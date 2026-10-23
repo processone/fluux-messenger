@@ -629,7 +629,11 @@ mod tests {
 #[link(name = "fluux_communication", kind = "static")]
 unsafe extern "C" {
     fn fluux_communication_prepare(json: *const std::ffi::c_char) -> *mut NSString;
-    fn fluux_communication_finish(token: *const std::ffi::c_char, commit: bool);
+    fn fluux_communication_finish(
+        token: *const std::ffi::c_char,
+        commit: bool,
+        names: *const std::ffi::c_char,
+    );
     fn fluux_communication_cancel(json: *const std::ffi::c_char);
 }
 
@@ -661,10 +665,17 @@ pub fn prepare_communication(mut payload: serde_json::Value) -> Result<Option<St
 }
 
 #[cfg(feature = "macos-communication-prototype")]
-pub fn finish_communication(token: &str, commit: bool) {
+pub fn finish_communication(token: &str, commit: bool, names: Option<serde_json::Value>) {
+    let names = names.and_then(|value| std::ffi::CString::new(value.to_string()).ok());
     if let Ok(token) = std::ffi::CString::new(token) {
         unsafe {
-            fluux_communication_finish(token.as_ptr(), commit);
+            fluux_communication_finish(
+                token.as_ptr(),
+                commit,
+                names
+                    .as_ref()
+                    .map_or(std::ptr::null(), |value| value.as_ptr()),
+            );
         }
     }
 }

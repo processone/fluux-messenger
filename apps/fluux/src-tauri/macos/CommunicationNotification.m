@@ -31,6 +31,7 @@ API_AVAILABLE(macos(12.0))
 @property NSDate *created;
 @property BOOL cancelled;
 @property BOOL enriched;
+@property BOOL finalizing;
 @end
 @implementation FluuxCommunicationRecord
 @end
@@ -150,6 +151,10 @@ API_AVAILABLE(macos(12.0))
         return @"";
     }
     @synchronized(self) { if (record.cancelled) return @""; }
+    [self prepareContent:record];
+    return token;
+}
+- (UNMutableNotificationContent *)baseContent:(NSDictionary *)p {
     UNMutableNotificationContent *base = [UNMutableNotificationContent new];
     base.title = text(p[@"title"]);
     base.body = text(p[@"body"]);
@@ -157,18 +162,24 @@ API_AVAILABLE(macos(12.0))
     base.userInfo = p[@"target"] ?: @{};
     // macOS's existing path has no OS sound; the frontend owns its sound preference.
     base.sound = nil;
+    return base;
+}
+- (void)prepareContent:(FluuxCommunicationRecord *)record {
+    NSDictionary *p = record.payload;
+    record.enriched = NO;
+    UNMutableNotificationContent *base = [self baseContent:p];
     record.content = base;
     INSendMessageIntent *intent = [self intent:p];
     if (intent) {
         INInteraction *interaction = [[INInteraction alloc] initWithIntent:intent response:nil];
         interaction.direction = INInteractionDirectionIncoming;
-        interaction.identifier = opaque(@[identifier]);
+        interaction.identifier = opaque(@[record.identifier]);
         record.interactionID = interaction.identifier;
         interaction.groupIdentifier = group(p);
         dispatch_semaphore_t donated = dispatch_semaphore_create(0);
         __block BOOL accepted = NO;
         @synchronized(self) {
-            if (record.cancelled) return @"";
+            if (record.cancelled) return;
             [self rememberGroup:p];
             self.donate(interaction, ^(NSError *error) {
                 @synchronized(self) {
@@ -184,9 +195,48 @@ API_AVAILABLE(macos(12.0))
             if (updated && !error) { record.content = updated; record.enriched = YES; } // Never mutate Apple's result.
         }
     }
-    return token;
 }
 - (void)finish:(NSString *)token commit:(BOOL)commit {
+    [self finish:token commit:commit names:nil];
+}
+- (void)finish:(NSString *)token commit:(BOOL)commit names:(NSDictionary *)names {
+    FluuxCommunicationRecord *reserved;
+    @synchronized(self) {
+        reserved = _pending[token];
+        if (!reserved || reserved.finalizing) return;
+        reserved.finalizing = YES;
+        if (reserved.cancelled || [reserved.created timeIntervalSinceNow] < -30) commit = NO;
+        if (commit && names) {
+            // Accept only presentation names; message content, routing and identities stay reserved.
+            NSString *sender = text(names[@"senderName"]), *title = text(names[@"title"]);
+            BOOL room = [reserved.payload[@"navType"] isEqual:@"room"];
+            NSString *roomName = text(names[@"roomName"]);
+            if (!sender.length || !title.length || (room && !roomName.length)) commit = NO;
+            else {
+                NSMutableDictionary *updated = reserved.payload.mutableCopy;
+                NSMutableDictionary *metadata = [updated[@"communication"] mutableCopy];
+                metadata[@"senderName"] = sender;
+                if (room) metadata[@"roomName"] = roomName;
+                updated[@"communication"] = metadata;
+                updated[@"title"] = title;
+                reserved.payload = updated;
+            }
+        }
+    }
+    // The existing donation identifies the same event/person. Refresh only its presentation,
+    // without another asynchronous donation window after frontend eligibility validation.
+    // Preserve a preparation failure's fallback and never mutate Apple's transformed result.
+    if (commit && names) {
+        BOOL enriched = reserved.enriched;
+        reserved.enriched = NO;
+        UNMutableNotificationContent *base = [self baseContent:reserved.payload];
+        reserved.content = base;
+        if (enriched) {
+            NSError *error = nil;
+            UNNotificationContent *updated = self.transform(base, [self intent:reserved.payload], &error);
+            if (updated && !error) { reserved.content = updated; reserved.enriched = YES; }
+        }
+    }
     @synchronized(self) {
         FluuxCommunicationRecord *record = _pending[token];
         if (!record) return;
@@ -267,8 +317,8 @@ void *fluux_communication_prepare(const char *json) {
         return NULL;
     }
 }
-void fluux_communication_finish(const char *token, bool commit) {
-    @autoreleasepool { if (@available(macOS 12.0, *)) if (enabled()) [engine() finish:[NSString stringWithUTF8String:token] commit:commit]; }
+void fluux_communication_finish(const char *token, bool commit, const char *names) {
+    @autoreleasepool { if (@available(macOS 12.0, *)) if (enabled()) [engine() finish:[NSString stringWithUTF8String:token] commit:commit names:names ? payload(names) : nil]; }
 }
 void fluux_communication_cancel(const char *json) {
     @autoreleasepool { if (@available(macOS 12.0, *)) if (enabled()) [engine() cancelTarget:payload(json)]; }

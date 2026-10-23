@@ -85,6 +85,7 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }
 
 import { useDesktopNotifications } from './useDesktopNotifications'
 import { chatStore } from '@fluux/sdk'
+import { roomStore } from '@fluux/sdk/stores'
 import type { Message } from '@fluux/sdk'
 import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
 import { setPreviewLedgerSession, clearPreviewLedgerSession } from '@/platform/ios/previewReadLedger'
@@ -216,6 +217,34 @@ describe('useDesktopNotifications posting + guard', () => {
       invoke.mockResolvedValue(null)
     }
   })
+  // Captain's F5 choice: refresh only display names; other metadata/eligibility changes still cancel.
+  it.each(['contact', 'room', 'other-metadata'] as const)('finalizes preparation after a %s change with current presentation only', async change => {
+    let prepared!: (token: string) => void
+    invoke.mockImplementation((command: string) => command === 'prepare_communication_notification'
+      ? new Promise<string>(resolve => { prepared = resolve }) : Promise.resolve(null))
+    try {
+      renderHook(() => useDesktopNotifications())
+      const posting = change === 'contact'
+        ? handlers.onConversationMessage?.({ id: 'alice@example.com', name: 'Alice' }, { id: 'rename-contact', from: 'alice@example.com' })
+        : handlers.onRoomMessage?.({ jid: 'team@conf.example.com', name: 'Team', nickname: 'me',
+          occupants: new Map([['bob', { nick: 'bob', occupantId: 'stable-bob', affiliation: 'member', role: 'participant' }],
+            ['me', { nick: 'me', occupantId: 'stable-me', affiliation: 'member', role: 'participant' }]]) },
+        { id: 'rename-room', nick: 'bob', occupantId: 'stable-bob' })
+      await vi.waitFor(() => expect(prepared).toBeTypeOf('function'))
+      if (change === 'contact') chatStore.getState().updateConversationName('alice@example.com', 'Alicia')
+      else roomStore.getState().updateRoom('team@conf.example.com', change === 'room' ? { name: 'Projects' } : { nickname: 'another-self' })
+      prepared('rename-token')
+      await posting
+      expect(invoke).toHaveBeenCalledWith('finish_communication_notification', change === 'other-metadata'
+        ? { token: 'rename-token', commit: false }
+        : { token: 'rename-token', commit: true, names: change === 'contact'
+          ? { title: 'Alicia', senderName: 'Alicia' }
+          : { title: 'bob @ Projects', senderName: 'bob', roomName: 'Projects' } })
+      expect(invoke.mock.calls.filter(([command]) => command === 'finish_communication_notification')).toHaveLength(1)
+      expect(invoke.mock.calls.some(([command]) => command === 'post_notification')).toBe(false)
+    } finally { invoke.mockResolvedValue(null) }
+  })
+
   // Source intent: #1386 requires a second eligibility check after native preparation.
   it.each(['read', 'permission', 'dnd', 'unmount'])('cancels native preparation after %s changes', async (change) => {
     let prepared!: (token: string) => void

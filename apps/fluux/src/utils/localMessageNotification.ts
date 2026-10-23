@@ -13,11 +13,10 @@ export type LocalMessageNotification =
 type Translate = Parameters<typeof formatLocalizedPreview>[1]
 
 /** Local message text policy: docs/NOTIFICATION_CONTENT.md and its shared native/TS fixtures. */
-export function buildLocalMessageNotification(target: LocalMessageNotification, t: Translate, language: string, web: boolean) {
+export function buildLocalMessageNotification(target: LocalMessageNotification, t: Translate, language: string, web: boolean, count = target.entity.unreadCount) {
   if (!isNotificationMessageReady(target.message)) return undefined
   const preview = formatLocalizedPreview(target.message, t)
   if (!preview.trim()) return undefined
-  const count = target.entity.unreadCount
   const coalesced = count > 1
   const baseTitle = target.kind === 'chat'
     ? target.entity.name || getLocalPart(target.message.from)

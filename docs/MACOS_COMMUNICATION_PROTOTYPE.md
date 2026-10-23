@@ -138,7 +138,13 @@ incoming interaction, then transforms the complete base content. Donation or
 transformation failure selects the fallback **before** scheduling. The frontend
 then re-resolves the live message and rechecks account generation, unread state,
 retraction, preview edits, permission, mentions/room eligibility and Fluux DND.
-Only a still-eligible token is committed. When preparation returns `null`
+Only a still-eligible token is committed. If only a contact or room display name
+changed during preparation, finalization refreshes the transformed
+content with that current name before its one scheduling decision. Other
+structured metadata or preview changes still cancel. The reservation stays
+cancellable during the refresh, and unread-count growth remains eligible. The
+existing donation represents the same event/person; refreshing presentation does
+not add another asynchronous donation window after eligibility validation. When preparation returns `null`
 (disabled prototype, unsupported system or incomplete identity), the caller uses
 legacy posting without this additional eligibility check.
 Read/account cleanup also cancels native preparations. Apple's successful
