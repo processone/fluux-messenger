@@ -20,7 +20,7 @@ for name in ['App', 'UITests', 'Tauri', 'SwiftRs']:
     (lab / name).mkdir()
 source = (repo / 'apps/fluux/src-tauri/plugins/push/ios/Sources/PushPlugin.swift').read_text()
 # Compile the complete production delegate, with its original access control,
-# beside the test bridge. No UIKit/Tauri host or real account is launched.
+# beside the test bridge, without launching the production app or any account.
 start = source.index('private class RemoteNotificationDelegate:')
 end = source.index('\nprivate struct DismissTarget:', start)
 (lab / 'App/App.swift').write_text((fixture / 'App.swift').read_text() + '\n' + source[start:end])
