@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "Ponovno povezivanje...",
         "reconnectingIn": "Ponovno povezivanje za {{seconds}}s (pokušaj {{attempt}})",
+        "reconnectingStep": "Ponovno povezivanje za {{seconds}}s",
         "connecting": "Povezivanje...",
         "verifying": "Provjera veze...",
         "connectionError": "Greška veze",
@@ -653,7 +654,7 @@
             "acceptedWithoutVerifying": "Novi ključ prihvaćen. Sugovornik nije provjeren",
             "acceptFailed": "Nije moguće prihvatiti novi ključ. Pokušajte ponovno"
         },
-        "offlinePlaceholder": "Izvanmrežno. Poruke će biti poslane nakon ponovnog povezivanja",
+        "offlinePlaceholder": "Izvanmrežno. Slati možete čim se ponovno povežete.",
         "loadImage": "Učitaj sliku",
         "loadVideo": "Učitaj video",
         "loadAudio": "Učitaj zvuk",

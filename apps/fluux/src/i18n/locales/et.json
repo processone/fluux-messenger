@@ -113,6 +113,7 @@
     "status": {
         "reconnecting": "Taasühendamine...",
         "reconnectingIn": "Taasühendamine {{seconds}}s pärast (katse {{attempt}})",
+        "reconnectingStep": "Taasühendamine {{seconds}}s pärast",
         "connecting": "Ühendamine...",
         "verifying": "Ühenduse kontrollimine...",
         "connectionError": "Ühenduse viga",
@@ -653,7 +654,7 @@
             "acceptedWithoutVerifying": "Uus võti vastu võetud. Kontakt on kinnitamata",
             "acceptFailed": "Uue võtme vastuvõtmine ebaõnnestus. Proovi uuesti"
         },
-        "offlinePlaceholder": "Võrguühenduseta. Sõnumid saadetakse pärast taasühendamist",
+        "offlinePlaceholder": "Võrguühenduseta. Saad saata kohe pärast taasühendamist.",
         "loadImage": "Laadi pilt",
         "loadVideo": "Laadi video",
         "loadAudio": "Laadi heli",

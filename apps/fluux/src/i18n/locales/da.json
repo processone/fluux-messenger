@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "Genopretter forbindelse...",
         "reconnectingIn": "Genopretter forbindelse om {{seconds}}s (forsøg {{attempt}})",
+        "reconnectingStep": "Genopretter forbindelse om {{seconds}}s",
         "connecting": "Opretter forbindelse...",
         "verifying": "Verificerer forbindelse...",
         "connectionError": "Forbindelsesfejl",
@@ -651,7 +652,7 @@
             "acceptedWithoutVerifying": "Ny nøgle accepteret. Kontakten er ikke verificeret",
             "acceptFailed": "Kunne ikke acceptere den nye nøgle. Prøv igen"
         },
-        "offlinePlaceholder": "Offline. Beskeder sendes, når forbindelsen er genoprettet",
+        "offlinePlaceholder": "Offline. Du kan sende, så snart forbindelsen er genoprettet.",
         "loadImage": "Indlæs billede",
         "loadVideo": "Indlæs video",
         "loadAudio": "Indlæs lyd",

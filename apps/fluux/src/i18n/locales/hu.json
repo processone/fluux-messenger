@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "Újracsatlakozás...",
         "reconnectingIn": "Újracsatlakozás {{seconds}} mp múlva ({{attempt}}. kísérlet)",
+        "reconnectingStep": "Újracsatlakozás {{seconds}} mp múlva",
         "connecting": "Csatlakozás...",
         "verifying": "Kapcsolat ellenőrzése...",
         "connectionError": "Kapcsolódási hiba",
@@ -651,7 +652,7 @@
             "acceptedWithoutVerifying": "Új kulcs elfogadva. A partner nincs ellenőrizve",
             "acceptFailed": "Nem sikerült elfogadni az új kulcsot. Próbálja újra"
         },
-        "offlinePlaceholder": "Offline. Az üzenetek újracsatlakozáskor lesznek elküldve",
+        "offlinePlaceholder": "Offline. Az újracsatlakozás után tudsz üzenetet küldeni.",
         "loadImage": "Kép betöltése",
         "loadVideo": "Videó betöltése",
         "loadAudio": "Hang betöltése",

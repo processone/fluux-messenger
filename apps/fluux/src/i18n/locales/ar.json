@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "جارٍ إعادة الاتصال...",
         "reconnectingIn": "إعادة الاتصال خلال {{seconds}} ثانية (المحاولة {{attempt}})",
+        "reconnectingStep": "إعادة الاتصال خلال {{seconds}} ثانية",
         "connecting": "جارٍ الاتصال...",
         "verifying": "جارٍ التحقق من الاتصال...",
         "connectionError": "خطأ في الاتصال",
@@ -659,7 +660,7 @@
             "acceptedWithoutVerifying": "تم قبول المفتاح الجديد. الطرف الآخر غير موثّق",
             "acceptFailed": "تعذّر قبول المفتاح الجديد. حاول مرة أخرى"
         },
-        "offlinePlaceholder": "غير متصل. سيتم إرسال الرسائل عند إعادة الاتصال",
+        "offlinePlaceholder": "غير متصل. يمكنك الإرسال بمجرد إعادة الاتصال.",
         "loadImage": "تحميل الصورة",
         "loadVideo": "تحميل الفيديو",
         "loadAudio": "تحميل الصوت",

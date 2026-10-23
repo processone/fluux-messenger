@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "Jungiamasi iš naujo...",
         "reconnectingIn": "Prisijungiama iš naujo po {{seconds}}s (bandymas {{attempt}})",
+        "reconnectingStep": "Prisijungiama iš naujo po {{seconds}}s",
         "connecting": "Jungiamasi...",
         "verifying": "Tikrinamas ryšys...",
         "connectionError": "Ryšio klaida",
@@ -655,7 +656,7 @@
             "acceptedWithoutVerifying": "Naujas raktas priimtas. Kontaktas nepatvirtintas",
             "acceptFailed": "Nepavyko priimti naujo rakto. Bandykite dar kartą"
         },
-        "offlinePlaceholder": "Neprisijungus. Žinutės bus išsiųstos prisijungus iš naujo",
+        "offlinePlaceholder": "Neprisijungus. Siųsti galėsite prisijungę iš naujo.",
         "loadImage": "Įkelti nuotrauką",
         "loadVideo": "Įkelti vaizdo įrašą",
         "loadAudio": "Įkelti garsą",

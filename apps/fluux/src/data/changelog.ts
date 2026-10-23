@@ -17,8 +17,14 @@ export const changelog: ChangelogEntry[] = [
     version: '0.18.1',
     date: 'Unreleased',
     sections: [{
+      type: 'added',
+      items: [
+        'While Fluux is reconnecting for more than two seconds, the open conversation or room shows the connection step ("Reconnecting in 5s", "Connecting...") under its name, and so does the list title on narrow screens',
+      ],
+    }, {
       type: 'fixed',
       items: [
+        'The message box no longer promises that messages will be sent on reconnection while sending is paused: it now says you can send once you are back online',
         'New-message dividers include all unread messages when new messages arrive after scrolling an unfocused room or chat',
         'macOS: the caret no longer drifts from the text while typing in rooms. Inline predictive text is disabled in rooms; 1:1 chats keep it',
         'macOS: saved sign-in, encryption keys and local integrations share one keychain approval after a one-time migration. Existing secrets remain available to the previous release',

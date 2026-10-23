@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "Endurtengist...",
         "reconnectingIn": "Endurtengist eftir {{seconds}}s (tilraun {{attempt}})",
+        "reconnectingStep": "Endurtengist eftir {{seconds}}s",
         "connecting": "Tengist...",
         "verifying": "Staðfesti tengingu...",
         "connectionError": "Tengingarvilla",
@@ -651,7 +652,7 @@
             "acceptedWithoutVerifying": "Nýr lykill samþykktur. Jafningi er óstaðfestur",
             "acceptFailed": "Ekki tókst að samþykkja nýja lykilinn. Reyndu aftur"
         },
-        "offlinePlaceholder": "Ónettengt. Skilaboð verða send þegar tengingin kemst á aftur",
+        "offlinePlaceholder": "Ónettengt. Þú getur sent um leið og tengingin kemst á aftur.",
         "loadImage": "Hlaða mynd",
         "loadVideo": "Hlaða myndband",
         "loadAudio": "Hlaða hljóð",

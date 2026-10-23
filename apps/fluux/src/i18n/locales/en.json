@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "Reconnecting...",
         "reconnectingIn": "Reconnecting in {{seconds}}s (attempt {{attempt}})",
+        "reconnectingStep": "Reconnecting in {{seconds}}s",
         "connecting": "Connecting...",
         "verifying": "Verifying connection...",
         "connectionError": "Connection error",
@@ -651,7 +652,7 @@
             "acceptedWithoutVerifying": "New key accepted. Peer is unverified",
             "acceptFailed": "Couldn't accept the new key. Try again"
         },
-        "offlinePlaceholder": "Offline. Messages will be sent when you reconnect",
+        "offlinePlaceholder": "Offline. You can send as soon as you reconnect.",
         "loadImage": "Load image",
         "loadVideo": "Load video",
         "loadAudio": "Load audio",

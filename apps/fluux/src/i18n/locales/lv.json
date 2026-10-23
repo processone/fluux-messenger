@@ -112,6 +112,7 @@
     "status": {
         "reconnecting": "Atkārtoti savienojas...",
         "reconnectingIn": "Atkārtots savienojums pēc {{seconds}}s (mēģinājums {{attempt}})",
+        "reconnectingStep": "Atkārtots savienojums pēc {{seconds}}s",
         "connecting": "Savienojas...",
         "verifying": "Pārbauda savienojumu...",
         "connectionError": "Savienojuma kļūda",
@@ -654,7 +655,7 @@
             "acceptedWithoutVerifying": "Jaunā atslēga pieņemta. Partneris nav verificēts",
             "acceptFailed": "Neizdevās pieņemt jauno atslēgu. Mēģiniet vēlreiz"
         },
-        "offlinePlaceholder": "Bezsaistē. Ziņas tiks nosūtītas pēc atkārtotas savienošanas",
+        "offlinePlaceholder": "Bezsaistē. Varēsi sūtīt, tiklīdz savienojums atjaunosies.",
         "loadImage": "Ielādēt attēlu",
         "loadVideo": "Ielādēt videoklipu",
         "loadAudio": "Ielādēt audio",

@@ -113,6 +113,7 @@
     "status": {
         "reconnecting": "Qed jerġa' jikkonnettja...",
         "reconnectingIn": "Jerġa' jikkonnettja fi {{seconds}}s (tentattiv {{attempt}})",
+        "reconnectingStep": "Jerġa' jikkonnettja fi {{seconds}}s",
         "connecting": "Qed jikkonnettja...",
         "verifying": "Qed jivverifika l-konnessjoni...",
         "connectionError": "Żball fil-konnessjoni",
@@ -659,7 +660,7 @@
             "acceptedWithoutVerifying": "Iċ-ċavetta l-ġdida ġiet aċċettata. Il-parti l-oħra mhix ivverifikata",
             "acceptFailed": "Ma stajtx taċċetta ċ-ċavetta l-ġdida. Erġa' pprova"
         },
-        "offlinePlaceholder": "Offline. Il-messaġġi jintbagħtu meta terġa' tikkonnettja",
+        "offlinePlaceholder": "Offline. Tkun tista' tibgħat hekk kif terġa' tikkonnettja.",
         "loadImage": "Itgħabba l-immaġni",
         "loadVideo": "Itgħabba l-vidjo",
         "loadAudio": "Itgħabba l-awdjo",

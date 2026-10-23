@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "מתחבר מחדש...",
         "reconnectingIn": "מתחבר מחדש בעוד {{seconds}} שניות (ניסיון {{attempt}})",
+        "reconnectingStep": "מתחבר מחדש בעוד {{seconds}} שניות",
         "connecting": "מתחבר...",
         "verifying": "מאמת חיבור...",
         "connectionError": "שגיאת חיבור",
@@ -653,7 +654,7 @@
             "acceptedWithoutVerifying": "המפתח החדש התקבל. העמית לא אומת",
             "acceptFailed": "לא ניתן לקבל את המפתח החדש. נסה שוב"
         },
-        "offlinePlaceholder": "לא מקוון. הודעות יישלחו עם החיבור מחדש",
+        "offlinePlaceholder": "לא מקוון. אפשר יהיה לשלוח מיד עם החיבור מחדש.",
         "loadImage": "טען תמונה",
         "loadVideo": "טען סרטון",
         "loadAudio": "טען שמע",

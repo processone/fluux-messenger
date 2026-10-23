@@ -113,6 +113,7 @@
     "status": {
         "reconnecting": "Se reconectează...",
         "reconnectingIn": "Reconectare în {{seconds}}s (încercarea {{attempt}})",
+        "reconnectingStep": "Reconectare în {{seconds}}s",
         "connecting": "Se conectează...",
         "verifying": "Se verifică conexiunea...",
         "connectionError": "Eroare de conexiune",
@@ -655,7 +656,7 @@
             "acceptedWithoutVerifying": "Cheie nouă acceptată. Contactul nu este verificat",
             "acceptFailed": "Nu s-a putut accepta noua cheie. Încearcă din nou"
         },
-        "offlinePlaceholder": "Offline. Mesajele vor fi trimise la reconectare",
+        "offlinePlaceholder": "Offline. Vei putea trimite imediat ce te reconectezi.",
         "loadImage": "Încarcă imaginea",
         "loadVideo": "Încarcă videoclipul",
         "loadAudio": "Încarcă sunetul",

@@ -113,6 +113,7 @@
     "status": {
         "reconnecting": "Reconnectant...",
         "reconnectingIn": "Reconnectant en {{seconds}}s (intent {{attempt}})",
+        "reconnectingStep": "Reconnectant en {{seconds}}s",
         "connecting": "Connectant...",
         "verifying": "Verificant connexió...",
         "connectionError": "Error de connexió",
@@ -655,7 +656,7 @@
             "acceptedWithoutVerifying": "Clau nova acceptada. El contacte no està verificat",
             "acceptFailed": "No s'ha pogut acceptar la clau nova. Torna-ho a provar"
         },
-        "offlinePlaceholder": "Fora de línia. Els missatges s'enviaran en reconnectar",
+        "offlinePlaceholder": "Fora de línia. Podràs enviar en reconnectar.",
         "loadImage": "Carrega la imatge",
         "loadVideo": "Carrega el vídeo",
         "loadAudio": "Carrega l'àudio",

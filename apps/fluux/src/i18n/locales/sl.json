@@ -113,6 +113,7 @@
     "status": {
         "reconnecting": "Ponovno povezovanje...",
         "reconnectingIn": "Ponovna povezava čez {{seconds}}s (poskus {{attempt}})",
+        "reconnectingStep": "Ponovna povezava čez {{seconds}}s",
         "connecting": "Povezovanje...",
         "verifying": "Preverjanje povezave...",
         "connectionError": "Napaka povezave",
@@ -657,7 +658,7 @@
             "acceptedWithoutVerifying": "Nov ključ sprejet. Sogovornik ni preverjen",
             "acceptFailed": "Novega ključa ni bilo mogoče sprejeti. Poskusite znova"
         },
-        "offlinePlaceholder": "Brez povezave. Sporočila bodo poslana ob ponovni povezavi",
+        "offlinePlaceholder": "Brez povezave. Pošiljate lahko takoj ob ponovni povezavi.",
         "loadImage": "Naloži sliko",
         "loadVideo": "Naloži video",
         "loadAudio": "Naloži zvok",

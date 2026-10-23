@@ -113,6 +113,7 @@
     "status": {
         "reconnecting": "Opětovné připojování...",
         "reconnectingIn": "Opětovné připojení za {{seconds}} s (pokus {{attempt}})",
+        "reconnectingStep": "Opětovné připojení za {{seconds}} s",
         "connecting": "Připojování...",
         "verifying": "Ověřování připojení...",
         "connectionError": "Chyba připojení",
@@ -657,7 +658,7 @@
             "acceptedWithoutVerifying": "Nový klíč přijat. Kontakt není ověřen",
             "acceptFailed": "Nepodařilo se přijmout nový klíč. Zkuste to znovu"
         },
-        "offlinePlaceholder": "Offline. Zprávy budou odeslány po opětovném připojení",
+        "offlinePlaceholder": "Offline. Odesílat budete moci po opětovném připojení.",
         "loadImage": "Načíst obrázek",
         "loadVideo": "Načíst video",
         "loadAudio": "Načíst zvuk",

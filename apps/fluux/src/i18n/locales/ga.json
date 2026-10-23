@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "Ag athcheangal...",
         "reconnectingIn": "Ag athcheangal i {{seconds}}s (iarracht {{attempt}})",
+        "reconnectingStep": "Ag athcheangal i {{seconds}}s",
         "connecting": "Ag ceangal...",
         "verifying": "Ag fíorú ceangal...",
         "connectionError": "Earráid ceangail",
@@ -657,7 +658,7 @@
             "acceptedWithoutVerifying": "Glacadh leis an eochair nua. Níl an piara fíoraithe",
             "acceptFailed": "Níorbh fhéidir glacadh leis an eochair nua. Bain triail eile as"
         },
-        "offlinePlaceholder": "As líne. Seolfar teachtaireachtaí nuair a athnascfar",
+        "offlinePlaceholder": "As líne. Beidh tú in ann seoladh a luaithe a athnascfaidh tú.",
         "loadImage": "Luchtaigh íomhá",
         "loadVideo": "Luchtaigh físeán",
         "loadAudio": "Luchtaigh fuaim",

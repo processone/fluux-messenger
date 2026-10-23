@@ -12,6 +12,7 @@ import type { Room } from '@fluux/sdk'
 import { getUniqueOccupantCount } from '@fluux/sdk'
 import { RoomAvatar } from './RoomAvatar'
 import { Tooltip } from './Tooltip'
+import { ConnectionStepLine, useConnectionStep } from './ConnectionStep'
 import { useWindowDrag } from '@/hooks'
 import { renderTextWithLinks } from '@/utils/messageStyles'
 import { AvatarCropModal } from './AvatarCropModal'
@@ -105,6 +106,8 @@ export function RoomHeader({
     onBulkModeration,
   })
 
+  const connectionStep = useConnectionStep()
+
   return (
     <header className="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-2 md:gap-3" {...dragRegionProps}>
       {/* Back button - mobile only */}
@@ -139,7 +142,9 @@ export function RoomHeader({
         >
           <span className="block font-semibold text-fluux-text truncate leading-tight">{room.name}</span>
           <p className="text-xs text-fluux-muted truncate">
-            {room.subject?.trim() ? renderTextWithLinks(room.subject) : room.jid}
+            {connectionStep
+              ? <ConnectionStepLine step={connectionStep} />
+              : room.subject?.trim() ? renderTextWithLinks(room.subject) : room.jid}
           </p>
         </button>
       </Tooltip>

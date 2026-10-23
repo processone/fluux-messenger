@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "Återansluter...",
         "reconnectingIn": "Återansluter om {{seconds}}s (försök {{attempt}})",
+        "reconnectingStep": "Återansluter om {{seconds}}s",
         "connecting": "Ansluter...",
         "verifying": "Verifierar anslutning...",
         "connectionError": "Anslutningsfel",
@@ -651,7 +652,7 @@
             "acceptedWithoutVerifying": "Ny nyckel accepterad. Motparten är overifierad",
             "acceptFailed": "Kunde inte acceptera den nya nyckeln. Försök igen"
         },
-        "offlinePlaceholder": "Offline. Meddelanden skickas när anslutningen återupprättats",
+        "offlinePlaceholder": "Offline. Du kan skicka så fort anslutningen är återupprättad.",
         "loadImage": "Läs in bild",
         "loadVideo": "Läs in video",
         "loadAudio": "Läs in ljud",

@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "Opnieuw verbinden...",
         "reconnectingIn": "Opnieuw verbinden over {{seconds}}s (poging {{attempt}})",
+        "reconnectingStep": "Opnieuw verbinden over {{seconds}}s",
         "connecting": "Verbinden...",
         "verifying": "Verbinding verifiëren...",
         "connectionError": "Verbindingsfout",
@@ -651,7 +652,7 @@
             "acceptedWithoutVerifying": "Nieuwe sleutel geaccepteerd. Contact is niet geverifieerd",
             "acceptFailed": "Kon de nieuwe sleutel niet accepteren. Probeer opnieuw"
         },
-        "offlinePlaceholder": "Offline. Berichten worden verzonden zodra de verbinding is hersteld",
+        "offlinePlaceholder": "Offline. Je kunt verzenden zodra de verbinding is hersteld.",
         "loadImage": "Afbeelding laden",
         "loadVideo": "Video laden",
         "loadAudio": "Audio laden",

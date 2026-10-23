@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "Yhdistetään uudelleen...",
         "reconnectingIn": "Yhdistetään uudelleen {{seconds}}s kuluttua (yritys {{attempt}})",
+        "reconnectingStep": "Yhdistetään uudelleen {{seconds}}s kuluttua",
         "connecting": "Yhdistetään...",
         "verifying": "Vahvistetaan yhteyttä...",
         "connectionError": "Yhteysvirhe",
@@ -651,7 +652,7 @@
             "acceptedWithoutVerifying": "Uusi avain hyväksytty. Vertaista ei ole vahvistettu",
             "acceptFailed": "Uuden avaimen hyväksyminen epäonnistui. Yritä uudelleen"
         },
-        "offlinePlaceholder": "Offline-tilassa. Viestit lähetetään, kun yhteys palautuu",
+        "offlinePlaceholder": "Offline-tilassa. Voit lähettää heti, kun yhteys palautuu.",
         "loadImage": "Lataa kuva",
         "loadVideo": "Lataa video",
         "loadAudio": "Lataa ääni",

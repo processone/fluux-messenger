@@ -111,6 +111,7 @@
     "status": {
         "reconnecting": "Kobler til på nytt...",
         "reconnectingIn": "Kobler til på nytt om {{seconds}}s (forsøk {{attempt}})",
+        "reconnectingStep": "Kobler til på nytt om {{seconds}}s",
         "connecting": "Kobler til...",
         "verifying": "Verifiserer tilkobling...",
         "connectionError": "Tilkoblingsfeil",
@@ -651,7 +652,7 @@
             "acceptedWithoutVerifying": "Ny nøkkel godtatt. Motparten er ikke verifisert",
             "acceptFailed": "Kunne ikke godta den nye nøkkelen. Prøv igjen"
         },
-        "offlinePlaceholder": "Frakoblet. Meldinger sendes når tilkoblingen er gjenopprettet",
+        "offlinePlaceholder": "Frakoblet. Du kan sende så snart tilkoblingen er gjenopprettet.",
         "loadImage": "Last inn bilde",
         "loadVideo": "Last inn video",
         "loadAudio": "Last inn lyd",

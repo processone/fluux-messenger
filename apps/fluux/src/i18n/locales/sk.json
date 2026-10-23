@@ -112,6 +112,7 @@
     "status": {
         "reconnecting": "Znovu sa pripája...",
         "reconnectingIn": "Znovu sa pripojí za {{seconds}}s (pokus {{attempt}})",
+        "reconnectingStep": "Znovu sa pripojí za {{seconds}}s",
         "connecting": "Pripája sa...",
         "verifying": "Overuje sa pripojenie...",
         "connectionError": "Chyba pripojenia",
@@ -656,7 +657,7 @@
             "acceptedWithoutVerifying": "Nový kľúč prijatý. Kontakt nie je overený",
             "acceptFailed": "Nepodarilo sa prijať nový kľúč. Skúste znova"
         },
-        "offlinePlaceholder": "Offline. Správy sa odošlú po opätovnom pripojení",
+        "offlinePlaceholder": "Offline. Odosielať budete môcť po opätovnom pripojení.",
         "loadImage": "Načítať obrázok",
         "loadVideo": "Načítať video",
         "loadAudio": "Načítať zvuk",

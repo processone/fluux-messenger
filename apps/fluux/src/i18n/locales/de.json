@@ -113,6 +113,7 @@
     "status": {
         "reconnecting": "Verbindung wird wiederhergestellt...",
         "reconnectingIn": "Erneuter Verbindungsversuch in {{seconds}}s (Versuch {{attempt}})",
+        "reconnectingStep": "Erneuter Verbindungsversuch in {{seconds}}s",
         "connecting": "Verbinden...",
         "verifying": "Verbindung wird überprüft...",
         "connectionError": "Verbindungsfehler",
@@ -653,7 +654,7 @@
             "acceptedWithoutVerifying": "Neuer Schlüssel akzeptiert. Kontakt ist nicht verifiziert",
             "acceptFailed": "Der neue Schlüssel konnte nicht akzeptiert werden. Versuche es erneut"
         },
-        "offlinePlaceholder": "Offline. Nachrichten werden bei erneuter Verbindung gesendet",
+        "offlinePlaceholder": "Offline. Senden ist nach der Wiederverbindung möglich.",
         "loadImage": "Bild laden",
         "loadVideo": "Video laden",
         "loadAudio": "Audio laden",

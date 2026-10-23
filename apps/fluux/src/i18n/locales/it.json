@@ -113,6 +113,7 @@
     "status": {
         "reconnecting": "Riconnessione...",
         "reconnectingIn": "Riconnessione tra {{seconds}}s (tentativo {{attempt}})",
+        "reconnectingStep": "Riconnessione tra {{seconds}}s",
         "connecting": "Connessione...",
         "verifying": "Verifica connessione...",
         "connectionError": "Errore di connessione",
@@ -655,7 +656,7 @@
             "acceptedWithoutVerifying": "Nuova chiave accettata. Il contatto non è verificato",
             "acceptFailed": "Impossibile accettare la nuova chiave. Riprova"
         },
-        "offlinePlaceholder": "Offline. I messaggi verranno inviati alla riconnessione",
+        "offlinePlaceholder": "Offline. Potrai inviare non appena ti riconnetti.",
         "loadImage": "Carica immagine",
         "loadVideo": "Carica video",
         "loadAudio": "Carica audio",

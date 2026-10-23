@@ -113,6 +113,7 @@
     "status": {
         "reconnecting": "Ponowne łączenie...",
         "reconnectingIn": "Ponowne łączenie za {{seconds}}s (próba {{attempt}})",
+        "reconnectingStep": "Ponowne łączenie za {{seconds}}s",
         "connecting": "Łączenie...",
         "verifying": "Weryfikacja połączenia...",
         "connectionError": "Błąd połączenia",
@@ -657,7 +658,7 @@
             "acceptedWithoutVerifying": "Nowy klucz zaakceptowany. Rozmówca niezweryfikowany",
             "acceptFailed": "Nie udało się zaakceptować nowego klucza. Spróbuj ponownie"
         },
-        "offlinePlaceholder": "Offline. Wiadomości zostaną wysłane po ponownym połączeniu",
+        "offlinePlaceholder": "Offline. Wysyłanie będzie możliwe po ponownym połączeniu.",
         "loadImage": "Załaduj obraz",
         "loadVideo": "Załaduj wideo",
         "loadAudio": "Załaduj audio",

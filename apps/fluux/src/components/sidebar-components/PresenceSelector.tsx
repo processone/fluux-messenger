@@ -6,6 +6,7 @@ import { useConnectionStore, useEventsStore } from '@fluux/sdk/react'
 import { ChevronDown, Check, RefreshCw, X } from 'lucide-react'
 import { TextInput } from '../ui/TextInput'
 import { Tooltip } from '../Tooltip'
+import { DEGRADED_STATUS_GRACE_MS, useConnectionStep } from '../ConnectionStep'
 import { PRESENCE_COLORS } from '@/constants/ui'
 
 const presenceOptions: { value: PresenceStatus; labelKey: string; color: string }[] = [
@@ -207,10 +208,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
   )
 }
 
-/** Grace before the chip surfaces a degraded connection state — fast
- * reconnects and post-wake verifications (e.g. silent SM resumptions)
- * come and go without flashing anything. */
-export const DEGRADED_STATUS_GRACE_MS = 2000
+export { DEGRADED_STATUS_GRACE_MS }
 
 interface StatusDisplayProps {
   status: string
@@ -332,23 +330,7 @@ interface StatusOrPresenceProps {
  */
 export function StatusOrPresence({ isOpen, onOpenChange }: StatusOrPresenceProps) {
   const status = useConnectionStore((s) => s.status)
-  const isVerifying = useConnectionStore((s) => s.isVerifying)
-
-  const isDegraded =
-    status === 'reconnecting' ||
-    status === 'connecting' ||
-    status === 'verifying' ||
-    (status === 'online' && isVerifying)
-
-  const [showDegraded, setShowDegraded] = useState(false)
-  useEffect(() => {
-    if (!isDegraded) {
-      setShowDegraded(false)
-      return
-    }
-    const timer = setTimeout(() => setShowDegraded(true), DEGRADED_STATUS_GRACE_MS)
-    return () => clearTimeout(timer)
-  }, [isDegraded])
+  const step = useConnectionStep()
 
   // Terminal states surface immediately (App usually routes them to the
   // login screen anyway, unmounting this chip).
@@ -356,8 +338,8 @@ export function StatusOrPresence({ isOpen, onOpenChange }: StatusOrPresenceProps
     return <StatusDisplay status={status} />
   }
 
-  if (isDegraded && showDegraded) {
-    return <StatusDisplay status={status === 'online' ? 'verifying' : status} />
+  if (step) {
+    return <StatusDisplay status={step} />
   }
 
   return <PresenceSelector isOpen={isOpen} onOpenChange={onOpenChange} />
