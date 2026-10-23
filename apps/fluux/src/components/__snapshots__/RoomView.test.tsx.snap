@@ -38,6 +38,10 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
                 class="text-xs text-fluux-muted truncate"
               >
                 room@conference.example.com
+                <span
+                  class="sr-only"
+                  role="status"
+                />
               </p>
             </button>
           </div>

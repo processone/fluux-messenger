@@ -36,6 +36,10 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
               Online
             </p>
           </div>
+          <span
+            class="sr-only"
+            role="status"
+          />
         </div>
         <div
           class="flex items-center gap-1 md:gap-3"
@@ -550,6 +554,10 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
               Online
             </p>
           </div>
+          <span
+            class="sr-only"
+            role="status"
+          />
         </div>
         <div
           class="flex items-center gap-1 md:gap-3"
