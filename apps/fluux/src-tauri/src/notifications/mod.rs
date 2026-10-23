@@ -193,11 +193,11 @@ pub async fn finish_communication_notification(
             .map(serde_json::to_value)
             .transpose()
             .map_err(|_| "invalid notification names")?;
-        return tauri::async_runtime::spawn_blocking(move || {
+        tauri::async_runtime::spawn_blocking(move || {
             macos::finish_communication(&token, commit, names)
         })
         .await
-        .map_err(|_| "notification finalization failed".to_string());
+        .map_err(|_| "notification finalization failed".to_string())
     }
     #[cfg(not(all(target_os = "macos", feature = "macos-communication-test")))]
     {
