@@ -29,24 +29,28 @@ let mountedUsers = 0
 export function useConnectionStep(): ConnectionStepKind | null {
   const status = useConnectionStore((s) => s.status)
   const isVerifying = useConnectionStore((s) => s.isVerifying)
-  const isCatchingUp = useConnectionStore((s) => s.isCatchingUp)
+  const catchUpStartedAt = useConnectionStore((s) => s.isCatchingUp ? s.catchUpStartedAt : null)
 
   // "Updating..." follows the reconnection until the missed messages have
-  // arrived, but only for a bounded time.
-  const [catchUpExpired, setCatchUpExpired] = useState(false)
+  // arrived, but only for a bounded time. The limit is measured from the start
+  // of the catch-up in the store, so it holds across header mounts: navigating
+  // cannot bring back an expired step.
+  const [, expire] = useState(0)
   useEffect(() => {
-    setCatchUpExpired(false)
-    if (!isCatchingUp) return
-    const timer = setTimeout(() => setCatchUpExpired(true), CATCH_UP_STEP_LIMIT_MS)
+    if (catchUpStartedAt === null) return
+    const remaining = CATCH_UP_STEP_LIMIT_MS - (Date.now() - catchUpStartedAt)
+    if (remaining <= 0) return
+    const timer = setTimeout(() => expire((n) => n + 1), remaining)
     return () => clearTimeout(timer)
-  }, [isCatchingUp])
+  }, [catchUpStartedAt])
+  const catchUpActive = catchUpStartedAt !== null && Date.now() - catchUpStartedAt < CATCH_UP_STEP_LIMIT_MS
 
   const step: ConnectionStepKind | null =
     status === 'reconnecting' || status === 'connecting' || status === 'verifying'
       ? status
       : status === 'online' && isVerifying
         ? 'verifying'
-        : status === 'online' && isCatchingUp && !catchUpExpired
+        : status === 'online' && catchUpActive
           ? 'updating'
           : null
   const isDegraded = step !== null

@@ -81,6 +81,30 @@ describe('setupRoomSideEffects', () => {
     cleanup?.()
   })
 
+  // FLM-120 R1: the open room's catch-up is one owner of the "Updating..." step.
+  describe('catch-up owner', () => {
+    it('holds isCatchingUp while the open room fetches and releases it afterwards', async () => {
+      roomStore.getState().addRoom({
+        jid: ROOM, name: 'Test Room', nickname: 'testuser', joined: true, supportsMAM: true,
+        occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set(), isBookmarked: true,
+      })
+      roomStore.getState().setActiveRoom(ROOM)
+      let finish: () => void = () => {}
+      ;(mockClient.internal.mam.catchUpRoomHistory as ReturnType<typeof vi.fn>).mockImplementation(
+        () => new Promise<void>((resolve) => { finish = resolve }),
+      )
+      cleanup = setupRoomSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
+
+      await vi.waitFor(() => expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalled())
+      expect(connectionStore.getState().isCatchingUp).toBe(true)
+      finish()
+      await vi.waitFor(() => expect(connectionStore.getState().isCatchingUp).toBe(false))
+    })
+  })
+
   describe('supportsMAM subscription', () => {
     it('should trigger MAM fetch when supportsMAM becomes true on active room', async () => {
       roomStore.getState().addRoom({

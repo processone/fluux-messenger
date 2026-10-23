@@ -50,8 +50,13 @@ interface ConnectionState {
   status: ConnectionStatus
   /** True while the machine is in connected.verifying (wake verification in progress) */
   isVerifying: boolean
-  /** True while the post-connect conversation catch-up (MAM) is running */
+  /** True while any post-connect catch-up owner is still running (see beginCatchUp) */
   isCatchingUp: boolean
+  /** When the current catch-up began; the "Updating..." step is bounded from here */
+  catchUpStartedAt: number | null
+  /** Running catch-up owners; the epoch invalidates owners of an ended session */
+  catchUpOwners: number
+  catchUpEpoch: number
   jid: string | null
   error: string | null
   discoveryFailure: DiscoveryFailure | null
@@ -85,7 +90,14 @@ interface ConnectionState {
   // Actions - state setters only (connect/disconnect moved to hooks)
   setStatus: (status: ConnectionStatus) => void
   setIsVerifying: (isVerifying: boolean) => void
-  setIsCatchingUp: (isCatchingUp: boolean) => void
+  /**
+   * Register one catch-up owner (a MAM fetch, session preparation, ...).
+   * `isCatchingUp` stays true until every owner has ended. Returns the owner's
+   * end function: idempotent, and a no-op once the session's owners were reset.
+   */
+  beginCatchUp: () => () => void
+  /** Drop every owner (the connection left online). */
+  resetCatchUp: () => void
   setJid: (jid: string | null) => void
   setDiscoveryFailure: (failure: DiscoveryFailure | null) => void
   setError: (error: string | null) => void
@@ -120,6 +132,9 @@ const initialState = {
   status: 'disconnected' as ConnectionStatus,
   isVerifying: false,
   isCatchingUp: false,
+  catchUpStartedAt: null as number | null,
+  catchUpOwners: 0,
+  catchUpEpoch: 0,
   jid: null,
   error: null,
   discoveryFailure: null as DiscoveryFailure | null,
@@ -148,13 +163,39 @@ const initialState = {
   windowVisible: true, // Assume visible on startup
 }
 
+let catchUpEpochSeq = 0
+
 export const connectionStore = createStore<ConnectionState>()(
-  subscribeWithSelector((set) => ({
+  subscribeWithSelector((set, get) => ({
   ...initialState,
 
   setStatus: (status) => set({ status }),
   setIsVerifying: (isVerifying) => set({ isVerifying }),
-  setIsCatchingUp: (isCatchingUp) => set({ isCatchingUp }),
+  beginCatchUp: () => {
+    const { catchUpEpoch, catchUpOwners, catchUpStartedAt } = get()
+    set({
+      isCatchingUp: true,
+      catchUpOwners: catchUpOwners + 1,
+      catchUpStartedAt: catchUpStartedAt ?? Date.now(),
+    })
+    let ended = false
+    return () => {
+      if (ended) return
+      ended = true
+      const state = get()
+      if (state.catchUpEpoch !== catchUpEpoch) return
+      const owners = Math.max(0, state.catchUpOwners - 1)
+      set(owners === 0
+        ? { catchUpOwners: 0, isCatchingUp: false, catchUpStartedAt: null }
+        : { catchUpOwners: owners })
+    }
+  },
+  resetCatchUp: () => set({
+    isCatchingUp: false,
+    catchUpStartedAt: null,
+    catchUpOwners: 0,
+    catchUpEpoch: ++catchUpEpochSeq,
+  }),
   setJid: (jid) => set({ jid }),
   setDiscoveryFailure: (discoveryFailure) => set({ discoveryFailure }),
   setError: (error) => set({ error }),
@@ -208,6 +249,7 @@ export const connectionStore = createStore<ConnectionState>()(
 
   reset: () => set((state) => ({
     ...initialState,
+    catchUpEpoch: ++catchUpEpochSeq,
     ownResources: new Map(), // Create new Map instance on reset
     webPushEnabled: state.webPushEnabled, // Preserve persisted preference
   })),

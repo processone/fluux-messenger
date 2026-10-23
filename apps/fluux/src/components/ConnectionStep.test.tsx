@@ -11,6 +11,7 @@ import { ChatHeader } from './ChatHeader'
 let mockStatus = 'online'
 let mockIsVerifying = false
 let mockIsCatchingUp = false
+let mockCatchUpStartedAt = 0
 let mockReconnectTargetTime: number | null = null
 
 vi.mock('react-i18next', () => ({
@@ -33,7 +34,7 @@ vi.mock('@fluux/sdk/react', () => ({
       contacts: new Map([['emma@example.com', { jid: 'emma@example.com', name: 'Emma', presence: 'online', statusMessage: 'En ligne' }]]),
     }),
   useConnectionStore: (selector: (s: unknown) => unknown) =>
-    selector({ status: mockStatus, isVerifying: mockIsVerifying, isCatchingUp: mockIsCatchingUp, reconnectTargetTime: mockReconnectTargetTime }),
+    selector({ status: mockStatus, isVerifying: mockIsVerifying, isCatchingUp: mockIsCatchingUp, catchUpStartedAt: mockIsCatchingUp ? mockCatchUpStartedAt : null, reconnectTargetTime: mockReconnectTargetTime }),
   useContactTime: () => null,
   useLastActivity: vi.fn(),
 }))
@@ -179,6 +180,7 @@ describe('"Updating..." while missed messages arrive', () => {
     act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
     mockStatus = 'online'
     mockIsCatchingUp = true
+    mockCatchUpStartedAt = Date.now()
     rerender(header())
     expect(screen.getByTestId('connection-step').textContent).toContain('status.updating')
     expect(screen.queryByText('En ligne')).toBeNull()
@@ -190,6 +192,7 @@ describe('"Updating..." while missed messages arrive', () => {
 
   it('stops after the time limit even if the catch-up is still running', () => {
     mockIsCatchingUp = true
+    mockCatchUpStartedAt = Date.now()
     render(header())
     act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
     expect(screen.getByTestId('connection-step').textContent).toContain('status.updating')
@@ -198,8 +201,22 @@ describe('"Updating..." while missed messages arrive', () => {
     expect(screen.getByText('En ligne')).toBeTruthy()
   })
 
+  it('does not bring back an expired step when a header mounts later (R3)', () => {
+    mockIsCatchingUp = true
+    mockCatchUpStartedAt = Date.now()
+    const first = render(header())
+    act(() => { vi.advanceTimersByTime(CATCH_UP_STEP_LIMIT_MS + 1) })
+    expect(screen.queryByTestId('connection-step')).toBeNull()
+    first.unmount()
+    // The user navigates: a new header mounts while the store still says catching up.
+    render(header())
+    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
+    expect(screen.queryByTestId('connection-step')).toBeNull()
+  })
+
   it('does not flash for a catch-up shorter than the grace delay', () => {
     mockIsCatchingUp = true
+    mockCatchUpStartedAt = Date.now()
     const { rerender } = render(header())
     act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS - 1) })
     mockIsCatchingUp = false

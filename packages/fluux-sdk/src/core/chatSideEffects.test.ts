@@ -142,6 +142,28 @@ describe('setupChatSideEffects', () => {
     })
   })
 
+  // FLM-120 R1: the open chat's catch-up is one owner of the "Updating..." step.
+  describe('catch-up owner', () => {
+    it('holds isCatchingUp while the open chat fetches and releases it afterwards', async () => {
+      chatStore.getState().addConversation({
+        id: 'contact@example.com', name: 'contact@example.com', type: 'chat', lastMessage: undefined, unreadCount: 0,
+      })
+      chatStore.getState().setActiveConversation('contact@example.com')
+      let finish: () => void = () => {}
+      mockClient.internal.mam.catchUpConversationHistory.mockImplementation(
+        () => new Promise<void>((resolve) => { finish = resolve }),
+      )
+      connectionStore.getState().setServerInfo({ identities: [], domain: 'example.com', features: [NS_MAM] })
+      cleanup = setupChatSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => expect(connectionStore.getState().isCatchingUp).toBe(true))
+      await vi.waitFor(() => expect(mockClient.internal.mam.catchUpConversationHistory).toHaveBeenCalled())
+      finish()
+      await vi.waitFor(() => expect(connectionStore.getState().isCatchingUp).toBe(false))
+    })
+  })
+
   describe('reconnection', () => {
     it('should use forward query (start) when cache has messages after reconnection', async () => {
       const cachedTimestamp = new Date('2026-02-15T10:00:00Z')
