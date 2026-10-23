@@ -29,7 +29,6 @@ import {
   getPollOptionEmojis,
   isPollExpired,
 } from '../poll'
-import { roomStore } from '../../stores/roomStore'
 import type { StanzaClaim } from '../stanzaRouting'
 
 /**
@@ -206,12 +205,7 @@ export class Poll extends BaseModule {
 
     await this.chat.sendReaction(roomJid, messageId, newReactions)
 
-    // Persist vote acknowledgement locally for banner dismissal across page reloads
-    if (newReactions.length > 0) {
-      roomStore.getState().recordPollVote(roomJid, messageId)
-    } else {
-      roomStore.getState().removePollVote(roomJid, messageId)
-    }
+    this.deps.emitSDK('room:poll-vote', { roomJid, messageId, emojis: newReactions })
   }
 
   /**

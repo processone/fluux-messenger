@@ -22,6 +22,15 @@ const noCoreBarrel = {
     "Import from '../core/types' (or the declaring module) instead of the '../core' barrel - the barrel re-exports XMPPClient, so a store importing through it re-creates the core/stores import cycle.",
 }
 
+// Protocol modules report changes through typed SDK events. Store mutations
+// belong in bindings; type imports and pure stores/shared helpers are allowed.
+const noRuntimeStores = {
+  regex: '^(?:@fluux/sdk/stores(?:/|$)|(?:\\.{1,2}/)+stores(?:$|/(?!shared(?:/|$))))',
+  allowTypeImports: true,
+  message:
+    'Protocol modules must emit typed SDK events and let store bindings update state instead of importing runtime stores.',
+}
+
 export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
@@ -51,6 +60,14 @@ export default tseslint.config(
       // Allow console - SDK needs logging for debugging and error reporting
       'no-console': 'off',
       'no-restricted-imports': ['error', { patterns: [noStoresBarrel] }],
+    },
+  },
+  {
+    files: ['src/core/modules/**/*.ts'],
+    // Snapshot persistence is an existing composition boundary, not a protocol module.
+    ignores: ['src/core/modules/stateSnapshot.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [noStoresBarrel, noRuntimeStores] }],
     },
   },
   {

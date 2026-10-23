@@ -552,6 +552,16 @@ export function createStoreBindings(
     stores.room.updateReactions(roomJid, messageId, reactorNick, emojis)
   })
 
+  on('room:poll-vote', ({ roomJid, messageId, emojis }) => {
+    const stores = getStores()
+    // Preserve banner acknowledgement while any reaction remains, even a non-poll emoji.
+    if (emojis.length > 0) {
+      stores.room.recordPollVote(roomJid, messageId)
+    } else {
+      stores.room.removePollVote(roomJid, messageId)
+    }
+  })
+
   on('room:subject', ({ roomJid, subject }) => {
     const stores = getStores()
     stores.room.updateRoom(roomJid, { subject })

@@ -116,8 +116,8 @@ connection-instance suffix. `packages/fluux-sdk/src/core/jid.ts`.
 ### binding / store binding
 
 The primary layer that listens to typed SDK events and writes them into Zustand stores. `XMPPClient`
-installs it for React and non-React consumers alike; direct-write exceptions include connection state
-and poll-vote acknowledgement. XMPP resource binding is a different and unrelated protocol notion.
+installs it for React and non-React consumers alike, including poll-vote acknowledgement. Connection
+state has direct-write exceptions. XMPP resource binding is a different and unrelated protocol notion.
 
 **Standard notion:** a reducer layer, or the adapter half of ports-and-adapters. Bots avoid React,
 not the default bindings. `packages/fluux-sdk/src/bindings/storeBindings.ts`;

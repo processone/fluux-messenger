@@ -442,6 +442,17 @@ export interface RoomEvents {
     timestamp?: Date
   }
 
+  /**
+   * Local poll vote reactions successfully sent, including vote removal.
+   * This acknowledges the local send, not server delivery. Store bindings use
+   * the resulting reactions to persist poll banner acknowledgement.
+   */
+  'room:poll-vote': {
+    roomJid: string
+    messageId: string
+    emojis: string[]
+  }
+
   /** Room subject changed */
   'room:subject': {
     roomJid: string
