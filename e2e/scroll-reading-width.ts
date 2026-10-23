@@ -80,10 +80,13 @@ async function expectBottomAnchorHeld(list: Locator, anchor: { id: string; fract
 }
 
 async function wrappedDraft(page: Page) {
-  await page.locator('textarea').fill(
-    'A multiline draft should grow when the reading column narrows. '.repeat(5) +
-    '\nThe next paragraph stays unsent while reading history.',
-  )
+  // Typed line by line: the room composer is a contenteditable, where a newline
+  // in a single fill is not a line break.
+  const composer = page.locator('.message-input').first()
+  await composer.click()
+  await page.keyboard.insertText('A multiline draft should grow when the reading column narrows. '.repeat(5))
+  await page.keyboard.press('Shift+Enter')
+  await page.keyboard.insertText('The next paragraph stays unsent while reading history.')
   await settle(page)
 }
 

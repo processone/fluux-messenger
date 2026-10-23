@@ -1602,7 +1602,7 @@ test.describe('Typing indicator never covers message text', () => {
     expect(await pillHeight(page), 'precondition: the band is mounted with height').toBeGreaterThan(10)
 
     const marker = `sent-under-pill-${Date.now()}`
-    const composer = page.locator('textarea').first()
+    const composer = page.locator('.message-input').first()
     await composer.click()
     await composer.fill(`ok ${marker}`)
     await page.keyboard.press('Enter')
