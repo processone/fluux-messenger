@@ -265,7 +265,7 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
       {isEmpty && (
         <span
           aria-hidden="true"
-          className="message-input-placeholder pointer-events-none absolute inset-y-0 start-0 px-2 truncate text-fluux-muted"
+          className="message-input-placeholder pointer-events-none absolute inset-y-0 start-0 end-0 px-2 truncate text-fluux-muted"
           style={{ lineHeight: '24px' }}
         >
           {placeholder}

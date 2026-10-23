@@ -829,3 +829,47 @@ test.describe('narrow composer drawer on touch', () => {
     await chooser
   })
 })
+
+test.describe('room placeholder at phone width', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
+
+  /**
+   * The placeholder span is absolutely positioned inside the field. With only a start
+   * edge it sizes to its text, so `truncate` never cuts it: a long room name ran under
+   * the send button with no ellipsis.
+   */
+  test('a long placeholder is cut with an ellipsis inside the field', async ({ page }) => {
+    const editor = await openRoomComposer(page)
+    await page.evaluate(() => {
+      const demo = window as unknown as {
+        __demoClient: { stopAnimation(): void }
+        __roomStore: { getState(): { activeRoomJid: string; updateRoom(jid: string, u: { name: string }): void } }
+      }
+      demo.__demoClient.stopAnimation()
+      const rooms = demo.__roomStore.getState()
+      rooms.updateRoom(rooms.activeRoomJid, { name: 'ProcessOne technical discussions with a very long name' })
+    })
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+    await page.waitForTimeout(250) // the drawer's 160ms collapse transition
+
+    const g = await editor.evaluate((ed) => {
+      const ph = ed.parentElement!.querySelector<HTMLElement>('.message-input-placeholder')!
+      const send = ed.closest('form')!.querySelector<HTMLElement>('button[type="submit"]')!
+      const range = document.createRange()
+      range.selectNodeContents(ph)
+      return {
+        textWidth: range.getBoundingClientRect().width,
+        editorRight: ed.getBoundingClientRect().right,
+        editorWidth: ed.getBoundingClientRect().width,
+        phRight: ph.getBoundingClientRect().right,
+        sendLeft: send.getBoundingClientRect().left,
+        clientWidth: ph.clientWidth,
+        scrollWidth: ph.scrollWidth,
+      }
+    })
+    expect(g.textWidth).toBeGreaterThan(g.editorWidth)
+    expect(g.phRight).toBeLessThanOrEqual(g.editorRight + EPSILON)
+    expect(g.phRight).toBeLessThanOrEqual(g.sendLeft + EPSILON)
+    expect(g.scrollWidth).toBeGreaterThan(g.clientWidth)
+  })
+})
