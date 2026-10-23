@@ -23,6 +23,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { platform } from '@/platform'
 import { photoBlocksSend, type PendingAttachment } from '@/hooks/usePendingAttachment'
 import { PendingPhotoDetails } from './composer/PendingPhotoDetails'
+import type { ComposerChangeEvent, ComposerInputElement, ComposerSelectEvent } from './composer/composerInput'
 
 // Format file size for display
 function formatFileSize(bytes: number): string {
@@ -43,7 +44,7 @@ const PAUSED_TIMEOUT_MS = 5000
 const COMPOSING_UI_TIMEOUT_MS = 1500
 
 function restoreTextareaCursor(
-  inputRef: RefObject<HTMLTextAreaElement | null>,
+  inputRef: RefObject<ComposerInputElement | null>,
   position: number,
 ) {
   setTimeout(() => {
@@ -126,12 +127,13 @@ interface UploadState {
 }
 
 export type { ComposerAutocompleteAriaProps }
+export type { ComposerChangeEvent, ComposerInputElement, ComposerSelectEvent }
 
 export type { PendingAttachment }
 
 interface MessageComposerProps {
   /** Ref for the textarea element (for focus zones) */
-  textareaRef?: React.RefObject<HTMLTextAreaElement | null>
+  textareaRef?: React.RefObject<ComposerInputElement | null>
   /** Placeholder text for the input */
   placeholder: string
   /** Reply info if replying to a message */
@@ -164,13 +166,13 @@ interface MessageComposerProps {
   typingNotificationsEnabled?: boolean
   /** Custom input renderer for mention overlay support */
   renderInput?: (props: {
-    inputRef: RefObject<HTMLTextAreaElement | null>
-    mergedRef: (node: HTMLTextAreaElement | null) => void
+    inputRef: RefObject<ComposerInputElement | null>
+    mergedRef: (node: ComposerInputElement | null) => void
     value: string
-    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
-    onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
-    onSelect?: (e: React.SyntheticEvent<HTMLTextAreaElement>) => void
-    onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
+    onChange: (e: ComposerChangeEvent) => void
+    onKeyDown: (e: React.KeyboardEvent<ComposerInputElement>) => void
+    onSelect?: (e: ComposerSelectEvent) => void
+    onPaste?: (e: React.ClipboardEvent<HTMLElement>) => void
     placeholder: string
     ariaProps: ComposerAutocompleteAriaProps
   }) => ReactNode
@@ -357,15 +359,15 @@ export function MessageComposer({
     () => (commandsEnabled !== false && !replyingTo && classifyInput ? classifyInput(text) : 'send'),
     [text, commandsEnabled, replyingTo, classifyInput]
   )
-  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const inputRef = useRef<ComposerInputElement>(null)
 
   // Merged ref callback to assign to both internal and external refs
-  const mergedInputRef = (node: HTMLTextAreaElement | null) => {
+  const mergedInputRef = (node: ComposerInputElement | null) => {
     // Assign to internal ref
-    (inputRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = node
+    (inputRef as React.MutableRefObject<ComposerInputElement | null>).current = node
     // Assign to external ref if provided
     if (textareaRef) {
-      (textareaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = node
+      (textareaRef as React.MutableRefObject<ComposerInputElement | null>).current = node
     }
   }
 
@@ -487,7 +489,9 @@ export function MessageComposer({
   }
   const resizeToContent = useCallback((forceRemeasure = false) => {
     const textarea = inputRef.current
-    if (!textarea) return
+    // A contenteditable input sizes itself in CSS (1 to 8 lines); only a textarea
+    // needs its height written.
+    if (!(textarea instanceof HTMLTextAreaElement)) return
 
     if (paddingBlockRef.current < 0 || forceRemeasure) {
       const cs = getComputedStyle(textarea)
@@ -580,9 +584,19 @@ export function MessageComposer({
     if (!textarea || typeof ResizeObserver === 'undefined') return
 
     let lastWidth = -1 // first callback (fires on observe) establishes the baseline and re-measures once layout settled
+    let lastHeight = -1
+    const selfSizing = !(textarea instanceof HTMLTextAreaElement)
     const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width
-      if (width === undefined || width === lastWidth) return
+      const { width, height } = entries[0]?.contentRect ?? {}
+      if (width === undefined) return
+      // A self-sizing input grows on its own, so a height change is what
+      // tells the surrounding layout the composer moved.
+      if (selfSizing && height !== undefined && height !== lastHeight) {
+        const first = lastHeight < 0
+        lastHeight = height
+        if (!first) onInputResizeRef.current?.()
+      }
+      if (width === lastWidth) return
       lastWidth = width
       resizeToContent(true)
     })
@@ -592,7 +606,7 @@ export function MessageComposer({
 
   // Control character filtering (Tauri macOS arrow-key bug) is handled by
   // the TextArea component — see ui/TextInput.tsx
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleTextChange = (e: ComposerChangeEvent) => {
     // A keystroke legitimately re-renders this controlled input (text + caret)
     // ~1-2× — fast typing / key-repeat would otherwise trip the render-loop
     // *warning*. Arm the interaction grace so warnings stay quiet while typing;
@@ -743,7 +757,7 @@ export function MessageComposer({
     restoreTextareaCursor(inputRef, newCursorPosition)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<ComposerInputElement>) => {
     const enterSends = e.key === 'Enter' && !e.shiftKey && !usesMobileEnterKey()
     if (isEmojiAutocompleteActive) {
       if (e.key === 'ArrowUp') {
@@ -793,7 +807,7 @@ export function MessageComposer({
     }
   }
 
-  const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+  const handleSelect = (e: ComposerSelectEvent) => {
     updateCaret(e.currentTarget.value, e.currentTarget.selectionStart)
   }
 
@@ -812,7 +826,7 @@ export function MessageComposer({
   // Supports: screenshots, "Copy Image" from browsers, pasted files
   // On Linux/Tauri, WebKitGTK may not expose clipboard images through the web API,
   // so we fall back to native clipboard reading via tauri-plugin-clipboard-manager.
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const handlePaste = (e: React.ClipboardEvent<HTMLElement>) => {
     if (!onFileSelect) return
 
     const clipboardData = e.clipboardData

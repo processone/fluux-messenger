@@ -295,7 +295,7 @@ test.describe('message toolbar alignment', () => {
         })
         await page.locator('[data-nav="rooms"]').click()
         await page.getByText('Team Chat', { exact: true }).first().click()
-        await page.locator('.composer-mirror + textarea').waitFor()
+        await page.locator('.message-input[contenteditable="true"]').waitFor()
 
         const messageId = 'demo-room-whisper-pub'
         if (afterDivider) {

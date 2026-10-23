@@ -3,7 +3,7 @@ import { getActiveMessageListController } from './conversation/activeMessageList
 import { isSpamModerated } from '@/utils/spamModeration'
 import { SpamModerationOption } from './SpamModerationOption'
 import type { GapInterval, MessageRowRef } from '@fluux/sdk'
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { flushSync } from 'react-dom'
 import { shallow } from 'zustand/shallow'
 import { useTranslation } from 'react-i18next'
@@ -24,9 +24,11 @@ import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { deriveCopyBody } from '@/utils/copyMessageBody'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, MessageCircle, EyeOff, User, Settings, Ear, X, Hash } from 'lucide-react'
 import { EasterEggAnimation } from './easter-eggs/EasterEggAnimation'
-import { TextInput, TextArea } from './ui/TextInput'
-import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, type ComposerAutocompleteAriaProps, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
+import { TextInput } from './ui/TextInput'
+import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, type ComposerAutocompleteAriaProps, type ComposerInputElement, type ComposerChangeEvent, type ComposerSelectEvent } from './MessageComposer'
 import { MentionAutocompleteMenu } from './composer/MentionAutocompleteMenu'
+import { RoomComposerEditor } from './composer/RoomComposerEditor'
+import { reconcileReferences } from './composer/reconcileReferences'
 import { composerAutocompleteAriaProps } from './composer/autocompleteAria'
 import { usesMobileEnterKey } from './composer/mobileEnter'
 import { ConversationColumn } from './conversation/ConversationColumn'
@@ -706,7 +708,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                 key={activeRoom.jid}
                 ref={composerHandleRef}
                 roomJid={activeRoom.jid}
-                textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
+                textareaRef={composerRef as React.RefObject<ComposerInputElement | null>}
                 sendMessage={sendMessage}
                 sendCorrection={sendCorrection}
                 retractMessage={retractMessage}
@@ -1867,7 +1869,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
 interface RoomMessageInputProps {
   roomJid: string
-  textareaRef?: React.RefObject<HTMLTextAreaElement | null>
+  textareaRef?: React.RefObject<ComposerInputElement | null>
   sendMessage: (roomJid: string, body: string, options?: { replyTo?: { id: string; to: string; fallback?: { author: string; body: string } }; references?: MentionReference[]; attachment?: FileAttachment }) => Promise<string>
   sendCorrection: (roomJid: string, messageId: string, newBody: string, attachment?: FileAttachment) => Promise<void>
   retractMessage: (roomJid: string, messageId: string) => Promise<void>
@@ -2015,19 +2017,23 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     onDraftRestored: handleDraftRestored,
   })
 
-  // Keep the mention mirror's scroll offset locked to the textarea's after every
-  // content change. The textarea's own scroll event is not sufficient: on a
-  // keystroke the browser scrolls to reveal the caret BEFORE React re-renders the
-  // mirror, so the handler copies the offset while the mirror is still a line
-  // short — the write clamps to 0 and nothing re-syncs once the content lands.
-  // Re-asserting here, after the DOM is updated and before paint, is what keeps
-  // the highlighted text under the caret on the newline that grows the draft.
-  const mirrorRef = useRef<HTMLDivElement | null>(null)
-  useLayoutEffect(() => {
-    const mirror = mirrorRef.current
-    const input = textareaRef?.current
-    if (mirror && input) mirror.scrollTop = input.scrollTop
-  }, [text, textareaRef])
+  // The editor reports its own edits together with the mentions it now holds, so
+  // those need no bookkeeping here. Any other rewrite of the draft (a mention or
+  // emoji the composer inserts, a completed :shortcode:) moves the mentions that
+  // follow it, so their offsets are carried across the change.
+  const textRef = useRef(text)
+  textRef.current = text
+  const editorTextRef = useRef<string | null>(null)
+  const handleEditorEdit = useCallback((editedText: string, editedReferences: MentionReference[]) => {
+    editorTextRef.current = editedText
+    setReferences(editedReferences)
+  }, [])
+  const handleValueChange = useCallback((nextText: string) => {
+    setText(nextText)
+    if (nextText !== editorTextRef.current) {
+      setReferences(prev => reconcileReferences(textRef.current, nextText, prev))
+    }
+  }, [setText])
 
   // Exit whisper mode AND discard the typed text. The composer draft is keyed only
   // by room JID, so a private whisper draft would otherwise survive into the public
@@ -2093,7 +2099,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   const handleMentionSelect = (index: number) => {
     const { newText, newCursorPosition, reference } = selectMatch(index)
     setText(newText)
-    setReferences(prev => [...prev, reference])
+    setReferences(prev => [...reconcileReferences(text, newText, prev), reference])
     // Restores focus, drops the caret after the mention rather than at the end
     // of the message, and reports the new position back for the next lookup.
     composerRef.current?.placeCaret(newText, newCursorPosition)
@@ -2332,15 +2338,15 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     mentionDropdown
   )
 
-  // Custom input renderer with mention highlighting
-  const renderMentionInput = ({ inputRef, mergedRef, value, onChange, onKeyDown: baseKeyDown, onSelect, onPaste, placeholder, ariaProps }: {
-    inputRef: React.RefObject<HTMLTextAreaElement | null>
-    mergedRef: (node: HTMLTextAreaElement | null) => void
+  // Custom input renderer: the single-layer editor, which colours mentions in
+  // the same element that holds the caret.
+  const renderMentionInput = ({ mergedRef, value, onChange, onKeyDown: baseKeyDown, onSelect, onPaste, placeholder, ariaProps }: {
+    mergedRef: (node: ComposerInputElement | null) => void
     value: string
-    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
-    onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
-    onSelect?: (e: React.SyntheticEvent<HTMLTextAreaElement>) => void
-    onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
+    onChange: (e: ComposerChangeEvent) => void
+    onKeyDown: (e: React.KeyboardEvent<ComposerInputElement>) => void
+    onSelect?: (e: ComposerSelectEvent) => void
+    onPaste?: (e: React.ClipboardEvent<HTMLElement>) => void
     placeholder: string
     ariaProps: ComposerAutocompleteAriaProps
   }) => {
@@ -2356,55 +2362,10 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         })
       : ariaProps
 
-    // Enhanced keydown handler for mentions
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Keyboard handling for the completion menus. Backspace/Delete need nothing
+    // here: a mention is one unit of the editor, so it goes in one keystroke.
+    const handleKeyDown = (e: KeyboardEvent) => {
       const enterSelectsSuggestion = e.key === 'Enter' && !usesMobileEnterKey()
-      // Handle backspace/delete within a mention - delete the whole mention at once
-      if (e.key === 'Backspace' || e.key === 'Delete') {
-        const textarea = e.currentTarget
-        const selStart = textarea.selectionStart
-        const selEnd = textarea.selectionEnd
-
-        // Find if cursor/selection overlaps with any mention
-        for (let i = 0; i < references.length; i++) {
-          const ref = references[i]
-          // Check if cursor is inside or at the boundary of this mention
-          const cursorInMention = (e.key === 'Backspace')
-            ? (selStart > ref.begin && selStart <= ref.end) // Backspace: cursor after start, up to end
-            : (selStart >= ref.begin && selStart < ref.end) // Delete: cursor from start, before end
-          const selectionOverlapsMention = selStart < ref.end && selEnd > ref.begin
-
-          if (cursorInMention || selectionOverlapsMention) {
-            e.preventDefault()
-
-            // Remove the entire mention from text
-            const newText = text.slice(0, ref.begin) + text.slice(ref.end)
-            const mentionLength = ref.end - ref.begin
-
-            // Update references: remove this one and adjust positions of later ones
-            const newReferences = references
-              .filter((_, idx) => idx !== i)
-              .map(r => {
-                if (r.begin > ref.begin) {
-                  return { ...r, begin: r.begin - mentionLength, end: r.end - mentionLength }
-                }
-                return r
-              })
-
-            setText(newText)
-            setReferences(newReferences)
-
-            // Set cursor to where the mention started
-            setTimeout(() => {
-              if (inputRef.current) {
-                inputRef.current.setSelectionRange(ref.begin, ref.begin)
-                setCursorPosition(ref.begin)
-              }
-            }, 0)
-            return
-          }
-        }
-      }
 
       // Handle command-menu keyboard navigation. Takes precedence over the mention
       // menu -- in practice they are mutually exclusive (command menu only triggers
@@ -2464,60 +2425,22 @@ export const RoomMessageInput = memo(function RoomMessageInput({
       }
 
       // Pass to base handler for enter to send
-      baseKeyDown(e)
+      baseKeyDown(e as unknown as React.KeyboardEvent<ComposerInputElement>)
     }
 
     return (
-      <>
-        {/* Background layer with styled mentions - positioned absolutely within parent wrapper */}
-        {/* The mirror must wrap at exactly the textarea's content width, or the
-            glyphs the user reads drift away from the caret they sit under. The
-            styled scrollbar takes layout, so the width depends on whether a
-            scrollbar is reserved — and `scrollbar-gutter: stable` (index.css)
-            only reserves one on an overflow:hidden box in Blink, not WebKit,
-            which is the engine the desktop app runs. Matching the textarea's
-            `overflow-y: auto` makes the reservation track it in every engine:
-            both boxes hold the same content at the same height, so they cross
-            the overflow boundary together. `composer-mirror` then hides this
-            layer's own scrollbar without giving back the width it reserves. */}
-        <div
-          className="message-input composer-mirror absolute inset-0 px-2 pointer-events-none
-                     whitespace-pre-wrap overflow-y-auto overflow-x-hidden"
-          aria-hidden="true"
-          ref={mirrorRef}
-        >
-          {renderInputWithMentions(value, references)}
-        </div>
-        {/* Transparent textarea on top - uses shared base classes for consistency */}
-        <TextArea
-          ref={mergedRef}
-          value={value}
-          onChange={onChange}
-          onSelect={onSelect}
-          onKeyDown={handleKeyDown}
-          onPaste={onPaste}
-          onScroll={(e) => {
-            // Sync overlay scroll when textarea scrolls
-            const overlay = e.currentTarget.previousElementSibling as HTMLElement
-            if (overlay) {
-              overlay.scrollTop = e.currentTarget.scrollTop
-            }
-          }}
-          placeholder={placeholder}
-          rows={1}
-          spellCheck={true}
-          autoCorrect="on"
-          // Inline predictions add layout-only text that the mention mirror cannot
-          // render, moving the caret away from the visible text on macOS.
-          // React's textarea types do not yet declare this lowercase attribute.
-          {...{ writingsuggestions: 'false' }}
-          autoCapitalize="sentences"
-          enterKeyHint="enter"
-          {...inputAriaProps}
-          className={`${MESSAGE_INPUT_BASE_CLASSES} ${MESSAGE_INPUT_OVERLAY_CLASSES}`}
-          style={{ caretColor: 'var(--fluux-text, #e4e4e7)' }}
-        />
-      </>
+      <RoomComposerEditor
+        value={value}
+        references={references}
+        placeholder={placeholder}
+        ariaProps={inputAriaProps}
+        mergedRef={mergedRef}
+        onEdit={handleEditorEdit}
+        onChange={onChange}
+        onSelect={onSelect ?? noopSelect}
+        onKeyDown={handleKeyDown}
+        onPaste={onPaste}
+      />
     )
   }
 
@@ -2597,7 +2520,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         classifyInput={classifyInput}
         commandsEnabled={!whisperTarget}
         value={text}
-        onValueChange={setText}
+        onValueChange={handleValueChange}
         onSelectionChange={setCursorPosition}
         onFileSelect={onFileSelect}
         uploadState={uploadState}
@@ -2662,78 +2585,4 @@ function RoomJoinPrompt({
   )
 }
 
-// Helper functions
-
-/**
- * Render text with @mentions highlighted for the input overlay
- * Only highlights completed mentions (those in the references array)
- */
-/**
- * A `pre-wrap` container lays out no line box for a terminal newline, but a
- * textarea does — so for any draft ending in a newline the mirror is one line
- * shorter than the textarea it has to match. At the cap that means it never
- * becomes a scroll container: it reserves no scrollbar gutter (a 6px wrap
- * mismatch in WebKit) and cannot follow the textarea's scrollTop, so the
- * highlighted text drifts away from the caret. Pressing Enter for a new line is
- * the most ordinary way to hit this. A zero-width space forces the final line
- * box without contributing any advance width.
- */
-const TRAILING_LINE_SENTINEL = '\u200b'
-
-function renderInputWithMentions(text: string, references: MentionReference[]): React.ReactNode {
-  if (!text) return null
-
-  // However many newlines a draft ends with, only the last one loses its line box.
-  const sentinel = text.endsWith('\n') ? TRAILING_LINE_SENTINEL : ''
-
-  // If no references, render plain text
-  if (references.length === 0) {
-    return <span className="text-fluux-text">{text + sentinel}</span>
-  }
-
-  // Sort references by begin position
-  const sortedRefs = [...references].sort((a, b) => a.begin - b.begin)
-
-  const parts: React.ReactNode[] = []
-  let lastIndex = 0
-
-  for (let i = 0; i < sortedRefs.length; i++) {
-    const ref = sortedRefs[i]
-
-    // Add text before this mention
-    if (ref.begin > lastIndex) {
-      parts.push(
-        <span key={`text-${i}`} className="text-fluux-text">
-          {text.slice(lastIndex, ref.begin)}
-        </span>
-      )
-    }
-
-    // Add the highlighted mention
-    parts.push(
-      <span key={`mention-${i}`} className="text-fluux-brand">
-        {text.slice(ref.begin, ref.end)}
-      </span>
-    )
-
-    lastIndex = ref.end
-  }
-
-  // Add any remaining text after the last mention. The sentinel rides along on
-  // that trailing run, or stands alone when a mention ends the draft.
-  if (lastIndex < text.length) {
-    parts.push(
-      <span key="text-end" className="text-fluux-text">
-        {text.slice(lastIndex) + sentinel}
-      </span>
-    )
-  } else if (sentinel) {
-    parts.push(
-      <span key="text-end" className="text-fluux-text">
-        {sentinel}
-      </span>
-    )
-  }
-
-  return <>{parts}</>
-}
+const noopSelect = () => {}

@@ -18,13 +18,14 @@
  *     → `never clips content without a scrollbar`, `grows to the documented cap`.
  *
  *  2. CARET / TEXT DRIFT IN ROOMS.
- *     The room composer paints mention highlights with a mirror div stacked behind
- *     a transparent textarea. `::-webkit-scrollbar` is styled with an explicit
- *     width, so the scrollbar takes layout instead of overlaying: the moment the
- *     textarea started scrolling it lost those pixels of content width while the
- *     mirror kept the full width. The layers then wrapped at different columns, so
- *     the text the user sees drifted away from the caret it is meant to sit under.
- *     → `mirror keeps the textarea's content width`, `mirror matches text metrics`.
+ *     The room composer used to paint mention highlights with a mirror div stacked
+ *     behind a transparent textarea. Two layers wrap independently, so a scrollbar
+ *     taking width in one of them, a missing trailing line box, or text the engine
+ *     adds to only one layer (macOS inline predictions) moved the caret away from
+ *     the text it belonged to. The room composer is now ONE contenteditable that
+ *     holds the text, the mention colour and the caret, so there is no second
+ *     layout to disagree with.
+ *     → `room composer is one layer`, `caret sits on the glyph it follows`.
  *
  * Run:
  *   npm run test:composer
@@ -41,8 +42,8 @@ import { wheelAwayFromBottom } from './harness/scrollHarness'
 const DEMO_URL = '/demo.html?tutorial=false'
 
 /**
- * A room, so the mention-highlight mirror is in play — the 1:1 composer renders a
- * plain textarea with no mirror. Reached through the UI rather than a hash route:
+ * A room, whose composer is the single-layer mention editor — the 1:1 composer is a
+ * plain textarea. Reached through the UI rather than a hash route:
  * demo.tsx clears localStorage on boot, so a deep link into a room does not
  * survive a cold context.
  */
@@ -72,11 +73,13 @@ interface Geometry {
   clientHeight: number
   scrollHeight: number
   scrollTop: number
-  textareaContentWidth: number
-  mirrorContentWidth: number
-  mirrorScrollHeight: number
+  /** Width the text wraps inside; excludes any scrollbar the engine put in flow. */
+  contentWidth: number
   paddingTop: number
 }
+
+/** The room composer's editor: a contenteditable carrying the shared .message-input styling. */
+const ROOM_EDITOR = '.message-input[contenteditable="true"]'
 
 /** Load the demo straight into a room and wait for the composer to mount. */
 async function openRoomComposer(page: Page): Promise<Locator> {
@@ -85,62 +88,49 @@ async function openRoomComposer(page: Page): Promise<Locator> {
   await page.locator('[data-nav="rooms"]').click()
   await page.getByText(ROOM_NAME, { exact: true }).first().click()
 
-  // Wait for the ROOM composer specifically — a textarea stacked on a .composer-mirror —
-  // rather than "the first textarea on the page". The demo runs its own default-route
-  // navigation on startup, so an early click can leave the app in a 1:1 view whose
-  // composer carries no mirror; the old unscoped locator matched that one and failed the
-  // assertion below. Waiting on the pairing makes the wait condition and the structure
-  // the tests depend on the same thing.
-  const textarea = page.locator('.composer-mirror + textarea').first()
-  await textarea.waitFor({ state: 'visible', timeout: 30_000 })
-
-  // The geometry invariants below compare the mirror's box against the textarea's, which
-  // only holds while both carry the shared .message-input styling. Assert that contract
-  // so a class rename fails loudly here instead of silently skewing every measurement.
-  const mirrorSharesComposerStyling = await textarea.evaluate(
-    (el) => el.previousElementSibling?.classList.contains('message-input') ?? false
-  )
-  expect(
-    mirrorSharesComposerStyling,
-    'the composer mirror should share the .message-input styling with the textarea',
-  ).toBe(true)
-  return textarea
+  // Wait for the ROOM composer specifically, rather than "the first input on the page":
+  // the demo runs its own default-route navigation on startup, so an early click can leave
+  // the app in a 1:1 view whose composer is a textarea.
+  const editor = page.locator(ROOM_EDITOR).first()
+  await editor.waitFor({ state: 'visible', timeout: 30_000 })
+  return editor
 }
 
-/** Replace the draft the way React's controlled input expects, then settle layout. */
-async function setDraft(textarea: Locator, value: string): Promise<void> {
-  await textarea.evaluate((el, v) => {
-    const setter = Object.getOwnPropertyDescriptor(
-      window.HTMLTextAreaElement.prototype,
-      'value'
-    )!.set!
-    setter.call(el, v)
-    el.dispatchEvent(new Event('input', { bubbles: true }))
-  }, value)
-  // React commits the mirror's new content asynchronously. Two frames put us
-  // past the commit and the layout effect that re-syncs the mirror, so the
-  // measurements below compare settled boxes instead of racing the render.
-  await textarea.evaluate(
+/**
+ * Replace the draft with real input, then settle layout. Select-all + delete,
+ * then each line typed and joined by Shift+Enter (plain Enter sends). Works on a
+ * textarea and on the contenteditable, and goes through the same events a user's
+ * keyboard does — a direct write to the DOM would bypass the editor's own state.
+ */
+async function setDraft(input: Locator, value: string): Promise<void> {
+  const page = input.page()
+  await input.focus()
+  await page.keyboard.press('ControlOrMeta+A')
+  await page.keyboard.press('Backspace')
+  const lines = value.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]) await page.keyboard.insertText(lines[i])
+    if (i < lines.length - 1) await page.keyboard.press('Shift+Enter')
+  }
+  // React commits the new text asynchronously. Two frames put us past the commit
+  // and the autosize that follows it, so the measurements below compare settled
+  // boxes instead of racing the render.
+  await input.evaluate(
     () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
   )
 }
 
-async function measure(textarea: Locator): Promise<Geometry> {
-  return textarea.evaluate((el) => {
-    const ta = el as HTMLTextAreaElement
-    const mirror = ta.previousElementSibling as HTMLElement | null
+async function measure(input: Locator): Promise<Geometry> {
+  return input.evaluate((el) => {
+    const cs = getComputedStyle(el)
     return {
-      styleHeight: ta.style.height,
-      overflowY: ta.style.overflowY,
-      clientHeight: ta.clientHeight,
-      scrollHeight: ta.scrollHeight,
-      scrollTop: ta.scrollTop,
-      // clientWidth excludes any scrollbar the engine put in flow — which is the
-      // whole point: this is the width the text actually wraps inside.
-      textareaContentWidth: ta.clientWidth,
-      mirrorContentWidth: mirror ? mirror.clientWidth : -1,
-      mirrorScrollHeight: mirror ? mirror.scrollHeight : -1,
-      paddingTop: parseFloat(getComputedStyle(ta).paddingTop) || 0,
+      styleHeight: (el as HTMLElement).style.height,
+      overflowY: cs.overflowY,
+      clientHeight: el.clientHeight,
+      scrollHeight: el.scrollHeight,
+      scrollTop: el.scrollTop,
+      contentWidth: el.clientWidth,
+      paddingTop: parseFloat(cs.paddingTop) || 0,
     }
   })
 }
@@ -153,7 +143,7 @@ async function openStableComposer(page: Page, view: 'chat' | 'room'): Promise<Lo
     textarea = await openRoomComposer(page)
   } else {
     await bootDemo(page, DEMO_URL)
-    textarea = page.locator('textarea').first()
+    textarea = page.locator('textarea.message-input').first()
     await textarea.waitFor({ state: 'visible' })
   }
   // Keep history fixed: the demo timeline adds messages, and its transport
@@ -256,15 +246,15 @@ async function waitForMessageLayoutSettled(scroller: Locator): Promise<void> {
 // ── Invariants ───────────────────────────────────────────────────────────────
 
 test.describe('composer geometry', () => {
-  // Native inline predictions add layout-only text that the mention
-  // mirror cannot paint. Guard WebKit's opt-out gate, not simulated predictions
-  // (direct setMarkedText injection bypasses that gate).
-  test('disables inline predictions only in the mirrored room composer', async ({ page }) => {
+  // Inline predictions are native text the engine lays out next to the caret. A
+  // mirrored composer cannot paint it, so rooms used to opt out of it; the single
+  // layer draws it like any other glyph, so neither composer may opt out any more.
+  test('keeps inline predictions available in the room and 1:1 composers', async ({ page }) => {
     const chat = await openStableComposer(page, 'chat')
     await expect(chat).not.toHaveAttribute('writingsuggestions', 'false')
 
     const room = await openRoomComposer(page)
-    await expect(room).toHaveAttribute('writingsuggestions', 'false')
+    await expect(room).not.toHaveAttribute('writingsuggestions', 'false')
   })
 
   for (const view of ['chat', 'room'] as const) {
@@ -275,7 +265,7 @@ test.describe('composer geometry', () => {
       const draft = 'First line\nSecond line\nThird line\nFourth line\nLast line example.'
       const scroller = page.locator('[data-message-list]').first()
       const snapshot = async () => scroller.evaluate((el) => {
-        const ta = document.querySelector('textarea')!
+        const ta = document.querySelector('.message-input')!
         return {
           composerHeight: ta.clientHeight,
           viewportHeight: el.clientHeight,
@@ -340,7 +330,7 @@ test.describe('composer geometry', () => {
           await waitForMessageLayoutSettled(scroller)
 
           const read = (anchorIndex: string | null = null) => scroller.evaluate((el, expectedAnchorIndex) => {
-            const ta = document.querySelector('textarea')!
+            const ta = document.querySelector('.message-input')!
             const badge = el.parentElement!.querySelector('[data-typing-pill]')
             const rect = el.getBoundingClientRect()
             const rows = Array.from(el.querySelectorAll('.message-row[data-message-id]'))
@@ -500,133 +490,122 @@ test.describe('composer geometry', () => {
   })
 
   /**
-   * The caret lives in the textarea; the glyphs the user sees live in the mirror.
-   * They only agree if both wrap inside the same content width — in EVERY overflow
-   * state, since the scrollbar appearing is what used to change it. This is the
-   * guard that keeps mention highlighting viable: without it the only fix would be
-   * dropping the mirror (and nick rendering with it).
+   * The structural half of the fix: caret, text and mention colour are one
+   * element. A second layer is what let wrap points, scrollbar gutters and
+   * engine-generated text disagree, so its return must fail loudly here.
    */
-  test('mention mirror keeps the textarea content width in every overflow state', async ({ page }) => {
-    const textarea = await openRoomComposer(page)
+  test('room composer is one layer: no mirror, no textarea, mentions styled in place', async ({ page }) => {
+    const editor = await openRoomComposer(page)
+    const card = page.locator('.composer-card')
+    await expect(card.locator('.composer-mirror')).toHaveCount(0)
+    await expect(card.locator('textarea')).toHaveCount(0)
 
-    for (const n of [1, MAX_LINES, MAX_LINES + 4]) {
-      await setDraft(textarea, linesOf(n))
-      const g = await measure(textarea)
-      expect(
-        g.mirrorContentWidth,
-        `${n} lines (overflow-y:${g.overflowY}): mirror wraps at ${g.mirrorContentWidth}px but the caret wraps at ${g.textareaContentWidth}px — the visible text drifts away from the caret`
-      ).toBe(g.textareaContentWidth)
+    await editor.click()
+    await page.keyboard.type('hello @')
+    await page.keyboard.press('Enter') // picks the first suggestion
+    const mention = editor.locator('[data-mention]')
+    await expect(mention).toHaveCount(1)
+    const mentionText = (await mention.textContent())!
+    expect(mentionText.startsWith('@')).toBe(true)
+    // The colour is applied to the real text node the caret sits in, not to a copy.
+    const colours = await editor.evaluate((el) => {
+      const mention = el.querySelector('[data-mention]')!
+      const plain = el.querySelector('p')!.firstChild as HTMLElement
+      return { mention: getComputedStyle(mention).color, plain: getComputedStyle(plain.parentElement!).color }
+    })
+    expect(colours.mention).not.toBe(colours.plain)
+  })
+
+  /**
+   * The reported bug as a user sees it: the caret is where the last typed
+   * character is. After typing a message that wraps onto several lines, the
+   * caret must sit on the line of the last glyph, right after it — in whichever
+   * engine, at whatever width.
+   */
+  test('caret sits on the glyph it follows on every wrapped line', async ({ page }) => {
+    const editor = await openRoomComposer(page)
+    await editor.click()
+
+    const words = 'We found a registration for the jid in this room, and will check if we misinterpret the message'
+    for (const width of [1298, 1000, 760]) {
+      await page.setViewportSize({ width, height: 900 })
+      await setDraft(editor, '')
+      await page.keyboard.insertText(`${words} ${words}`)
+      // Compare after every ArrowLeft too, so the caret is checked on each wrapped line, not just the last.
+      for (const stepsBack of [0, 30, 60, 90]) {
+        for (let i = 0; i < (stepsBack === 0 ? 0 : 30); i++) await page.keyboard.press('ArrowLeft')
+        const probe = await editor.evaluate((el) => {
+          const sel = getSelection()!
+          const range = sel.getRangeAt(0)
+          const caret = range.getClientRects()[0] ?? range.startContainer.parentElement!.getBoundingClientRect()
+          // The glyph before the caret.
+          const text = range.startContainer
+          const before = document.createRange()
+          before.setStart(text, Math.max(0, range.startOffset - 1))
+          before.setEnd(text, range.startOffset)
+          const glyph = before.getBoundingClientRect()
+          return { caretTop: caret.top, caretLeft: caret.left, glyphTop: glyph.top, glyphRight: glyph.right }
+        })
+        expect(
+          Math.abs(probe.caretTop - probe.glyphTop),
+          `${width}px, ${stepsBack} chars back: caret top ${probe.caretTop} vs glyph top ${probe.glyphTop}`
+        ).toBeLessThanOrEqual(2)
+        expect(
+          Math.abs(probe.caretLeft - probe.glyphRight),
+          `${width}px, ${stepsBack} chars back: caret x ${probe.caretLeft} vs glyph right edge ${probe.glyphRight}`
+        ).toBeLessThanOrEqual(2)
+      }
     }
   })
 
   /**
-   * A draft ending in a newline is the case a `pre-wrap` mirror gets wrong: it
-   * lays out no line box for the terminal break, where the textarea does. The
-   * mirror is then a line shorter, which at the overflow boundary means it does
-   * not become a scroll container at all — so it reserves no scrollbar gutter
-   * (a 6px wrap mismatch in WebKit) and cannot follow the textarea's scrollTop.
-   * Pressing Enter for a new line is the single most ordinary way to reach this.
+   * A mention is one unit: one Backspace removes all of it and the references
+   * the message is sent with follow. Replaces the old manual offset arithmetic.
    */
-  test('mention mirror tracks the textarea when the draft ends with a newline', async ({ page }) => {
-    const textarea = await openRoomComposer(page)
+  test('a mention deletes atomically', async ({ page }) => {
+    const editor = await openRoomComposer(page)
+    await editor.click()
+    await page.keyboard.type('ping @')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('now')
+    await expect(editor.locator('[data-mention]')).toHaveCount(1)
+    for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowLeft') // before " now"
+    // Keys outrun the browser's selectionchange, which is how the editor learns
+    // where the caret is; a person types slower. Wait until it has caught up.
+    const afterMention = 'ping '.length + (await editor.locator('[data-mention]').textContent())!.length
+    await expect.poll(() => editor.evaluate((el) => (el as unknown as { selectionStart: number }).selectionStart)).toBe(afterMention)
+    await page.keyboard.press('Backspace')
+    await expect(editor.locator('[data-mention]')).toHaveCount(0)
+    expect(await editor.evaluate((el) => (el as unknown as { value: string }).value)).toBe('ping  now')
+  })
 
-    // Just under the cap, at it, and past it — the boundary is where a missing
-    // final line box flips the mirror out of being scrollable.
-    for (const n of [2, MAX_LINES, MAX_LINES + 4]) {
-      const draft = `${linesOf(n)}\n`
-      await setDraft(textarea, draft)
-
-      const g = await measure(textarea)
-      expect(
-        g.mirrorContentWidth,
-        `${n} lines + trailing newline (overflow-y:${g.overflowY}): mirror wraps at ${g.mirrorContentWidth}px but the caret wraps at ${g.textareaContentWidth}px`
-      ).toBe(g.textareaContentWidth)
-      expect(
-        g.mirrorScrollHeight,
-        `${n} lines + trailing newline: mirror lays out ${g.mirrorScrollHeight}px of content but the textarea lays out ${g.scrollHeight}px — the mirror is missing the final line box`
-      ).toBe(g.scrollHeight)
-
-      // The mirror must be able to follow the textarea's scroll offset. It can
-      // only do that if it has the same scrollable height.
-      const offsets = await textarea.evaluate((el) => {
-        const ta = el as HTMLTextAreaElement
-        const mirror = ta.previousElementSibling as HTMLElement
-        ta.scrollTop = ta.scrollHeight
-        ta.dispatchEvent(new Event('scroll', { bubbles: true }))
-        return { textarea: ta.scrollTop, mirror: mirror.scrollTop }
-      })
-      expect(
-        offsets.mirror,
-        `${n} lines + trailing newline: textarea scrolled to ${offsets.textarea} but the mirror stayed at ${offsets.mirror} — highlighted text drifts vertically from the caret`
-      ).toBe(offsets.textarea)
-    }
-
-    // The same thing the way a user reaches it: fill the composer, then press
-    // Enter for one more line. Real keystrokes, so the browser's own
-    // caret-into-view scroll runs and the mirror has to follow it.
-    await setDraft(textarea, '')
-    await textarea.click()
+  /**
+   * A draft ending in a newline needs its own line box: pressing Enter for a new
+   * line must leave the caret on that new line, inside the scrollport.
+   */
+  test('a trailing newline gets its own line and keeps the caret visible', async ({ page }) => {
+    const editor = await openRoomComposer(page)
+    await setDraft(editor, '')
     for (let n = 1; n <= MAX_LINES; n++) {
-      await textarea.type(`line ${n}`)
+      await page.keyboard.insertText(`line ${n}`)
       await page.keyboard.press('Shift+Enter') // plain Enter sends
     }
-
     expect(
-      await textarea.evaluate((el) => (el as HTMLTextAreaElement).value.endsWith('\n')),
+      await editor.evaluate((el) => (el as unknown as { value: string }).value.endsWith('\n')),
       'the draft should end on the newline just typed'
     ).toBe(true)
 
-    // Polled rather than sampled once: the browser's caret scroll and React's
-    // re-sync land on separate frames, so a single read can catch the gap
-    // between them. It still fails loudly — with the real numbers — if the
-    // mirror never catches up.
     await expect
-      .poll(
-        async () =>
-          textarea.evaluate((el) => {
-            const ta = el as HTMLTextAreaElement
-            const mirror = ta.previousElementSibling as HTMLElement
-            const synced = mirror.scrollTop === ta.scrollTop && mirror.clientWidth === ta.clientWidth
-            return synced
-              ? 'synced'
-              : `mirror scrollTop ${mirror.scrollTop} vs textarea ${ta.scrollTop}, width ${mirror.clientWidth} vs ${ta.clientWidth}`
-          }),
-        { timeout: 5_000 }
-      )
-      .toBe('synced')
-  })
-
-  /**
-   * The rest of the mirror contract. Identical width only guarantees identical
-   * wrapping if the text metrics match too, so pin them: a future font or padding
-   * tweak applied to one layer is a caret-drift regression.
-   */
-  test('mention mirror matches the textarea text metrics', async ({ page }) => {
-    const textarea = await openRoomComposer(page)
-    await setDraft(textarea, linesOf(3))
-
-    const metrics = await textarea.evaluate((el) => {
-      const pick = (n: Element) => {
-        const s = getComputedStyle(n)
-        return {
-          fontSize: s.fontSize,
-          fontFamily: s.fontFamily,
-          fontWeight: s.fontWeight,
-          letterSpacing: s.letterSpacing,
-          lineHeight: s.lineHeight,
-          whiteSpace: s.whiteSpace,
-          wordBreak: s.wordBreak,
-          overflowWrap: s.overflowWrap,
-          paddingLeft: s.paddingLeft,
-          paddingRight: s.paddingRight,
-          paddingTop: s.paddingTop,
-          borderLeftWidth: s.borderLeftWidth,
-        }
-      }
-      return { textarea: pick(el), mirror: pick(el.previousElementSibling!) }
-    })
-
-    expect(metrics.mirror).toEqual(metrics.textarea)
+      .poll(async () => {
+        const g = await measure(editor)
+        const caretBottom = await editor.evaluate((el) => {
+          const rects = getSelection()!.getRangeAt(0).getClientRects()
+          const rect = rects[0] ?? (getSelection()!.focusNode as Element).getBoundingClientRect()
+          return rect.bottom - el.getBoundingClientRect().top
+        })
+        return g.scrollHeight > MAX_LINES * LINE_HEIGHT && caretBottom <= g.clientHeight + CARET_SLACK_PX
+      }, { timeout: 5_000 })
+      .toBe(true)
   })
 
   /**
@@ -657,27 +636,6 @@ test.describe('composer geometry', () => {
       caretBottom,
       `caret line [${caretTop}, ${caretBottom}] is below the visible band [${g.scrollTop}, ${g.scrollTop + g.clientHeight}]`
     ).toBeLessThanOrEqual(g.scrollTop + g.clientHeight + CARET_SLACK_PX)
-  })
-
-  /**
-   * The mirror is a separate scroll box, so it has to track the textarea's offset:
-   * a desync shifts every glyph by whole lines relative to the caret.
-   */
-  test('mention mirror stays scroll-synced with the textarea', async ({ page }) => {
-    const textarea = await openRoomComposer(page)
-    await setDraft(textarea, linesOf(MAX_LINES + 6))
-
-    await textarea.evaluate((el) => {
-      const ta = el as HTMLTextAreaElement
-      ta.scrollTop = ta.scrollHeight // jump to the bottom, as typing would
-      ta.dispatchEvent(new Event('scroll', { bubbles: true }))
-    })
-
-    const offsets = await textarea.evaluate((el) => {
-      const ta = el as HTMLTextAreaElement
-      return { textarea: ta.scrollTop, mirror: (ta.previousElementSibling as HTMLElement).scrollTop }
-    })
-    expect(offsets.mirror).toBeCloseTo(offsets.textarea, 0)
   })
 })
 

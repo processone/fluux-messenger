@@ -1,6 +1,6 @@
 # Room composer caret drift — follow-up plan (contenteditable / Lexical)
 
-**Status:** Deferred until **after 0.16.0 stable**. Do not implement before then.
+**Status:** Implemented (Option A, Lexical with a `MentionNode`) — see the decision log.
 **Created:** 2026-06-08
 **Context:** Bug investigation 2026-06-08 — the room/MUC message composer's text
 caret is misaligned from where characters appear, starting at the second
@@ -205,3 +205,17 @@ engines that originally reproduced the bug (Android Blink, macOS WebKit).
   the single-element contenteditable editor, **evaluating Lexical first** because
   the mobile IME hardening is the entire risk. Plain-textarea fallback documented
   as a stopgap.
+- **2026-10-23:** Implemented Option A. The room composer is a single Lexical
+  contenteditable (`components/composer/RoomComposerEditor.tsx`); `@mention`s are
+  token `MentionNode`s (`roomEditorModel.ts`), so they are coloured in the same
+  element that holds the caret and are removed by one Backspace. The mirror div,
+  its scrollbar latch, the trailing-newline sentinel and the manual atomic-delete
+  code are gone, and so is the interim `writingsuggestions="false"` opt-out:
+  macOS inline predictions are drawn by the engine in the same layout as the text,
+  so rooms keep them. The editor exposes `value`, `selectionStart`, `selectionEnd`
+  and `setSelectionRange` on its root element, so `MessageComposer` and the
+  draft, mention and emoji code are unchanged. A 1:1 chat keeps its plain textarea.
+  Acceptance matrix: caret tracking and inline predictions were exercised on macOS
+  WebKit (a native WKWebView harness injecting a real inline completion) and in
+  Playwright WebKit and Chromium; iOS Safari and Android Brave/Chrome (IME,
+  autocorrect, swipe typing) still need a pass on devices.
