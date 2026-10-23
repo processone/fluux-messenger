@@ -332,11 +332,15 @@ jobs:
             echo "Seeded $(ls "$HOME"/.apt-debs/*.deb 2>/dev/null | wc -l) cached .deb file(s)"
           fi
 
-      # A stalled mirror is cut and retried rather than left to the 30-minute backstop.
+      # A stalled mirror is cut and retried rather than left to the 30-minute backstop. The
+      # wrapper runs as root so its timeout can kill apt itself, not only sudo.
       - name: Install Playwright OS dependencies
+        env:
+          CI_RETRY_CLEANUP: scripts/ci-apt-cleanup.sh
         run: |
           scripts/ci-apt-prepare.sh
-          scripts/ci-retry.sh 3 300 npx playwright install-deps ${{ matrix.browser }}
+          sudo --preserve-env=CI_RETRY_CLEANUP env "PATH=$PATH" scripts/ci-retry.sh 3 300 \
+            npx playwright install-deps ${{ matrix.browser }}
 
       # Each engine runs against its own bundled demo. Separate reading and
       # live-edge files let both workers share the scroll workload while tests
@@ -393,14 +397,16 @@ jobs:
             apt-debs-
 
       - name: Install system dependencies
+        env:
+          CI_RETRY_CLEANUP: scripts/ci-apt-cleanup.sh
         run: |
           if [ -d "$HOME/.apt-debs" ]; then
             sudo cp "$HOME"/.apt-debs/*.deb /var/cache/apt/archives/ 2>/dev/null || true
           fi
           scripts/ci-apt-prepare.sh
-          scripts/ci-retry.sh 3 300 bash -c '
-            sudo apt-get update &&
-            sudo apt-get install -y \
+          sudo --preserve-env=CI_RETRY_CLEANUP scripts/ci-retry.sh 3 300 bash -c '
+            apt-get update &&
+            apt-get install -y \
               libwebkit2gtk-4.1-dev \
               libayatana-appindicator3-dev \
               librsvg2-dev \

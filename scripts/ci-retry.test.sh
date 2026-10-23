@@ -48,4 +48,16 @@ bash "$RETRY" 2 1 sleep 30 >/dev/null 2>&1
 check "a stalled try is cut at its limit (exit 124)" "124" "$?"
 [ $((SECONDS - start)) -lt 10 ] || { echo "FAIL stalled tries took too long"; failures=$((failures + 1)); }
 
+# A descendant of a timed-out try must not outlive it: it is what would keep apt's locks.
+bash "$RETRY" 1 1 bash -c 'sleep 60 & echo $! > "$1"; wait' _ "$WORK/pid" >/dev/null 2>&1
+sleep 1
+kill -0 "$(cat "$WORK/pid")" 2>/dev/null
+check "a timed-out try leaves no descendant running" "1" "$?"
+
+# The cleanup hook runs after each failed try, and not after a success.
+cleanup="$WORK/cleanup.sh"
+printf '#!/usr/bin/env bash\necho x >> "%s"\n' "$WORK/cleaned" > "$cleanup"
+CI_RETRY_CLEANUP="bash $cleanup" bash "$RETRY" 3 5 bash "$flaky" "$WORK/c" >/dev/null 2>&1
+check "cleanup runs after each failed try only" "2" "$(wc -l < "$WORK/cleaned" | tr -d ' ')"
+
 [ "$failures" -eq 0 ]
