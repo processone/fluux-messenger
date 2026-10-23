@@ -18,6 +18,7 @@ import type { MentionReference } from '@fluux/sdk'
 import {
   CLEAR_HISTORY_COMMAND,
   COMMAND_PRIORITY_CRITICAL,
+  $setSelection,
   KEY_DOWN_COMMAND,
   PASTE_COMMAND,
   createEditor,
@@ -25,6 +26,7 @@ import {
 } from 'lexical'
 import { registerPlainText } from '@lexical/plain-text'
 import { createEmptyHistoryState, registerHistory } from '@lexical/history'
+import { CONTROL_CHAR_RE } from '@/utils/tauriInputFix'
 import type { ComposerAutocompleteAriaProps } from './autocompleteAria'
 import type { ComposerInputElement } from './composerInput'
 import {
@@ -32,6 +34,7 @@ import {
   $serializeReferences,
   $serializeText,
   $setContent,
+  $stripControlChars,
   $setSelectionOffsets,
   MentionNode,
 } from './roomEditorModel'
@@ -137,6 +140,13 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
       if (event.isComposing || event.keyCode === 229) return
       latest.current.onKeyDown(event)
     }
+    // Lexical applies a beforeinput even when another listener (the global
+    // control-character guard) already cancelled it. Ours is attached first.
+    const onNativeBeforeInput = (event: InputEvent) => {
+      if (event.defaultPrevented) event.stopImmediatePropagation()
+    }
+    root.addEventListener('beforeinput', onNativeBeforeInput)
+    cleanups.push(() => root.removeEventListener('beforeinput', onNativeBeforeInput))
     root.addEventListener('keydown', onNativeKeyDown)
     cleanups.push(() => root.removeEventListener('keydown', onNativeKeyDown))
     cleanups.push(
@@ -172,6 +182,13 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
         )
         setIsEmpty(text.length === 0)
         if (tags.has(EXTERNAL_TAG)) return
+        // Safety net behind the global beforeinput guard, for what it cannot see
+        // (a paste): drop control characters, keeping the caret on its text. The
+        // clean state is reported by the update this triggers.
+        if (new RegExp(CONTROL_CHAR_RE.source).test(text)) {
+          editor.update(() => $stripControlChars(), { tag: 'composer-sanitize' })
+          return
+        }
         const handlers = latest.current
         if (text !== reportedText.current) {
           reportedText.current = text
@@ -226,6 +243,13 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
     editor.update(
       () => {
         $setContent(value, latest.current.references)
+        // A draft written while the user is elsewhere is passive: placing a
+        // selection would pull focus into the editor. Explicit actions focus
+        // the input themselves and place the caret afterwards.
+        if (document.activeElement !== rootRef.current) {
+          $setSelection(null)
+          return
+        }
         const caret = keepCaret && previous ? Math.min(previous[0], value.length) : value.length
         $setSelectionOffsets(caret, keepCaret && previous ? Math.min(previous[1], value.length) : caret)
       },

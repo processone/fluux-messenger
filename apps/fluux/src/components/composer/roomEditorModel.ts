@@ -11,6 +11,7 @@
  * serializes correctly — paragraph boundaries read as `\n`.
  */
 import type { MentionReference } from '@fluux/sdk'
+import { CONTROL_CHAR_RE } from '@/utils/tauriInputFix'
 import {
   $createLineBreakNode,
   $createParagraphNode,
@@ -21,6 +22,7 @@ import {
   $isElementNode,
   $isLineBreakNode,
   $isRangeSelection,
+  $isTextNode,
   $setSelection,
   TextNode,
   type EditorConfig,
@@ -241,6 +243,23 @@ function $offsetToPoint(offset: number, point: PointType): void {
   const last = paragraphs[paragraphs.length - 1]
   if (last && $isElementNode(last)) point.set(last.getKey(), last.getChildrenSize(), 'element')
   else point.set(root.getKey(), root.getChildrenSize(), 'element')
+}
+
+/** Remove C0 control characters (and DEL) from every text node, keeping the selection on its text. */
+export function $stripControlChars(): void {
+  const text = $serializeText()
+  const selection = $getSelectionOffsets()
+  const pattern = new RegExp(CONTROL_CHAR_RE.source, 'g')
+  const shift = (offset: number) => offset - (text.slice(0, offset).match(pattern)?.length ?? 0)
+  const visit = (node: LexicalNode) => {
+    if ($isElementNode(node)) node.getChildren().forEach(visit)
+    else if ($isTextNode(node)) {
+      const clean = node.getTextContent().replace(pattern, '')
+      if (clean !== node.getTextContent()) node.setTextContent(clean)
+    }
+  }
+  $getRoot().getChildren().forEach(visit)
+  if (selection) $setSelectionOffsets(shift(selection[0]), shift(selection[1]))
 }
 
 /** Select `[start, end]` (offsets in the serialized text). */

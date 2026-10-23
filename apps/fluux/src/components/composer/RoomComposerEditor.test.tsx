@@ -87,3 +87,46 @@ describe('RoomComposerEditor paste', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * Intent (review R1): the textarea this editor replaced stripped C0 control
+ * characters Tauri's macOS webview inserts; the room draft, and the XML sent from
+ * it, must not carry them either.
+ */
+describe('RoomComposerEditor control characters', () => {
+  it('strips control characters from pasted text and keeps the caret after the text', async () => {
+    const { input, onEdit } = setup('', [])
+    act(() => input.setSelectionRange(0, 0))
+
+    await paste(input, { text: 'a\u0001b\u007fc\nd\te' })
+
+    expect(input.value).toBe('abc\nd\te')
+    expect(onEdit).toHaveBeenLastCalledWith('abc\nd\te', [])
+    expect(input.selectionStart).toBe('abc\nd\te'.length)
+  })
+})
+
+/**
+ * Intent (review R2): restoring a saved draft is passive, as it was in the
+ * textarea. It must not take focus or create a caret; explicit actions (mention,
+ * emoji, edit) focus through the composer, which this does not touch.
+ */
+describe('RoomComposerEditor draft restore', () => {
+  it('does not take focus or create a caret when a restored draft replaces the value', () => {
+    let input: ComposerInputElement | null = null
+    const props = {
+      references: [] as MentionReference[],
+      placeholder: 'Message',
+      ariaProps: {},
+      mergedRef: (node: ComposerInputElement | null) => { input = node ?? input },
+      onEdit: vi.fn(), onChange: vi.fn(), onSelect: vi.fn(), onKeyDown: vi.fn(),
+    }
+    getSelection()?.removeAllRanges()
+    const { rerender } = render(<RoomComposerEditor {...props} value="" />)
+    rerender(<RoomComposerEditor {...props} value="a saved draft" />)
+
+    expect((input as unknown as ComposerInputElement).value).toBe('a saved draft')
+    expect(document.activeElement).not.toBe(input)
+    expect(getSelection()?.rangeCount ? getSelection()!.anchorNode : null).toBeNull()
+  })
+})
