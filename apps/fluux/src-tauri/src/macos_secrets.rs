@@ -18,23 +18,32 @@ fn recovery_prefix(account: &str) -> String {
 #[derive(Debug, Clone)]
 pub struct StoreError {
     code: Option<i32>,
+    invalid_item: bool,
     message: String,
 }
 impl StoreError {
     fn native(code: i32, message: impl Into<String>) -> Self {
         Self {
             code: Some(code),
+            invalid_item: false,
             message: message.into(),
         }
     }
     fn user_denial(&self) -> bool {
         matches!(self.code, Some(-25293 | -128))
     }
+    fn invalid_item(message: &str) -> Self {
+        Self {
+            invalid_item: true,
+            ..Self::from(message)
+        }
+    }
 }
 impl From<String> for StoreError {
     fn from(message: String) -> Self {
         Self {
             code: None,
+            invalid_item: false,
             message,
         }
     }
@@ -83,8 +92,8 @@ impl Default for Bundle {
 
 pub struct Secrets<S> {
     store: S,
-    // Only an explicit denial/cancel is shared by overlapping consumers.
-    // Transient failures leave the cache empty so the next caller can retry.
+    // Denial/cancel and deterministic combined-item decode/version failures
+    // are shared for this launch. Transient failures leave the cache empty.
     cache: Mutex<Option<StoreResult<Bundle>>>,
 }
 impl<S: Backend> Secrets<S> {
@@ -99,10 +108,13 @@ impl<S: Backend> Secrets<S> {
     }
     fn load(&self) -> StoreResult<Bundle> {
         if let Some(json) = self.store.read(ACCOUNT)? {
-            let bundle: Bundle = serde_json::from_str(&json)
-                .map_err(|_| "Invalid macOS secrets item; refusing to overwrite it".to_string())?;
+            let bundle: Bundle = serde_json::from_str(&json).map_err(|_| {
+                StoreError::invalid_item("Invalid macOS secrets item; refusing to overwrite it")
+            })?;
             if bundle.version != 1 {
-                return Err("Unsupported macOS secrets version".into());
+                return Err(StoreError::invalid_item(
+                    "Unsupported macOS secrets version",
+                ));
             }
             // No legacy reads or cleanup once the bundle exists. In particular,
             // ignore pending_cleanup from an earlier development build.
@@ -242,7 +254,7 @@ impl<S: Backend> Secrets<S> {
                 Ok(bundle) => *cache = Some(Ok(bundle)),
                 Err(error) => {
                     tracing::error!("macOS secrets load failed: {error}");
-                    if error.user_denial() {
+                    if error.user_denial() || error.invalid_item {
                         *cache = Some(Err(error.clone()));
                     }
                     return Err(error);
@@ -394,7 +406,10 @@ mod native {
                     .join(".secrets-revision"))
             }
         }
-        fn revision(&self) -> Result<(std::fs::File, std::path::PathBuf, u64), String> {
+        fn revision(
+            &self,
+            exclusive: bool,
+        ) -> Result<(std::fs::File, std::path::PathBuf, u64), String> {
             use std::{fs::OpenOptions, os::unix::fs::OpenOptionsExt};
             let path = self.revision_path()?;
             std::fs::create_dir_all(path.parent().ok_or("Missing revision directory")?)
@@ -408,7 +423,14 @@ mod native {
                 .mode(0o600)
                 .open(path.with_extension("lock"))
                 .map_err(|e| e.to_string())?;
-            file.lock().map_err(|e| e.to_string())?;
+            // Readers may wait for authorization while holding this lock. Let
+            // other readers proceed, but keep writes exclusive through mutation.
+            if exclusive {
+                file.lock()
+            } else {
+                file.lock_shared()
+            }
+            .map_err(|e| e.to_string())?;
             let revision = match std::fs::read_to_string(&path) {
                 Ok(value) => value
                     .trim()
@@ -421,7 +443,7 @@ mod native {
         }
         fn begin_write(&self) -> Result<std::fs::File, String> {
             use std::{fs::OpenOptions, io::Write, os::unix::fs::OpenOptionsExt};
-            let (lock, path, revision) = self.revision()?;
+            let (lock, path, revision) = self.revision(true)?;
             let mut observed = self
                 .observed_revision
                 .lock()
@@ -509,7 +531,7 @@ mod native {
     impl Backend for Keychain {
         fn read(&self, account: &str) -> StoreResult<Option<String>> {
             let revision = if account == ACCOUNT {
-                self.revision().ok()
+                self.revision(false).ok()
             } else {
                 None
             };
@@ -525,9 +547,13 @@ mod native {
                 SERVICE,
                 account,
             ) {
-                Ok((bytes, _)) => String::from_utf8(bytes.to_vec())
-                    .map(Some)
-                    .map_err(|_| "Invalid keychain text".into()),
+                Ok((bytes, _)) => String::from_utf8(bytes.to_vec()).map(Some).map_err(|_| {
+                    if account == ACCOUNT {
+                        StoreError::invalid_item("Invalid keychain text")
+                    } else {
+                        "Invalid keychain text".into()
+                    }
+                }),
                 Err(e) if e.code() == -25300 => Ok(None),
                 Err(e) => Err(StoreError::native(
                     e.code(),
@@ -577,6 +603,46 @@ mod native {
             keychain: Some(SecKeychain::open(&path).unwrap()),
             ..Keychain::default()
         };
+        // FLM-104 I1: the launcher holds a shared revision lock in a separate
+        // process. A pending reader must not serialize another identity's read.
+        if action == "shared-read" {
+            assert!(raw.get(ACCOUNT).unwrap().is_some());
+            println!("second identity read the combined item while another reader held its revision lock");
+            return;
+        }
+        if action == "exclusive-write" {
+            assert!(raw.get(ACCOUNT).unwrap().is_some());
+            let _write = raw.begin_write().unwrap();
+            let contender = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(raw.revision_path().unwrap().with_extension("lock"))
+                .unwrap();
+            assert!(matches!(
+                contender.try_lock_shared(),
+                Err(std::fs::TryLockError::WouldBlock)
+            ));
+            assert!(matches!(
+                contender.try_lock(),
+                Err(std::fs::TryLockError::WouldBlock)
+            ));
+            println!("exclusive write still excludes both readers and writers");
+            return;
+        }
+        // FLM-104 I3: exercise native UTF-8 decoding as well as bundle decoding.
+        let invalid: Option<&[u8]> = match action.as_str() {
+            "invalid-utf8" => Some(&[0xff]),
+            "invalid-json" => Some(b"not JSON"),
+            "invalid-version" => Some(br#"{"version":2,"items":{}}"#),
+            _ => None,
+        };
+        if let Some(bytes) = invalid {
+            raw.keychain
+                .as_ref()
+                .unwrap()
+                .add_generic_password(SERVICE, ACCOUNT, bytes)
+                .unwrap();
+        }
         if action == "seed" {
             crate::credentials::save(
                 &raw,
@@ -677,6 +743,29 @@ mod native {
             fail_new: action == "write-failed",
             reads: Mutex::new(Vec::new()),
         });
+        if let Some(bytes) = invalid {
+            let error = crate::credentials::load(&store).unwrap_err();
+            assert_eq!(store.get("mcp-token").unwrap_err(), error);
+            assert_eq!(
+                store
+                    .get("openpgp_passphrase:alice@example.com")
+                    .unwrap_err(),
+                error
+            );
+            store.retry_denied_access().unwrap();
+            assert_eq!(store.set("mcp-token", "replacement").unwrap_err(), error);
+            assert_eq!(store.delete("mcp-token").unwrap_err(), error);
+            assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT]);
+            let (stored, _) = find_generic_password(
+                store.store.raw.keychain.as_ref().map(std::slice::from_ref),
+                SERVICE,
+                ACCOUNT,
+            )
+            .unwrap();
+            assert_eq!(stored.to_vec(), bytes);
+            println!("{action}: one native read across startup consumers and explicit retry; original item unchanged");
+            return;
+        }
         if action == "denied" {
             assert!(crate::credentials::load(&store).is_err());
             assert!(
@@ -1041,7 +1130,7 @@ mod tests {
                 .is_some());
         }
     }
-    // FLM-79 F4: cache only explicit denial/cancel, not locked/transient errors.
+    // FLM-79 F4: cache native denial/cancel, not locked/transient errors.
     #[test]
     fn denial_and_cancel_are_cached_but_transient_errors_retry() {
         for code in [-25293, -128, -25308, -25291] {
@@ -1079,16 +1168,47 @@ mod tests {
         store.set("mcp-token", "different-token").unwrap();
         assert_eq!(*store.store.writes.lock().unwrap(), [ACCOUNT]);
     }
-    // FLM-66: unsupported data must not authorize overwriting the only newer copy.
+    // FLM-66 / FLM-104 I3: unsupported data is read once per launch and never
+    // overwritten, even by an explicit denial retry. A new launch can retry it.
     #[test]
-    fn malformed_or_future_bundles_are_not_overwritten() {
+    fn malformed_or_future_bundles_are_cached_without_overwriting() {
         for value in ["not JSON", r#"{"version":2,"items":{}}"#] {
             let raw = legacy();
             raw.set(ACCOUNT, value).unwrap();
+            raw.reads.lock().unwrap().clear();
+            raw.writes.lock().unwrap().clear();
             let original = raw.items.lock().unwrap().clone();
             let store = Secrets::new(raw);
-            assert!(store.set("mcp-token", "replacement").is_err());
+            let failure = crate::credentials::load(&store).unwrap_err();
+            assert_eq!(store.get("mcp-token").unwrap_err(), failure);
+            assert_eq!(
+                store
+                    .get("openpgp_passphrase:alice@example.com")
+                    .unwrap_err(),
+                failure
+            );
+            store.retry_denied_access().unwrap();
+            assert_eq!(store.set("mcp-token", "replacement").unwrap_err(), failure);
+            assert_eq!(store.delete("mcp-token").unwrap_err(), failure);
+            assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT]);
+            assert!(store.store.writes.lock().unwrap().is_empty());
+            assert!(store.store.deletes.lock().unwrap().is_empty());
             assert_eq!(*store.store.items.lock().unwrap(), original);
+            // Even if another app repairs the item, this launch keeps its error.
+            let repaired = serde_json::to_string(&Bundle::default()).unwrap();
+            store
+                .store
+                .items
+                .lock()
+                .unwrap()
+                .insert(ACCOUNT.into(), repaired);
+            assert_eq!(store.get("mcp-token").unwrap_err(), failure);
+            let restarted = Secrets::new(store.store);
+            assert!(restarted.get("mcp-token").unwrap().is_none());
+            assert_eq!(*restarted.store.reads.lock().unwrap(), [ACCOUNT, ACCOUNT]);
+            println!(
+                "malformed/future item: one read per launch, no writes or deletes, restart retries"
+            );
         }
     }
     // FLM-66: serial writes must preserve unrelated secrets across restart.

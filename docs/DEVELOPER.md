@@ -293,11 +293,15 @@ The keychain service name stays `com.processone.fluux`. On macOS, `macos_secrets
 remembered credentials, `last_user`, OpenPGP passphrases (including inactive accounts), and the MCP token
 into one versioned `secrets-v1` item. Startup, credential commands, OpenPGP and MCP share its
 mutex-protected cache. A normal migrated launch decrypts one item, so a changed identity needs at most
-one keychain access approval. Only a user denial/cancel (`-25293`, `-128`), carried as a numeric
-typed backend error, is cached as a failure; transient errors retry on the next call. Normal reads,
+one keychain access approval. A user denial/cancel (`-25293`, `-128`), carried as a numeric
+typed backend error, is cached as a failure for the launch. Deterministic combined-item failures
+(invalid UTF-8, malformed JSON/schema or an unsupported version) are also cached, without overwriting
+the item or repeating its access approval. Transient errors retry on the next call. Normal reads,
 saves and keep-data logout require a restart after denial. Explicit full wipe (`force: true`, including
 `--clear-storage`) and OpenPGP forget clear only the cached startup denial and retry once, allowing a
 new authorization. A second denial remains cached and is returned rather than retried in a loop.
+This explicit retry does not clear a deterministic decode/version failure; restart after repairing
+the item or opening it with a compatible version.
 
 The first launch reads every legacy service entry and recovery copy, writes the combined item, then
 reads it back to verify it. **This release does not delete or rewrite any originals during migration.**
@@ -349,8 +353,11 @@ bundle. Adoption preserves a different replaced value under a unique, account-sc
 copy and the new slot together in one atomic combined-item update and one revision bump. Legacy
 fallback still persists the separate recovery item before replacing the live slot. Explicit forget
 also removes these matching copies. Unlock tries these already-loaded, account-scoped recovery copies
-before reading an old item or reporting key-unrecoverable. A matching copy is validated by decrypting the key and adopted safely;
-the other identity can therefore unlock without another keychain read or prompt. Invalid copies are
+before reading an old item or reporting key-unrecoverable. A matching loaded copy is validated by
+decrypting the key and used in memory, without adopting it back into the shared slot. Release and Dev
+can therefore unlock different local key files without flipping that slot, bumping the revision or
+invalidating the other running cache. Recovery from a validated old item still adopts safely and
+preserves the replaced value. Loaded-copy recovery needs no extra keychain read or prompt. Invalid copies are
 skipped, and failed lookup preserves the original unlock error. A valid current passphrase never
 reads recovery copies or the old item. If recovery fails (including a denied read or
 invalid legacy base64), it is logged, but the original missing/decrypt failure is returned so the UI
@@ -371,7 +378,9 @@ marker is unused. Windows, Linux and iOS retain their layouts.
 
 Release and Dev still share the service and combined item; neither re-creates the other's entries.
 A separate file lock and a single, atomically replaced revision value refuse stale writes from another
-running cache, without a second keychain decrypt. Identical saves skip writes; deleting an absent
+running cache, without a second keychain decrypt. Reads hold a shared lock while decrypting, so one
+copy waiting for authorization does not block another copy's read. Writes retain an exclusive lock
+through the revision update and keychain mutation. Identical saves skip writes; deleting an absent
 bundle entry still cleans matching old copies but does not rewrite the bundle.
 A missing, unreadable or invalid revision file never blocks reading secrets: only writes are refused
 when the cache cannot establish a revision. Restart the stale app before saving again. Ad-hoc rebuilds
@@ -389,9 +398,13 @@ explicit keychains under a scratch `HOME` with `FM3000_LOCAL_CODESIGN_DIR`. It t
 cleanup, one denial, simulated Always Allow (equivalent items trusting both identities), Dev
 consolidation followed by the old identity reading its unchanged originals, a pending-cleanup bundle
 with a changed original, failed-write fallback/retry, no-op writes, atomic revisions, unavailable
-revision tracking, token rotation and logout. It runs the focused secrets, credentials, OpenPGP storage
+revision tracking, token rotation and logout. A second process reads while another reader holds the
+shared revision lock; exclusive writes still exclude readers and writers. Native invalid UTF-8,
+malformed JSON and future-version fixtures each produce one read across startup consumers and explicit
+retry, with no item replacement. It runs the focused secrets, credentials, OpenPGP storage
 and asynchronous forget Rust tests under the same scratch HOME, including the reviewed migration
-states, transient retries, denial caching, explicit erase retry and error propagation/logging. Dialogs
+states, transient retries, denial/decode caching, explicit erase retry, memory-only recovery across
+Release/Dev relaunches, and error propagation/logging. Dialogs
 are disabled; the transcript shows native access results, not real signed-app dialogs. No default/search-list change or secret
 output is involved. Real signed-app dialogs remain unqualified.
 

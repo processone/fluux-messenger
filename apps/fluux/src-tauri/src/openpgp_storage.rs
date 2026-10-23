@@ -526,7 +526,9 @@ fn unlock_persisted_key(
                 if let Ok(cert) =
                     decrypt_cert_secrets(encrypted.clone(), &Password::from(passphrase.clone()))
                 {
-                    let _ = adopt(&passphrase);
+                    // This copy is already durable in the shared bundle. Use
+                    // it in memory: Release and Dev may have different key files,
+                    // so adopting here would flip the shared slot on each switch.
                     return Ok(PersistedKey {
                         cert,
                         backing: PassphraseBacking::Keychain,
@@ -1914,6 +1916,7 @@ mod tests {
         struct Memory {
             items: Arc<Mutex<BTreeMap<String, String>>>,
             legacy_reads: Arc<AtomicUsize>,
+            writes: Arc<AtomicUsize>,
             fail_legacy: bool,
         }
         impl SecretStore for Memory {
@@ -1921,6 +1924,7 @@ mod tests {
                 Ok(self.items.lock().unwrap().get(a).cloned())
             }
             fn set(&self, a: &str, v: &str) -> std::result::Result<(), String> {
+                self.writes.fetch_add(1, Ordering::SeqCst);
                 self.items.lock().unwrap().insert(a.into(), v.into());
                 Ok(())
             }
@@ -1970,6 +1974,7 @@ mod tests {
             let raw = Memory {
                 items: Arc::new(Mutex::new(BTreeMap::new())),
                 legacy_reads: Arc::new(AtomicUsize::new(0)),
+                writes: Arc::new(AtomicUsize::new(0)),
                 fail_legacy: denied,
             };
             let mut items = BTreeMap::new();
@@ -2048,26 +2053,31 @@ mod tests {
                     let mut other = KeyStorage::for_testing(other_dir.clone());
                     other.use_keychain = true;
                     other.allow_file_fallback = false;
-                    other.store_override = Some(secrets.clone());
                     fs::write(
                         other.key_file_path(jid).unwrap(),
                         encrypted_old.as_tsk().armored().to_vec().unwrap(),
                     )
                     .unwrap();
-                    assert_eq!(
-                        other.load(jid).unwrap().unwrap().cert.fingerprint(),
-                        old_cert.fingerprint()
-                    );
-                    assert_eq!(
-                        raw.legacy_reads.load(Ordering::SeqCst),
-                        1,
-                        "the other identity unlocks from memory without another old-item read"
-                    );
-                    assert_eq!(
-                        storage.load(jid).unwrap().unwrap().cert.fingerprint(),
-                        current_cert.fingerprint()
-                    );
-                    assert_eq!(raw.legacy_reads.load(Ordering::SeqCst), 1);
+                    // FLM-104 I2, captain's memory-only choice: switching and
+                    // relaunching identities must not flip the shared slot.
+                    let saved = raw.items.lock().unwrap().clone();
+                    let writes = raw.writes.load(Ordering::SeqCst);
+                    for _ in 0..3 {
+                        other.store_override = Some(Arc::new(Secrets::new(raw.clone())));
+                        assert_eq!(
+                            other.load(jid).unwrap().unwrap().cert.fingerprint(),
+                            old_cert.fingerprint()
+                        );
+                        storage.store_override = Some(Arc::new(Secrets::new(raw.clone())));
+                        assert_eq!(
+                            storage.load(jid).unwrap().unwrap().cert.fingerprint(),
+                            current_cert.fingerprint()
+                        );
+                        assert_eq!(raw.legacy_reads.load(Ordering::SeqCst), 1);
+                        assert_eq!(raw.writes.load(Ordering::SeqCst), writes);
+                        assert_eq!(*raw.items.lock().unwrap(), saved);
+                    }
+                    println!("Release/Dev encrypted key files unlock across three relaunches each, without writes or old-item reads");
                     fs::remove_dir_all(other_dir).unwrap();
                 }
             }

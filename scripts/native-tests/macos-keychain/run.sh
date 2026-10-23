@@ -43,6 +43,14 @@ probe() {
   probe reader denied
   export FLUUX_PROBE_KEYCHAIN="$HOME/approved.keychain-db"
   "$LAB/fixture" approved "$FLUUX_PROBE_KEYCHAIN" "$HOME/password" "$LAB/owner" "$LAB/reader"
+  # FLM-104 I1: a real second process reads while a shared reader is pending.
+  FLUUX_PROBE_ACTION=shared-read python3 - "$LAB/reader" "$FLUUX_PROBE_KEYCHAIN" <<'PY'
+import fcntl, pathlib, subprocess, sys
+with open(pathlib.Path(sys.argv[2]).with_suffix('.lock'), 'a+b') as lock:
+    fcntl.flock(lock, fcntl.LOCK_SH)
+    subprocess.run([sys.argv[1], 'macos_secrets::native::native_keychain_probe', '--exact', '--ignored', '--nocapture'], check=True, timeout=15)
+PY
+  probe reader exclusive-write
   probe reader startup
   # The Dev identity must not break the installed release's old layout.
   export FLUUX_PROBE_KEYCHAIN="$HOME/release-dev.keychain-db"
@@ -62,6 +70,12 @@ probe() {
   "$LAB/fixture" create "$FLUUX_PROBE_KEYCHAIN" "$HOME/password"
   probe owner seed
   probe owner write-failed
+  # FLM-104 I3: deterministic failures must not decrypt repeatedly or overwrite.
+  for invalid in invalid-utf8 invalid-json invalid-version; do
+    export FLUUX_PROBE_KEYCHAIN="$HOME/$invalid.keychain-db"
+    "$LAB/fixture" create "$FLUUX_PROBE_KEYCHAIN" "$HOME/password"
+    probe owner "$invalid"
+  done
   # Pure failure/recovery tests also execute under the scratch HOME.
   "$LAB/owner" macos_secrets::tests:: --nocapture
   "$LAB/owner" credentials::tests:: --nocapture
