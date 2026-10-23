@@ -58,6 +58,22 @@ The owner must merge the prototype's effective config when preparing bundle
 metadata and verify that the final host contains the two declarations above.
 Never replace an installed production or Dev app to test this prototype.
 
+## Updater isolation
+
+The captain chose to disable checking and installation only for the prototype
+identity. The native host does not register the updater plugin for
+`net.processone.fluux.communication-prototype`, regardless of whether its optional
+communication feature is enabled. It supplies an immutable initialization marker
+before frontend modules run; the existing platform capability then hides the
+Updates category and suppresses automatic/manual checks and update prompts.
+Direct updater calls also have no native plugin to handle them. Production and
+Dev identities keep their updater registration and normal capabilities.
+
+`createUpdaterArtifacts: false` alone does not provide this protection: it only
+controls artifact creation, not checking the production release feed. Testers
+must use a build containing this identity-scoped guard, not rely on declining
+prompts. Installed UI/behavior evidence still requires the isolated signed bundle.
+
 ## Availability and signing assessment
 
 | Item | Assessment | Qualification |
@@ -224,7 +240,14 @@ certificate or private-key path. Tauri copies it to
 `Fluux Communication Prototype.app/Contents/embedded.provisionprofile`. The signing
 owner must verify that the embedded profile matches the isolated App ID/team,
 authorizes Communication Notifications, and accompanies the expected signed
-entitlements. Copying a profile alone does not prove entitlement approval.
+entitlements. For this prototype when a team is set, check both signing keys:
+
+- `com.apple.application-identifier` must equal `<Team ID>.net.processone.fluux.communication-prototype`.
+- `com.apple.developer.team-identifier` must equal that same `<Team ID>`.
+
+The metadata generator adds these keys only to the enabled prototype identity
+when its team is known; production and Dev metadata remain unchanged. Copying a
+profile alone does not prove entitlement approval.
 Use only the isolated signing environment described above; this is not a command
 for the automated contract tests or a request to use personal signing material.
 

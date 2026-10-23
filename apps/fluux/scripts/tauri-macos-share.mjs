@@ -57,7 +57,7 @@ const sign = (step, command, args) => {
 const readPlist = path => JSON.parse(run('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path]).toString())
 const writePlist = (path, value) => run('/usr/bin/plutil', ['-convert', 'xml1', '-o', path, '--', '-'], { input: JSON.stringify(value) })
 
-// #1386 keeps the communication declarations off normal application identities.
+// #1386 keeps communication declarations and prototype signing identifiers off normal identities.
 export function hostMetadata(settings, info, entitlements) {
   return {
     info: { ...info, FluuxShareGroup: settings.group,
@@ -65,6 +65,10 @@ export function hostMetadata(settings, info, entitlements) {
     },
     entitlements: { ...entitlements, 'com.apple.security.application-groups': [settings.group],
       ...(settings.communicationPrototype ? { 'com.apple.developer.usernotifications.communication': true } : {}),
+      ...(settings.communicationPrototype && settings.team ? {
+        'com.apple.application-identifier': `${settings.team}.${settings.identifier}`,
+        'com.apple.developer.team-identifier': settings.team,
+      } : {}),
     },
   }
 }

@@ -187,3 +187,20 @@ describe('experimental mobile shell', () => {
     ])
   })
 })
+
+describe('native prototype update capability', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    resetPlatformDetection()
+  })
+
+  it.each([true, undefined])('I2 changes only updater availability for initialization marker %s', (disabled) => {
+    vi.stubGlobal('__TAURI_INTERNALS__', {})
+    vi.stubGlobal('__TAURI_OS_PLUGIN_INTERNALS__', { platform: 'macos' })
+    vi.stubGlobal('navigator', { platform: 'MacIntel', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' })
+    vi.stubGlobal('__FLUUX_DISABLE_UPDATER__', disabled)
+    resetPlatformDetection()
+    const ordinary = deriveCapabilities('desktop', 'macos')
+    expect(platform()).toEqual({ ...ordinary, hasInAppUpdates: disabled !== true })
+  })
+})

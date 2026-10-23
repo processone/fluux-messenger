@@ -57,13 +57,18 @@ test('signing failures name the failing step and stderr without leaking argv pas
 test('issue #1386 declarations require the separate prototype identity and explicit feature', () => {
   for (const identifier of [config.identifier, `${config.identifier}.dev`, `${config.identifier}.communication-prototype`]) {
     for (const enabled of [false, true]) {
-      const settings = shareSettings({ ...config, identifier, build: { features: enabled ? ['macos-communication-prototype'] : [] } }, {})
-      const metadata = hostMetadata(settings, { CFBundleDisplayName: config.productName }, { 'com.apple.security.network.client': true })
-      const prototype = enabled && identifier.endsWith('.communication-prototype')
-      assert.equal(metadata.info.FluuxCommunicationPrototype === true, prototype)
-      assert.equal(metadata.entitlements['com.apple.developer.usernotifications.communication'] === true, prototype)
-      assert.deepEqual(metadata.info.NSUserActivityTypes, prototype ? ['INSendMessageIntent'] : undefined)
-      assert.equal(metadata.entitlements['com.apple.security.network.client'], true)
+      for (const env of [{}, { APPLE_TEAM_ID: 'ABCDE12345' }]) {
+        const settings = shareSettings({ ...config, identifier, build: { features: enabled ? ['macos-communication-prototype'] : [] } }, env)
+        const metadata = hostMetadata(settings, { CFBundleDisplayName: config.productName }, { 'com.apple.security.network.client': true })
+        const prototype = enabled && identifier.endsWith('.communication-prototype')
+        assert.equal(metadata.info.FluuxCommunicationPrototype === true, prototype)
+        assert.equal(metadata.entitlements['com.apple.developer.usernotifications.communication'] === true, prototype)
+        assert.deepEqual(metadata.info.NSUserActivityTypes, prototype ? ['INSendMessageIntent'] : undefined)
+        assert.equal(metadata.entitlements['com.apple.security.network.client'], true)
+        // J1: no team-specific signing identifiers on production/Dev, or on an unowned prototype.
+        assert.equal(metadata.entitlements['com.apple.application-identifier'], prototype && settings.team ? `${settings.team}.${identifier}` : undefined)
+        assert.equal(metadata.entitlements['com.apple.developer.team-identifier'], prototype ? settings.team : undefined)
+      }
     }
   }
 })

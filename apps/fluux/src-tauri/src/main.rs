@@ -1265,6 +1265,11 @@ fn print_startup_diagnostics() {
     eprintln!("---");
 }
 
+// The isolated notification prototype must never install a production release over itself.
+fn updater_enabled_for_identifier(identifier: &str) -> bool {
+    identifier != "net.processone.fluux.communication-prototype"
+}
+
 fn main() {
     tls::init_crypto_provider();
 
@@ -1496,8 +1501,17 @@ fn main() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
+    let app = if updater_enabled_for_identifier(&identifier) {
+        app.plugin(tauri_plugin_updater::Builder::new().build())
+    } else {
+        // Tauri runs this before frontend modules detect their platform capabilities.
+        // The plugin is absent too, so direct updater invocations cannot check or install.
+        app.append_invoke_initialization_script(
+            ";Object.defineProperty(window, '__FLUUX_DISABLE_UPDATER__', { value: true });",
+        )
+    };
+    let app = app
         .manage(window_behavior::WindowBehavior::default())
         .manage(LogDirectory(log_dir.clone()))
         // On macOS, decorum's on_window_ready hook repositions the traffic
@@ -2348,6 +2362,26 @@ mod tests {
     use super::*;
 
     const LOOPBACK: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
+
+    #[test]
+    fn updater_is_disabled_only_for_the_prototype_identity() {
+        // Captain's I2 choice: runtime identity, not the optional native feature, owns this policy.
+        for config in [
+            include_str!("../tauri.conf.json"),
+            include_str!("../tauri.dev.conf.json"),
+        ] {
+            let config: serde_json::Value = serde_json::from_str(config).unwrap();
+            assert!(updater_enabled_for_identifier(
+                config["identifier"].as_str().unwrap()
+            ));
+        }
+        let prototype: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.communication-prototype.conf.json"))
+                .unwrap();
+        assert!(!updater_enabled_for_identifier(
+            prototype["identifier"].as_str().unwrap()
+        ));
+    }
 
     #[test]
     fn test_merge_no_proxy_empty_adds_all_loopback() {

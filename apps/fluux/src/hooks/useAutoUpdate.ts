@@ -3,9 +3,6 @@ import { createDownloadProgressTracker, type UpdaterDownloadEvent } from './down
 import { platform } from '@/platform'
 
 
-// In-app updates are disabled on Linux - users update through their distro package manager
-const updaterEnabled = platform().hasInAppUpdates
-
 // Cap download-progress re-renders to ~10/sec. The updater emits a Progress
 // event per network chunk (hundreds/sec on a fast link); updating React state on
 // every one re-rendered the whole tree past the render-loop detector threshold
@@ -41,6 +38,8 @@ interface UseAutoUpdateOptions {
 
 export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
   const { autoCheck = false } = options
+  // Includes distro-managed hosts and the native prototype's identity-scoped guard.
+  const updaterEnabled = platform().hasInAppUpdates
   const [state, setState] = useState<UpdateState>(initialState)
   const [update, setUpdate] = useState<Awaited<ReturnType<typeof import('@tauri-apps/plugin-updater').check>> | null>(null)
 
@@ -82,10 +81,10 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
         error: errorKey,
       }))
     }
-  }, [])
+  }, [updaterEnabled])
 
   const downloadAndInstall = async () => {
-    if (!update) return
+    if (!updaterEnabled || !update) return
 
     setState(prev => ({ ...prev, downloading: true, progress: 0, error: null }))
 
@@ -141,7 +140,7 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
       const timer = setTimeout(checkForUpdate, 2000)
       return () => clearTimeout(timer)
     }
-  }, [checkForUpdate, autoCheck])
+  }, [checkForUpdate, autoCheck, updaterEnabled])
 
   return {
     ...state,

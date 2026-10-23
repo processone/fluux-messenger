@@ -16,3 +16,8 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+// Set by the isolated native identity before platform detection; its updater plugin is absent.
+interface Window {
+  readonly __FLUUX_DISABLE_UPDATER__?: boolean
+}

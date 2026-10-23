@@ -96,6 +96,7 @@ test('prototype config reaches Cargo and generates its isolated communication de
   const args = buildArgs({ prototype: true, inspect({ fixture, native, configuration }) {
     assert.equal(typeof configuration, 'string', 'Tauri must forward its effective overrides to the native build')
     const effective = JSON.parse(configuration)
+    const team = 'ABCDE12345'
     assert.equal(effective.identifier, prototypeConfig.identifier)
     assert.deepEqual(effective.build.features, prototypeConfig.build.features)
     const scripts = join(fixture, 'scripts')
@@ -106,7 +107,7 @@ test('prototype config reaches Cargo and generates its isolated communication de
     for (const file of ['Info.plist', 'Entitlements.plist']) cpSync(join(root, 'apps/fluux/src-tauri', file), join(native, file))
     execFileSync(process.execPath, [join(scripts, 'tauri-macos-share.mjs'), '--prepare'], {
       cwd: fixture,
-      env: { ...process.env, TAURI_CONFIG: configuration, APPLE_TEAM_ID: '', APPLE_SIGNING_IDENTITY: '' },
+      env: { ...process.env, TAURI_CONFIG: configuration, APPLE_TEAM_ID: team, APPLE_SIGNING_IDENTITY: '' },
       timeout: 30000,
     })
     const readPlist = file => JSON.parse(execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', join(native, 'macos/.build', file)], { encoding: 'utf8' }))
@@ -115,8 +116,11 @@ test('prototype config reaches Cargo and generates its isolated communication de
     assert.equal(info.FluuxCommunicationPrototype, true)
     assert.deepEqual(info.NSUserActivityTypes, ['INSendMessageIntent'])
     assert.equal(entitlements['com.apple.developer.usernotifications.communication'], true)
+    assert.equal(entitlements['com.apple.application-identifier'], `${team}.${effective.identifier}`)
+    assert.equal(entitlements['com.apple.developer.team-identifier'], team)
     console.log('Unsigned Tauri configuration probe:', JSON.stringify({ identifier: effective.identifier, features: effective.build.features,
-      prototypeFlag: info.FluuxCommunicationPrototype, communicationEntitlement: entitlements['com.apple.developer.usernotifications.communication'] }))
+      prototypeFlag: info.FluuxCommunicationPrototype, communicationEntitlement: entitlements['com.apple.developer.usernotifications.communication'],
+      applicationIdentifier: entitlements['com.apple.application-identifier'], teamIdentifier: entitlements['com.apple.developer.team-identifier'] }))
   } })
   const featureIndex = args.indexOf('--features')
   assert.ok(featureIndex >= 0)

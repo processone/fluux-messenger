@@ -75,7 +75,10 @@ export function platform(): PlatformCapabilities {
     const os = shell === 'mobile'
       ? (nativePlatform() === 'android' ? 'android' : 'ios')
       : detectOS()
-    current = deriveCapabilities(shell, os)
+    const detected = deriveCapabilities(shell, os)
+    current = shell === 'desktop' && typeof window !== 'undefined' && window.__FLUUX_DISABLE_UPDATER__ === true
+      ? { ...detected, hasInAppUpdates: false }
+      : detected
   }
   return current
 }
