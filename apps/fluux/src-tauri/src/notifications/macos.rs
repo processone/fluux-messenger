@@ -654,7 +654,8 @@ pub fn prepare_communication(mut payload: serde_json::Value) -> Result<Option<St
     payload["target"] = serde_json::to_value(target).map_err(|_| "invalid notification target")?;
     let json =
         std::ffi::CString::new(payload.to_string()).map_err(|_| "invalid notification payload")?;
-    // The bridge returns a retained NSString or nil on older macOS. No alert is scheduled here.
+    // The bridge returns a retained NSString, or nil on older macOS, when the prototype
+    // is disabled, or when the identity store is full. No alert is scheduled here.
     let token = unsafe { Retained::from_raw(fluux_communication_prepare(json.as_ptr())) };
     Ok(token.map(|s| s.to_string()))
 }
