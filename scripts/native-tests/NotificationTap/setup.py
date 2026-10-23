@@ -1,21 +1,21 @@
 import json
-import os
 import pathlib
 import shutil
+import subprocess
 import sys
-import tomllib
 
-# Use the locked, downloaded crate unchanged. No notification payload is
-# reconstructed here: the actual plugin creates and delivers the request.
+# Resolve and download the locked crate through Cargo, including custom source
+# locations. The actual plugin still creates and delivers the notification.
 repo = pathlib.Path.cwd()
 lab = pathlib.Path(sys.argv[1])
 fixture = pathlib.Path(__file__).parent
-lock = tomllib.loads((repo / 'apps/fluux/src-tauri/Cargo.lock').read_text())
-version = next(pkg['version'] for pkg in lock['package'] if pkg['name'] == 'tauri-plugin-notification')
-cargo = pathlib.Path(os.environ.get('CARGO_HOME', pathlib.Path.home() / '.cargo'))
-plugin = next((cargo / 'registry/src').glob(f'*/tauri-plugin-notification-{version}/ios/Sources'), None)
-if plugin is None:
-    raise SystemExit(f'Fetch the locked notification crate {version} before running this fixture')
+metadata = json.loads(subprocess.check_output([
+    'cargo', 'metadata', '--locked', '--format-version', '1', '--manifest-path',
+    str(repo / 'apps/fluux/src-tauri/Cargo.toml'),
+], text=True, timeout=240))
+notification = next(pkg for pkg in metadata['packages'] if pkg['name'] == 'tauri-plugin-notification')
+version = notification['version']
+plugin = pathlib.Path(notification['manifest_path']).parent / 'ios/Sources'
 for name in ['App', 'UITests', 'Tauri', 'SwiftRs']:
     (lab / name).mkdir()
 source = (repo / 'apps/fluux/src-tauri/plugins/push/ios/Sources/PushPlugin.swift').read_text()

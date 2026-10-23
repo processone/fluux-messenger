@@ -452,7 +452,8 @@ their separate `from` / catch-up arrival-jump path. Dismissal does not navigate.
 
 `npm run test:ios-notifications` checks the shared tap fixtures against the locked
 notification crate's actual Swift content producer and action serializer on macOS.
-Fetch the locked Cargo dependencies first if they are not already installed.
+Both native entry points use `cargo metadata --locked` to resolve and download
+missing plugin sources, honoring `CARGO_HOME` and Cargo source configuration.
 The hook tests consume that same `userInfo` fixture, not an Android action envelope.
 For OS-delivered banner taps, run the unsigned, account-free simulator fixture:
 
@@ -461,8 +462,11 @@ FLUUX_TAP_RESULTS=/absolute/path/outside/the/project \
   bash scripts/native-tests/NotificationTap/run.sh
 ```
 
-The fixture needs Xcode, XcodeGen, Python 3.11+ and an installed simulator runtime.
-It creates and removes its own simulator. Override `FLUUX_TAP_RUNTIME` and
+The fixture needs Cargo, Xcode, XcodeGen, Python 3.9+ and an installed simulator runtime.
+Each invocation creates a fresh `run-*` subdirectory under `FLUUX_TAP_RESULTS`,
+prints that location and preserves earlier results. A failed build or test prints
+its log path and keeps its failing exit status.
+The fixture creates and removes its own simulator. Override `FLUUX_TAP_RUNTIME` and
 `FLUUX_TAP_DEVICE` when the default iOS 26.5 / iPhone 17 Pro is unavailable.
 It runs the actual notification plugin and Fluux delegate with a test event bridge,
 retains logs and screenshots, and checks direct-chat taps and room taps.

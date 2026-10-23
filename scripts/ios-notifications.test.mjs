@@ -1,8 +1,7 @@
-import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
-import { tmpdir, homedir } from 'node:os'
-import TOML from '@iarna/toml'
-import { join } from 'node:path'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -29,12 +28,15 @@ function compileNotificationTests(scratch, main, ios = false) {
 test('iOS local tap fixtures match the locked notification plugin payload', { skip: process.platform !== 'darwin' }, () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-local-tap-'))
   try {
-    const lock = TOML.parse(readFileSync(fileURLToPath(new URL('../apps/fluux/src-tauri/Cargo.lock', import.meta.url)), 'utf8'))
-    const version = lock.package.find(pkg => pkg.name === 'tauri-plugin-notification').version
-    const registry = join(process.env.CARGO_HOME ?? join(homedir(), '.cargo'), 'registry', 'src')
-    const plugin = readdirSync(registry).map(name => join(registry, name, `tauri-plugin-notification-${version}`, 'ios', 'Sources'))
-      .find(path => { try { return readdirSync(path).includes('Notification.swift') } catch { return false } })
-    assert.ok(plugin, `Fetch the locked notification crate ${version} before testing its native payload`)
+    // Cargo downloads missing locked sources and resolves custom CARGO_HOME,
+    // registries and source replacements; a prefilled registry/src is not required.
+    const metadata = JSON.parse(execFileSync('cargo', ['metadata', '--locked', '--format-version', '1', '--manifest-path',
+      fileURLToPath(new URL('../apps/fluux/src-tauri/Cargo.toml', import.meta.url))], {
+      encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 240000,
+    }))
+    const notification = metadata.packages.find(pkg => pkg.name === 'tauri-plugin-notification')
+    assert.ok(notification, 'The app must resolve a notification plugin')
+    const plugin = join(dirname(notification.manifest_path), 'ios', 'Sources')
     execFileSync('xcrun', ['swiftc', '-swift-version', '5', '-emit-module', '-emit-library', '-static', '-module-name', 'Tauri',
       fileURLToPath(new URL('./native-tests/NotificationTap/Tauri.swift', import.meta.url)), '-emit-module-path', join(scratch, 'Tauri.swiftmodule'), '-o', join(scratch, 'libTauri.a')])
     // Only the plugin's data declarations are needed on macOS; its UIKit host
@@ -48,6 +50,52 @@ test('iOS local tap fixtures match the locked notification plugin payload', { sk
     const output = execFileSync(binary, [fileURLToPath(new URL('./native-tests/NotificationTap/payloads.json', import.meta.url))], { encoding: 'utf8' })
     assert.match(output, /payload contract passed/)
     console.log(output.trim())
+  } finally { rmSync(scratch, { recursive: true, force: true }) }
+})
+
+test('native tap runner preserves rerun evidence and reports the failed log', { skip: process.platform !== 'darwin' }, () => {
+  // FLM-106 I1: exercise the real runner without starting a simulator or build.
+  // The build stand-in reproduces xcodebuild's existing-result-bundle refusal.
+  const scratch = mkdtempSync(join(tmpdir(), 'fluux-tap-runner-'))
+  try {
+    const bin = join(scratch, 'bin')
+    const results = join(scratch, 'results with spaces')
+    mkdirSync(bin)
+    for (const [name, body] of Object.entries({
+      xcodegen: 'exit 0',
+      xcrun: 'if [[ "$1 $2" == "simctl create" ]]; then echo fixture-simulator; fi',
+      xcodebuild: `while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "-resultBundlePath" ]]; then bundle="$2"; break; fi
+  shift
+done
+if [[ -e "$bundle" ]]; then echo 'Existing result bundle' >&2; exit 65; fi
+mkdir -p "$bundle"
+echo "Build evidence: $bundle"
+if [[ "\${FLUUX_TAP_TEST_BUILD_FAIL:-0}" == 1 ]]; then echo 'Build failed' >&2; exit 65; fi`,
+    })) {
+      const path = join(bin, name)
+      writeFileSync(path, `#!/bin/bash\nset -euo pipefail\n${body}\n`)
+      chmodSync(path, 0o755)
+    }
+    const run = (fail = false) => spawnSync('bash', [fileURLToPath(new URL('./native-tests/NotificationTap/run.sh', import.meta.url))], {
+      encoding: 'utf8', timeout: 240000,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, FLUUX_TAP_RESULTS: results, FLUUX_TAP_TEST_BUILD_FAIL: fail ? '1' : '0' },
+    })
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = run()
+      assert.equal(result.status, 0, result.stderr || result.error?.message)
+    }
+    const runs = readdirSync(results)
+    assert.equal(runs.length, 2)
+    const previousLogs = runs.map(name => readFileSync(join(results, name, 'native-taps.log'), 'utf8'))
+    const failed = run(true)
+    assert.equal(failed.status, 65, failed.stderr || failed.error?.message)
+    const failedRun = readdirSync(results).find(name => !runs.includes(name))
+    assert.ok(failedRun)
+    const log = join(results, failedRun, 'native-taps.log')
+    assert.ok(failed.stderr.includes(log), failed.stderr)
+    assert.match(readFileSync(log, 'utf8'), /Build failed/)
+    assert.deepEqual(runs.map(name => readFileSync(join(results, name, 'native-taps.log'), 'utf8')), previousLogs)
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
 
