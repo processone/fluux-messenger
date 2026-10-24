@@ -1049,6 +1049,147 @@ describe('positioning controller live-edge ownership', () => {
     expect(ambient.positionFrame).not.toHaveBeenCalled()
   })
 
+  describe('while the reader holds input', () => {
+    const touch = { deltaY: 0, geometry: { top: 1000, height: 2000, client: 1000 } }
+
+    it.each([
+      ['paused at the edge', false],
+      ['dragging within the bottom threshold', true],
+    ])('refuses every ambient re-pin %s', (_label, dragged) => {
+      const harness = liveEdgeHarness()
+      const controller = new PositioningController()
+      const request = controller.beginLiveEdgeEntry({
+        conversationId,
+        entryFacts: liveEntryFacts(),
+        executor: harness.executor,
+      })
+      controller.holdInput(conversationId)
+      controller.observeUserInput(conversationId, touch)
+      expect(harness.complete).toHaveBeenCalledWith(request, 'user-takeover')
+      if (dragged) controller.observeUserScroll(conversationId, -10, true)
+
+      const ambient = liveEdgeHarness()
+      expect(controller.reconcileLiveEdge({
+        conversationId,
+        executor: ambient.executor,
+        rearmEligibleFromGeometry: true,
+      })).toBe(false)
+      expect(ambient.positionFrame).not.toHaveBeenCalled()
+    })
+
+    it('replays one refused re-pin once the input ends', () => {
+      const harness = liveEdgeHarness()
+      const controller = new PositioningController()
+      controller.beginLiveEdgeEntry({
+        conversationId,
+        entryFacts: liveEntryFacts(),
+        executor: harness.executor,
+      })
+      controller.holdInput(conversationId)
+      controller.observeUserInput(conversationId, touch)
+      expect(controller.takeDeferredLiveEdge(conversationId)).toBeNull()
+      controller.reconcileLiveEdge({
+        conversationId,
+        executor: liveEdgeHarness().executor,
+        rearmEligibleFromGeometry: true,
+      })
+      expect(controller.takeDeferredLiveEdge(conversationId)).toBeNull()
+
+      controller.observeUserInputEnd(conversationId, true)
+      expect(controller.takeDeferredLiveEdge(conversationId)).toEqual({ rearmEligibleFromGeometry: true })
+      expect(controller.takeDeferredLiveEdge(conversationId)).toBeNull()
+      const ambient = liveEdgeHarness()
+      expect(controller.reconcileLiveEdge({
+        conversationId,
+        executor: ambient.executor,
+        rearmEligibleFromGeometry: true,
+      })).toBe(true)
+      expect(ambient.positionFrame).toHaveBeenCalledOnce()
+    })
+
+    it('voids the refused verdict once the reader moves after it', () => {
+      const controller = new PositioningController()
+      controller.beginLiveEdgeEntry({
+        conversationId,
+        entryFacts: liveEntryFacts(),
+        executor: liveEdgeHarness().executor,
+      })
+      controller.holdInput(conversationId)
+      controller.observeUserInput(conversationId, touch)
+      controller.reconcileLiveEdge({
+        conversationId,
+        executor: liveEdgeHarness().executor,
+        rearmEligibleFromGeometry: true,
+      })
+      controller.observeUserScroll(conversationId, -400, false)
+      controller.observeUserInputEnd(conversationId, false)
+      expect(controller.takeDeferredLiveEdge(conversationId)).toEqual({ rearmEligibleFromGeometry: false })
+    })
+
+    it('lets the hold lapse when the release never arrives', () => {
+      vi.useFakeTimers()
+      try {
+        const controller = new PositioningController()
+        controller.beginLiveEdgeEntry({
+          conversationId,
+          entryFacts: liveEntryFacts(),
+          executor: liveEdgeHarness().executor,
+        })
+        controller.holdInput(conversationId)
+      controller.observeUserInput(conversationId, touch)
+        vi.advanceTimersByTime(1000)
+        controller.observeUserScroll(conversationId, -10, true)
+        vi.advanceTimersByTime(1000)
+        const held = liveEdgeHarness()
+        expect(controller.reconcileLiveEdge({
+          conversationId,
+          executor: held.executor,
+          rearmEligibleFromGeometry: true,
+        })).toBe(false)
+
+        vi.advanceTimersByTime(600)
+        const lapsed = liveEdgeHarness()
+        expect(controller.reconcileLiveEdge({
+          conversationId,
+          executor: lapsed.executor,
+          rearmEligibleFromGeometry: true,
+        })).toBe(true)
+        expect(lapsed.positionFrame).toHaveBeenCalledOnce()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('does not carry the hold into the next visit of the conversation', () => {
+      const controller = new PositioningController()
+      controller.beginLiveEdgeEntry({
+        conversationId,
+        entryFacts: liveEntryFacts(),
+        executor: liveEdgeHarness().executor,
+      })
+      controller.holdInput(conversationId)
+      controller.observeUserInput(conversationId, touch)
+      controller.beginLiveEdgeEntry({
+        conversationId: 'other@example.test',
+        entryFacts: liveEntryFacts(),
+        executor: liveEdgeHarness().executor,
+      })
+      controller.beginLiveEdgeEntry({
+        conversationId,
+        entryFacts: liveEntryFacts(),
+        executor: liveEdgeHarness().executor,
+      })
+
+      const ambient = liveEdgeHarness()
+      expect(controller.reconcileLiveEdge({
+        conversationId,
+        executor: ambient.executor,
+        rearmEligibleFromGeometry: true,
+      })).toBe(true)
+      expect(controller.takeDeferredLiveEdge(conversationId)).toBeNull()
+    })
+  })
+
   it('re-arms cancelled follow when geometry returns to the bottom', () => {
     const harness = liveEdgeHarness()
     const controller = new PositioningController()
