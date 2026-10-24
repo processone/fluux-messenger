@@ -417,8 +417,16 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
         chatStore.getState().setActiveConversation(CHAT)
         await vi.waitFor(() => expect(staleCount).toEqual({ unread: 1 }))
         expect(chatStore.getState().conversationMeta.get(CHAT)?.readPointer).toBe(readPointer)
+        // The live edge is measured while nothing is unread, so the report has no count to
+        // clear; the unread count then returns, as the in-flight recount saw it.
+        const setUnread = (unreadCount: number) => chatStore.setState((state) => ({
+          conversationMeta: new Map(state.conversationMeta).set(CHAT, { ...state.conversationMeta.get(CHAT)!, unreadCount }),
+          conversations: new Map(state.conversations).set(CHAT, { ...state.conversations.get(CHAT)!, unreadCount }),
+        }))
+        setUnread(0)
         const key = { kind: 'chat' as const, entityId: CHAT, accountScope: '' }
         reportViewport(key, currentViewportGeneration(key), 'at-edge')
+        setUnread(1)
 
         chatStore.getState()[writer](CHAT)
         expect(chatStore.getState().conversationMeta.get(CHAT)?.readPointer).toEqual({

@@ -45,7 +45,7 @@ import { isUnseenIncomingMessage, onActivate, onMessageReceived } from '../share
 import { isRenderableStoredMessage } from '../../utils/messageRenderability'
 import { getStorageScopeJid as currentStorageScope } from '../../utils/storageScope'
 import { beginViewportGeneration } from '../shared/viewportEvidence'
-import { resolveRoomReadPointerOrder } from '../shared/readPointer'
+import { resolveRoomReadPointerOrder, rowRefOfPointer } from '../shared/readPointer'
 import { findMessageRowIndex as findRow } from '../../utils/messageIdentity'
 import { createPendingEntityWrites } from '../shared/pendingEntityWrites'
 import { createRecountRetryScheduler } from '../shared/recountRetry'
@@ -57,7 +57,7 @@ import {
 } from '../shared/readMarkerSync'
 import { createRemoteDividerAdvanceTracker } from '../shared/dividerAdvance'
 import { clearTransientEntity, clearTransientScope, pruneTransient } from '../shared/transientUnread'
-import { clearViewportEvidence, currentViewportEvidence } from '../shared/viewportEvidence'
+import { clearViewportEvidence, currentViewportEvidence, onViewportAtEdge } from '../shared/viewportEvidence'
 import { clearPurgedMarkers, isMarkerPurged, notePurgedMarker, noteSupersededMarker } from '../shared/purgedMarkers'
 
 export type ReadTrackerKind = 'chat' | 'room'
@@ -510,7 +510,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     if (account && pointer && pointer !== before) emitLocalRead({ account, kind, conversationId: entityId, pointer })
   }
 
-  return {
+  const tracker = {
     kind,
     scopeKey,
     mdsGate,
@@ -1165,6 +1165,18 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       mdsGate.reset()
     },
   }
+
+  // Opening an entity can report "seen newest row" before "at the live edge", and the
+  // first report then clears nothing. Replay the already-seen row once the edge is known.
+  onViewportAtEdge((key) => {
+    if (key.kind !== kind || key.accountScope !== (getStorageScopeJid() ?? '')) return
+    const view = ports.storage.read(key.entityId)
+    const seen = rowRefOfPointer(view?.readPointer)
+    if (!view?.isActive || !view.atLiveEdge || view.unreadCount === 0 || !seen) return
+    if (findMessageRowIndex(view.messages, seen) === view.messages.length - 1) tracker.advance(key.entityId, seen)
+  })
+
+  return tracker
 }
 
 export type ReadTracker = ReturnType<typeof createReadTracker>

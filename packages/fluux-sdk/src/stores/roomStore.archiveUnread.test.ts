@@ -1861,8 +1861,8 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       roomStore.setState((state) => ({ messages: new Map(state.messages).set(ROOM, [anchor, p0, u1]) }))
       const pointer = makeReadPointer(u1, 'room')
       roomStore.getState().setActiveRoom(ROOM)
-      setMeta({ unreadCount: 3, readPointer: pointer })
       reportViewport(scopeKey(), currentViewportGeneration(scopeKey()), 'at-edge')
+      setMeta({ unreadCount: 3, readPointer: pointer })
 
       // Hold an older cache snapshot across the direct read acknowledgement.
       let releaseCount!: (result: { unread: number }) => void

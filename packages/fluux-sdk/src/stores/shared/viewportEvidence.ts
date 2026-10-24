@@ -49,6 +49,18 @@ const SEP = String.fromCharCode(0)
 
 const entities = new Map<string, EntityEvidence>()
 
+type AtEdgeListener = (key: EvidenceKey) => void
+const atEdgeListeners = new Set<AtEdgeListener>()
+
+/**
+ * Subscribe to an entity's evidence turning `at-edge`. Lets the read tracker
+ * re-check the badge when the measurement arrives after the "seen" report.
+ */
+export function onViewportAtEdge(listener: AtEdgeListener): () => void {
+  atEdgeListeners.add(listener)
+  return () => { atEdgeListeners.delete(listener) }
+}
+
 function keyString(key: EvidenceKey): string {
   return `${key.accountScope}${SEP}${key.kind}${SEP}${key.entityId}`
 }
@@ -98,6 +110,7 @@ export function reportViewport(key: EvidenceKey, generation: number, evidence: '
   if (!current || generation !== current.generation) return
   if (current.evidence === evidence) return
   entities.set(k, { generation: current.generation, evidence })
+  if (evidence === 'at-edge') atEdgeListeners.forEach(listener => listener(key))
 }
 
 /**
