@@ -1144,9 +1144,10 @@ export function useMessageListScroll({
     if (plan.loadNewer) triggerLoadNewer()
   }
 
-  const observeUserInput = (id: string, input: UserScrollInput) => {
+  const observeUserInput = (id: string, input: UserScrollInput, hold = false) => {
     const movement = observeViewportGeometry(id, input)
     const controller = positioningControllerRef.current
+    if (hold) controller?.holdInput(id)
     if (input.deltaY < 0 && controller?.ownsMessageTarget()) cancelMediaBatch()
     controller?.observeUserInput(id, input, movement?.userDelta ?? 0)
     // A touch/scrollbar gesture at an edge may not move scrollTop or emit a scroll event.
@@ -1162,6 +1163,10 @@ export function useMessageListScroll({
       reconcileMessageTargetAfterResize()
     }
     setMeasuredAtBottom(atLiveEdge)
+    const deferred = positioningControllerRef.current?.takeDeferredLiveEdge(id)
+    if (deferred) {
+      reconcileLiveEdgeRef.current('input-release', deferred.rearmEligibleFromGeometry || atLiveEdge)
+    }
   }
 
   const observeKeyboardNavigation = useStableCallback((id: string) => {
@@ -1218,7 +1223,7 @@ export function useMessageListScroll({
     },
     recordUserInput: (id, at) =>
       viewportSessionRef.current?.recordUserInput(id, at),
-    observeUserInput,
+    observeUserInput: (id, input) => observeUserInput(id, input, true),
     observeUserInputEnd,
     log: debugLog,
   })

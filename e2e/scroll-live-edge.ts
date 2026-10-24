@@ -732,6 +732,51 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
   })
 
+  test('a finger on the list holds the view until it lifts, then the band re-pins', async ({ page }) => {
+    // A reader who puts a finger down at the edge and drags a little is still inside the at-bottom
+    // band, where every ambient stimulus re-pins. Under the finger that re-pin is a fight: the view
+    // snaps back each time a row changes height. Plain events carrying a `touches` list stand in for
+    // a touch, since desktop WebKit has no Touch constructor; the list reads nothing else.
+    const DRAG_PX = 60
+    await enterAtBottom(page)
+
+    const touch = (type: string, clientY: number | null) => page.evaluate(([kind, y]) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement
+      const row = s.querySelector('[data-message-id]') ?? s
+      const touches = y === null ? [] : [{ identifier: 1, clientX: 200, clientY: y }]
+      const event = new Event(kind as string, { bubbles: true, cancelable: false })
+      Object.defineProperty(event, 'touches', { value: touches })
+      Object.defineProperty(event, 'changedTouches', { value: touches })
+      ;(kind === 'touchend' ? window : row).dispatchEvent(event)
+    }, [type, clientY] as const)
+
+    await touch('touchstart', 400)
+    await page.evaluate((px) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement
+      s.scrollTop -= px
+    }, DRAG_PX)
+    await touch('touchmove', 400 + DRAG_PX)
+    await settle(page)
+    const held = await readGeometry(page)
+    expect(held.distFromBottom, 'precondition: dragged inside the at-bottom band').toBeGreaterThan(PIN_TOLERANCE_PX)
+    expect(held.distFromBottom, 'precondition: dragged inside the at-bottom band').toBeLessThan(AT_BOTTOM_OK_PX)
+
+    await setTyping(page, true)
+    await page.waitForSelector('[data-typing-pill]', { timeout: 5_000 })
+    await settle(page)
+    expect(
+      Math.abs((await readGeometry(page)).scrollTop - held.scrollTop),
+      'an ambient re-pin moved the view under the reader\'s finger',
+    ).toBeLessThanOrEqual(2)
+
+    await touch('touchend', null)
+    await settle(page)
+    expect(
+      (await readGeometry(page)).distFromBottom,
+      'the re-pin refused under the finger was not replayed when it lifted inside the band',
+    ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
+  })
+
   test('never re-pins a reader who deliberately scrolled up', async ({ page }) => {
     await enterAtBottom(page)
 

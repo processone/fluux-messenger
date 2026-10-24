@@ -588,6 +588,12 @@ const UNREAD_MARKER_TAKEOVER_DRIFT_PX = 300
 // Preserved from the former hook-local pinVirtualizedBottom loop.
 const LIVE_EDGE_REASSERT_FRAMES = 60
 const LIVE_EDGE_STABLE_FRAMES = 8
+/**
+ * How long held input outlives the last input or scroll the reader produced. iOS dispatches
+ * `touchend` to the element the touch started on, so a row virtualised away mid-drag swallows it;
+ * without this bound a lost release would disable following the live edge until the next touch.
+ */
+const HELD_INPUT_TIMEOUT_MS = 1500
 // Preserved from the former standalone media-anchor loop.
 const ANCHOR_PRESERVATION_REASSERT_FRAMES = 90
 const ANCHOR_PRESERVATION_STABLE_FRAMES = 8
@@ -666,6 +672,10 @@ export class PositioningController {
     if (accepted !== this.model) {
       if (request.source.kind === 'entry' || request.conversationId !== this.model.currentConversationId ||
         request.desired.kind === 'live-edge') this.unreadMarkerHold = null
+      if (request.source.kind === 'entry' || request.conversationId !== this.model.currentConversationId) {
+        this.heldInput = null
+        this.deferredLiveEdge = null
+      }
       if ((request.source.kind === 'entry' || request.source.kind === 'user-navigation') &&
         request.source.reason === 'unread-marker') this.unreadMarkerHold = request.conversationId
       if (request.source.kind === 'user-navigation') this.onUserNavigation?.(request.conversationId)
@@ -697,6 +707,24 @@ export class PositioningController {
     direction: number
   } | null = null
   private unreadMarkerHold: string | null = null
+  /**
+   * The conversation whose reader is touching, dragging the scrollbar, holding a scroll key or
+   * mid-wheel, from {@link holdInput} to {@link observeUserInputEnd}. No ambient
+   * stimulus may re-pin the live edge under that input: a row that changes height on every frame
+   * would otherwise snap the viewport back before the finger leaves the bottom threshold.
+   */
+  private heldInput: {
+    conversationId: string
+    /**
+     * The re-pin refused under this input, if any. `rearmEligibleFromGeometry` is the refused
+     * caller's verdict, taken before its own growth moved the reader; any later movement by the
+     * reader voids it, since the reader then decides where they are.
+     */
+    deferred: { rearmEligibleFromGeometry: boolean } | null
+    lastInputAt: number
+  } | null = null
+  /** A re-pin refused under held input, owed once that input ends. */
+  private deferredLiveEdge: { conversationId: string; rearmEligibleFromGeometry: boolean } | null = null
   private savedExecution: SavedPositionExecutionState | null = null
   private unreadExecution: UnreadMarkerExecutionState | null = null
   private explicitTargetExecution: ExplicitTargetExecutionState | null = null
@@ -887,6 +915,10 @@ export class PositioningController {
       conversationId: input.conversationId,
       fallback: false,
       observe: () => {
+        if (this.isInputHeld(input.conversationId)) {
+          this.heldInput!.deferred = { rearmEligibleFromGeometry: input.rearmEligibleFromGeometry }
+          return false
+        }
         if (!shouldReconcileAfterAppend(this.model, input.conversationId)) {
           return this.rearmLiveEdgeFromGeometry(
             input.conversationId,
@@ -1555,6 +1587,7 @@ export class PositioningController {
       conversationId,
       fallback: null,
       observe: () => {
+        if (this.heldInput?.conversationId === conversationId) this.heldInput.lastInputAt = Date.now()
         const active = this.model.active
         if (
           input && active?.request.conversationId === conversationId &&
@@ -1663,6 +1696,9 @@ export class PositioningController {
   }
 
   observeUserScroll(conversationId: string, delta: number, atLiveEdge = false): void {
+    if (delta !== 0 && this.heldInput?.conversationId === conversationId && this.heldInput.deferred) {
+      this.heldInput.deferred.rearmEligibleFromGeometry = false
+    }
     const active = this.model.active
     if (delta !== 0 && !this.hasCurrentTargetTakeover(conversationId) &&
       !(active?.request.source.kind === 'user-navigation' && active.request.source.reason === 'message-target')) {
@@ -1690,7 +1726,24 @@ export class PositioningController {
     }
   }
 
+  /**
+   * Native input started or continued: a touch, a scrollbar drag, a held scroll key or a wheel
+   * burst. Only a source that also reports {@link observeUserInputEnd} may call this.
+   */
+  holdInput(conversationId: string): void {
+    if (this.heldInput?.conversationId === conversationId) {
+      this.heldInput.lastInputAt = Date.now()
+    } else {
+      this.heldInput = { conversationId, deferred: null, lastInputAt: Date.now() }
+    }
+  }
+
   observeUserInputEnd(conversationId: string, atLiveEdge = false): boolean {
+    const held = this.heldInput
+    if (held?.conversationId === conversationId) {
+      if (held.deferred) this.deferredLiveEdge = { conversationId, ...held.deferred }
+      this.heldInput = null
+    }
     if (atLiveEdge && this.hasUnreadMarkerHold(conversationId)) {
       this.unreadMarkerHold = null
       this.observeSettledUserGeometry({
@@ -1705,6 +1758,27 @@ export class PositioningController {
     if (!active || active.phase.kind !== 'paused-user-input') return false
     this.model = { ...this.model, active: { ...active, phase: { kind: 'settled' } } }
     return true
+  }
+
+  private isInputHeld(conversationId: string): boolean {
+    const held = this.heldInput
+    if (held?.conversationId !== conversationId) return false
+    if (Date.now() - held.lastInputAt < HELD_INPUT_TIMEOUT_MS) return true
+    this.heldInput = null
+    return false
+  }
+
+  /**
+   * The ambient re-pin refused while the reader held input, consuming it; null when none is owed.
+   * The caller replays it through {@link reconcileLiveEdge}, which still requires follow to be armed
+   * or geometry eligibility: the refused stimulus's own verdict, or the released position.
+   */
+  takeDeferredLiveEdge(conversationId: string): { rearmEligibleFromGeometry: boolean } | null {
+    const deferred = this.deferredLiveEdge
+    if (deferred?.conversationId !== conversationId) return null
+    this.deferredLiveEdge = null
+    if (this.model.currentConversationId !== conversationId) return null
+    return { rearmEligibleFromGeometry: deferred.rearmEligibleFromGeometry }
   }
 
   private hasCurrentTargetTakeover(conversationId: string): boolean {
