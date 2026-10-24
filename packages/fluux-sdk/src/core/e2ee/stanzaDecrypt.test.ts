@@ -807,6 +807,50 @@ describe('recordUnclaimedEME', () => {
     expect(recordUnclaimedEME(stanza, true).kind).toBe('none')
     expect(recordUnclaimedEME(stanza, false).kind).toBe('none')
   })
+
+  describe('with declared plugins, before any plugin registers', () => {
+    function declaredManager(expectedPlugins: readonly string[]): E2EEManager {
+      return new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(),
+        account: { jid: 'me@example.com' },
+        expectedPlugins,
+      })
+    }
+
+    it('tags a protocol no declared plugin handles as unsupported on arrival', () => {
+      const stanza = omemoStanza()
+      const disposition = recordUnclaimedEME(stanza, declaredManager(['openpgp']))
+
+      expect(disposition.kind).toBe('unsupported')
+      expect(readStashedUnsupportedEncryption(stanza)).toEqual({
+        namespace: 'eu.siacs.conversations.axolotl',
+        name: 'OMEMO',
+      })
+    })
+
+    it('keeps a declared protocol retryable until its plugin registers', () => {
+      const stanza = openPgpStanza()
+      const disposition = recordUnclaimedEME(stanza, declaredManager(['openpgp']))
+
+      expect(disposition.kind).toBe('retry')
+      expect(readStashedUnsupportedEncryption(stanza)).toBeUndefined()
+    })
+
+    it('tags every protocol unsupported when the app declares no plugins', () => {
+      expect(recordUnclaimedEME(omemoStanza(), declaredManager([])).kind).toBe('unsupported')
+      expect(recordUnclaimedEME(openPgpStanza(), declaredManager([])).kind).toBe('unsupported')
+    })
+
+    it('waits for registration when the app declares nothing (no declaration given)', () => {
+      const manager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(),
+        account: { jid: 'me@example.com' },
+      })
+      expect(recordUnclaimedEME(omemoStanza(), manager).kind).toBe('retry')
+    })
+  })
 })
 
 // ---------------------------------------------------------------------------

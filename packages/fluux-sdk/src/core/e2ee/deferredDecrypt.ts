@@ -208,7 +208,10 @@ export class DeferredDecryptEngine {
       return 0
     }
     const manager = this.deps.getManager()
-    if (!manager || !manager.hasPlugins()) return 0
+    // With declared plugins a pass is useful before any registers: it tags
+    // stored payloads of protocols no declared plugin handles as unsupported,
+    // while payloads a declared plugin may still decrypt stay pending.
+    if (!manager || !(manager.hasPlugins() || manager.hasDeclaredPlugins())) return 0
     const stores = this.deps.getStores()
     if (!stores) return 0
 

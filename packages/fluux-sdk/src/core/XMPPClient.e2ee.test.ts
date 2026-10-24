@@ -1121,6 +1121,26 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
     })
   })
 
+  describe('declared plugins (ensureE2EEManager)', () => {
+    function buildManager(client: XMPPClient): E2EEManager {
+      ;(client as unknown as { currentJid: string }).currentJid = 'me@example.com/web'
+      ;(client as unknown as { ensureE2EEManager: () => void }).ensureE2EEManager()
+      return client.e2ee!
+    }
+
+    it('hands the configured plugin ids to every manager it builds', () => {
+      const manager = buildManager(new XMPPClient({ debug: false, e2eePlugins: ['openpgp'] }))
+
+      expect(manager.hasDeclaredPlugins()).toBe(true)
+      expect(manager.expectsPlugin('openpgp')).toBe(true)
+      expect(manager.expectsPlugin('omemo')).toBe(false)
+    })
+
+    it('declares nothing when the option is omitted', () => {
+      expect(buildManager(new XMPPClient({ debug: false })).hasDeclaredPlugins()).toBe(false)
+    })
+  })
+
   describe('key-unlocked wiring (ensureE2EEManager)', () => {
     it('decrypts a stashed message when the plugin signals notifyKeyUnlocked()', async () => {
       // End-to-end guard for the centralized restore→retry trigger. Build the

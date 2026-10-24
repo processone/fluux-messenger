@@ -544,6 +544,41 @@ describe('DeferredDecryptEngine', () => {
     expect(stores.chat.updateMessage.mock.calls[0][2]).toMatchObject({ body: 'hello', encryptedPayload: undefined })
   })
 
+  it('tags stored unsupported-protocol payloads before any declared plugin registers', async () => {
+    manager = new E2EEManager({
+      storage: new InMemoryStorageBackend(),
+      xmpp: stubXmppPrimitives(),
+      account: { jid: 'me@example.com' },
+      expectedPlugins: ['openpgp'],
+    })
+    const stored = (id: string, encryptedPayload: string): Message => ({
+      type: 'chat',
+      id,
+      stanzaId: undefined, originId: undefined,
+      conversationId: 'bob@example.com',
+      from: 'bob@example.com',
+      body: 'fallback',
+      timestamp: new Date(),
+      isOutgoing: false,
+      encryptedPayload,
+    })
+    const omemo = stored('omemo-1', '<encrypted xmlns="eu.siacs.conversations.axolotl"><header sid="1"/><payload>ciphertext</payload></encrypted>')
+    const openpgp = stored('pgp-1', '<openpgp xmlns="urn:xmpp:openpgp:0">ciphertext</openpgp>')
+    stores.chat.getAllStoredMessages.mockReturnValue([
+      { id: 'bob@example.com', messages: [omemo, openpgp] },
+    ])
+
+    await engine.retryPending()
+
+    expect(stores.chat.updateMessage).toHaveBeenCalledTimes(1)
+    const [, target, updates] = stores.chat.updateMessage.mock.calls[0]
+    expect(target).toBe(omemo)
+    expect(updates).toMatchObject({
+      encryptedPayload: undefined,
+      unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' },
+    })
+  })
+
   it('is a no-op when no E2EE manager is available', async () => {
     engine = new DeferredDecryptEngine({
       updateSearchIndex: vi.fn().mockResolvedValue(undefined),

@@ -20,6 +20,7 @@ import { startRecountDeferralTally } from './utils/recountDeferralTally'
 import { registerServiceWorker } from './utils/serviceWorkerUpdate'
 import { requestPersistentStorage } from './utils/persistStorage'
 import { sweepExpiredPassphrases } from './e2ee/webPassphraseCache'
+import { E2EE_PLUGIN_IDS } from './e2ee/registerPlugins'
 import { getReconnectIntent } from './utils/reconnectIntent'
 import { captureWebLoginPrefill } from './utils/loginPrefillSources'
 import { useLoginPrefillStore } from './stores/loginPrefillStore'
@@ -177,6 +178,7 @@ const renderApp = () => ReactDOM.createRoot(document.getElementById('root')!).re
         debug={import.meta.env.DEV}
         proxyAdapter={proxyAdapter}
         shouldAutoReconnect={() => getReconnectIntent() === 'active'}
+        e2eePlugins={E2EE_PLUGIN_IDS}
       >
         {AnomalyInstaller ? (
           <React.Suspense fallback={null}>

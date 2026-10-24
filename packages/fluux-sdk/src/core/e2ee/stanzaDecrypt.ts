@@ -569,8 +569,9 @@ interface EMEIdentity {
 
 /**
  * Outcome of classifying a `<message>` whose encrypted child no plugin claimed.
- * - `retry`: E2EE isn't ready yet — the payload is stashed for deferred retry.
- * - `unsupported`: a plugin is registered but none handles this protocol — the
+ * - `retry`: a plugin that may handle this protocol is not ready yet — the
+ *   payload is stashed for deferred retry.
+ * - `unsupported`: no registered or declared plugin handles this protocol — the
  *   sender's fallback `<body>` should be shown; the message is tagged so the UI
  *   can render an "unsupported method" hint.
  * - `none`: the stanza isn't actually encryption-tagged (cleartext / malformed).
@@ -585,27 +586,30 @@ const UNSUPPORTED_ENC_STASH = '__unsupportedEncryption'
 interface PluginRegistry {
   hasPlugins(): boolean
   getPlugin(id: string): unknown
+  hasDeclaredPlugins?(): boolean
+  expectsPlugin?(id: string): boolean
 }
 
 type UnclaimedEMEPluginState = boolean | PluginRegistry
 
-function unclaimedPluginState(state: UnclaimedEMEPluginState): {
-  hasPlugins: boolean
-  hasPluginForNamespace(namespace: string): boolean
-} {
-  if (typeof state === 'boolean') {
-    return {
-      hasPlugins: state,
-      hasPluginForNamespace: () => false,
-    }
+/**
+ * Whether an unclaimed stanza in `namespace` can never be decrypted by this
+ * client, so it is unsupported now rather than worth a later retry.
+ *
+ * With declared plugins the answer is known before registration finishes: only
+ * a protocol whose plugin is declared or registered can still be claimed.
+ * Without a declaration nothing is known until the first plugin registers, and
+ * a protocol whose plugin is registered but failed to claim this exact shape
+ * stays retryable.
+ */
+function isUnsupportedNamespace(state: UnclaimedEMEPluginState, namespace: string): boolean {
+  if (typeof state === 'boolean') return state
+  const pluginId = EME_NAMESPACE_PLUGIN_IDS[namespace]
+  if (state.hasDeclaredPlugins?.()) {
+    return !pluginId || !state.expectsPlugin?.(pluginId)
   }
-  return {
-    hasPlugins: state.hasPlugins(),
-    hasPluginForNamespace: (namespace) => {
-      const pluginId = EME_NAMESPACE_PLUGIN_IDS[namespace]
-      return pluginId ? !!state.getPlugin(pluginId) : false
-    },
-  }
+  if (!state.hasPlugins()) return false
+  return !pluginId || !state.getPlugin(pluginId)
 }
 
 /**
@@ -683,13 +687,9 @@ function isEmptyOmemoElement(namespace: string, child: Element | null): boolean 
  * Classify and tag an encryption-tagged stanza that no plugin claimed, mutating
  * the stanza with the appropriate stash. See {@link UnclaimedEMEDisposition}.
  *
- * @param pluginState - whether the E2EE manager has at least one plugin
- *   registered. When false the protocol may still be one we support whose
- *   plugin hasn't finished init — stash for retry. When true an unclaimed
- *   stanza is a protocol we have no plugin for — unsupported, unless the
- *   corresponding plugin is registered and merely failed to claim this exact
- *   shape, in which case keep it retryable instead of surfacing a false
- *   "not supported" notice.
+ * @param pluginState - the E2EE manager, or a bare "a plugin is registered"
+ *   flag. See {@link isUnsupportedNamespace} for how it decides between an
+ *   unsupported tag and a stash for retry.
  */
 export function recordUnclaimedEME(
   stanza: Element,
@@ -705,8 +705,7 @@ export function recordUnclaimedEME(
     return { kind: 'none' }
   }
 
-  const state = unclaimedPluginState(pluginState)
-  if (state.hasPlugins && !state.hasPluginForNamespace(target.namespace)) {
+  if (isUnsupportedNamespace(pluginState, target.namespace)) {
     const name = EME_PROTOCOL_NAMES[target.namespace] ?? target.emeName ?? target.namespace
     const info: EMEIdentity = { namespace: target.namespace, name }
     ;(stanza as unknown as Record<string, EMEIdentity>)[UNSUPPORTED_ENC_STASH] = info

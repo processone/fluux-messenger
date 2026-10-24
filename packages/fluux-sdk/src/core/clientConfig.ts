@@ -96,4 +96,25 @@ export interface XMPPClientConfig {
    * explicit logout). Evaluated live — no cached copy. Defaults to always-on.
    */
   shouldAutoReconnect?: () => boolean
+  /**
+   * Ids of the E2EE plugins the app registers on `e2ee:manager-ready`.
+   *
+   * Declaring them lets the SDK tag a message encrypted with any other protocol
+   * (for example OMEMO when only OpenPGP is wired) as unsupported as soon as it
+   * arrives. Messages for a declared protocol wait for its plugin to register.
+   * When omitted, every encrypted message waits until the first plugin
+   * registers before an unsupported protocol is recognised.
+   *
+   * A declared id only keeps messages waiting for a protocol the SDK can map to
+   * it: `openpgp` for XEP-0373. A message in a protocol it cannot map that
+   * arrives before a plugin claiming it registers is tagged unsupported.
+   *
+   * @example
+   * ```tsx fragment
+   * <XMPPProvider e2eePlugins={['openpgp']}>
+   *   <App />
+   * </XMPPProvider>
+   * ```
+   */
+  e2eePlugins?: readonly string[]
 }
