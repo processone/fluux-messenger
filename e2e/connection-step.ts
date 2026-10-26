@@ -156,7 +156,10 @@ for (const vp of VIEWPORTS) {
         const started = await page.evaluate((scope: Scope) => (window as W).__connectionStore!.getState().updates[scope]!.startedAt, scope)
         const announced = await header.getByTestId('update-announcement').textContent()
         await expect(header.getByTestId('update-icon')).toBeVisible({ timeout: 4000 })
-        expect(await header.innerText()).toContain(normal)
+        // Accessible retrieval text is additional header content, not a subtitle change.
+        for (const line of normal.split('\n').map(line => line.trim()).filter(Boolean)) {
+          await expect(header).toContainText(line)
+        }
         await stable()
         expect(await header.getByTestId('update-announcement').textContent()).toBe(announced)
         await expect(header.getByTestId('update-icon').locator('svg')).not.toHaveClass(/animate-spin/)

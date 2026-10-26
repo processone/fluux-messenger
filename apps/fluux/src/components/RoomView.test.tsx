@@ -1252,11 +1252,16 @@ describe('RoomView', () => {
       expect(container).toMatchSnapshot()
     })
 
-    it('should match snapshot for non-joined room', () => {
+    // FLM-168: a room not being retrieved must preserve its name and subtitle.
+    it('keeps the non-joined room header without a retrieval signal', () => {
       mockActiveRoom = createRoom({ joined: false })
 
       const { container } = render(<RoomView />)
-      expect(container).toMatchSnapshot()
+      const header = container.querySelector('header')!
+      expect(within(header).getByText(mockActiveRoom!.name)).toBeInTheDocument()
+      expect(within(header).getByText(mockActiveRoom!.jid)).toBeInTheDocument()
+      expect(screen.queryByTestId('update-text')).toBeNull()
+      expect(screen.queryByTestId('update-icon')).toBeNull()
     })
 
     // Snapshot tests with messages/typing are skipped due to memory issues
