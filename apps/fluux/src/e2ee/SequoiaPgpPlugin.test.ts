@@ -2894,6 +2894,130 @@ describe('SequoiaPgpPlugin', () => {
     })
   })
 
+  // FLM-157 review, finding R4: the key check a reconnect starts reads the
+  // server, then records or clears the own-key conflict. When our key changes
+  // in between, the check must not compare the server's new key with our old
+  // one and block encryption, nor undo a conflict decision made since.
+  describe('the reconnect key check, when our key changes while it reads the server', () => {
+    const ME = 'me@example.com'
+    const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
+    type Built = ReturnType<typeof makeContext>
+    type Setup = { built: Built; device: SequoiaPgpPlugin; backup?: string }
+
+    const tamperedKeyList = (date: string): PEPItem => ({
+      id: 'current',
+      payload: {
+        name: 'public-keys-list',
+        attrs: { xmlns: OX_NS },
+        children: [pubkeyMetadata('TAMPEREDFP000000', date)],
+      },
+    })
+
+    /**
+     * Holds the next read of `account`'s key list until `release()`, as a
+     * slow network does. The server answers with what it held when the read
+     * was sent, or when it is released.
+     */
+    const holdKeyListRead = (built: Built, account: string, answers: 'when-sent' | 'when-released') => {
+      const read = built.ctx.xmpp.queryPEP
+      let release!: () => void
+      const released = new Promise<void>((resolve) => { release = resolve })
+      let taken = false
+      built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
+        if (taken || jid !== account || node !== METADATA_NODE) return read(jid, node, maxItems)
+        taken = true
+        const early = answers === 'when-sent' ? await read(jid, node, maxItems) : null
+        await released
+        return early ?? read(jid, node, maxItems)
+      }
+      return { taken: () => taken, release }
+    }
+
+    /** The server work `onReconnected` started, once it is done. */
+    const reconnectWork = (device: SequoiaPgpPlugin) =>
+      (device as unknown as { reconnectResync: Promise<void> }).reconnectResync
+
+    /** Our key on this device, published. */
+    const publishedKey = async (): Promise<Setup> => {
+      const built = makeContext(ME)
+      await plugin.init(built.ctx)
+      return { built, device: plugin }
+    }
+
+    /** This device holds one of our keys; the server holds a backup of another. */
+    const otherKeyInBackup = async (): Promise<Setup> => {
+      const first = makeContext(ME)
+      await plugin.init(first.ctx)
+      await plugin.backupSecretKey('shared-pp')
+      const backup = (await plugin.fetchSecretKeyBackup())!
+      fake.accounts.clear()
+      const device = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const built = makeContext(ME)
+      await device.init(built.ctx)
+      await built.ctx.xmpp.publishPEP(SECRET_KEY_NODE, {
+        id: 'current',
+        payload: { name: 'secretkey', attrs: { xmlns: OX_NS }, children: [encodeOpenPgpArmorForXep0373(backup)] },
+      })
+      return { built, device, backup }
+    }
+
+    /** The server lists a key this device does not hold: a conflict is shown. */
+    const conflictShown = async (): Promise<Setup> => {
+      await fake.invoke<KeyBundle>('openpgp_ensure_key', { accountJid: ME, userId: `xmpp:${ME}` })
+      const built = makeContext(ME)
+      built.peerPublish(ME, METADATA_NODE, tamperedKeyList('2024-01-01T00:00:00Z'))
+      await plugin.init(built.ctx)
+      expect(getOwnKeyConflict()).not.toBeNull()
+      return { built, device: plugin }
+    }
+
+    it.each([
+      { change: 'a rotation', setUp: publishedKey, answers: 'when-released' as const,
+        run: (s: Setup) => s.device.rotateEncryptionKey() },
+      { change: 'a restore from the server backup', setUp: otherKeyInBackup, answers: 'when-released' as const,
+        run: (s: Setup) => s.device.restoreSecretKey('shared-pp') },
+      { change: 'an import from a file', setUp: otherKeyInBackup, answers: 'when-released' as const,
+        run: (s: Setup) => s.device.importKeyFromFile(s.backup!, 'shared-pp') },
+      { change: 'a replacement of our identity', setUp: publishedKey, answers: 'when-released' as const,
+        run: (s: Setup) => s.device.retireAndGenerateIdentity() },
+      { change: 'overwriting the server to resolve a conflict', setUp: conflictShown, answers: 'when-sent' as const,
+        run: (s: Setup) => s.device.resolveOwnKeyConflict_overwriteServer() },
+    ])('leaves encryption unblocked after $change', async ({ setUp, answers, run }) => {
+      const setup = await setUp()
+      const read = holdKeyListRead(setup.built, ME, answers)
+      setup.device.onReconnected({ resumed: true })
+      await vi.waitFor(() => expect(read.taken()).toBe(true))
+
+      // The change completes on its own: no key picker is asked for.
+      expect(await run(setup) ?? {}).not.toHaveProperty('needsPicker')
+      read.release()
+      await reconnectWork(setup.device)
+
+      expect(getOwnKeyConflict()).toBeNull()
+    })
+
+    it("leaves the next account's conflict in place after a log out", async () => {
+      const OTHER = 'other@example.com'
+      const { built } = await publishedKey()
+      const read = holdKeyListRead(built, ME, 'when-released')
+      plugin.onReconnected({ resumed: true })
+      await vi.waitFor(() => expect(read.taken()).toBe(true))
+      await plugin.shutdown()
+
+      // The next account's server lists a key this device does not hold.
+      await fake.invoke<KeyBundle>('openpgp_ensure_key', { accountJid: OTHER, userId: `xmpp:${OTHER}` })
+      const next = makeContext(OTHER)
+      next.peerPublish(OTHER, METADATA_NODE, tamperedKeyList('2024-01-01T00:00:00Z'))
+      await new SequoiaPgpPlugin({ invoke: fake.invoke }).init(next.ctx)
+      const conflict = getOwnKeyConflict()
+      expect(conflict).toMatchObject({ kind: 'primary-mismatch', publishedFingerprint: 'TAMPEREDFP000000' })
+
+      read.release()
+      await reconnectWork(plugin)
+      expect(getOwnKeyConflict()).toBe(conflict)
+    })
+  })
+
   describe('onPeerKeysChanged', () => {
     it('re-fetches the peer metadata even when peerKeys is hot', async () => {
       // The pin gate model means peerKeys is no longer evicted on

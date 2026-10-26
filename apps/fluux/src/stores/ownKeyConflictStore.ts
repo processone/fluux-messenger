@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 
 /**
- * Own-key conflict: detected during `ensureIdentity()` when the key
- * published on the server does not match the local key material.
+ * Own-key conflict: detected during `ensureIdentity()` or a reconnect when
+ * the key published on the server does not match the local key material.
  *
  * Two kinds:
  *
@@ -24,8 +24,9 @@ import { create } from 'zustand'
  * backup, replacing local key with the server's version).
  *
  * Not persisted: conflict is re-detected on every `ensureIdentity()` call
- * (i.e. every session start). Stale persisted conflicts could block the
- * user after they already resolved it on another device.
+ * (i.e. every session start) and on every reconnect. Stale persisted
+ * conflicts could block the user after they already resolved it on another
+ * device.
  */
 export interface OwnKeyConflict {
   kind: 'primary-mismatch' | 'subkey-mismatch'

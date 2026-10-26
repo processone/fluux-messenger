@@ -120,6 +120,7 @@ import {
   clearOwnKeyConflict,
   getOwnKeyConflict,
   recordOwnKeyConflict,
+  type OwnKeyConflict,
 } from '@/stores/ownKeyConflictStore'
 import {
   setPinnedPrimaryFp,
@@ -459,6 +460,9 @@ export const OPENPGP_DESCRIPTOR: E2EEProtocolDescriptor = {
  */
 export type BackupProbeResult = 'present' | 'absent' | 'unknown'
 
+/** What a check of our published key found, or `outdated` when our key changed meanwhile. */
+type OwnKeyCheckVerdict = 'consistent' | 'conflict' | 'outdated'
+
 // ---------------------------------------------------------------------------
 // Abstract base class
 // ---------------------------------------------------------------------------
@@ -500,6 +504,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   // Server work each reconnect re-runs (see `onReconnected`), one run at a
   // time, so a run cut short by another drop is followed by the next one.
   private reconnectResync: Promise<void> = Promise.resolve()
+
+  // Counts operations that change our own key, or what the server publishes
+  // for it: rotate, restore or import, replace, resolve a conflict, log out.
+  // A check of the published key that started before one of them must not
+  // write its verdict (see `checkOwnPublishedKeyConsistency`).
+  private ownKeyOperations = 0
 
   protected now: () => number = () => Date.now()
 
@@ -837,6 +847,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   async shutdown(): Promise<void> {
+    this.ownKeyOperations++
     if (this._publishVerificationTimeout !== null) {
       clearTimeout(this._publishVerificationTimeout)
       this._publishVerificationTimeout = null
@@ -909,6 +920,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * must call {@link retractPublicKeys} FIRST while the session is live.
    */
   async deleteIdentity(): Promise<void> {
+    this.ownKeyOperations++
     const accountJid = this.ctx?.account.jid
     if (accountJid) {
       await this.forgetAccount(accountJid).catch(() => {})
@@ -958,10 +970,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    */
   private async publishOwnIdentity(bundle: KeyBundle): Promise<void> {
     const ctx = this.requireCtx()
-    await this.checkOwnPublishedKeyConsistency(bundle)
-    if (getOwnKeyConflict()) {
+    const verdict = await this.checkOwnPublishedKeyConsistency(bundle)
+    // Our key changed while the server was read; that change publishes what
+    // it needs.
+    if (verdict === 'outdated') return
+    if (verdict === 'conflict') {
       ctx.logger.warn(
-        `${this.pluginName()}: own key conflict detected (${getOwnKeyConflict()!.kind}); ` +
+        `${this.pluginName()}: own key conflict detected (${getOwnKeyConflict()?.kind}); ` +
           `encryption blocked until resolved`,
       )
       return
@@ -1002,6 +1017,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       )
     }
     const previousFingerprint = this.ownBundle.fingerprint
+    this.ownKeyOperations++
 
     let bundle: KeyBundle
     try {
@@ -1093,6 +1109,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    */
   async retireAndGenerateIdentity(): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
+    this.ownKeyOperations++
 
     let publishedFingerprints: string[] = []
     try {
@@ -1505,6 +1522,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   ): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
     const previousFingerprint = this.ownBundle?.fingerprint
+    this.ownKeyOperations++
     let bundle: KeyBundle
     try {
       bundle = await this.backupImportSelected(
@@ -1555,6 +1573,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         `${this.pluginName()}: cannot overwrite server before ensureIdentity has completed`,
       )
     }
+    this.ownKeyOperations++
     await this.publishOwnPublicKeyData(this.ownBundle)
     await this.publishOwnPublicKeyMetadata(this.ownBundle)
     clearOwnKeyConflict()
@@ -1669,27 +1688,45 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
   }
 
-  private async checkOwnPublishedKeyConsistency(bundle: KeyBundle): Promise<void> {
+  /**
+   * Compare what the server publishes for our account with `bundle`, our
+   * key when the check started, and record or clear the own-key conflict.
+   *
+   * The verdict is written only while it still describes our key: the same
+   * account, the same key, and no own-key operation since the check started
+   * (rotate, restore or import, replace, resolve a conflict, log out). An
+   * older check that lands later would compare the server's new key with
+   * the old one and block encryption for nothing, or clear a conflict found
+   * since; it reports `outdated` and writes nothing.
+   */
+  private async checkOwnPublishedKeyConsistency(
+    bundle: KeyBundle,
+  ): Promise<OwnKeyCheckVerdict> {
     const ctx = this.requireCtx()
+    const operations = this.ownKeyOperations
+    const settle = (conflict: OwnKeyConflict | null): OwnKeyCheckVerdict => {
+      if (this.ctx !== ctx || this.ownBundle !== bundle || this.ownKeyOperations !== operations) {
+        return 'outdated'
+      }
+      if (!conflict) {
+        clearOwnKeyConflict()
+        return 'consistent'
+      }
+      recordOwnKeyConflict(conflict)
+      return 'conflict'
+    }
 
     let metadataItems: PEPItem[]
     try {
       metadataItems = await ctx.xmpp.queryPEP(ctx.account.jid, PUBLIC_KEYS_METADATA_NODE, 1)
     } catch {
-      clearOwnKeyConflict()
-      return
+      return settle(null)
     }
 
-    if (metadataItems.length === 0) {
-      clearOwnKeyConflict()
-      return
-    }
+    if (metadataItems.length === 0) return settle(null)
 
     const advertised = parseAdvertisedFingerprints(metadataItems)
-    if (advertised.length === 0) {
-      clearOwnKeyConflict()
-      return
-    }
+    if (advertised.length === 0) return settle(null)
 
     let publishedDate = ''
     outer: for (const item of metadataItems) {
@@ -1706,13 +1743,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
     const matchingFP = advertised.find((fp) => fingerprintsEqual(fp, bundle.fingerprint))
     if (!matchingFP) {
-      recordOwnKeyConflict({
+      return settle({
         kind: 'primary-mismatch',
         localFingerprint: bundle.fingerprint,
         publishedFingerprint: advertised[0] ?? '',
         publishedDate,
       })
-      return
     }
 
     let dataItems: PEPItem[]
@@ -1724,14 +1760,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         toXep0373Fingerprint(bundle.fingerprint),
       )
     } catch {
-      clearOwnKeyConflict()
-      return
+      return settle(null)
     }
 
-    if (dataItems.length === 0) {
-      clearOwnKeyConflict()
-      return
-    }
+    if (dataItems.length === 0) return settle(null)
 
     const publishedArmored = parsePublicKeyDataItem(dataItems[0].payload)
     if (
@@ -1739,16 +1771,15 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       !openPgpBlocksEqual(publishedArmored, bundle.publicArmored) &&
       !(await this.certsShareSameKeyMaterial(publishedArmored, bundle.publicArmored))
     ) {
-      recordOwnKeyConflict({
+      return settle({
         kind: 'subkey-mismatch',
         localFingerprint: bundle.fingerprint,
         publishedFingerprint: bundle.fingerprint,
         publishedDate,
       })
-      return
     }
 
-    clearOwnKeyConflict()
+    return settle(null)
   }
 
   /**
