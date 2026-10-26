@@ -1139,6 +1139,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.waitFor(() => {
         expect(loadSpy.mock.calls.filter(([jid]) => jid === roomJid)).toHaveLength(1)
       })
+      const scopeStartedAt = connectionStore.getState().updates[`room:${roomJid}`]!.startedAt
       await vi.advanceTimersByTimeAsync(10_000)
 
       roomStore.getState().setActiveRoom(null)
@@ -1148,6 +1149,8 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
       expect(mockClient.internal.mam.catchUpRoomHistory).not.toHaveBeenCalled()
       expect(roomStore.getState().getRoomMAMQueryState(roomJid).isLoading).toBe(false)
+      // FLM-168: navigation/handoff must not restart or hide the same scope.
+      expect(connectionStore.getState().updates[`room:${roomJid}`]).toMatchObject({ startedAt: scopeStartedAt, phase: 'icon' })
 
       resolveBackgroundCache([])
       await vi.waitFor(() => {

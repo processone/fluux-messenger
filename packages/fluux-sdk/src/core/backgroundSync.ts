@@ -222,6 +222,7 @@ export function setupBackgroundSyncSideEffects(
       membershipEpoch,
     }
     mamInFlightRooms.set(roomJid, reservation)
+    const endUpdate = connectionStore.getState().beginUpdate([`room:${roomJid}`, 'rooms'])
     const endCatchUp = connectionStore.getState().beginCatchUp()
     try {
       const caughtUp = await catchUpFreshSessionRoom(
@@ -248,6 +249,7 @@ export function setupBackgroundSyncSideEffects(
     } catch {
       return false
     } finally {
+      endUpdate()
       endCatchUp()
       if (mamInFlightRooms.get(roomJid) === reservation) {
         mamInFlightRooms.delete(roomJid)
@@ -352,6 +354,7 @@ export function setupBackgroundSyncSideEffects(
 
     resumeSeededRooms.add(roomJid)
     logInfo(`Background sync: SM resumption — catching up late-joined room ${roomJid}`)
+    const endUpdate = connectionStore.getState().beginUpdate([`room:${roomJid}`, 'rooms'])
     const endCatchUp = connectionStore.getState().beginCatchUp()
     try {
       await client.internal.mam.catchUpRoom(roomJid, sessionStartTime)
@@ -360,6 +363,7 @@ export function setupBackgroundSyncSideEffects(
       // recorded so a failing room can't be retried on every presence change;
       // the next session re-evaluates it from scratch.
     } finally {
+      endUpdate()
       endCatchUp()
     }
   }
