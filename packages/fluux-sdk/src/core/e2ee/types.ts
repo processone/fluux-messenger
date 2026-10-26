@@ -75,6 +75,17 @@ export interface PeerSupport {
   fingerprint?: string
 }
 
+/** How the account came back online, passed to {@link E2EEPlugin.onReconnected}. */
+export interface E2EEReconnectInfo {
+  /**
+   * True when Stream Management resumed the previous session: the server
+   * replayed everything it queued while the client was away, PEP
+   * notifications included. False for a new session, which never receives
+   * the notifications sent while it was offline.
+   */
+  resumed: boolean
+}
+
 /** Identity material the plugin has ensured exists locally + published. */
 export interface IdentityInfo {
   /**
@@ -627,6 +638,22 @@ export interface E2EEPlugin {
    * separately — plugins only need to evict their own state here.
    */
   onPeerKeysChanged?(peer: BareJID): void
+
+  /**
+   * Optional hook: the account is online again after a network loss, and
+   * this plugin stayed registered through it. The host keeps its plugins
+   * until the session ends, so they decrypt what a resumed session replays
+   * on arrival; it calls this once per reconnect, before the connection
+   * reports online, so before anything is sent in the new session.
+   *
+   * On a new session (`resumed` false) the plugin missed every PEP
+   * notification sent while it was offline: it must stop relying on state
+   * those notifications kept current, such as which peer key lists it had
+   * refreshed, before its next send. The host drops its own capability cache
+   * at the same time. Network work, such as re-publishing the plugin's own
+   * key after an earlier publication failed, is started without blocking.
+   */
+  onReconnected?(info: E2EEReconnectInfo): void
 
   /**
    * Optional: rotate the encryption material while preserving identity.

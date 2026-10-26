@@ -286,6 +286,8 @@ export class XMPPClient {
    * client reconnects on its own after a network loss, so registered plugins
    * decrypt what a resumed session replays; torn down when the session ends
    * (disconnect, cancelled reconnect, conflict, authentication failure).
+   * Its plugins hear of each reconnect through
+   * {@link E2EEPlugin.onReconnected}.
    *
    * Apps register {@link E2EEPlugin} implementations on `e2ee:manager-ready`,
    * or immediately if the manager already exists when subscribing. The Chat
@@ -804,6 +806,17 @@ export class XMPPClient {
     // another identity.
     this.connection.setSessionEndedHandler(() => {
       void this.tearDownE2EEManager()
+    })
+
+    // A session started with the manager kept from before a network loss:
+    // tell its plugins before anything is sent in it. A new session missed
+    // the PEP notifications sent while offline, so key lists the plugins had
+    // refreshed may be out of date. A manager for another account is left
+    // alone; ensureE2EEManager replaces it.
+    this.connection.setSessionStartedHandler((isResumption) => {
+      const manager = this.e2ee
+      if (!manager || !this.currentJid || manager.getAccountJid() !== getBareJid(this.currentJid)) return
+      manager.notifyReconnected({ resumed: isResumption })
     })
 
     // Set up stanza router - Connection will call this for each incoming stanza

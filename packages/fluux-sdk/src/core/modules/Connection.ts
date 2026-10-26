@@ -284,6 +284,9 @@ export class Connection extends BaseModule {
   // Callback for the end of a session (see setSessionEndedHandler)
   private onSessionEnded?: () => void
 
+  // Callback for the start of a session (see setSessionStartedHandler)
+  private onSessionStarted?: (isResumption: boolean) => void
+
   // Callback for stanza routing
   private onStanza?: (stanza: Element) => void
 
@@ -615,6 +618,26 @@ export class Connection extends BaseModule {
   }
 
   /**
+   * Set callback for the start of a session, resumed or new.
+   * Called synchronously when a connection attempt succeeds, before the
+   * machine reports the client online and before the post-connect flow, so
+   * nothing has been sent in the session yet. `isResumption` is true when
+   * Stream Management resumed the previous session.
+   */
+  setSessionStartedHandler(handler: (isResumption: boolean) => void): void {
+    this.onSessionStarted = handler
+  }
+
+  /**
+   * Report a successful attempt: first to the session-started callback,
+   * then to the machine, which switches the status to online.
+   */
+  private signalConnectionSuccess(isResumption: boolean, source: string): void {
+    this.onSessionStarted?.(isResumption)
+    this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, source)
+  }
+
+  /**
    * Set callback for stanza routing.
    * Called for each incoming stanza to route to modules.
    */
@@ -785,7 +808,7 @@ export class Connection extends BaseModule {
         'Connection attempt',
         async (isResumption) => {
           // Signal machine: initial connection succeeded
-          this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'connect:connection-success')
+          this.signalConnectionSuccess(isResumption, 'connect:connection-success')
           await this.handleConnectionSuccess(isResumption, `Connected as ${jid}`, effectiveJoinedRooms)
         }
       )
@@ -2912,7 +2935,7 @@ export class Connection extends BaseModule {
       // This shouldn't happen in normal flow, but guards against edge cases.
       if (this.xmpp && this.xmpp.status === 'online') {
         this.stores.console.addEvent('Connection still online - cancelling reconnect attempt', 'connection')
-        this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'attemptReconnect:already-online')
+        this.signalConnectionSuccess(false, 'attemptReconnect:already-online')
         await this.handleConnectionSuccess(false, 'Reconnected', previouslyJoinedRooms)
         return
       }
@@ -2955,7 +2978,7 @@ export class Connection extends BaseModule {
           'Reconnect attempt',
           async (isResumption) => {
             // Signal machine: reconnect succeeded → connected.healthy
-            this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'attemptReconnect:success')
+            this.signalConnectionSuccess(isResumption, 'attemptReconnect:success')
             await this.handleConnectionSuccess(
               isResumption,
               'Reconnected',

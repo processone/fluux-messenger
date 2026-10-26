@@ -20,6 +20,7 @@ export type {
   DiscoResult,
   E2EEPlugin,
   E2EEProtocolDescriptor,
+  E2EEReconnectInfo,
   EncryptedPayload,
   IdentityInfo,
   InboundDecryptContext,

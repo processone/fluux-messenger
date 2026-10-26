@@ -27,6 +27,7 @@ import { XMPPClient } from './XMPPClient'
 import { createMockXmppClient, type MockXmppClient } from './test-utils'
 import { DummyPlaintextPlugin } from './e2ee/DummyPlaintextPlugin'
 import { chatStore } from '../stores/chatStore'
+import { connectionStore } from '../stores/connectionStore'
 import { rosterStore } from '../stores/rosterStore'
 import type { Contact } from './types/roster'
 import type { Message } from './types'
@@ -128,6 +129,41 @@ describe('E2EE manager across a network loss', () => {
     expect(client.e2ee).toBe(manager)
     expect(managersBuilt).toBe(1)
     expect(shutdown).not.toHaveBeenCalled()
+  })
+
+  // FLM-157 review, findings R1 and R2: the kept plugins must learn how the
+  // connection came back, before anything is sent in the new session. A new
+  // session missed the PEP notifications sent while offline; the plugins also
+  // retry the publication a re-registration used to retry.
+  describe('tells the kept plugins how the connection came back, before the status reads online', () => {
+    const watchReconnects = () => {
+      const calls: Array<{ resumed: boolean; status: string }> = []
+      client.e2ee!.getPlugin('dummy-plaintext')!.onReconnected = ({ resumed }) => {
+        calls.push({ resumed, status: connectionStore.getState().status })
+      }
+      return calls
+    }
+    const reconnect = async (comeBack: () => void) => {
+      loseNetwork()
+      useNewSocket()
+      await vi.advanceTimersByTimeAsync(1_000)
+      comeBack()
+      await vi.advanceTimersByTimeAsync(10)
+    }
+
+    it('a resumed session', async () => {
+      const calls = watchReconnects()
+      await reconnect(() => socket._emitSM('resumed'))
+      expect(calls).toEqual([{ resumed: true, status: expect.not.stringMatching(/^online$/) }])
+      expect(connectionStore.getState().status).toBe('online')
+    })
+
+    it('a new session, after the server lost the old one', async () => {
+      const calls = watchReconnects()
+      await reconnect(() => socket._emit('online'))
+      expect(calls).toEqual([{ resumed: false, status: expect.not.stringMatching(/^online$/) }])
+      expect(connectionStore.getState().status).toBe('online')
+    })
   })
 
   it('keeps the manager through a server restart, which also reconnects on its own', () => {

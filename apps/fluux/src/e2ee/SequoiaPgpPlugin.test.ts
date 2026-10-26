@@ -2800,6 +2800,98 @@ describe('SequoiaPgpPlugin', () => {
         expect(fps).toContain(P2.fingerprint)
       })
     })
+
+    // FLM-157 review, finding R1: the plugin now stays registered through a
+    // network loss. When the server could not resume the session, the PEP
+    // notifications sent while offline are lost, so a key withdrawn meanwhile
+    // must not stay a recipient.
+    describe('a new session after a network loss, with the plugin kept registered', () => {
+      const ME = 'me@example.com'
+
+      it('re-reads the peer and own key lists before the next send', async () => {
+        const built = makeContext(ME)
+        await plugin.init(built.ctx)
+        const mePep = installPeerPep(built, ME)
+        const meSelf = fake.accounts.get(ME)!
+        const meSib = validKey('SIBLINGKEY0001', ME)
+        mePep.announce([meSelf, meSib])
+        const bobPep = installPeerPep(built, PEER)
+        const A = validKey('KEYAAAA0001')
+        const B = validKey('KEYBBBB0002')
+        bobPep.announce([A, B])
+        const first = recipientFpsFromEncrypt(await plugin.encrypt(await openBob(), encodeBodyAsPayload('before')))
+        expect(new Set(first)).toEqual(new Set([A.fingerprint, B.fingerprint, meSelf.fingerprint, meSib.fingerprint]))
+
+        // While offline, Bob withdraws B and our other device withdraws its key.
+        // This client never hears of it: the old session is gone.
+        bobPep.setAnnouncedFps([A.fingerprint])
+        mePep.setAnnouncedFps([meSelf.fingerprint])
+        plugin.onReconnected({ resumed: false })
+        // The keys stay known, to verify what was signed with them.
+        expect(plugin.getPeerFingerprints(PEER)).toEqual([A.fingerprint, B.fingerprint])
+
+        const after = recipientFpsFromEncrypt(await plugin.encrypt(await openBob(), encodeBodyAsPayload('after')))
+        expect(new Set(after)).toEqual(new Set([A.fingerprint, meSelf.fingerprint]))
+      })
+
+      it('does not let a key list read before the reconnect count as fresh after it', async () => {
+        const built = makeContext(ME)
+        await plugin.init(built.ctx)
+        const bobPep = installPeerPep(built, PEER)
+        const A = validKey('KEYAAAA0001')
+        const B = validKey('KEYBBBB0002')
+        bobPep.announce([A, B])
+        // A read of Bob's list started in the old session is still waiting for B.
+        const releaseOldRead = bobPep.deferNextDataFor(B.fingerprint)
+        const oldRead = plugin.probePeer(PEER)
+        await flush()
+
+        bobPep.setAnnouncedFps([A.fingerprint])
+        plugin.onReconnected({ resumed: false })
+        const firstSend = recipientFpsFromEncrypt(await plugin.encrypt(await openBob(), encodeBodyAsPayload('first')))
+        expect(firstSend).toContain(A.fingerprint)
+        expect(firstSend).not.toContain(B.fingerprint)
+        releaseOldRead()
+        await oldRead
+
+        const nextSend = recipientFpsFromEncrypt(await plugin.encrypt(await openBob(), encodeBodyAsPayload('next')))
+        expect(nextSend).toContain(A.fingerprint)
+        expect(nextSend).not.toContain(B.fingerprint)
+      })
+    })
+  })
+
+  // FLM-157 review, finding R2: before the plugin stayed registered, each
+  // reconnect registered it again, which retried a public-key publication that
+  // had failed. The reconnect itself now retries it.
+  describe('publication after a reconnect, with the plugin kept registered', () => {
+    const ME = 'me@example.com'
+
+    it.each([
+      ['a resumed session', true],
+      ['a new session', false],
+    ])('publishes our public key again after %s when the first publication failed', async (_label, resumed) => {
+      const built = makeContext(ME)
+      const publish = built.ctx.xmpp.publishPEP
+      let serverRefuses = true
+      built.ctx.xmpp.publishPEP = async (node, item, options) => {
+        if (serverRefuses && node.startsWith(METADATA_NODE)) throw new Error('internal-server-error')
+        return publish(node, item, options)
+      }
+      await plugin.init(built.ctx)
+      const ownFp = fake.accounts.get(ME)!.fingerprint
+      expect(built.warnings.some((w) => w.includes('public key publish failed'))).toBe(true)
+      expect(built.published.filter((p) => p.node.startsWith(METADATA_NODE))).toEqual([])
+
+      serverRefuses = false
+      plugin.onReconnected({ resumed })
+      await vi.waitFor(() => {
+        expect(built.published.map((p) => p.node)).toEqual(
+          expect.arrayContaining([dataNodeFor(ownFp), METADATA_NODE]),
+        )
+      })
+      expect(advertisedFingerprintsIn(built.published)).toEqual([ownFp])
+    })
   })
 
   describe('onPeerKeysChanged', () => {

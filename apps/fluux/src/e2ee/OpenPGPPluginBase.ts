@@ -47,6 +47,7 @@ import type {
   DecryptResult,
   E2EEPlugin,
   E2EEProtocolDescriptor,
+  E2EEReconnectInfo,
   EncryptedPayload,
   IdentityInfo,
   InboundDecryptContext,
@@ -478,7 +479,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   // A persisted `active` flag is only tentative after startup/reconnect, so the
   // first send to a peer this session must trigger a definitive metadata
   // refresh. These four collections drive that and are cleared alongside
-  // `peerKeys` on shutdown/reset.
+  // `peerKeys` on shutdown/reset, and on their own when a reconnect starts a
+  // new session (see `onReconnected`).
   //
   // A JID here has had a definitive, complete metadata refresh this session.
   private readonly freshThisSession = new Set<BareJID>()
@@ -494,6 +496,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private readonly keysetRetryAfter = new Map<BareJID, number>()
   private readonly peerRefreshGenerations = new Map<BareJID, number>()
   private readonly freshPeerRefreshGenerations = new Map<BareJID, number>()
+
+  // Server work each reconnect re-runs (see `onReconnected`), one run at a
+  // time, so a run cut short by another drop is followed by the next one.
+  private reconnectResync: Promise<void> = Promise.resolve()
 
   protected now: () => number = () => Date.now()
 
@@ -851,13 +857,50 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this.ctx = null
   }
 
+  /**
+   * The account is online again and this plugin stayed registered (the host
+   * keeps it through a network loss so it decrypts what a resumed session
+   * replays). Called before anything is sent in the new session.
+   *
+   * A new session missed the PEP notifications sent while offline, so a key
+   * list refreshed in the previous one may name a key its owner has since
+   * withdrawn: forget which lists are fresh, and the next send to anyone,
+   * our own other devices included, re-reads them first. A resumed session
+   * received those notifications in its replay, so the lists stay current.
+   *
+   * On every reconnect, re-check and re-publish our own key and re-read the
+   * verification list, as a newly registered plugin did: a best-effort
+   * publication that failed earlier gets another try.
+   */
+  onReconnected({ resumed }: E2EEReconnectInfo): void {
+    if (!this.ctx) return
+    if (!resumed) this.clearKeysetSessionState()
+    this.reconnectResync = this.reconnectResync
+      .then(() => this.resyncAfterReconnect())
+      .catch((err: unknown) => {
+        this.ctx?.logger.warn(`${this.pluginName()}: re-sync after reconnect failed: ${formatError(err)}`)
+      })
+  }
+
+  private async resyncAfterReconnect(): Promise<void> {
+    const bundle = this.ownBundle
+    // A locked or undecided identity is published by the unlock or recovery path.
+    if (!this.ctx || !bundle) return
+    await this.publishOwnIdentity(bundle)
+    if (this._verificationStoreUnsub) await this.syncVerificationsFromServer()
+  }
+
   /** Drop all session-scoped keyset freshness/health state. */
   private clearKeysetSessionState(): void {
+    // Advance every refresh generation rather than forgetting it, so a
+    // refresh still in flight cannot mark its peer fresh when it lands.
+    for (const [peer, generation] of this.peerRefreshGenerations) {
+      this.peerRefreshGenerations.set(peer, generation + 1)
+    }
     this.freshThisSession.clear()
     this.keysetIncomplete.clear()
     this.everSupported.clear()
     this.keysetRetryAfter.clear()
-    this.peerRefreshGenerations.clear()
     this.freshPeerRefreshGenerations.clear()
   }
 
@@ -903,25 +946,38 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // successful restore/import/replace lifts the host's recovery routing.
     this._keyRecoveryNeeded = false
 
+    await this.publishOwnIdentity(bundle)
+    return { fingerprint: bundle.fingerprint }
+  }
+
+  /**
+   * Compare what the server publishes for our account with our own key, and
+   * publish our public key unless another key conflicts. The publication is
+   * best effort: a failure is logged, and the next reconnect tries again
+   * (see {@link onReconnected}).
+   */
+  private async publishOwnIdentity(bundle: KeyBundle): Promise<void> {
+    const ctx = this.requireCtx()
     await this.checkOwnPublishedKeyConsistency(bundle)
     if (getOwnKeyConflict()) {
       ctx.logger.warn(
         `${this.pluginName()}: own key conflict detected (${getOwnKeyConflict()!.kind}); ` +
           `encryption blocked until resolved`,
       )
-      return { fingerprint: bundle.fingerprint }
+      return
     }
 
+    // A key replaced while this ran (rotate, restore) must not be advertised again.
+    if (this.ownBundle !== bundle) return
     try {
       await this.publishOwnPublicKeyData(bundle)
+      if (this.ownBundle !== bundle) return
       await this.publishOwnPublicKeyMetadata(bundle)
     } catch (err) {
       ctx.logger.warn(
         `${this.pluginName()}: public key publish failed: ${formatError(err)}`,
       )
     }
-
-    return { fingerprint: bundle.fingerprint }
   }
 
   /**
@@ -972,8 +1028,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
 
     // The two publishes above and the one below look alike but are not.
-    // `ensureIdentity` re-publishes the public key on every connection, so a
-    // failure there self-heals and a warning is the honest response.
+    // `ensureIdentity` and `onReconnected` re-publish the public key on every
+    // connection, so a failure there self-heals and a warning is the honest
+    // response.
     //
     // Nothing ever retries the backup. The caller only supplies a passphrase
     // when re-publishing the backup IS the operation — the user has just been

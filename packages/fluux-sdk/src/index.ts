@@ -490,6 +490,7 @@ export type {
   E2EEManagerOptions,
   E2EEPlugin,
   E2EEProtocolDescriptor,
+  E2EEReconnectInfo,
   EncryptedPayload,
   IdentityInfo,
   InboundDecryptContext,

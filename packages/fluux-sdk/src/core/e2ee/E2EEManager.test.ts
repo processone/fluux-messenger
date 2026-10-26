@@ -908,6 +908,54 @@ describe('E2EEManager — shutdown', () => {
   })
 })
 
+// FLM-157 review, finding R1: the host keeps its plugins through a network
+// loss, and a new session missed the PEP notifications sent while offline,
+// so probe results cached in the previous session must not decide a send.
+describe('E2EEManager — reconnect with the plugins kept', () => {
+  const target = { kind: 'direct' as const, peer: 'bob@example.com' }
+
+  it('forgets cached probe results on a new session, and keeps them on a resumed one', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    await mgr.register(plugin)
+    await mgr.canEncryptTo(target)
+    await mgr.canEncryptTo(target)
+    expect(plugin.probed).toHaveLength(1)
+
+    mgr.notifyReconnected({ resumed: true })
+    await mgr.canEncryptTo(target)
+    expect(plugin.probed).toHaveLength(1)
+
+    mgr.notifyReconnected({ resumed: false })
+    await mgr.canEncryptTo(target)
+    expect(plugin.probed).toHaveLength(2)
+  })
+
+  it('does not let a probe started before a new session fill the cache after it', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    await mgr.register(plugin)
+    let answerStaleProbe!: (support: PeerSupport) => void
+    plugin.probePeer = (peer) => {
+      plugin.probed.push(peer)
+      return new Promise((resolve) => { answerStaleProbe = resolve })
+    }
+    const staleSend = mgr.canEncryptTo(target)
+    await vi.waitFor(() => expect(plugin.probed).toHaveLength(1))
+
+    mgr.notifyReconnected({ resumed: false })
+    answerStaleProbe({ supported: false, ttl: 3600 })
+    expect(await staleSend).toBe(false)
+
+    plugin.probePeer = async (peer) => {
+      plugin.probed.push(peer)
+      return { supported: true, ttl: 60 }
+    }
+    expect(await mgr.canEncryptTo(target)).toBe(true)
+    expect(plugin.probed).toHaveLength(2)
+  })
+})
+
 describe('E2EEManager — isPeerVerified', () => {
   it('returns false when no plugins are registered', async () => {
     const mgr = makeManager()
