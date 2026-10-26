@@ -102,3 +102,40 @@ it.each(['before-measure', 'before-write'] as const)('#1601: keeps the reader mo
   expect(measurementAfter).toBe(1)
   expect(scroller.scrollTop, 'a cancelled measurement must preserve the published reader movement and apply growth once').toBe(g.scrollTop + wheel + growth)
 })
+
+// Intent: issue #1601, successive measurements after a cancelled target. A target cancelled by the
+// reader's takeover must not rewrite later measurements: each counts its growth once on the position
+// the reader holds at that write.
+it('#1601: applies each successive measurement once on the reader position after a cancelled target', () => {
+  const scroller = document.body.appendChild(document.createElement('div'))
+  Object.defineProperties(scroller, {
+    offsetHeight: { value: 532 }, offsetWidth: { value: 800 },
+    clientHeight: { value: 532 }, scrollHeight: { value: 11956 },
+  })
+  scroller.scrollTo = vi.fn((options?: ScrollToOptions | number) => {
+    scroller.scrollTop = typeof options === 'object' ? options.top ?? 0 : 0
+  }) as typeof scroller.scrollTo
+  const items = Array.from({ length: 201 }, (_, i) => ({ key: `row-${i}` }))
+  const indexById = new Map(items.map((item, i) => [item.key, i]))
+  const { result } = renderHook(() => useTanstackMessageVirtualizer({
+    items, indexById, scrollRef: { current: scroller }, estimateSize: 72,
+  }))
+  act(() => result.current.scrollToOffset(6395))
+  const readerMovesTo = (top: number) => act(() => {
+    scroller.scrollTop = top
+    result.current.scrollToOffset(top)
+    result.current.cancelPendingScroll?.() // the takeover cancels the target again
+  })
+  const measure = (index: number, height: number) => {
+    const row = scroller.appendChild(document.createElement('div'))
+    row.dataset.index = String(index)
+    row.getBoundingClientRect = () => new DOMRect(0, 0, 800, height)
+    act(() => result.current.measureElement(row))
+  }
+  readerMovesTo(6995)
+  measure(1, 446) // +374
+  expect(scroller.scrollTop).toBe(6995 + 374)
+  readerMovesTo(scroller.scrollTop + 100)
+  measure(2, 172) // +100
+  expect(scroller.scrollTop).toBe(6995 + 374 + 100 + 100)
+})
