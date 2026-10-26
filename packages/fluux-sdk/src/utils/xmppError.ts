@@ -103,3 +103,48 @@ export function hasErrorCondition(err: unknown, condition: string): boolean {
   if ((err as { condition?: string } | null)?.condition === condition) return true
   return err instanceof Error && err.message.includes(condition)
 }
+
+/** Namespace of the defined-condition elements, per xmpp.js error class. */
+const CONDITION_NAMESPACES: Record<string, string> = {
+  StanzaError: NS_XMPP_STANZAS,
+  StreamError: 'urn:ietf:params:xml:ns:xmpp-streams',
+  SASLError: 'urn:ietf:params:xml:ns:xmpp-sasl',
+}
+
+/**
+ * Re-derive an xmpp.js error's condition from its raw element, by namespace,
+ * whatever the order of its children.
+ *
+ * xmpp.js 0.14 (`@xmpp/error`) takes the FIRST child element as the condition.
+ * RFC 6120 (§4.9.3, §6.5, §8.3.2) does not fix the order, and ejabberd 26.09
+ * (xmpp 1.13.5) sends `<text/>` before the condition, so the error surfaced as
+ * the condition `text`. Covers IQ/stanza errors, stream errors and SASL
+ * failures, which all share that parser. Mutates and returns the error;
+ * anything else is returned untouched.
+ */
+export function normalizeXmppError<T>(err: T): T {
+  const e = err as {
+    name?: string
+    element?: Element
+    condition?: string
+    text?: string
+    message?: string
+  } | null
+  const ns = e?.name ? CONDITION_NAMESPACES[e.name] : undefined
+  if (!e || !ns || !e.element) return err
+
+  let condition: string | undefined
+  let text: string | undefined
+  for (const child of e.element.children ?? []) {
+    if (typeof child === 'string') continue
+    const childNs = child.attrs?.xmlns ?? (child as { getNS?: () => string }).getNS?.()
+    if (childNs !== ns) continue
+    if (child.name === 'text') text ??= child.getText?.() || undefined
+    else condition ??= child.name
+  }
+  if (!condition || condition === e.condition) return err
+  e.condition = condition
+  e.text = text ?? ''
+  e.message = condition + (text ? ` - ${text}` : '')
+  return err
+}

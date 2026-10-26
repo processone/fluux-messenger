@@ -51,6 +51,7 @@ import { createE2EEDiagnosticLogger } from './e2eeDiagnosticLogger'
 import { getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
 import { clearLocallyPublishedDisplayed } from './localMdsPublishes'
 import { generateUUID } from '../utils/uuid'
+import { normalizeXmppError } from '../utils/xmppError'
 
 /**
  * Session storage key for persisting presence machine state.
@@ -2072,7 +2073,9 @@ export class XMPPClient {
   protected beginIQSend(iq: Element): Promise<Element> {
     const xmpp = this.requireTransport('IQ', { checkSocket: true })
     try {
-      return xmpp.iqCaller.request(iq)
+      return xmpp.iqCaller.request(iq).catch((err: unknown) => {
+        throw normalizeXmppError(err)
+      })
     } catch (err) {
       this.repairAndRethrowSendError(err)
     }

@@ -3,6 +3,7 @@
  */
 import { onTestFinished, vi, type Mock } from 'vitest'
 import type { Element } from '@xmpp/client'
+import { Parser } from '@xmpp/xml'
 import type { Room, StoreBindings, SDKEvents, SDKEventPayload } from './types'
 import type { StoreRefs } from '../bindings/storeBindings'
 import type { PresenceReader } from './presenceReader'
@@ -1211,3 +1212,20 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     getIgnoredForRoom: vi.fn().mockReturnValue([]),
   } as unknown as MockStoreRefs['ignore'],
 })
+
+/**
+ * Parse literal XML, as received on the wire, into a real xmpp.js element
+ * (unlike {@link createMockElement}, which builds a partial stand-in).
+ */
+export function parseElement(xmlText: string): Element {
+  const parser = new Parser()
+  let parsed: Element | undefined
+  let failure: Error | undefined
+  parser.on('error', (err: Error) => { failure = err })
+  parser.on('element', (el: Element) => { parsed = el })
+  parser.write('<stream:stream xmlns:stream="http://etherx.jabber.org/streams" xmlns="jabber:client">')
+  parser.write(xmlText)
+  if (failure) throw failure
+  if (!parsed) throw new Error('parseElement: no complete element in input')
+  return parsed
+}
