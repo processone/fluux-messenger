@@ -2914,24 +2914,26 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     /**
-     * Holds the next read of `account`'s key list (or of its key data) until
-     * `release()`, as a slow network does. The server answers with what it
-     * held when the read was sent, or when it is released.
+     * Holds the `nth` next read of `account`'s key list (or of its key data)
+     * until `release()`, as a slow network does. The server answers with what
+     * it held when the read was sent, or when it is released.
      */
     const holdKeyRead = (
       built: Built,
       account: string,
       answers: 'when-sent' | 'when-released',
       of: 'key list' | 'key data' = 'key list',
+      nth = 1,
     ) => {
       const read = built.ctx.xmpp.queryPEP
       let release!: () => void
       const released = new Promise<void>((resolve) => { release = resolve })
       let taken = false
+      let seen = 0
       const held = (node: string) =>
         of === 'key list' ? node === METADATA_NODE : node.startsWith(`${METADATA_NODE}:`)
       built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
-        if (taken || jid !== account || !held(node)) return read(jid, node, maxItems)
+        if (taken || jid !== account || !held(node) || ++seen < nth) return read(jid, node, maxItems)
         taken = true
         const early = answers === 'when-sent' ? await read(jid, node, maxItems) : null
         await released
@@ -3096,6 +3098,99 @@ describe('SequoiaPgpPlugin', () => {
           expect(await change ?? {}).not.toHaveProperty('needsPicker')
 
           expect(getOwnKeyConflict()).toBeNull()
+        },
+      )
+    })
+
+    // FLM-157 review, finding R5: once the check has passed, the reconnect
+    // publishes our key, merging it into the key list it reads from the
+    // server, and heals the node when the server refuses the publication.
+    // When a restore, an import or a replacement publishes a new key in
+    // between, nothing the reconnect writes may undo it: no old list, no
+    // retired key, no deleted list.
+    describe('when our key changes after the check, while the reconnect publishes it', () => {
+      /** The fingerprints the server lists for our account now. */
+      const serverKeyList = async (built: Built) =>
+        advertisedFingerprintsIn(
+          (await built.ctx.xmpp.queryPEP(ME, METADATA_NODE, 1)).map((item) => ({ node: METADATA_NODE, item })),
+        ) ?? []
+      const ourKey = () => fake.accounts.get(ME)!.fingerprint
+
+      const restore = { change: 'a restore from the server backup', setUp: otherKeyInBackup,
+        run: (s: Setup) => s.device.restoreSecretKey('shared-pp') }
+      const keyReplacements = [
+        restore,
+        { change: 'an import from a file', setUp: otherKeyInBackup,
+          run: (s: Setup) => s.device.importKeyFromFile(s.backup!, 'shared-pp') },
+        { change: 'a replacement of our identity', setUp: publishedKey,
+          run: (s: Setup) => s.device.retireAndGenerateIdentity() },
+      ]
+
+      it.each(keyReplacements)(
+        'keeps the new key list when $change publishes while the reconnect reads the list to merge',
+        async ({ setUp, run }) => {
+          const setup = await setUp()
+          // The check reads the key list first; the publication reads it again
+          // to merge our key into it. Its answer is the list before the change.
+          const read = holdKeyRead(setup.built, ME, 'when-sent', 'key list', 2)
+          setup.device.onReconnected({ resumed: true })
+          await vi.waitFor(() => expect(read.taken()).toBe(true))
+
+          expect(await run(setup) ?? {}).not.toHaveProperty('needsPicker')
+          read.release()
+          await reconnectWork(setup.device)
+
+          expect(await serverKeyList(setup.built)).toEqual([ourKey()])
+        },
+      )
+
+      /**
+       * The server refuses the reconnect's publication of our key list with
+       * precondition-not-met, so the reconnect heals the node: it deletes it,
+       * publishes again, and on a second refusal publishes without the
+       * refused options. The server processes each request when it is sent;
+       * its answer to the `held` one waits for `release()`.
+       */
+      const slowKeyListHealing = (built: Built, held: 'refusal' | 'delete' | 'second refusal') => {
+        const { publishPEP: publish, deletePEP: remove } = built.ctx.xmpp
+        let release!: () => void
+        const released = new Promise<void>((resolve) => { release = resolve })
+        let taken = false
+        const answerLate = async () => {
+          taken = true
+          await released
+        }
+        let refusals = held === 'second refusal' ? 2 : 1
+        built.ctx.xmpp.publishPEP = async (node, item, options) => {
+          if (node !== METADATA_NODE || refusals === 0) return publish(node, item, options)
+          refusals--
+          if (refusals === 0 && held !== 'delete') await answerLate()
+          throw Object.assign(new Error('conflict - precondition-not-met'), { condition: 'precondition-not-met' })
+        }
+        built.ctx.xmpp.deletePEP = async (node) => {
+          await remove(node)
+          if (held === 'delete' && node === METADATA_NODE && !taken) await answerLate()
+        }
+        return { taken: () => taken, release }
+      }
+
+      it.each([
+        { answered: 'refusal' as const, next: 'deletes the list' },
+        { answered: 'delete' as const, next: 'publishes the list again' },
+        { answered: 'second refusal' as const, next: 'publishes the list without the refused options' },
+      ])(
+        'keeps the new key list when a restore publishes before the $answered answer, after which the reconnect $next',
+        async ({ answered }) => {
+          const setup = await restore.setUp()
+          const healing = slowKeyListHealing(setup.built, answered)
+          setup.device.onReconnected({ resumed: true })
+          await vi.waitFor(() => expect(healing.taken()).toBe(true))
+
+          expect(await restore.run(setup)).not.toHaveProperty('needsPicker')
+          healing.release()
+          await reconnectWork(setup.device)
+
+          expect(await serverKeyList(setup.built)).toEqual([ourKey()])
         },
       )
     })
@@ -5784,6 +5879,53 @@ describe('SequoiaPgpPlugin', () => {
 
       expect(store.isPeerVerified('alice@example.com', 'ALICE_FP')).toBe(false)
       expect(store.isPeerVerified('bob@example.com', 'BOB_FP')).toBe(true)
+    })
+
+    // FLM-157 review, finding R5: each reconnect reads the verification list
+    // again. A list read before a log out is not applied: by then the stores
+    // belong to the next account.
+    it('applies nothing from a list a reconnect read before a log out', async () => {
+      const { ctx, peerPublish } = makeContext('me@example.com')
+      const fp = 'FP_LOGOUT_TEST'
+      fake.accounts.set('me@example.com', {
+        fingerprint: fp,
+        publicArmored: makeOpenPgpArmor(
+          'PGP PUBLIC KEY BLOCK',
+          `Fingerprint: ${fp}\nUID: xmpp:me@example.com\nKind: public\nRotation: 0\n`,
+        ),
+        keychainBacked: true,
+      })
+      await plugin.init(ctx)
+      await new Promise((r) => setTimeout(r, 0))
+      // Another device published a list while this one was offline.
+      peerPublish(
+        'me@example.com',
+        VERIFICATIONS_NODE,
+        buildVerificationsPepItem(fp, { 'frank@example.com': 'FRANK_FP' }, 3),
+      )
+
+      // The reconnect's read of the list is answered after the log out.
+      const read = ctx.xmpp.queryPEP
+      let release!: () => void
+      const released = new Promise<void>((resolve) => { release = resolve })
+      let taken = false
+      ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
+        if (taken || node !== VERIFICATIONS_NODE) return read(jid, node, maxItems)
+        taken = true
+        const items = await read(jid, node, maxItems)
+        await released
+        return items
+      }
+      plugin.onReconnected({ resumed: true })
+      await vi.waitFor(() => expect(taken).toBe(true))
+      await plugin.shutdown()
+      release()
+      await (plugin as unknown as { reconnectResync: Promise<void> }).reconnectResync
+
+      const store = await import('@/stores/verifiedPeerKeysStore')
+      expect(store.useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid).toEqual({})
+      const { loadAppliedVerificationsVersion } = await import('./verificationSync')
+      expect(loadAppliedVerificationsVersion()).toBe(-1)
     })
   })
 

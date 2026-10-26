@@ -463,6 +463,23 @@ export type BackupProbeResult = 'present' | 'absent' | 'unknown'
 /** What a check of our published key found, or `outdated` when our key changed meanwhile. */
 type OwnKeyCheckVerdict = 'consistent' | 'conflict' | 'outdated'
 
+/**
+ * Whether work started for our key still describes it (see
+ * `OpenPGPPluginBase.ownKeyFreshness`).
+ */
+type OwnKeyFreshness = () => boolean
+
+/** Stops work an own-key change has outdated, before its next write. */
+class OutdatedOwnKeyWork extends Error {
+  constructor() {
+    super('outdated by a change of our own key')
+  }
+}
+
+function assertCurrent(current: OwnKeyFreshness | undefined): void {
+  if (current && !current()) throw new OutdatedOwnKeyWork()
+}
+
 // ---------------------------------------------------------------------------
 // Abstract base class
 // ---------------------------------------------------------------------------
@@ -508,9 +525,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   // Operations that change our own key, or what the server publishes for it
   // (rotate, restore or import, replace, resolve a conflict, delete, log out),
   // advance this count when they start and again when they end, and are
-  // counted in `runningOwnKeyOperations` while under way. A check of the
-  // published key that overlaps one of them must not write its verdict (see
-  // `checkOwnPublishedKeyConsistency`).
+  // counted in `runningOwnKeyOperations` while under way. Work that reads the
+  // server for our key and overlaps one of them must not write what it
+  // concluded (see `ownKeyFreshness`).
   private ownKeyOperations = 0
   private runningOwnKeyOperations = 0
 
@@ -974,9 +991,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    */
   private async publishOwnIdentity(bundle: KeyBundle): Promise<void> {
     const ctx = this.requireCtx()
-    const verdict = await this.checkOwnPublishedKeyConsistency(bundle)
-    // Our key changed while the server was read; that change publishes what
-    // it needs.
+    // Every write below, the publication's healing retries included, stops
+    // once a change of our key outdates this work; that change publishes
+    // what it needs.
+    const current = this.ownKeyFreshness(bundle)
+    const verdict = await this.checkOwnPublishedKeyConsistency(bundle, current)
     if (verdict === 'outdated') return
     if (verdict === 'conflict') {
       ctx.logger.warn(
@@ -986,13 +1005,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       return
     }
 
-    // A key replaced while this ran (rotate, restore) must not be advertised again.
-    if (this.ownBundle !== bundle) return
     try {
-      await this.publishOwnPublicKeyData(bundle)
-      if (this.ownBundle !== bundle) return
-      await this.publishOwnPublicKeyMetadata(bundle)
+      await this.publishOwnPublicKeyData(bundle, current)
+      await this.publishOwnPublicKeyMetadata(bundle, [], current)
     } catch (err) {
+      if (err instanceof OutdatedOwnKeyWork) return
       ctx.logger.warn(
         `${this.pluginName()}: public key publish failed: ${formatError(err)}`,
       )
@@ -1617,6 +1634,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const ctx = this.ctx
     const ownPublicArmored = this.ownBundle.publicArmored
     const ownFingerprint = this.ownBundle.fingerprint
+    const current = this.ownKeyFreshness(this.ownBundle)
     try {
       const remote = await fetchVerificationsFromServer(
         ctx,
@@ -1626,7 +1644,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         ownPublicArmored,
         ownFingerprint,
       )
-      if (!remote) return
+      // A list read before a log out or a change of our key is not applied:
+      // the stores now belong to that change, or to the next account. The
+      // next sync applies the list again.
+      if (!remote || !current()) return
       const local = useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid
       const plan = planVerificationUpdate(remote, local, loadAppliedVerificationsVersion())
       if (!plan.apply) return
@@ -1697,8 +1718,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   /**
    * Run `operation`, which changes our own key or what the server publishes
-   * for it, so that no check of the published key overlapping it writes a
-   * verdict (see `checkOwnPublishedKeyConsistency`).
+   * for it, so that no work overlapping it writes what it concluded from
+   * the server (see `ownKeyFreshness`).
    */
   private async ownKeyOperation<T>(operation: () => Promise<T>): Promise<T> {
     this.ownKeyOperations++
@@ -1712,32 +1733,44 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   /**
+   * Freshness of work that starts now for `bundle`: true while it still
+   * describes our key, that is, the same account, the same key, and no
+   * own-key operation (rotate, restore or import, replace, resolve a
+   * conflict, delete, log out) started, ended or under way since.
+   *
+   * Work that reads the server and then writes what it concluded checks it
+   * before every write: the reconnect's own-key conflict verdict, our key's
+   * publication with its key-list merge and healing retries, and the
+   * verification list it applies. Work that overlaps an own-key operation
+   * would write the server's old state over the operation's result (a
+   * retired key advertised again, a cleared conflict put back), or write
+   * into the next account after a log out; it writes nothing instead, and
+   * the operation publishes what it needs.
+   */
+  private ownKeyFreshness(bundle: KeyBundle | null): OwnKeyFreshness {
+    const ctx = this.ctx
+    const operations = this.ownKeyOperations
+    return () =>
+      ctx !== null &&
+      this.ctx === ctx &&
+      this.ownBundle === bundle &&
+      this.ownKeyOperations === operations &&
+      this.runningOwnKeyOperations === 0
+  }
+
+  /**
    * Compare what the server publishes for our account with `bundle`, our
    * key when the check started, and record or clear the own-key conflict.
-   *
-   * The verdict is written only while it still describes our key: the same
-   * account, the same key, and no own-key operation (rotate, restore or
-   * import, replace, resolve a conflict, delete, log out) started, ended or
-   * under way while the check read the server. A check that overlaps one
-   * would compare the server's old or new key with the wrong one and block
-   * encryption for nothing, or undo the operation's conflict decision; it
-   * reports `outdated` and writes nothing, and the operation publishes what
-   * it needs.
+   * The verdict is written only while `current` holds; otherwise the check
+   * reports `outdated` and writes nothing.
    */
   private async checkOwnPublishedKeyConsistency(
     bundle: KeyBundle,
+    current: OwnKeyFreshness,
   ): Promise<OwnKeyCheckVerdict> {
     const ctx = this.requireCtx()
-    const operations = this.ownKeyOperations
     const settle = (conflict: OwnKeyConflict | null): OwnKeyCheckVerdict => {
-      if (
-        this.ctx !== ctx ||
-        this.ownBundle !== bundle ||
-        this.ownKeyOperations !== operations ||
-        this.runningOwnKeyOperations > 0
-      ) {
-        return 'outdated'
-      }
+      if (!current()) return 'outdated'
       if (!conflict) {
         clearOwnKeyConflict()
         return 'consistent'
@@ -1849,7 +1882,14 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return sameComponentFingerprints(published, local)
   }
 
-  private async publishOwnPublicKeyData(bundle: KeyBundle): Promise<void> {
+  /**
+   * @param current freshness of the reconnect work this publication belongs
+   *        to (see `ownKeyFreshness`); an own-key operation publishes without it
+   */
+  private async publishOwnPublicKeyData(
+    bundle: KeyBundle,
+    current?: OwnKeyFreshness,
+  ): Promise<void> {
     const createdAt = bundle.createdAt ?? (await this.validateCert(bundle.publicArmored)).createdAt
     const payload: XMLElementData = {
       name: 'pubkey',
@@ -1866,6 +1906,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       publicKeyDataNodeFor(toXep0373Fingerprint(bundle.fingerprint)),
       { id: xep0082DateTime(createdAt), payload },
       PUBLIC_KEY_NODE_OPTIONS,
+      undefined,
+      current,
     )
   }
 
@@ -1881,10 +1923,14 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    *
    * @param drop fingerprints to retire instead of carrying over — the identity
    *             this publish replaces (restore / import / retire).
+   * @param current freshness of the reconnect work this publication belongs
+   *        to (see `ownKeyFreshness`): a list read before our key changed is
+   *        never written back. An own-key operation publishes without it.
    */
   private async publishOwnPublicKeyMetadata(
     bundle: KeyBundle,
     drop: readonly string[] = [],
+    current?: OwnKeyFreshness,
   ): Promise<void> {
     const ctx = this.requireCtx()
     let existing: PEPItem[] = []
@@ -1910,6 +1956,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       { id: CURRENT_ITEM_ID, payload },
       PUBLIC_KEYS_METADATA_NODE_OPTIONS,
       PUBLIC_KEY_NODE_OPTIONS,
+      current,
     )
   }
 
@@ -1917,18 +1964,23 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * @param fallbackOptions options to publish with when the server still
    *        refuses `options` on a freshly recreated node, for settings that are
    *        only recommended and that not every server accepts as publish-options
+   * @param current checked before every write, the healing delete and
+   *        retries included; once it fails, this throws `OutdatedOwnKeyWork`
    */
   private async publishWithPreconditionHeal(
     node: string,
     item: { id: string; payload: XMLElementData },
     options: PEPPublishOptions,
     fallbackOptions?: PEPPublishOptions,
+    current?: OwnKeyFreshness,
   ): Promise<void> {
     const ctx = this.requireCtx()
+    assertCurrent(current)
     try {
       await ctx.xmpp.publishPEP(node, item, options)
     } catch (err) {
       if (!isPreconditionNotMet(err)) throw err
+      assertCurrent(current)
       ctx.logger.warn(
         `${this.pluginName()}: publish rejected on ${node} with precondition-not-met; deleting node and retrying`,
       )
@@ -1940,10 +1992,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         )
         throw err
       }
+      assertCurrent(current)
       try {
         await ctx.xmpp.publishPEP(node, item, options)
       } catch (retryErr) {
         if (!fallbackOptions || !isPreconditionNotMet(retryErr)) throw retryErr
+        assertCurrent(current)
         ctx.logger.warn(
           `${this.pluginName()}: ${node} refuses send_last_published_item and deliver_payloads; publishing without them`,
         )
