@@ -11,8 +11,9 @@
  *   rather than at its time limit.
  * - With FLUUX_LIVE_PAYLOAD=encrypted (FLM-157), the replayed encrypted
  *   messages are decrypted on arrival and stored as readable text: 5 direct
- *   messages from Bob, a received carbon (Bob writes to Alice's other device)
- *   and a sent carbon (Alice's other device writes to Bob). The client keeps
+ *   messages from Bob, a received carbon (Bob writes to Alice's other device,
+ *   at the full address the server bound for it) and a sent carbon (Alice's
+ *   other device writes to Bob), each replayed in its carbon wrapper. The client keeps
  *   its E2EE manager across the drop, so the plugin registered before the
  *   outage decrypts the replay. The plugin is registered the way the app does
  *   it, on every e2ee:manager-ready, and its decrypt takes 1.5 s so the
@@ -36,7 +37,7 @@ import 'fake-indexeddb/auto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import { DummyPlaintextPlugin } from './e2ee/DummyPlaintextPlugin'
-import type { ConversationHandle, EncryptedPayload, InboundDecryptContext } from './e2ee/types'
+import type { ConversationHandle, E2EEReconnectInfo, EncryptedPayload, InboundDecryptContext } from './e2ee/types'
 
 const accountsPath = process.env.FLUUX_LIVE_ACCOUNTS
 const mode = process.env.FLUUX_LIVE_RESUME === 'traditional' ? 'traditional' : 'sasl2'
@@ -85,7 +86,7 @@ describe.skipIf(!accountsPath)(`resume replay against a live server (${mode}${en
       addEventListener(type: string, listener: any, options?: any): void {
         if (type !== 'message') return super.addEventListener(type, listener, options)
         return super.addEventListener(type, (event: MessageEvent) => {
-          if (typeof event.data === 'string') frames.push({ ms: Date.now() - t0, data: event.data.slice(0, 400) })
+          if (typeof event.data === 'string') frames.push({ ms: Date.now() - t0, data: event.data.slice(0, 1_000) })
           if (mode !== 'traditional') return listener.call(this, event)
           const data = typeof event.data === 'string'
             ? event.data.replace(/<authentication xmlns=['"]urn:xmpp:sasl:2['"]>[\s\S]*?<\/authentication>/, '')
@@ -118,8 +119,16 @@ describe.skipIf(!accountsPath)(`resume replay against a live server (${mode}${en
       ? xmppClient({ service: accounts.ws, username: aliceLocal, domain: aliceDomain, password: accounts.alice.password, resource: 'other-device' })
       : null
     aliceOther?.on('error', () => {})
-    // No initial presence: the other device gets only what is addressed to it.
-    if (aliceOther) await aliceOther.start()
+    if (aliceOther) {
+      await aliceOther.start()
+      // Online, as a real device is, but with a negative priority: it gets only
+      // what is addressed to it, never what Bob sends to Alice's bare address.
+      await aliceOther.send(xml('presence', {}, xml('priority', {}, '-1')))
+    }
+    // The server picks the resource it binds: a message to any other resource
+    // would reach Alice as a direct message, not as a carbon. The library sets
+    // `jid` once bound; the SDK's declaration of its client leaves it out.
+    const aliceOtherJid = (aliceOther as unknown as { jid?: { toString(): string } } | null)?.jid?.toString()
 
     globalThis.WebSocket = AliceWebSocket as typeof WebSocket
     const { XMPPClient } = await import('./XMPPClient')
@@ -161,6 +170,9 @@ describe.skipIf(!accountsPath)(`resume replay against a live server (${mode}${en
         note('decrypt-start')
         await new Promise((r) => setTimeout(r, SLOW_DECRYPT_MS))
         return super.decrypt(handle, payload, context)
+      }
+      onReconnected({ resumed }: E2EEReconnectInfo) {
+        note('plugin-reconnected', { resumed, status: connectionStore.getState().status })
       }
     }
     if (encrypted) {
@@ -216,7 +228,7 @@ describe.skipIf(!accountsPath)(`resume replay against a live server (${mode}${en
       }
       if (aliceOther) {
         // Received carbon: Bob writes to Alice's other device.
-        await bob.send(encryptedMessage({ to: `${accounts.alice.jid}/other-device`, id: `replay-${t0}-received-carbon` }, `${runTag}received carbon`))
+        await bob.send(encryptedMessage({ to: aliceOtherJid!, id: `replay-${t0}-received-carbon` }, `${runTag}received carbon`))
         // Sent carbon: Alice's other device writes to Bob.
         await aliceOther.send(encryptedMessage({ to: accounts.bob.jid, id: `replay-${t0}-sent-carbon` }, `${runTag}sent carbon`))
       }
@@ -224,6 +236,7 @@ describe.skipIf(!accountsPath)(`resume replay against a live server (${mode}${en
       await new Promise((r) => setTimeout(r, 1_500))
       networkDown = false
       note('network-up')
+      const networkUpMs = Date.now() - t0
 
       await waitFor(() => connectionStore.getState().status === 'online', 60_000, 'resumed online')
       note('online-again', { e2eeKept: alice.e2ee !== null && alice.e2ee === managerBefore })
@@ -248,6 +261,10 @@ describe.skipIf(!accountsPath)(`resume replay against a live server (${mode}${en
 
         // FLM-157: the manager, and the plugin registered on it, survived the drop.
         expect(alice.e2ee).toBe(managerBefore)
+        // FLM-157 review, findings R1 and R2: the kept plugin heard of the
+        // resume once, before the status read online.
+        const reconnects = timeline.filter((e) => e.event === 'plugin-reconnected')
+        expect(reconnects.map((e) => [e.resumed, e.ms <= onlineAt])).toEqual([[true, true]])
         // Every replayed message was stored with its decrypted text the first
         // time, never with the fallback, and the message cache holds the text.
         expect(storedFallbacks).toEqual([])
@@ -256,6 +273,12 @@ describe.skipIf(!accountsPath)(`resume replay against a live server (${mode}${en
         expect(rows.map((m) => m.body).sort()).toEqual([...delivered].sort())
         expect(rows).toHaveLength(expected)
         expect(rows.find((m) => m.id.endsWith('-sent-carbon'))?.isOutgoing).toBe(true)
+        // The two carbons came back in the replay as carbons, in the wrapper
+        // the server puts around a copy of another device's message.
+        const carbonFrame = (kind: 'received' | 'sent', id: string) => frames.find((f) => f.ms >= networkUpMs &&
+          new RegExp(`<${kind} xmlns=['"]urn:xmpp:carbons:2['"]><forwarded [^>]*><message [^>]*id=['"]${id}['"]`).test(f.data))
+        expect(carbonFrame('received', `replay-${t0}-received-carbon`)).toBeDefined()
+        expect(carbonFrame('sent', `replay-${t0}-sent-carbon`)).toBeDefined()
       }
 
       // An explicit disconnect still ends the session and drops the manager.
