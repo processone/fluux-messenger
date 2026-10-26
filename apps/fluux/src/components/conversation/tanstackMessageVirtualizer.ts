@@ -239,7 +239,13 @@ export function useTanstackMessageVirtualizer({
       // Suppressing an adjustment is done at `shouldAdjustScrollPositionOnItemSizeChange`, which
       // runs before anything is counted; refusing it here is not available to the observer.
       if (refused && source !== 'measurement') return
-      elementScroll(offset, options, instance)
+      // The library computed `offset` when the row resized, and the observer above (or a scroll the
+      // browser published since) may have moved the reader on. Applying the counted adjustment to
+      // that stale base would write the old position back and erase the movement (#1601), so a
+      // measurement write adds its adjustment to where the reader is now. This holds for every
+      // consumer of the write, whichever target was cancelled meanwhile.
+      const base = source === 'measurement' && instance.scrollElement ? instance.scrollElement.scrollTop : offset
+      elementScroll(base, options, instance)
       observer?.({ phase: 'after', source, behavior: options.behavior })
       if (source === 'measurement' && instance.scrollElement) {
         offsetCbRef.current?.(instance.scrollElement.scrollTop, false)
