@@ -90,4 +90,17 @@ describe('showWebNotification', () => {
       expect(NotificationCtor.mock.calls[0][1]).not.toHaveProperty('silent')
     })
   })
+
+  // FLM-152 R10: the last check happens after the registration wait, at final submission.
+  it('shows nothing when superseded while waiting for the registration', async () => {
+    const registration = { showNotification: vi.fn().mockResolvedValue(undefined) }
+    let superseded = false
+    setServiceWorker({
+      getRegistration: vi.fn().mockImplementation(async () => { superseded = true; return registration }),
+      ready: Promise.resolve(registration),
+    })
+    await showWebNotification('Title', { body: 'Body' }, {}, () => superseded)
+    expect(registration.showNotification).not.toHaveBeenCalled()
+    expect(NotificationCtor).not.toHaveBeenCalled()
+  })
 })

@@ -18,6 +18,7 @@ const setStatus = (s: string) => {
 }
 
 const showWebNotification = vi.fn()
+const held = new Map<string, Promise<unknown>>()
 
 vi.mock('./useNotificationEvents', () => ({
   useNotificationEvents: (handlers: {
@@ -71,6 +72,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   return {
     ...actual,
     rosterStore: { getState: () => ({ getContact: () => undefined }) },
+    resolveNotificationMessage: (m: { id: string }) => held.get(m.id) ?? actual.resolveNotificationMessage(m as never),
     usePresence: () => ({ presenceStatus: 'online' }),
     useConnectionStatus: () => ({ status: currentStatus }),
   }
@@ -282,5 +284,27 @@ describe('useDesktopNotifications catch-up window', () => {
     })
     await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
     expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(['alice: from alice'])
+  })
+
+  // FLM-152 R11: a fallback attempt keeps its original arrival order, so a live banner shown
+  // while the newest candidate was still being checked is not overwritten by an older one.
+  it('does not let an older fallback overwrite a live banner', async () => {
+    useToastStore.setState({ toasts: [] })
+    connectionStore.setState({ windowVisible: true })
+    const { rerender } = renderHook(() => useDesktopNotifications())
+    act(() => { setStatus('online'); rerender() })
+    let release!: (m: unknown) => void
+    const bobMessage = { ...msg('b1', ''), timestamp: new Date(Date.now() - 1000) }
+    held.set('b1', new Promise(resolve => { release = resolve }))
+    act(() => {
+      capturedOnConversationMessage?.(conv('alice'), { ...msg('a1', 'from alice'), timestamp: new Date(Date.now() - 3000) })
+      capturedOnConversationMessage?.(conv('bob'), bobMessage)
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    await act(async () => { capturedOnConversationMessage?.(conv('carol'), msg('c1', 'from carol')) })
+    expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(['carol: from carol'])
+    await act(async () => { release(bobMessage); await vi.advanceTimersByTimeAsync(10) })
+    held.clear()
+    expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(['carol: from carol'])
   })
 })

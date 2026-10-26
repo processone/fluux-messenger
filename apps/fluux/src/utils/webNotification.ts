@@ -53,6 +53,8 @@ export async function showWebNotification(
   title: string,
   options: WebNotificationOptions,
   nav: WebNotificationNav = {},
+  /** Checked at final submission: true means another cue replaced this notification. */
+  superseded: () => boolean = () => false,
 ): Promise<void> {
   const { onClick, ...notificationOptions } = options
   const soundOptions: NotificationOptions = osNotificationSilent() ? { silent: true } : {}
@@ -64,6 +66,7 @@ export async function showWebNotification(
 
   try {
     const registration = await serviceWorkerRegistration()
+    if (superseded()) return
     if (registration) {
       await registration.showNotification(title, payload)
       return

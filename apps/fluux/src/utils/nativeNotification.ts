@@ -45,6 +45,8 @@ export function currentAccountId(): string | null {
 export async function postNativeDesktopNotification(
   payload: NativeDesktopNotification,
   eligible: () => Promise<boolean | NotificationNames> = async () => true,
+  /** Checked at final submission: true means another cue replaced this banner. */
+  superseded: () => boolean = () => false,
 ): Promise<void> {
   try {
     const { communication, ...legacyPayload } = payload
@@ -67,6 +69,7 @@ export async function postNativeDesktopNotification(
       }
       // The captain chose prototype-only revalidation: null retains legacy desktop eligibility.
     }
+    if (superseded()) return
     await invoke('post_notification', { ...legacyPayload, silent: osNotificationSilent() })
   } catch (error) {
     console.error('[Notifications] Native notification failed:', error)

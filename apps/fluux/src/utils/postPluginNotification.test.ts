@@ -173,4 +173,13 @@ describe('postPluginNotification', () => {
 
     expect(errorSpy).not.toHaveBeenCalled()
   })
+
+  // FLM-152 R10: the last check happens after the channel wait, at final submission.
+  it('does not notify when superseded after the channel wait', async () => {
+    useSettingsStore.setState({ soundEnabled: false })
+    let superseded = false
+    createChannel.mockImplementation(async () => { superseded = true })
+    await postPluginNotification({ title: 'T', body: 'B' }, undefined, () => superseded)
+    expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
+  })
 })

@@ -871,4 +871,44 @@ describe('useDesktopNotifications posting + guard', () => {
       expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
     })
   })
+
+describe('useDesktopNotifications system post gate (FLM-152 R10)', () => {
+  let restorePlatform: () => void
+  beforeEach(() => {
+    resetNotificationFixtures()
+    vi.clearAllMocks()
+    handlers = {}
+    restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+    isMobileTauri.mockResolvedValue(false)
+    mockPresenceStatus = 'online'
+    mockWindowVisible = false
+    getNotificationPermissionGranted.mockReturnValue(true)
+    useSettingsStore.setState({ soundEnabled: true, inAppBannerEnabled: true })
+    useToastStore.setState({ toasts: [] })
+  })
+  afterEach(() => { restorePlatform(); invoke.mockReset(); invoke.mockResolvedValue(null) })
+
+  it('uses the banner when Fluux comes to the front while the native post is being prepared', async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'prepare_communication_notification') mockWindowVisible = true
+      return null
+    })
+    renderHook(() => useDesktopNotifications())
+    await handlers.onConversationMessage?.({ id: 'alice@example.com', name: 'Alice' }, { id: 'm1', from: 'alice@example.com' })
+    expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
+    expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(['Alice: body text'])
+  })
+
+  it('shows nothing in that case when Show banner is off', async () => {
+    useSettingsStore.setState({ inAppBannerEnabled: false })
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'prepare_communication_notification') mockWindowVisible = true
+      return null
+    })
+    renderHook(() => useDesktopNotifications())
+    await handlers.onConversationMessage?.({ id: 'alice@example.com', name: 'Alice' }, { id: 'm1', from: 'alice@example.com' })
+    expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
+    expect(useToastStore.getState().toasts).toEqual([])
+  })
+})
 })
