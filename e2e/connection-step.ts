@@ -65,7 +65,8 @@ for (const vp of VIEWPORTS) {
           await page.getByTestId('sidebar-pane').getByText('Team Chat', { exact: true }).first().click()
         }
         const header = page.locator('header').last()
-        await expect(header).toBeVisible()
+        // Read the baseline only once the clicked conversation is open.
+        await expect(header).toContainText(view === 'chat' ? 'Emma Wilson' : 'Team Chat')
         const baseline = await headerHeight(page)
         const subtitleBefore = await header.innerText()
         await shot(page, `${vp.label}-${view}-1-online`)
