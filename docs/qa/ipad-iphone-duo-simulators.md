@@ -29,6 +29,12 @@ Planned targets:
 - iPad Pro 11-inch (M5), iOS Simulator 27.0.
 - iPhone Duo, iOS Simulator 27.1.
 
+**Select the iOS 27.1 runtime for iPhone Duo. iOS 27.0 is not sufficient:**
+the Duo target is only available under 27.1. Check its runtime with
+`xcrun simctl list devices available` and select its UUID rather than relying
+on a device name shared by multiple runtimes. Do not create another Duo if the
+requested device already exists.
+
 Build from a clean committed checkout, record the source commit with the build
 log, and use the same embedded demo on both targets. Do not substitute a desktop
 browser at the same viewport for native simulator evidence.
@@ -53,11 +59,15 @@ in use, in both directions, without relaunching or discarding the current state.
 For each failure, record the target, **orientation** (portrait or landscape),
 rotation direction when relevant, source provenance, steps, expected result,
 actual result and the smallest evidence that shows it. Log a problem separately
-for each affected orientation rather than reporting a blanket device result. Keep test artifacts
-outside the project. File reproducible product defects separately after checking
+for each affected orientation rather than reporting a blanket device result.
+Keep test artifacts outside the project. File reproducible product defects separately after checking
 for an existing task; do not repair them as part of this testing-only change.
 
 ## Results
 
-Not run yet. A result must distinguish observed behavior from missing proof and
-must not treat a successful build as a successful application journey.
+Exploratory iPad runs are in progress; final coverage is not established yet.
+They have exercised navigation, local demo sends and draft rotation, but the
+complete scrolling and software-keyboard journeys still need proof. The Duo
+journeys have not started. A result must distinguish observed behavior from
+missing proof and must not treat a successful build as a successful application
+journey.
