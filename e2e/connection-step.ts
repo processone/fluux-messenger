@@ -9,7 +9,7 @@
  * Set CONNECTION_STEP_SHOTS=<dir> to also save screenshots of each state.
  */
 import { test, expect, type Page } from '@playwright/test'
-import type { connectionStore } from '@fluux/sdk/stores'
+import type { connectionStore, chatStore, roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
 
 const SHOTS = process.env.CONNECTION_STEP_SHOTS
@@ -17,7 +17,7 @@ const GRACE_MS = 2000
 
 type Store = typeof connectionStore
 type Scope = Parameters<ReturnType<Store['getState']>['beginUpdate']>[0][number]
-type W = Window & { __connectionStore?: Store; __owners?: Array<() => void> }
+type W = Window & { __connectionStore?: Store; __chatStore?: typeof chatStore; __roomStore?: typeof roomStore; __owners?: Array<() => void> }
 
 const setConnection = (page: Page, status: string, attempt = 0, targetInMs: number | null = null) =>
   page.evaluate(([s, a, t]) => {
@@ -206,7 +206,12 @@ for (const vp of VIEWPORTS) {
         await expect(header.getByTestId('update-announcement')).toHaveText('')
 
         // ChatHeader and RoomHeader reuse their component instance across targets.
-        const otherName = view === 'chat' ? 'Sophia Chen' : 'Design Review'
+        const otherName = await page.evaluate(view => {
+          const w = window as W
+          return view === 'chat'
+            ? w.__chatStore!.getState().conversations.get('sophia@fluux.chat')!.name
+            : w.__roomStore!.getState().rooms.get('design@conference.fluux.chat')!.name!
+        }, view)
         if (vp.label === 'iphone') await page.getByRole('button', { name: /back/i }).first().click()
         await page.getByTestId('sidebar-pane').getByText(otherName, { exact: true }).first().click()
         await expect(header).toContainText(otherName)
