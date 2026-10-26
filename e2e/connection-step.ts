@@ -167,13 +167,18 @@ for (const vp of VIEWPORTS) {
         await shot(page, `${vp.label}-${view}-scoped-icon`)
         // Explanation opens without opening room info or moving the messages.
         const trigger = header.getByRole('button', { name: new RegExp(`Retrieving messages for ${name}`) })
+        const explanation = page.getByRole('tooltip').filter({ hasText: `Retrieving messages for ${name}` })
         await trigger.focus()
         await page.keyboard.press('Enter')
-        await expect(page.getByText(`Retrieving messages for ${name}`, { exact: true }).last()).toBeVisible()
+        await expect(explanation).toBeVisible()
+        await expect(explanation.locator('..')).toHaveCSS('opacity', '1')
         await trigger.press('Enter')
+        await expect(explanation).toHaveCount(0)
         await trigger.click()
-        await expect(page.getByText(`Retrieving messages for ${name}`, { exact: true }).last()).toBeVisible()
+        await expect(explanation).toBeVisible()
+        await expect(explanation.locator('..')).toHaveCSS('opacity', '1')
         await trigger.click()
+        await expect(explanation).toHaveCount(0)
 
         // Navigate away, then come back after the brief window: no new grace/text.
         if (vp.label === 'iphone') await page.getByRole('button', { name: /back/i }).first().click()

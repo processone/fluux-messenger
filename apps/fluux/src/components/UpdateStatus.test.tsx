@@ -56,8 +56,9 @@ describe('read-only scoped update display', () => {
     expect(screen.queryByTestId('update-text')).toBeNull()
     const trigger = screen.getByRole('button', { name: 'status.retrievingFor: Messages' })
     fireEvent.click(trigger)
-    expect(screen.getAllByText('status.retrievingFor: Messages').length).toBeGreaterThan(1)
+    expect(screen.getByRole('tooltip').textContent).toBe('status.retrievingFor: Messages')
     fireEvent.keyDown(trigger, { key: 'Enter' })
+    expect(screen.queryByRole('tooltip')).toBeNull()
     expect(trigger.querySelector('button')).toBeNull()
   })
 
