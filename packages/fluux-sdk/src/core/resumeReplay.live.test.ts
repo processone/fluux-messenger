@@ -19,22 +19,31 @@
  * accounts. By default the resume must go through SASL2 inline, so the server
  * must offer SASL2 (on ejabberd without TLS: allow_unencrypted_sasl2).
  * FLUUX_LIVE_RESUME=traditional hides SASL2 from Alice's client, so the resume
- * uses the stream-feature <resume/> instead. FLUUX_LIVE_TRANSCRIPT=path writes the timeline as JSON.
+ * uses the stream-feature <resume/> instead. FLUUX_LIVE_PAYLOAD=encrypted
+ * sends the messages through a test E2EE plugin whose decrypt takes 1.5 s, so
+ * the server's ping reply arrives before the replayed messages are stored; it
+ * keeps the E2EE manager across the drop (see FLM-157).
+ * FLUUX_LIVE_TRANSCRIPT=path writes the timeline as JSON.
  *
  *   FLUUX_LIVE_ACCOUNTS=/path/accounts.json npx vitest run src/core/resumeReplay.live.test.ts
  */
 import 'fake-indexeddb/auto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
+import { DummyPlaintextPlugin } from './e2ee/DummyPlaintextPlugin'
+import type { ConversationHandle, EncryptedPayload, InboundDecryptContext } from './e2ee/types'
 
 const accountsPath = process.env.FLUUX_LIVE_ACCOUNTS
 const mode = process.env.FLUUX_LIVE_RESUME === 'traditional' ? 'traditional' : 'sasl2'
+const encrypted = process.env.FLUUX_LIVE_PAYLOAD === 'encrypted'
 const MESSAGES = 5
+// Encrypted payloads take this long to decrypt, so the ping reply comes first.
+const SLOW_DECRYPT_MS = 1_500
 
 interface Account { jid: string; password: string }
 interface Accounts { ws: string; alice: Account; bob: Account }
 
-describe.skipIf(!accountsPath)(`resume replay against a live server (${mode})`, () => {
+describe.skipIf(!accountsPath)(`resume replay against a live server (${mode}${encrypted ? ', encrypted' : ''})`, () => {
   it('keeps the Updating step until the replayed messages are stored', async () => {
     const accounts = JSON.parse(readFileSync(accountsPath!, 'utf8')) as Accounts
 
@@ -125,6 +134,24 @@ describe.skipIf(!accountsPath)(`resume replay against a live server (${mode})`, 
       // Bob is a contact: a message from a stranger is held as a request, not a conversation.
       if (!rosterStore.getState().hasContact(accounts.bob.jid)) await alice.contacts.addContact(accounts.bob.jid, 'Bob')
       await waitFor(() => rosterStore.getState().hasContact(accounts.bob.jid), 10_000, 'Bob in the roster')
+      if (encrypted) {
+        // A test plugin that claims Bob's payloads and decrypts them slowly.
+        class SlowDummyPlugin extends DummyPlaintextPlugin {
+          override async decrypt(handle: ConversationHandle, payload: EncryptedPayload, context?: InboundDecryptContext) {
+            note('decrypt-start')
+            await new Promise((r) => setTimeout(r, SLOW_DECRYPT_MS))
+            return super.decrypt(handle, payload, context)
+          }
+        }
+        await waitFor(() => !!alice.e2ee, 10_000, 'E2EE manager')
+        await alice.e2ee!.register(new SlowDummyPlugin())
+        // Stand-in: the client currently drops its E2EE manager on a network
+        // loss and rebuilds it only after the replay (FLM-157), so replayed
+        // payloads would never be decrypted. Keep the manager across the drop.
+        ;(alice as unknown as { tearDownE2EEManager: () => Promise<void> }).tearDownE2EEManager = async () => {
+          note('e2ee-teardown-skipped')
+        }
+      }
       note('first-session-settled')
 
       // Outage: the socket dies without a stream close, so the server keeps the session.
@@ -139,7 +166,12 @@ describe.skipIf(!accountsPath)(`resume replay against a live server (${mode})`, 
       }
       await waitFor(() => connectionStore.getState().status !== 'online', 10_000, 'offline')
       for (let i = 1; i <= MESSAGES; i++) {
-        await bob.send(xml('message', { to: accounts.alice.jid, type: 'chat', id: `replay-${t0}-${i}` }, xml('body', {}, `${runTag}${i}`)))
+        const text = `${runTag}${i}`
+        await bob.send(encrypted
+          ? xml('message', { to: accounts.alice.jid, type: 'chat', id: `replay-${t0}-${i}` },
+            xml('body', {}, '[dummy-plaintext payload]'),
+            xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(text).toString('base64')))
+          : xml('message', { to: accounts.alice.jid, type: 'chat', id: `replay-${t0}-${i}` }, xml('body', {}, text)))
       }
       note('bob-sent', { count: MESSAGES })
       await new Promise((r) => setTimeout(r, 1_500))
@@ -161,10 +193,15 @@ describe.skipIf(!accountsPath)(`resume replay against a live server (${mode})`, 
       expect(hold).toBeDefined()
       expect(release.replayedInStore).toBe(MESSAGES)
       expect(release.ms - onlineAt).toBeLessThan(10_000)
+      if (encrypted) {
+        // The server's replay and ping reply arrive well before the decrypts end.
+        const firstDecrypt = timeline.find((e) => e.event === 'decrypt-start' && e.ms >= onlineAt)!
+        expect(release.ms - firstDecrypt.ms).toBeGreaterThanOrEqual(SLOW_DECRYPT_MS - 50)
+      }
     } finally {
       note('end', { conversations: [...chatStore.getState().conversations.values()].map((c) => ({ id: c.id, unread: c.unreadCount, last: c.lastMessage?.body })) })
       if (process.env.FLUUX_LIVE_TRANSCRIPT) {
-        writeFileSync(process.env.FLUUX_LIVE_TRANSCRIPT, JSON.stringify({ mode, timeline, frames }, null, 2))
+        writeFileSync(process.env.FLUUX_LIVE_TRANSCRIPT, JSON.stringify({ mode, encrypted, timeline, frames }, null, 2))
       }
       await alice.disconnect().catch(() => {})
       await bob.stop().catch(() => {})

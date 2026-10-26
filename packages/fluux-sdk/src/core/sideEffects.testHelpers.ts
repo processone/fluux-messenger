@@ -50,7 +50,7 @@ export interface MockSideEffectClient {
       catchUpRoomHistory: Mock
       discoverNewConversationsFromRoster: Mock
     }
-    waitForServerRoundTrip: Mock
+    waitForReplayIngested: Mock
   }
   rooms: {
     queryRoomMembers: Mock
@@ -97,7 +97,7 @@ export function createMockClient(): MockSideEffectClient & SideEffectHost {
         catchUpRoomHistory: vi.fn().mockResolvedValue(undefined),
         discoverNewConversationsFromRoster: vi.fn().mockResolvedValue(true),
       },
-      waitForServerRoundTrip: vi.fn().mockResolvedValue(undefined),
+      waitForReplayIngested: vi.fn().mockResolvedValue(undefined),
     },
     rooms: {
       queryRoomMembers: vi.fn().mockResolvedValue([]),

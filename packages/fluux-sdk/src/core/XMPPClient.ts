@@ -156,8 +156,12 @@ interface InternalSurface {
   conversationSync: ConversationSync
   /** Fetches and merges the conversation list outside a fresh session's setup. */
   refreshConversationList(): Promise<void>
-  /** Resolves when the server answers a ping sent now, or after the timeout. Never rejects. */
-  waitForServerRoundTrip(timeoutMs: number): Promise<void>
+  /**
+   * Resolves once the server has answered a ping sent now and the encrypted
+   * messages received before that answer are decrypted, or after the timeout.
+   * Never rejects.
+   */
+  waitForReplayIngested(timeoutMs: number): Promise<void>
   entityTime: EntityTime
   lastActivity: LastActivity
   pubsub: PubSub
@@ -750,7 +754,7 @@ export class XMPPClient {
       on: (event, handler) => this.subscribeToBus(event, handler as ClientEvents[typeof event]),
       mam, mds, conversationSync, entityTime, lastActivity, pubsub,
       refreshConversationList: () => this.sessionLifecycle.refreshConversationList(),
-      waitForServerRoundTrip: (timeoutMs) => this.waitForServerRoundTrip(timeoutMs),
+      waitForReplayIngested: (timeoutMs) => this.waitForReplayIngested(timeoutMs),
     }
     internalSurfaces.set(this, this.#internal)
 
@@ -2011,7 +2015,8 @@ export class XMPPClient {
     }
   }
 
-  private async waitForServerRoundTrip(timeoutMs: number): Promise<void> {
+  private async waitForReplayIngested(timeoutMs: number): Promise<void> {
+    const deadline = Date.now() + timeoutMs
     // Next macrotask: the resume handler that calls this runs before the
     // connection restores its Stream Management counters.
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -2021,6 +2026,16 @@ export class XMPPClient {
     } catch {
       // An error reply is still an answer; a timeout or a lost socket ends the wait.
     }
+    // Encrypted replayed messages reach the store only once decrypted, which
+    // can end after the answer.
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([
+      this.messages.whenLiveDecryptsSettled(),
+      new Promise((resolve) => { timer = setTimeout(resolve, remaining) }),
+    ])
+    clearTimeout(timer)
   }
 
   protected async sendIQ(iq: Element, timeoutMs?: number): Promise<Element> {

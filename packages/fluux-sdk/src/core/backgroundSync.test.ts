@@ -2549,14 +2549,14 @@ describe('catch-up owners (Updating step)', () => {
   // the server answers a request sent after the resume.
   it('holds a resumed session with nothing to fetch until the server answers after its replay', async () => {
     const answer = deferred()
-    mockClient.internal.waitForServerRoundTrip.mockReturnValue(answer.promise)
+    mockClient.internal.waitForReplayIngested.mockReturnValue(answer.promise)
     connectionStore.getState().setStatus('reconnecting')
     cleanup = setupBackgroundSyncSideEffects(mockClient)
     const seen: boolean[] = []
     const unsub = connectionStore.subscribe((s) => s.isCatchingUp, (v) => seen.push(v))
     simulateSmResumption(mockClient)
     await vi.advanceTimersByTimeAsync(1_000)
-    expect(mockClient.internal.waitForServerRoundTrip).toHaveBeenCalledExactlyOnceWith(RESUME_REPLAY_LIMIT_MS)
+    expect(mockClient.internal.waitForReplayIngested).toHaveBeenCalledExactlyOnceWith(RESUME_REPLAY_LIMIT_MS)
     expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalled()
     expect(caughtUp()).toBe(true)
     answer.resolve()
@@ -2567,7 +2567,7 @@ describe('catch-up owners (Updating step)', () => {
   })
 
   it('releases a resumed session at the replay time limit when the server never answers', async () => {
-    mockClient.internal.waitForServerRoundTrip.mockReturnValue(new Promise(() => {}))
+    mockClient.internal.waitForReplayIngested.mockReturnValue(new Promise(() => {}))
     connectionStore.getState().setStatus('reconnecting')
     cleanup = setupBackgroundSyncSideEffects(mockClient)
     simulateSmResumption(mockClient)
@@ -2579,7 +2579,7 @@ describe('catch-up owners (Updating step)', () => {
 
   it('drops the replay owner with the connection, and its late answer cannot clear the next session', async () => {
     const late = deferred()
-    mockClient.internal.waitForServerRoundTrip.mockReturnValueOnce(late.promise)
+    mockClient.internal.waitForReplayIngested.mockReturnValueOnce(late.promise)
     connectionStore.getState().setStatus('reconnecting')
     cleanup = setupBackgroundSyncSideEffects(mockClient)
     simulateSmResumption(mockClient)
@@ -2590,7 +2590,7 @@ describe('catch-up owners (Updating step)', () => {
 
     // The next resume waits on its own answer; the old one arriving late changes nothing.
     const next = deferred()
-    mockClient.internal.waitForServerRoundTrip.mockReturnValueOnce(next.promise)
+    mockClient.internal.waitForReplayIngested.mockReturnValueOnce(next.promise)
     simulateSmResumption(mockClient)
     late.resolve()
     await vi.advanceTimersByTimeAsync(0)
@@ -2601,7 +2601,7 @@ describe('catch-up owners (Updating step)', () => {
   })
 
   it('releases the replay owner when the side effects are torn down', () => {
-    mockClient.internal.waitForServerRoundTrip.mockReturnValue(new Promise(() => {}))
+    mockClient.internal.waitForReplayIngested.mockReturnValue(new Promise(() => {}))
     connectionStore.getState().setStatus('reconnecting')
     const stop = setupBackgroundSyncSideEffects(mockClient)
     simulateSmResumption(mockClient)

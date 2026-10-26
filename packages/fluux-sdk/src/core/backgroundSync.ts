@@ -73,7 +73,8 @@ import {
  * replayed stanzas. Only joined, inactive rooms that still need archive coverage
  * receive a resume seed query. The catch-up step stays up until the server
  * answers a round trip sent after the resume, which it does only once it has
- * replayed what it queued, or until RESUME_REPLAY_LIMIT_MS.
+ * replayed what it queued, and the encrypted replayed messages are decrypted,
+ * or until RESUME_REPLAY_LIMIT_MS.
  *
  * @param client - The client driving these side effects
  * @param options - Configuration options
@@ -665,8 +666,8 @@ export function setupBackgroundSyncSideEffects(
 
     // The server replays the stanzas it queued during the outage right after
     // the resume, and answers a new request only after them. Hold the step on
-    // that answer, bounded, so presence does not come back before the missed
-    // messages have arrived.
+    // that answer and on the decrypts it leaves running, bounded, so presence
+    // does not come back before the missed messages are in the store.
     endResumeReplay()
     const endReplay = connectionStore.getState().beginCatchUp()
     endSessionPreparation()
@@ -676,7 +677,7 @@ export function setupBackgroundSyncSideEffects(
     }
     const replayLimit = setTimeout(release, RESUME_REPLAY_LIMIT_MS)
     releaseResumeReplay = release
-    client.internal.waitForServerRoundTrip(RESUME_REPLAY_LIMIT_MS).then(release, release)
+    client.internal.waitForReplayIngested(RESUME_REPLAY_LIMIT_MS).then(release, release)
 
     const resumeGeneration = sessionGeneration
     const state = roomStore.getState()

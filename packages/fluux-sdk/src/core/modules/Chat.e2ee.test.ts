@@ -705,6 +705,52 @@ describe('Chat E2EE wiring', () => {
     })
   })
 
+  // FLM-120 review R8: a resumed session holds "Updating..." until the
+  // replayed messages are in the store; an encrypted one gets there only when
+  // its asynchronous decrypt ends, which can be after the server's ping reply.
+  describe('pending live decrypts', () => {
+    it('settles only after slow decrypts of a direct message and of received and sent carbons have emitted', async () => {
+      await chat.sendMessage('bob@example.com', 'missed while offline')
+      const payload = captured[0].children.filter((c) => typeof c === 'string' || c.name !== 'active')
+      const inner = (attrs: Record<string, string>) => xml('message', { type: 'chat', ...attrs }, ...payload)
+      const carbon = (kind: 'received' | 'sent', attrs: Record<string, string>) => xml(
+        'message',
+        { from: 'me@example.com', to: 'me@example.com/device-B', type: 'chat' },
+        xml(kind, { xmlns: 'urn:xmpp:carbons:2' }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, inner(attrs))),
+      )
+
+      let openGate!: () => void
+      const gate = new Promise<void>((r) => { openGate = r })
+      const decrypt = manager.decryptInbound.bind(manager)
+      vi.spyOn(manager, 'decryptInbound').mockImplementation(async (...args) => {
+        await gate
+        return decrypt(...args)
+      })
+      const sdkEvents: string[] = []
+      const { deps } = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+      deps.emitSDK = (event) => { sdkEvents.push(event) }
+      const rxChat = new Chat(deps, new MAM(deps))
+
+      rxChat.handle(inner({ from: 'bob@example.com/r', to: 'me@example.com', id: 'r-direct' }))
+      rxChat.handle(carbon('received', { from: 'bob@example.com/laptop', to: 'me@example.com', id: 'r-received' }))
+      rxChat.handle(carbon('sent', { from: 'me@example.com/device-A', to: 'bob@example.com', id: 'r-sent' }))
+
+      let settled = false
+      const done = rxChat.whenLiveDecryptsSettled().then(() => { settled = true })
+      await new Promise((r) => setTimeout(r, 10))
+      expect(settled).toBe(false)
+      expect(sdkEvents.filter((e) => e === 'chat:message')).toHaveLength(0)
+
+      openGate()
+      await done
+      expect(sdkEvents.filter((e) => e === 'chat:message')).toHaveLength(3)
+    })
+
+    it('settles at once when nothing is being decrypted', async () => {
+      await expect(chat.whenLiveDecryptsSettled()).resolves.toBeUndefined()
+    })
+  })
+
   describe('securityContext threading', () => {
     it('sets securityContext on outbound encrypted messages', async () => {
       await chat.sendMessage('bob@example.com', 'Hello, Bob!')

@@ -176,6 +176,9 @@ interface MessageEnvelopeContext {
 export class Chat extends BaseModule {
   private mamModule: MAM
   private correctionReceipts: CorrectionReceipts
+  // Live encrypted messages still being decrypted: they reach the store only
+  // when their decrypt ends.
+  private liveDecrypts = new Set<Promise<void>>()
 
   constructor(deps: ModuleDependencies, mamModule: MAM) {
     super(deps)
@@ -499,8 +502,23 @@ export class Chat extends BaseModule {
     const manager = this.deps.getE2EEManager?.()
     if (!manager) return false
     if (!stanzaHasE2EEClaim(stanza, manager)) return false
-    void this.decryptAndReprocess(manager, stanza, context)
+    const pending = this.decryptAndReprocess(manager, stanza, context)
+    this.liveDecrypts.add(pending)
+    const settle = () => { this.liveDecrypts.delete(pending) }
+    pending.then(settle, settle)
     return true
+  }
+
+  /**
+   * Resolves once every live decrypt started before this call, and any
+   * started while waiting, has ended (successfully or not).
+   *
+   * @internal
+   */
+  async whenLiveDecryptsSettled(): Promise<void> {
+    while (this.liveDecrypts.size > 0) {
+      await Promise.allSettled([...this.liveDecrypts])
+    }
   }
 
   private async decryptAndReprocess(
