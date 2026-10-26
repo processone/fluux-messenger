@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setPlatformForTesting } from '@/platform'
 import type { InvokeFn } from './SequoiaPgpPlugin'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
+import { deleteOwnKey } from './deleteOwnKey'
 import { OPENPGP_DESCRIPTOR } from './OpenPGPPluginBase'
 import { legacyNormalizeBackupPassphrase } from './backupPassphrase'
 import { getOwnKeyConflict } from '@/stores/ownKeyConflictStore'
@@ -2946,6 +2947,13 @@ describe('SequoiaPgpPlugin', () => {
     const reconnectWork = (device: SequoiaPgpPlugin) =>
       (device as unknown as { reconnectResync: Promise<void> }).reconnectResync
 
+    /** The fingerprints the server lists for our account now. */
+    const serverKeyList = async (built: Built) =>
+      advertisedFingerprintsIn(
+        (await built.ctx.xmpp.queryPEP(ME, METADATA_NODE, 1)).map((item) => ({ node: METADATA_NODE, item })),
+      ) ?? []
+    const ourKey = () => fake.accounts.get(ME)!.fingerprint
+
     /** Our key on this device, published. */
     const publishedKey = async (): Promise<Setup> => {
       const built = makeContext(ME)
@@ -3109,13 +3117,6 @@ describe('SequoiaPgpPlugin', () => {
     // between, nothing the reconnect writes may undo it: no old list, no
     // retired key, no deleted list.
     describe('when our key changes after the check, while the reconnect publishes it', () => {
-      /** The fingerprints the server lists for our account now. */
-      const serverKeyList = async (built: Built) =>
-        advertisedFingerprintsIn(
-          (await built.ctx.xmpp.queryPEP(ME, METADATA_NODE, 1)).map((item) => ({ node: METADATA_NODE, item })),
-        ) ?? []
-      const ourKey = () => fake.accounts.get(ME)!.fingerprint
-
       const restore = { change: 'a restore from the server backup', setUp: otherKeyInBackup,
         run: (s: Setup) => s.device.restoreSecretKey('shared-pp') }
       const keyReplacements = [
@@ -3193,6 +3194,52 @@ describe('SequoiaPgpPlugin', () => {
           expect(await serverKeyList(setup.built)).toEqual([ourKey()])
         },
       )
+    })
+
+    // FLM-157 review, finding R6: deleting our key withdraws it from the
+    // server, then erases it here and unregisters the plugin. A reconnect in
+    // between must not publish it again: peers would encrypt to a key whose
+    // private material is gone.
+    describe('when a reconnect runs while we delete our key', () => {
+      /**
+       * Holds the server's answer to the next withdrawal of an item from
+       * `node` until `release()`; the server processes it when it is sent.
+       */
+      const holdWithdrawal = (built: Built, node: string) => {
+        const retract = built.ctx.xmpp.retractPEP
+        let release!: () => void
+        const released = new Promise<void>((resolve) => { release = resolve })
+        let taken = false
+        built.ctx.xmpp.retractPEP = async (target, itemId) => {
+          await retract(target, itemId)
+          if (taken || target !== node) return
+          taken = true
+          await released
+        }
+        return { taken: () => taken, release }
+      }
+
+      it.each([
+        { pending: 'the withdrawal of our key data', deleteBackup: false,
+          node: (fingerprint: string) => dataNodeFor(fingerprint) },
+        { pending: 'the withdrawal of our backup', deleteBackup: true,
+          node: () => SECRET_KEY_NODE },
+      ])('publishes nothing again when it runs during $pending', async ({ deleteBackup, node }) => {
+        const { built, device } = await publishedKey()
+        await device.backupSecretKey('shared-pp')
+        const deleted = ourKey()
+        const withdrawal = holdWithdrawal(built, node(deleted))
+        const deletion = deleteOwnKey(device, { deleteBackup, unregister: () => device.shutdown() })
+        await vi.waitFor(() => expect(withdrawal.taken()).toBe(true))
+
+        device.onReconnected({ resumed: true })
+        await reconnectWork(device)
+        withdrawal.release()
+        await deletion
+
+        expect(await serverKeyList(built)).toEqual([])
+        expect(await built.ctx.xmpp.queryPEP(ME, dataNodeFor(deleted), 1)).toEqual([])
+      })
     })
   })
 

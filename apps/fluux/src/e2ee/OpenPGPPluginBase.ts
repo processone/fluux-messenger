@@ -523,8 +523,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private reconnectResync: Promise<void> = Promise.resolve()
 
   // Operations that change our own key, or what the server publishes for it
-  // (rotate, restore or import, replace, resolve a conflict, delete, log out),
-  // advance this count when they start and again when they end, and are
+  // (rotate, restore or import, replace, resolve a conflict, delete, log out,
+  // and a caller's flow of several steps, see `runOwnKeyChange`), advance
+  // this count when they start and again when they end, and are
   // counted in `runningOwnKeyOperations` while under way. Work that reads the
   // server for our key and overlaps one of them must not write what it
   // concluded (see `ownKeyFreshness`).
@@ -1239,6 +1240,19 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           `(from the server backup or a file) or explicitly retire the published identity.`,
       )
     }
+  }
+
+  /**
+   * Run a caller's flow of several own-key steps as one change of our own
+   * key, from its first step to its last, so that no reconnect overlapping
+   * any part of it checks or publishes our key. The delete-key flow
+   * withdraws our key from the server, then its backup, then erases it and
+   * unregisters this plugin: a reconnect between the withdrawal and the
+   * erasure would otherwise publish a key nobody can decrypt with. Steps
+   * that are own-key operations themselves nest inside it.
+   */
+  async runOwnKeyChange<T>(flow: () => Promise<T>): Promise<T> {
+    return this.ownKeyOperation(flow)
   }
 
   async retractPublicKeys(): Promise<void> {

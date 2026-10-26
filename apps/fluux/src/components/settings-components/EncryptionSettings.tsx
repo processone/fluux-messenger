@@ -7,6 +7,7 @@ import { SettingsDisclosure } from '@/components/ui/SettingsDisclosure'
 import { useConnection, useXMPPContext, getBareJid, isE2EEPluginError } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
+import { deleteOwnKey, type OwnKeyDeletionPlugin } from '@/e2ee/deleteOwnKey'
 import { useToastStore } from '@/stores/toastStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
@@ -855,32 +856,15 @@ export function EncryptionSettings() {
       setIsDeleting(true)
       try {
         const plugin = client.e2ee?.getPlugin('openpgp') as
-          | {
-              retractPublicKeys?: () => Promise<void>
-              retractSecretKeyBackup?: () => Promise<void>
-              deleteIdentity?: () => Promise<void>
-            }
+          | OwnKeyDeletionPlugin
           | null
           | undefined
-
-        // Order matters. Retract FIRST so peers stop discovering our
-        // fingerprint while we still have an XMPP session. If the
-        // retract throws (network, server rejected the IQ), we bubble
-        // the error to the dialog and leave local key material intact —
-        // the user can retry without being stranded.
-        if (plugin?.retractPublicKeys) {
-          await plugin.retractPublicKeys()
-        }
-        if (deleteBackup && plugin?.retractSecretKeyBackup) {
-          await plugin.retractSecretKeyBackup()
-        }
-
-        // Peers are now (best-effort) unable to encrypt to us — safe to
-        // wipe the local key material and unregister.
-        if (plugin?.deleteIdentity) {
-          await plugin.deleteIdentity()
-        }
-        await unregisterE2EEPlugins(client)
+        // Withdraws the key from the server, then erases it and unregisters
+        // the plugin; a failed withdrawal throws and keeps the key.
+        await deleteOwnKey(plugin ?? {}, {
+          deleteBackup,
+          unregister: () => unregisterE2EEPlugins(client),
+        })
         setOpenpgpEnabled(false)
         setFingerprint(null)
         setShowDeleteConfirm(false)
