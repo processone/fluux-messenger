@@ -317,14 +317,78 @@ describe('installOrderTolerantErrors', () => {
     await expect(request).rejects.toMatchObject({ condition: 'item-not-found', message: 'item-not-found - Node not found' })
   })
 
-  it('leaves an application-specific child after the condition', () => {
-    const iq = parseElement(
-      `<iq type="error"><error type="wait"><text xmlns="${STANZAS}">slow</text>`
-      + `<resource-constraint xmlns="${STANZAS}"/><too-many xmlns="urn:example:app"/></error></iq>`)
-    putErrorConditionFirst(iq)
-    const err = StanzaError.fromElement(iq.getChild('error'))
-    expect(err.condition).toBe('resource-constraint')
-    expect(err.application?.name).toBe('too-many')
+  const parts = {
+    condition: `<resource-constraint xmlns="${STANZAS}"/>`,
+    text: `<text xmlns="${STANZAS}">Too many hats</text>`,
+    application: '<too-many xmlns="urn:example:app"/>',
+  }
+  const permutations = (items: string[]): string[][] =>
+    items.length <= 1 ? [items] : items.flatMap((item, i) =>
+      permutations([...items.slice(0, i), ...items.slice(i + 1)]).map(rest => [item, ...rest]))
+
+  it.each(permutations(['condition', 'text', 'application']))(
+    'keeps condition, text and application apart in the order %s, %s, %s', (...order) => {
+      const iq = parseElement(`<iq type="error"><error type="wait">${order.map(k => parts[k as keyof typeof parts]).join('')}</error></iq>`)
+      putErrorConditionFirst(iq)
+      const err = StanzaError.fromElement(iq.getChild('error'))
+      expect([err.condition, err.text, err.application?.name]).toEqual(['resource-constraint', 'Too many hats', 'too-many'])
+    })
+
+  // Real SASL2 + FAST negotiation: features in, authenticate out, failure back.
+  // The client's credentials callback offers a FAST token and a password, so a
+  // rejected token must fall back to PLAIN, and only on not-authorized.
+  async function negotiate(failureChildren: string, install: boolean) {
+    const conn = client({
+      service: 'ws://localhost:1', domain: 'example.com',
+      credentials: async (authenticate: (c: object, m: string, ua: unknown) => Promise<void>,
+        _mechanisms: string[], fast: unknown) => {
+        const token = fast ? { mechanism: 'HT-SHA-256-NONE', token: 'tok', expiry: '2999-01-01T00:00:00Z' } : undefined
+        await authenticate({ username: 'alice', password: 'secret', token }, 'PLAIN', undefined)
+      },
+    } as never) as unknown as {
+      _onElement(el: Element): void
+      send(el: Element): Promise<void>
+      fast: { fetchToken(): Promise<unknown>; saveToken(): void; deleteToken(): Promise<void> }
+      on(event: string, handler: (...args: unknown[]) => void): void
+    }
+    if (install) installOrderTolerantErrors(conn)
+    const sent: string[] = []
+    const errors: string[] = []
+    let deleted = false
+    conn.fast.deleteToken = async () => { deleted = true }
+    conn.fast.saveToken = () => {}
+    conn.on('error', err => errors.push((err as Error).message))
+    conn.send = async (el: Element) => {
+      const mechanism = el.attrs.mechanism
+      if (el.name !== 'authenticate') return
+      sent.push(mechanism)
+      await Promise.resolve()
+      conn._onElement(parseElement(mechanism === 'HT-SHA-256-NONE'
+        ? `<failure xmlns="urn:xmpp:sasl:2">${failureChildren}</failure>`
+        : '<success xmlns="urn:xmpp:sasl:2"><authorization-identifier>alice@example.com</authorization-identifier></success>'))
+    }
+    conn._onElement(parseElement(
+      '<stream:features xmlns:stream="http://etherx.jabber.org/streams">'
+      + '<authentication xmlns="urn:xmpp:sasl:2"><mechanism>PLAIN</mechanism>'
+      + '<inline><fast xmlns="urn:xmpp:fast:0"><mechanism>HT-SHA-256-NONE</mechanism></fast></inline>'
+      + '</authentication></stream:features>'))
+    await new Promise(r => setTimeout(r, 50))
+    return { sent, errors, deleted }
+  }
+
+  const SASL = 'urn:ietf:params:xml:ns:xmpp-sasl'
+  it.each(orders(
+    '<text xml:lang="en">Invalid token</text>',
+    `<not-authorized xmlns="${SASL}"/>`,
+  ))('invalidates a rejected FAST token and falls back to the password: %s', async (_label, children) => {
+    const result = await negotiate(children, true)
+    expect(result).toEqual({ sent: ['HT-SHA-256-NONE', 'PLAIN'], errors: [], deleted: true })
+  })
+
+  it('without the hook, a text-first rejection keeps the dead token and raises an error (control)', async () => {
+    const result = await negotiate(`<text xml:lang="en">Invalid token</text><not-authorized xmlns="${SASL}"/>`, false)
+    expect(result.deleted).toBe(false)
+    expect(result.errors).toEqual(['text'])
   })
 
   it('does nothing to a non-error element or a client without the entry point', () => {

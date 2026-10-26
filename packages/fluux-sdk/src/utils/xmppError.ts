@@ -118,12 +118,23 @@ function elementName(el: Element): string {
   return (el as Ltx).getName?.() ?? el.name
 }
 
-/** Move the defined-condition child (not `<text/>`, in `ns`) to the front. */
+/**
+ * Order an error's children the way xmpp.js reads them: the defined condition
+ * (not `<text/>`, in `ns`), then `<text/>`, then everything else.
+ * `@xmpp/error` takes children 1, 2 and 3 as condition, text-or-application
+ * and application, so moving only the condition would let an application
+ * element in second place push the text out.
+ */
 function conditionFirst(errorEl: Element, ns: string): void {
   const children = errorEl.children
   if (!Array.isArray(children)) return
-  const at = children.findIndex(c => typeof c !== 'string' && elementName(c) !== 'text' && elementNs(c) === ns)
-  if (at > 0) children.unshift(...children.splice(at, 1))
+  const isCondition = (c: unknown) =>
+    typeof c !== 'string' && elementName(c as Element) !== 'text' && elementNs(c as Element) === ns
+  const condition = children.find(isCondition)
+  if (!condition) return
+  const texts = children.filter(c => c !== condition && typeof c !== 'string' && elementName(c) === 'text')
+  const rest = children.filter(c => c !== condition && !texts.includes(c))
+  children.splice(0, children.length, condition, ...texts, ...rest)
 }
 
 /**
