@@ -169,13 +169,7 @@ async function startRun(accounts: Accounts) {
 
   // Alice's network: while down, every new socket fails to connect. In
   // traditional mode, SASL2 is removed from the stream features she reads.
-  // ejabberd 26.09 lists an error's <text> before its condition, which the
-  // client misreads (FLM-161, issue #1808) so the plugin cannot set up a new
-  // account; the condition is put first, as RFC 6120 orders it. `outbound`
-  // lets a check change what Alice sends; `sent` records it.
-  const conditionFirst = (data: string) => data.replace(
-    /(<error\b[^>]*>)(<text\b[^>]*>[^<]*<\/text>)(<[a-z-]+ xmlns=['"]urn:ietf:params:xml:ns:xmpp-stanzas['"]\/>)/g,
-    '$1$3$2')
+  // `outbound` lets a check change what Alice sends; `sent` records it.
   const RealWebSocket = globalThis.WebSocket
   const net = { down: false, outbound: (data: string) => data }
   const sent: Array<{ ms: number; data: string }> = []
@@ -195,9 +189,8 @@ async function startRun(accounts: Accounts) {
       if (type !== 'message') return super.addEventListener(type, listener, options)
       return super.addEventListener(type, (event: MessageEvent) => {
         let data = event.data
-        if (typeof data === 'string') {
-          data = conditionFirst(data)
-          if (mode === 'traditional') data = data.replace(/<authentication xmlns=['"]urn:xmpp:sasl:2['"]>[\s\S]*?<\/authentication>/, '')
+        if (typeof data === 'string' && mode === 'traditional') {
+          data = data.replace(/<authentication xmlns=['"]urn:xmpp:sasl:2['"]>[\s\S]*?<\/authentication>/, '')
         }
         listener.call(this, data === event.data ? event : new MessageEvent('message', { data }))
       }, options)
