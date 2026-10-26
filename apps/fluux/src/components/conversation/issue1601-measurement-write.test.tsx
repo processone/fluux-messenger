@@ -222,3 +222,15 @@ it('#1601 R3: a measurement of a row from the previous conversation adds nothing
   measure(2, 400, false) // outside act so the switch renders while the write is in flight
   expect(scroller.scrollTop).toBe(500)
 })
+
+it('#1601 R1: drops a re-measure +300 for a row that spans the reader after the reader moves up', () => {
+  const { scroller, hook, measure } = harness()
+  act(() => hook.result.current.scrollToOffset(1000))
+  measure(4, 90, false) // row 4 (400-490) is now measured: its next size change is a re-measure
+  act(() => hook.result.current.scrollToOffset(500))
+  act(() => hook.result.current.setScrollWriteObserver?.(write => {
+    if (write.phase === 'before' && write.source === 'measurement') scroller.scrollTop = 450
+  }))
+  measure(4, 390) // entirely above 500 when TanStack approves; spans the reader at 450
+  expect(scroller.scrollTop).toBe(450)
+})

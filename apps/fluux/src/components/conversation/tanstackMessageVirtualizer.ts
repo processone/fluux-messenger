@@ -160,7 +160,7 @@ export function useTanstackMessageVirtualizer({
   // Bumped whenever the reader takes the pixels: any destination decided earlier is void.
   const generationRef = useRef(0)
   // The row virtual-core is about to resize, as seen by the measurement that precedes its write.
-  const measuringRef = useRef<{ index: number; key: ReturnType<Virtualizer<HTMLElement, Element>['options']['getItemKey']>; start: number } | null>(null)
+  const measuringRef = useRef<{ index: number; key: ReturnType<Virtualizer<HTMLElement, Element>['options']['getItemKey']>; start: number; end: number; first: boolean } | null>(null)
   const setScrollWriteObserver = useCallback<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>(
     observer => { writeObserverRef.current = observer }, [],
   )
@@ -285,7 +285,8 @@ export function useTanstackMessageVirtualizer({
       const sameRow = measuring !== null
         && instance.scrollElement === scroller && itemKeyRef.current?.items === rows
         && instance.options.getItemKey(measuring.index) === measuring.key
-      const delta = sameRow && measuring.start < live + hold ? options.adjustments ?? 0 : 0
+      const above = sameRow && (measuring.first ? measuring.start < live + hold : measuring.end <= live + hold)
+      const delta = above ? options.adjustments ?? 0 : 0
       retargetLibraryWrite(instance, live + hold, delta)
       elementScroll(live, { ...options, adjustments: delta }, instance)
       observer?.({ phase: 'after', source, behavior: options.behavior })
@@ -303,8 +304,14 @@ export function useTanstackMessageVirtualizer({
       const index = instance.indexFromElement(element)
       const key = instance.options.getItemKey(index)
       // virtual-core resizes this row right after we return; its write is judged against this row.
+      // Like virtual-core's own check, a first measurement is corrected once its top is above the
+      // reader, a re-measurement only once the whole row is.
+      const known = instance as unknown as { itemSizeCache?: Map<unknown, number> }
+      const cached = instance.measurementsCache?.[index]
+      const first = known.itemSizeCache ? !known.itemSizeCache.has(key) : true
+      const start = cached?.start ?? Infinity
       measuringRef.current = index >= 0
-        ? { index, key, start: instance.measurementsCache?.[index]?.start ?? Infinity } : null
+        ? { index, key, start, end: start + (known.itemSizeCache?.get(key) ?? cached?.size ?? 0), first } : null
       if (index >= 0 && size > 0) onMeasuredRef.current?.(String(key), size)
       if (size > 0 && element.querySelector('[data-msg-text]') && !samplePendingRef.current) {
         samplePendingRef.current = true
