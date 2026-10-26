@@ -16,16 +16,12 @@ import {
   XMPP_STREAM_OPEN_TIMEOUT_MS,
 } from './connectionTimeouts'
 import { SM_SESSION_TIMEOUT_MS } from '../connectionMachine'
-// xmpp.js ships no types for this internal module; it is the class xmpp.js emits for <stream:error>.
-// @ts-expect-error TS7016
-import StreamError from '@xmpp/connection/lib/StreamError.js'
 import { DummyPlaintextPlugin } from '../e2ee/DummyPlaintextPlugin'
 import {
   createMockXmppClient,
   createMockStores,
   createMockElement,
   slowDownDigest,
-  parseElement,
   type MockXmppClient,
   type MockStoreBindings,
 } from '../test-utils'
@@ -2257,30 +2253,6 @@ describe('XMPPClient Connection', () => {
         'resource-conflict',
         'Session Replaced',
         expect.stringContaining('Another client connected')
-      )
-    })
-
-    it('detects a resource conflict when the server sends <text/> before the condition', async () => {
-      const connectPromise = xmppClient.connect({
-        jid: 'user@example.com',
-        password: 'secret',
-        server: 'example.com',
-        skipDiscovery: true,
-      })
-      mockXmppClientInstance._emit('online')
-      await connectPromise
-      vi.mocked(mockStores.console.addEvent).mockClear()
-
-      // Condition-after-text stream error (issue #1808 ordering), as xmpp.js parses it
-      const element = parseElement(
-        '<error xmlns="http://etherx.jabber.org/streams">'
-        + '<text xmlns="urn:ietf:params:xml:ns:xmpp-streams">Replaced by new connection</text>'
-        + '<conflict xmlns="urn:ietf:params:xml:ns:xmpp-streams"/></error>')
-      mockXmppClientInstance._emit('error', StreamError.fromElement(element))
-
-      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
-        'Disconnected: Resource conflict (another client connected)',
-        'error'
       )
     })
 

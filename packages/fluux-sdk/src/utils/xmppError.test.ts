@@ -1,13 +1,15 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { createMockElement, parseElement } from '../core/test-utils'
 // xmpp.js ships no types for this internal module; it is the class iqCaller rejects with.
 // @ts-expect-error TS7016
 import StanzaError from '@xmpp/middleware/lib/StanzaError.js'
 // @ts-expect-error TS7016
-import StreamError from '@xmpp/connection/lib/StreamError.js'
-// @ts-expect-error TS7016
 import SASLError from '@xmpp/sasl/lib/SASLError.js'
-import { parseXMPPError, formatXMPPError, normalizeXmppError, type XMPPStanzaError } from './xmppError'
+import type { Element } from '@xmpp/client'
+import { parseXMPPError, formatXMPPError, installOrderTolerantErrors, putErrorConditionFirst, type XMPPStanzaError } from './xmppError'
+
+// test-utils mocks '@xmpp/client'; the redirect and FAST paths need the real client.
+const { client } = await vi.importActual<typeof import('@xmpp/client')>('@xmpp/client')
 
 describe('parseXMPPError', () => {
   it('should parse a standard error element with type, condition, and text', () => {
@@ -238,62 +240,97 @@ describe('formatXMPPError', () => {
 
 // Issue #1808: ejabberd 26.09 (xmpp 1.13.5) sends <text/> before the condition,
 // and xmpp.js 0.14 reads the first child as the condition.
-// Literal error child of ejabberd 26.09's reply to a PEP items request on a missing node.
-const textFirst = () => parseElement(
-  '<error type="cancel" code="404">'
-  + '<text xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" xml:lang="en">Node not found</text>'
-  + '<item-not-found xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error>')
-const conditionFirst = () => parseElement(
-  '<error type="cancel" code="404">'
-  + '<item-not-found xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/>'
-  + '<text xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" xml:lang="en">Node not found</text></error>')
+// Issue #1808: ejabberd 26.09 (xmpp 1.13.5) sends <text/> before the condition,
+// and xmpp.js 0.14 reads the first child as the condition. Both child orders
+// are valid XMPP, so each case runs with the text before and after it.
+const STANZAS = 'urn:ietf:params:xml:ns:xmpp-stanzas'
+const orders = (text: string, condition: string): Array<[string, string]> => [
+  ['text first (ejabberd 26.09)', text + condition],
+  ['condition first (RFC examples)', condition + text],
+]
 
-describe('normalizeXmppError', () => {
-  it('xmpp.js alone misreads the 26.09 reply as condition "text"', () => {
-    expect(StanzaError.fromElement(textFirst()).condition).toBe('text')
+describe('installOrderTolerantErrors', () => {
+  // The real xmpp.js client: its own _onElement decides on redirects and errors.
+  function connectionSeeing(xmlText: string) {
+    const conn = client({ service: 'ws://localhost:1', domain: 'example.com' }) as unknown as {
+      _onElement(el: Element): void
+      _onSeeOtherHost(error: { condition: string }): void
+      on(event: string, handler: (...args: unknown[]) => void): void
+    }
+    installOrderTolerantErrors(conn)
+    const seen = { redirect: undefined as string | undefined, errors: [] as Array<{ condition: string }> }
+    conn._onSeeOtherHost = (error) => { seen.redirect = error.condition }
+    conn.on('error', (err) => seen.errors.push(err as { condition: string }))
+    conn._onElement(parseElement(xmlText))
+    return seen
+  }
+
+  it.each(orders(
+    '<text xmlns="urn:ietf:params:xml:ns:xmpp-streams">Moved</text>',
+    '<see-other-host xmlns="urn:ietf:params:xml:ns:xmpp-streams">other.example.com</see-other-host>',
+  ))('follows a see-other-host stream error: %s', (_label, children) => {
+    const seen = connectionSeeing(`<stream:error xmlns:stream="http://etherx.jabber.org/streams">${children}</stream:error>`)
+    expect(seen.redirect).toBe('see-other-host')
+    expect(seen.errors).toEqual([])
   })
 
-  it('recovers the item-not-found condition from the 26.09 reply', () => {
-    const err = normalizeXmppError(StanzaError.fromElement(textFirst()))
-    expect(err.condition).toBe('item-not-found')
-    expect(err.message).toBe('item-not-found - Node not found')
-    expect(err.text).toBe('Node not found')
+  it.each(orders(
+    '<text xmlns="urn:ietf:params:xml:ns:xmpp-streams">Replaced</text>',
+    '<conflict xmlns="urn:ietf:params:xml:ns:xmpp-streams"/>',
+  ))('reports a conflict stream error as conflict: %s', (_label, children) => {
+    const seen = connectionSeeing(`<stream:error xmlns:stream="http://etherx.jabber.org/streams">${children}</stream:error>`)
+    expect(seen.errors.map(e => e.condition)).toEqual(['conflict'])
   })
 
-  it('gives the same result for either child order', () => {
-    const a = normalizeXmppError(StanzaError.fromElement(textFirst()))
-    const b = normalizeXmppError(StanzaError.fromElement(conditionFirst()))
-    expect([a.condition, a.message, a.text]).toEqual([b.condition, b.message, b.text])
+  it.each(orders('<text xml:lang="en">Invalid token</text>', '<not-authorized/>'))(
+    'lets SASLError (read by the FAST and auth paths) see not-authorized: %s',
+    (_label, children) => {
+      const el = parseElement(`<failure xmlns="urn:ietf:params:xml:ns:xmpp-sasl">${children}</failure>`)
+      putErrorConditionFirst(el)
+      expect(SASLError.fromElement(el).condition).toBe('not-authorized')
+    },
+  )
+
+  it.each(orders(
+    `<text xmlns="${STANZAS}" xml:lang="en">Node not found</text>`,
+    `<item-not-found xmlns="${STANZAS}"/>`,
+  ))('lets an IQ error reject as item-not-found with its text: %s', (_label, children) => {
+    const iq = parseElement(`<iq type="error" id="1"><error type="cancel" code="404">${children}</error></iq>`)
+    putErrorConditionFirst(iq)
+    const err = StanzaError.fromElement(iq.getChild('error'))
+    expect([err.condition, err.message]).toEqual(['item-not-found', 'item-not-found - Node not found'])
   })
 
-  it('recovers the condition of a stream error with <text/> first', () => {
-    const el = parseElement(
-      '<error xmlns="http://etherx.jabber.org/streams">'
-      + '<text xmlns="urn:ietf:params:xml:ns:xmpp-streams">Replaced</text>'
-      + '<conflict xmlns="urn:ietf:params:xml:ns:xmpp-streams"/></error>')
-    expect(StreamError.fromElement(el).condition).toBe('text')
-    expect(normalizeXmppError(StreamError.fromElement(el)).message).toBe('conflict - Replaced')
+  it.each(orders(
+    `<text xmlns="${STANZAS}" xml:lang="en">Node not found</text>`,
+    `<item-not-found xmlns="${STANZAS}"/>`,
+  ))('rejects a real iqCaller request with item-not-found: %s', async (_label, children) => {
+    const conn = client({ service: 'ws://localhost:1', domain: 'example.com' }) as unknown as {
+      _onElement(el: Element): void
+      send(el: Element): Promise<void>
+      iqCaller: { request(el: Element): Promise<unknown> }
+    }
+    installOrderTolerantErrors(conn)
+    conn.send = async () => {}
+    const request = conn.iqCaller.request(parseElement('<iq type="get" id="q1"><pubsub xmlns="http://jabber.org/protocol/pubsub"/></iq>'))
+    conn._onElement(parseElement(`<iq type="error" id="q1"><error type="cancel" code="404">${children}</error></iq>`))
+    await expect(request).rejects.toMatchObject({ condition: 'item-not-found', message: 'item-not-found - Node not found' })
   })
 
-  it('recovers the condition of a SASL failure with <text/> first', () => {
-    const el = parseElement(
-      '<failure xmlns="urn:ietf:params:xml:ns:xmpp-sasl">'
-      + '<text xml:lang="en">Invalid username or password</text><not-authorized/></failure>')
-    expect(SASLError.fromElement(el).condition).toBe('text')
-    expect(normalizeXmppError(SASLError.fromElement(el)).condition).toBe('not-authorized')
+  it('leaves an application-specific child after the condition', () => {
+    const iq = parseElement(
+      `<iq type="error"><error type="wait"><text xmlns="${STANZAS}">slow</text>`
+      + `<resource-constraint xmlns="${STANZAS}"/><too-many xmlns="urn:example:app"/></error></iq>`)
+    putErrorConditionFirst(iq)
+    const err = StanzaError.fromElement(iq.getChild('error'))
+    expect(err.condition).toBe('resource-constraint')
+    expect(err.application?.name).toBe('too-many')
   })
 
-  it('keeps an application-specific child out of the condition', () => {
-    const el = parseElement(
-      '<error type="wait"><text xmlns="urn:ietf:params:xml:ns:xmpp-stanzas">slow</text>'
-      + '<resource-constraint xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/>'
-      + '<too-many xmlns="urn:example:app"/></error>')
-    expect(normalizeXmppError(StanzaError.fromElement(el)).condition).toBe('resource-constraint')
-  })
-
-  it('ignores errors that carry no xmpp.js element', () => {
-    const err = new Error('socket closed')
-    expect(normalizeXmppError(err)).toBe(err)
-    expect(err.message).toBe('socket closed')
+  it('does nothing to a non-error element or a client without the entry point', () => {
+    const msg = parseElement('<message><body>hi</body></message>')
+    putErrorConditionFirst(msg)
+    expect(msg.children).toHaveLength(1)
+    expect(() => installOrderTolerantErrors({})).not.toThrow()
   })
 })

@@ -1,5 +1,5 @@
 import type { DiscoveryDiagnostics } from '../../utils/websocketDiscovery'
-import { normalizeXmppError } from '../../utils/xmppError'
+import { installOrderTolerantErrors } from '../../utils/xmppError'
 import type { DiscoveryFailure } from '../types/connection'
 import { client, Client, Element, xml } from '@xmpp/client'
 import { getMechanism } from '@xmpp/client/lib/createOnAuthenticate.js'
@@ -1947,9 +1947,8 @@ export class Connection extends BaseModule {
     })
 
     this.authentications.set(xmppClient, authentication)
-    // Registered before every other 'error' listener so they all read a stream
-    // or SASL error's condition by namespace, not by xmpp.js's child position.
-    xmppClient.on('error', normalizeXmppError)
+    // xmpp.js reads an error's condition by child position; see the helper.
+    installOrderTolerantErrors(xmppClient)
     xmppClient.on('send', element => authentication.sent(element))
     xmppClient.on('element', element => authentication.received(element))
 

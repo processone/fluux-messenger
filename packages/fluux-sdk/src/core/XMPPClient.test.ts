@@ -11,9 +11,6 @@
  * - XMPPClient.presence.test.ts - presence handling, MUC presence
  * - XMPPClient.disco.test.ts - service discovery, server info
  */
-// xmpp.js ships no types for this internal module; it is the class iqCaller rejects with.
-// @ts-expect-error TS7016
-import StanzaError from '@xmpp/middleware/lib/StanzaError.js'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from './XMPPClient'
 import type { ConnectionStatus } from './types/connection'
@@ -24,7 +21,6 @@ import {
   createMockRoom,
   type MockXmppClient,
   type MockStoreBindings,
-  parseElement,
 } from './test-utils'
 import { VERIFY_CONNECTION_TIMEOUT_MS } from './modules/connectionTimeouts'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
@@ -1461,30 +1457,6 @@ describe('XMPPClient', () => {
         'Dead connection detected, will reconnect',
         'connection'
       )
-    })
-  })
-
-  describe('IQ error condition order (issue #1808)', () => {
-    it('reports item-not-found when the server sends <text/> before the condition', async () => {
-      const connectPromise = xmppClient.connect({
-        jid: 'user@example.com',
-        password: 'password',
-        server: 'wss://example.com/ws',
-      })
-      mockXmppClientInstance._emit('online')
-      await connectPromise
-
-      // Literal ejabberd 26.09 reply to a PEP items request on a missing node
-      const element = parseElement(
-        '<error type="cancel" code="404">'
-        + '<text xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" xml:lang="en">Node not found</text>'
-        + '<item-not-found xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error>')
-      mockXmppClientInstance.iqCaller.request.mockRejectedValueOnce(StanzaError.fromElement(element))
-
-      await expect(xmppClient.blocking.fetchBlocklist()).rejects.toMatchObject({
-        condition: 'item-not-found',
-        message: 'item-not-found - Node not found',
-      })
     })
   })
 

@@ -104,47 +104,60 @@ export function hasErrorCondition(err: unknown, condition: string): boolean {
   return err instanceof Error && err.message.includes(condition)
 }
 
-/** Namespace of the defined-condition elements, per xmpp.js error class. */
-const CONDITION_NAMESPACES: Record<string, string> = {
-  StanzaError: NS_XMPP_STANZAS,
-  StreamError: 'urn:ietf:params:xml:ns:xmpp-streams',
-  SASLError: 'urn:ietf:params:xml:ns:xmpp-sasl',
+const NS_STREAM = 'http://etherx.jabber.org/streams'
+const NS_STREAM_ERRORS = 'urn:ietf:params:xml:ns:xmpp-streams'
+const NS_SASL = 'urn:ietf:params:xml:ns:xmpp-sasl'
+const NS_SASL2 = 'urn:xmpp:sasl:2'
+
+// ltx semantics, as xmpp.js's own `is()` uses: prefix-free name, inherited namespace.
+type Ltx = { getNS?: () => string; getName?: () => string }
+function elementNs(el: Element): string | undefined {
+  return (el as Ltx).getNS?.() ?? el.attrs?.xmlns
+}
+function elementName(el: Element): string {
+  return (el as Ltx).getName?.() ?? el.name
+}
+
+/** Move the defined-condition child (not `<text/>`, in `ns`) to the front. */
+function conditionFirst(errorEl: Element, ns: string): void {
+  const children = errorEl.children
+  if (!Array.isArray(children)) return
+  const at = children.findIndex(c => typeof c !== 'string' && elementName(c) !== 'text' && elementNs(c) === ns)
+  if (at > 0) children.unshift(...children.splice(at, 1))
 }
 
 /**
- * Re-derive an xmpp.js error's condition from its raw element, by namespace,
- * whatever the order of its children.
+ * Put an incoming error's defined condition first among its children, in place.
  *
- * xmpp.js 0.14 (`@xmpp/error`) takes the FIRST child element as the condition.
- * RFC 6120 (§4.9.3, §6.5, §8.3.2) does not fix the order, and ejabberd 26.09
- * (xmpp 1.13.5) sends `<text/>` before the condition, so the error surfaced as
- * the condition `text`. Covers IQ/stanza errors, stream errors and SASL
- * failures, which all share that parser. Mutates and returns the error;
- * anything else is returned untouched.
+ * xmpp.js 0.14 (`@xmpp/error`) takes the FIRST child element as the condition,
+ * and acts on it while parsing (`see-other-host` redirects, rejected FAST
+ * tokens, auth failures). RFC 6120 (§4.9.3, §6.5, §8.3.2) does not fix the
+ * child order, and ejabberd 26.09 (xmpp 1.13.5) sends `<text/>` before the
+ * condition, so the condition read as `text`. Covers stream errors, SASL
+ * failures and stanza errors. Call it before xmpp.js reads the element.
  */
-export function normalizeXmppError<T>(err: T): T {
-  const e = err as {
-    name?: string
-    element?: Element
-    condition?: string
-    text?: string
-    message?: string
-  } | null
-  const ns = e?.name ? CONDITION_NAMESPACES[e.name] : undefined
-  if (!e || !ns || !e.element) return err
-
-  let condition: string | undefined
-  let text: string | undefined
-  for (const child of e.element.children ?? []) {
-    if (typeof child === 'string') continue
-    const childNs = child.attrs?.xmlns ?? (child as { getNS?: () => string }).getNS?.()
-    if (childNs !== ns) continue
-    if (child.name === 'text') text ??= child.getText?.() || undefined
-    else condition ??= child.name
+export function putErrorConditionFirst(el: Element): void {
+  if (elementName(el) === 'error' && elementNs(el) === NS_STREAM) {
+    conditionFirst(el, NS_STREAM_ERRORS)
+  } else if (elementName(el) === 'failure' && (elementNs(el) === NS_SASL || elementNs(el) === NS_SASL2)) {
+    conditionFirst(el, NS_SASL)
+  } else if (el.attrs?.type === 'error') {
+    const errorEl = el.getChild?.('error')
+    if (errorEl) conditionFirst(errorEl, NS_XMPP_STANZAS)
   }
-  if (!condition || condition === e.condition) return err
-  e.condition = condition
-  e.text = text ?? ''
-  e.message = condition + (text ? ` - ${text}` : '')
-  return err
+}
+
+/**
+ * Make an xmpp.js connection read error conditions by namespace. Wraps the
+ * instance's element entry point, which runs before any of its own error
+ * handling (the `error` event comes too late for the redirect and FAST paths).
+ */
+export function installOrderTolerantErrors(client: object): void {
+  const target = client as { _onElement?: (el: Element) => unknown }
+  const onElement = target._onElement
+  if (typeof onElement !== 'function') return
+  target._onElement = function (this: unknown, el: Element) {
+    putErrorConditionFirst(el)
+    return onElement.call(this, el)
+  }
 }
