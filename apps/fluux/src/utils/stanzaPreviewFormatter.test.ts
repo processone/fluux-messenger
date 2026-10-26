@@ -41,6 +41,14 @@ describe('simplifyJid', () => {
 })
 
 describe('extractAttribute', () => {
+  it('reads an attribute by name whatever the attribute order', () => {
+    expect(extractAttribute('<iq jid="a@b" id="q1" type="get">', 'id')).toBe('q1')
+    expect(extractAttribute('<iq id="q1" jid="a@b" type="get">', 'id')).toBe('q1')
+    expect(extractAttribute('<iq subtype="x" type="get">', 'type')).toBe('get')
+    expect(extractAttribute('<iq type="get" subtype="x">', 'type')).toBe('get')
+  })
+
+
   it('extracts attribute with double quotes', () => {
     expect(extractAttribute('<message from="user@example.com">', 'from')).toBe('user@example.com')
   })

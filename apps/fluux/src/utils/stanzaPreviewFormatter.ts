@@ -113,8 +113,9 @@ export function simplifyJid(jid: string | null): string {
  * Extract an attribute value from an XML tag string
  */
 export function extractAttribute(tag: string, attr: string): string | null {
-  // Match attribute with double or single quotes
-  const regex = new RegExp(`${attr}=["']([^"']*)["']`)
+  // Match the attribute by whole name, with double or single quotes. Attribute
+  // order is not significant in XML, so `id=` must not match inside `jid=`.
+  const regex = new RegExp(`(?:^|[\\s<])${attr}=["']([^"']*)["']`)
   const match = tag.match(regex)
   return match ? match[1] : null
 }
