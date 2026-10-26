@@ -255,6 +255,7 @@ for (const vp of VIEWPORTS) {
       await page.evaluate(() => (window as W).__owners!.shift()!())
       // FLM-171 F1: returning to a completed list, including via Contacts,
       // must not turn its historical snapshot into a new completion event.
+      if (vp.label === 'iphone') await page.getByRole('button', { name: /back/i }).first().click()
       await page.locator('[data-nav="rooms"]').click()
       await expect(bar.getByTestId('update-announcement')).toHaveText('')
       await page.locator('[data-nav="contacts"]').click()
