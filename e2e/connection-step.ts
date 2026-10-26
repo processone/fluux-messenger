@@ -153,7 +153,7 @@ for (const vp of VIEWPORTS) {
         await expect(header.getByTestId('update-text')).toContainText('Retrieving messages', { timeout: 2500 })
         await stable()
         await shot(page, `${vp.label}-${view}-scoped-brief`)
-        const started = await page.evaluate((scope: Scope) => (window as W).__connectionStore!.getState().updates[scope]!.startedAt, scope)
+        const started = await page.evaluate(scope => (window as W).__connectionStore!.getState().updates[scope as Scope]!.startedAt, scope)
         const announced = await header.getByTestId('update-announcement').textContent()
         await expect(header.getByTestId('update-icon')).toBeVisible({ timeout: 4000 })
         // Accessible retrieval text is additional header content, not a subtitle change.
@@ -184,7 +184,7 @@ for (const vp of VIEWPORTS) {
         await page.getByTestId('sidebar-pane').getByText(name, { exact: true }).first().click()
         await expect(header.getByTestId('update-icon')).toBeVisible()
         await expect(header.getByTestId('update-text')).toHaveCount(0)
-        expect(await page.evaluate((scope: Scope) => (window as W).__connectionStore!.getState().updates[scope]!.startedAt, scope)).toBe(started)
+        expect(await page.evaluate(scope => (window as W).__connectionStore!.getState().updates[scope as Scope]!.startedAt, scope)).toBe(started)
         // The icon is still present after the former 15-second cutoff.
         await page.waitForTimeout(Math.max(0, 15_200 - (Date.now() - started)))
         await expect(header.getByTestId('update-icon')).toBeVisible()
