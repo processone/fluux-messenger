@@ -35,14 +35,25 @@ browser at the same viewport for native simulator evidence.
 
 ## Scenarios
 
+The requested iPad coverage includes **both portrait and landscape** for every
+flow, not just an initial launch in each orientation. Repeat the complete iPad
+checklist below in both orientations. Also exercise rotation while the app is
+in use, in both directions, without relaunching or discarding the current state.
+
 | Scenario | Actions | Observations to retain |
 | --- | --- | --- |
-| iPad interface | Open a conversation; navigate to another conversation and settings; rotate portrait/landscape | Native screenshots, accessibility tree, visible and reachable controls, any clipping or overlap |
+| iPad navigation, portrait and landscape | Open a conversation; navigate to another conversation; scroll the conversation list; open settings and return | Native screenshots and accessibility tree for each orientation; visible and reachable controls; clipping or overlap |
+| iPad rotation with an open conversation | Rotate portrait to landscape and back while a conversation is open | Selected conversation and usable message view after each transition |
+| iPad rotation while typing | Start a draft with the software keyboard visible; rotate in both directions; continue typing and locally send | Draft retained; composer, keyboard and send control remain reachable; a single local message; transition recording |
+| iPad rotation with a scrolled list | Scroll the conversation list; rotate in both directions without resetting it | Visible list position, selected conversation, reachable rows and scroll behavior before and after each rotation |
+| iPad composer and lifecycle, portrait and landscape | Focus the composer; enter and locally send a unique demo message; dismiss the software keyboard; background and foreground the app | Keyboard/composer visibility and usable returning view in each orientation; a single local message |
 | iPhone Duo interface | Repeat navigation and rotation; inspect the screen modes actually exposed by Simulator | Actual display geometry, native screenshots, any unsupported mode or defect |
-| Composer and lifecycle, each target | Focus the composer; enter and locally send a unique demo message; dismiss the software keyboard; background and foreground the app | Keyboard/composer visibility, a single local message, a usable returning view; recording for transitions |
+| iPhone Duo composer and lifecycle | Focus the composer; enter and locally send a unique demo message; dismiss the software keyboard; background and foreground the app | Keyboard/composer visibility, a single local message, a usable returning view; recording for transitions |
 
-For each failure, record the target, source provenance, steps, expected result,
-actual result and the smallest evidence that shows it. Keep test artifacts
+For each failure, record the target, **orientation** (portrait or landscape),
+rotation direction when relevant, source provenance, steps, expected result,
+actual result and the smallest evidence that shows it. Log a problem separately
+for each affected orientation rather than reporting a blanket device result. Keep test artifacts
 outside the project. File reproducible product defects separately after checking
 for an existing task; do not repair them as part of this testing-only change.
 
