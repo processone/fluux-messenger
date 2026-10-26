@@ -82,6 +82,23 @@ describe('single owner of scoped retrieval state', () => {
     newEnd()
   })
 
+  // FLM-171 F3: the public summary is derived from these same handles,
+  // never a second registration a producer must remember to pair.
+  it('derives the public catch-up summary from one registration per job', () => {
+    vi.setSystemTime(1000)
+    const first = state().beginUpdate([chat, 'messages'])
+    expect(state()).toMatchObject({ isCatchingUp: true, catchUpStartedAt: 1000, catchUpOwners: 1 })
+    expect(state().updates[chat]?.owners).toBe(1)
+    expect(state().updates.messages?.owners).toBe(1)
+    vi.setSystemTime(5000)
+    const second = state().beginUpdate(['room:team@conference.fluux.chat', 'rooms'])
+    expect(state().catchUpOwners).toBe(2)
+    first(); first()
+    expect(state()).toMatchObject({ isCatchingUp: true, catchUpStartedAt: 1000, catchUpOwners: 1 })
+    second()
+    expect(state()).toMatchObject({ isCatchingUp: false, catchUpStartedAt: null, catchUpOwners: 0 })
+  })
+
   it('does not create a local scope for unknown global preparation or a scheduled wait', () => {
     const end = state().beginCatchUp()
     vi.advanceTimersByTime(10_000)

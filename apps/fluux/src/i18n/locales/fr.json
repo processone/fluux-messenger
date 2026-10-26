@@ -115,7 +115,6 @@
         "reconnectingStep": "Reconnexion dans {{seconds}}s",
         "connecting": "Connexion...",
         "verifying": "Vérification de la connexion...",
-        "updating": "Mise à jour...",
         "retrievingMessages": "Récupération des messages…",
         "retrievingFor": "Récupération des messages en cours pour {{target}}",
         "retrievalEndedFor": "La récupération des messages s’est arrêtée pour {{target}}",

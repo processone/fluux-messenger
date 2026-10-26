@@ -114,7 +114,6 @@
         "reconnectingStep": "Yhdistetään uudelleen {{seconds}}s kuluttua",
         "connecting": "Yhdistetään...",
         "verifying": "Vahvistetaan yhteyttä...",
-        "updating": "Päivitetään...",
         "retrievingMessages": "Haetaan viestejä…",
         "retrievingFor": "Haetaan viestejä: {{target}}",
         "retrievalEndedFor": "Viestien haku päättyi: {{target}}",

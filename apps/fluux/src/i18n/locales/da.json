@@ -114,7 +114,6 @@
         "reconnectingStep": "Genopretter forbindelse om {{seconds}}s",
         "connecting": "Opretter forbindelse...",
         "verifying": "Verificerer forbindelse...",
-        "updating": "Opdaterer...",
         "retrievingMessages": "Henter beskeder…",
         "retrievingFor": "Henter beskeder for {{target}}",
         "retrievalEndedFor": "Hentning af beskeder for {{target}} er afsluttet",

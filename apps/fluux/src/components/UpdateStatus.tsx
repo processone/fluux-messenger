@@ -2,10 +2,34 @@ import { useTranslation } from 'react-i18next'
 import { RefreshCw } from 'lucide-react'
 import { useConnectionStore } from '@fluux/sdk/react'
 import type { ConnectionState } from '@fluux/sdk/stores'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { Tooltip } from './Tooltip'
 
 type Scope = keyof ConnectionState['updates']
+
+/** Observe announcements, not the owner's historical snapshot at mount. */
+function UpdateAnnouncement({ update, target }: {
+  update: ConnectionState['updates'][Scope]
+  target: string
+}) {
+  const { t } = useTranslation()
+  const startedAt = update?.startedAt
+  const announcement = update?.announcement
+  const observed = useRef({ startedAt, announcement, message: '' })
+  const previous = observed.current
+  let message = previous.message
+  if (startedAt !== previous.startedAt || announcement !== previous.announcement) {
+    const endedObservedWork = announcement === 'ended'
+      && startedAt === previous.startedAt && previous.announcement === 'started'
+    message = announcement === 'started' || endedObservedWork
+      ? t(announcement === 'started' ? 'status.retrievingFor' : 'status.retrievalEndedFor', { target })
+      : ''
+  }
+  useEffect(() => {
+    observed.current = { startedAt, announcement, message }
+  }, [startedAt, announcement, message])
+  return <span role="status" data-testid="update-announcement" className="sr-only">{message}</span>
+}
 
 /** Read-only projection of the SDK owner's phase. No view owns update time or state. */
 export function UpdateStatus({ scope, target, list = false, children }: {
@@ -14,15 +38,12 @@ export function UpdateStatus({ scope, target, list = false, children }: {
   list?: boolean
   children: ReactNode
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const update = useConnectionStore(s => scope ? s.updates?.[scope] : undefined)
   const healthy = useConnectionStore(s => s.status === 'online' && !s.isVerifying)
   const visible = healthy && update && (update.phase === 'brief' || update.phase === 'icon')
   const text = visible && !list && update.phase === 'brief'
   const explanation = t('status.retrievingFor', { target })
-  const announced = healthy && update?.announcement
-    ? t(update.announcement === 'started' ? 'status.retrievingFor' : 'status.retrievalEndedFor', { target })
-    : ''
   return (
     <div className={`flex min-w-0 items-center gap-1 ${list ? '' : 'text-xs text-fluux-muted'}`}>
       <div className="min-w-0 truncate" data-testid={text ? 'update-text' : undefined}>
@@ -36,7 +57,11 @@ export function UpdateStatus({ scope, target, list = false, children }: {
           </span>
         </Tooltip>
       )}
-      <span role="status" data-testid="update-announcement" className="sr-only">{announced}</span>
+      <UpdateAnnouncement
+        key={JSON.stringify([scope, healthy, target, i18n?.resolvedLanguage])}
+        update={healthy ? update : undefined}
+        target={target}
+      />
     </div>
   )
 }

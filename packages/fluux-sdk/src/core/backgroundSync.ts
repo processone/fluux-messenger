@@ -41,8 +41,8 @@ import {
 import { executeWithConcurrency } from '../utils/concurrencyUtils'
 
 /**
- * How long a resumed session holds the "Updating..." step while it waits for
- * the server's replay of the stanzas queued during the outage.
+ * Maximum unknown-target replay wait after resumption. Known-target ingestion
+ * owns its scopes independently, including beyond this reception limit.
  */
 export const RESUME_REPLAY_LIMIT_MS = 10_000
 import {
@@ -71,10 +71,9 @@ import {
  *
  * On SM resumption (`'resumed'` event), rooms already caught up to live rely on
  * replayed stanzas. Only joined, inactive rooms that still need archive coverage
- * receive a resume seed query. The catch-up step stays up until the server
- * answers a round trip sent after the resume, which it does only once it has
- * replayed what it queued, and the encrypted replayed messages are decrypted,
- * or until RESUME_REPLAY_LIMIT_MS.
+ * receive a resume seed query. The public catch-up aggregate includes a bounded
+ * unknown-target replay wait. Actual targeted ingestion owns its local scopes
+ * through integration/decryption, independently of RESUME_REPLAY_LIMIT_MS.
  *
  * @param client - The client driving these side effects
  * @param options - Configuration options
@@ -98,9 +97,9 @@ export function setupBackgroundSyncSideEffects(
   // leaves, and rejoins can't re-query the archive repeatedly.
   const resumeSeededRooms = new Set<string>()
 
-  // "Updating..." owner held from the moment the connection is online until the
-  // catch-up owners below take over, so the step has no gap while the session
-  // is being prepared (inputs, MAM discovery).
+  // Unknown-target preparation uses the same owner as scoped retrieval. It
+  // preserves the public aggregate while inputs/MAM discovery arrive, without
+  // starting a local scope or a presentation deadline.
   let endSessionPrep: (() => void) | undefined
   function endSessionPreparation(): void {
     endSessionPrep?.()
@@ -223,7 +222,6 @@ export function setupBackgroundSyncSideEffects(
     }
     mamInFlightRooms.set(roomJid, reservation)
     const endUpdate = connectionStore.getState().beginUpdate([`room:${roomJid}`, 'rooms'])
-    const endCatchUp = connectionStore.getState().beginCatchUp()
     try {
       const caughtUp = await catchUpFreshSessionRoom(
         roomJid,
@@ -250,7 +248,6 @@ export function setupBackgroundSyncSideEffects(
       return false
     } finally {
       endUpdate()
-      endCatchUp()
       if (mamInFlightRooms.get(roomJid) === reservation) {
         mamInFlightRooms.delete(roomJid)
       }
@@ -355,7 +352,6 @@ export function setupBackgroundSyncSideEffects(
     resumeSeededRooms.add(roomJid)
     logInfo(`Background sync: SM resumption — catching up late-joined room ${roomJid}`)
     const endUpdate = connectionStore.getState().beginUpdate([`room:${roomJid}`, 'rooms'])
-    const endCatchUp = connectionStore.getState().beginCatchUp()
     try {
       await client.internal.mam.catchUpRoom(roomJid, sessionStartTime)
     } catch {
@@ -364,7 +360,6 @@ export function setupBackgroundSyncSideEffects(
       // the next session re-evaluates it from scratch.
     } finally {
       endUpdate()
-      endCatchUp()
     }
   }
 
@@ -474,11 +469,11 @@ export function setupBackgroundSyncSideEffects(
     const activeConversationId = chatStore.getState().activeConversationId
 
     // Serialized pipeline: catch-up → roster discovery → archived check
-    // Catch-up owners for the "Updating..." step: the serialized conversation
-    // pipeline and the delayed room pass (held across its 10 s delay so the step
-    // does not drop and reappear). They take over from session preparation.
-    const endPipelineCatchUp = connectionStore.getState().beginCatchUp()
-    const endRoomCatchUp = connectionStore.getState().beginCatchUp()
+    // Preserve the public aggregate across preparation, the serialized pipeline
+    // and the scheduled room pass. These unknown-target handles have no local
+    // scope; real list/target work below starts its own presentation deadlines.
+    const endPipelineCatchUp = connectionStore.getState().beginUpdate([])
+    const endRoomCatchUp = connectionStore.getState().beginUpdate([])
     endSessionPreparation()
 
     void (async () => {
@@ -597,7 +592,7 @@ export function setupBackgroundSyncSideEffects(
     if (connectionStore.getState().status !== 'online' || !client.isConnected()) return
     const features = connectionStore.getState().serverInfo?.features
     const supportsMAM = features?.includes(NS_MAM) ?? false
-    // Nothing will be fetched: don't hold the "Updating..." step open.
+    // No archive retrieval will run: release unknown-target preparation.
     if (features && !supportsMAM) endSessionPreparation()
     if (!supportsMAM) return
     triggerBackgroundSync()
@@ -623,9 +618,9 @@ export function setupBackgroundSyncSideEffects(
 
     // A cache-cleared resume upgraded to full setup: status is already online
     // (no transition to start preparation) and the resume pass may have
-    // released its owners, so hold the step until the fresh sync takes over.
+    // released its handles, so retain preparation until fresh sync takes over.
     if (followsUninterruptedResume && !endSessionPrep && connectionStore.getState().status === 'online') {
-      endSessionPrep = connectionStore.getState().beginCatchUp()
+      endSessionPrep = connectionStore.getState().beginUpdate([])
     }
 
     logInfo('Background sync: fresh session — waiting for MAM support and session inputs')
@@ -671,11 +666,11 @@ export function setupBackgroundSyncSideEffects(
     void client.retryPendingDecrypts()
 
     // The server replays the stanzas it queued during the outage right after
-    // the resume, and answers a new request only after them. Hold the step on
-    // that answer and on the decrypts it leaves running, bounded, so presence
-    // does not come back before the missed messages are in the store.
+    // the resume, and answers a new request only after them. Track this bounded
+    // unknown-target reception wait without local presentation. Known-target
+    // ingestion retains its own scopes through actual integration/decryption.
     endResumeReplay()
-    const endReplay = connectionStore.getState().beginCatchUp()
+    const endReplay = connectionStore.getState().beginUpdate([])
     endSessionPreparation()
     const release = () => {
       clearTimeout(replayLimit)
@@ -700,10 +695,9 @@ export function setupBackgroundSyncSideEffects(
     }
 
     logInfo(`Background sync: SM resumption — catching up ${eligible.length} not-caught-up room(s)`)
-    // One owner across the whole sequential pass, so the step does not drop
-    // between rooms.
+    // One list registration spans the sequential pass and derives the public
+    // aggregate too, without a second catch-up registration.
     const endListUpdate = connectionStore.getState().beginUpdate(['rooms'])
-    const endResumeCatchUp = connectionStore.getState().beginCatchUp()
     void (async () => {
       try {
         for (const room of eligible) {
@@ -712,7 +706,6 @@ export function setupBackgroundSyncSideEffects(
         }
       } finally {
         endListUpdate()
-        endResumeCatchUp()
       }
     })()
   })
@@ -738,13 +731,13 @@ export function setupBackgroundSyncSideEffects(
         endResumeReplay()
       }
       // A resumed session already ran its 'resumed' handler: nothing to prepare.
-      // Every other way online holds the step until the sync takes over: a
+      // Every other way online retains preparation until sync takes over: a
       // reconnect, and a saved session restored by a new client. A status that
       // flips straight from 'disconnected' to 'online' made no connection
       // attempt (the demo), so there is nothing to catch up on.
       if (status === 'online' && previousStatus !== 'online' && previousStatus !== 'disconnected' && !isResumedSession) {
         endSessionPreparation()
-        endSessionPrep = connectionStore.getState().beginCatchUp()
+        endSessionPrep = connectionStore.getState().beginUpdate([])
       }
       previousStatus = status
     }

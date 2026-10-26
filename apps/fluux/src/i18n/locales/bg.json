@@ -114,7 +114,6 @@
         "reconnectingStep": "Повторно свързване след {{seconds}}с",
         "connecting": "Свързване...",
         "verifying": "Проверка на връзката...",
-        "updating": "Актуализиране...",
         "retrievingMessages": "Извличане на съобщения…",
         "retrievingFor": "Извличане на съобщения за {{target}}",
         "retrievalEndedFor": "Извличането на съобщения за {{target}} приключи",

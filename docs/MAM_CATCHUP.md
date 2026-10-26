@@ -43,6 +43,12 @@ from 2 to 5 seconds, then a fixed icon until the final registration ends.
 There is no success timeout. Views select their own scope; mounting, navigation
 and unmounting do not schedule or reset update time.
 
+The same registration derives the public `isCatchingUp` and `catchUpStartedAt`
+aggregate. A producer never registers a separate catch-up handle alongside its
+scope handle. Unknown preparation or a scheduled pass uses `beginUpdate([])`:
+it preserves the public aggregate without creating a local scope or deadline.
+`beginCatchUp()` remains a compatibility alias for that empty-scope registration.
+
 Foreground cache hydration, targeted background catch-up and roster discovery
 register conversation/room work with the appropriate list. Preview-only work
 registers only its list. Scheduled room waits, unknown session preparation,
@@ -58,7 +64,10 @@ phase, then restore presence/topic beside the icon. Lists always keep their
 title and use only the icon. Its explanation is available by hover, keyboard
 activation and touch. Contextual accessible announcements describe the start
 and the end of displayed work; the end wording does not assert success after
-an error. Own presence and unrelated sections do not display retrieval work.
+an error. Each mounted announcement region observes only transitions for its
+current scope while healthy; changing scope or returning from verification does
+not replay an end stored by an earlier episode. Own presence and unrelated
+sections do not display retrieval work.
 Global reconnection and verification retain their separate presentation.
 
 Disconnect/reset cancels the owner's deadlines and invalidates old releases

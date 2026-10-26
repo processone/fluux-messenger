@@ -64,11 +64,11 @@ interface ConnectionState {
   status: ConnectionStatus
   /** True while the machine is in connected.verifying (wake verification in progress) */
   isVerifying: boolean
-  /** True while any post-connect catch-up owner is still running (see beginCatchUp) */
+  /** Derived from the same work handles as updates, including unknown-target preparation. */
   isCatchingUp: boolean
-  /** When the current global catch-up began (not a presentation deadline). */
+  /** Start of the aggregate work episode, retained until its last handle ends. */
   catchUpStartedAt: number | null
-  /** Running catch-up owners; the epoch invalidates owners of an ended session */
+  /** Registered work handles, counted once regardless of their number of scopes. */
   catchUpOwners: number
   catchUpEpoch: number
   jid: string | null
@@ -105,9 +105,9 @@ interface ConnectionState {
   setStatus: (status: ConnectionStatus) => void
   setIsVerifying: (isVerifying: boolean) => void
   /**
-   * Register one catch-up owner (a MAM fetch, session preparation, ...).
-   * `isCatchingUp` stays true until every owner has ended. Returns the owner's
-   * end function: idempotent, and a no-op once the session's owners were reset.
+   * Compatibility alias for beginUpdate([]), with no local presentation scope.
+   * Producers register once with beginUpdate(scopes); its handles also derive
+   * isCatchingUp and catchUpStartedAt. Old callers retain the same lifecycle.
    */
   beginCatchUp: () => () => void
   /** Drop every owner (the connection left online). */
@@ -230,7 +230,12 @@ export const connectionStore = createStore<ConnectionState>()(
         setTimeout(advance, 5000),
       ])
     }
-    set({ updates })
+    set({
+      updates,
+      catchUpOwners: get().catchUpOwners + 1,
+      isCatchingUp: true,
+      catchUpStartedAt: get().catchUpStartedAt ?? Date.now(),
+    })
     let ended = false
     return () => {
       if (ended || get().catchUpEpoch !== epoch) return
@@ -247,7 +252,13 @@ export const connectionStore = createStore<ConnectionState>()(
         } : {}) }
         if (owners === 0) clearUpdateTimers(scope)
       }
-      set({ updates })
+      const catchUpOwners = Math.max(0, get().catchUpOwners - 1)
+      set({
+        updates,
+        catchUpOwners,
+        isCatchingUp: catchUpOwners > 0,
+        catchUpStartedAt: catchUpOwners > 0 ? get().catchUpStartedAt : null,
+      })
     }
   },
   setStatus: (status) => {
@@ -255,25 +266,7 @@ export const connectionStore = createStore<ConnectionState>()(
     set({ status })
   },
   setIsVerifying: (isVerifying) => set({ isVerifying }),
-  beginCatchUp: () => {
-    const { catchUpEpoch, catchUpOwners, catchUpStartedAt } = get()
-    set({
-      isCatchingUp: true,
-      catchUpOwners: catchUpOwners + 1,
-      catchUpStartedAt: catchUpStartedAt ?? Date.now(),
-    })
-    let ended = false
-    return () => {
-      if (ended) return
-      ended = true
-      const state = get()
-      if (state.catchUpEpoch !== catchUpEpoch) return
-      const owners = Math.max(0, state.catchUpOwners - 1)
-      set(owners === 0
-        ? { catchUpOwners: 0, isCatchingUp: false, catchUpStartedAt: null }
-        : { catchUpOwners: owners })
-    }
-  },
+  beginCatchUp: () => get().beginUpdate([]),
   resetCatchUp: () => {
     clearUpdateTimers()
     set({

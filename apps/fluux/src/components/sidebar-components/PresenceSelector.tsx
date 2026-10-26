@@ -287,13 +287,6 @@ export function StatusDisplay({ status }: StatusDisplayProps) {
         <span className="truncate">{t('status.verifying')}</span>
       </p>
     )
-  } else if (status === 'updating') {
-    statusLine = (
-      <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
-        <RefreshCw className="size-3 animate-spin flex-shrink-0" />
-        <span className="truncate">{t('status.updating')}</span>
-      </p>
-    )
   } else if (status === 'connecting') {
     statusLine = (
       <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">

@@ -116,7 +116,6 @@
         "reconnectingStep": "Erneuter Verbindungsversuch in {{seconds}}s",
         "connecting": "Verbinden...",
         "verifying": "Verbindung wird überprüft...",
-        "updating": "Aktualisieren...",
         "retrievingMessages": "Nachrichten werden abgerufen…",
         "retrievingFor": "Nachrichten für {{target}} werden abgerufen",
         "retrievalEndedFor": "Der Nachrichtenabruf für {{target}} ist beendet",

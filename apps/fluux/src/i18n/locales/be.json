@@ -114,7 +114,6 @@
         "reconnectingStep": "Перападключэнне праз {{seconds}}с",
         "connecting": "Падключэнне...",
         "verifying": "Праверка падключэння...",
-        "updating": "Абнаўленне...",
         "retrievingMessages": "Атрыманне паведамленняў…",
         "retrievingFor": "Атрыманне паведамленняў для {{target}}",
         "retrievalEndedFor": "Атрыманне паведамленняў для {{target}} скончылася",

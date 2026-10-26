@@ -116,7 +116,6 @@
         "reconnectingStep": "Reconnectant en {{seconds}}s",
         "connecting": "Connectant...",
         "verifying": "Verificant connexió...",
-        "updating": "Actualitzant...",
         "retrievingMessages": "S’estan recuperant els missatges…",
         "retrievingFor": "S’estan recuperant els missatges de {{target}}",
         "retrievalEndedFor": "La recuperació dels missatges de {{target}} ha acabat",

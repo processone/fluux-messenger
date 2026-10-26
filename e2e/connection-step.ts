@@ -31,8 +31,8 @@ const setConnection = (page: Page, status: string, attempt = 0, targetInMs: numb
   }, [status, attempt, targetInMs] as const)
 
 // The demo never receives the session inputs that end the SDK's session
-// preparation (it holds the "Updating..." step for up to its time limit), so the
-// plain online-return checks end it the way the finished sync would.
+// preparation. Its unknown-target handle affects only the public aggregate;
+// plain online-return checks release it the way finished sync would.
 const finishSync = (page: Page) =>
   page.evaluate(() => (window as W).__connectionStore!.getState().resetCatchUp())
 
@@ -198,6 +198,32 @@ for (const vp of VIEWPORTS) {
         await expect(header.getByTestId('update-icon')).toHaveCount(0)
         await expect(header.getByTestId('update-announcement')).toContainText(`Message retrieval ended for ${name}`)
         await stable()
+
+        // FLM-171 F1: a short verification must not replay the retained end.
+        await page.evaluate(() => (window as W).__connectionStore!.getState().setIsVerifying(true))
+        await page.waitForTimeout(250)
+        await page.evaluate(() => (window as W).__connectionStore!.getState().setIsVerifying(false))
+        await expect(header.getByTestId('update-announcement')).toHaveText('')
+
+        // ChatHeader and RoomHeader reuse their component instance across targets.
+        const otherName = view === 'chat' ? 'Sophia Chen' : 'Design Review'
+        if (vp.label === 'iphone') await page.getByRole('button', { name: /back/i }).first().click()
+        await page.getByTestId('sidebar-pane').getByText(otherName, { exact: true }).first().click()
+        await expect(header).toContainText(otherName)
+        await expect(header.getByTestId('update-announcement')).toHaveText('')
+        if (vp.label === 'iphone') await page.getByRole('button', { name: /back/i }).first().click()
+        await page.getByTestId('sidebar-pane').getByText(name, { exact: true }).first().click()
+        await expect(header).toContainText(name)
+        await expect(header.getByTestId('update-announcement')).toHaveText('')
+
+        // Completion during verification is also historical on healthy return.
+        await begin([scope])
+        await expect(header.getByTestId('update-text')).toBeVisible({ timeout: 3000 })
+        await page.evaluate(() => (window as W).__connectionStore!.getState().setIsVerifying(true))
+        await end()
+        await page.waitForTimeout(250)
+        await page.evaluate(() => (window as W).__connectionStore!.getState().setIsVerifying(false))
+        await expect(header.getByTestId('update-announcement')).toHaveText('')
         info.annotations.push({ type: 'scoped-update', description: `${vp.label} ${view}: ${baseline}px; own scope start unchanged; no 15-second expiry` })
       })
     }
@@ -222,6 +248,14 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator('header').last().getByTestId('update-icon')).toHaveCount(0)
       await expect(page.getByTestId('connection-step')).toHaveCount(0)
       await page.evaluate(() => (window as W).__owners!.shift()!())
+      // FLM-171 F1: returning to a completed list, including via Contacts,
+      // must not turn its historical snapshot into a new completion event.
+      await page.locator('[data-nav="rooms"]').click()
+      await expect(bar.getByTestId('update-announcement')).toHaveText('')
+      await page.locator('[data-nav="contacts"]').click()
+      await expect(bar.getByTestId('update-announcement')).toHaveText('')
+      await page.locator('[data-nav="rooms"]').click()
+      await expect(bar.getByTestId('update-announcement')).toHaveText('')
     })
 
     test('list title shows the step on narrow screens only', async ({ page }) => {

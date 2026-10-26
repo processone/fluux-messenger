@@ -114,7 +114,6 @@
         "reconnectingStep": "Ponovno povezivanje za {{seconds}}s",
         "connecting": "Povezivanje...",
         "verifying": "Provjera veze...",
-        "updating": "Ažuriranje...",
         "retrievingMessages": "Dohvaćanje poruka…",
         "retrievingFor": "Dohvaćanje poruka za {{target}}",
         "retrievalEndedFor": "Dohvaćanje poruka za {{target}} je završilo",

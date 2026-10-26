@@ -78,6 +78,66 @@ describe('read-only scoped update display', () => {
     end()
   })
 
+  // FLM-171 F1: navigation and wake verification must not replay completion
+  // left in the owner's latest snapshot by an earlier retrieval episode.
+  it.each([
+    ['chat:other@fluux.chat', 'chat:emma@fluux.chat'],
+    ['room:other@conference.fluux.chat', 'room:team@conference.fluux.chat'],
+    ['messages', 'rooms'],
+    ['rooms', 'messages'],
+  ] as const)('does not announce stale completion when %s switches to %s', (away, completed) => {
+    const end = connectionStore.getState().beginUpdate([completed])
+    act(() => vi.advanceTimersByTime(2500))
+    end()
+    const view = render(<UpdateStatus scope={away} target="Away">Away</UpdateStatus>)
+    view.rerender(<UpdateStatus scope={completed} target="Completed">Online</UpdateStatus>)
+    expect(screen.getByRole('status').textContent).toBe('')
+    view.rerender(<UpdateStatus target="Contacts">Contacts</UpdateStatus>)
+    view.rerender(<UpdateStatus scope={completed} target="Completed">Online</UpdateStatus>)
+    expect(screen.getByRole('status').textContent).toBe('')
+
+    let nextEnd!: () => void
+    act(() => { nextEnd = connectionStore.getState().beginUpdate([completed]) })
+    act(() => vi.advanceTimersByTime(2000))
+    expect(screen.getByRole('status').textContent).toBe('status.retrievingFor: Completed')
+    act(nextEnd)
+    expect(screen.getByRole('status').textContent).toBe('status.retrievalEndedFor: Completed')
+  })
+
+  it.each([true, false])('does not replay completion on healthy return (ended before verification: %s)', endedBefore => {
+    const end = begin()
+    render(chat)
+    act(() => vi.advanceTimersByTime(2500))
+    if (endedBefore) act(end)
+    act(() => connectionStore.getState().setIsVerifying(true))
+    if (!endedBefore) act(end)
+    act(() => vi.advanceTimersByTime(1000)) // shorter than the reconnect grace
+    act(() => connectionStore.getState().setIsVerifying(false))
+    expect(screen.getByRole('status').textContent).toBe('')
+  })
+
+  it('observes a new end after healthy return without replaying the existing start', () => {
+    const end = begin()
+    render(chat)
+    act(() => vi.advanceTimersByTime(2500))
+    act(() => connectionStore.getState().setIsVerifying(true))
+    act(() => vi.advanceTimersByTime(1000))
+    act(() => connectionStore.getState().setIsVerifying(false))
+    expect(screen.getByRole('status').textContent).toBe('')
+    act(end)
+    expect(screen.getByRole('status').textContent).toBe('status.retrievalEndedFor: Emma')
+  })
+
+  it('does not announce an end when no active snapshot was committed to this view', () => {
+    render(chat)
+    act(() => {
+      const end = begin()
+      vi.advanceTimersByTime(2500)
+      end()
+    })
+    expect(screen.getByRole('status').textContent).toBe('')
+  })
+
   it('gives degraded connection/error states priority without announcing successful retrieval', () => {
     begin()
     render(chat)

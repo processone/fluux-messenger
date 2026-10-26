@@ -116,7 +116,6 @@
         "reconnectingStep": "Taasühendamine {{seconds}}s pärast",
         "connecting": "Ühendamine...",
         "verifying": "Ühenduse kontrollimine...",
-        "updating": "Värskendamine...",
         "retrievingMessages": "Sõnumite toomine…",
         "retrievingFor": "Sõnumite toomine: {{target}}",
         "retrievalEndedFor": "Sõnumite toomine lõppes: {{target}}",
