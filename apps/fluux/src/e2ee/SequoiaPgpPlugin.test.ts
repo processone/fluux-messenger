@@ -2914,17 +2914,24 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     /**
-     * Holds the next read of `account`'s key list until `release()`, as a
-     * slow network does. The server answers with what it held when the read
-     * was sent, or when it is released.
+     * Holds the next read of `account`'s key list (or of its key data) until
+     * `release()`, as a slow network does. The server answers with what it
+     * held when the read was sent, or when it is released.
      */
-    const holdKeyListRead = (built: Built, account: string, answers: 'when-sent' | 'when-released') => {
+    const holdKeyRead = (
+      built: Built,
+      account: string,
+      answers: 'when-sent' | 'when-released',
+      of: 'key list' | 'key data' = 'key list',
+    ) => {
       const read = built.ctx.xmpp.queryPEP
       let release!: () => void
       const released = new Promise<void>((resolve) => { release = resolve })
       let taken = false
+      const held = (node: string) =>
+        of === 'key list' ? node === METADATA_NODE : node.startsWith(`${METADATA_NODE}:`)
       built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
-        if (taken || jid !== account || node !== METADATA_NODE) return read(jid, node, maxItems)
+        if (taken || jid !== account || !held(node)) return read(jid, node, maxItems)
         taken = true
         const early = answers === 'when-sent' ? await read(jid, node, maxItems) : null
         await released
@@ -2984,7 +2991,7 @@ describe('SequoiaPgpPlugin', () => {
         run: (s: Setup) => s.device.resolveOwnKeyConflict_overwriteServer() },
     ])('leaves encryption unblocked after $change', async ({ setUp, answers, run }) => {
       const setup = await setUp()
-      const read = holdKeyListRead(setup.built, ME, answers)
+      const read = holdKeyRead(setup.built, ME, answers)
       setup.device.onReconnected({ resumed: true })
       await vi.waitFor(() => expect(read.taken()).toBe(true))
 
@@ -2999,7 +3006,7 @@ describe('SequoiaPgpPlugin', () => {
     it("leaves the next account's conflict in place after a log out", async () => {
       const OTHER = 'other@example.com'
       const { built } = await publishedKey()
-      const read = holdKeyListRead(built, ME, 'when-released')
+      const read = holdKeyRead(built, ME, 'when-released')
       plugin.onReconnected({ resumed: true })
       await vi.waitFor(() => expect(read.taken()).toBe(true))
       await plugin.shutdown()
@@ -3015,6 +3022,82 @@ describe('SequoiaPgpPlugin', () => {
       read.release()
       await reconnectWork(plugin)
       expect(getOwnKeyConflict()).toBe(conflict)
+    })
+
+    // FLM-157 review of round 3: a check that starts while our key is already
+    // changing reads what the server held before the change published, so
+    // its verdict must not be written either, whether it ends after the
+    // change (a pending conflict overwrite put the conflict back) or before.
+    describe('when the check starts while the change is publishing', () => {
+      /** Holds `account`'s next publication of its public key until `release()`. */
+      const holdKeyPublication = (built: Built) => {
+        const publish = built.ctx.xmpp.publishPEP
+        let release!: () => void
+        const released = new Promise<void>((resolve) => { release = resolve })
+        let taken = false
+        built.ctx.xmpp.publishPEP = async (node, item, options) => {
+          if (taken || !node.startsWith(METADATA_NODE)) return publish(node, item, options)
+          taken = true
+          await released
+          return publish(node, item, options)
+        }
+        return { taken: () => taken, release }
+      }
+
+      /** Starts `run` and waits until it is publishing our key. */
+      const changePublishing = async (setup: Setup, run: (s: Setup) => Promise<unknown>) => {
+        const publication = holdKeyPublication(setup.built)
+        const change = run(setup)
+        await vi.waitFor(() => expect(publication.taken()).toBe(true))
+        return { change, release: publication.release }
+      }
+
+      // Each swaps our key before publishing it. A rotation keeps our
+      // fingerprint in the key list, so the check judges it by the key data.
+      const keyChanges = [
+        { change: 'a rotation', setUp: publishedKey, judgedBy: 'key data' as const,
+          run: (s: Setup) => s.device.rotateEncryptionKey() },
+        { change: 'a restore from the server backup', setUp: otherKeyInBackup, judgedBy: 'key list' as const,
+          run: (s: Setup) => s.device.restoreSecretKey('shared-pp') },
+        { change: 'an import from a file', setUp: otherKeyInBackup, judgedBy: 'key list' as const,
+          run: (s: Setup) => s.device.importKeyFromFile(s.backup!, 'shared-pp') },
+      ]
+      const overwrite = { change: 'overwriting the server to resolve a conflict', setUp: conflictShown,
+        judgedBy: 'key list' as const, run: (s: Setup) => s.device.resolveOwnKeyConflict_overwriteServer() }
+
+      it.each([...keyChanges, overwrite])(
+        'leaves encryption unblocked when the check ends after $change',
+        async ({ setUp, judgedBy, run }) => {
+          const setup = await setUp()
+          const { change, release } = await changePublishing(setup, run)
+          // The check reads what the server holds before the change publishes it.
+          const read = holdKeyRead(setup.built, ME, 'when-sent', judgedBy)
+          setup.device.onReconnected({ resumed: true })
+          await vi.waitFor(() => expect(read.taken()).toBe(true))
+
+          release()
+          expect(await change ?? {}).not.toHaveProperty('needsPicker')
+          read.release()
+          await reconnectWork(setup.device)
+
+          expect(getOwnKeyConflict()).toBeNull()
+        },
+      )
+
+      it.each(keyChanges)(
+        'leaves encryption unblocked when the check ends while $change is publishing',
+        async ({ setUp, run }) => {
+          const setup = await setUp()
+          const { change, release } = await changePublishing(setup, run)
+          setup.device.onReconnected({ resumed: true })
+          await reconnectWork(setup.device)
+
+          release()
+          expect(await change ?? {}).not.toHaveProperty('needsPicker')
+
+          expect(getOwnKeyConflict()).toBeNull()
+        },
+      )
     })
   })
 

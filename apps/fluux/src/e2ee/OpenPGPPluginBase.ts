@@ -505,11 +505,14 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   // time, so a run cut short by another drop is followed by the next one.
   private reconnectResync: Promise<void> = Promise.resolve()
 
-  // Counts operations that change our own key, or what the server publishes
-  // for it: rotate, restore or import, replace, resolve a conflict, log out.
-  // A check of the published key that started before one of them must not
-  // write its verdict (see `checkOwnPublishedKeyConsistency`).
+  // Operations that change our own key, or what the server publishes for it
+  // (rotate, restore or import, replace, resolve a conflict, delete, log out),
+  // advance this count when they start and again when they end, and are
+  // counted in `runningOwnKeyOperations` while under way. A check of the
+  // published key that overlaps one of them must not write its verdict (see
+  // `checkOwnPublishedKeyConsistency`).
   private ownKeyOperations = 0
+  private runningOwnKeyOperations = 0
 
   protected now: () => number = () => Date.now()
 
@@ -920,17 +923,18 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * must call {@link retractPublicKeys} FIRST while the session is live.
    */
   async deleteIdentity(): Promise<void> {
-    this.ownKeyOperations++
-    const accountJid = this.ctx?.account.jid
-    if (accountJid) {
-      await this.forgetAccount(accountJid).catch(() => {})
-      clearBackedUpFingerprint(accountJid)
-      clearPeerKeyCache(accountJid)
-    }
-    this.ownBundle = null
-    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
-    this.peerKeys.clear()
-    this.clearKeysetSessionState()
+    return this.ownKeyOperation(async () => {
+      const accountJid = this.ctx?.account.jid
+      if (accountJid) {
+        await this.forgetAccount(accountJid).catch(() => {})
+        clearBackedUpFingerprint(accountJid)
+        clearPeerKeyCache(accountJid)
+      }
+      this.ownBundle = null
+      if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
+      this.peerKeys.clear()
+      this.clearKeysetSessionState()
+    })
   }
 
   // ---------------------------------------------------------------------------
@@ -1017,64 +1021,64 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       )
     }
     const previousFingerprint = this.ownBundle.fingerprint
-    this.ownKeyOperations++
-
-    let bundle: KeyBundle
-    try {
-      bundle = await this.rotateKeyMaterial(ctx.account.jid)
-    } catch (err) {
-      throw this.toPluginError('rotateEncryptionKey', err)
-    }
-
-    if (!fingerprintsEqual(bundle.fingerprint, previousFingerprint)) {
-      throw new Error(
-        `${this.pluginName()}: rotation produced new fingerprint ${bundle.fingerprint} (expected stable ${previousFingerprint})`,
-      )
-    }
-    this.ownBundle = bundle
-    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
-
-    try {
-      await this.publishOwnPublicKeyData(bundle)
-      await this.publishOwnPublicKeyMetadata(bundle)
-    } catch (err) {
-      ctx.logger.warn(
-        `${this.pluginName()}: rotated key publish failed: ${formatError(err)}`,
-      )
-    }
-
-    // The two publishes above and the one below look alike but are not.
-    // `ensureIdentity` and `onReconnected` re-publish the public key on every
-    // connection, so a failure there self-heals and a warning is the honest
-    // response.
-    //
-    // Nothing ever retries the backup. The caller only supplies a passphrase
-    // when re-publishing the backup IS the operation — the user has just been
-    // shown that passphrase and told to write it down — and the passphrase
-    // stops existing the moment the dialog closes. Reporting success here
-    // sends the user away guarding a backup that was never published.
-    if (backupPassphrase !== undefined) {
+    return this.ownKeyOperation(async () => {
+      let bundle: KeyBundle
       try {
-        await this.backupSecretKey(backupPassphrase)
+        bundle = await this.rotateKeyMaterial(ctx.account.jid)
       } catch (err) {
-        ctx.logger.error(
-          `${this.pluginName()}: rotated backup publish failed: ${formatError(err)}`,
-        )
-        // Reuse the boundary classification so a network blip stays
-        // transient and the app's retry semantics are unchanged, but pin the
-        // code: the rotation above is committed, and the app has to be able
-        // to say so instead of reporting a rotation that never happened.
-        const classified = this.toPluginError('rotateEncryptionKey', err)
-        throw new E2EEPluginError(
-          classified.kind,
-          'backup-publish-failed',
-          `${this.pluginName()}: key rotated, but publishing the new backup failed: ${formatError(err)}`,
-          err,
+        throw this.toPluginError('rotateEncryptionKey', err)
+      }
+
+      if (!fingerprintsEqual(bundle.fingerprint, previousFingerprint)) {
+        throw new Error(
+          `${this.pluginName()}: rotation produced new fingerprint ${bundle.fingerprint} (expected stable ${previousFingerprint})`,
         )
       }
-    }
+      this.ownBundle = bundle
+      if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
 
-    return { fingerprint: bundle.fingerprint }
+      try {
+        await this.publishOwnPublicKeyData(bundle)
+        await this.publishOwnPublicKeyMetadata(bundle)
+      } catch (err) {
+        ctx.logger.warn(
+          `${this.pluginName()}: rotated key publish failed: ${formatError(err)}`,
+        )
+      }
+
+      // The two publishes above and the one below look alike but are not.
+      // `ensureIdentity` and `onReconnected` re-publish the public key on every
+      // connection, so a failure there self-heals and a warning is the honest
+      // response.
+      //
+      // Nothing ever retries the backup. The caller only supplies a passphrase
+      // when re-publishing the backup IS the operation — the user has just been
+      // shown that passphrase and told to write it down — and the passphrase
+      // stops existing the moment the dialog closes. Reporting success here
+      // sends the user away guarding a backup that was never published.
+      if (backupPassphrase !== undefined) {
+        try {
+          await this.backupSecretKey(backupPassphrase)
+        } catch (err) {
+          ctx.logger.error(
+            `${this.pluginName()}: rotated backup publish failed: ${formatError(err)}`,
+          )
+          // Reuse the boundary classification so a network blip stays
+          // transient and the app's retry semantics are unchanged, but pin the
+          // code: the rotation above is committed, and the app has to be able
+          // to say so instead of reporting a rotation that never happened.
+          const classified = this.toPluginError('rotateEncryptionKey', err)
+          throw new E2EEPluginError(
+            classified.kind,
+            'backup-publish-failed',
+            `${this.pluginName()}: key rotated, but publishing the new backup failed: ${formatError(err)}`,
+            err,
+          )
+        }
+      }
+
+      return { fingerprint: bundle.fingerprint }
+    })
   }
 
   /**
@@ -1109,65 +1113,65 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    */
   async retireAndGenerateIdentity(): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
-    this.ownKeyOperations++
-
-    let publishedFingerprints: string[] = []
-    try {
-      publishedFingerprints = await probeRemotePublishedFingerprints(
-        this.requireCtx().xmpp.queryPEP,
-        ctx.account.jid,
-      )
-    } catch (err) {
-      ctx.logger.debug(
-        `${this.pluginName()}: enumerate published fingerprints during retire failed: ${formatError(err)}`,
-      )
-    }
-
-    await ctx.xmpp
-      .retractPEP(PUBLIC_KEYS_METADATA_NODE, CURRENT_ITEM_ID)
-      .catch((err) => {
-        ctx.logger.debug(
-          `${this.pluginName()}: retract metadata during retire failed: ${formatError(err)}`,
+    return this.ownKeyOperation(async () => {
+      let publishedFingerprints: string[] = []
+      try {
+        publishedFingerprints = await probeRemotePublishedFingerprints(
+          this.requireCtx().xmpp.queryPEP,
+          ctx.account.jid,
         )
-      })
-    for (const fp of publishedFingerprints) {
-      await this.retractPublicKeyDataNode(fp)
-    }
+      } catch (err) {
+        ctx.logger.debug(
+          `${this.pluginName()}: enumerate published fingerprints during retire failed: ${formatError(err)}`,
+        )
+      }
 
-    await this.forgetAccount(ctx.account.jid).catch(() => {})
-    this.ownBundle = null
-    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
+      await ctx.xmpp
+        .retractPEP(PUBLIC_KEYS_METADATA_NODE, CURRENT_ITEM_ID)
+        .catch((err) => {
+          ctx.logger.debug(
+            `${this.pluginName()}: retract metadata during retire failed: ${formatError(err)}`,
+          )
+        })
+      for (const fp of publishedFingerprints) {
+        await this.retractPublicKeyDataNode(fp)
+      }
 
-    this._allowSilentRegenerate = true
-    let bundle: KeyBundle
-    try {
-      bundle = await this.ensureKeyMaterial(ctx.account.jid)
-    } finally {
-      this._allowSilentRegenerate = false
-    }
-    this.ownBundle = bundle
-    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
+      await this.forgetAccount(ctx.account.jid).catch(() => {})
+      this.ownBundle = null
+      if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
 
-    try {
-      await this.publishOwnPublicKeyData(bundle)
-      // The retired identity's fingerprints must leave the list — we just
-      // retracted their data nodes and forgot their secret material.
-      await this.publishOwnPublicKeyMetadata(bundle, publishedFingerprints)
-    } catch (err) {
-      ctx.logger.warn(
-        `${this.pluginName()}: retire publish failed: ${formatError(err)}`,
-      )
-    }
+      this._allowSilentRegenerate = true
+      let bundle: KeyBundle
+      try {
+        bundle = await this.ensureKeyMaterial(ctx.account.jid)
+      } finally {
+        this._allowSilentRegenerate = false
+      }
+      this.ownBundle = bundle
+      if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
 
-    clearOwnKeyConflict()
+      try {
+        await this.publishOwnPublicKeyData(bundle)
+        // The retired identity's fingerprints must leave the list — we just
+        // retracted their data nodes and forgot their secret material.
+        await this.publishOwnPublicKeyMetadata(bundle, publishedFingerprints)
+      } catch (err) {
+        ctx.logger.warn(
+          `${this.pluginName()}: retire publish failed: ${formatError(err)}`,
+        )
+      }
 
-    // The replacement identity is usable now; the retired [E] subkey is kept
-    // locally so history stays decryptable. Re-run deferred decrypts so any
-    // still-stashed messages are recovered immediately.
-    ctx.notifyKeyUnlocked?.()
-    this.reverifyTrustStateAfterKeyChange()
+      clearOwnKeyConflict()
 
-    return { fingerprint: bundle.fingerprint }
+      // The replacement identity is usable now; the retired [E] subkey is kept
+      // locally so history stays decryptable. Re-run deferred decrypts so any
+      // still-stashed messages are recovered immediately.
+      ctx.notifyKeyUnlocked?.()
+      this.reverifyTrustStateAfterKeyChange()
+
+      return { fingerprint: bundle.fingerprint }
+    })
   }
 
   /**
@@ -1522,61 +1526,64 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   ): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
     const previousFingerprint = this.ownBundle?.fingerprint
-    this.ownKeyOperations++
-    let bundle: KeyBundle
-    try {
-      bundle = await this.backupImportSelected(
-        ctx.account.jid,
-        backupMessage,
-        passphrase,
-        fingerprint,
-      )
-    } catch (err) {
-      throw this.toPluginError('installKey', err)
-    }
-    this.ownBundle = bundle
-    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
-    writeBackedUpFingerprint(ctx.account.jid, bundle.fingerprint)
-
-    try {
-      await this.publishOwnPublicKeyData(bundle)
-      // The key we just replaced is no longer ours to decrypt with, so it must
-      // not stay advertised — but any SIBLING device's entry has to survive.
-      await this.publishOwnPublicKeyMetadata(
-        bundle,
-        previousFingerprint ? [previousFingerprint] : [],
-      )
-      if (previousFingerprint) {
-        await this.retractStalePublicKeyDataNode(previousFingerprint, bundle.fingerprint)
+    return this.ownKeyOperation(async () => {
+      let bundle: KeyBundle
+      try {
+        bundle = await this.backupImportSelected(
+          ctx.account.jid,
+          backupMessage,
+          passphrase,
+          fingerprint,
+        )
+      } catch (err) {
+        throw this.toPluginError('installKey', err)
       }
-    } catch (err) {
-      ctx.logger.warn(
-        `${this.pluginName()}: public key publish after install failed: ${formatError(err)}`,
-      )
-    }
+      this.ownBundle = bundle
+      if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
+      writeBackedUpFingerprint(ctx.account.jid, bundle.fingerprint)
 
-    // The key just became usable (restore / file import / picker). Tell the
-    // host so it re-runs deferred decrypts immediately — otherwise messages
-    // stashed while the key was absent stay "could not be decrypted" until an
-    // unrelated trigger (reconnect, app restart) re-registers the plugin.
-    ctx.notifyKeyUnlocked?.()
-    this.reverifyTrustStateAfterKeyChange()
+      try {
+        await this.publishOwnPublicKeyData(bundle)
+        // The key we just replaced is no longer ours to decrypt with, so it must
+        // not stay advertised — but any SIBLING device's entry has to survive.
+        await this.publishOwnPublicKeyMetadata(
+          bundle,
+          previousFingerprint ? [previousFingerprint] : [],
+        )
+        if (previousFingerprint) {
+          await this.retractStalePublicKeyDataNode(previousFingerprint, bundle.fingerprint)
+        }
+      } catch (err) {
+        ctx.logger.warn(
+          `${this.pluginName()}: public key publish after install failed: ${formatError(err)}`,
+        )
+      }
 
-    return { fingerprint: bundle.fingerprint }
+      // The key just became usable (restore / file import / picker). Tell the
+      // host so it re-runs deferred decrypts immediately — otherwise messages
+      // stashed while the key was absent stay "could not be decrypted" until an
+      // unrelated trigger (reconnect, app restart) re-registers the plugin.
+      ctx.notifyKeyUnlocked?.()
+      this.reverifyTrustStateAfterKeyChange()
+
+      return { fingerprint: bundle.fingerprint }
+    })
   }
 
   async resolveOwnKeyConflict_overwriteServer(): Promise<void> {
-    if (!this.ownBundle) {
+    const bundle = this.ownBundle
+    if (!bundle) {
       throw new E2EEPluginError(
         'permanent',
         'no-identity',
         `${this.pluginName()}: cannot overwrite server before ensureIdentity has completed`,
       )
     }
-    this.ownKeyOperations++
-    await this.publishOwnPublicKeyData(this.ownBundle)
-    await this.publishOwnPublicKeyMetadata(this.ownBundle)
-    clearOwnKeyConflict()
+    return this.ownKeyOperation(async () => {
+      await this.publishOwnPublicKeyData(bundle)
+      await this.publishOwnPublicKeyMetadata(bundle)
+      clearOwnKeyConflict()
+    })
   }
 
   async resolveOwnKeyConflict_importFromServer(passphrase: string): Promise<IdentityInfo> {
@@ -1689,15 +1696,33 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   /**
+   * Run `operation`, which changes our own key or what the server publishes
+   * for it, so that no check of the published key overlapping it writes a
+   * verdict (see `checkOwnPublishedKeyConsistency`).
+   */
+  private async ownKeyOperation<T>(operation: () => Promise<T>): Promise<T> {
+    this.ownKeyOperations++
+    this.runningOwnKeyOperations++
+    try {
+      return await operation()
+    } finally {
+      this.runningOwnKeyOperations--
+      this.ownKeyOperations++
+    }
+  }
+
+  /**
    * Compare what the server publishes for our account with `bundle`, our
    * key when the check started, and record or clear the own-key conflict.
    *
    * The verdict is written only while it still describes our key: the same
-   * account, the same key, and no own-key operation since the check started
-   * (rotate, restore or import, replace, resolve a conflict, log out). An
-   * older check that lands later would compare the server's new key with
-   * the old one and block encryption for nothing, or clear a conflict found
-   * since; it reports `outdated` and writes nothing.
+   * account, the same key, and no own-key operation (rotate, restore or
+   * import, replace, resolve a conflict, delete, log out) started, ended or
+   * under way while the check read the server. A check that overlaps one
+   * would compare the server's old or new key with the wrong one and block
+   * encryption for nothing, or undo the operation's conflict decision; it
+   * reports `outdated` and writes nothing, and the operation publishes what
+   * it needs.
    */
   private async checkOwnPublishedKeyConsistency(
     bundle: KeyBundle,
@@ -1705,7 +1730,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const ctx = this.requireCtx()
     const operations = this.ownKeyOperations
     const settle = (conflict: OwnKeyConflict | null): OwnKeyCheckVerdict => {
-      if (this.ctx !== ctx || this.ownBundle !== bundle || this.ownKeyOperations !== operations) {
+      if (
+        this.ctx !== ctx ||
+        this.ownBundle !== bundle ||
+        this.ownKeyOperations !== operations ||
+        this.runningOwnKeyOperations > 0
+      ) {
         return 'outdated'
       }
       if (!conflict) {
