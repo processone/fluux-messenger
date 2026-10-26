@@ -520,6 +520,7 @@ export function setupBackgroundSyncSideEffects(
       roomCatchUpTimer = undefined
       endRoomTimerOwner = undefined // the pass below now owns its release
       void (async () => {
+        const endListUpdate = connectionStore.getState().beginUpdate(['rooms'])
         try {
           logInfo('Background sync: room catch-up (delayed 10s)')
           // Only rooms that confirmed a join during THIS fresh session are
@@ -550,6 +551,7 @@ export function setupBackgroundSyncSideEffects(
           initialRoomPassDone = true
           await reconcileFreshSessionRooms(syncGeneration)
         } finally {
+          endListUpdate()
           endRoomCatchUp()
         }
         if (syncGeneration !== sessionGeneration) return
@@ -696,6 +698,7 @@ export function setupBackgroundSyncSideEffects(
     logInfo(`Background sync: SM resumption — catching up ${eligible.length} not-caught-up room(s)`)
     // One owner across the whole sequential pass, so the step does not drop
     // between rooms.
+    const endListUpdate = connectionStore.getState().beginUpdate(['rooms'])
     const endResumeCatchUp = connectionStore.getState().beginCatchUp()
     void (async () => {
       try {
@@ -704,6 +707,7 @@ export function setupBackgroundSyncSideEffects(
           await seedResumeRoomOnce(room.jid, resumeGeneration)
         }
       } finally {
+        endListUpdate()
         endResumeCatchUp()
       }
     })()

@@ -1391,7 +1391,7 @@ describe('scoped retrieval through archive integration', () => {
       h.resolveNextIQ(xml('iq', { type: 'result' }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })))
       await decrypting
       expect(connectionStore.getState().updates[`${kind}:${peer}`]?.owners ?? 0).toBe(operation === 'catchup' ? 1 : 0)
-      expect(connectionStore.getState().updates[kind === 'chat' ? 'messages' : 'rooms']?.owners).toBe(1)
+      expect(connectionStore.getState().updates[kind === 'chat' ? 'messages' : 'rooms']?.owners).toBeGreaterThan(0)
       expect(h.emitted.some(e => e.event === (kind === 'chat' ? 'chat:history-messages' : 'room:history-messages'))).toBe(false)
       unblock()
       await work
@@ -1441,4 +1441,38 @@ describe('retrieval scope negative controls (FLM-168)', () => {
     expect(stores.connection.beginUpdate).not.toHaveBeenCalled()
     expect(connectionStore.getState().updates).toEqual({})
   })
+})
+
+
+it('keeps one list episode across sequential preview targets (FLM-168)', async () => {
+  vi.useFakeTimers()
+  connectionStore.getState().reset()
+  const manager = await makeManagerWithDummyPlugin('me@example.com')
+  const stores = createMockStores()
+  stores.connection.beginUpdate.mockImplementation(connectionStore.getState().beginUpdate)
+  stores.chat.getAllConversations.mockReturnValue([{ id: 'emma@example.com' }, { id: 'bob@example.com' }] as never)
+  const h = makeHarness({ jid: 'me@example.com', manager, stores })
+  let first!: () => void
+  let second!: () => void
+  let enteredSecond!: () => void
+  const secondStarted = new Promise<void>(resolve => { enteredSecond = resolve })
+  const firstWork = new Promise<void>(resolve => { first = resolve })
+  const secondWork = new Promise<void>(resolve => { second = resolve })
+  vi.spyOn(h.mam as unknown as { fetchPreviewForConversation: (id: string) => Promise<void> }, 'fetchPreviewForConversation')
+    .mockImplementation(id => { if (id === 'emma@example.com') return firstWork; enteredSecond(); return secondWork })
+  const work = h.mam.refreshConversationPreviews({ concurrency: 1 })
+  try {
+    const start = connectionStore.getState().updates.messages!.startedAt
+    await vi.advanceTimersByTimeAsync(2200)
+    first()
+    await secondStarted
+    expect(connectionStore.getState().updates.messages).toMatchObject({ startedAt: start, phase: 'brief' })
+    second()
+    await work
+    expect(connectionStore.getState().updates.messages).toMatchObject({ owners: 0, phase: 'idle', announcement: 'ended' })
+  } finally {
+    first(); second(); await work
+    connectionStore.getState().reset()
+    vi.useRealTimers()
+  }
 })

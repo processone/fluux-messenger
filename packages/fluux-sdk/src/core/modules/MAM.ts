@@ -1557,11 +1557,12 @@ export class MAM extends BaseModule {
 
     const conversationIds = conversations.map((c) => c.id)
 
+    const endListUpdate = this.deps.stores?.connection?.beginUpdate?.(['messages'])
     await executeWithConcurrency(
       conversationIds,
       (conversationId) => session.isCurrent() ? this.fetchPreviewForConversation(conversationId) : Promise.resolve(),
       concurrency
-    )
+    ).finally(() => endListUpdate?.())
 
     if (!session.isCurrent()) return
     logInfo(`Preview refresh complete for ${conversations.length} conversation(s)`)
@@ -1592,11 +1593,12 @@ export class MAM extends BaseModule {
 
     const conversationIds = archivedConversations.map((c) => c.id)
 
+    const endListUpdate = this.deps.stores?.connection?.beginUpdate?.(['messages'])
     await executeWithConcurrency(
       conversationIds,
       (conversationId) => session.isCurrent() ? this.fetchPreviewForConversation(conversationId) : Promise.resolve(),
       concurrency
-    )
+    ).finally(() => endListUpdate?.())
   }
 
   /**
@@ -1630,6 +1632,7 @@ export class MAM extends BaseModule {
       category: 'sm',
     })
 
+    const endListUpdate = this.deps.stores?.connection?.beginUpdate?.(['messages'])
     await executeWithConcurrency(
       conversations,
       async (conv) => {
@@ -1658,7 +1661,7 @@ export class MAM extends BaseModule {
         }
       },
       concurrency
-    )
+    ).finally(() => endListUpdate?.())
 
     logInfo(`Background catch-up for ${conversations.length} conversation(s) — complete`)
   }
@@ -1762,6 +1765,7 @@ export class MAM extends BaseModule {
       category: 'sm',
     })
 
+    const endListUpdate = this.deps.stores?.connection?.beginUpdate?.(['messages'])
     await executeWithConcurrency(
       newContacts,
       async (contact) => {
@@ -1800,7 +1804,7 @@ export class MAM extends BaseModule {
         }
       },
       concurrency
-    )
+    ).finally(() => endListUpdate?.())
 
     logInfo(`Roster discovery complete for ${newContacts.length} contact(s)`)
     return !interrupted
@@ -2304,21 +2308,26 @@ export class MAM extends BaseModule {
       category: 'sm',
     })
 
-    // For MAM rooms: fetch preview via MAM query
-    const mamRoomJids = mamRooms.map((r) => r.jid)
-    await executeWithConcurrency(
-      mamRoomJids,
-      (roomJid) => session.isCurrent() ? this.fetchPreviewForRoom(roomJid) : Promise.resolve(),
-      concurrency
-    )
+    const endListUpdate = this.deps.stores?.connection?.beginUpdate?.(['rooms'])
+    try {
+      // For MAM rooms: fetch preview via MAM query
+      const mamRoomJids = mamRooms.map((r) => r.jid)
+      await executeWithConcurrency(
+        mamRoomJids,
+        (roomJid) => session.isCurrent() ? this.fetchPreviewForRoom(roomJid) : Promise.resolve(),
+        concurrency
+      )
 
-    // For non-MAM rooms: load preview from cache to populate lastMessage
-    // This only updates lastMessage without modifying the messages array
-    for (const room of nonMamRooms) {
-      if (!session.isCurrent()) return
-      if (!room.lastMessage) {
-        await this.deps.stores?.room.loadPreviewFromCache(room.jid)
+      // For non-MAM rooms: load preview from cache to populate lastMessage
+      // This only updates lastMessage without modifying the messages array
+      for (const room of nonMamRooms) {
+        if (!session.isCurrent()) return
+        if (!room.lastMessage) {
+          await this.deps.stores?.room.loadPreviewFromCache(room.jid)
+        }
       }
+    } finally {
+      endListUpdate?.()
     }
   }
 
