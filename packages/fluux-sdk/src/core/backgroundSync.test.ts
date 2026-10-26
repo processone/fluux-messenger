@@ -45,7 +45,7 @@ vi.mock('../utils/messageCache', () => ({
   getRoomMessageCount: vi.fn().mockResolvedValue(0),
 }))
 
-import { setupBackgroundSyncSideEffects } from './backgroundSync'
+import { setupBackgroundSyncSideEffects, RESUME_REPLAY_LIMIT_MS } from './backgroundSync'
 import { setupRoomSideEffects } from './roomSideEffects'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
@@ -2544,12 +2544,71 @@ describe('catch-up owners (Updating step)', () => {
     expect(seen).toEqual([true, false])
   })
 
-  it('releases the step when a resumed session has nothing to catch up', async () => {
+  // R6: with only direct chats (or caught-up rooms) a resume has no fetch of its
+  // own; the missed messages arrive as the server's replay, which ends before
+  // the server answers a request sent after the resume.
+  it('holds a resumed session with nothing to fetch until the server answers after its replay', async () => {
+    const answer = deferred()
+    mockClient.internal.waitForServerRoundTrip.mockReturnValue(answer.promise)
+    connectionStore.getState().setStatus('reconnecting')
+    cleanup = setupBackgroundSyncSideEffects(mockClient)
+    const seen: boolean[] = []
+    const unsub = connectionStore.subscribe((s) => s.isCatchingUp, (v) => seen.push(v))
+    simulateSmResumption(mockClient)
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(mockClient.internal.waitForServerRoundTrip).toHaveBeenCalledExactlyOnceWith(RESUME_REPLAY_LIMIT_MS)
+    expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalled()
+    expect(caughtUp()).toBe(true)
+    answer.resolve()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(caughtUp()).toBe(false)
+    unsub()
+    expect(seen).toEqual([true, false])
+  })
+
+  it('releases a resumed session at the replay time limit when the server never answers', async () => {
+    mockClient.internal.waitForServerRoundTrip.mockReturnValue(new Promise(() => {}))
     connectionStore.getState().setStatus('reconnecting')
     cleanup = setupBackgroundSyncSideEffects(mockClient)
     simulateSmResumption(mockClient)
+    await vi.advanceTimersByTimeAsync(RESUME_REPLAY_LIMIT_MS - 1)
+    expect(caughtUp()).toBe(true)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(caughtUp()).toBe(false)
+  })
+
+  it('drops the replay owner with the connection, and its late answer cannot clear the next session', async () => {
+    const late = deferred()
+    mockClient.internal.waitForServerRoundTrip.mockReturnValueOnce(late.promise)
+    connectionStore.getState().setStatus('reconnecting')
+    cleanup = setupBackgroundSyncSideEffects(mockClient)
+    simulateSmResumption(mockClient)
+    expect(caughtUp()).toBe(true)
+    connectionStore.getState().setStatus('reconnecting')
+    expect(caughtUp()).toBe(false)
+    expect(vi.getTimerCount()).toBe(0) // the limit timer went with it
+
+    // The next resume waits on its own answer; the old one arriving late changes nothing.
+    const next = deferred()
+    mockClient.internal.waitForServerRoundTrip.mockReturnValueOnce(next.promise)
+    simulateSmResumption(mockClient)
+    late.resolve()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(caughtUp()).toBe(true)
+    next.resolve()
     await vi.advanceTimersByTimeAsync(0)
     expect(caughtUp()).toBe(false)
+  })
+
+  it('releases the replay owner when the side effects are torn down', () => {
+    mockClient.internal.waitForServerRoundTrip.mockReturnValue(new Promise(() => {}))
+    connectionStore.getState().setStatus('reconnecting')
+    const stop = setupBackgroundSyncSideEffects(mockClient)
+    simulateSmResumption(mockClient)
+    expect(caughtUp()).toBe(true)
+    stop()
+    expect(caughtUp()).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('releases the step when the server has no MAM', async () => {

@@ -39,6 +39,12 @@ import {
   selectRoomsNeedingResumeSeed,
 } from '../utils/mamCatchUpUtils'
 import { executeWithConcurrency } from '../utils/concurrencyUtils'
+
+/**
+ * How long a resumed session holds the "Updating..." step while it waits for
+ * the server's replay of the stanzas queued during the outage.
+ */
+export const RESUME_REPLAY_LIMIT_MS = 10_000
 import {
   getRoomMembershipEpoch,
   invalidateRoomMemberships,
@@ -65,7 +71,9 @@ import {
  *
  * On SM resumption (`'resumed'` event), rooms already caught up to live rely on
  * replayed stanzas. Only joined, inactive rooms that still need archive coverage
- * receive a resume seed query.
+ * receive a resume seed query. The catch-up step stays up until the server
+ * answers a round trip sent after the resume, which it does only once it has
+ * replayed what it queued, or until RESUME_REPLAY_LIMIT_MS.
  *
  * @param client - The client driving these side effects
  * @param options - Configuration options
@@ -97,6 +105,13 @@ export function setupBackgroundSyncSideEffects(
     endSessionPrep?.()
     endSessionPrep = undefined
   }
+  // The owner a resumed session holds until the server's replay is answered.
+  let releaseResumeReplay: (() => void) | undefined
+  function endResumeReplay(): void {
+    releaseResumeReplay?.()
+    releaseResumeReplay = undefined
+  }
+
   // Timer for delayed room catch-up (cleared on cleanup or disconnect)
   let roomCatchUpTimer: ReturnType<typeof setTimeout> | undefined
   // Owner held while the delayed room pass waits on its timer.
@@ -648,6 +663,21 @@ export function setupBackgroundSyncSideEffects(
     // the key already unlocked. Coalesced with any in-flight pass.
     void client.retryPendingDecrypts()
 
+    // The server replays the stanzas it queued during the outage right after
+    // the resume, and answers a new request only after them. Hold the step on
+    // that answer, bounded, so presence does not come back before the missed
+    // messages have arrived.
+    endResumeReplay()
+    const endReplay = connectionStore.getState().beginCatchUp()
+    endSessionPreparation()
+    const release = () => {
+      clearTimeout(replayLimit)
+      endReplay()
+    }
+    const replayLimit = setTimeout(release, RESUME_REPLAY_LIMIT_MS)
+    releaseResumeReplay = release
+    client.internal.waitForServerRoundTrip(RESUME_REPLAY_LIMIT_MS).then(release, release)
+
     const resumeGeneration = sessionGeneration
     const state = roomStore.getState()
     const eligible = selectRoomsNeedingResumeSeed(
@@ -659,7 +689,6 @@ export function setupBackgroundSyncSideEffects(
       // Says nothing about rooms not yet joined — the bookmark re-join runs
       // later in handleSmResumption and is covered by seedResumeRoomOnce.
       logInfo('Background sync: SM resumption — no already-joined room needs catch-up')
-      endSessionPreparation()
       return
     }
 
@@ -667,7 +696,6 @@ export function setupBackgroundSyncSideEffects(
     // One owner across the whole sequential pass, so the step does not drop
     // between rooms.
     const endResumeCatchUp = connectionStore.getState().beginCatchUp()
-    endSessionPreparation()
     void (async () => {
       try {
         for (const room of eligible) {
@@ -698,6 +726,7 @@ export function setupBackgroundSyncSideEffects(
         resumeSeededRooms.clear()
         resetRoomRetryState()
         cancelRoomCatchUpTimer()
+        endResumeReplay()
       }
       // A resumed session already ran its 'resumed' handler: nothing to prepare.
       // Every other way online holds the step until the sync takes over: a
@@ -869,5 +898,6 @@ export function setupBackgroundSyncSideEffects(
     unsubscribeKeyUnlocked()
     cancelRoomCatchUpTimer()
     endSessionPreparation()
+    endResumeReplay()
   }
 }
