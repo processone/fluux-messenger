@@ -16,7 +16,7 @@ const SHOTS = process.env.CONNECTION_STEP_SHOTS
 const GRACE_MS = 2000
 
 type Store = typeof connectionStore
-type W = Window & { __connectionStore?: Store }
+type W = Window & { __connectionStore?: Store; __owners?: Array<() => void> }
 
 const setConnection = (page: Page, status: string, attempt = 0, targetInMs: number | null = null) =>
   page.evaluate(([s, a, t]) => {
@@ -146,18 +146,18 @@ for (const vp of VIEWPORTS) {
       // session inputs to end it, so it is replaced in one synchronous step), then
       // hand over to each other; the step stays throughout.
       await page.evaluate(() => {
-        const w = window as W & { __owners: Array<() => void> }
+        const w = window as W
         const s = w.__connectionStore!.getState()
         s.resetCatchUp()
         w.__owners = [s.beginCatchUp(), s.beginCatchUp()]
       })
       await page.waitForTimeout(300)
       await expect(step).toContainText('Updating...')
-      await page.evaluate(() => (window as W & { __owners: Array<() => void> }).__owners.shift()!())
+      await page.evaluate(() => (window as W).__owners!.shift()!())
       await expect(step).toContainText('Updating...')
 
       // Last owner ends: the normal subtitle returns.
-      await page.evaluate(() => (window as W & { __owners: Array<() => void> }).__owners.shift()!())
+      await page.evaluate(() => (window as W).__owners!.shift()!())
       await expect(page.getByTestId('connection-step')).toHaveCount(0)
       expect(await headerHeight(page)).toBe(baseline)
       expect(await header.innerText()).toBe(presence)
