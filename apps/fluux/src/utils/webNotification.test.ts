@@ -103,4 +103,15 @@ describe('showWebNotification', () => {
     expect(registration.showNotification).not.toHaveBeenCalled()
     expect(NotificationCtor).not.toHaveBeenCalled()
   })
+
+  // FLM-152 R10: a rejection that arrives after Fluux gained focus must not reach the constructor.
+  it('shows nothing when the registration lookup rejects after Fluux gained focus', async () => {
+    let superseded = false
+    setServiceWorker({
+      getRegistration: vi.fn().mockImplementation(async () => { superseded = true; throw new TypeError('lookup failed') }),
+      ready: new Promise(() => {}),
+    })
+    await showWebNotification('Title', { body: 'Body' }, {}, () => superseded)
+    expect(NotificationCtor).not.toHaveBeenCalled()
+  })
 })

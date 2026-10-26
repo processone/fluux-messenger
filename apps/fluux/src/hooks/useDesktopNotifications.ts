@@ -321,13 +321,20 @@ export function useDesktopNotifications(): void {
     if (!notification) return false
     // Fluux may come to the front during the avatar or platform work, including the waits inside
     // the posting helpers, so each of them asks once more at final submission.
-    const final = notification
-    const frontNow = () => {
+    // Late callbacks revalidate the session and the current target and text before any banner or haptic.
+    const frontNow = async () => {
       if (!connectionStore.getState().windowVisible) return false
-      showInAppBanner(final, arrival, accountId)
+      const latest = await resolveTarget(original)
+      if (isDnd() || currentAccountId() !== accountId || accountGenerationRef.current !== generation) return true
+      const current = latest && buildLocalMessageNotification(latest, t, i18n?.language ?? 'en', !desktop)
+      if (!connectionStore.getState().windowVisible) return false
+      if (current) showInAppBanner(current, arrival, accountId)
       return true
     }
-    if (frontNow()) return true
+    if (connectionStore.getState().windowVisible) {
+      showInAppBanner(notification, arrival, accountId)
+      return true
+    }
     if (!getNotificationPermissionGranted()) return true
     const { title, body, navType, navTarget, messageId, count } = notification
     notificationDebug.desktopNotification({ title, body: '(message preview)',
@@ -340,10 +347,10 @@ export function useDesktopNotifications(): void {
           communication }, async () => {
           const latest = await resolveTarget(original)
           if (!latest || isDnd() || currentAccountId() !== accountId || accountGenerationRef.current !== generation || !getNotificationPermissionGranted()) return false
+          if (await frontNow()) return false
           // Keep the prepared count: unread growth remains eligible, not a content edit.
           const current = buildLocalMessageNotification(latest, t, i18n?.language ?? 'en', false, count)
           const latestCommunication = communicationMetadata(latest)
-          if (frontNow()) return false
           if (!current || !communication || !latestCommunication || current.body !== body ||
             current.navType !== navType || current.navTarget !== navTarget || current.messageId !== messageId) return false
           // F5/R2: names can refresh and recipients stay as donated; message/sender identity must still match.

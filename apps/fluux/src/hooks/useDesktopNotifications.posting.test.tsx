@@ -899,6 +899,30 @@ describe('useDesktopNotifications system post gate (FLM-152 R10)', () => {
     expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(['Alice: body text'])
   })
 
+  // FLM-152 R12: a late callback must not show a retired account's preview.
+  it('shows no banner when the account changes while the native post is being prepared', async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'prepare_communication_notification') { mockWindowVisible = true; mockJid = 'other@example.com' }
+      return null
+    })
+    renderHook(() => useDesktopNotifications())
+    await handlers.onConversationMessage?.({ id: 'alice@example.com', name: 'Alice' }, { id: 'm1', from: 'alice@example.com' })
+    expect(useToastStore.getState().toasts).toEqual([])
+    expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
+  })
+
+  // FLM-152 R12: nor text from a conversation that is no longer eligible.
+  it('shows no banner when the conversation is gone by the time Fluux is in front', async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'prepare_communication_notification') { mockWindowVisible = true; chatStore.setState({ conversations: new Map() }) }
+      return null
+    })
+    renderHook(() => useDesktopNotifications())
+    await handlers.onConversationMessage?.({ id: 'alice@example.com', name: 'Alice' }, { id: 'm1', from: 'alice@example.com' })
+    expect(useToastStore.getState().toasts).toEqual([])
+    expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
+  })
+
   it('shows nothing in that case when Show banner is off', async () => {
     useSettingsStore.setState({ inAppBannerEnabled: false })
     invoke.mockImplementation(async (cmd: string) => {

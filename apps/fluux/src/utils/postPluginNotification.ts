@@ -31,7 +31,7 @@ const SILENT_CHANNEL_ID = 'fluux-silent'
  * Never rejects: callers post notifications fire-and-forget, and a failed
  * banner must not break message handling.
  */
-export async function postPluginNotification(options: Options, selected?: MessageRowRef, superseded: () => boolean = () => false): Promise<void> {
+export async function postPluginNotification(options: Options, selected?: MessageRowRef, superseded: () => boolean | Promise<boolean> = () => false): Promise<void> {
   try {
     if (platform().os === 'android' && osNotificationSilent() && !(Number.parseInt(version(), 10) < 8)) {
       await createChannel({
@@ -50,7 +50,7 @@ export async function postPluginNotification(options: Options, selected?: Messag
       if (!isIOSNotificationCurrent(extra.navTarget, extra.messageId, extra.accountId, selected)) return
       options = { ...options, id }
     }
-    if (superseded()) return
+    if (await superseded()) return
     await invoke('plugin:notification|notify', { options })
   } catch (error) {
     console.error('[Notifications] Plugin notification failed:', error)
