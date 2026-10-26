@@ -3,6 +3,9 @@ import { createMockElement, parseElement } from '../core/test-utils'
 // xmpp.js ships no types for this internal module; it is the class iqCaller rejects with.
 // @ts-expect-error TS7016
 import StanzaError from '@xmpp/middleware/lib/StanzaError.js'
+// xmpp.js ships no types for these internal modules.
+// @ts-expect-error TS7016
+import StreamError from '@xmpp/connection/lib/StreamError.js'
 // @ts-expect-error TS7016
 import SASLError from '@xmpp/sasl/lib/SASLError.js'
 import type { Element } from '@xmpp/client'
@@ -338,12 +341,16 @@ describe('installOrderTolerantErrors', () => {
   // The client's credentials callback offers a FAST token and a password, so a
   // rejected token must fall back to PLAIN, and only on not-authorized.
   async function negotiate(failureChildren: string, install: boolean) {
+    // Settles when the credentials callback's authenticate() call does, i.e.
+    // after the FAST attempt and any password fallback have finished.
+    let authenticated!: Promise<void>
     const conn = client({
       service: 'ws://localhost:1', domain: 'example.com',
       credentials: async (authenticate: (c: object, m: string, ua: unknown) => Promise<void>,
         _mechanisms: string[], fast: unknown) => {
         const token = fast ? { mechanism: 'HT-SHA-256-NONE', token: 'tok', expiry: '2999-01-01T00:00:00Z' } : undefined
-        await authenticate({ username: 'alice', password: 'secret', token }, 'PLAIN', undefined)
+        authenticated = authenticate({ username: 'alice', password: 'secret', token }, 'PLAIN', undefined)
+        await authenticated
       },
     } as never) as unknown as {
       _onElement(el: Element): void
@@ -372,7 +379,8 @@ describe('installOrderTolerantErrors', () => {
       + '<authentication xmlns="urn:xmpp:sasl:2"><mechanism>PLAIN</mechanism>'
       + '<inline><fast xmlns="urn:xmpp:fast:0"><mechanism>HT-SHA-256-NONE</mechanism></fast></inline>'
       + '</authentication></stream:features>'))
-    await new Promise(r => setTimeout(r, 50))
+    await vi.waitFor(() => expect(authenticated).toBeDefined())
+    await authenticated
     return { sent, errors, deleted }
   }
 
@@ -389,6 +397,32 @@ describe('installOrderTolerantErrors', () => {
     const result = await negotiate(`<text xml:lang="en">Invalid token</text><not-authorized xmlns="${SASL}"/>`, false)
     expect(result.deleted).toBe(false)
     expect(result.errors).toEqual(['text'])
+  })
+
+  it.each([
+    ['stanza', STANZAS, (c: string) => `<iq type="error"><error type="wait">${c}</error></iq>`],
+    ['stream', 'urn:ietf:params:xml:ns:xmpp-streams',
+      (c: string) => `<stream:error xmlns:stream="http://etherx.jabber.org/streams">${c}</stream:error>`],
+  ])('ignores a foreign-namespace <text/> ahead of the protocol text and application (%s)', (_kind, ns, wrap) => {
+    const el = parseElement(wrap(
+      '<text xmlns="urn:example:ext">Not for display</text>'
+      + '<too-many xmlns="urn:example:app"/>'
+      + `<text xmlns="${ns}">Protocol reason</text><resource-constraint xmlns="${ns}"/>`))
+    putErrorConditionFirst(el)
+    const errorEl = el.name === 'iq' ? el.getChild('error') : el
+    const Err = ns === STANZAS ? StanzaError : StreamError
+    const err = Err.fromElement(errorEl)
+    expect([err.condition, err.text, err.application?.name]).toEqual(['resource-constraint', 'Protocol reason', 'too-many'])
+  })
+
+  it('reads SASL2 protocol text, not a foreign <text/>, ahead of it', () => {
+    const el = parseElement(
+      '<failure xmlns="urn:xmpp:sasl:2"><text xmlns="urn:example:ext">Not for display</text>'
+      + '<text xml:lang="en">Invalid token</text>'
+      + '<not-authorized xmlns="urn:ietf:params:xml:ns:xmpp-sasl"/></failure>')
+    putErrorConditionFirst(el)
+    const err = SASLError.fromElement(el)
+    expect([err.condition, err.text]).toEqual(['not-authorized', 'Invalid token'])
   })
 
   it('does nothing to a non-error element or a client without the entry point', () => {

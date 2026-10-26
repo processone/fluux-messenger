@@ -120,21 +120,23 @@ function elementName(el: Element): string {
 
 /**
  * Order an error's children the way xmpp.js reads them: the defined condition
- * (not `<text/>`, in `ns`), then `<text/>`, then everything else.
- * `@xmpp/error` takes children 1, 2 and 3 as condition, text-or-application
- * and application, so moving only the condition would let an application
- * element in second place push the text out.
+ * (in `ns`), then the protocol `<text/>` (in `textNs`), then everything else
+ * with any other `<text/>` last. `@xmpp/error` takes children 1, 2 and 3 as
+ * condition, text-or-application and application, and recognises text by
+ * name alone, so a foreign-namespace `<text/>` must not sit ahead of the
+ * protocol text or of the application element.
  */
-function conditionFirst(errorEl: Element, ns: string): void {
+function conditionFirst(errorEl: Element, ns: string, textNs: readonly string[]): void {
   const children = errorEl.children
   if (!Array.isArray(children)) return
-  const isCondition = (c: unknown) =>
-    typeof c !== 'string' && elementName(c as Element) !== 'text' && elementNs(c as Element) === ns
-  const condition = children.find(isCondition)
+  const isElement = (c: unknown): c is Element => typeof c !== 'string'
+  const isText = (c: Element) => elementName(c) === 'text'
+  const condition = children.find(c => isElement(c) && !isText(c) && elementNs(c) === ns)
   if (!condition) return
-  const texts = children.filter(c => c !== condition && typeof c !== 'string' && elementName(c) === 'text')
-  const rest = children.filter(c => c !== condition && !texts.includes(c))
-  children.splice(0, children.length, condition, ...texts, ...rest)
+  const protocolText = children.filter(c => isElement(c) && isText(c) && textNs.includes(elementNs(c) ?? ''))
+  const foreignText = children.filter(c => isElement(c) && isText(c) && !protocolText.includes(c))
+  const rest = children.filter(c => c !== condition && !protocolText.includes(c) && !foreignText.includes(c))
+  children.splice(0, children.length, condition, ...protocolText, ...rest, ...foreignText)
 }
 
 /**
@@ -149,12 +151,12 @@ function conditionFirst(errorEl: Element, ns: string): void {
  */
 export function putErrorConditionFirst(el: Element): void {
   if (elementName(el) === 'error' && elementNs(el) === NS_STREAM) {
-    conditionFirst(el, NS_STREAM_ERRORS)
+    conditionFirst(el, NS_STREAM_ERRORS, [NS_STREAM_ERRORS])
   } else if (elementName(el) === 'failure' && (elementNs(el) === NS_SASL || elementNs(el) === NS_SASL2)) {
-    conditionFirst(el, NS_SASL)
+    conditionFirst(el, NS_SASL, [NS_SASL, NS_SASL2])
   } else if (el.attrs?.type === 'error') {
     const errorEl = el.getChild?.('error')
-    if (errorEl) conditionFirst(errorEl, NS_XMPP_STANZAS)
+    if (errorEl) conditionFirst(errorEl, NS_XMPP_STANZAS, [NS_XMPP_STANZAS])
   }
 }
 
