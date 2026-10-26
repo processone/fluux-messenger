@@ -105,6 +105,10 @@ const AUTH_STREAM_ERROR_MARKERS = [
 const isAuthStreamError = (message: string): boolean =>
   AUTH_STREAM_ERROR_MARKERS.some(marker => message.includes(marker))
 
+/** States in which the session is over and only a new connect() starts another. */
+const isSessionEndState = (state: ConnectionStateValue): boolean =>
+  state === 'disconnected' || isTerminalState(state)
+
 /**
  * Thrown by `runTimedConnectionAttempt` when its timeout fires for a client
  * that has already been replaced by a newer attempt. The outer `connect()`
@@ -277,6 +281,9 @@ export class Connection extends BaseModule {
   // Callback for disconnect notification
   private onDisconnect?: () => void
 
+  // Callback for the end of a session (see setSessionEndedHandler)
+  private onSessionEnded?: () => void
+
   // Callback for stanza routing
   private onStanza?: (stanza: Element) => void
 
@@ -406,6 +413,10 @@ export class Connection extends BaseModule {
             'attemptReconnect:unhandled-rejection'
           )
         })
+      }
+
+      if (isSessionEndState(stateValue) && !isSessionEndState(previousState)) {
+        this.onSessionEnded?.()
       }
 
       this.previousMachineState = stateValue
@@ -588,6 +599,19 @@ export class Connection extends BaseModule {
    */
   setDisconnectHandler(handler: () => void): void {
     this.onDisconnect = handler
+  }
+
+  /**
+   * Set callback for the end of a session.
+   * Called once when the machine enters `disconnected` or a terminal state:
+   * an explicit disconnect, a cancelled or refused reconnect, a resource
+   * conflict, an authentication failure or a failed first login. A network
+   * loss the client recovers from on its own goes through `reconnecting` and
+   * does not end the session, so state the resumed stream still needs (such
+   * as the E2EE plugins that decrypt its replay) is kept.
+   */
+  setSessionEndedHandler(handler: () => void): void {
+    this.onSessionEnded = handler
   }
 
   /**

@@ -282,8 +282,10 @@ export class XMPPClient {
    * End-to-end encryption plugin host. `null` before the first successful
    * connection — the manager is tied to a logged-in identity and is
    * constructed on successful connection (via `ensureE2EEManager`, driven by
-   * the session-lifecycle engine) when the JID becomes known. Torn down on
-   * explicit disconnect.
+   * the session-lifecycle engine) when the JID becomes known. Kept while the
+   * client reconnects on its own after a network loss, so registered plugins
+   * decrypt what a resumed session replays; torn down when the session ends
+   * (disconnect, cancelled reconnect, conflict, authentication failure).
    *
    * Apps register {@link E2EEPlugin} implementations on `e2ee:manager-ready`,
    * or immediately if the manager already exists when subscribing. The Chat
@@ -706,8 +708,9 @@ export class XMPPClient {
 
     // E2EEManager is NOT constructed here — it's tied to a logged-in
     // identity. See `ensureE2EEManager` (called from handleConnectionSuccess)
-    // and `tearDownE2EEManager` (called on disconnect). Modules access it
-    // via `moduleDeps.getE2EEManager()`, which returns `null` before login.
+    // and `tearDownE2EEManager` (called when the session ends). Modules
+    // access it via `moduleDeps.getE2EEManager()`, which returns `null`
+    // before login.
 
     const moduleDeps = {
       stores: this.stores,
@@ -790,10 +793,16 @@ export class XMPPClient {
     this.connection.setDisconnectHandler(() => {
       this.avatarState.cancel()
       this.presenceActor.send({ type: 'DISCONNECT' })
-      // Tear down the E2EEManager when the user disconnects — the manager
-      // is tied to a logged-in identity. If they reconnect (same JID or
-      // different), we rebuild fresh in handleConnectionSuccess so there's
-      // no stale account state.
+    })
+
+    // The E2EEManager is tied to a logged-in identity: tear it down when the
+    // session ends (logout, cancelled reconnect, conflict, auth failure). Keep
+    // it while the client reconnects on its own after a network loss: a
+    // resumed stream replays the messages queued during the outage at once,
+    // and only the plugins registered before the drop can decrypt them on
+    // arrival. ensureE2EEManager rebuilds it if the next session is for
+    // another identity.
+    this.connection.setSessionEndedHandler(() => {
       void this.tearDownE2EEManager()
     })
 
@@ -1956,10 +1965,10 @@ export class XMPPClient {
   }
 
   /**
-   * Tear down the E2EEManager on disconnect. Existing plugin state on the
-   * native side (e.g. Sequoia keys cached in Rust) is not affected — this
-   * only releases the host-side object so a subsequent reconnect starts
-   * from a clean slate.
+   * Tear down the E2EEManager when the session ends. Existing plugin state on
+   * the native side (e.g. Sequoia keys cached in Rust) is not affected — this
+   * only releases the host-side object so the next login starts from a clean
+   * slate.
    *
    * @internal
    */
