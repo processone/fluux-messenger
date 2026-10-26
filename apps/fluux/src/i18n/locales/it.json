@@ -117,6 +117,9 @@
         "connecting": "Connessione...",
         "verifying": "Verifica connessione...",
         "updating": "Aggiornamento...",
+        "retrievingMessages": "Recupero dei messaggi…",
+        "retrievingFor": "Recupero dei messaggi per {{target}}",
+        "retrievalEndedFor": "Il recupero dei messaggi per {{target}} è terminato",
         "connectionError": "Errore di connessione",
         "disconnected": "Disconnesso",
         "cancelReconnection": "Annulla riconnessione"

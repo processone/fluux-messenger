@@ -40,12 +40,19 @@ import type {
 import type { MessageActor, CorrectionReferences } from '../../utils/messageIdentity'
 import type { GetMessagesOptions } from '../../utils/messageCache'
 
+export type UpdateScope = 'messages' | 'rooms' | `chat:${string}` | `room:${string}`
+
 /**
  * Connection-store surface the client writes to.
  *
  * @category Internal
  */
 export interface ConnectionBindings {
+  /** Register actual targeted retrieval work, never scheduled waits or older-history paging. */
+  beginUpdate?: (scopes: readonly UpdateScope[]) => () => void
+  /** Reception boundary only; known-target work keeps its own integration owner. */
+  beginReplay?: () => () => void
+  isReceivingReplay?: () => boolean
   // Actions - state setters only (connect/disconnect moved to hooks)
   setStatus: (status: ConnectionStatus) => void
   setIsVerifying: (isVerifying: boolean) => void

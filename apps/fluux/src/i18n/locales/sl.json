@@ -117,6 +117,9 @@
         "connecting": "Povezovanje...",
         "verifying": "Preverjanje povezave...",
         "updating": "Posodabljanje...",
+        "retrievingMessages": "Pridobivanje sporočil…",
+        "retrievingFor": "Pridobivanje sporočil za {{target}}",
+        "retrievalEndedFor": "Pridobivanje sporočil za {{target}} se je končalo",
         "connectionError": "Napaka povezave",
         "disconnected": "Odklopljen",
         "cancelReconnection": "Prekliči ponovno povezavo"

@@ -8,11 +8,7 @@ import { useConnectionStore } from '@fluux/sdk/react'
  * flashing anything. */
 export const DEGRADED_STATUS_GRACE_MS = 2000
 
-/** Upper bound on the "Updating..." step: a slow archive must not keep the
- * header in a transient state forever. */
-export const CATCH_UP_STEP_LIMIT_MS = 15000
-
-export type ConnectionStepKind = 'reconnecting' | 'connecting' | 'verifying' | 'updating'
+export type ConnectionStepKind = 'reconnecting' | 'connecting' | 'verifying'
 
 // Start of the current outage and the number of mounted hook users. Kept at
 // module level so a header mounted mid-outage (the user opens a chat) continues
@@ -29,30 +25,12 @@ let mountedUsers = 0
 export function useConnectionStep(): ConnectionStepKind | null {
   const status = useConnectionStore((s) => s.status)
   const isVerifying = useConnectionStore((s) => s.isVerifying)
-  const catchUpStartedAt = useConnectionStore((s) => s.isCatchingUp ? s.catchUpStartedAt : null)
-
-  // "Updating..." follows the reconnection until the missed messages have
-  // arrived, but only for a bounded time. The limit is measured from the start
-  // of the catch-up in the store, so it holds across header mounts: navigating
-  // cannot bring back an expired step.
-  const [, expire] = useState(0)
-  useEffect(() => {
-    if (catchUpStartedAt === null) return
-    const remaining = CATCH_UP_STEP_LIMIT_MS - (Date.now() - catchUpStartedAt)
-    if (remaining <= 0) return
-    const timer = setTimeout(() => expire((n) => n + 1), remaining)
-    return () => clearTimeout(timer)
-  }, [catchUpStartedAt])
-  const catchUpActive = catchUpStartedAt !== null && Date.now() - catchUpStartedAt < CATCH_UP_STEP_LIMIT_MS
-
   const step: ConnectionStepKind | null =
     status === 'reconnecting' || status === 'connecting' || status === 'verifying'
       ? status
       : status === 'online' && isVerifying
         ? 'verifying'
-        : status === 'online' && catchUpActive
-          ? 'updating'
-          : null
+        : null
   const isDegraded = step !== null
 
   // Recorded during render (idempotent) so the first paint is already right.
@@ -113,7 +91,7 @@ function useStepLabels(step: ConnectionStepKind | null): { label: string; announ
     const label = secondsLeft !== null ? t('status.reconnectingStep', { seconds: secondsLeft }) : t('status.reconnecting')
     return { label, announced: t('status.reconnecting') }
   }
-  const label = step === 'verifying' ? t('status.verifying') : step === 'updating' ? t('status.updating') : t('status.connecting')
+  const label = step === 'verifying' ? t('status.verifying') : t('status.connecting')
   return { label, announced: label }
 }
 
@@ -141,7 +119,7 @@ export function ConnectionStepSlot({ children, narrowOnly = false }: { children?
       {line}
       {/* One announcer: the narrow-only title's region follows its breakpoint, so
           on md+ only the conversation header announces the step. */}
-      <span role="status" className={narrowOnly ? 'sr-only md:hidden' : 'sr-only'}>{announced}</span>
+      <span role="status" data-testid="connection-announcement" className={narrowOnly ? 'sr-only md:hidden' : 'sr-only'}>{announced}</span>
     </>
   )
 }

@@ -330,7 +330,7 @@ interface StatusOrPresenceProps {
  *
  * Owns the connection-state subscriptions (status, isVerifying) so the
  * Sidebar itself never re-renders on connection churn. Transient degraded
- * states ('reconnecting'/'connecting'/'verifying'/'updating', or the post-wake
+ * states ('reconnecting'/'connecting'/'verifying', or the post-wake
  * `online + isVerifying` machine sub-state) only surface after a grace
  * delay — until then the presence selector stays, swapping one fixed-height
  * line for another, so nothing in the layout ever moves.

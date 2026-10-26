@@ -115,6 +115,9 @@
         "connecting": "Povezivanje...",
         "verifying": "Provjera veze...",
         "updating": "Ažuriranje...",
+        "retrievingMessages": "Dohvaćanje poruka…",
+        "retrievingFor": "Dohvaćanje poruka za {{target}}",
+        "retrievalEndedFor": "Dohvaćanje poruka za {{target}} je završilo",
         "connectionError": "Greška veze",
         "disconnected": "Odspojeno",
         "cancelReconnection": "Odustani od ponovnog povezivanja"

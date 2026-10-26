@@ -115,6 +115,9 @@
         "connecting": "연결 중...",
         "verifying": "연결 확인 중...",
         "updating": "업데이트 중...",
+        "retrievingMessages": "메시지 가져오는 중…",
+        "retrievingFor": "{{target}}의 메시지를 가져오는 중",
+        "retrievalEndedFor": "{{target}}의 메시지 가져오기가 종료되었습니다",
         "connectionError": "연결 오류",
         "disconnected": "연결 끊김",
         "cancelReconnection": "재연결 취소"

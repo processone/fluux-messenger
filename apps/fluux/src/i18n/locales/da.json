@@ -115,6 +115,9 @@
         "connecting": "Opretter forbindelse...",
         "verifying": "Verificerer forbindelse...",
         "updating": "Opdaterer...",
+        "retrievingMessages": "Henter beskeder…",
+        "retrievingFor": "Henter beskeder for {{target}}",
+        "retrievalEndedFor": "Hentning af beskeder for {{target}} er afsluttet",
         "connectionError": "Forbindelsesfejl",
         "disconnected": "Afbrudt",
         "cancelReconnection": "Annuller genforbindelse"

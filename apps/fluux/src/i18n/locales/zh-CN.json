@@ -115,6 +115,9 @@
         "connecting": "正在连接…",
         "verifying": "正在验证连接…",
         "updating": "正在更新...",
+        "retrievingMessages": "正在获取消息…",
+        "retrievingFor": "正在获取 {{target}} 的消息",
+        "retrievalEndedFor": "{{target}} 的消息获取已结束",
         "connectionError": "连接错误",
         "disconnected": "已断开连接",
         "cancelReconnection": "取消重新连接"

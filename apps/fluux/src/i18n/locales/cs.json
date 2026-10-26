@@ -117,6 +117,9 @@
         "connecting": "Připojování...",
         "verifying": "Ověřování připojení...",
         "updating": "Aktualizace...",
+        "retrievingMessages": "Načítání zpráv…",
+        "retrievingFor": "Načítání zpráv pro {{target}}",
+        "retrievalEndedFor": "Načítání zpráv pro {{target}} skončilo",
         "connectionError": "Chyba připojení",
         "disconnected": "Odpojeno",
         "cancelReconnection": "Zrušit opětovné připojení"

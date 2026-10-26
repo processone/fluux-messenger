@@ -115,6 +115,9 @@
         "connecting": "מתחבר...",
         "verifying": "מאמת חיבור...",
         "updating": "מעדכן...",
+        "retrievingMessages": "הודעות מאוחזרות…",
+        "retrievingFor": "הודעות מאוחזרות עבור {{target}}",
+        "retrievalEndedFor": "אחזור ההודעות עבור {{target}} הסתיים",
         "connectionError": "שגיאת חיבור",
         "disconnected": "מנותק",
         "cancelReconnection": "ביטול חיבור מחדש"

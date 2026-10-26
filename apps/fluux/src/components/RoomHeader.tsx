@@ -13,6 +13,7 @@ import { getUniqueOccupantCount } from '@fluux/sdk'
 import { RoomAvatar } from './RoomAvatar'
 import { Tooltip } from './Tooltip'
 import { ConnectionStepSlot } from './ConnectionStep'
+import { UpdateStatus } from './UpdateStatus'
 import { useWindowDrag } from '@/hooks'
 import { renderTextWithLinks } from '@/utils/messageStyles'
 import { AvatarCropModal } from './AvatarCropModal'
@@ -128,24 +129,30 @@ export function RoomHeader({
         size="header"
       />
 
-      {/* Name and info — opens Room Info modal with the full topic and details.
-          The tooltip wrapper carries the flex sizing so the button still fills
-          the free space between the avatar and the trailing action cluster. */}
-      <Tooltip content={t('rooms.showRoomInfo')} position="bottom" className="flex flex-1 min-w-0">
-        <button
-          type="button"
-          onClick={() => setShowInfoModal(true)}
-          aria-label={`${t('rooms.showRoomInfo')}: ${room.name}`}
-          className="flex-1 min-w-0 text-start rounded-md px-1 -mx-1 py-0.5 hover:bg-fluux-hover transition-colors"
-        >
-          <span className="block font-semibold text-fluux-text truncate leading-tight">{room.name}</span>
-          <p className="text-xs text-fluux-muted truncate">
-            <ConnectionStepSlot>
-              {room.subject?.trim() ? renderTextWithLinks(room.subject) : room.jid}
-            </ConnectionStepSlot>
-          </p>
-        </button>
-      </Tooltip>
+      {/* The update explanation is a sibling of the room-info control, never a nested button. */}
+      <div className="flex-1 min-w-0">
+        <Tooltip content={t('rooms.showRoomInfo')} position="bottom" className="flex min-w-0">
+          <button
+            type="button"
+            onClick={() => setShowInfoModal(true)}
+            aria-label={`${t('rooms.showRoomInfo')}: ${room.name}`}
+            className="min-w-0 text-start rounded-md px-1 -mx-1 hover:bg-fluux-hover transition-colors"
+          >
+            <span className="block font-semibold text-fluux-text truncate leading-tight">{room.name}</span>
+          </button>
+        </Tooltip>
+        <div className="text-xs text-fluux-muted min-w-0">
+          <ConnectionStepSlot>
+            <UpdateStatus scope={`room:${room.jid}`} target={room.name}>
+              <span className="cursor-pointer" onClick={(event) => {
+                if (!(event.target as HTMLElement).closest('a')) setShowInfoModal(true)
+              }}>
+                {room.subject?.trim() ? renderTextWithLinks(room.subject) : room.jid}
+              </span>
+            </UpdateStatus>
+          </ConnectionStepSlot>
+        </div>
+      </div>
 
       {/* Trailing action cluster — grouped tightly on mobile (gap-1) so the
           kebab and members pill read as one unit; desktop keeps the header's md

@@ -116,6 +116,9 @@
         "connecting": "Pripája sa...",
         "verifying": "Overuje sa pripojenie...",
         "updating": "Aktualizácia...",
+        "retrievingMessages": "Načítavajú sa správy…",
+        "retrievingFor": "Načítavajú sa správy pre {{target}}",
+        "retrievalEndedFor": "Načítavanie správ pre {{target}} sa skončilo",
         "connectionError": "Chyba pripojenia",
         "disconnected": "Odpojený",
         "cancelReconnection": "Zrušiť opätovné pripojenie"

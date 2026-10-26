@@ -18,6 +18,7 @@ import { JoinRoomModal } from './JoinRoomModal'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
 import { ConnectionStepSlot } from './ConnectionStep'
+import { UpdateStatus } from './UpdateStatus'
 import { AddContactModal } from './AddContactModal'
 import { CreateRoomModal } from './CreateRoomModal'
 import { CreateQuickChatModal } from './CreateQuickChatModal'
@@ -307,17 +308,23 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
       {/* Main Content */}
       <div className={`${mobileRailOnly ? 'hidden md:flex' : 'flex'} flex-1 flex-col min-w-0`}>
         {/* Header - with drag region for window movement */}
-        <div className="h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
-          <h1 className="flex-1 font-semibold text-fluux-text truncate">
+        <div data-testid="sidebar-header" className="h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
+          <div className="flex-1 min-w-0 font-semibold text-fluux-text">
             <ConnectionStepSlot narrowOnly>
-            {sidebarView === 'messages' ? (showArchived ? t('messages.archivedTitle') : t('sidebar.messages'))
-              : sidebarView === 'rooms' ? t('sidebar.rooms')
-              : sidebarView === 'contacts' ? t('sidebar.contacts')
-              : sidebarView === 'admin' ? t('sidebar.admin')
-              : sidebarView === 'settings' ? t('sidebar.settings')
-              : t('sidebar.search')}
+              <UpdateStatus
+                scope={sidebarView === 'messages' || sidebarView === 'rooms' ? sidebarView : undefined}
+                target={sidebarView === 'messages' ? t('sidebar.messages') : t('sidebar.rooms')}
+                list
+              >
+                <h1 className="truncate">{sidebarView === 'messages' ? (showArchived ? t('messages.archivedTitle') : t('sidebar.messages'))
+                  : sidebarView === 'rooms' ? t('sidebar.rooms')
+                  : sidebarView === 'contacts' ? t('sidebar.contacts')
+                  : sidebarView === 'admin' ? t('sidebar.admin')
+                  : sidebarView === 'settings' ? t('sidebar.settings')
+                  : t('sidebar.search')}</h1>
+              </UpdateStatus>
             </ConnectionStepSlot>
-          </h1>
+          </div>
           {sidebarView === 'messages' && (
             <MessagesHeaderActions
               showArchived={showArchived}

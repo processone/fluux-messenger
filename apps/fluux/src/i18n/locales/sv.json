@@ -115,6 +115,9 @@
         "connecting": "Ansluter...",
         "verifying": "Verifierar anslutning...",
         "updating": "Uppdaterar...",
+        "retrievingMessages": "Hämtar meddelanden…",
+        "retrievingFor": "Hämtar meddelanden för {{target}}",
+        "retrievalEndedFor": "Hämtningen av meddelanden för {{target}} har avslutats",
         "connectionError": "Anslutningsfel",
         "disconnected": "Frånkopplad",
         "cancelReconnection": "Avbryt återanslutning"

@@ -16,6 +16,7 @@ const SHOTS = process.env.CONNECTION_STEP_SHOTS
 const GRACE_MS = 2000
 
 type Store = typeof connectionStore
+type Scope = Parameters<ReturnType<Store['getState']>['beginUpdate']>[0][number]
 type W = Window & { __connectionStore?: Store; __owners?: Array<() => void> }
 
 const setConnection = (page: Page, status: string, attempt = 0, targetInMs: number | null = null) =>
@@ -107,88 +108,112 @@ for (const vp of VIEWPORTS) {
       })
     }
 
-    // The demo has no XMPP server, so the journey plays the SDK's side of the
-    // handoff through the real store owners (the same beginCatchUp the session
-    // preparation, MAM fetches and room passes use): preparation takes over at
-    // 'online', a fetch owner takes over from it, and the step ends with the
-    // last owner. The header must never show presence in between.
-    test(`${vp.label}: header keeps "Updating..." from reconnecting until the last catch-up owner ends`, async ({ page }) => {
-      await bootDemo(page, '/demo.html?tutorial=false')
-      await page.evaluate(() => (window as unknown as { __demoClient?: { stopAnimation(): void } }).__demoClient?.stopAnimation())
-      await page.locator('[data-nav="messages"]').click()
-      await page.getByTestId('sidebar-pane').getByText('Emma Wilson', { exact: true }).first().click()
-      const header = page.locator('header').last()
-      await expect(header).toBeVisible()
-      const baseline = await headerHeight(page)
-      const presence = await header.innerText()
+    // FLM-168: exercise the actual application and single SDK owner with
+    // controlled producer completion, independently from server timing.
+    for (const view of ['chat', 'room'] as const) {
+      test(`${view}: scoped retrieval is brief, preserves layout and has no expiry`, async ({ page }, info) => {
+        await bootDemo(page, '/demo.html?tutorial=false')
+        await page.evaluate(() => (window as unknown as { __demoClient: { stopAnimation(): void } }).__demoClient.stopAnimation())
+        const nav = view === 'chat' ? 'messages' : 'rooms'
+        const name = view === 'chat' ? 'Emma Wilson' : 'Team Chat'
+        const scope = view === 'chat' ? 'chat:emma@fluux.chat' : 'room:team@conference.fluux.chat'
+        await page.locator(`[data-nav="${nav}"]`).click()
+        await page.getByTestId('sidebar-pane').getByText(name, { exact: true }).first().click()
+        await page.mouse.move(1100, 700)
+        const header = page.locator('header').last()
+        await expect(header).toContainText(name)
+        const baseline = await headerHeight(page)
+        const normal = await header.innerText()
+        const begin = (scopes: Scope[]) => page.evaluate(scopes => {
+          const w = window as W
+          w.__owners ??= []
+          w.__owners.push(w.__connectionStore!.getState().beginUpdate(scopes))
+        }, scopes)
+        const end = () => page.evaluate(() => (window as W).__owners!.shift()!())
+        const stable = async () => expect(await headerHeight(page)).toBe(baseline)
 
-      // Every header text change from here on is recorded in the page.
-      await page.evaluate(() => {
-        const w = window as unknown as { __seen: string[] }
-        w.__seen = []
-        const h = Array.from(document.querySelectorAll('header')).pop()!
-        new MutationObserver(() => w.__seen.push(h.innerText)).observe(h, { subtree: true, childList: true, characterData: true })
+        // Unknown/global preparation and another conversation do not affect this header.
+        await begin(['chat:other@fluux.chat'])
+        await page.waitForTimeout(2200)
+        await expect(header.getByTestId('update-text')).toHaveCount(0)
+        await expect(header.getByTestId('update-icon')).toHaveCount(0)
+        await end()
+        // Short local work stays silent.
+        await begin([scope, nav])
+        await page.waitForTimeout(600)
+        await end()
+        await expect(header.getByTestId('update-text')).toHaveCount(0)
+
+        // Measure the message surface as well as the fixed header; no inserted banner.
+        const messageSurface = page.locator('[data-message-id]').first()
+        const top = await messageSurface.evaluate(el => el.getBoundingClientRect().top).catch(() => null)
+        await begin([scope, nav])
+        await page.waitForTimeout(1000)
+        await expect(header.getByTestId('update-text')).toHaveCount(0)
+        await expect(header.getByTestId('update-text')).toContainText('Retrieving messages', { timeout: 2500 })
+        await stable()
+        await shot(page, `${vp.label}-${view}-scoped-brief`)
+        const started = await page.evaluate(scope => (window as W).__connectionStore!.getState().updates[scope]!.startedAt, scope)
+        const announced = await header.getByTestId('update-announcement').textContent()
+        await expect(header.getByTestId('update-icon')).toBeVisible({ timeout: 4000 })
+        expect(await header.innerText()).toContain(normal)
+        await stable()
+        expect(await header.getByTestId('update-announcement').textContent()).toBe(announced)
+        await expect(header.getByTestId('update-icon').locator('svg')).not.toHaveClass(/animate-spin/)
+        if (top !== null) expect(await messageSurface.evaluate(el => el.getBoundingClientRect().top)).toBe(top)
+        await shot(page, `${vp.label}-${view}-scoped-icon`)
+        // Explanation opens without opening room info or moving the messages.
+        const trigger = header.getByRole('button', { name: new RegExp(`Retrieving messages for ${name}`) })
+        await trigger.focus()
+        await page.keyboard.press('Enter')
+        await expect(page.getByText(`Retrieving messages for ${name}`, { exact: true }).last()).toBeVisible()
+        await trigger.press('Enter')
+        await trigger.click()
+        await expect(page.getByText(`Retrieving messages for ${name}`, { exact: true }).last()).toBeVisible()
+        await trigger.click()
+
+        // Navigate away, then come back after the brief window: no new grace/text.
+        if (vp.label === 'iphone') await page.getByRole('button', { name: /back/i }).first().click()
+        await page.locator('[data-nav="settings"]').click()
+        await expect(page.getByTestId('update-text')).toHaveCount(0)
+        await expect(page.getByTestId('update-icon')).toHaveCount(0)
+        await page.locator(`[data-nav="${nav}"]`).click()
+        await page.getByTestId('sidebar-pane').getByText(name, { exact: true }).first().click()
+        await expect(header.getByTestId('update-icon')).toBeVisible()
+        await expect(header.getByTestId('update-text')).toHaveCount(0)
+        expect(await page.evaluate(scope => (window as W).__connectionStore!.getState().updates[scope]!.startedAt, scope)).toBe(started)
+        // The icon is still present after the former 15-second cutoff.
+        await page.waitForTimeout(Math.max(0, 15_200 - (Date.now() - started)))
+        await expect(header.getByTestId('update-icon')).toBeVisible()
+        await stable()
+        await end()
+        await expect(header.getByTestId('update-icon')).toHaveCount(0)
+        await expect(header.getByTestId('update-announcement')).toContainText(`Message retrieval ended for ${name}`)
+        await stable()
+        info.annotations.push({ type: 'scoped-update', description: `${vp.label} ${view}: ${baseline}px; own scope start unchanged; no 15-second expiry` })
       })
+    }
 
-      await setConnection(page, 'reconnecting', 1, null)
-      const step = header.getByTestId('connection-step')
-      await expect(step).toContainText('Connecting', { timeout: GRACE_MS + 1000 })
-
-      // Online: the SDK's own session preparation owns the step from the status
-      // change (no owner is begun here), so presence never reappears.
-      await setConnection(page, 'online')
-      await expect(step).toContainText('Updating...')
-      await expect(page.getByRole('status').filter({ hasText: 'Updating' })).toHaveCount(1)
-      expect(await headerHeight(page)).toBe(baseline)
-      await shot(page, `${vp.label}-chat-5-updating`)
-
-      // The sync's catch-up owners take over from preparation (the demo has no
-      // session inputs to end it, so it is replaced in one synchronous step), then
-      // hand over to each other; the step stays throughout.
+    test('list scopes stay independent and never replace titles or own presence', async ({ page }) => {
+      await bootDemo(page, '/demo.html?tutorial=false')
+      await page.evaluate(() => (window as unknown as { __demoClient: { stopAnimation(): void } }).__demoClient.stopAnimation())
+      await page.locator('[data-nav="rooms"]').click()
+      const bar = page.getByTestId('sidebar-header')
+      const height = await bar.evaluate(el => el.getBoundingClientRect().height)
       await page.evaluate(() => {
         const w = window as W
-        const s = w.__connectionStore!.getState()
-        s.resetCatchUp()
-        w.__owners = [s.beginCatchUp(), s.beginCatchUp()]
+        w.__owners = [w.__connectionStore!.getState().beginUpdate(['rooms'])]
       })
-      await page.waitForTimeout(300)
-      await expect(step).toContainText('Updating...')
-      await page.evaluate(() => (window as W).__owners!.shift()!())
-      await expect(step).toContainText('Updating...')
-
-      // Last owner ends: the normal subtitle returns.
-      await page.evaluate(() => (window as W).__owners!.shift()!())
-      await expect(page.getByTestId('connection-step')).toHaveCount(0)
-      expect(await headerHeight(page)).toBe(baseline)
-      expect(await header.innerText()).toBe(presence)
-
-      // Presence appeared only after the last owner ended (the final snapshot).
-      const seen = await page.evaluate(() => (window as unknown as { __seen: string[] }).__seen)
-      expect(seen.slice(0, -1).filter((t) => t === presence)).toEqual([])
-    })
-
-    test(`${vp.label}: the "Updating..." time limit survives navigating between conversations`, async ({ page }) => {
-      test.setTimeout(60_000)
-      await bootDemo(page, '/demo.html?tutorial=false')
-      await page.evaluate(() => (window as unknown as { __demoClient?: { stopAnimation(): void } }).__demoClient?.stopAnimation())
+      await expect(bar.getByTestId('update-icon')).toBeVisible({ timeout: 3500 })
+      await expect(bar.locator('h1')).toHaveText('Rooms')
+      expect(await bar.evaluate(el => el.getBoundingClientRect().height)).toBe(height)
+      await shot(page, `${vp.label}-scoped-list`)
       await page.locator('[data-nav="messages"]').click()
-      const list = page.getByTestId('sidebar-pane')
-      await list.getByText('Emma Wilson', { exact: true }).first().click()
-      await expect(page.locator('header').last()).toBeVisible()
-
-      // A catch-up that never ends (a stuck owner) keeps isCatchingUp true.
-      await page.evaluate(() => { (window as W).__connectionStore!.getState().beginCatchUp() })
-      const step = () => page.locator('header').last().getByTestId('connection-step')
-      await expect(step()).toContainText('Updating...', { timeout: GRACE_MS + 1000 })
-      await expect(step()).toHaveCount(0, { timeout: 16_000 })
-
-      // Opening another conversation mounts a new header: the expired step stays gone.
-      if (vp.label === 'iphone') await page.getByRole('button', { name: /back/i }).first().click()
-      await page.locator('[data-nav="rooms"]').click()
-      await list.getByText('Team Chat', { exact: true }).first().click()
-      await page.waitForTimeout(GRACE_MS + 500)
-      await expect(step()).toHaveCount(0)
-      expect(await page.evaluate(() => (window as W).__connectionStore!.getState().isCatchingUp)).toBe(true)
+      await expect(bar.getByTestId('update-icon')).toHaveCount(0)
+      await page.getByTestId('sidebar-pane').getByText('Emma Wilson', { exact: true }).first().click()
+      await expect(page.locator('header').last().getByTestId('update-icon')).toHaveCount(0)
+      await expect(page.getByTestId('connection-step')).toHaveCount(0)
+      await page.evaluate(() => (window as W).__owners!.shift()!())
     })
 
     test('list title shows the step on narrow screens only', async ({ page }) => {
@@ -197,11 +222,11 @@ for (const vp of VIEWPORTS) {
       const title = page.getByTestId('sidebar-pane').locator('h1')
       await expect(title).toBeVisible()
       // The h1 line box may differ (12px step vs title); the fixed-height bar around it must not.
-      const bar = title.locator('xpath=..')
+      const bar = page.getByTestId('sidebar-header')
       const before = await bar.evaluate((el) => el.getBoundingClientRect().height)
       await setConnection(page, 'connecting')
       await page.waitForTimeout(GRACE_MS + 300)
-      const step = title.getByTestId('connection-step')
+      const step = bar.getByTestId('connection-step')
       if (vp.label === 'iphone') {
         await expect(step).toBeVisible()
         await expect(title.getByText('Messages', { exact: true })).toBeHidden()

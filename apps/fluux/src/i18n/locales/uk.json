@@ -115,6 +115,9 @@
         "connecting": "Підключення...",
         "verifying": "Перевірка підключення...",
         "updating": "Оновлення...",
+        "retrievingMessages": "Отримання повідомлень…",
+        "retrievingFor": "Отримання повідомлень для {{target}}",
+        "retrievalEndedFor": "Отримання повідомлень для {{target}} завершилося",
         "connectionError": "Помилка підключення",
         "disconnected": "Відключено",
         "cancelReconnection": "Скасувати перепідключення"

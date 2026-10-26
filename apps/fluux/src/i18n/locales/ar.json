@@ -115,6 +115,9 @@
         "connecting": "جارٍ الاتصال...",
         "verifying": "جارٍ التحقق من الاتصال...",
         "updating": "جارٍ التحديث...",
+        "retrievingMessages": "جارٍ استرجاع الرسائل…",
+        "retrievingFor": "جارٍ استرجاع الرسائل لـ {{target}}",
+        "retrievalEndedFor": "انتهى استرجاع الرسائل لـ {{target}}",
         "connectionError": "خطأ في الاتصال",
         "disconnected": "غير متصل",
         "cancelReconnection": "إلغاء إعادة الاتصال"

@@ -28,6 +28,9 @@
 import type { StoreBindings } from './types/storeBindings'
 
 export const connectionBindingMethodKeys = [
+  'beginUpdate',
+  'beginReplay',
+  'isReceivingReplay',
   'setStatus',
   'setIsVerifying',
   'setJid',

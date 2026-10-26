@@ -115,6 +115,9 @@
         "connecting": "Yhdistetään...",
         "verifying": "Vahvistetaan yhteyttä...",
         "updating": "Päivitetään...",
+        "retrievingMessages": "Haetaan viestejä…",
+        "retrievingFor": "Haetaan viestejä: {{target}}",
+        "retrievalEndedFor": "Viestien haku päättyi: {{target}}",
         "connectionError": "Yhteysvirhe",
         "disconnected": "Yhteys katkaistu",
         "cancelReconnection": "Peruuta uudelleenyhdistäminen"

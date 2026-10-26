@@ -115,6 +115,9 @@
         "connecting": "Ag ceangal...",
         "verifying": "Ag fíorú ceangal...",
         "updating": "Ag nuashonrú...",
+        "retrievingMessages": "Teachtaireachtaí á n-aisghabháil…",
+        "retrievingFor": "Teachtaireachtaí á n-aisghabháil do {{target}}",
+        "retrievalEndedFor": "Tá aisghabháil teachtaireachtaí do {{target}} críochnaithe",
         "connectionError": "Earráid ceangail",
         "disconnected": "Dícheangailte",
         "cancelReconnection": "Cealaigh athcheangal"

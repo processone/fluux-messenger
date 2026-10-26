@@ -92,6 +92,7 @@ export function setupChatSideEffects(
 
     logInfo(`Chat: starting MAM sync for ...@${getDomain(conversationId) || '*'}`)
 
+    const endUpdate = connectionStore.getState().beginUpdate([`chat:${conversationId}`, 'messages'])
     const endCatchUp = connectionStore.getState().beginCatchUp()
     try {
       // Load IndexedDB cache first to ensure we have the latest messages
@@ -121,6 +122,7 @@ export function setupChatSideEffects(
       // Clear loading state on error (MAM module clears it on success)
       chatStore.getState().setMAMLoading(conversationId, false)
     } finally {
+      endUpdate()
       endCatchUp()
     }
   }

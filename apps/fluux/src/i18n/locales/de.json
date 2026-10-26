@@ -117,6 +117,9 @@
         "connecting": "Verbinden...",
         "verifying": "Verbindung wird überprüft...",
         "updating": "Aktualisieren...",
+        "retrievingMessages": "Nachrichten werden abgerufen…",
+        "retrievingFor": "Nachrichten für {{target}} werden abgerufen",
+        "retrievalEndedFor": "Der Nachrichtenabruf für {{target}} ist beendet",
         "connectionError": "Verbindungsfehler",
         "disconnected": "Getrennt",
         "cancelReconnection": "Wiederverbindung abbrechen"

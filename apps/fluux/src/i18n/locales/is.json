@@ -115,6 +115,9 @@
         "connecting": "Tengist...",
         "verifying": "Staðfesti tengingu...",
         "updating": "Uppfæri...",
+        "retrievingMessages": "Sæki skilaboð…",
+        "retrievingFor": "Sæki skilaboð fyrir {{target}}",
+        "retrievalEndedFor": "Sókn skilaboða fyrir {{target}} er lokið",
         "connectionError": "Tengingarvilla",
         "disconnected": "Aftengt",
         "cancelReconnection": "Hætta við endurtengingu"

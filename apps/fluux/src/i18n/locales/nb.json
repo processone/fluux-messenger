@@ -115,6 +115,9 @@
         "connecting": "Kobler til...",
         "verifying": "Verifiserer tilkobling...",
         "updating": "Oppdaterer...",
+        "retrievingMessages": "Henter meldinger…",
+        "retrievingFor": "Henter meldinger for {{target}}",
+        "retrievalEndedFor": "Henting av meldinger for {{target}} er avsluttet",
         "connectionError": "Tilkoblingsfeil",
         "disconnected": "Frakoblet",
         "cancelReconnection": "Avbryt gjenoppkobling"
