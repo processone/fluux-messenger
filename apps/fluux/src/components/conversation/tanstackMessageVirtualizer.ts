@@ -97,6 +97,25 @@ export function observeElementOffsetWithRaf(
   }
 }
 
+/**
+ * Points virtual-core's bookkeeping for a compensation write at the position actually written:
+ * `target` is in layout coordinates (the library adds its held offset to the element position).
+ * Its write record, which the read-back is matched against, and its clamp recovery were computed
+ * from the offset it decided on, so a rebased write that kept the old ones would be read back as
+ * foreign and lose the part a not yet grown spacer clamps away. Both are private, so a library
+ * that renames them leaves the write correct and only the bookkeeping as it was.
+ */
+function retargetLibraryWrite(instance: object, layoutOffset: number, delta: number) {
+  const lib = instance as {
+    pendingWrite?: { target: number } | null
+    _clampedAdjustment?: unknown
+    _clampedBy?: (target: number) => unknown
+  }
+  const target = layoutOffset + delta
+  if (lib.pendingWrite) lib.pendingWrite.target = target
+  if (typeof lib._clampedBy === 'function') lib._clampedAdjustment = lib._clampedBy(target)
+}
+
 interface Args {
   /** Only the stable `key` per row is needed — the adapter is agnostic to item kind
    *  (date/message/header/footer all window uniformly). The caller renders by kind. */
@@ -138,6 +157,10 @@ export function useTanstackMessageVirtualizer({
   const navigationWriteRef = useRef(false)
   // Set by cancelPendingScroll until the next navigation write. See there.
   const cancelledTargetRef = useRef(false)
+  // Bumped whenever the reader takes the pixels: any destination decided earlier is void.
+  const generationRef = useRef(0)
+  // The row virtual-core is about to resize, as seen by the measurement that precedes its write.
+  const measuringRef = useRef<{ index: number; key: ReturnType<Virtualizer<HTMLElement, Element>['options']['getItemKey']>; start: number } | null>(null)
   const setScrollWriteObserver = useCallback<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>(
     observer => { writeObserverRef.current = observer }, [],
   )
@@ -229,6 +252,14 @@ export function useTanstackMessageVirtualizer({
         : options.adjustments !== undefined ? 'measurement' : 'reconcile'
       if (source === 'navigation') cancelledTargetRef.current = false
       else if (source === 'reconcile' && cancelledTargetRef.current) return
+      // The write's authority: the destination generation, scroller and row set it was decided under.
+      // The observer below can hand the pixels to the reader (cancelPendingScroll) before we write.
+      const generation = generationRef.current
+      // Taken before the observer: its takeover writes (and so re-enters this function) too.
+      const measuring = source === 'measurement' ? measuringRef.current : null
+      if (source === 'measurement') measuringRef.current = null
+      const scroller = instance.scrollElement
+      const rows = itemKeyRef.current?.items
       const observer = writeObserverRef.current
       const refused = observer?.({ phase: 'before', source, behavior: options.behavior }) === false
       // A measurement write carries the adjustment for a row that measured taller than its
@@ -238,18 +269,27 @@ export function useTanstackMessageVirtualizer({
       // stranded that many pixels above the live edge with nothing left to reconcile it (#1510).
       // Suppressing an adjustment is done at `shouldAdjustScrollPositionOnItemSizeChange`, which
       // runs before anything is counted; refusing it here is not available to the observer.
-      if (refused && source !== 'measurement') return
-      // The library computed `offset` when the row resized, and the observer above (or a scroll the
-      // browser published since) may have moved the reader on. Applying the counted adjustment to
-      // that stale base would write the old position back and erase the movement (#1601), so a
-      // measurement write adds its adjustment to where the reader is now. This holds for every
-      // consumer of the write, whichever target was cancelled meanwhile.
-      const base = source === 'measurement' && instance.scrollElement ? instance.scrollElement.scrollTop : offset
-      elementScroll(base, options, instance)
-      observer?.({ phase: 'after', source, behavior: options.behavior })
-      if (source === 'measurement' && instance.scrollElement) {
-        offsetCbRef.current?.(instance.scrollElement.scrollTop, false)
+      if (source !== 'measurement') {
+        if (refused || generationRef.current !== generation || instance.scrollElement !== scroller) return
+        elementScroll(offset, options, instance)
+        observer?.({ phase: 'after', source, behavior: options.behavior })
+        return
       }
+      // The library decided on `offset` when the row resized, and the observer above (or a scroll
+      // the browser published since) may have moved the reader on. Writing that stale base back
+      // erases the movement (#1601), and an adjustment approved for a row that is no longer above
+      // the reader is wrong. So the adjustment is judged against the reader's live position and
+      // added to it, and the library's write bookkeeping is pointed at what is actually written.
+      const live = scroller?.scrollTop ?? offset
+      const hold = (instance as unknown as { _holdOffset?: number })._holdOffset ?? 0
+      const sameRow = measuring !== null
+        && instance.scrollElement === scroller && itemKeyRef.current?.items === rows
+        && instance.options.getItemKey(measuring.index) === measuring.key
+      const delta = sameRow && measuring.start < live + hold ? options.adjustments ?? 0 : 0
+      retargetLibraryWrite(instance, live + hold, delta)
+      elementScroll(live, { ...options, adjustments: delta }, instance)
+      observer?.({ phase: 'after', source, behavior: options.behavior })
+      if (instance.scrollElement) offsetCbRef.current?.(instance.scrollElement.scrollTop, false)
     },
     measureElement: (element, entry, instance) => {
       writeObserverRef.current?.({ phase: 'before-measure', source: 'measurement' })
@@ -262,6 +302,9 @@ export function useTanstackMessageVirtualizer({
       const size = entry?.borderBoxSize?.[0]?.blockSize ?? element.getBoundingClientRect().height
       const index = instance.indexFromElement(element)
       const key = instance.options.getItemKey(index)
+      // virtual-core resizes this row right after we return; its write is judged against this row.
+      measuringRef.current = index >= 0
+        ? { index, key, start: instance.measurementsCache?.[index]?.start ?? Infinity } : null
       if (index >= 0 && size > 0) onMeasuredRef.current?.(String(key), size)
       if (size > 0 && element.querySelector('[data-msg-text]') && !samplePendingRef.current) {
         samplePendingRef.current = true
@@ -304,6 +347,7 @@ export function useTanstackMessageVirtualizer({
   const cancelPendingScroll = useCallback(() => {
     const scroller = scrollRef.current
     if (!scroller) return
+    generationRef.current++
     const wasNavigation = navigationWriteRef.current
     navigationWriteRef.current = true
     try { virtualizer.scrollToOffset(scroller.scrollTop) }

@@ -139,3 +139,86 @@ it('#1601: applies each successive measurement once on the reader position after
   measure(2, 172) // +100
   expect(scroller.scrollTop).toBe(6995 + 374 + 100 + 100)
 })
+
+// Intent: issue #1601 / FLM-70 direction B. The write keeps TanStack's approval honest against the
+// reader's live position, and a destination or row decided before the reader took over is void.
+function harness(opts: { count?: number; estimate?: number; clientHeight?: number; scrollHeight?: number } = {}) {
+  const scroller = document.body.appendChild(document.createElement('div'))
+  const dims = { clientHeight: opts.clientHeight ?? 600, scrollHeight: opts.scrollHeight ?? 5000 }
+  Object.defineProperties(scroller, {
+    offsetHeight: { get: () => dims.clientHeight }, offsetWidth: { value: 800 },
+    clientHeight: { get: () => dims.clientHeight }, scrollHeight: { get: () => dims.scrollHeight },
+  })
+  scroller.scrollTo = vi.fn((o?: ScrollToOptions | number) => {
+    const top = typeof o === 'object' ? o.top ?? 0 : 0
+    scroller.scrollTop = Math.max(0, Math.min(top, dims.scrollHeight - dims.clientHeight))
+  }) as typeof scroller.scrollTo
+  const make = (keys: string[]) => {
+    const items = keys.map(key => ({ key }))
+    return { items, indexById: new Map(items.map((item, i) => [item.key, i])) }
+  }
+  const keys = Array.from({ length: opts.count ?? 50 }, (_, i) => `row-${i}`)
+  const hook = renderHook((props: { keys: string[] }) => useTanstackMessageVirtualizer({
+    ...make(props.keys), scrollRef: { current: scroller }, estimateSize: opts.estimate ?? 100,
+  }), { initialProps: { keys } })
+  const measure = (index: number, height: number, inAct = true) => {
+    const row = scroller.appendChild(document.createElement('div'))
+    row.dataset.index = String(index)
+    row.getBoundingClientRect = () => new DOMRect(0, 0, 800, height)
+    if (inAct) act(() => hook.result.current.measureElement(row))
+    else hook.result.current.measureElement(row)
+  }
+  const lib = () => hook.result.current as unknown as Record<string, unknown>
+  return { scroller, dims, hook, measure, lib }
+}
+
+it('#1601 R1: drops a +300 approved for a row that the reader has since moved above', () => {
+  const { scroller, hook, measure } = harness()
+  act(() => hook.result.current.scrollToOffset(500))
+  act(() => hook.result.current.setScrollWriteObserver?.(write => {
+    if (write.phase === 'before' && write.source === 'measurement') scroller.scrollTop = 100
+  }))
+  measure(4, 400) // row 4 starts at 400, above the reader at 500 when TanStack approves, below it at 100
+  expect(scroller.scrollTop).toBe(100)
+})
+
+it('#1601 R2: a rebased write that the spacer clamps is recovered once the spacer grows', () => {
+  const { scroller, dims, hook, measure } = harness({ scrollHeight: 1600 }) // max scrollTop 1000
+  act(() => hook.result.current.scrollToOffset(500))
+  act(() => hook.result.current.setScrollWriteObserver?.(write => {
+    if (write.phase === 'before' && write.source === 'measurement') scroller.scrollTop = 850
+  }))
+  measure(4, 400) // +300 on 850 asks for 1150; the element holds 1000 until its spacer grows
+  expect(scroller.scrollTop).toBe(1000)
+  dims.scrollHeight = 1900
+  act(() => hook.result.current.refreshEstimates?.(true))
+  act(() => { scroller.dispatchEvent(new Event('scroll')) })
+  expect(scroller.scrollTop).toBe(1150)
+})
+
+it('#1601 R3: a destination cancelled while the observer looks is not written', () => {
+  const { scroller, hook } = harness()
+  act(() => hook.result.current.scrollToOffset(500))
+  let cancelled = false
+  act(() => hook.result.current.setScrollWriteObserver?.(write => {
+    if (write.phase === 'before' && write.source === 'navigation' && !cancelled) {
+      cancelled = true
+      scroller.scrollTop = 520 // the reader took over
+      hook.result.current.cancelPendingScroll?.()
+    }
+  }))
+  act(() => hook.result.current.scrollToOffset(3000))
+  expect(scroller.scrollTop).toBe(520)
+})
+
+it('#1601 R3: a measurement of a row from the previous conversation adds nothing to the new one', () => {
+  const { scroller, hook, measure } = harness()
+  act(() => hook.result.current.scrollToOffset(500))
+  act(() => hook.result.current.setScrollWriteObserver?.(write => {
+    if (write.phase === 'before' && write.source === 'measurement') {
+      hook.rerender({ keys: Array.from({ length: 50 }, (_, i) => `other-${i}`) }) // conversation switched
+    }
+  }))
+  measure(2, 400, false) // outside act so the switch renders while the write is in flight
+  expect(scroller.scrollTop).toBe(500)
+})
