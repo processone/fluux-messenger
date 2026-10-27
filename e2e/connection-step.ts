@@ -17,7 +17,13 @@ const GRACE_MS = 2000
 
 type Store = typeof connectionStore
 type Scope = Parameters<ReturnType<Store['getState']>['beginUpdate']>[0][number]
-type W = Window & { __connectionStore?: Store; __chatStore?: typeof chatStore; __roomStore?: typeof roomStore; __owners?: Array<() => void> }
+type RetrievalNotice = { text: string; retrievalStatusCount: number }
+type W = Window & {
+  __connectionStore?: Store; __chatStore?: typeof chatStore; __roomStore?: typeof roomStore
+  __owners?: Array<() => void>
+  __retrievalNotices?: RetrievalNotice[]
+  __retrievalNoticeObserver?: MutationObserver
+}
 
 const setConnection = (page: Page, status: string, attempt = 0, targetInMs: number | null = null) =>
   page.evaluate(([s, a, t]) => {
@@ -39,6 +45,32 @@ const finishSync = (page: Page) =>
 // FLM-171 G1/G2: positive and negative checks observe the same named window.
 function roomInfoWindow(page: Page, roomName: string) {
   return page.getByRole('dialog', { name: roomName, exact: true })
+}
+
+// FLM-171 J1: capture transient notices in the page before any work starts.
+// Observe the body so the transcript survives header replacement on navigation.
+async function observeRetrievalNotices(page: Page) {
+  await page.evaluate(() => {
+    const w = window as W
+    w.__retrievalNoticeObserver?.disconnect()
+    const notices: RetrievalNotice[] = []
+    w.__retrievalNotices = notices
+    const record = () => {
+      const header = [...document.querySelectorAll('header')].at(-1)
+      const text = header?.querySelector('[data-testid="update-announcement"]')?.textContent ?? ''
+      if (notices.at(-1)?.text === text) return
+      const retrievalStatusCount = [...document.querySelectorAll('[role="status"]')]
+        .filter(node => node.textContent?.startsWith('Retrieving messages for ')).length
+      notices.push({ text, retrievalStatusCount })
+    }
+    w.__retrievalNoticeObserver = new MutationObserver(record)
+    w.__retrievalNoticeObserver.observe(document.body, { subtree: true, childList: true, characterData: true })
+    record()
+  })
+}
+
+async function retrievalNotices(page: Page) {
+  return page.evaluate(() => (window as W).__retrievalNotices ?? [])
 }
 
 async function headerHeight(page: Page): Promise<number> {
@@ -136,6 +168,7 @@ for (const vp of VIEWPORTS) {
         }, scopes)
         const end = () => page.evaluate(() => (window as W).__owners!.shift()!())
         const stable = async () => expect(await headerHeight(page)).toBe(baseline)
+        await observeRetrievalNotices(page)
 
         // Unknown/global preparation and another conversation do not affect this header.
         await begin(['chat:other@fluux.chat'])
@@ -157,15 +190,12 @@ for (const vp of VIEWPORTS) {
         await expect(header.getByTestId('update-text')).toHaveCount(0)
         await expect(header.getByTestId('update-text')).toContainText('Retrieving messages', { timeout: 2500 })
         const phrase = `Retrieving messages for ${name}`
-        await expect(header.getByTestId('update-announcement')).toHaveText(phrase)
-        const startNotice = await header.getByTestId('update-announcement').textContent()
         await stable()
         await shot(page, `${vp.label}-${view}-scoped-brief`)
         const started = await page.evaluate(scope => (window as W).__connectionStore!.getState().updates[scope as Scope]!.startedAt, scope)
         // Captain F5: retrieval belongs only to this visible header, never lists.
         await expect(page.getByTestId('sidebar-header').getByTestId('update-icon')).toHaveCount(0)
         await expect(page.getByTestId('sidebar-header').getByTestId('update-announcement')).toHaveCount(0)
-        await expect(page.getByRole('status').filter({ hasText: 'Retrieving messages for' })).toHaveCount(1)
         await expect(header.getByTestId('update-icon')).toBeVisible({ timeout: 4000 })
         // Accessible retrieval text is additional header content, not a subtitle change.
         for (const line of normal.split('\n').map(line => line.trim()).filter(Boolean)) {
@@ -174,6 +204,10 @@ for (const vp of VIEWPORTS) {
         await stable()
         // Captain I1: start was delivered, then only the icon's hidden explanation remains.
         await expect(header.getByTestId('update-announcement')).toHaveText('')
+        const recordedStart = (await retrievalNotices(page)).find(notice => notice.text === phrase)
+        expect(recordedStart?.text).toBe(phrase)
+        expect(recordedStart?.retrievalStatusCount).toBe(1)
+        const startNotice = recordedStart?.text
         await expect.poll(async () => ((await header.textContent()) ?? '').split(phrase).length - 1).toBe(1)
         const iconPhaseNotice = await header.getByTestId('update-announcement').textContent()
         const iconPhasePhraseCount = ((await header.textContent()) ?? '').split(phrase).length - 1
@@ -214,11 +248,12 @@ for (const vp of VIEWPORTS) {
         await stable()
         await end()
         await expect(header.getByTestId('update-icon')).toHaveCount(0)
-        await expect(header.getByTestId('update-announcement')).toContainText(`Message retrieval ended for ${name}`)
-        const endNotice = await header.getByTestId('update-announcement').textContent()
         await expect(header.getByTestId('update-announcement')).toHaveText('')
+        const endPhrase = `Message retrieval ended for ${name}`
+        const recordedEnd = (await retrievalNotices(page)).find(notice => notice.text === endPhrase)
+        expect(recordedEnd?.text).toBe(endPhrase)
+        const endNotice = recordedEnd?.text
         const clearedEndNotice = await header.getByTestId('update-announcement').textContent()
-        info.annotations.push({ type: 'i1-announcement', description: JSON.stringify({ viewport: vp.label, view, startNotice, iconPhaseNotice, iconPhasePhraseCount, endNotice, clearedEndNotice }) })
         await stable()
 
         // FLM-171 F1: a short verification must not replay the retained end.
@@ -251,6 +286,10 @@ for (const vp of VIEWPORTS) {
         await page.waitForTimeout(250)
         await page.evaluate(() => (window as W).__connectionStore!.getState().setIsVerifying(false))
         await expect(header.getByTestId('update-announcement')).toHaveText('')
+        const noticeTranscript = await retrievalNotices(page)
+        expect(noticeTranscript.filter(notice => notice.text).map(notice => notice.text)).toEqual([phrase, endPhrase, phrase])
+        info.annotations.push({ type: 'i1-announcement', description: JSON.stringify({ viewport: vp.label, view, startNotice, iconPhaseNotice, iconPhasePhraseCount, endNotice, clearedEndNotice, noticeTranscript }) })
+        await page.evaluate(() => (window as W).__retrievalNoticeObserver?.disconnect())
         info.annotations.push({ type: 'scoped-update', description: `${vp.label} ${view}: ${baseline}px; own scope start unchanged; no 15-second expiry` })
       })
     }
