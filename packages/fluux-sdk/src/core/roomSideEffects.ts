@@ -185,7 +185,7 @@ export function setupRoomSideEffects(
 
     logInfo(`Room: starting MAM catch-up for ${roomJid}`)
 
-    const endCatchUp = connectionStore.getState().beginCatchUp()
+    const endUpdate = connectionStore.getState().beginUpdate([`room:${roomJid}`, 'rooms'])
     try {
       // Load IndexedDB cache first to ensure we have the latest messages
       // before deciding the MAM query direction. Without this, a foreground
@@ -242,7 +242,7 @@ export function setupRoomSideEffects(
       roomStore.getState().setRoomMAMLoading(roomJid, false)
       requestRoomMamHandoff(client, fetchOwner.coverage)
     } finally {
-      endCatchUp()
+      endUpdate()
     }
   }
 

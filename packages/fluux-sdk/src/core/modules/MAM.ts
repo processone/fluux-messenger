@@ -1557,11 +1557,12 @@ export class MAM extends BaseModule {
 
     const conversationIds = conversations.map((c) => c.id)
 
+    const endListUpdate = this.deps.stores?.connection?.beginUpdate?.(['messages'])
     await executeWithConcurrency(
       conversationIds,
       (conversationId) => session.isCurrent() ? this.fetchPreviewForConversation(conversationId) : Promise.resolve(),
       concurrency
-    )
+    ).finally(() => endListUpdate?.())
 
     if (!session.isCurrent()) return
     logInfo(`Preview refresh complete for ${conversations.length} conversation(s)`)
@@ -1592,11 +1593,12 @@ export class MAM extends BaseModule {
 
     const conversationIds = archivedConversations.map((c) => c.id)
 
+    const endListUpdate = this.deps.stores?.connection?.beginUpdate?.(['messages'])
     await executeWithConcurrency(
       conversationIds,
       (conversationId) => session.isCurrent() ? this.fetchPreviewForConversation(conversationId) : Promise.resolve(),
       concurrency
-    )
+    ).finally(() => endListUpdate?.())
   }
 
   /**
@@ -1630,9 +1632,11 @@ export class MAM extends BaseModule {
       category: 'sm',
     })
 
+    const endListUpdate = this.deps.stores?.connection?.beginUpdate?.(['messages'])
     await executeWithConcurrency(
       conversations,
       async (conv) => {
+        const endUpdate = this.deps.stores?.connection?.beginUpdate?.([`chat:${conv.id}`, 'messages'])
         try {
           // Skip if disconnected (avoid queuing doomed queries)
           if (this.deps.stores?.connection.getStatus() !== 'online') return
@@ -1652,10 +1656,12 @@ export class MAM extends BaseModule {
           await this.catchUpConversationHistory(conv.id, messages, { sessionStartTime, stitchReadPointer: true })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
+        } finally {
+          endUpdate?.()
         }
       },
       concurrency
-    )
+    ).finally(() => endListUpdate?.())
 
     logInfo(`Background catch-up for ${conversations.length} conversation(s) — complete`)
   }
@@ -1694,6 +1700,7 @@ export class MAM extends BaseModule {
     messages: Array<{ timestamp?: Date; stanzaId?: string }>,
     options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
   ): Promise<void> {
+    const endUpdate = this.deps.stores?.connection?.beginUpdate?.([`chat:${conversationId}`, 'messages'])
     await this.runCatchUpHistory(messages, options, {
       label: `...@${getDomain(conversationId) || '*'}`,
       getGaps: () => this.deps.stores?.chat.getConversationGaps?.(conversationId) ?? [],
@@ -1717,7 +1724,7 @@ export class MAM extends BaseModule {
           oldest: true,
         })) ?? []) as Array<{ timestamp?: Date; stanzaId?: string }>,
       query: (opts) => this.queryArchive({ with: conversationId, ...opts }),
-    })
+    }).finally(() => endUpdate?.())
   }
 
   /**
@@ -1758,9 +1765,11 @@ export class MAM extends BaseModule {
       category: 'sm',
     })
 
+    const endListUpdate = this.deps.stores?.connection?.beginUpdate?.(['messages'])
     await executeWithConcurrency(
       newContacts,
       async (contact) => {
+        const endUpdate = this.deps.stores?.connection?.beginUpdate?.([`chat:${contact.jid}`, 'messages'])
         try {
           if (this.deps.stores?.connection.getStatus() !== 'online') {
             interrupted = true
@@ -1790,10 +1799,12 @@ export class MAM extends BaseModule {
           }
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
+        } finally {
+          endUpdate?.()
         }
       },
       concurrency
-    )
+    ).finally(() => endListUpdate?.())
 
     logInfo(`Roster discovery complete for ${newContacts.length} contact(s)`)
     return !interrupted
@@ -1811,18 +1822,23 @@ export class MAM extends BaseModule {
    *   excludes messages received this session (see `selectCatchUpQuery`).
    */
   async catchUpRoom(roomJid: string, sessionStartTime?: number): Promise<void> {
-    if (this.deps.stores?.connection.getStatus() !== 'online') return
+    const endUpdate = this.deps.stores?.connection?.beginUpdate?.([`room:${roomJid}`, 'rooms'])
+    try {
+      if (this.deps.stores?.connection.getStatus() !== 'online') return
 
-    // Read the newest cached messages to compute a proper forward cursor — a PURE
-    // read (`peek`) that does NOT populate the store. Background catch-up runs only
-    // for NON-active rooms (the active room is excluded), and the invariant is that
-    // only the active room is resident in RAM; mergeRoomMAMMessages persists the
-    // fetched history to IndexedDB. Without `peek`, every synced room would hold
-    // ~MAM_CACHE_LOAD_LIMIT messages in RAM. We still need the cached messages (not
-    // just the persisted preview timestamp) so the cursor lands on the newest
-    // PRE-session message and the forward query fills the whole offline gap.
-    const messages = (await this.deps.stores?.room.loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT, peek: true })) || []
-    await this.catchUpRoomHistory(roomJid, messages, { sessionStartTime, stitchReadPointer: true })
+      // Read the newest cached messages to compute a proper forward cursor — a PURE
+      // read (`peek`) that does NOT populate the store. Background catch-up runs only
+      // for NON-active rooms (the active room is excluded), and the invariant is that
+      // only the active room is resident in RAM; mergeRoomMAMMessages persists the
+      // fetched history to IndexedDB. Without `peek`, every synced room would hold
+      // ~MAM_CACHE_LOAD_LIMIT messages in RAM. We still need the cached messages (not
+      // just the persisted preview timestamp) so the cursor lands on the newest
+      // PRE-session message and the forward query fills the whole offline gap.
+      const messages = (await this.deps.stores?.room.loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT, peek: true })) || []
+      await this.catchUpRoomHistory(roomJid, messages, { sessionStartTime, stitchReadPointer: true })
+    } finally {
+      endUpdate?.()
+    }
   }
 
   /** Room twin of {@link catchUpConversationHistory} — same Phase A/B over queryRoomArchive. */
@@ -1831,6 +1847,7 @@ export class MAM extends BaseModule {
     messages: Array<{ timestamp?: Date; stanzaId?: string }>,
     options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
   ): Promise<void> {
+    const endUpdate = this.deps.stores?.connection?.beginUpdate?.([`room:${roomJid}`, 'rooms'])
     await this.runCatchUpHistory(messages, options, {
       label: roomJid,
       getGaps: () => this.deps.stores?.room.getRoomGaps?.(roomJid) ?? [],
@@ -1854,7 +1871,7 @@ export class MAM extends BaseModule {
           oldest: true,
         })) ?? []) as Array<{ timestamp?: Date; stanzaId?: string }>,
       query: (opts) => this.queryRoomArchive({ roomJid, ...opts }),
-    })
+    }).finally(() => endUpdate?.())
   }
 
   /**
@@ -2198,6 +2215,7 @@ export class MAM extends BaseModule {
    */
   private async fetchPreviewForConversation(conversationId: string): Promise<void> {
     const session = this.captureQuery()
+    const endUpdate = this.deps.stores?.connection?.beginUpdate?.(['messages'])
     try {
       const queryId = `preview_${generateUUID()}`
 
@@ -2258,6 +2276,8 @@ export class MAM extends BaseModule {
     } catch (_error) {
       // Silently ignore errors - preview refresh is best-effort
       // Individual conversation failures shouldn't affect others
+    } finally {
+      endUpdate?.()
     }
   }
 
@@ -2288,21 +2308,26 @@ export class MAM extends BaseModule {
       category: 'sm',
     })
 
-    // For MAM rooms: fetch preview via MAM query
-    const mamRoomJids = mamRooms.map((r) => r.jid)
-    await executeWithConcurrency(
-      mamRoomJids,
-      (roomJid) => session.isCurrent() ? this.fetchPreviewForRoom(roomJid) : Promise.resolve(),
-      concurrency
-    )
+    const endListUpdate = this.deps.stores?.connection?.beginUpdate?.(['rooms'])
+    try {
+      // For MAM rooms: fetch preview via MAM query
+      const mamRoomJids = mamRooms.map((r) => r.jid)
+      await executeWithConcurrency(
+        mamRoomJids,
+        (roomJid) => session.isCurrent() ? this.fetchPreviewForRoom(roomJid) : Promise.resolve(),
+        concurrency
+      )
 
-    // For non-MAM rooms: load preview from cache to populate lastMessage
-    // This only updates lastMessage without modifying the messages array
-    for (const room of nonMamRooms) {
-      if (!session.isCurrent()) return
-      if (!room.lastMessage) {
-        await this.deps.stores?.room.loadPreviewFromCache(room.jid)
+      // For non-MAM rooms: load preview from cache to populate lastMessage
+      // This only updates lastMessage without modifying the messages array
+      for (const room of nonMamRooms) {
+        if (!session.isCurrent()) return
+        if (!room.lastMessage) {
+          await this.deps.stores?.room.loadPreviewFromCache(room.jid)
+        }
       }
+    } finally {
+      endListUpdate?.()
     }
   }
 
@@ -2317,6 +2342,7 @@ export class MAM extends BaseModule {
    */
   async fetchPreviewForRoom(roomJid: string): Promise<void> {
     const session = this.captureQuery()
+    const endUpdate = this.deps.stores?.connection?.beginUpdate?.(['rooms'])
     try {
       // Cache-first: try loading preview from IndexedDB before making a network query.
       // The delayed background room catch-up will correct the preview later if stale.
@@ -2366,6 +2392,8 @@ export class MAM extends BaseModule {
       }
     } catch (_error) {
       // Silently ignore errors - preview refresh is best-effort
+    } finally {
+      endUpdate?.()
     }
   }
 

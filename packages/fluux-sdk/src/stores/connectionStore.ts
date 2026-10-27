@@ -1,3 +1,4 @@
+import type { UpdateScope } from '../core/types/storeBindings'
 import type { DiscoveryFailure } from '../core/types/connection'
 import { createStore } from 'zustand/vanilla'
 import { subscribeWithSelector } from 'zustand/middleware'
@@ -5,6 +6,13 @@ import type { ConnectionStatus, ConnectionMethod, PresenceShow, ServerInfo, Reso
 
 // Re-export for convenience
 export type { ServerInfo, ServerIdentity, HttpUploadService, WebPushService, WebPushStatus } from '../core/types'
+
+export interface ScopeUpdate {
+  startedAt: number
+  owners: number
+  phase: 'silent' | 'brief' | 'icon' | 'idle'
+  announcement: 'started' | 'ended' | null
+}
 
 /**
  * Connection state interface for the XMPP connection store.
@@ -47,14 +55,20 @@ export type { ServerInfo, ServerIdentity, HttpUploadService, WebPushService, Web
  * @category Stores
  */
 interface ConnectionState {
+  /** Single owner for every retrieval scope, including its presentation deadlines. Never persisted. */
+  replayOwners: number
+  beginReplay: () => () => void
+  isReceivingReplay: () => boolean
+  updates: Partial<Record<UpdateScope, ScopeUpdate>>
+  beginUpdate: (scopes: readonly UpdateScope[]) => () => void
   status: ConnectionStatus
   /** True while the machine is in connected.verifying (wake verification in progress) */
   isVerifying: boolean
-  /** True while any post-connect catch-up owner is still running (see beginCatchUp) */
+  /** Derived from the same work handles as updates, including unknown-target preparation. */
   isCatchingUp: boolean
-  /** When the current catch-up began; the "Updating..." step is bounded from here */
+  /** Start of the aggregate work episode, retained until its last handle ends. */
   catchUpStartedAt: number | null
-  /** Running catch-up owners; the epoch invalidates owners of an ended session */
+  /** Registered work handles, counted once regardless of their number of scopes. */
   catchUpOwners: number
   catchUpEpoch: number
   jid: string | null
@@ -91,9 +105,9 @@ interface ConnectionState {
   setStatus: (status: ConnectionStatus) => void
   setIsVerifying: (isVerifying: boolean) => void
   /**
-   * Register one catch-up owner (a MAM fetch, session preparation, ...).
-   * `isCatchingUp` stays true until every owner has ended. Returns the owner's
-   * end function: idempotent, and a no-op once the session's owners were reset.
+   * Compatibility alias for beginUpdate([]), with no local presentation scope.
+   * Producers register once with beginUpdate(scopes); its handles also derive
+   * isCatchingUp and catchUpStartedAt. Old callers retain the same lifecycle.
    */
   beginCatchUp: () => () => void
   /** Drop every owner (the connection left online). */
@@ -132,6 +146,8 @@ const initialState = {
   status: 'disconnected' as ConnectionStatus,
   isVerifying: false,
   isCatchingUp: false,
+  replayOwners: 0,
+  updates: {} as ConnectionState['updates'],
   catchUpStartedAt: null as number | null,
   catchUpOwners: 0,
   catchUpEpoch: 0,
@@ -164,38 +180,104 @@ const initialState = {
 }
 
 let catchUpEpochSeq = 0
+// Only this module schedules update presentation. Views merely select a phase.
+const updateTimers = new Map<UpdateScope, ReturnType<typeof setTimeout>[]>()
+function clearUpdateTimers(scope?: UpdateScope): void {
+  if (scope !== undefined) {
+    updateTimers.get(scope)?.forEach(clearTimeout)
+    updateTimers.delete(scope)
+  } else {
+    for (const key of updateTimers.keys()) clearUpdateTimers(key)
+  }
+}
 
 export const connectionStore = createStore<ConnectionState>()(
   subscribeWithSelector((set, get) => ({
   ...initialState,
 
-  setStatus: (status) => set({ status }),
-  setIsVerifying: (isVerifying) => set({ isVerifying }),
-  beginCatchUp: () => {
-    const { catchUpEpoch, catchUpOwners, catchUpStartedAt } = get()
+  isReceivingReplay: () => get().replayOwners > 0,
+  beginReplay: () => {
+    const epoch = get().catchUpEpoch
+    set({ replayOwners: get().replayOwners + 1 })
+    let ended = false
+    return () => {
+      if (ended || get().catchUpEpoch !== epoch) return
+      ended = true
+      set({ replayOwners: Math.max(0, get().replayOwners - 1) })
+    }
+  },
+  beginUpdate: (requestedScopes) => {
+    const scopes = [...new Set(requestedScopes)]
+    const epoch = get().catchUpEpoch
+    const updates = { ...get().updates }
+    for (const scope of scopes) {
+      const existing = updates[scope]
+      if (existing && existing.owners > 0) {
+        updates[scope] = { ...existing, owners: existing.owners + 1 }
+        continue
+      }
+      const startedAt = Date.now()
+      updates[scope] = { startedAt, owners: 1, phase: 'silent', announcement: null }
+      const advance = () => {
+        const current = get()
+        const activity = current.updates[scope]
+        if (current.catchUpEpoch !== epoch || !activity?.owners) return
+        const phase = Date.now() - activity.startedAt >= 5000 ? 'icon' : 'brief'
+        set({ updates: { ...current.updates, [scope]: { ...activity, phase, announcement: 'started' } } })
+      }
+      updateTimers.set(scope, [
+        setTimeout(advance, 2000),
+        setTimeout(advance, 5000),
+      ])
+    }
     set({
+      updates,
+      catchUpOwners: get().catchUpOwners + 1,
       isCatchingUp: true,
-      catchUpOwners: catchUpOwners + 1,
-      catchUpStartedAt: catchUpStartedAt ?? Date.now(),
+      catchUpStartedAt: get().catchUpStartedAt ?? Date.now(),
     })
     let ended = false
     return () => {
-      if (ended) return
+      if (ended || get().catchUpEpoch !== epoch) return
       ended = true
-      const state = get()
-      if (state.catchUpEpoch !== catchUpEpoch) return
-      const owners = Math.max(0, state.catchUpOwners - 1)
-      set(owners === 0
-        ? { catchUpOwners: 0, isCatchingUp: false, catchUpStartedAt: null }
-        : { catchUpOwners: owners })
+      const updates = { ...get().updates }
+      for (const scope of scopes) {
+        const activity = updates[scope]
+        if (!activity?.owners) continue
+        const owners = activity.owners - 1
+        updates[scope] = { ...activity, owners, ...(owners === 0 ? {
+          phase: 'idle' as const,
+          // Neutral end, not a claim of success: error/cancellation also release work.
+          announcement: activity.phase === 'silent' ? null : 'ended' as const,
+        } : {}) }
+        if (owners === 0) clearUpdateTimers(scope)
+      }
+      const catchUpOwners = Math.max(0, get().catchUpOwners - 1)
+      set({
+        updates,
+        catchUpOwners,
+        isCatchingUp: catchUpOwners > 0,
+        catchUpStartedAt: catchUpOwners > 0 ? get().catchUpStartedAt : null,
+      })
     }
   },
-  resetCatchUp: () => set({
-    isCatchingUp: false,
-    catchUpStartedAt: null,
-    catchUpOwners: 0,
-    catchUpEpoch: ++catchUpEpochSeq,
-  }),
+  setStatus: (status) => {
+    if (status !== 'online') get().resetCatchUp()
+    set({ status })
+  },
+  setIsVerifying: (isVerifying) => set({ isVerifying }),
+  beginCatchUp: () => get().beginUpdate([]),
+  resetCatchUp: () => {
+    clearUpdateTimers()
+    set({
+      updates: {},
+      replayOwners: 0,
+      isCatchingUp: false,
+      catchUpStartedAt: null,
+      catchUpOwners: 0,
+      catchUpEpoch: ++catchUpEpochSeq,
+    })
+  },
   setJid: (jid) => set({ jid }),
   setDiscoveryFailure: (discoveryFailure) => set({ discoveryFailure }),
   setError: (error) => set({ error }),
@@ -247,12 +329,15 @@ export const connectionStore = createStore<ConnectionState>()(
   setMAMFulltextSearch: (supported) => set({ mamFulltextSearch: supported }),
   setWindowVisible: (visible) => set({ windowVisible: visible }),
 
-  reset: () => set((state) => ({
-    ...initialState,
-    catchUpEpoch: ++catchUpEpochSeq,
-    ownResources: new Map(), // Create new Map instance on reset
-    webPushEnabled: state.webPushEnabled, // Preserve persisted preference
-  })),
+  reset: () => {
+    clearUpdateTimers()
+    set((state) => ({
+      ...initialState,
+      catchUpEpoch: ++catchUpEpochSeq,
+      ownResources: new Map(), // Create new Map instance on reset
+      webPushEnabled: state.webPushEnabled, // Preserve persisted preference
+    }))
+  },
 })))
 
 export type { ConnectionState }

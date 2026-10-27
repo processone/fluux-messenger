@@ -13,6 +13,7 @@ import { getUniqueOccupantCount } from '@fluux/sdk'
 import { RoomAvatar } from './RoomAvatar'
 import { Tooltip } from './Tooltip'
 import { ConnectionStepSlot } from './ConnectionStep'
+import { UpdateStatus } from './UpdateStatus'
 import { useWindowDrag } from '@/hooks'
 import { renderTextWithLinks } from '@/utils/messageStyles'
 import { AvatarCropModal } from './AvatarCropModal'
@@ -41,6 +42,8 @@ import {
 
 export interface RoomHeaderProps {
   room: Room
+  /** This header is covered by another pane, so retrieval stays silent. */
+  covered?: boolean
   onBack?: () => void
   showOccupants: boolean
   onToggleOccupants: () => void
@@ -56,6 +59,7 @@ export interface RoomHeaderProps {
 
 export function RoomHeader({
   room,
+  covered = false,
   onBack,
   showOccupants,
   onToggleOccupants,
@@ -128,24 +132,26 @@ export function RoomHeader({
         size="header"
       />
 
-      {/* Name and info — opens Room Info modal with the full topic and details.
-          The tooltip wrapper carries the flex sizing so the button still fills
-          the free space between the avatar and the trailing action cluster. */}
-      <Tooltip content={t('rooms.showRoomInfo')} position="bottom" className="flex flex-1 min-w-0">
-        <button
-          type="button"
-          onClick={() => setShowInfoModal(true)}
-          aria-label={`${t('rooms.showRoomInfo')}: ${room.name}`}
-          className="flex-1 min-w-0 text-start rounded-md px-1 -mx-1 py-0.5 hover:bg-fluux-hover transition-colors"
-        >
-          <span className="block font-semibold text-fluux-text truncate leading-tight">{room.name}</span>
-          <p className="text-xs text-fluux-muted truncate">
-            <ConnectionStepSlot>
+      {/* The room-info button covers the original full free area. Content is
+          hit-transparent except links and the separate explanation control. */}
+      <div className="relative flex-1 min-w-0 py-0.5" data-testid="room-info-area">
+        <Tooltip content={t('rooms.showRoomInfo')} position="bottom" className="absolute inset-0 -mx-1 flex">
+          <button
+            type="button"
+            onClick={() => setShowInfoModal(true)}
+            aria-label={`${t('rooms.showRoomInfo')}: ${room.name}`}
+            className="flex-1 min-w-0 rounded-md hover:bg-fluux-hover transition-colors"
+          />
+        </Tooltip>
+        <div className="relative pointer-events-none min-w-0 [&_a]:pointer-events-auto">
+          <span aria-hidden="true" className="block font-semibold text-fluux-text truncate leading-tight">{room.name}</span>
+          <ConnectionStepSlot>
+            <UpdateStatus scope={`room:${room.jid}`} target={room.name} visible={!covered}>
               {room.subject?.trim() ? renderTextWithLinks(room.subject) : room.jid}
-            </ConnectionStepSlot>
-          </p>
-        </button>
-      </Tooltip>
+            </UpdateStatus>
+          </ConnectionStepSlot>
+        </div>
+      </div>
 
       {/* Trailing action cluster — grouped tightly on mobile (gap-1) so the
           kebab and members pill read as one unit; desktop keeps the header's md

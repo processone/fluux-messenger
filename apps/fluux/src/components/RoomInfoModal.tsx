@@ -22,6 +22,7 @@ export function RoomInfoModal({ room, onClose }: RoomInfoModalProps) {
   return (
     <ModalShell
       title={room.name}
+      dialogLabel={room.name || room.jid}
       onClose={onClose}
       width="max-w-md"
       panelClassName="max-h-[80vh] flex flex-col"

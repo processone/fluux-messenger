@@ -115,7 +115,9 @@
         "reconnectingStep": "Επανασύνδεση σε {{seconds}}δ",
         "connecting": "Σύνδεση...",
         "verifying": "Επαλήθευση σύνδεσης...",
-        "updating": "Ενημέρωση...",
+        "retrievingMessages": "Ανάκτηση μηνυμάτων…",
+        "retrievingFor": "Ανάκτηση μηνυμάτων για {{target}}",
+        "retrievalEndedFor": "Η ανάκτηση μηνυμάτων για {{target}} τελείωσε",
         "connectionError": "Σφάλμα σύνδεσης",
         "disconnected": "Αποσυνδέθηκε",
         "cancelReconnection": "Ακύρωση επανασύνδεσης"

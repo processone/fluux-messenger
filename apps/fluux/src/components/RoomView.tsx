@@ -566,6 +566,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           {/* Header */}
           <RoomHeader
             room={activeRoom}
+            covered={covered}
             onBack={onBack}
             showOccupants={showOccupants}
             onToggleOccupants={() => setShowOccupants(!showOccupants)}

@@ -115,7 +115,9 @@
         "reconnectingStep": "Atkārtots savienojums pēc {{seconds}}s",
         "connecting": "Savienojas...",
         "verifying": "Pārbauda savienojumu...",
-        "updating": "Atjaunina...",
+        "retrievingMessages": "Iegūst ziņojumus…",
+        "retrievingFor": "Iegūst ziņojumus: {{target}}",
+        "retrievalEndedFor": "Ziņojumu iegūšana beidzās: {{target}}",
         "connectionError": "Savienojuma kļūda",
         "disconnected": "Atvienots",
         "cancelReconnection": "Atcelt atkārtoto savienošanos"

@@ -2038,6 +2038,9 @@ export class XMPPClient {
   }
 
   private async waitForReplayIngested(timeoutMs: number): Promise<void> {
+    // SM retransmissions need not carry a delay tag. Mark reception until the
+    // ping answer, so Chat can attach slow integration to known peers only.
+    const endReplay = this.stores?.connection.beginReplay?.()
     const deadline = Date.now() + timeoutMs
     // Next macrotask: the resume handler that calls this runs before the
     // connection restores its Stream Management counters.
@@ -2047,6 +2050,8 @@ export class XMPPClient {
       await this.sendIQ(xml('iq', { type: 'get' }, xml('ping', { xmlns: NS_PING })), timeoutMs)
     } catch {
       // An error reply is still an answer; a timeout or a lost socket ends the wait.
+    } finally {
+      endReplay?.()
     }
     // Encrypted replayed messages reach the store only once decrypted, which
     // can end after the answer.

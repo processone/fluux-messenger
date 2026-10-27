@@ -114,7 +114,9 @@
         "reconnectingStep": "Újracsatlakozás {{seconds}} mp múlva",
         "connecting": "Csatlakozás...",
         "verifying": "Kapcsolat ellenőrzése...",
-        "updating": "Frissítés...",
+        "retrievingMessages": "Üzenetek lekérése…",
+        "retrievingFor": "Üzenetek lekérése: {{target}}",
+        "retrievalEndedFor": "Az üzenetek lekérése véget ért: {{target}}",
         "connectionError": "Kapcsolódási hiba",
         "disconnected": "Szétkapcsolva",
         "cancelReconnection": "Újracsatlakozás megszakítása"

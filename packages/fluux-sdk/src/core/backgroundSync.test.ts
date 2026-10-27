@@ -847,11 +847,20 @@ describe('setupBackgroundSyncSideEffects', () => {
         roomJid: 'b@conference.example.com',
         joined: true,
       })
-      await vi.advanceTimersByTimeAsync(10_000)
+      // FLM-168: the scheduled wait is silent; actual targeted cache work
+      // belongs to the same retrieval episode as its eventual archive query.
+      await vi.advanceTimersByTimeAsync(9999)
+      expect(connectionStore.getState().updates['room:b@conference.example.com']).toBeUndefined()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(connectionStore.getState().updates['room:b@conference.example.com']).toMatchObject({ phase: 'silent', owners: 1 })
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(connectionStore.getState().updates['room:b@conference.example.com']?.phase).toBe('brief')
       roomStore.getState().setActiveRoom('b@conference.example.com')
       resolveCache([])
       await Promise.resolve()
       await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(connectionStore.getState().updates['room:b@conference.example.com']?.owners).toBe(0)
 
       expect(mockClient.internal.mam.catchUpRoomHistory).not.toHaveBeenCalled()
       loadSpy.mockRestore()
@@ -1130,6 +1139,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.waitFor(() => {
         expect(loadSpy.mock.calls.filter(([jid]) => jid === roomJid)).toHaveLength(1)
       })
+      const scopeStartedAt = connectionStore.getState().updates[`room:${roomJid}`]!.startedAt
       await vi.advanceTimersByTimeAsync(10_000)
 
       roomStore.getState().setActiveRoom(null)
@@ -1139,6 +1149,8 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
       expect(mockClient.internal.mam.catchUpRoomHistory).not.toHaveBeenCalled()
       expect(roomStore.getState().getRoomMAMQueryState(roomJid).isLoading).toBe(false)
+      // FLM-168: navigation/handoff must not restart or hide the same scope.
+      expect(connectionStore.getState().updates[`room:${roomJid}`]).toMatchObject({ startedAt: scopeStartedAt, phase: 'icon' })
 
       resolveBackgroundCache([])
       await vi.waitFor(() => {

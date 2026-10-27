@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
-import { ConnectionStepSlot, DEGRADED_STATUS_GRACE_MS, CATCH_UP_STEP_LIMIT_MS } from './ConnectionStep'
+import { ConnectionStepSlot, DEGRADED_STATUS_GRACE_MS } from './ConnectionStep'
 import { ChatHeader } from './ChatHeader'
 
 // FLM-120: the sidebar chip is invisible when a conversation is open on a
@@ -99,7 +99,7 @@ describe('connection step in the conversation header', () => {
     mockReconnectTargetTime = Date.now() + 9000
     renderHeader()
     act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
-    expect(screen.getByRole('status').textContent).toBe('status.reconnecting')
+    expect(screen.getByTestId('connection-announcement').textContent).toBe('status.reconnecting')
   })
 })
 
@@ -135,10 +135,10 @@ describe('connection step review fixes', () => {
   it('mounts the live region empty before the step text arrives', () => {
     mockStatus = 'connecting'
     renderHeader()
-    const region = screen.getByRole('status')
+    const region = screen.getByTestId('connection-announcement')
     expect(region.textContent).toBe('')
     act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
-    expect(screen.getByRole('status')).toBe(region)
+    expect(screen.getByTestId('connection-announcement')).toBe(region)
     expect(region.textContent).toBe('status.connecting')
   })
 })
@@ -161,67 +161,14 @@ describe('list title', () => {
   })
 })
 
-describe('"Updating..." while missed messages arrive', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
+describe('scoped retrieval no longer inherits the global catch-up', () => {
+  it('keeps presence during unknown or other-target work (FLM-168)', () => {
     mockStatus = 'online'
     mockIsVerifying = false
-    mockIsCatchingUp = false
-    mockReconnectTargetTime = null
-  })
-  afterEach(() => vi.useRealTimers())
-
-  // A fresh element each time, so rerender re-reads the mocked store.
-  const header = () => <ChatHeader name="Emma" type="chat" jid="emma@example.com" contact={{ jid: 'emma@example.com' } as never} />
-
-  it('follows the reconnection, then gives way to presence when the catch-up ends', () => {
-    mockStatus = 'reconnecting'
-    const { rerender } = render(header())
-    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
-    mockStatus = 'online'
     mockIsCatchingUp = true
-    mockCatchUpStartedAt = Date.now()
-    rerender(header())
-    expect(screen.getByTestId('connection-step').textContent).toContain('status.updating')
-    expect(screen.queryByText('En ligne')).toBeNull()
-    mockIsCatchingUp = false
-    rerender(header())
+    mockCatchUpStartedAt = Date.now() - 3000
+    renderHeader()
     expect(screen.queryByTestId('connection-step')).toBeNull()
     expect(screen.getByText('En ligne')).toBeTruthy()
-  })
-
-  it('stops after the time limit even if the catch-up is still running', () => {
-    mockIsCatchingUp = true
-    mockCatchUpStartedAt = Date.now()
-    render(header())
-    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
-    expect(screen.getByTestId('connection-step').textContent).toContain('status.updating')
-    act(() => { vi.advanceTimersByTime(CATCH_UP_STEP_LIMIT_MS) })
-    expect(screen.queryByTestId('connection-step')).toBeNull()
-    expect(screen.getByText('En ligne')).toBeTruthy()
-  })
-
-  it('does not bring back an expired step when a header mounts later (R3)', () => {
-    mockIsCatchingUp = true
-    mockCatchUpStartedAt = Date.now()
-    const first = render(header())
-    act(() => { vi.advanceTimersByTime(CATCH_UP_STEP_LIMIT_MS + 1) })
-    expect(screen.queryByTestId('connection-step')).toBeNull()
-    first.unmount()
-    // The user navigates: a new header mounts while the store still says catching up.
-    render(header())
-    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
-    expect(screen.queryByTestId('connection-step')).toBeNull()
-  })
-
-  it('does not flash for a catch-up shorter than the grace delay', () => {
-    mockIsCatchingUp = true
-    mockCatchUpStartedAt = Date.now()
-    const { rerender } = render(header())
-    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS - 1) })
-    mockIsCatchingUp = false
-    rerender(header())
-    act(() => { vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS) })
-    expect(screen.queryByTestId('connection-step')).toBeNull()
   })
 })

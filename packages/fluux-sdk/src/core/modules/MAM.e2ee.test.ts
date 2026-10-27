@@ -16,6 +16,7 @@ import { createPresenceReader } from '../presenceReader'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { MAM } from './MAM'
+import { connectionStore } from '../../stores/connectionStore'
 import { createMockStores } from '../test-utils'
 import type { ModuleDependencies } from './BaseModule'
 import {
@@ -1298,11 +1299,14 @@ it.each(['preview', 'byId'] as const)('preserves the existing %s room decryption
   const roomJid = 'encryption@conference.example.com'
   const manager = await makeManagerWithDummyPlugin(jid)
   const decrypt = vi.spyOn(manager, 'decryptArchive')
+  connectionStore.getState().reset()
   const stores = createMockStores()
+  stores.connection.beginUpdate.mockImplementation(connectionStore.getState().beginUpdate)
   stores.room.reconcileHistoryMessages.mockImplementation(async messages => messages)
   const h = makeHarness({ jid, manager, stores })
   const query = path === 'preview' ? h.mam.fetchPreviewForRoom(roomJid) : h.mam.fetchRoomMessageById(roomJid, 'archive')
   await h.iqPending()
+  expect(connectionStore.getState().updates.rooms?.owners ?? 0).toBe(path === 'preview' ? 1 : 0)
   const [queryId, collector] = [...h.collectors][0]
   const entry = buildMAMResult({ archiveId: 'archive', forwardedMessage: xml('message', { from: `${roomJid}/Alice`, type: 'groupchat', id: 'client' },
     xml('body', {}, 'Encrypted placeholder'),
@@ -1311,6 +1315,8 @@ it.each(['preview', 'byId'] as const)('preserves the existing %s room decryption
   collector(entry)
   h.resolveNextIQ(xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })))
   const result = await query
+  expect(connectionStore.getState().updates.rooms?.owners ?? 0).toBe(0)
+  connectionStore.getState().reset()
   if (path === 'preview') {
     expect(decrypt).not.toHaveBeenCalled()
     expect(stores.room.updateLastMessagePreview).toHaveBeenCalledWith(roomJid, expect.objectContaining({ body: 'Encrypted placeholder' }))
@@ -1343,3 +1349,130 @@ it.each([['own-occ', true], ['other-occ', false]] as const)(
     h.resolveNextIQ(xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })))
     expect(await query).toMatchObject({ isOutgoing: outgoing })
   })
+
+// FLM-168: targeted retrieval must outlive the IQ reply until decryption and
+// integration finish. This executes the actual MAM orchestrator and collector.
+describe('scoped retrieval through archive integration', () => {
+  it.each((['chat', 'room'] as const).flatMap(kind => (kind === 'chat' ? ['catchup', 'preview'] : ['catchup']).map(operation => [kind, operation] as const)))('holds the %s %s scope until the encrypted archive is integrated', async (kind, operation) => {
+    connectionStore.getState().reset()
+    connectionStore.getState().setStatus('online')
+    const me = 'me@example.com'
+    const peer = kind === 'chat' ? 'peer@example.com' : 'team@conference.example.com'
+    const manager = await makeManagerWithDummyPlugin(me)
+    const payload = await manager.encryptOutbound({ kind: 'direct', peer }, new TextEncoder().encode('Recovered message'))
+    if (!payload) throw new Error('Missing encrypted fixture')
+    const stores = createMockStores()
+    stores.connection.beginUpdate.mockImplementation(connectionStore.getState().beginUpdate)
+    stores.connection.getStatus.mockReturnValue('online')
+    stores.chat.getAllConversations.mockReturnValue([{ id: peer } as never])
+    const h = makeHarness({ jid: me, manager, stores })
+    let unblock!: () => void
+    let entered!: () => void
+    const blocked = new Promise<void>(resolve => { unblock = resolve })
+    const decrypting = new Promise<void>(resolve => { entered = resolve })
+    const original = manager.decryptArchive.bind(manager)
+    vi.spyOn(manager, 'decryptArchive').mockImplementation(async (...args) => {
+      entered()
+      await blocked
+      return original(...args)
+    })
+    const work = operation === 'preview'
+      ? kind === 'chat' ? h.mam.refreshConversationPreviews() : h.mam.fetchPreviewForRoom(peer)
+      : kind === 'chat' ? h.mam.catchUpConversationHistory(peer, []) : h.mam.catchUpRoomHistory(peer, [])
+    try {
+      await h.iqPending()
+      const [queryId, collect] = [...h.collectors.entries()][0]
+      const entry = buildMAMResult({ archiveId: 'recovered-1', forwardedMessage: xml('message', {
+        from: kind === 'chat' ? peer + '/phone' : peer + '/Emma', to: me, type: kind === 'chat' ? 'chat' : 'groupchat', id: 'retrieval-fixture',
+      }, xml('body', {}, '[encrypted]'), xml(payload.payload.stanzaElement.name, payload.payload.stanzaElement.attrs,
+        ...(payload.payload.stanzaElement.children as (string | Element)[]))) })
+      entry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+      collect(entry)
+      h.resolveNextIQ(xml('iq', { type: 'result' }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })))
+      await decrypting
+      expect(connectionStore.getState().updates[`${kind}:${peer}`]?.owners ?? 0).toBe(operation === 'catchup' ? 1 : 0)
+      expect(connectionStore.getState().updates[kind === 'chat' ? 'messages' : 'rooms']?.owners).toBeGreaterThan(0)
+      expect(h.emitted.some(e => e.event === (kind === 'chat' ? 'chat:history-messages' : 'room:history-messages'))).toBe(false)
+      unblock()
+      await work
+      expect(connectionStore.getState().updates[`${kind}:${peer}`]?.owners ?? 0).toBe(0)
+      expect(connectionStore.getState().updates[kind === 'chat' ? 'messages' : 'rooms']?.owners).toBe(0)
+      if (operation === 'preview') {
+        expect(kind === 'chat' ? stores.chat.updateLastMessagePreview : stores.room.updateLastMessagePreview)
+          .toHaveBeenCalledWith(peer, expect.objectContaining({ body: 'Recovered message' }))
+        return
+      }
+      const delivered = h.emitted.find(e => e.event === (kind === 'chat' ? 'chat:history-messages' : 'room:history-messages'))
+      expect(delivered).toBeDefined()
+      expect((delivered!.payload.messages as Array<{ body: string }>)[0].body).toBe('Recovered message')
+    } finally {
+      unblock()
+      await work
+      connectionStore.getState().reset()
+    }
+  })
+})
+
+
+describe('retrieval scope negative controls (FLM-168)', () => {
+  it.each(['chat', 'room'] as const)('releases targeted %s work on a failed archive request', async kind => {
+    connectionStore.getState().reset()
+    const manager = await makeManagerWithDummyPlugin('me@example.com')
+    const stores = createMockStores()
+    stores.connection.beginUpdate.mockImplementation(connectionStore.getState().beginUpdate)
+    const h = makeHarness({ jid: 'me@example.com', manager, stores })
+    const query = kind === 'chat' ? 'queryArchive' : 'queryRoomArchive'
+    vi.spyOn(h.mam, query).mockRejectedValue(new Error('Socket closed'))
+    try {
+      await expect(kind === 'chat' ? h.mam.catchUpConversationHistory('peer@example.com', [])
+        : h.mam.catchUpRoomHistory('peer@example.com', [])).rejects.toThrow('Socket closed')
+      expect(connectionStore.getState().updates[`${kind}:peer@example.com`]).toMatchObject({ owners: 0, phase: 'idle', announcement: null })
+    } finally { connectionStore.getState().reset() }
+  })
+
+  it('does not register ordinary archive paging as local retrieval', async () => {
+    connectionStore.getState().reset()
+    const manager = await makeManagerWithDummyPlugin('me@example.com')
+    const stores = createMockStores()
+    stores.connection.beginUpdate.mockImplementation(connectionStore.getState().beginUpdate)
+    const h = makeHarness({ jid: 'me@example.com', manager, stores })
+    await runQueryWithEntry(h, 'peer@example.com', buildMAMResult({ archiveId: 'older-fixture',
+      forwardedMessage: xml('message', { from: 'peer@example.com/desktop', to: 'me@example.com', type: 'chat', id: 'older-fixture' }, xml('body', {}, 'Earlier message')) }))
+    expect(stores.connection.beginUpdate).not.toHaveBeenCalled()
+    expect(connectionStore.getState().updates).toEqual({})
+  })
+})
+
+
+it('keeps one list episode across sequential preview targets (FLM-168)', async () => {
+  vi.useFakeTimers()
+  connectionStore.getState().reset()
+  const manager = await makeManagerWithDummyPlugin('me@example.com')
+  const stores = createMockStores()
+  stores.connection.beginUpdate.mockImplementation(connectionStore.getState().beginUpdate)
+  stores.chat.getAllConversations.mockReturnValue([{ id: 'emma@example.com' }, { id: 'bob@example.com' }] as never)
+  const h = makeHarness({ jid: 'me@example.com', manager, stores })
+  let first!: () => void
+  let second!: () => void
+  let enteredSecond!: () => void
+  const secondStarted = new Promise<void>(resolve => { enteredSecond = resolve })
+  const firstWork = new Promise<void>(resolve => { first = resolve })
+  const secondWork = new Promise<void>(resolve => { second = resolve })
+  vi.spyOn(h.mam as unknown as { fetchPreviewForConversation: (id: string) => Promise<void> }, 'fetchPreviewForConversation')
+    .mockImplementation(id => { if (id === 'emma@example.com') return firstWork; enteredSecond(); return secondWork })
+  const work = h.mam.refreshConversationPreviews({ concurrency: 1 })
+  try {
+    const start = connectionStore.getState().updates.messages!.startedAt
+    await vi.advanceTimersByTimeAsync(2200)
+    first()
+    await secondStarted
+    expect(connectionStore.getState().updates.messages).toMatchObject({ startedAt: start, phase: 'brief' })
+    second()
+    await work
+    expect(connectionStore.getState().updates.messages).toMatchObject({ owners: 0, phase: 'idle', announcement: 'ended' })
+  } finally {
+    first(); second(); await work
+    connectionStore.getState().reset()
+    vi.useRealTimers()
+  }
+})

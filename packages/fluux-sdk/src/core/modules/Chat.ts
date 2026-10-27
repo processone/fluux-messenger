@@ -329,6 +329,7 @@ export class Chat extends BaseModule {
           incrementUnread: !whisper.isOutgoing,
           incrementMentions: !whisper.isOutgoing,
         })
+        this.trackRoomRetrievalIntegration(whisper)
         if (!isSentCarbon) this.deps.emit('message', whisper as unknown as Message)
         return whisper
       }
@@ -536,6 +537,14 @@ export class Chat extends BaseModule {
     const jid = this.deps.getCurrentJid()
     const ownBareJid = getBareJid(jid ?? '')
     const { peer, isSelfOutgoing } = deriveConversationContext(stanza, ownBareJid)
+    // Delayed replay has a known target now. Ordinary live traffic never starts
+    // a retrieval indicator, and the global ping/decrypt deadline cannot end it.
+    const delayed = context.delayEl || stanza.getChild('delay', NS_DELAY)
+      || this.deps.stores?.connection?.isReceivingReplay?.()
+    const room = stanza.attrs.type === 'groupchat' || !!this.deps.stores?.room?.getRoom(peer)
+    const endUpdate = delayed && peer
+      ? this.deps.stores?.connection?.beginUpdate?.(room ? [`room:${peer}`, 'rooms'] : [`chat:${peer}`, 'messages'])
+      : undefined
     const finish = this.correctionReceipts.begin(stanza)
     try {
       await decryptStanzaInPlace(stanza, manager, peer, 'live', {
@@ -543,7 +552,9 @@ export class Chat extends BaseModule {
       })
       if (!scope.isCurrent() || jid !== this.deps.getCurrentJid() || manager !== this.deps.getE2EEManager?.()) return
       this.handleMessageInternal(stanza, context)
+      if (room && delayed) await this.deps.stores?.room.waitForMessageArrivals?.(peer)
     } finally {
+      endUpdate?.()
       finish()
     }
   }
@@ -2368,7 +2379,19 @@ export class Chat extends BaseModule {
       incrementUnread: !message.isOutgoing,
       incrementMentions: message.isMention,
     })
+    this.trackRoomRetrievalIntegration(message)
     return message
+  }
+
+  private trackRoomRetrievalIntegration(message: RoomMessage): void {
+    const roomJid = message.roomJid
+    // Delayed room/whisper publication can await cache reconciliation after the SDK
+    // event returns. Keep this target active through that existing boundary.
+    const arrivals = this.deps.stores?.room.waitForMessageArrivals?.(roomJid)
+    if (arrivals && (message.isDelayed || this.deps.stores?.connection?.isReceivingReplay?.())) {
+      const endUpdate = this.deps.stores?.connection?.beginUpdate?.([`room:${roomJid}`, 'rooms'])
+      void arrivals.then(() => endUpdate?.(), () => endUpdate?.())
+    }
   }
 
   /**

@@ -32,6 +32,61 @@ user's flag. The store rule is covered by
 publication regressions are in
 `packages/fluux-sdk/src/core/modules/MAM.archivedFlag.integration.test.ts`.
 
+## Scoped retrieval status
+
+`connectionStore` is the single owner of retrieval activity, scope ownership and
+phase timing. Its ephemeral
+`updates` record is keyed by `chat:<bare JID>`, `room:<bare JID>`, `messages`
+and `rooms`. `beginUpdate(scopes)` registers running work and returns an
+idempotent release. Overlapping registrations share one start time per scope.
+Only this module schedules presentation: silent before 2 seconds, brief text
+from 2 to 5 seconds, then a fixed icon until the final registration ends.
+There is no success timeout. Only conversation headers select their own scope;
+mounting, navigation and unmounting do not schedule or reset update time.
+
+The same registration derives the public `isCatchingUp` and `catchUpStartedAt`
+aggregate. A producer never registers a separate catch-up handle alongside its
+scope handle. Unknown preparation or a scheduled pass uses `beginUpdate([])`:
+it preserves the public aggregate without creating a local scope or deadline.
+`beginCatchUp()` remains a compatibility alias for that empty-scope registration.
+
+Foreground cache hydration, targeted background catch-up and roster discovery
+register conversation/room work with the appropriate list. Preview-only work
+registers only its list. Scheduled room waits, unknown session preparation,
+normal live messages and older-history paging do not register local work.
+Stream replay reception is marked until the existing ping answer; known-target
+decryptions and delayed room publication retain separate registrations until
+integration ends, even after the global replay wait expires. Existing room
+preview decryption policy is unchanged: preview-only room reads do not initiate
+a decryption pass.
+
+Conversation subtitles show “Retrieving messages…” only during the brief
+phase, then restore presence/topic beside the icon. Lists and unrelated sections
+have no retrieval indicator or announcement, including for list-only work.
+A header covered by the mobile member pane is silent; returning reads the
+original episode without restarting its time or replaying historical completion.
+Its explanation is available by hover, keyboard activation and touch. The room-info
+control retains its original full free width, with links and the explanation as
+separate interactive targets, never nested buttons. Contextual accessible
+announcements describe the start and the end of displayed work; the end wording
+does not assert success after
+an error. Each mounted announcement region observes only transitions for its
+current scope while healthy; changing scope or returning from verification does
+not replay an end stored by an earlier episode. The region clears each committed
+notice after a 1.5-second assistive-technology delivery window, leaving only the
+icon's hidden explanation in settled icon-phase header text. Browsers expose no
+screen-reader speech-completion acknowledgement; this is a delivery opportunity,
+not detection of the end of speech. Replaced or unmounted regions cancel their
+pending cleanup, and cleared notices do not refill on phase changes. This local
+notice lifetime never changes SDK activity, scope state or phase deadlines.
+Own presence and unrelated sections do not display retrieval work.
+Global reconnection and verification retain their separate presentation.
+
+Disconnect/reset cancels the owner's deadlines and invalidates old releases
+using the existing session epoch. Nothing in this status record is persisted,
+and status tracking does not change network scheduling, encryption, read state
+or the loading of older messages.
+
 ## Message Updates During Cache Hydration
 
 Chats and rooms share the ordering boundary in

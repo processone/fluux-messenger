@@ -116,7 +116,9 @@
         "reconnectingStep": "Ponowne łączenie za {{seconds}}s",
         "connecting": "Łączenie...",
         "verifying": "Weryfikacja połączenia...",
-        "updating": "Aktualizacja...",
+        "retrievingMessages": "Pobieranie wiadomości…",
+        "retrievingFor": "Pobieranie wiadomości dla {{target}}",
+        "retrievalEndedFor": "Pobieranie wiadomości dla {{target}} zakończyło się",
         "connectionError": "Błąd połączenia",
         "disconnected": "Rozłączony",
         "cancelReconnection": "Anuluj ponowne łączenie"

@@ -116,7 +116,9 @@
         "reconnectingStep": "Reconectare în {{seconds}}s",
         "connecting": "Se conectează...",
         "verifying": "Se verifică conexiunea...",
-        "updating": "Se actualizează...",
+        "retrievingMessages": "Se preiau mesajele…",
+        "retrievingFor": "Se preiau mesajele pentru {{target}}",
+        "retrievalEndedFor": "Preluarea mesajelor pentru {{target}} s-a încheiat",
         "connectionError": "Eroare de conexiune",
         "disconnected": "Deconectat",
         "cancelReconnection": "Anulează reconectarea"

@@ -10,6 +10,8 @@ import { createPresenceReader } from '../presenceReader'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { Chat } from './Chat'
+import { createMockStores } from '../test-utils'
+import { connectionStore } from '../../stores/connectionStore'
 import { MAM } from './MAM'
 import type { ModuleDependencies } from './BaseModule'
 import {
@@ -2307,3 +2309,86 @@ async function capturePluginCtx(
   if (!captured) throw new Error('capturePluginCtx: ctx was not captured')
   return captured
 }
+
+// FLM-168: slow replay integration belongs only to its actual targets. A ping
+// deadline and a new live message are not evidence of targeted completion.
+describe('scoped replay decryption ownership', () => {
+  it.each(['stream', 'delayed', 'live'] as const)('tracks %s traffic through decrypt and carbon re-entry', async kind => {
+    connectionStore.getState().reset()
+    connectionStore.getState().setStatus('online')
+    const manager = await makeManagerWithDummyPlugin('me@example.com')
+    const payload = await manager.encryptOutbound({ kind: 'direct', peer: 'bob@example.com' }, new TextEncoder().encode('Recovered after outage'))
+    if (!payload) throw new Error('Missing encrypted fixture')
+    let unblock!: () => void
+    let entered!: () => void
+    const gate = new Promise<void>(resolve => { unblock = resolve })
+    const decrypting = new Promise<void>(resolve => { entered = resolve })
+    const original = manager.decryptInbound.bind(manager)
+    vi.spyOn(manager, 'decryptInbound').mockImplementation(async (...args) => {
+      entered()
+      await gate
+      return original(...args)
+    })
+    const h = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+    const stores = createMockStores()
+    stores.connection.beginUpdate.mockImplementation(connectionStore.getState().beginUpdate)
+    stores.connection.isReceivingReplay.mockImplementation(connectionStore.getState().isReceivingReplay)
+    h.deps.stores = stores
+    const chat = new Chat(h.deps, new MAM(h.deps))
+    const endReplay = kind === 'stream' ? connectionStore.getState().beginReplay() : () => {}
+    const inner = (sent: boolean) => xml('message', {
+      from: sent ? 'me@example.com/other' : 'bob@example.com/phone',
+      to: sent ? 'bob@example.com' : 'me@example.com', type: 'chat', id: sent ? 'replayed-sent' : 'replayed-incoming',
+    }, xml(payload.payload.stanzaElement.name, payload.payload.stanzaElement.attrs,
+      ...(payload.payload.stanzaElement.children as (string | Element)[])),
+    ...(kind === 'delayed' ? [xml('delay', { xmlns: 'urn:xmpp:delay', stamp: '2026-01-26T12:00:00Z' })] : []))
+    try {
+      chat.handle(inner(false))
+      for (const sent of [false, true]) chat.handle(xml('message', { from: 'me@example.com' },
+        xml(sent ? 'sent' : 'received', { xmlns: 'urn:xmpp:carbons:2' }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, inner(sent)))))
+      await decrypting
+      endReplay()
+      expect(connectionStore.getState().isReceivingReplay()).toBe(false)
+      expect(connectionStore.getState().updates['chat:bob@example.com']?.owners ?? 0).toBe(kind === 'live' ? 0 : 3)
+      expect(h.sdkEmitted.filter(e => (e as { event: string }).event === 'chat:message')).toHaveLength(0)
+      unblock()
+      await chat.whenLiveDecryptsSettled()
+      expect(connectionStore.getState().updates['chat:bob@example.com']?.owners ?? 0).toBe(0)
+      expect(h.sdkEmitted.filter(e => (e as { event: string }).event === 'chat:message')).toHaveLength(3)
+    } finally {
+      unblock()
+      endReplay()
+      await chat.whenLiveDecryptsSettled()
+      connectionStore.getState().reset()
+    }
+  })
+})
+
+
+it.each(['groupchat', 'chat'] as const)('keeps delayed room %s retrieval active through asynchronous arrival publication (FLM-168)', async type => {
+  connectionStore.getState().reset()
+  connectionStore.getState().setStatus('online')
+  const manager = await makeManagerWithDummyPlugin('me@example.com')
+  const h = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+  const stores = createMockStores()
+  stores.connection.beginUpdate.mockImplementation(connectionStore.getState().beginUpdate)
+  stores.room.getRoom.mockReturnValue({ jid: 'team@conference.example.com', nickname: 'Me', occupants: new Map() } as never)
+  let publish!: (current: boolean) => void
+  const arrival = new Promise<boolean>(resolve => { publish = resolve })
+  stores.room.waitForMessageArrivals.mockReturnValue(arrival)
+  h.deps.stores = stores
+  const chat = new Chat(h.deps, new MAM(h.deps))
+  try {
+    chat.handle(xml('message', { from: 'team@conference.example.com/Emma', type, id: 'delayed-room-row' },
+      xml('delay', { xmlns: 'urn:xmpp:delay', stamp: '2026-01-26T12:00:00Z' }),
+      ...(type === 'chat' ? [xml('x', { xmlns: 'http://jabber.org/protocol/muc#user' })] : []),
+      xml('body', {}, 'Waiting for cache reconciliation')))
+    expect(connectionStore.getState().updates['room:team@conference.example.com']?.owners).toBe(1)
+    publish(true)
+    await arrival
+    expect(connectionStore.getState().updates['room:team@conference.example.com']?.owners).toBe(0)
+  } finally {
+    publish(false)
+    connectionStore.getState().reset()
+  }
+})

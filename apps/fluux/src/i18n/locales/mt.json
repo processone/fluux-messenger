@@ -116,7 +116,9 @@
         "reconnectingStep": "Jerġa' jikkonnettja fi {{seconds}}s",
         "connecting": "Qed jikkonnettja...",
         "verifying": "Qed jivverifika l-konnessjoni...",
-        "updating": "Qed jiġi aġġornat...",
+        "retrievingMessages": "Qed jinġiebu l-messaġġi…",
+        "retrievingFor": "Qed jinġiebu l-messaġġi għal {{target}}",
+        "retrievalEndedFor": "Il-ġbir tal-messaġġi għal {{target}} intemm",
         "connectionError": "Żball fil-konnessjoni",
         "disconnected": "Diskonnettjat",
         "cancelReconnection": "Ikkanċella r-rikonnessjoni"

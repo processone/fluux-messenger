@@ -114,7 +114,9 @@
         "reconnectingStep": "Opnieuw verbinden over {{seconds}}s",
         "connecting": "Verbinden...",
         "verifying": "Verbinding verifiëren...",
-        "updating": "Bijwerken...",
+        "retrievingMessages": "Berichten ophalen…",
+        "retrievingFor": "Berichten ophalen voor {{target}}",
+        "retrievalEndedFor": "Het ophalen van berichten voor {{target}} is gestopt",
         "connectionError": "Verbindingsfout",
         "disconnected": "Verbinding verbroken",
         "cancelReconnection": "Opnieuw verbinden annuleren"

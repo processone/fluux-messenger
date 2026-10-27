@@ -114,7 +114,9 @@
         "reconnectingStep": "Prisijungiama iš naujo po {{seconds}}s",
         "connecting": "Jungiamasi...",
         "verifying": "Tikrinamas ryšys...",
-        "updating": "Atnaujinama...",
+        "retrievingMessages": "Gaunami pranešimai…",
+        "retrievingFor": "Gaunami {{target}} pranešimai",
+        "retrievalEndedFor": "{{target}} pranešimų gavimas baigėsi",
         "connectionError": "Ryšio klaida",
         "disconnected": "Atsijungta",
         "cancelReconnection": "Atšaukti pakartotinį prisijungimą"
