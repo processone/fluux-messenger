@@ -109,6 +109,61 @@ function request(overrides: Partial<DirectionalHistoryRequest> = {}): Directiona
   }
 }
 
+/**
+ * A list whose rows are mounted and windowed by the virtualizer, with message ids, indexes and
+ * offsets the test can move as a batch of older history lands.
+ */
+function mountedList(input: {
+  scrollTop: number
+  rows: { index: number; id: string; start: number; size: number }[]
+}) {
+  const viewport = scrollerHarness({ scrollTop: input.scrollTop, scrollHeight: 30_000, clientHeight: 796 })
+  for (const row of input.rows) {
+    const wrapper = document.createElement('div')
+    wrapper.dataset.index = String(row.index)
+    const message = document.createElement('div')
+    message.dataset.messageId = row.id
+    wrapper.append(message)
+    viewport.scroller.append(wrapper)
+  }
+  let rows = input.rows
+  const scrollToOffset = vi.fn((offset: number) => { viewport.scrollTop = offset })
+  const holdAnchor = vi.fn()
+  const virtualizer: MessageVirtualizer = {
+    getVirtualItems: () => rows.map(row => ({ index: row.index, start: row.start, size: row.size, key: row.id })),
+    getTotalSize: () => 30_000,
+    itemCount: 200,
+    getOffsetForMessageId: id => rows.find(row => row.id === id)?.start ?? null,
+    getIndexForMessageId: id => rows.find(row => row.id === id)?.index ?? null,
+    ensureMessageMounted: vi.fn(async () => {}),
+    measureElement: vi.fn(),
+    scrollToOffset,
+    scrollToIndex: vi.fn(),
+    beginAnimatedScrollToOffset: vi.fn(),
+    holdAnchor,
+  }
+  return {
+    viewport,
+    virtualizer,
+    scrollToOffset,
+    holdAnchor,
+    /** Older rows land above: every kept row moves down by `addedPx` and on by `addedRows`. */
+    land(addedRows: number, addedPx: number) {
+      rows = rows.map(row => ({ ...row, index: row.index + addedRows, start: row.start + addedPx }))
+    },
+  }
+}
+
+function anchorRequest(messageId: string, offsetPx: number): DirectionalHistoryRequest {
+  return request({
+    desired: {
+      kind: 'anchor',
+      messageId,
+      placement: { kind: 'top-offset', offsetPx: pixelOffset(offsetPx) },
+    },
+  })
+}
+
 function adapterHarness(input: {
   scroller: HTMLElement | null
   virtualizer?: MessageVirtualizer
@@ -217,6 +272,77 @@ describe('DirectionalHistoryBrowserAdapter', () => {
     const { adapter } = adapterHarness({ scroller: viewport.scroller, virtualizer })
 
     expect(adapter.capture('message-1', 20)?.anchor).toEqual({ id: 'message-2', offsetFromTop: 132 })
+  })
+
+  // Intent: FLM-185, rows landing up to 99 px from where the reader last saw them on an iPhone.
+  // A load is captured early in the bounce past the top; in the FLM-176 device trace the bounce
+  // went on from -12 px to -114 px before 3598 px of older history landed, and the commit then
+  // reads scrollTop 0. Restoring the capture-time offset moved every kept row up by 102 px.
+  it('restores the anchor where the reader last saw it after the bounce deepens', () => {
+    const list = mountedList({
+      scrollTop: -12,
+      rows: [
+        { index: 0, id: 'message-1', start: 0, size: 120 },
+        { index: 1, id: 'message-2', start: 120, size: 48 },
+      ],
+    })
+    const { adapter } = adapterHarness({ scroller: list.viewport.scroller, virtualizer: list.virtualizer })
+    const capture = adapter.capture('message-1', 200)
+    expect(capture?.anchor).toEqual({ id: 'message-2', offsetFromTop: 132 })
+
+    list.viewport.scrollTop = -114
+    adapter.observeScroll()
+    list.land(100, 3_598)
+    // The landed rows clamp the bounce: this scroll no longer shows where the reader was.
+    list.viewport.scrollTop = 0
+    adapter.observeScroll()
+
+    adapter.createExecutor(vi.fn()).positionFrame(anchorRequest('message-2', 132), lease())
+    // message-2 now starts at 3718 and was last seen 234 px below the top.
+    expect(list.scrollToOffset).toHaveBeenCalledWith(3_484, { releaseGesture: true })
+  })
+
+  // Intent: FLM-185. A load captured at exactly scrollTop 0 anchored on the window's first message,
+  // which loses its sender line when older messages of the same sender land above it, so every
+  // row under it moved up by about 43 px. A current window names the row after it instead.
+  it('anchors after the first message at scrollTop zero when the window is current', () => {
+    const list = mountedList({
+      scrollTop: 0,
+      rows: [
+        { index: 0, id: 'message-1', start: 0, size: 120 },
+        { index: 1, id: 'message-2', start: 120, size: 48 },
+      ],
+    })
+    const { adapter } = adapterHarness({ scroller: list.viewport.scroller, virtualizer: list.virtualizer })
+
+    expect(adapter.capture('message-1', 200)?.anchor).toEqual({ id: 'message-2', offsetFromTop: 120 })
+  })
+
+  // Intent: FLM-185. After the restore write, rows between the viewport top and the anchor measured
+  // 22 px taller and moved it; the next frame's correction never came because the reader's touch
+  // ended the restore. The restore holds its anchor in the virtualizer until it ends, and a restore
+  // that was replaced must not let go of its successor's hold.
+  it('holds the anchor from the first write until its own restore ends', () => {
+    const list = mountedList({
+      scrollTop: 300,
+      rows: [{ index: 2, id: 'anchor', start: 900, size: 80 }],
+    })
+    const { adapter } = adapterHarness({ scroller: list.viewport.scroller, virtualizer: list.virtualizer })
+    const firstComplete = vi.fn()
+    const first = adapter.createExecutor(firstComplete)
+    first.positionFrame(request(), lease())
+    first.positionFrame(request(), lease())
+    first.complete(request(), 'applied')
+    expect(list.holdAnchor.mock.calls).toEqual([['anchor']])
+
+    const second = adapter.createExecutor(vi.fn())
+    second.positionFrame(request(), lease())
+    first.complete(request(), 'superseded')
+    expect(list.holdAnchor.mock.calls).toEqual([['anchor'], ['anchor']])
+    expect(firstComplete.mock.calls).toEqual([[request(), 'applied'], [request(), 'superseded']])
+
+    second.complete(request(), 'user-takeover')
+    expect(list.holdAnchor.mock.calls).toEqual([['anchor'], ['anchor'], [null]])
   })
 
   it('positions through the virtualizer and waits through a temporary missing anchor', () => {

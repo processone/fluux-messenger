@@ -663,6 +663,7 @@ export function useMessageListScroll({
     // Not construction: an availability probe and the one-frame settlement scheduler, both of which
     // the directional load flow drives directly.
     getDirectionalHistoryBrowser,
+    observeDirectionalHistoryScroll,
     resetLiveEdgeRepaintDebt,
     disposeDirectionalHistoryBrowser,
   } = useScrollExecutors({
@@ -1269,6 +1270,9 @@ export function useMessageListScroll({
     // *warning*. The rolling window expires shortly after scrolling stops, so a genuine
     // post-scroll loop is still reported; the hard throw threshold is unaffected.
     notifyUserInput()
+    // A load in flight restores its anchor where the reader last saw it, which on an iPhone keeps
+    // moving through the bounce past the top until the batch lands.
+    observeDirectionalHistoryScroll()
 
     const el = e.currentTarget
     const { scrollTop, scrollHeight, clientHeight } = el

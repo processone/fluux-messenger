@@ -140,6 +140,18 @@ function makeMessages(count: number): BaseMessage[] {
 }
 
 /**
+ * Where the list placed a message row (its wrapper's `top`, the fake virtualizer's start). At
+ * scrollTop 0 a history load anchors on the first visible message after the window's first one
+ * (FLM-185), so prepend tests read that row's start instead of assuming the first message.
+ */
+function rowStart(container: HTMLElement, messageId: string): number {
+  const row = container.querySelector(`[data-message-row-id="${messageId}"]`)
+  const wrapper = row?.closest('[data-index]') as HTMLElement | null
+  if (!wrapper) throw new Error(`row ${messageId} is not mounted`)
+  return parseFloat(wrapper.style.top)
+}
+
+/**
  * Seed a KNOWN content anchor for `conversationId`, overwriting whatever the component captured on
  * leave. jsdom has no layout (rows measure offsetHeight 0), so findBottomAnchor degenerates to
  * {last row, fraction 1} and a meaningful anchor can't arise organically — we inject one. A
@@ -347,16 +359,15 @@ describe('MessageList — virtualized scroll integration', () => {
   })
 
   it('restores the MAM-prepend scroll from the virtualizer offset, not the windowed-out DOM anchor', () => {
-    // After prepend the anchor (msg-0) is windowed out, so querySelector(anchor) returns
+    // After prepend the anchor (msg-1) is windowed out, so querySelector(anchor) returns
     // null and the old code fell back to distance-from-bottom math (landing the viewport on
     // the just-loaded older rows — the reported "position lost"). getOffsetForMessageId
     // returns the anchor's offset even when it is unmounted, so the restore tracks it.
     //
-    // Sequence: at scrollTop=0 the anchor is msg-0 at absolutePos=0 (top of content).
-    // anchorOffsetFromTop = virtOffset - scrollTop = 0 - 0 = 0.
-    // After prepend msg-0 shifts to absolutePos=1000.
-    // Restore: newScrollTop = 1000 - 0 = 1000. The anchor stays at the same visual offset.
-    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 0 : null))
+    // Sequence: at scrollTop=0 the anchor is msg-1, the first message after the window's first,
+    // at its row start. anchorOffsetFromTop = start - scrollTop = start.
+    // After prepend msg-1 shifts down by 1000.
+    // Restore: newScrollTop = (start + 1000) - start = 1000. The anchor keeps its visual offset.
     const older: BaseMessage[] = Array.from({ length: 10 }, (_, i) => ({
       id: `older-${i}`, stanzaId: undefined, originId: undefined, from: 'user@example.com', body: `Older ${i}`,
       timestamp: new Date(2024, 0, 1, 11, i), isOutgoing: false, type: 'chat' as const,
@@ -376,20 +387,22 @@ describe('MessageList — virtualized scroll integration', () => {
       configurable: true,
     })
 
-    // Capture the anchor (msg-0, at absolutePos=0 → offsetFromTop=0 at scrollTop=0).
+    // Capture the anchor (msg-1, offsetFromTop = its start at scrollTop=0).
+    const anchorStart = rowStart(container, 'msg-1')
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-1' ? anchorStart : null))
     fireEvent.click(getByText('chat.loadEarlierMessages'))
     getOffsetForMessageId.mockClear()
     scrollTopSets.length = 0
 
-    // Simulate msg-0 shifting to absolutePos=1000 after the 10 prepended items.
-    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 1000 : null))
+    // Simulate msg-1 shifting down by 1000 after the 10 prepended items.
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-1' ? anchorStart + 1000 : null))
 
     // Older messages arrive -> firstId + count change -> the prepend restore runs.
     rerender(<MessageList messages={[...older, ...makeMessages(50)]} {...props} />)
 
-    // The restore called getOffsetForMessageId to find the new position of msg-0 and
-    // set scrollTop = newOffset - savedOffset = 1000 - 0 = 1000.
-    expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-0')
+    // The restore called getOffsetForMessageId to find the new position of msg-1 and
+    // set scrollTop = newOffset - savedOffset = 1000.
+    expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-1')
     expect(scrollTopSets).toContain(1000)
   })
 
@@ -399,7 +412,6 @@ describe('MessageList — virtualized scroll integration', () => {
     // count to GROW and left the view stranded (the reported jump); the restore must now fire on
     // the firstId change alone. The anchor (msg-0, top-visible) survives — only the newest tail is
     // evicted, far below the viewport.
-    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 0 : null))
     const older: BaseMessage[] = Array.from({ length: 10 }, (_, i) => ({
       id: `older-${i}`, stanzaId: undefined, originId: undefined, from: 'user@example.com', body: `Older ${i}`,
       timestamp: new Date(2024, 0, 1, 11, i), isOutgoing: false, type: 'chat' as const,
@@ -419,17 +431,19 @@ describe('MessageList — virtualized scroll integration', () => {
       configurable: true,
     })
 
-    // Capture the anchor (msg-0 at absolutePos=0 → offsetFromTop=0 at scrollTop=0).
+    // Capture the anchor (msg-1, offsetFromTop = its start at scrollTop=0).
+    const anchorStart = rowStart(container, 'msg-1')
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-1' ? anchorStart : null))
     fireEvent.click(getByText('chat.loadEarlierMessages'))
     getOffsetForMessageId.mockClear()
     scrollTopSets.length = 0
-    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 1000 : null))
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-1' ? anchorStart + 1000 : null))
 
     // SLIDE: prepend 10 older AND drop the newest 10 (msg-40..msg-49) → count stays 50,
     // firstId msg-0 → older-0. Under the OLD gate this would have been ignored (count unchanged).
     rerender(<MessageList messages={[...older, ...makeMessages(40)]} {...props} />)
 
-    expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-0')
+    expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-1')
     expect(scrollTopSets).toContain(1000)
   })
 

@@ -156,6 +156,8 @@ export interface ScrollExecutors {
   createResidentTopExecutor: () => ResidentTopExecutor
   emergencyResidentTopWrite: () => boolean
   getDirectionalHistoryBrowser: () => DirectionalHistoryBrowserAdapter
+  /** Scroll event: let a pending history load follow the reader's view (see observeScroll). */
+  observeDirectionalHistoryScroll: () => void
   /** Conversation entry: drop repaint debt owed by the room being left. */
   resetLiveEdgeRepaintDebt: () => void
   /** Unmount: release the directional adapter's scheduler without racing a rebuild. */
@@ -585,6 +587,12 @@ export function useScrollExecutors({
     liveEdgeBrowserRef.current?.resetRepaintDebt()
   }, [])
 
+  // Read through the ref, not the lazy getter: only an adapter that captured a load has a view to
+  // follow, and scroll events should not build one.
+  const observeDirectionalHistoryScroll = useCallback(() => {
+    directionalHistoryBrowserRef.current?.observeScroll()
+  }, [])
+
   const disposeDirectionalHistoryBrowser = useCallback(() => {
     const directionalBrowser = directionalHistoryBrowserRef.current
     directionalBrowser?.dispose()
@@ -604,6 +612,7 @@ export function useScrollExecutors({
     createResidentTopExecutor,
     emergencyResidentTopWrite,
     getDirectionalHistoryBrowser,
+    observeDirectionalHistoryScroll,
     resetLiveEdgeRepaintDebt,
     disposeDirectionalHistoryBrowser,
   }

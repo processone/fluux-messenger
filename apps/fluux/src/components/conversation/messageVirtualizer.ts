@@ -54,6 +54,14 @@ export interface MessageVirtualizer {
     behavior?: ScrollBehavior
   }) => boolean | void) | undefined): void
   setAutomaticScrollAdjustmentEnabled?(enabled: boolean): void
+  /**
+   * Keep the row of `messageId` still on screen while rows resize, instead of the viewport top:
+   * every row before it that changes height is compensated, in view or not, and rows after it are
+   * not. A history restore holds its anchor so rows measuring between the viewport top and the
+   * anchor cannot move what the reader is looking at. `null` returns to the library's rule.
+   * Disabled automatic adjustment still wins.
+   */
+  holdAnchor?(messageId: string | null): void
   /** Rows to render: visible range, overscan, and any retained message, with start offsets. */
   getVirtualItems(): VirtualWindowItem[]
   /** Total content height from measured rows and current estimates. The caller renders the
