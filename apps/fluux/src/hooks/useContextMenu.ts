@@ -2,7 +2,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useClickOutside } from './useClickOutside'
 import { useMenuViewportClamp } from './useMenuViewportClamp'
-import { getFloatingViewport } from './floatingViewport'
+import { useMenuScrollDismiss } from './useMenuScrollDismiss'
 
 export interface ContextMenuState {
   /** Whether the context menu is currently open */
@@ -81,6 +81,8 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
   const longPressTriggered = useRef(false)
   // Store the click position separately from the adjusted position
   const clickPosition = useRef({ x: 0, y: 0 })
+  // The element the menu was opened from; only scrolls that move it close the menu.
+  const anchorRef = useRef<Element | null>(null)
 
   useEffect(() => () => { if (longPressTimeout.current) clearTimeout(longPressTimeout.current) }, [])
 
@@ -90,16 +92,8 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
   // Click outside to close
   useClickOutside(menuRef, close, isOpen)
 
-  // A height-limited menu must remain open while its own contents scroll.
-  useEffect(() => {
-    if (!isOpen) return
-    const handleScroll = (event: Event) => {
-      if (getFloatingViewport().top && event.target instanceof Node && menuRef.current?.contains(event.target)) return
-      close()
-    }
-    document.addEventListener('scroll', handleScroll, { capture: true })
-    return () => document.removeEventListener('scroll', handleScroll, { capture: true })
-  }, [isOpen, close])
+  // Close when a scroll moves the anchor, not when an unrelated list scrolls itself.
+  useMenuScrollDismiss(isOpen, menuRef, anchorRef, close)
 
   // Adjust position after menu renders to keep it within the viewport
   useMenuViewportClamp(isOpen, menuRef, clickPosition, position, setPosition)
@@ -108,6 +102,7 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
   // consumers can depend on it without re-creating their own callbacks each render.
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
+    anchorRef.current = e.currentTarget instanceof Element ? e.currentTarget : null
     clickPosition.current = { x: e.clientX, y: e.clientY }
     setPosition({ x: e.clientX, y: e.clientY })
     setIsOpen(true)
@@ -119,8 +114,11 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
     longPressTriggered.current = false
     if (e.touches.length !== 1) return
     const touch = e.touches[0]
+    // currentTarget is only set while the event dispatches, so read it before the timer.
+    const anchor = e.currentTarget instanceof Element ? e.currentTarget : null
     longPressTimeout.current = setTimeout(() => {
       longPressTriggered.current = true
+      anchorRef.current = anchor
       clickPosition.current = { x: touch.clientX, y: touch.clientY }
       setPosition({ x: touch.clientX, y: touch.clientY })
       setIsOpen(true)

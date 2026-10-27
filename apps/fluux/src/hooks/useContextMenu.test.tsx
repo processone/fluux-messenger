@@ -9,15 +9,17 @@ function TestComponent({ longPressDuration = 500 }: { longPressDuration?: number
 
   return (
     <div>
-      <div
-        data-testid="trigger"
-        onContextMenu={menu.handleContextMenu}
-        onTouchStart={menu.handleTouchStart}
-        onTouchEnd={menu.handleTouchEnd}
-        onTouchMove={menu.handleTouchEnd}
-        onTouchCancel={menu.handleTouchEnd}
-      >
-        Right-click or long-press me
+      <div data-testid="trigger-list">
+        <div
+          data-testid="trigger"
+          onContextMenu={menu.handleContextMenu}
+          onTouchStart={menu.handleTouchStart}
+          onTouchEnd={menu.handleTouchEnd}
+          onTouchMove={menu.handleTouchEnd}
+          onTouchCancel={menu.handleTouchEnd}
+        >
+          Right-click or long-press me
+        </div>
       </div>
 
       {menu.isOpen && (
@@ -264,13 +266,13 @@ describe('useContextMenu', () => {
 describe('scrolling inside a context menu', () => {
   afterEach(() => document.documentElement.style.removeProperty('--fluux-window-titlebar-height'))
 
-  it('keeps the menu open for its own scrolling and closes on outside scrolling', () => {
+  it('keeps the menu open for its own scrolling and closes when its list scrolls', () => {
     document.documentElement.style.setProperty('--fluux-window-titlebar-height', '60px')
     render(<TestComponent />)
     fireEvent.contextMenu(screen.getByTestId('trigger'), { clientX: 100, clientY: 100 })
     fireEvent.scroll(screen.getByTestId('menu'))
     expect(screen.getByTestId('menu')).toBeInTheDocument()
-    fireEvent.scroll(screen.getByTestId('outside'))
+    fireEvent.scroll(screen.getByTestId('trigger-list'))
     expect(screen.queryByTestId('menu')).not.toBeInTheDocument()
   })
 
@@ -279,5 +281,34 @@ describe('scrolling inside a context menu', () => {
     fireEvent.contextMenu(screen.getByTestId('trigger'), { clientX: 100, clientY: 100 })
     fireEvent.scroll(screen.getByTestId('menu'))
     expect(screen.queryByTestId('menu')).not.toBeInTheDocument()
+  })
+})
+
+// The desktop Whisper journeys lost the member menu when the room's message list re-pinned
+// itself just after the menu opened. Only a scroll that moves the menu's anchor closes it.
+describe('scrolling elsewhere while a context menu is open', () => {
+  it('stays open while an unrelated list scrolls and closes when the page scrolls', () => {
+    render(<TestComponent />)
+    fireEvent.contextMenu(screen.getByTestId('trigger'), { clientX: 100, clientY: 100 })
+    fireEvent.scroll(screen.getByTestId('outside'))
+    expect(screen.getByTestId('menu')).toBeInTheDocument()
+    fireEvent.scroll(document)
+    expect(screen.queryByTestId('menu')).not.toBeInTheDocument()
+  })
+
+  it('keeps the long-pressed element as the anchor', () => {
+    vi.useFakeTimers()
+    try {
+      render(<TestComponent />)
+      fireEvent.touchStart(screen.getByTestId('trigger'), { touches: [{ clientX: 100, clientY: 100 }] })
+      act(() => vi.advanceTimersByTime(500))
+      fireEvent.touchEnd(screen.getByTestId('trigger'))
+      fireEvent.scroll(screen.getByTestId('outside'))
+      expect(screen.getByTestId('menu')).toBeInTheDocument()
+      fireEvent.scroll(screen.getByTestId('trigger-list'))
+      expect(screen.queryByTestId('menu')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -32,9 +32,12 @@ function List() {
 
 function renderList() {
   return render(
-    <div data-testid="scrolling-list" style={{ overflowY: 'auto', height: 518, marginTop: 78 }}>
-      <SidebarListMenuProvider><List /></SidebarListMenuProvider>
-    </div>,
+    <>
+      <div data-testid="scrolling-list" style={{ overflowY: 'auto', height: 518, marginTop: 78 }}>
+        <SidebarListMenuProvider><List /></SidebarListMenuProvider>
+      </div>
+      <div data-testid="message-list" style={{ overflowY: 'auto', height: 518 }} />
+    </>,
   )
 }
 
@@ -83,6 +86,23 @@ describe('sidebar menu — issue #1790', () => {
   it('still dismisses when its original list scrolls', () => {
     renderList()
     fireEvent.contextMenu(screen.getByText(conversation.name), { clientX: 215, clientY: 552 })
+    expect(screen.getByRole('button', { name: 'Archiver' })).toBeInTheDocument()
+    fireEvent.scroll(screen.getByTestId('scrolling-list'))
+    expect(screen.queryByRole('button', { name: 'Archiver' })).not.toBeInTheDocument()
+  })
+
+  // A message list re-pinning to a new message must not take a sidebar menu with it.
+  it('stays open while another list scrolls itself, after right-click or long press', () => {
+    vi.useFakeTimers()
+    renderList()
+    fireEvent.contextMenu(screen.getByText(conversation.name), { clientX: 215, clientY: 552 })
+    fireEvent.scroll(screen.getByTestId('message-list'))
+    expect(screen.getByRole('button', { name: 'Archiver' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Archiver' }))
+    fireEvent.touchStart(screen.getByText(conversation.name), { touches: [{ clientX: 215, clientY: 552 }] })
+    act(() => vi.advanceTimersByTime(500))
+    fireEvent.touchEnd(screen.getByText(conversation.name))
+    fireEvent.scroll(screen.getByTestId('message-list'))
     expect(screen.getByRole('button', { name: 'Archiver' })).toBeInTheDocument()
     fireEvent.scroll(screen.getByTestId('scrolling-list'))
     expect(screen.queryByRole('button', { name: 'Archiver' })).not.toBeInTheDocument()
