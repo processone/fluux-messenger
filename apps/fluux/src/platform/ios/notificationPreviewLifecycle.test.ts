@@ -16,7 +16,7 @@ const lab = vi.hoisted(() => ({
   token: null as Record<string, unknown> | null, provisionError: null as string | null,
   provisioned: [] as Record<string, unknown>[], invalidated: [] as Record<string, unknown>[],
 }))
-vi.mock('@/hooks/useSessionPersistence', () => ({ getSession: () => ({ jid: 'bob@nse.invalid', password: lab.password, server: 'tls://127.0.0.1:15223' }) }))
+vi.mock('@/utils/sessionStorage', () => ({ getSession: () => ({ jid: 'bob@nse.invalid', password: lab.password, server: 'tls://127.0.0.1:15223' }) }))
 vi.mock('@/utils/keychain', () => ({ getCredentials: async () => null }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: async (command: string, args: Record<string, unknown>) => {
   if (command === 'ios_notification_preview_material') { lab.reads++; if (lab.materialError) throw lab.materialError; return { secret_b64: 'synthetic-only', endpoints: [] } }

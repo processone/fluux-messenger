@@ -17,7 +17,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'en' } }),
 }))
 vi.mock('@/hooks', () => ({ useWindowDrag: () => ({ dragRegionProps: {} }) }))
-vi.mock('@/hooks/useSessionPersistence', () => ({ saveSession: vi.fn() }))
+vi.mock('@/utils/sessionStorage', () => ({ saveSession: vi.fn() }))
 vi.mock('@/utils/xmppResource', () => ({ getResource: () => 'test-resource' }))
 import { setPlatformForTesting } from '@/platform'
 

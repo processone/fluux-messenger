@@ -4,7 +4,7 @@ import { setPreviewLedgerSession, clearPreviewLedgerSession, startIOSReadLedger 
 import type { XMPPClient } from '@fluux/sdk/core'
 import { platform } from '@/platform'
 import { getCredentials } from '@/utils/keychain'
-import { getSession } from '@/hooks/useSessionPersistence'
+import { getSession } from '@/utils/sessionStorage'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { usePeerKeysetRevisionStore } from '@/stores/peerKeysetRevisionStore'
 import { useTrustStateStatusStore } from '@/stores/trustStateStatusStore'

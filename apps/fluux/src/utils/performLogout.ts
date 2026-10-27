@@ -1,5 +1,5 @@
 import { connectionStore, getBareJid } from '@fluux/sdk'
-import { clearSession } from '@/hooks/useSessionPersistence'
+import { clearSession } from '@/utils/sessionStorage'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearLocalData, clearAutoReconnectCredentials } from '@/utils/clearLocalData'
 import { endPushSession, type PushRegistrar } from '@/hooks/useNativePush'

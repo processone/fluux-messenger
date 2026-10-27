@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
-import { useSessionPersistence, saveSession, saveRoster } from './useSessionPersistence'
+import { useSessionPersistence } from './useSessionPersistence'
+import { saveSession, saveRoster } from '@/utils/sessionStorage'
 import { markLoggedOut, markConnectActive } from '@/utils/reconnectIntent'
 
 // Spy client. The auto-reconnect engine calls `client.connect(...)` through its
