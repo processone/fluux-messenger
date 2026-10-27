@@ -20,7 +20,7 @@ export const changelog: ChangelogEntry[] = [
       type: 'added',
       items: [
         'While Fluux is reconnecting for more than two seconds, the open conversation or room shows the connection step ("Reconnecting in 5s", "Connecting...") under its name, and so does the list title on narrow screens',
-        'Only the visible conversation header shows message retrieval: it briefly explains the work, then restores presence or topic beside a fixed icon until retrieval ends; lists and your own presence stay unchanged',
+        'After reconnecting, the open conversation\'s header briefly says it is fetching missed messages, then shows a small icon next to the status or topic until they have arrived',
         'When the Fluux window is focused, a message in another conversation, or a room message that would notify you, shows a Fluux banner instead of a system notification. Tap it to open the message. When Fluux is not focused, system notifications work as before. Turn the banner off with "Show banner" in Notifications settings',
       ],
     }, {
