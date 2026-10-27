@@ -27,3 +27,12 @@ npm run tauri build -- --config src-tauri/tauri.macos-push-spike.conf.json
 Notarize and staple the result, then run the scenarios from FLM-188 in a disposable macOS user.
 Decision rule: scenarios 4 and 5 show the alert within 60 seconds in 5 of 5 trials; scenarios
 2 and 3 never show a message twice.
+
+## Scenario options
+
+- Scenario 10: launch the app with `FLUUX_PUSH_SPIKE_CLOSE_AT_SLEEP=1` (for example
+  `open --env FLUUX_PUSH_SPIKE_CLOSE_AT_SLEEP=1 Fluux.app`). It closes the XMPP proxy link on
+  `NSWorkspaceWillSleepNotification`; the existing wake handling reconnects.
+- Scenario 11: `APNS_KEY_FILE=… APNS_KEY_ID=… APNS_TEAM_ID=… node apps/fluux/scripts/apns-direct.mjs <token-hex>`
+  sends a priority 10 alert with a one-hour expiration to `net.processone.fluux`. The key is read from a file,
+  never from the command line. Use it only after the captain consents to the team push key.

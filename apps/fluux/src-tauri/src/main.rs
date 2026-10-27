@@ -992,6 +992,13 @@ mod macos {
                 &RcBlock::new(move |_notification: NonNull<NSNotification>| {
                     // Clear any pending wake (shouldn't happen, but be safe)
                     PENDING_WAKE_TIME.store(0, Ordering::SeqCst);
+                    // Push spike (scenario 10): close the XMPP link before sleeping so
+                    // the server sees the session end and pushes at once.
+                    if std::env::var_os("FLUUX_PUSH_SPIKE_CLOSE_AT_SLEEP").is_some() {
+                        tauri::async_runtime::spawn(async {
+                            let _ = crate::xmpp_proxy::stop_proxy().await;
+                        });
+                    }
                     // Emit event to frontend so it can set XA presence
                     let _ = sleep_handle.emit("system-will-sleep", ());
                 }),
