@@ -158,6 +158,7 @@ for (const vp of VIEWPORTS) {
         await expect(header.getByTestId('update-text')).toContainText('Retrieving messages', { timeout: 2500 })
         const phrase = `Retrieving messages for ${name}`
         await expect(header.getByTestId('update-announcement')).toHaveText(phrase)
+        const startNotice = await header.getByTestId('update-announcement').textContent()
         await stable()
         await shot(page, `${vp.label}-${view}-scoped-brief`)
         const started = await page.evaluate(scope => (window as W).__connectionStore!.getState().updates[scope as Scope]!.startedAt, scope)
@@ -174,6 +175,8 @@ for (const vp of VIEWPORTS) {
         // Captain I1: start was delivered, then only the icon's hidden explanation remains.
         await expect(header.getByTestId('update-announcement')).toHaveText('')
         await expect.poll(async () => ((await header.textContent()) ?? '').split(phrase).length - 1).toBe(1)
+        const iconPhaseNotice = await header.getByTestId('update-announcement').textContent()
+        const iconPhasePhraseCount = ((await header.textContent()) ?? '').split(phrase).length - 1
         await expect(header.getByTestId('update-icon').locator('svg')).not.toHaveClass(/animate-spin/)
         if (top !== null) expect(await messageSurface.evaluate(el => el.getBoundingClientRect().top)).toBe(top)
         await shot(page, `${vp.label}-${view}-scoped-icon`)
@@ -212,7 +215,10 @@ for (const vp of VIEWPORTS) {
         await end()
         await expect(header.getByTestId('update-icon')).toHaveCount(0)
         await expect(header.getByTestId('update-announcement')).toContainText(`Message retrieval ended for ${name}`)
+        const endNotice = await header.getByTestId('update-announcement').textContent()
         await expect(header.getByTestId('update-announcement')).toHaveText('')
+        const clearedEndNotice = await header.getByTestId('update-announcement').textContent()
+        info.annotations.push({ type: 'i1-announcement', description: JSON.stringify({ viewport: vp.label, view, startNotice, iconPhaseNotice, iconPhasePhraseCount, endNotice, clearedEndNotice }) })
         await stable()
 
         // FLM-171 F1: a short verification must not replay the retained end.
