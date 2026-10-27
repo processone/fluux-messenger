@@ -795,7 +795,9 @@ fn reset_unusable_window_size(window: &tauri::WebviewWindow) {
         return;
     };
     let size = size.to_logical::<f64>(scale);
-    if window_behavior::saved_size_is_unusable(size.width, size.height) {
+    let maximized = window.is_maximized().unwrap_or(false);
+    let fullscreen = window.is_fullscreen().unwrap_or(false);
+    if window_behavior::saved_size_is_unusable(size.width, size.height, maximized, fullscreen) {
         let (width, height) = window_behavior::DEFAULT_WINDOW_SIZE;
         let _ = window.set_size(LogicalSize::new(width, height));
         let _ = window.center();

@@ -2050,6 +2050,7 @@ dependencies = [
  "sequoia-openpgp",
  "serde",
  "serde_json",
+ "tao",
  "tauri",
  "tauri-build",
  "tauri-plugin-background-task",
