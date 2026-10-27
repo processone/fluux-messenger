@@ -843,7 +843,14 @@ export class XMPPClient {
       this.onInternal('mucJoined', (roomJid) => {
         const room = this.stores?.room.getRoom(roomJid)
         if (room && !room.avatar && !room.avatarFromPresence) {
-          this.profile.fetchRoomAvatar(roomJid).catch(() => {})
+          // A restored 40-hex content hash lets the fetch save the picture under
+          // that hash; otherwise the hashless path keys it by a generated ID.
+          const restoredHash = room.avatarHash && /^[0-9a-f]{40}$/i.test(room.avatarHash) ? room.avatarHash : undefined
+          if (restoredHash) {
+            this.profile.fetchRoomAvatar(roomJid, restoredHash).catch(() => {})
+          } else {
+            this.profile.fetchRoomAvatar(roomJid).catch(() => {})
+          }
         }
         // Restore cached avatars for occupants whose presence lacked vcard-temp:x:update
         this.profile.restoreOccupantAvatarsFromCache(roomJid).catch(() => {})

@@ -756,6 +756,7 @@ export const createMockStores = (): MockStoreBindings => ({
     getActiveRoomJid: vi.fn().mockReturnValue(null),
     isNonAnonymousRoomAcknowledged: vi.fn(() => false),
     joinedRooms: vi.fn().mockReturnValue([]),
+    allRooms: vi.fn().mockReturnValue([]),
     getRoomLastTimestamp: vi.fn().mockReturnValue(undefined),
     getRoomMAMQueryState: vi.fn().mockReturnValue({ isLoading: false, error: null, hasQueried: false, isHistoryComplete: false }),
     loadMessagesFromCache: vi.fn().mockResolvedValue([]),

@@ -446,6 +446,8 @@ export interface RoomBindings {
 
   // Computed
   joinedRooms: () => Room[]
+  /** Every room in the store, joined or only bookmarked. */
+  allRooms: () => Room[]
 
   /**
    * Epoch ms of the room's persisted last-known message (the entity preview),
