@@ -144,17 +144,29 @@ impl<S: Backend> Secrets<S> {
                 .set(ACCOUNT, &json)
                 .map_err(StoreError::from)
                 .and_then(|()| {
-                    if self.store.read(ACCOUNT)?.as_deref() == Some(json.as_str()) {
-                        Ok(())
-                    } else {
-                        Err("Could not verify migrated macOS secrets".into())
-                    }
+                    self.store
+                        .read(ACCOUNT)?
+                        .and_then(|json| serde_json::from_str::<Bundle>(&json).ok())
+                        .ok_or_else(|| "Could not verify migrated macOS secrets".into())
                 });
-            if let Err(error) = migrated {
-                tracing::error!(
-                    "macOS secrets migration failed; using legacy items for this launch: {error}"
-                );
-                bundle.legacy = true;
+            match migrated {
+                Ok(verified) => {
+                    if verified.version != 1 {
+                        return Err(StoreError::invalid_item(
+                            "Unsupported macOS secrets version",
+                        ));
+                    }
+                    // Read-back also observes the writer revision. Cache that
+                    // exact bundle: another instance may have changed it since
+                    // our write, including removing retained legacy secrets.
+                    bundle = verified;
+                }
+                Err(error) => {
+                    tracing::error!(
+                        "macOS secrets migration failed; using legacy items for this launch: {error}"
+                    );
+                    bundle.legacy = true;
+                }
             }
         }
         // Cleanup is deliberately deferred for at least one release. Dev must
@@ -902,6 +914,7 @@ mod tests {
         fail_write: Mutex<bool>,
         fail_delete: Mutex<bool>,
         corrupt_write: Mutex<bool>,
+        concurrent_migration_bundle: Mutex<Option<Bundle>>,
     }
     impl SecretStore for FakeStore {
         fn get(&self, account: &str) -> Result<Option<String>, String> {
@@ -924,6 +937,13 @@ mod tests {
                 let stored = self.items.lock().unwrap().get(account).cloned().unwrap();
                 if let Ok(bundle) = serde_json::from_str::<Bundle>(&stored) {
                     self.snapshots.lock().unwrap().push(bundle.items);
+                }
+                // Another instance writes after migration, before its read-back.
+                if let Some(bundle) = self.concurrent_migration_bundle.lock().unwrap().take() {
+                    self.items
+                        .lock()
+                        .unwrap()
+                        .insert(ACCOUNT.into(), serde_json::to_string(&bundle).unwrap());
                 }
             }
             Ok(())
@@ -979,6 +999,74 @@ mod tests {
         store.store.reads.lock().unwrap().clear();
         store.store.writes.lock().unwrap().clear();
         Secrets::new(store.store)
+    }
+    #[test]
+    fn migration_preserves_concurrent_changes_during_read_back() {
+        let raw = legacy();
+        let mut concurrent = Bundle {
+            items: raw.items.lock().unwrap().clone(),
+            ..Bundle::default()
+        };
+        concurrent.items.insert(
+            "openpgp_passphrase:carol@example.net".into(),
+            "new-passphrase".into(),
+        );
+        concurrent.items.insert(
+            "openpgp_passphrase:alice@example.com".into(),
+            "updated-passphrase".into(),
+        );
+        concurrent
+            .items
+            .remove("openpgp_passphrase:bob@example.org");
+        *raw.concurrent_migration_bundle.lock().unwrap() = Some(concurrent);
+
+        let store = Secrets::new(raw);
+        assert!(crate::credentials::load(&store).unwrap().is_some());
+        store.set("mcp-token", "rotated-token").unwrap();
+
+        let restarted = Secrets::new(store.store);
+        assert_eq!(
+            restarted
+                .get("openpgp_passphrase:carol@example.net")
+                .unwrap()
+                .as_deref(),
+            Some("new-passphrase")
+        );
+        assert_eq!(
+            restarted
+                .get("openpgp_passphrase:alice@example.com")
+                .unwrap()
+                .as_deref(),
+            Some("updated-passphrase")
+        );
+        assert!(restarted
+            .get("openpgp_passphrase:bob@example.org")
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            restarted.get("mcp-token").unwrap().as_deref(),
+            Some("rotated-token")
+        );
+    }
+
+    #[test]
+    fn migration_does_not_overwrite_a_concurrent_future_bundle() {
+        let raw = legacy();
+        let future = Bundle {
+            version: 2,
+            ..Bundle::default()
+        };
+        let expected = serde_json::to_string(&future).unwrap();
+        *raw.concurrent_migration_bundle.lock().unwrap() = Some(future);
+        let store = Secrets::new(raw);
+
+        assert!(store.set("mcp-token", "replacement").is_err());
+        assert!(store.delete("mcp-token").is_err());
+        assert_eq!(
+            store.store.read(ACCOUNT).unwrap().as_deref(),
+            Some(expected.as_str())
+        );
+        assert!(store.store.deletes.lock().unwrap().is_empty());
     }
     // FLM-66: all startup consumers share exactly one item read.
     #[test]

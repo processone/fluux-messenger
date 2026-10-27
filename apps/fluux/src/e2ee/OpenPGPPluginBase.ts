@@ -1131,7 +1131,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    */
   async retireAndGenerateIdentity(): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
-    return this.ownKeyOperation(async () => {
+    const identity = await this.ownKeyOperation(async () => {
       let publishedFingerprints: string[] = []
       try {
         publishedFingerprints = await probeRemotePublishedFingerprints(
@@ -1186,10 +1186,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // locally so history stays decryptable. Re-run deferred decrypts so any
       // still-stashed messages are recovered immediately.
       ctx.notifyKeyUnlocked?.()
-      this.reverifyTrustStateAfterKeyChange()
 
       return { fingerprint: bundle.fingerprint }
     })
+    this.reverifyTrustStateAfterKeyChange()
+    return identity
   }
 
   /**
@@ -1557,7 +1558,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   ): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
     const previousFingerprint = this.ownBundle?.fingerprint
-    return this.ownKeyOperation(async () => {
+    const identity = await this.ownKeyOperation(async () => {
       let bundle: KeyBundle
       try {
         bundle = await this.backupImportSelected(
@@ -1595,10 +1596,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // stashed while the key was absent stay "could not be decrypted" until an
       // unrelated trigger (reconnect, app restart) re-registers the plugin.
       ctx.notifyKeyUnlocked?.()
-      this.reverifyTrustStateAfterKeyChange()
 
       return { fingerprint: bundle.fingerprint }
     })
+    // Subscription activation fetches verified peers. Start it after the key
+    // operation ends so its own freshness guard accepts the restored identity.
+    this.reverifyTrustStateAfterKeyChange()
+    return identity
   }
 
   async resolveOwnKeyConflict_overwriteServer(): Promise<void> {
