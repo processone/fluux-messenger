@@ -155,6 +155,10 @@ for (const vp of VIEWPORTS) {
         await shot(page, `${vp.label}-${view}-scoped-brief`)
         const started = await page.evaluate(scope => (window as W).__connectionStore!.getState().updates[scope as Scope]!.startedAt, scope)
         const announced = await header.getByTestId('update-announcement').textContent()
+        // Captain F5: retrieval belongs only to this visible header, never lists.
+        await expect(page.getByTestId('sidebar-header').getByTestId('update-icon')).toHaveCount(0)
+        await expect(page.getByTestId('sidebar-header').getByTestId('update-announcement')).toHaveCount(0)
+        await expect(page.getByRole('status').filter({ hasText: 'Retrieving messages for' })).toHaveCount(1)
         await expect(header.getByTestId('update-icon')).toBeVisible({ timeout: 4000 })
         // Accessible retrieval text is additional header content, not a subtitle change.
         for (const line of normal.split('\n').map(line => line.trim()).filter(Boolean)) {
@@ -174,11 +178,14 @@ for (const vp of VIEWPORTS) {
         await expect(explanation.locator('..')).toHaveCSS('opacity', '1')
         await trigger.press('Enter')
         await expect(explanation).toHaveCount(0)
-        await trigger.click()
+        if (vp.label === 'iphone') await trigger.tap()
+        else await trigger.click()
         await expect(explanation).toBeVisible()
         await expect(explanation.locator('..')).toHaveCSS('opacity', '1')
-        await trigger.click()
+        if (vp.label === 'iphone') await trigger.tap()
+        else await trigger.click()
         await expect(explanation).toHaveCount(0)
+        await expect(page.getByRole('dialog')).toHaveCount(0)
 
         // Navigate away, then come back after the brief window: no new grace/text.
         if (vp.label === 'iphone') await page.getByRole('button', { name: /back/i }).first().click()
@@ -233,36 +240,124 @@ for (const vp of VIEWPORTS) {
       })
     }
 
-    test('list scopes stay independent and never replace titles or own presence', async ({ page }) => {
+    test('list-only retrieval never projects an indicator or announcement', async ({ page }) => {
       await bootDemo(page, '/demo.html?tutorial=false')
       await page.evaluate(() => (window as unknown as { __demoClient: { stopAnimation(): void } }).__demoClient.stopAnimation())
+      await finishSync(page)
       await page.locator('[data-nav="rooms"]').click()
       const bar = page.getByTestId('sidebar-header')
       const height = await bar.evaluate(el => el.getBoundingClientRect().height)
       await page.evaluate(() => {
         const w = window as W
-        w.__owners = [w.__connectionStore!.getState().beginUpdate(['rooms'])]
+        w.__owners = [w.__connectionStore!.getState().beginUpdate(['rooms', 'messages'])]
       })
-      await expect(bar.getByTestId('update-icon')).toBeVisible({ timeout: 3500 })
+      await page.waitForTimeout(2200)
+      await expect(page.getByTestId('update-icon')).toHaveCount(0)
+      await expect(page.getByTestId('update-text')).toHaveCount(0)
+      await expect(bar.getByTestId('update-announcement')).toHaveCount(0)
       await expect(bar.locator('h1')).toHaveText('Rooms')
       expect(await bar.evaluate(el => el.getBoundingClientRect().height)).toBe(height)
-      await shot(page, `${vp.label}-scoped-list`)
       await page.locator('[data-nav="messages"]').click()
-      await expect(bar.getByTestId('update-icon')).toHaveCount(0)
       await page.getByTestId('sidebar-pane').getByText('Emma Wilson', { exact: true }).first().click()
-      await expect(page.locator('header').last().getByTestId('update-icon')).toHaveCount(0)
-      await expect(page.getByTestId('connection-step')).toHaveCount(0)
+      await expect(page.getByTestId('update-icon')).toHaveCount(0)
+      await expect(page.getByRole('status').filter({ hasText: /Retrieving messages|Message retrieval ended/ })).toHaveCount(0)
       await page.evaluate(() => (window as W).__owners!.shift()!())
-      // FLM-171 F1: returning to a completed list, including via Contacts,
-      // must not turn its historical snapshot into a new completion event.
       if (vp.label === 'iphone') await page.getByRole('button', { name: /back/i }).first().click()
       await page.locator('[data-nav="rooms"]').click()
-      await expect(bar.getByTestId('update-announcement')).toHaveText('')
       await page.locator('[data-nav="contacts"]').click()
-      await expect(bar.getByTestId('update-announcement')).toHaveText('')
       await page.locator('[data-nav="rooms"]').click()
-      await expect(bar.getByTestId('update-announcement')).toHaveText('')
+      await expect(bar.getByTestId('update-announcement')).toHaveCount(0)
     })
+
+    // Captain F4: full original free-width hit target, not just the room name.
+    test('room info spans its free width through every retrieval phase without nesting controls', async ({ page }) => {
+      await bootDemo(page, '/demo.html?tutorial=false')
+      await page.evaluate(() => (window as unknown as { __demoClient: { stopAnimation(): void } }).__demoClient.stopAnimation())
+      await finishSync(page)
+      await page.locator('[data-nav="rooms"]').click()
+      await page.getByTestId('sidebar-pane').getByText('Team Chat', { exact: true }).first().click()
+      const header = page.locator('header').last()
+      await expect(header).toContainText('Team Chat')
+      const originalHeight = await headerHeight(page)
+      const topicUrl = 'https://example.org/design-review'
+      await page.evaluate(url => (window as W).__roomStore!.getState().updateRoom('team@conference.fluux.chat', { subject: url }), topicUrl)
+      await page.context().route(topicUrl, route => route.fulfill({ status: 200, contentType: 'text/plain', body: 'Disposable topic-link fixture' }))
+      const info = header.getByRole('button', { name: 'Show room info: Team Chat', exact: true })
+      const checkWideTarget = async () => {
+        const area = await header.getByTestId('room-info-area').boundingBox()
+        const button = await info.boundingBox()
+        expect(area).not.toBeNull()
+        expect(button!.width).toBeGreaterThanOrEqual(area!.width - 1)
+        const x = area!.x + area!.width * .8
+        const y = area!.y + area!.height * .25
+        if (vp.label === 'iphone') await page.touchscreen.tap(x, y)
+        else await page.mouse.click(x, y)
+        await expect(page.getByRole('dialog')).toBeVisible()
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+        expect(await headerHeight(page)).toBe(originalHeight)
+      }
+      await checkWideTarget()
+      await page.evaluate(() => {
+        const w = window as W
+        w.__owners = [w.__connectionStore!.getState().beginUpdate(['room:team@conference.fluux.chat', 'rooms'])]
+      })
+      await expect(header.getByTestId('update-text')).toBeVisible({ timeout: 3000 })
+      await checkWideTarget()
+      await expect(header.getByTestId('update-icon')).toBeVisible({ timeout: 4000 })
+      await checkWideTarget()
+      const trigger = header.getByRole('button', { name: 'Retrieving messages for Team Chat', exact: true })
+      await expect(info.locator('button, [role="button"], a')).toHaveCount(0)
+      if (vp.label === 'iphone') await trigger.tap()
+      else await trigger.click()
+      const explanation = page.getByRole('tooltip').filter({ hasText: 'Retrieving messages for Team Chat' })
+      await expect(explanation.locator('..')).toHaveCSS('opacity', '1')
+      await expect(page.getByRole('dialog')).toHaveCount(0)
+      if (vp.label === 'iphone') await trigger.tap()
+      else await trigger.click()
+      const popupReady = page.waitForEvent('popup')
+      await header.getByRole('link', { name: topicUrl, exact: true }).click({ position: { x: 5, y: 5 } })
+      const popup = await popupReady
+      await expect(popup).toHaveURL(topicUrl)
+      await popup.close()
+      await expect(page.getByRole('dialog')).toHaveCount(0)
+      await page.evaluate(() => (window as W).__owners!.shift()!())
+    })
+
+    if (vp.label === 'iphone') {
+      test('a covered room header is silent and returns without replaying activity', async ({ page }) => {
+        await bootDemo(page, '/demo.html?tutorial=false')
+        await page.evaluate(() => (window as unknown as { __demoClient: { stopAnimation(): void } }).__demoClient.stopAnimation())
+        await finishSync(page)
+        await page.locator('[data-nav="rooms"]').click()
+        await page.getByTestId('sidebar-pane').getByText('Team Chat', { exact: true }).first().click()
+        const header = page.locator('header').last()
+        await expect(header).toContainText('Team Chat')
+        await page.evaluate(() => {
+          const w = window as W
+          w.__owners = [w.__connectionStore!.getState().beginUpdate(['room:team@conference.fluux.chat', 'rooms'])]
+        })
+        await expect(header.getByTestId('update-text')).toBeVisible({ timeout: 3000 })
+        const started = await page.evaluate(() => (window as W).__connectionStore!.getState().updates['room:team@conference.fluux.chat']!.startedAt)
+        const uncover = async () => {
+          await page.getByRole('heading', { name: 'Members', exact: true }).locator('..').getByRole('button').click()
+        }
+        await header.getByRole('button', { name: 'Show members', exact: true }).click()
+        await expect(page.getByTestId('update-text')).toHaveCount(0)
+        await expect(page.getByTestId('update-icon')).toHaveCount(0)
+        await expect(header.getByTestId('update-announcement')).toHaveText('')
+        await page.waitForTimeout(3200)
+        await uncover()
+        await expect(header.getByTestId('update-icon')).toBeVisible()
+        await expect(header.getByTestId('update-announcement')).toHaveText('')
+        expect(await page.evaluate(() => (window as W).__connectionStore!.getState().updates['room:team@conference.fluux.chat']!.startedAt)).toBe(started)
+        await header.getByRole('button', { name: 'Show members', exact: true }).click()
+        await page.evaluate(() => (window as W).__owners!.shift()!())
+        await uncover()
+        await expect(header.getByTestId('update-icon')).toHaveCount(0)
+        await expect(header.getByTestId('update-announcement')).toHaveText('')
+      })
+    }
 
     test('list title shows the step on narrow screens only', async ({ page }) => {
       await bootDemo(page, '/demo.html?tutorial=false')

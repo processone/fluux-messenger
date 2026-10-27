@@ -48,15 +48,14 @@ describe('read-only scoped update display', () => {
     expect(region.textContent).toBe('status.retrievalEndedFor: Emma')
   })
 
-  it('keeps a list title, and explains its icon with tap or keyboard', () => {
+  it('explains the conversation header icon with tap or keyboard', () => {
     begin()
-    render(<UpdateStatus scope="messages" target="Messages" list><h1>Messages</h1></UpdateStatus>)
-    act(() => vi.advanceTimersByTime(2500))
-    expect(screen.getByRole('heading').textContent).toBe('Messages')
+    render(chat)
+    act(() => vi.advanceTimersByTime(5500))
     expect(screen.queryByTestId('update-text')).toBeNull()
-    const trigger = screen.getByRole('button', { name: 'status.retrievingFor: Messages' })
+    const trigger = screen.getByRole('button', { name: 'status.retrievingFor: Emma' })
     fireEvent.click(trigger)
-    expect(screen.getByRole('tooltip').textContent).toBe('status.retrievingFor: Messages')
+    expect(screen.getByRole('tooltip').textContent).toBe('status.retrievingFor: Emma')
     fireEvent.keyDown(trigger, { key: 'Enter' })
     expect(screen.queryByRole('tooltip')).toBeNull()
     expect(trigger.querySelector('button')).toBeNull()
@@ -83,8 +82,6 @@ describe('read-only scoped update display', () => {
   it.each([
     ['chat:other@fluux.chat', 'chat:emma@fluux.chat'],
     ['room:other@conference.fluux.chat', 'room:team@conference.fluux.chat'],
-    ['messages', 'rooms'],
-    ['rooms', 'messages'],
   ] as const)('does not announce stale completion when %s switches to %s', (away, completed) => {
     const end = connectionStore.getState().beginUpdate([completed])
     act(() => vi.advanceTimersByTime(2500))
@@ -92,7 +89,7 @@ describe('read-only scoped update display', () => {
     const view = render(<UpdateStatus scope={away} target="Away">Away</UpdateStatus>)
     view.rerender(<UpdateStatus scope={completed} target="Completed">Online</UpdateStatus>)
     expect(screen.getByRole('status').textContent).toBe('')
-    view.rerender(<UpdateStatus target="Contacts">Contacts</UpdateStatus>)
+    view.rerender(<UpdateStatus target="No active conversation">Online</UpdateStatus>)
     view.rerender(<UpdateStatus scope={completed} target="Completed">Online</UpdateStatus>)
     expect(screen.getByRole('status').textContent).toBe('')
 
@@ -126,6 +123,37 @@ describe('read-only scoped update display', () => {
     expect(screen.getByRole('status').textContent).toBe('')
     act(end)
     expect(screen.getByRole('status').textContent).toBe('status.retrievalEndedFor: Emma')
+  })
+
+  // Captain F5: only an on-screen conversation header may project activity.
+  it('keeps a hidden header silent without restarting its owner when shown', () => {
+    const end = begin()
+    const startedAt = connectionStore.getState().updates['chat:emma@fluux.chat']!.startedAt
+    const view = render(<UpdateStatus visible={false} scope="chat:emma@fluux.chat" target="Emma">Online</UpdateStatus>)
+    act(() => vi.advanceTimersByTime(2500))
+    expect(screen.queryByTestId('update-text')).toBeNull()
+    expect(screen.queryByTestId('update-icon')).toBeNull()
+    expect(screen.getByRole('status').textContent).toBe('')
+    act(() => vi.advanceTimersByTime(3000))
+    const timers = vi.getTimerCount()
+    view.rerender(chat)
+    expect(screen.getByTestId('update-icon')).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toBe('')
+    expect(connectionStore.getState().updates['chat:emma@fluux.chat']!.startedAt).toBe(startedAt)
+    expect(vi.getTimerCount()).toBe(timers)
+    act(end)
+    expect(screen.getByRole('status').textContent).toBe('status.retrievalEndedFor: Emma')
+  })
+
+  it('does not replay completion when work ends behind a covering pane', () => {
+    const end = begin()
+    const view = render(chat)
+    act(() => vi.advanceTimersByTime(2500))
+    view.rerender(<UpdateStatus visible={false} scope="chat:emma@fluux.chat" target="Emma">Online</UpdateStatus>)
+    act(end)
+    view.rerender(chat)
+    expect(screen.queryByTestId('update-icon')).toBeNull()
+    expect(screen.getByRole('status').textContent).toBe('')
   })
 
   it('does not announce an end when no active snapshot was committed to this view', () => {

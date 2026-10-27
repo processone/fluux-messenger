@@ -42,6 +42,8 @@ import {
 
 export interface RoomHeaderProps {
   room: Room
+  /** This header is covered by another pane, so retrieval stays silent. */
+  covered?: boolean
   onBack?: () => void
   showOccupants: boolean
   onToggleOccupants: () => void
@@ -57,6 +59,7 @@ export interface RoomHeaderProps {
 
 export function RoomHeader({
   room,
+  covered = false,
   onBack,
   showOccupants,
   onToggleOccupants,
@@ -129,26 +132,22 @@ export function RoomHeader({
         size="header"
       />
 
-      {/* The update explanation is a sibling of the room-info control, never a nested button. */}
-      <div className="flex-1 min-w-0">
-        <Tooltip content={t('rooms.showRoomInfo')} position="bottom" className="flex min-w-0">
+      {/* The room-info button covers the original full free area. Content is
+          hit-transparent except links and the separate explanation control. */}
+      <div className="relative flex-1 min-w-0 py-0.5" data-testid="room-info-area">
+        <Tooltip content={t('rooms.showRoomInfo')} position="bottom" className="absolute inset-0 -mx-1 flex">
           <button
             type="button"
             onClick={() => setShowInfoModal(true)}
             aria-label={`${t('rooms.showRoomInfo')}: ${room.name}`}
-            className="min-w-0 text-start rounded-md px-1 -mx-1 hover:bg-fluux-hover transition-colors"
-          >
-            <span className="block font-semibold text-fluux-text truncate leading-tight">{room.name}</span>
-          </button>
+            className="flex-1 min-w-0 rounded-md hover:bg-fluux-hover transition-colors"
+          />
         </Tooltip>
-        <div className="text-xs text-fluux-muted min-w-0">
+        <div className="relative pointer-events-none min-w-0 [&_a]:pointer-events-auto">
+          <span aria-hidden="true" className="block font-semibold text-fluux-text truncate leading-tight">{room.name}</span>
           <ConnectionStepSlot>
-            <UpdateStatus scope={`room:${room.jid}`} target={room.name}>
-              <span className="cursor-pointer" onClick={(event) => {
-                if (!(event.target as HTMLElement).closest('a')) setShowInfoModal(true)
-              }}>
-                {room.subject?.trim() ? renderTextWithLinks(room.subject) : room.jid}
-              </span>
+            <UpdateStatus scope={`room:${room.jid}`} target={room.name} visible={!covered}>
+              {room.subject?.trim() ? renderTextWithLinks(room.subject) : room.jid}
             </UpdateStatus>
           </ConnectionStepSlot>
         </div>
