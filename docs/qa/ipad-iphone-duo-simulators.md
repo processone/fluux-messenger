@@ -8,17 +8,20 @@ together and not iPad Split View or Stage Manager. Every iPad flow covers both
 portrait and landscape, including rotation during an open conversation, typing
 and list scrolling.
 
-**Result: not fully qualified.** The native iPad journeys ran in both
-orientations, but a portrait-to-landscape rotation moved the message being read
-above the viewport (FLM-172). The Duo primary-screen journeys ran; its second
-screen and an effective landscape transition remain unverified because the
-bounded secondary-screen attempt could not start its test process.
+**Result: partial simulator coverage, with no confirmed Fluux defect in the
+exercised views.** The native iPad journeys ran in both orientations. Rotation
+keeps the bottom anchor by design; an upper message leaving the shorter landscape
+view is expected, not a defect. The Duo primary-screen journeys also ran.
+
+**Verdict: inconclusive**, because the Duo second screen, a real Duo landscape
+and the fold transition remain untested. The bounded secondary-screen attempt
+could not start its test process. The iPad rotation is not a reason for no-go.
 
 These checks use the real native shell with the project's isolated demo
 (`net.processone.fluux.demo`) and its existing conversation fixtures. Demo sends
 are local simulation, not XMPP delivery. No real account, personal keychain,
 signing identity or remote notification service was used. No product code was
-changed and FLM-172 remains a separate planned correction.
+changed.
 
 This is an interface check, not release qualification. Physical-device
 keyboard/touch behavior, fold hardware, networking, encryption, push delivery
@@ -100,35 +103,39 @@ with FLM-50 outside the project, not committed as product code or test artifacts
 | Dismiss keyboard, background and foreground | Keyboard hidden; conversation and local message remain usable | Keyboard hidden; conversation and local message remain usable |
 | Rotate with a conversation open | Selection remains Ava after return from landscape | Selection remains Ava after rotation from portrait |
 | Rotate while typing | Draft survives return; further typing and local send work | Draft survives arrival; further typing works |
-| Rotate with scrolled message history | Sampled message remains visible on landscape-to-portrait | **Reading-position shift on portrait-to-landscape; FLM-172** |
-| Rotate with scrolled sidebar | All fixture rows fit after rotation; selected conversation retained | List remains usable after rotation; selected conversation retained |
+| Rotate with scrolled message history | Bottom anchoring retained on return; upper messages re-enter the taller view | Bottom anchor kept as intended; upper message leaves the shorter view |
+| Rotate with sidebar open | Landscape list was scrolled; all fixture rows fit after rotation and selection remains | Rotation started from an unscrolled portrait list; list remains usable and selection remains |
 
-Seven XCTest methods finished without assertion failures. That status is **not**
-a complete behavioral pass: the reading-anchor check logged visibility rather
-than asserting it, and image inspection exposed the failure described below.
+Seven XCTest methods finished without assertion failures. The earlier top-row
+visibility diagnostic is not a valid failure criterion for the intended
+bottom-anchor resize behavior. The iPad rotation is not a confirmed defect;
+missing Duo coverage still prevents complete qualification.
 Initial exploratory runs also failed on stale live element indexes and hidden
 keyboard controls. The final driver reads an immutable message snapshot and
 checks actual keyboard geometry; earlier logs remain separate from final proof.
 
-### Finding: portrait-to-landscape reading-position shift
+### Expected rotation behavior: bottom anchoring
 
-Tracked separately as **FLM-172**, not repaired in this change.
+The captain confirmed that keeping the last message in place is right, not a
+bug. This agrees with the [scroll-positioning contract](../2026-07-23-scroll-positioning-contract.md),
+which preserves a bottom-relative reading anchor rather than pinning the top row.
 
 1. Open Ava's demo conversation on the iPad in portrait.
 2. Scroll toward its beginning until “I've been reviewing the Q1 user feedback —
    a few themes keep coming up” is visible near the top of the history.
 3. Rotate to landscape without scrolling again.
 
-Expected: the message being read remains visible across the rotation.
-Observed: that message moves above the viewport; “What are the top asks?” is the
-first visible message after rotation. The sampled reverse transition retained
-its anchor. This is a position shift, not evidence of message loss.
+Expected: keep the bottom anchor in place as the viewport becomes shorter;
+the previously visible top message need not stay visible.
+Observed: the bottom message stays in place. The upper message moves above the
+viewport and “What are the top asks?” becomes the first visible message; the
+upper message returns on the reverse rotation. This is the intended resize
+behavior, not message loss or a Fluux defect.
 
-Evidence: `ipad-message-list-portrait-second-scroll.png`,
-`ipad-message-list-landscape-after-rotation.png` (also retained upright), and
-`ipad-validated.log`, including `ROTATION_ANCHOR portrait-to-landscape ...
-visible=false`. Log the affected orientation as **landscape after portrait**;
-do not report both directions as failing.
+The **FLM-50 task record** contains the before/after orientation captures and
+the native log. Its top-row visibility diagnostic records which upper message
+left the view; it does not establish a failure of the expected bottom anchoring.
+The steps above remain the reproduction procedure.
 
 ## Duo results and limits
 
@@ -147,25 +154,29 @@ The portrait and requested-landscape captures document the same actual geometry.
 - LCD-1 / screen 3: 2007×2853 pixels.
 
 The bounded secondary-screen attempt captured a black screen 3, then confirmed
-screen 1 power off and screen 3 power on. Its boot had reported
-`Data Migration Failed`; the test runner then failed to launch because the
-simulator system was unavailable (`Host is down`, with the shell reported as
-probably crashed). No Fluux UI journey ran on the secondary screen, and no
-post-switch application screenshot was obtained. These observations do not
-establish the cause or a Fluux crash. No automatic retry was made, and cleanup
-stopped the simulator.
+screen 1 power off and screen 3 power on. The boot message
+`Data Migration Failed` was seen in the job output, but that boot output was
+not kept as an evidence file; this is an observed, unretained message, not a
+claim supported by the retained logs. The retained test-launcher log reports
+`Host is down`, with the shell described as probably crashed. No Fluux UI
+journey ran on the secondary screen, and no post-switch application screenshot
+was obtained. These observations do not establish the cause or a Fluux crash.
+No automatic retry was made, and cleanup stopped the simulator.
 
-Evidence: `duo-default.log`, `duo-displays.txt`,
-`duo-inner-display-control.log`, `duo-second-screen.log` and the intentionally
-black `duo-secondary-before-switch.png`. The missing second-screen, effective
-landscape and fold-transition proof remains explicit; it is not a passing result.
+The **FLM-50 task record** holds the primary-screen journey log, display
+inventory, display-power confirmations, failed test-launcher log and the
+intentionally black secondary-screen capture. The second screen, a real Duo
+landscape and the fold transition remain untested; none is a passing result.
 
-## Retained proof and local gate
+## Evidence record and local gate
 
-The task evidence includes the native build/init logs, binary provenance,
-runtime/WebKit inventory, exact XCTest driver sources, keyboard-disconnection
-helper, orientation captures, and failed as well as successful run logs.
-`ipad-draft-rotation.mp4` is a silent, real-time 13.3-second extract showing
+Refer to the **FLM-50 task record** for the native build/init logs, binary
+provenance, runtime/WebKit inventory, exact XCTest driver sources,
+keyboard-disconnection helper, orientation captures, and failed as well as
+successful run logs. Local evidence-folder filenames are temporary, not durable
+references from this document.
+
+The record also contains a silent, real-time 13.3-second extract showing
 portrait → landscape → portrait while composing, with the draft retained and
 locally sent. Its native frame buffer rotates content; black side bars preserve
 the whole portrait image rather than cropping it. The poster and extracted
