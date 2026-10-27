@@ -215,7 +215,7 @@ describe('DirectionalHistoryBrowserAdapter', () => {
       wrote: true,
       reassert: true,
     })
-    expect(scrollToOffset).toHaveBeenCalledWith(860)
+    expect(scrollToOffset).toHaveBeenCalledWith(860, { releaseGesture: true })
     expect(viewport.reflowReads).toBe(2)
 
     offset = null
@@ -248,7 +248,7 @@ describe('DirectionalHistoryBrowserAdapter', () => {
       wrote: true,
       reassert: false,
     })
-    expect(scrollToOffset).toHaveBeenCalledWith(1_300)
+    expect(scrollToOffset).toHaveBeenCalledWith(1_300, { releaseGesture: true })
   })
 
   it('uses the mounted element path and restores overflow ownership without a virtualizer', () => {
@@ -292,12 +292,12 @@ describe('DirectionalHistoryBrowserAdapter', () => {
 
     viewport.scrollTop = 856
     expect(executor.positionFrame(request(), currentLease)).toMatchObject({ wrote: true })
-    expect(scrollToOffset).toHaveBeenCalledWith(862)
+    expect(scrollToOffset).toHaveBeenCalledWith(862, { releaseGesture: true })
     scrollToOffset.mockClear()
 
     offset = 905
     expect(executor.positionFrame(request(), currentLease)).toMatchObject({ wrote: true })
-    expect(scrollToOffset).toHaveBeenCalledWith(865)
+    expect(scrollToOffset).toHaveBeenCalledWith(865, { releaseGesture: true })
   })
 
   it('rejects a stale lease or departed conversation before reading or writing geometry', () => {

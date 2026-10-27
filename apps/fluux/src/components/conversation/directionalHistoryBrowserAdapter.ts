@@ -223,7 +223,7 @@ export class DirectionalHistoryBrowserAdapter {
           initialized && Math.abs(scroller.scrollTop - boundedTarget) > 5
         const shouldWrite = !initialized || targetMoved || geometryDrift
         if (shouldWrite) {
-          if (virtualizer) virtualizer.scrollToOffset(boundedTarget)
+          if (virtualizer) virtualizer.scrollToOffset(boundedTarget, { releaseGesture: true })
           else scroller.scrollTop = boundedTarget
         }
         previousTarget = boundedTarget

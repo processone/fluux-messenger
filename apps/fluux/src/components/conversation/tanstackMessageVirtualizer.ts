@@ -401,8 +401,12 @@ export function useTanstackMessageVirtualizer({
     ensureMessageMounted,
     measureElement: virtualizer.measureElement,
     scrollToOffset: (offset, opts) => {
+      // @tanstack/virtual-core 3.19.5+ queues an absolute write while an iOS drag, fling or bounce
+      // is open and lands it ~100 ms after the gesture ends. A caller that owns the pixels closes
+      // that gesture first, as the library does itself for a write it does not defer.
+      if (opts?.releaseGesture) (virtualizer as unknown as { _iosGesture?: { end?: () => void } })._iosGesture?.end?.()
       navigationWriteRef.current = true
-      try { virtualizer.scrollToOffset(offset, opts) }
+      try { virtualizer.scrollToOffset(offset, opts && { behavior: opts.behavior }) }
       finally { navigationWriteRef.current = false }
       // @tanstack updates its reactive scrollOffset ONLY from the scroll element's 'scroll' DOM
       // event (observeElementOffset). scrollToOffset sets the DOM scrollTop (via _scrollToOffset)
