@@ -29,6 +29,26 @@ pub fn saved_size_is_unusable(width: f64, height: f64, maximized: bool, fullscre
     !maximized && !fullscreen && (width < MIN_WINDOW_SIZE.0 || height < MIN_WINDOW_SIZE.1)
 }
 
+/// Reset a restored window size smaller than the window's minimum (#1820).
+pub fn reset_unusable_window_size<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+    use tauri::LogicalSize;
+
+    let Ok(scale) = window.scale_factor() else {
+        return;
+    };
+    let Ok(size) = window.inner_size() else {
+        return;
+    };
+    let size = size.to_logical::<f64>(scale);
+    let maximized = window.is_maximized().unwrap_or(false);
+    let fullscreen = window.is_fullscreen().unwrap_or(false);
+    if saved_size_is_unusable(size.width, size.height, maximized, fullscreen) {
+        let (width, height) = DEFAULT_WINDOW_SIZE;
+        let _ = window.set_size(LogicalSize::new(width, height));
+        let _ = window.center();
+    }
+}
+
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloseAction {

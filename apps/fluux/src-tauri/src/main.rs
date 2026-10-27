@@ -784,26 +784,6 @@ async fn mcp_stop_server() -> Result<(), String> {
     mcp::server::stop().await
 }
 
-/// Reset a restored window size smaller than the window's minimum (#1820).
-fn reset_unusable_window_size(window: &tauri::WebviewWindow) {
-    use tauri::LogicalSize;
-
-    let Ok(scale) = window.scale_factor() else {
-        return;
-    };
-    let Ok(size) = window.inner_size() else {
-        return;
-    };
-    let size = size.to_logical::<f64>(scale);
-    let maximized = window.is_maximized().unwrap_or(false);
-    let fullscreen = window.is_fullscreen().unwrap_or(false);
-    if window_behavior::saved_size_is_unusable(size.width, size.height, maximized, fullscreen) {
-        let (width, height) = window_behavior::DEFAULT_WINDOW_SIZE;
-        let _ = window.set_size(LogicalSize::new(width, height));
-        let _ = window.center();
-    }
-}
-
 /// Check if window is visible on any monitor, reset to center if off-screen
 fn ensure_window_visible(window: &tauri::WebviewWindow) {
     use tauri::PhysicalPosition;
@@ -1870,7 +1850,7 @@ fn main() {
 
             // Check if window is off-screen (e.g., monitor was disconnected) and reset if needed
             if let Some(window) = app.get_webview_window("main") {
-                reset_unusable_window_size(&window);
+                window_behavior::reset_unusable_window_size(&window);
                 ensure_window_visible(&window);
                 // Ensure window has keyboard focus on launch
                 let _ = window.set_focus();

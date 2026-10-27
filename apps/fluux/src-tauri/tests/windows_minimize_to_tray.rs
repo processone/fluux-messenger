@@ -9,6 +9,7 @@
 #[path = "../src/window_behavior.rs"]
 mod window_behavior;
 
+use tauri::Manager;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tao::dpi::{LogicalSize, PhysicalSize};
 use tao::event_loop::{EventLoop, EventLoopBuilder};
@@ -121,4 +122,64 @@ fn show_desktop_without_a_tray_leaves_the_window_on_the_taskbar() {
     assert!(!hidden.load(Ordering::Relaxed));
     assert!(is_visible(&window));
     assert!(is_iconic(&window));
+}
+
+/// #1820 recovery through the real startup path: the window-state plugin
+/// restores a saved 144 x 19 sliver into a real Tauri window built from
+/// tauri.conf.json, then the startup repair runs on it. The state file uses a
+/// private name in the app's real config directory and is removed afterwards.
+#[test]
+#[allow(deprecated)]
+fn saved_sliver_is_repaired_by_the_startup_restore() {
+    const STATE_FILE: &str = ".window-state-1820-test.json";
+    let mut app = tauri::Builder::default()
+        .any_thread()
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_filename(STATE_FILE)
+                .with_state_flags(window_behavior::persisted_window_state())
+                .build(),
+        )
+        .build(tauri::generate_context!())
+        .expect("build app");
+
+    let dir = app.path().app_config_dir().expect("config dir");
+    std::fs::create_dir_all(&dir).unwrap();
+    let state_path = dir.join(STATE_FILE);
+    // The shape of the file reported in #1820, at 100% scaling.
+    std::fs::write(
+        &state_path,
+        r#"{"main":{"width":144,"height":19,"x":100,"y":100,"prev_x":100,"prev_y":100,
+            "maximized":false,"visible":true,"decorated":false,"fullscreen":false}}"#,
+    )
+    .unwrap();
+
+    let pump = |app: &mut tauri::App| {
+        for _ in 0..20 {
+            app.run_iteration(|_, _| {});
+        }
+    };
+    pump(&mut app);
+
+    let window = app.get_webview_window("main").expect("main window");
+    let logical = |w: &tauri::WebviewWindow| {
+        let scale = w.scale_factor().unwrap();
+        let size = w.inner_size().unwrap().to_logical::<f64>(scale);
+        (size.width, size.height)
+    };
+    let (w, h) = logical(&window);
+    assert!(
+        window_behavior::saved_size_is_unusable(w, h, false, false),
+        "the plugin did not restore the saved sliver ({w} x {h}), so this run proves nothing"
+    );
+
+    window_behavior::reset_unusable_window_size(&window);
+    pump(&mut app);
+
+    let (w, h) = logical(&window);
+    let _ = std::fs::remove_file(&state_path);
+    assert!(
+        !window_behavior::saved_size_is_unusable(w, h, false, false),
+        "window still a sliver after startup repair: {w} x {h}"
+    );
 }
