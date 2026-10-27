@@ -5644,6 +5644,40 @@ describe('SequoiaPgpPlugin', () => {
       return JSON.parse(decodeURIComponent(escape(atob(payloadB64))))
     }
 
+    it.each(['server backup', 'file'] as const)(
+      'imports verified peers after restoring an identity from %s on a fresh device',
+      async (source) => {
+        const { ctx, peerPublish } = makeContext('me@example.com')
+        await plugin.init(ctx)
+        const fp = plugin.getOwnFingerprint()!
+        await plugin.backupSecretKey('shared-pp')
+        const backup = (await plugin.fetchSecretKeyBackup())!
+        await plugin.shutdown()
+        fake.accounts.clear()
+        peerPublish(
+          'me@example.com',
+          VERIFICATIONS_NODE,
+          buildVerificationsPepItem(fp, { 'alice@example.com': 'ALICE_FP' }, 5),
+        )
+        const device = new SequoiaPgpPlugin({ invoke: fake.invoke })
+        try {
+          await device.init(ctx)
+          expect(device.getOwnFingerprint()).toBeNull()
+          if (source === 'server backup') {
+            await device.restoreSecretKey('shared-pp')
+          } else {
+            await device.importKeyFromFile(backup, 'shared-pp')
+          }
+          expect(device.getOwnFingerprint()).toBe(fp)
+          await new Promise((r) => setTimeout(r, 0))
+          const { isPeerVerified } = await import('@/stores/verifiedPeerKeysStore')
+          expect(isPeerVerified('alice@example.com', 'ALICE_FP')).toBe(true)
+        } finally {
+          await device.shutdown()
+        }
+      },
+    )
+
     it('seeds the local verified-peers store from the server node on init', async () => {
       const { ctx, peerPublish } = makeContext('me@example.com')
       // Pre-seed so we know the fingerprint before init.
