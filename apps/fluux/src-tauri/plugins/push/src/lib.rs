@@ -3,6 +3,8 @@
 
 mod conversation_destination;
 mod notification_names;
+#[cfg(target_os = "macos")]
+mod macos;
 
 #[cfg(target_os = "ios")]
 mod platform {
@@ -274,3 +276,6 @@ mod platform {
 
 #[cfg(target_os = "ios")]
 pub use platform::init;
+
+#[cfg(target_os = "macos")]
+pub use macos::init;

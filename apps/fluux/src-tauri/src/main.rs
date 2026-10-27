@@ -1506,6 +1506,9 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init());
+    // Spike: inert unless the signature carries a push entitlement.
+    #[cfg(target_os = "macos")]
+    let app = app.plugin(tauri_plugin_push::init());
     let app = if communication_test_available(&identifier) {
         // One immutable startup marker drives both communication and updater capabilities.
         // The updater plugin is absent too, so direct calls cannot check or install.

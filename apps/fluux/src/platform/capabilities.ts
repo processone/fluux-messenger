@@ -272,7 +272,8 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     notificationsManagedByOS: desktop || (shell === 'mobile' && (os === 'android' || os === 'ios')),
     usesWebPush: web,
     nativeHaptics: ios,
-    usesNativePush: shell === 'mobile' && os === 'ios',
+    // The macOS push spike is compiled in only by the notarized spike build.
+    usesNativePush: (shell === 'mobile' && os === 'ios') || (desktop && os === 'macos' && import.meta.env.VITE_MACOS_PUSH_SPIKE === '1'),
 
     // Window and process. macOS overlays its window controls on the content,
     // Windows has no native frame at all, Linux keeps a native title bar.

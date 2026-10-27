@@ -16,8 +16,12 @@ export function shareSettings(config, env = process.env) {
   const team = env.APPLE_TEAM_ID || signingIdentity.match(/^Developer ID Application: .*\(([A-Z0-9]{10})\)$/)?.[1]
   if (!team && signingIdentity.startsWith('Apple Development:')) throw new Error('Set APPLE_TEAM_ID for Apple Development signing')
   if (team && !/^[A-Z0-9]{10}$/.test(team)) throw new Error('Invalid Apple team identifier')
+  // Push spike: the notarized build signs for APNs only when asked, so ordinary builds keep today's entitlements.
+  const pushEnvironment = env.FLUUX_MACOS_PUSH_ENV || undefined
+  if (pushEnvironment && !['development', 'production'].includes(pushEnvironment)) throw new Error('FLUUX_MACOS_PUSH_ENV must be development or production')
+  if (pushEnvironment && !team) throw new Error('Push entitlements need an Apple team identifier')
   return {
-    identifier, name: config.productName, version: config.version,
+    pushEnvironment, identifier, name: config.productName, version: config.version,
     bundleVersion: config.bundle?.macOS?.bundleVersion || config.version,
     signingIdentity, team, group: `${team || 'group'}.${identifier}.share`,
     communicationTest: identifier === 'net.processone.fluux'
@@ -65,6 +69,11 @@ export function hostMetadata(settings, info, entitlements) {
     },
     entitlements: { ...entitlements, 'com.apple.security.application-groups': [settings.group],
       ...(settings.communicationTest ? { 'com.apple.developer.usernotifications.communication': true } : {}),
+      ...(settings.pushEnvironment ? {
+        'com.apple.developer.aps-environment': settings.pushEnvironment,
+        'com.apple.application-identifier': `${settings.team}.${settings.identifier}`,
+        'com.apple.developer.team-identifier': settings.team,
+      } : {}),
       ...(settings.communicationTest && settings.team ? {
         'com.apple.application-identifier': `${settings.team}.${settings.identifier}`,
         'com.apple.developer.team-identifier': settings.team,
@@ -88,6 +97,11 @@ function prepare() {
   const metadata = hostMetadata(settings, readPlist(join(root, 'Info.plist')), host)
   writePlist(join(output, 'Info.plist'), metadata.info)
   writePlist(join(output, 'Host.entitlements'), metadata.entitlements)
+  if (settings.pushEnvironment) {
+    const profile = process.env.FLUUX_MACOS_PROVISION_PROFILE
+    if (!profile) throw new Error('Set FLUUX_MACOS_PROVISION_PROFILE to the Developer ID profile with Push')
+    cpSync(profile, join(output, 'embedded.provisionprofile'))
+  }
   writePlist(join(output, 'Share.entitlements'), {
     ...shared, 'com.apple.security.app-sandbox': true, 'com.apple.security.files.user-selected.read-only': true,
   })
