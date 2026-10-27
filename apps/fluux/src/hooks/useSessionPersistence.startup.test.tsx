@@ -28,6 +28,9 @@ const mockOnOpenUrl = vi.fn()
 const statusHolder = { value: 'disconnected' as ConnectionStatus }
 const pushGate: { wait: Promise<void> | null } = { wait: null }
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ i18n: { language: 'fr' } }),
+}))
 vi.mock('@/utils/keychain', () => ({
   hasSavedCredentials: () => localStorage.getItem('xmpp-has-saved-credentials') === 'true',
   getCredentials: (...args: unknown[]) => mockGetCredentials(...args),
@@ -66,16 +69,16 @@ const JID = 'user@example.com'
 const LOGIN_LINK = 'xmpp:alice@other.example?connect;server=wss://other.example/ws'
 const JOIN_LINK = 'xmpp:team@conference.example.com?join'
 
-function seedKeychain(): void {
+function seedKeychain(jid = JID, server = 'example.com'): void {
   localStorage.setItem('xmpp-has-saved-credentials', 'true')
-  localStorage.setItem('xmpp-last-jid', JID)
-  localStorage.setItem('xmpp-last-server', 'example.com')
+  localStorage.setItem('xmpp-last-jid', jid)
+  localStorage.setItem('xmpp-last-server', server)
 }
-function seedFastToken(): void {
+function seedFastToken(jid = JID, server = 'example.com'): void {
   localStorage.setItem('xmpp-remember-me', 'true')
-  localStorage.setItem('xmpp-last-jid', JID)
-  localStorage.setItem('xmpp-last-server', 'example.com')
-  localStorage.setItem(`fluux:fast-token:${JID}`, JSON.stringify({
+  localStorage.setItem('xmpp-last-jid', jid)
+  localStorage.setItem('xmpp-last-server', server)
+  localStorage.setItem(`fluux:fast-token:${jid}`, JSON.stringify({
     mechanism: 'HT-SHA-256-NONE', token: 'tok', expiry: new Date(Date.now() + 86_400_000).toISOString(),
   }))
 }
@@ -120,6 +123,112 @@ describe('useSessionPersistence — startup owner', () => {
   })
   afterEach(() => {
     restorePlatform()
+  })
+
+  describe.each([
+    { name: 'web', shell: 'web', os: 'other', nativeKeepalive: false, nativeKeychain: false },
+    { name: 'desktop', shell: 'desktop', os: 'macos', nativeKeepalive: true, nativeKeychain: true },
+    { name: 'iOS', shell: 'mobile', os: 'ios', nativeKeepalive: false, nativeKeychain: true },
+  ] as const)('connection options on $name', ({ shell, os, nativeKeepalive, nativeKeychain }) => {
+    const jid = 'user@process-one.net'
+    const commonOptions = {
+      jid,
+      server: 'process-one.net',
+      fallbackWebSocketUrl: 'wss://chat.process-one.net/xmpp',
+      resource: 'fluux-w12345',
+      lang: 'fr',
+    }
+
+    beforeEach(() => {
+      setPlatformForTesting({ shell, os })
+      // Both stores carry the same valid resource to make forwarding observable
+      // regardless of whether the host has a stable install identity.
+      sessionStorage.setItem('xmpp-resource', commonOptions.resource)
+      localStorage.setItem('xmpp-resource', commonOptions.resource)
+    })
+
+    it.each([null, 'false', 'true'])('preserves session options with remember-me=%s', async (rememberMe) => {
+      saveSession(jid, 'session-password', 'process-one.net')
+      if (rememberMe !== null) localStorage.setItem('xmpp-remember-me', rememberMe)
+
+      renderHook(() => useSessionPersistence())
+      await waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1))
+      expect(mockConnect.mock.calls[0][0]).toStrictEqual({
+        ...commonOptions,
+        password: 'session-password',
+        disableSmKeepalive: nativeKeepalive,
+        rememberSession: rememberMe === 'true' ? true : undefined,
+        autoRetryOnTransientFailure: true,
+        previouslyJoinedRooms: undefined,
+      })
+    })
+
+    it('preserves FAST options without a password and derives the missing server', async () => {
+      seedFastToken(jid, '')
+
+      renderHook(() => useSessionPersistence())
+      await waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1))
+      expect(mockConnect.mock.calls[0][0]).toStrictEqual({
+        ...commonOptions,
+        password: undefined,
+        disableSmKeepalive: false,
+        rememberSession: true,
+        autoRetryOnTransientFailure: true,
+      })
+      await waitFor(() => expect(getSession()).toMatchObject({ jid, password: '', server: 'process-one.net' }))
+    })
+
+    if (nativeKeychain) {
+      it('forwards a matching keychain password on the FAST path without changing its policy', async () => {
+        seedFastToken(jid)
+        seedKeychain(jid)
+        mockGetCredentials.mockResolvedValue({ jid: `${jid}/other-resource`, password: 'fallback-password', server: 'example.com' })
+
+        renderHook(() => useSessionPersistence())
+        await waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1))
+        expect(mockConnect.mock.calls[0][0]).toStrictEqual({
+          ...commonOptions,
+          server: 'example.com',
+          fallbackWebSocketUrl: undefined,
+          password: 'fallback-password',
+          disableSmKeepalive: false,
+          rememberSession: true,
+          autoRetryOnTransientFailure: true,
+        })
+      })
+
+      it('leaves transient retry at the SDK default for a direct keychain startup', async () => {
+        seedKeychain(jid)
+        mockGetCredentials.mockResolvedValue({ jid: ` ${jid} `, password: 'keychain-password', server: '' })
+
+        renderHook(() => useSessionPersistence())
+        await waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1))
+        expect(mockConnect.mock.calls[0][0]).toStrictEqual({
+          ...commonOptions,
+          password: 'keychain-password',
+          disableSmKeepalive: nativeKeepalive,
+          rememberSession: true,
+        })
+        await waitFor(() => expect(getSession()).toMatchObject({ jid, password: 'keychain-password', server: 'process-one.net' }))
+      })
+
+      it('keeps JavaScript keepalive and transient retries for the keychain error fallback', async () => {
+        seedKeychain(jid, '')
+        mockGetCredentials.mockResolvedValue({ jid, password: 'retry-password', server: 'ignored.example' })
+        statusHolder.value = 'error'
+
+        renderHook(() => useSessionPersistence())
+        await waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1))
+        expect(mockConnect.mock.calls[0][0]).toStrictEqual({
+          ...commonOptions,
+          password: 'retry-password',
+          disableSmKeepalive: false,
+          rememberSession: true,
+          autoRetryOnTransientFailure: true,
+        })
+        await waitFor(() => expect(getSession()).toMatchObject({ jid, password: 'retry-password', server: 'process-one.net' }))
+      })
+    }
   })
 
   describe('what a reopen can reconnect with', () => {

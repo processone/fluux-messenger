@@ -3,7 +3,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { connectionStore, useXMPPContext, useConnectionActions, getBareJid, getDomain, deleteFastToken } from '@fluux/sdk'
 import { useRosterStore, useConnectionStore } from '@fluux/sdk/react'
-import type { Contact, ServerInfo, HttpUploadService, ResourcePresence, JoinedRoomInfo, ConnectOptions, LoginPrefill } from '@fluux/sdk'
+import type { Contact, ServerInfo, HttpUploadService, ResourcePresence, ConnectOptions, LoginPrefill } from '@fluux/sdk'
 import { getResource } from '@/utils/xmppResource'
 import { platform } from '@/platform'
 import { getCredentials, hasSavedCredentials } from '@/utils/keychain'
@@ -11,6 +11,7 @@ import { getReconnectIntent } from '@/utils/reconnectIntent'
 import { isShuttingDown } from '@/utils/appShutdown'
 import { getConnectionServerOptions } from '@/config/wellKnownServers'
 import { standaloneStartupReconnect } from '@/utils/startupReconnect'
+import { buildStartupConnectionOptions } from '@/utils/startupConnectionOptions'
 import { prewarmOpenpgpUnlock } from '@/utils/openpgpPrewarm'
 import { ensureDeepLinkRouter, setStartupLoginHandler, clearQueuedDeepLinks } from '@/utils/deepLinkRouter'
 import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
@@ -500,23 +501,11 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     // Auto-reconnect with stored credentials (password from sessionStorage)
     // Note: SDK automatically loads SM state from storage and attempts resumption
     // Room joining is now handled by the SDK's readStateStorage, not sessionStorage
-    const joinedRoomInfos: JoinedRoomInfo[] | undefined = undefined
     const resource = getResource()
-    const disableSmKeepalive = platform().hasNativeConnectionKeepalive
+    const hasNativeConnectionKeepalive = platform().hasNativeConnectionKeepalive
     console.log('[Auth] Reconnecting on page reload with password (SDK will attempt SM resumption first)')
 
-    // Preserve "Remember Me" preference so the SDK persists rotated FAST
-    // tokens during this session. Without this, a page-reload connect uses
-    // rememberSession=undefined → saveToken is a no-op → server rotates
-    // the token but the new one is lost → next tab-close/reopen fails.
     const rememberSession = localStorage.getItem('xmpp-remember-me') === 'true' || undefined
-
-    // Auto-retry transient transport failures (e.g., WebSocket ECONNERROR
-    // right after wake from sleep). The SDK will route those into its
-    // normal reconnect/backoff loop instead of going to terminal.initialFailure.
-    // Auth failures and server conflicts still surface immediately via the
-    // machine's AUTH_ERROR / CONFLICT events.
-    const autoRetry = true
     const serverOptions = getConnectionServerOptions(session.jid, session.server)
 
     // Check if another tab already holds this JID (web only)
@@ -532,7 +521,10 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
 
     try {
       await prepareNativePushAccount(session.jid)
-      const connecting = startupConnect(epoch, { jid: session.jid, password: session.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos })
+      const connecting = startupConnect(epoch, buildStartupConnectionOptions(
+        { jid: session.jid, password: session.password, ...serverOptions, resource, lang: i18n.language },
+        { kind: 'session', hasNativeConnectionKeepalive, rememberSession },
+      ))
       if (savedProfile?.ownAvatarHash) {
         // The SDK establishes account ownership before accepting cached avatar results.
         restoreOwnAvatarFromCache(savedProfile.ownAvatarHash).catch(() => {})
@@ -593,7 +585,10 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     // surface via the machine's AUTH_ERROR path and delete the token.
     try {
       await prepareNativePushAccount(savedJid)
-      const connected = await startupConnect(epoch, { jid: savedJid, password: fallbackPassword, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: false, rememberSession: true, autoRetryOnTransientFailure: true })
+      const connected = await startupConnect(epoch, buildStartupConnectionOptions(
+        { jid: savedJid, password: fallbackPassword, ...serverOptions, resource, lang: i18n.language },
+        { kind: 'fast-token' },
+      ))
       // Save session for subsequent in-tab reconnects. Store the
       // fallback password so reloads (Path A) don't have to re-hit
       // the keychain; empty string preserves prior behavior when no
@@ -640,7 +635,10 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     void prewarmOpenpgpUnlock(loginJid)
     try {
       await prepareNativePushAccount(loginJid)
-      const connected = await startupConnect(epoch, { jid: loginJid, password: credentials.password, ...serverOptions, resource: getResource(), lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: true })
+      const connected = await startupConnect(epoch, buildStartupConnectionOptions(
+        { jid: loginJid, password: credentials.password, ...serverOptions, resource: getResource(), lang: i18n.language },
+        { kind: 'keychain', hasNativeConnectionKeepalive: platform().hasNativeConnectionKeepalive },
+      ))
       // Save session for auto-reconnect on page reload
       if (connected) saveSession(loginJid, credentials.password, serverOptions.server)
     } catch (err) {
@@ -761,7 +759,10 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         console.log('[Auth] Auth failure on Tauri: retrying with keychain credentials')
         const resource = getResource()
         await prepareNativePushAccount(savedJid)
-        const connected = await startupConnect(epoch, { jid: savedJid, password: creds.password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: false, rememberSession: true, autoRetryOnTransientFailure: true })
+        const connected = await startupConnect(epoch, buildStartupConnectionOptions(
+          { jid: savedJid, password: creds.password, ...serverOptions, resource, lang: i18n.language },
+          { kind: 'keychain-retry' },
+        ))
         if (connected) saveSession(savedJid, creds.password, serverOptions.server)
       } catch (err) {
         console.log('[Auth] Keychain retry after auth failure failed:', err instanceof Error ? err.message : err)
