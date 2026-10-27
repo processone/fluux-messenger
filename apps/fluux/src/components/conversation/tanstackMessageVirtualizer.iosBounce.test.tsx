@@ -70,3 +70,27 @@ it('lands the restore on the requested offset, not a bounced one', () => {
   virtualizer.scrollToOffset(2000, { releaseGesture: true })
   expect(scroller.scrollTop).toBe(2000)
 })
+
+// Review FLM-182 F1 (second round): the production veto is a takeover that writes through
+// cancelPendingScroll before it refuses. While the reader's gesture is open the library holds that
+// write; if the restore had released the gesture first, the takeover write would land.
+it('runs the takeover write of a refused restore with the gesture still open', () => {
+  const { scroller, virtualizer } = bouncingList()
+  const landed: number[] = []
+  scroller.scrollTo = options => {
+    const top = (options as ScrollToOptions).top ?? 0
+    landed.push(top)
+    scroller.scrollTop = top
+  }
+  virtualizer.setScrollWriteObserver?.(({ phase }) => {
+    if (phase !== 'before') return undefined
+    virtualizer.cancelPendingScroll?.()
+    return false
+  })
+  virtualizer.scrollToOffset(1956, { releaseGesture: true })
+  expect(landed).toEqual([])
+  expect(scroller.scrollTop).toBe(20)
+  virtualizer.setScrollWriteObserver?.(undefined)
+  virtualizer.scrollToOffset(1956)
+  expect(scroller.scrollTop).toBe(20)
+})
