@@ -116,9 +116,8 @@ checks actual keyboard geometry; earlier logs remain separate from final proof.
 
 ### Expected rotation behavior: bottom anchoring
 
-The captain confirmed that keeping the last message in place is right, not a
-bug. This agrees with the [scroll-positioning contract](../2026-07-23-scroll-positioning-contract.md),
-which preserves a bottom-relative reading anchor rather than pinning the top row.
+The [scroll-positioning contract](../2026-07-23-scroll-positioning-contract.md)
+preserves a bottom-relative reading anchor rather than pinning the top row.
 
 1. Open Ava's demo conversation on the iPad in portrait.
 2. Scroll toward its beginning until “I've been reviewing the Q1 user feedback —
@@ -170,8 +169,8 @@ landscape and the fold transition remain untested; none is a passing result.
 
 ## Evidence record and local gate
 
-Refer to the **FLM-50 task record** for the native build/init logs, binary
-provenance, runtime/WebKit inventory, exact XCTest driver sources,
+Refer to the **FLM-50 task record** for binary provenance, runtime/WebKit
+inventory, exact XCTest driver sources,
 keyboard-disconnection helper, orientation captures, and failed as well as
 successful run logs. Local evidence-folder filenames are temporary, not durable
 references from this document.
