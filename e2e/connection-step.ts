@@ -156,10 +156,11 @@ for (const vp of VIEWPORTS) {
         await page.waitForTimeout(1000)
         await expect(header.getByTestId('update-text')).toHaveCount(0)
         await expect(header.getByTestId('update-text')).toContainText('Retrieving messages', { timeout: 2500 })
+        const phrase = `Retrieving messages for ${name}`
+        await expect(header.getByTestId('update-announcement')).toHaveText(phrase)
         await stable()
         await shot(page, `${vp.label}-${view}-scoped-brief`)
         const started = await page.evaluate(scope => (window as W).__connectionStore!.getState().updates[scope as Scope]!.startedAt, scope)
-        const announced = await header.getByTestId('update-announcement').textContent()
         // Captain F5: retrieval belongs only to this visible header, never lists.
         await expect(page.getByTestId('sidebar-header').getByTestId('update-icon')).toHaveCount(0)
         await expect(page.getByTestId('sidebar-header').getByTestId('update-announcement')).toHaveCount(0)
@@ -170,7 +171,9 @@ for (const vp of VIEWPORTS) {
           await expect(header).toContainText(line)
         }
         await stable()
-        expect(await header.getByTestId('update-announcement').textContent()).toBe(announced)
+        // Captain I1: start was delivered, then only the icon's hidden explanation remains.
+        await expect(header.getByTestId('update-announcement')).toHaveText('')
+        await expect.poll(async () => ((await header.textContent()) ?? '').split(phrase).length - 1).toBe(1)
         await expect(header.getByTestId('update-icon').locator('svg')).not.toHaveClass(/animate-spin/)
         if (top !== null) expect(await messageSurface.evaluate(el => el.getBoundingClientRect().top)).toBe(top)
         await shot(page, `${vp.label}-${view}-scoped-icon`)
@@ -209,6 +212,7 @@ for (const vp of VIEWPORTS) {
         await end()
         await expect(header.getByTestId('update-icon')).toHaveCount(0)
         await expect(header.getByTestId('update-announcement')).toContainText(`Message retrieval ended for ${name}`)
+        await expect(header.getByTestId('update-announcement')).toHaveText('')
         await stable()
 
         // FLM-171 F1: a short verification must not replay the retained end.

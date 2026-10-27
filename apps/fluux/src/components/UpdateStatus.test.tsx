@@ -31,9 +31,10 @@ describe('read-only scoped update display', () => {
     expect(screen.queryByTestId('update-icon')).toBeNull()
   })
 
-  it('restores presence at 5 s, keeps the icon and announces start/end but not the phase change', () => {
+  // Captain I1: notices are transient; the settled icon header has one explanation.
+  it('restores presence at 5 s and clears delivered start/end notices without refilling them', () => {
     const end = begin()
-    render(chat)
+    const view = render(chat)
     const region = screen.getByRole('status')
     expect(region.textContent).toBe('')
     act(() => vi.advanceTimersByTime(2000))
@@ -42,10 +43,52 @@ describe('read-only scoped update display', () => {
     act(() => vi.advanceTimersByTime(3000))
     expect(screen.getByText('Online')).toBeTruthy()
     expect(screen.getByTestId('update-icon').querySelector('svg')!.classList.contains('animate-spin')).toBe(false)
-    expect(region.textContent).toBe('status.retrievingFor: Emma')
+    expect(region.textContent).toBe('')
+    const explanation = screen.getByTestId('update-icon').getAttribute('title')!
+    expect((view.container.textContent ?? '').split(explanation).length - 1).toBe(1)
+    view.rerender(<UpdateStatus scope="chat:emma@fluux.chat" target="Emma">Still online</UpdateStatus>)
+    expect(region.textContent).toBe('')
     act(end)
     expect(screen.queryByTestId('update-icon')).toBeNull()
     expect(region.textContent).toBe('status.retrievalEndedFor: Emma')
+    const completed = connectionStore.getState().updates['chat:emma@fluux.chat']
+    act(() => vi.runOnlyPendingTimers())
+    expect(region.textContent).toBe('')
+    expect(connectionStore.getState().updates['chat:emma@fluux.chat']).toBe(completed)
+  })
+
+  it('replaces pending start cleanup with one end cleanup, without clearing SDK state', () => {
+    const end = begin()
+    render(chat)
+    act(() => vi.advanceTimersByTime(2000))
+    expect(screen.getByRole('status').textContent).toBe('status.retrievingFor: Emma')
+    act(end)
+    expect(screen.getByRole('status').textContent).toBe('status.retrievalEndedFor: Emma')
+    expect(vi.getTimerCount()).toBe(1)
+    const completed = connectionStore.getState().updates['chat:emma@fluux.chat']
+    act(() => vi.runOnlyPendingTimers())
+    expect(screen.getByRole('status').textContent).toBe('')
+    expect(connectionStore.getState().updates['chat:emma@fluux.chat']).toBe(completed)
+  })
+
+  it('cancels pending delivery cleanup on navigation and never replays it on return', () => {
+    const end = begin()
+    const view = render(chat)
+    act(() => vi.advanceTimersByTime(2000))
+    expect(screen.getByRole('status').textContent).toBe('status.retrievingFor: Emma')
+    const timers = vi.getTimerCount()
+    const active = connectionStore.getState().updates['chat:emma@fluux.chat']
+    view.rerender(<UpdateStatus scope="chat:other@fluux.chat" target="Other">Away</UpdateStatus>)
+    expect(screen.getByRole('status').textContent).toBe('')
+    expect(vi.getTimerCount()).toBe(timers - 1)
+    expect(connectionStore.getState().updates['chat:emma@fluux.chat']).toBe(active)
+    act(() => vi.advanceTimersByTime(3000))
+    view.rerender(chat)
+    expect(screen.getByRole('status').textContent).toBe('')
+    const explanation = screen.getByTestId('update-icon').getAttribute('title')!
+    expect((view.container.textContent ?? '').split(explanation).length - 1).toBe(1)
+    view.unmount()
+    end()
   })
 
   it('explains the conversation header icon with tap or keyboard', () => {

@@ -34,7 +34,8 @@ publication regressions are in
 
 ## Scoped retrieval status
 
-`connectionStore` is the single owner of retrieval presentation. Its ephemeral
+`connectionStore` is the single owner of retrieval activity, scope ownership and
+phase timing. Its ephemeral
 `updates` record is keyed by `chat:<bare JID>`, `room:<bare JID>`, `messages`
 and `rooms`. `beginUpdate(scopes)` registers running work and returns an
 idempotent release. Overlapping registrations share one start time per scope.
@@ -71,8 +72,14 @@ announcements describe the start and the end of displayed work; the end wording
 does not assert success after
 an error. Each mounted announcement region observes only transitions for its
 current scope while healthy; changing scope or returning from verification does
-not replay an end stored by an earlier episode. Own presence and unrelated
-sections do not display retrieval work.
+not replay an end stored by an earlier episode. The region clears each committed
+notice after a 1.5-second assistive-technology delivery window, leaving only the
+icon's hidden explanation in settled icon-phase header text. Browsers expose no
+screen-reader speech-completion acknowledgement; this is a delivery opportunity,
+not detection of the end of speech. Replaced or unmounted regions cancel their
+pending cleanup, and cleared notices do not refill on phase changes. This local
+notice lifetime never changes SDK activity, scope state or phase deadlines.
+Own presence and unrelated sections do not display retrieval work.
 Global reconnection and verification retain their separate presentation.
 
 Disconnect/reset cancels the owner's deadlines and invalidates old releases

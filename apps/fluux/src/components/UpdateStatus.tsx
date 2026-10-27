@@ -2,10 +2,15 @@ import { useTranslation } from 'react-i18next'
 import { RefreshCw } from 'lucide-react'
 import { useConnectionStore } from '@fluux/sdk/react'
 import type { ConnectionState } from '@fluux/sdk/stores'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Tooltip } from './Tooltip'
 
 type Scope = Extract<keyof ConnectionState['updates'], `chat:${string}` | `room:${string}`>
+
+// Browsers do not expose screen-reader speech completion. Give the polite
+// live-region update a delivery window, then remove its duplicate DOM text.
+// This timer never drives SDK activity, ownership or retrieval phases.
+const ANNOUNCEMENT_DELIVERY_MS = 1500
 
 /** Observe announcements, not the owner's historical snapshot at mount. */
 function UpdateAnnouncement({ update, target }: {
@@ -15,10 +20,14 @@ function UpdateAnnouncement({ update, target }: {
   const { t } = useTranslation()
   const startedAt = update?.startedAt
   const announcement = update?.announcement
-  const observed = useRef({ startedAt, announcement, message: '' })
+  const observed = useRef({ startedAt, announcement, message: '', notice: 0 })
+  // Clear only the delivered DOM copy, retaining observation history for a later end.
+  const [clearedNotice, setClearedNotice] = useState<number | null>(null)
   const previous = observed.current
   let message = previous.message
+  let notice = previous.notice
   if (startedAt !== previous.startedAt || announcement !== previous.announcement) {
+    notice += 1
     const endedObservedWork = announcement === 'ended'
       && startedAt === previous.startedAt && previous.announcement === 'started'
     message = announcement === 'started' || endedObservedWork
@@ -26,9 +35,14 @@ function UpdateAnnouncement({ update, target }: {
       : ''
   }
   useEffect(() => {
-    observed.current = { startedAt, announcement, message }
-  }, [startedAt, announcement, message])
-  return <span role="status" data-testid="update-announcement" className="sr-only">{message}</span>
+    observed.current = { startedAt, announcement, message, notice }
+  }, [startedAt, announcement, message, notice])
+  useEffect(() => {
+    if (!message) return
+    const timer = setTimeout(() => setClearedNotice(notice), ANNOUNCEMENT_DELIVERY_MS)
+    return () => clearTimeout(timer)
+  }, [message, notice])
+  return <span role="status" data-testid="update-announcement" className="sr-only">{clearedNotice === notice ? '' : message}</span>
 }
 
 /** Read-only projection of the SDK owner's phase. No view owns update time or state. */
