@@ -15,6 +15,18 @@ pub fn persisted_window_state() -> StateFlags {
     StateFlags::all().difference(StateFlags::DECORATIONS)
 }
 
+/// Smallest and default window size in logical pixels; they match `minWidth`,
+/// `minHeight`, `width` and `height` in `tauri.conf.json`.
+pub const MIN_WINDOW_SIZE: (f64, f64) = (360.0, 600.0);
+pub const DEFAULT_WINDOW_SIZE: (f64, f64) = (1000.0, 700.0);
+
+/// A saved size below the window's own minimum can only come from a window that
+/// was minimized or hidden when its state was saved (#1820). Restoring it leaves
+/// a sliver the user cannot recover from.
+pub fn saved_size_is_unusable(width: f64, height: f64) -> bool {
+    width < MIN_WINDOW_SIZE.0 || height < MIN_WINDOW_SIZE.1
+}
+
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloseAction {
@@ -99,6 +111,19 @@ mod tests {
         assert!(!should_hide_on_minimize(true, false, true, false));
         assert!(!should_hide_on_minimize(true, true, false, false));
         assert!(!should_hide_on_minimize(true, true, true, true));
+    }
+
+    #[test]
+    fn saved_size_below_the_window_minimum_is_unusable() {
+        // 144 x 19 is the sliver reported in #1820.
+        assert!(saved_size_is_unusable(144.0, 19.0));
+        assert!(saved_size_is_unusable(1000.0, 599.0));
+        assert!(saved_size_is_unusable(359.0, 700.0));
+        assert!(!saved_size_is_unusable(360.0, 600.0));
+        assert!(!saved_size_is_unusable(
+            DEFAULT_WINDOW_SIZE.0,
+            DEFAULT_WINDOW_SIZE.1
+        ));
     }
 
     #[test]
