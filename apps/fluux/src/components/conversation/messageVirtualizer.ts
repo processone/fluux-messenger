@@ -77,8 +77,10 @@ export interface MessageVirtualizer {
    * Use instead of writing `scroller.scrollTop` directly — goes through @tanstack's
    * own scroll path so its internal measurement state stays consistent.
    * behavior: 'auto' (default) = instant; 'smooth' = CSS smooth scroll.
+   * releaseGesture: the caller owns the pixels (a history restore after the batch landed), so
+   * write now instead of waiting for an iOS drag, fling or bounce to finish.
    */
-  scrollToOffset(offset: number, opts?: { behavior?: 'auto' | 'smooth' }): void
+  scrollToOffset(offset: number, opts?: { behavior?: 'auto' | 'smooth'; releaseGesture?: boolean }): void
   /**
    * Scroll so that item at `index` is aligned as requested.
    * align: 'start' | 'center' | 'end' | 'auto' (default = 'auto')

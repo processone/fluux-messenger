@@ -147,6 +147,9 @@ interface Args {
  * `getItemKey = items[i].key` (the message id) binds the measurement cache to the message,
  * not the index, so it survives MAM prepend (which shifts every index).
  */
+// The private gesture tracker of @tanstack/virtual-core 3.19.5+ (absent before, so every use is guarded).
+type IosGestureLike = { end?: () => void }
+
 export function useTanstackMessageVirtualizer({
   items, indexById, scrollRef, estimateSize = 64, sampleEstimateMetrics, initialMeasurements, onMeasured,
 }: Args): MessageVirtualizer {
@@ -155,6 +158,8 @@ export function useTanstackMessageVirtualizer({
   const retainedIdRef = useRef<string | null>(null)
   const writeObserverRef = useRef<Parameters<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>[0]>(undefined)
   const navigationWriteRef = useRef(false)
+  // The outcome of the reader-takeover check scrollToOffset already ran before releasing a gesture.
+  const precheckedRef = useRef<{ refused: boolean } | null>(null)
   // Set by cancelPendingScroll until the next navigation write. See there.
   const cancelledTargetRef = useRef(false)
   // Bumped whenever the reader takes the pixels: any destination decided earlier is void.
@@ -261,7 +266,9 @@ export function useTanstackMessageVirtualizer({
       const scroller = instance.scrollElement
       const rows = itemKeyRef.current?.items
       const observer = writeObserverRef.current
-      const refused = observer?.({ phase: 'before', source, behavior: options.behavior }) === false
+      const prechecked = precheckedRef.current
+      precheckedRef.current = null
+      const refused = prechecked ? prechecked.refused : observer?.({ phase: 'before', source, behavior: options.behavior }) === false
       // A measurement write carries the adjustment for a row that measured taller than its
       // estimate above the reader. virtual-core folds that adjustment into its own scrollOffset
       // and clears it as soon as it has called this function, whether or not the element moved,
@@ -401,9 +408,30 @@ export function useTanstackMessageVirtualizer({
     ensureMessageMounted,
     measureElement: virtualizer.measureElement,
     scrollToOffset: (offset, opts) => {
-      navigationWriteRef.current = true
-      try { virtualizer.scrollToOffset(offset, opts) }
-      finally { navigationWriteRef.current = false }
+      // @tanstack/virtual-core 3.19.5+ queues an absolute write while an iOS drag, fling or bounce
+      // is open and lands it ~100 ms after the gesture ends. A caller that owns the pixels closes
+      // that gesture first, as the library does itself for a write it does not defer. Only an
+      // unrefused write owns them: the reader-takeover check runs here, with the gesture still
+      // open, so a refusal (and the takeover write it makes) leaves the reader's protection intact.
+      const gesture = opts?.releaseGesture
+        ? (virtualizer as unknown as { _iosGesture?: IosGestureLike })._iosGesture : undefined
+      let write = true
+      if (gesture) {
+        cancelledTargetRef.current = false
+        const generation = generationRef.current
+        const scroller = virtualizer.scrollElement
+        const refused = writeObserverRef.current?.({ phase: 'before', source: 'navigation', behavior: opts?.behavior }) === false
+        write = !refused && generationRef.current === generation && virtualizer.scrollElement === scroller
+        if (write) {
+          gesture.end?.()
+          precheckedRef.current = { refused: false }
+        }
+      }
+      if (write) {
+        navigationWriteRef.current = true
+        try { virtualizer.scrollToOffset(offset, opts && { behavior: opts.behavior }) }
+        finally { navigationWriteRef.current = false; precheckedRef.current = null }
+      }
       // @tanstack updates its reactive scrollOffset ONLY from the scroll element's 'scroll' DOM
       // event (observeElementOffset). scrollToOffset sets the DOM scrollTop (via _scrollToOffset)
       // but leaves scrollOffset stale until that event fires. The MAM-prepend restore calls this

@@ -193,6 +193,32 @@ describe('DirectionalHistoryBrowserAdapter', () => {
     })
   })
 
+  // Intent: the captain's jerky-scroll report (FLM-174/FLM-185). On an iPhone the first row lost its
+  // sender line (-42/-43 px) when older messages of the same sender landed above it, so anchoring
+  // on it moved the text under the reader by that much; device traces showed 30 px past the 20 px allowance.
+  it('anchors on the first visible row after the window first row when the list is bounced', () => {
+    const viewport = scrollerHarness({ scrollTop: -12 })
+    const rows = [
+      { index: 0, id: 'message-1', start: 0, size: 120 },
+      { index: 1, id: 'message-2', start: 120, size: 48 },
+    ]
+    for (const row of rows) {
+      const wrapper = document.createElement('div')
+      wrapper.dataset.index = String(row.index)
+      const message = document.createElement('div')
+      message.dataset.messageId = row.id
+      wrapper.append(message)
+      viewport.scroller.append(wrapper)
+    }
+    const { virtualizer } = virtualizerHarness(viewport.scroller, {
+      offset: () => 0,
+      items: rows.map(row => ({ index: row.index, start: row.start, size: row.size, key: row.id })),
+    })
+    const { adapter } = adapterHarness({ scroller: viewport.scroller, virtualizer })
+
+    expect(adapter.capture('message-1', 20)?.anchor).toEqual({ id: 'message-2', offsetFromTop: 132 })
+  })
+
   it('positions through the virtualizer and waits through a temporary missing anchor', () => {
     const viewport = scrollerHarness()
     let offset: number | null = 900
@@ -215,7 +241,7 @@ describe('DirectionalHistoryBrowserAdapter', () => {
       wrote: true,
       reassert: true,
     })
-    expect(scrollToOffset).toHaveBeenCalledWith(860)
+    expect(scrollToOffset).toHaveBeenCalledWith(860, { releaseGesture: true })
     expect(viewport.reflowReads).toBe(2)
 
     offset = null
@@ -248,7 +274,7 @@ describe('DirectionalHistoryBrowserAdapter', () => {
       wrote: true,
       reassert: false,
     })
-    expect(scrollToOffset).toHaveBeenCalledWith(1_300)
+    expect(scrollToOffset).toHaveBeenCalledWith(1_300, { releaseGesture: true })
   })
 
   it('uses the mounted element path and restores overflow ownership without a virtualizer', () => {
@@ -292,12 +318,12 @@ describe('DirectionalHistoryBrowserAdapter', () => {
 
     viewport.scrollTop = 856
     expect(executor.positionFrame(request(), currentLease)).toMatchObject({ wrote: true })
-    expect(scrollToOffset).toHaveBeenCalledWith(862)
+    expect(scrollToOffset).toHaveBeenCalledWith(862, { releaseGesture: true })
     scrollToOffset.mockClear()
 
     offset = 905
     expect(executor.positionFrame(request(), currentLease)).toMatchObject({ wrote: true })
-    expect(scrollToOffset).toHaveBeenCalledWith(865)
+    expect(scrollToOffset).toHaveBeenCalledWith(865, { releaseGesture: true })
   })
 
   it('rejects a stale lease or departed conversation before reading or writing geometry', () => {

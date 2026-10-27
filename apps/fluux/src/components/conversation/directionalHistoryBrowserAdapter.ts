@@ -60,35 +60,36 @@ export class DirectionalHistoryBrowserAdapter {
     const { scrollTop, scrollHeight, clientHeight } = scroller
     let anchor: DirectionalHistoryBrowserCapture['anchor'] = null
 
-    if (virtualizer) {
-      if (scrollTop === 0 && firstMessageId) {
+    if (virtualizer && scrollTop === 0 && firstMessageId) {
+      anchor = {
+        id: firstMessageId,
+        offsetFromTop: virtualizer.getOffsetForMessageId(firstMessageId) ?? 0,
+      }
+    } else if (virtualizer) {
+      // The window's first row is the one prepended history changes: it stops heading its group
+      // and loses its sender line (~43 px) when older messages of the same sender land above it.
+      // Anchoring on it would keep its top still while the text under the reader jumps, so the
+      // anchor is the first visible row after it; it falls back to the first row alone.
+      for (const item of virtualizer.getVirtualItems()) {
+        const viewportOffset = item.start - scrollTop
+        if (viewportOffset < -item.size / 2) continue
+        const wrapper = scroller.querySelector(
+          `[data-index="${item.index}"]`,
+        )
+        const message = wrapper?.querySelector(
+          '[data-message-row-id], [data-message-id]',
+        ) as HTMLElement | null
+        const messageId = message ? readMessageRowId(message) : undefined
+        if (!messageId || messageId === firstMessageId) continue
+        anchor = { id: messageId, offsetFromTop: viewportOffset }
+        break
+      }
+      if (!anchor && firstMessageId) {
         anchor = {
           id: firstMessageId,
           offsetFromTop:
-            virtualizer.getOffsetForMessageId(firstMessageId) ?? 0,
-        }
-      } else {
-        for (const item of virtualizer.getVirtualItems()) {
-          const viewportOffset = item.start - scrollTop
-          if (viewportOffset < -item.size / 2) continue
-          const wrapper = scroller.querySelector(
-            `[data-index="${item.index}"]`,
-          )
-          const message = wrapper?.querySelector(
-            '[data-message-row-id], [data-message-id]',
-          ) as HTMLElement | null
-          const messageId = message ? readMessageRowId(message) : undefined
-          if (!messageId) continue
-          anchor = { id: messageId, offsetFromTop: viewportOffset }
-          break
-        }
-        if (!anchor && firstMessageId) {
-          anchor = {
-            id: firstMessageId,
-            offsetFromTop:
-              (virtualizer.getOffsetForMessageId(firstMessageId) ?? 0) -
-              scrollTop,
-          }
+            (virtualizer.getOffsetForMessageId(firstMessageId) ?? 0) -
+            scrollTop,
         }
       }
     } else {
@@ -223,7 +224,7 @@ export class DirectionalHistoryBrowserAdapter {
           initialized && Math.abs(scroller.scrollTop - boundedTarget) > 5
         const shouldWrite = !initialized || targetMoved || geometryDrift
         if (shouldWrite) {
-          if (virtualizer) virtualizer.scrollToOffset(boundedTarget)
+          if (virtualizer) virtualizer.scrollToOffset(boundedTarget, { releaseGesture: true })
           else scroller.scrollTop = boundedTarget
         }
         previousTarget = boundedTarget
