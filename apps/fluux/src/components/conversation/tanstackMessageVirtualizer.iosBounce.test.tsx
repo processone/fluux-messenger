@@ -52,3 +52,21 @@ it('still lets the library hold an ordinary write while the tail is open', () =>
   virtualizer.scrollToOffset(1956)
   expect(scroller.scrollTop).toBe(20)
 })
+
+// Review FLM-182 F1: a restore the reader vetoed must not cost the reader's momentum its protection.
+it('keeps the gesture tail open when the restore is refused', () => {
+  const { scroller, virtualizer } = bouncingList()
+  virtualizer.setScrollWriteObserver?.(({ phase }) => (phase === 'before' ? false : undefined))
+  virtualizer.scrollToOffset(1956, { releaseGesture: true })
+  expect(scroller.scrollTop).toBe(20)
+  virtualizer.setScrollWriteObserver?.(undefined)
+  virtualizer.scrollToOffset(1956)
+  expect(scroller.scrollTop).toBe(20)
+})
+
+it('lands the restore on the requested offset, not a bounced one', () => {
+  const { scroller, virtualizer } = bouncingList()
+  scroller.scrollTop = -63
+  virtualizer.scrollToOffset(2000, { releaseGesture: true })
+  expect(scroller.scrollTop).toBe(2000)
+})
