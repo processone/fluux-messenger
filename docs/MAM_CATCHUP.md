@@ -40,8 +40,8 @@ and `rooms`. `beginUpdate(scopes)` registers running work and returns an
 idempotent release. Overlapping registrations share one start time per scope.
 Only this module schedules presentation: silent before 2 seconds, brief text
 from 2 to 5 seconds, then a fixed icon until the final registration ends.
-There is no success timeout. Only conversation headers select their own scope; mounting, navigation
-and unmounting do not schedule or reset update time.
+There is no success timeout. Only conversation headers select their own scope;
+mounting, navigation and unmounting do not schedule or reset update time.
 
 The same registration derives the public `isCatchingUp` and `catchUpStartedAt`
 aggregate. A producer never registers a separate catch-up handle alongside its
@@ -66,8 +66,9 @@ A header covered by the mobile member pane is silent; returning reads the
 original episode without restarting its time or replaying historical completion.
 Its explanation is available by hover, keyboard activation and touch. The room-info
 control retains its original full free width, with links and the explanation as
-separate interactive targets, never nested buttons. Contextual accessible announcements describe the start
-and the end of displayed work; the end wording does not assert success after
+separate interactive targets, never nested buttons. Contextual accessible
+announcements describe the start and the end of displayed work; the end wording
+does not assert success after
 an error. Each mounted announcement region observes only transitions for its
 current scope while healthy; changing scope or returning from verification does
 not replay an end stored by an earlier episode. Own presence and unrelated

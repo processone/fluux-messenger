@@ -281,7 +281,7 @@ for (const vp of VIEWPORTS) {
       const originalHeight = await headerHeight(page)
       const topicUrl = 'https://example.org/design-review'
       await page.evaluate(url => (window as W).__roomStore!.getState().updateRoom('team@conference.fluux.chat', { subject: url }), topicUrl)
-      await page.context().route(topicUrl, route => route.fulfill({ status: 200, contentType: 'text/plain', body: 'Disposable topic-link fixture' }))
+      await page.context().route(`${new URL(topicUrl).origin}/**`, route => route.fulfill({ status: 200, contentType: 'text/plain', body: 'Disposable topic-link fixture' }))
       const info = header.getByRole('button', { name: 'Show room info: Team Chat', exact: true })
       const checkWideTarget = async () => {
         const area = await header.getByTestId('room-info-area').boundingBox()

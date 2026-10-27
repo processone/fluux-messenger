@@ -310,12 +310,12 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
         <div data-testid="sidebar-header" className="h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
           <div className="flex-1 min-w-0 font-semibold text-fluux-text">
             <ConnectionStepSlot narrowOnly>
-                <h1 className="truncate">{sidebarView === 'messages' ? (showArchived ? t('messages.archivedTitle') : t('sidebar.messages'))
-                  : sidebarView === 'rooms' ? t('sidebar.rooms')
-                  : sidebarView === 'contacts' ? t('sidebar.contacts')
-                  : sidebarView === 'admin' ? t('sidebar.admin')
-                  : sidebarView === 'settings' ? t('sidebar.settings')
-                  : t('sidebar.search')}</h1>
+              <h1 className="truncate">{sidebarView === 'messages' ? (showArchived ? t('messages.archivedTitle') : t('sidebar.messages'))
+                : sidebarView === 'rooms' ? t('sidebar.rooms')
+                : sidebarView === 'contacts' ? t('sidebar.contacts')
+                : sidebarView === 'admin' ? t('sidebar.admin')
+                : sidebarView === 'settings' ? t('sidebar.settings')
+                : t('sidebar.search')}</h1>
             </ConnectionStepSlot>
           </div>
           {sidebarView === 'messages' && (
