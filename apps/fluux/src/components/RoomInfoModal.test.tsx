@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { RoomInfoModal } from './RoomInfoModal'
 import type { Room } from '@fluux/sdk'
 
@@ -36,6 +36,17 @@ afterEach(() => {
 })
 
 describe('RoomInfoModal', () => {
+  // FLM-171 G1/G2: the window must expose the named dialog that positive
+  // and negative interaction checks observe, not merely its visible contents.
+  it.each(['General', ''])('exposes a named dialog and its close control (room name: %s)', name => {
+    const room = makeRoom({ name })
+    render(<RoomInfoModal room={room} onClose={() => {}} />)
+    const dialog = screen.getByRole('dialog', { name: room.name || room.jid })
+    expect(dialog.getAttribute('aria-modal')).toBe('true')
+    expect(within(dialog).getByRole('heading', { level: 2 }).textContent).toBe(room.name)
+    expect(within(dialog).getByRole('button', { name: 'common.close' })).toBeTruthy()
+  })
+
   it('renders the room name (title), JID and full topic', () => {
     render(<RoomInfoModal room={makeRoom()} onClose={() => {}} />)
     expect(screen.getByText('General')).toBeTruthy()

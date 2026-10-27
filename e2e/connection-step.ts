@@ -36,6 +36,11 @@ const setConnection = (page: Page, status: string, attempt = 0, targetInMs: numb
 const finishSync = (page: Page) =>
   page.evaluate(() => (window as W).__connectionStore!.getState().resetCatchUp())
 
+// FLM-171 G1/G2: positive and negative checks observe the same named window.
+function roomInfoWindow(page: Page, roomName: string) {
+  return page.getByRole('dialog', { name: roomName, exact: true })
+}
+
 async function headerHeight(page: Page): Promise<number> {
   return page.locator('main header, header').last().evaluate((el) => el.getBoundingClientRect().height)
 }
@@ -185,7 +190,7 @@ for (const vp of VIEWPORTS) {
         if (vp.label === 'iphone') await trigger.tap()
         else await trigger.click()
         await expect(explanation).toHaveCount(0)
-        await expect(page.getByRole('dialog')).toHaveCount(0)
+        await expect(view === 'room' ? roomInfoWindow(page, name) : page.getByRole('dialog')).toHaveCount(0)
 
         // Navigate away, then come back after the brief window: no new grace/text.
         if (vp.label === 'iphone') await page.getByRole('button', { name: /back/i }).first().click()
@@ -283,6 +288,7 @@ for (const vp of VIEWPORTS) {
       await page.evaluate(url => (window as W).__roomStore!.getState().updateRoom('team@conference.fluux.chat', { subject: url }), topicUrl)
       await page.context().route(`${new URL(topicUrl).origin}/**`, route => route.fulfill({ status: 200, contentType: 'text/plain', body: 'Disposable topic-link fixture' }))
       const info = header.getByRole('button', { name: 'Show room info: Team Chat', exact: true })
+      const roomInfo = roomInfoWindow(page, 'Team Chat')
       const checkWideTarget = async () => {
         const area = await header.getByTestId('room-info-area').boundingBox()
         const button = await info.boundingBox()
@@ -292,9 +298,11 @@ for (const vp of VIEWPORTS) {
         const y = area!.y + area!.height * .25
         if (vp.label === 'iphone') await page.touchscreen.tap(x, y)
         else await page.mouse.click(x, y)
-        await expect(page.getByRole('dialog')).toBeVisible()
+        await expect(roomInfo).toBeVisible()
+        await expect(roomInfo.getByRole('heading', { level: 2, name: 'Team Chat', exact: true })).toBeVisible()
+        await expect(roomInfo.getByRole('button', { name: 'Close', exact: true })).toBeVisible()
         await page.keyboard.press('Escape')
-        await expect(page.getByRole('dialog')).toHaveCount(0)
+        await expect(roomInfo).toHaveCount(0)
         expect(await headerHeight(page)).toBe(originalHeight)
       }
       await checkWideTarget()
@@ -312,7 +320,7 @@ for (const vp of VIEWPORTS) {
       else await trigger.click()
       const explanation = page.getByRole('tooltip').filter({ hasText: 'Retrieving messages for Team Chat' })
       await expect(explanation.locator('..')).toHaveCSS('opacity', '1')
-      await expect(page.getByRole('dialog')).toHaveCount(0)
+      await expect(roomInfo).toHaveCount(0)
       if (vp.label === 'iphone') await trigger.tap()
       else await trigger.click()
       const popupReady = page.waitForEvent('popup')
@@ -320,7 +328,7 @@ for (const vp of VIEWPORTS) {
       const popup = await popupReady
       await expect(popup).toHaveURL(topicUrl)
       await popup.close()
-      await expect(page.getByRole('dialog')).toHaveCount(0)
+      await expect(roomInfo).toHaveCount(0)
       await page.evaluate(() => (window as W).__owners!.shift()!())
     })
 
