@@ -1,4 +1,4 @@
-import { occupantAvatarKey, captureOccupantAvatar, snapshotOccupantAvatar, type AvatarVersion } from '../../utils/avatarState'
+import { occupantAvatarKey, captureOccupantAvatar, snapshotOccupantAvatar, type AvatarVersion, type AvatarStateOwner } from '../../utils/avatarState'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
@@ -1128,7 +1128,7 @@ export class Profile extends BaseModule {
     try {
       const freshUrls = await refreshAllBlobUrls()
       if (freshUrls.size === 0) {
-        this.repointRoomAvatars(freshUrls)
+        this.repointRoomAvatars(freshUrls, snapshot)
         return
       }
 
@@ -1169,7 +1169,7 @@ export class Profile extends BaseModule {
         }
       }
 
-      this.repointRoomAvatars(freshUrls)
+      this.repointRoomAvatars(freshUrls, snapshot)
 
       // Hash mappings or image bytes can be evicted while the roster retains a
       // blob URL. Recover those contacts only through the owner's snapshot:
@@ -1246,20 +1246,25 @@ export class Profile extends BaseModule {
    * loop over stored mappings cannot reach them. A room whose hash has a fresh
    * copy is re-pointed to it; one without is cleared and refetched.
    */
-  private repointRoomAvatars(freshUrls: Map<string, string>): void {
+  private repointRoomAvatars(freshUrls: Map<string, string>, snapshot: ReturnType<AvatarStateOwner['snapshot']>): void {
     const roomStore = this.deps.stores?.room
     const live = new Set(freshUrls.values())
     for (const { jid } of roomStore?.allRooms() ?? []) {
       const room = roomStore?.getRoom(jid)
       if (!room?.avatar?.startsWith('blob:') || live.has(room.avatar)) continue
       const fresh = room.avatarHash ? freshUrls.get(room.avatarHash) : undefined
+      // Snapshot guards: a refresh that began before a newer session or
+      // announcement must not overwrite what that one put in the store.
       if (fresh) {
-        this.deps.emitSDK('room:updated', { roomJid: jid, updates: { avatar: fresh, avatarHash: room.avatarHash } })
+        const version = snapshot(jid, room.avatarHash)
+        if (!version.positive()) continue
+        version.apply(() => this.deps.emitSDK('room:updated', { roomJid: jid, updates: { avatar: fresh, avatarHash: room.avatarHash } }))
         continue
       }
-      const expected = this.avatarState.capture(jid).hash
-      this.deps.emitSDK('room:updated', { roomJid: jid, updates: { avatar: undefined } })
-      this.fetchRoomAvatar(jid, typeof expected === 'string' ? expected : undefined).catch(() => {})
+      const expected = room.avatarHash
+      const cleared = snapshot(jid, expected)
+        .apply(() => this.deps.emitSDK('room:updated', { roomJid: jid, updates: { avatar: undefined } }))
+      if (cleared) this.fetchRoomAvatar(jid, expected).catch(() => {})
     }
   }
 

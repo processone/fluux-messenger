@@ -57,7 +57,7 @@ async function startApp(replyDelays: number[], legacyJoin = false) {
     pending.push(profile.fetchRoomAvatar(ROOM, HASH))
   }
   const start = async () => { await profile.restoreAllRoomAvatarHashes(); join(); await Promise.all(pending) }
-  return { profile, cache, room, start }
+  return { profile, cache, room, start, avatarState }
 }
 
 describe('room avatar after a long reconnect', () => {
@@ -99,5 +99,22 @@ describe('room avatar after a long reconnect', () => {
     await wait(50)
 
     expect(shown(next.room)).toEqual({ loadable: true, avatarHash: HASH })
+  })
+
+  // FLM-203 R1: a refresh begun before a newer announcement must not overwrite it.
+  it('does not let an older refresh overwrite a room picture announced meanwhile', async () => {
+    const app = await startApp([0, 0])
+    await app.start()
+    await app.cache.clearAllAvatars()
+    Object.assign(app.room, { avatar: 'blob:tauri://localhost/dead' })
+
+    const refresh = app.profile.refreshAllAvatarBlobUrls()
+    const newer = app.avatarState.capture(ROOM, 'f'.repeat(40))
+    newer.apply(() => Object.assign(app.room, { avatar: 'blob:tauri://localhost/newer', avatarHash: 'f'.repeat(40) }))
+    await refresh
+    await wait(50)
+
+    expect(app.room.avatar).toBe('blob:tauri://localhost/newer')
+    expect(app.room.avatarHash).toBe('f'.repeat(40))
   })
 })
