@@ -48,7 +48,7 @@ import { useFocusZones, useViewNavigation, isMobileWeb, isSmallScreen, useWindow
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useIosPaneNavigation } from '@/hooks/useIosPaneNavigation'
 import { useDeepLink } from '@/hooks/useDeepLink'
-import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
+import { saveViewState, getSavedViewState, type ViewStateData } from '@/utils/sessionStorage'
 import { useModalStore } from '@/stores/modalStore'
 import { Server, ShieldOff, MessageCircle, Hash, Users, Search, Settings, Plus, ArrowLeft, Loader2, type LucideIcon } from 'lucide-react'
 

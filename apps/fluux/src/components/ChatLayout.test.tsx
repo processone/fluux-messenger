@@ -501,7 +501,7 @@ vi.mock('@/hooks/useKeyboardShortcuts', () => ({
   },
 }))
 
-vi.mock('@/hooks/useSessionPersistence', () => ({
+vi.mock('@/utils/sessionStorage', () => ({
   saveViewState: vi.fn(),
   getSavedViewState: vi.fn(() => null),
 }))
@@ -1214,7 +1214,7 @@ describe('ChatLayout - Tab Memory', () => {
 })
 
 // Import the mock to change its behavior in specific tests
-import * as sessionPersistence from '@/hooks/useSessionPersistence'
+import * as sessionStorage from '@/utils/sessionStorage'
 
 describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)', () => {
   // These tests prevent regression of the bug where activeConversationId
@@ -1234,7 +1234,7 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
     // Restoring the persisted view is programmatic, not a user navigation, so
     // it must not push a duplicate history entry — Back after a reload should
     // not pop to a phantom empty list.
-    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue({
+    vi.mocked(sessionStorage.getSavedViewState).mockReturnValue({
       sidebarView: 'messages',
       activeConversationId: 'carol@example.com',
       activeRoomJid: null,
@@ -1258,7 +1258,7 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
     // Scenario: User was in Rooms view (activeConversationId: null)
     // On restore, we MUST call setActiveConversation(null) to override
     // any stale value from chatStore's zustand persistence
-    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue({
+    vi.mocked(sessionStorage.getSavedViewState).mockReturnValue({
       sidebarView: 'rooms',
       activeConversationId: null,
       activeRoomJid: 'room@conference.example.com',
@@ -1276,7 +1276,7 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
   it('should always set activeRoomJid from session storage, even when null', async () => {
     // Scenario: User was in Messages view (activeRoomJid: null)
     // On restore, we MUST call setActiveRoom(null) to clear any stale value
-    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue({
+    vi.mocked(sessionStorage.getSavedViewState).mockReturnValue({
       sidebarView: 'messages',
       activeConversationId: 'alice@example.com',
       activeRoomJid: null,
@@ -1293,7 +1293,7 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
 
   it('should restore both conversation and room correctly from session storage', async () => {
     // Scenario: User was viewing a conversation in Messages tab
-    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue({
+    vi.mocked(sessionStorage.getSavedViewState).mockReturnValue({
       sidebarView: 'messages',
       activeConversationId: 'bob@example.com',
       activeRoomJid: null,
@@ -1310,7 +1310,7 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
 
   it('should handle session storage with both null correctly (fresh state)', async () => {
     // Scenario: Fresh session, nothing was active
-    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue({
+    vi.mocked(sessionStorage.getSavedViewState).mockReturnValue({
       sidebarView: 'messages',
       activeConversationId: null,
       activeRoomJid: null,
@@ -1332,7 +1332,7 @@ describe('ChatLayout - URL→store sync hydration (popstate)', () => {
     vi.clearAllMocks()
     // clearAllMocks doesn't remove mockReturnValue stubs left by the
     // session-storage describe above — restore the default (no saved state)
-    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue(null)
+    vi.mocked(sessionStorage.getSavedViewState).mockReturnValue(null)
     setMockState({
       activeConversationId: null,
       activeRoomJid: null,
@@ -1388,7 +1388,7 @@ describe('ChatLayout - URL→store sync hydration (popstate)', () => {
 describe('ChatLayout - EmptyState visual design', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue(null)
+    vi.mocked(sessionStorage.getSavedViewState).mockReturnValue(null)
     setMockState({
       activeConversationId: null,
       activeRoomJid: null,
@@ -1413,7 +1413,7 @@ describe('ChatLayout - Show profile from conversation header', () => {
     vi.clearAllMocks()
     // clearAllMocks doesn't remove mockReturnValue stubs left by the
     // session-storage describe above — restore the default (no saved state)
-    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue(null)
+    vi.mocked(sessionStorage.getSavedViewState).mockReturnValue(null)
     setMockState({
       activeConversationId: null,
       activeRoomJid: null,

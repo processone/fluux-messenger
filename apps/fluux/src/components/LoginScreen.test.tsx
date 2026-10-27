@@ -75,8 +75,8 @@ vi.mock('@/hooks', () => ({
     }),
 }))
 
-// Mock useSessionPersistence
-vi.mock('@/hooks/useSessionPersistence', () => ({
+// Mock session storage
+vi.mock('@/utils/sessionStorage', () => ({
     saveSession: vi.fn(),
 }))
 

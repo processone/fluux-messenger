@@ -18,8 +18,9 @@ import {
   saveOwnResources,
   getSavedOwnResources,
   type ViewStateData,
-} from './useSessionPersistence'
+} from './sessionStorage'
 import type { Contact, ServerInfo, HttpUploadService, ResourcePresence } from '@fluux/sdk'
+import { connectionStore } from '@fluux/sdk'
 
 const TEST_JID = 'user@example.com'
 const OTHER_JID = 'other@example.com'
@@ -58,7 +59,7 @@ Object.defineProperty(global, 'sessionStorage', {
   writable: true,
 })
 
-describe('useSessionPersistence', () => {
+describe('sessionStorage', () => {
   beforeEach(() => {
     // Clear mock storage before each test
     Object.keys(mockStorage).forEach((key) => delete mockStorage[key])
@@ -85,6 +86,67 @@ describe('useSessionPersistence', () => {
 
     it('should return null when no session exists', () => {
       expect(getSession()).toBeNull()
+    })
+  })
+
+  describe('account scope contract', () => {
+    it('uses a bare JID for the key while preserving the stored session payload', () => {
+      const jid = `${TEST_JID}/desktop`
+      saveSession(jid, 'password', TEST_SERVER)
+      expect(mockStorage[scopedKey(SESSION_KEY)]).toBe(JSON.stringify({ jid, password: 'password', server: TEST_SERVER }))
+      expect(getSession(`${TEST_JID}/mobile`)).toEqual({ jid, password: 'password', server: TEST_SERVER })
+      expect(mockStorage[ACTIVE_SESSION_JID_KEY]).toBe(TEST_JID)
+    })
+
+    it('prefers an explicit account, then the connected account, then the active tab account', () => {
+      saveSession(TEST_JID, 'first', TEST_SERVER)
+      saveSession(OTHER_JID, 'second', TEST_SERVER)
+      const state = connectionStore.getState()
+      const current = vi.spyOn(connectionStore, 'getState').mockReturnValue({ ...state, jid: `${TEST_JID}/desktop` })
+      try {
+        expect(getSession()?.password).toBe('first')
+        expect(getSession(OTHER_JID)?.password).toBe('second')
+        current.mockReturnValue({ ...state, jid: null })
+        expect(getSession()?.password).toBe('second')
+      } finally {
+        current.mockRestore()
+      }
+    })
+
+    it('reads legacy credentials only when no account scope is known', () => {
+      const legacy = { jid: TEST_JID, password: 'legacy', server: TEST_SERVER }
+      mockStorage[SESSION_KEY] = JSON.stringify(legacy)
+      expect(getSession()).toBeNull()
+      delete mockStorage[ACTIVE_SESSION_JID_KEY]
+      expect(getSession(OTHER_JID)).toBeNull()
+      expect(getSession()).toEqual(legacy)
+      expect(mockStorage[ACTIVE_SESSION_JID_KEY]).toBe(TEST_JID)
+    })
+
+    it('clears the active account and legacy keys while preserving other accounts and unrelated state', () => {
+      const keys = [SESSION_KEY, ROSTER_KEY, VIEW_STATE_KEY, OWN_RESOURCES_KEY, 'xmpp-profile', 'xmpp-server-info']
+      for (const key of keys) {
+        mockStorage[key] = 'legacy'
+        mockStorage[scopedKey(key)] = 'current'
+        mockStorage[scopedKey(key, OTHER_JID)] = 'other'
+      }
+      mockStorage['unrelated-preference'] = 'keep'
+
+      clearSession()
+
+      for (const key of keys) {
+        expect(mockStorage[key]).toBeUndefined()
+        expect(mockStorage[scopedKey(key)]).toBeUndefined()
+        expect(mockStorage[scopedKey(key, OTHER_JID)]).toBe('other')
+      }
+      expect(mockStorage['unrelated-preference']).toBe('keep')
+      expect(mockStorage[ACTIVE_SESSION_JID_KEY]).toBeUndefined()
+    })
+
+    it('returns null for corrupt scoped credentials without changing the active account', () => {
+      mockStorage[scopedKey(SESSION_KEY, OTHER_JID)] = '{ invalid'
+      expect(getSession(OTHER_JID)).toBeNull()
+      expect(mockStorage[ACTIVE_SESSION_JID_KEY]).toBe(TEST_JID)
     })
   })
 

@@ -9,7 +9,8 @@ import { connectionStore } from '@fluux/sdk/stores'
 import { XMPPProvider } from '@fluux/sdk/react'
 import { clearAllAvatarData, revokeAllBlobUrls } from '@fluux/sdk/cache'
 import { xml, type Element } from '@fluux/sdk/xmpp'
-import { saveSession, useSessionPersistence } from './useSessionPersistence'
+import { useSessionPersistence } from './useSessionPersistence'
+import { saveSession } from '@/utils/sessionStorage'
 
 vi.mock('@fluux/sdk', async () => {
   const { connectionStore } = await import('@fluux/sdk/stores')

@@ -4,7 +4,7 @@ import { performLogout } from './performLogout'
 import { deleteCredentials } from '@/utils/keychain'
 import { setPlatformForTesting } from '@/platform'
 import { getReconnectIntent } from './reconnectIntent'
-import { saveSession, getSession } from '@/hooks/useSessionPersistence'
+import { saveSession, getSession } from '@/utils/sessionStorage'
 
 // Keep real reconnectIntent / clearAutoReconnectCredentials / clearSession (the
 // behaviours under test). Only stub the heavy/native edges.
