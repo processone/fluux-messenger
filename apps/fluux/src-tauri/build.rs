@@ -11,6 +11,19 @@ fn main() {
         .unwrap_or_else(|| "unknown".to_string());
     println!("cargo:rustc-env=GIT_HASH={}", git_hash);
 
+    // The app binary gets its manifest from tauri-build. Integration tests that
+    // create a real window (tests/windows_minimize_to_tray.rs) need the same
+    // Common Controls 6 dependency, or they fail to start with
+    // STATUS_ENTRYPOINT_NOT_FOUND.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+    {
+        println!("cargo:rustc-link-arg-tests=/MANIFEST:EMBED");
+        println!(
+            "cargo:rustc-link-arg-tests=/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
+        );
+    }
+
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         for variable in ["TAURI_CONFIG", "APPLE_TEAM_ID", "APPLE_SIGNING_IDENTITY"] {
             println!("cargo:rerun-if-env-changed={variable}");
