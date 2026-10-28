@@ -84,7 +84,7 @@ export class DirectionalHistoryBrowserAdapter {
     ) {
       anchor = {
         id: firstMessageId,
-        offsetFromTop: virtualizer.getOffsetForMessageId(firstMessageId) ?? 0,
+        offsetFromTop: rowStart(virtualizer, firstMessageId) ?? 0,
       }
     } else if (virtualizer) {
       // The window's first row is the one prepended history changes: it stops heading its group
@@ -109,7 +109,7 @@ export class DirectionalHistoryBrowserAdapter {
         anchor = {
           id: firstMessageId,
           offsetFromTop:
-            (virtualizer.getOffsetForMessageId(firstMessageId) ?? 0) -
+            (rowStart(virtualizer, firstMessageId) ?? 0) -
             scrollTop,
         }
       }
@@ -176,11 +176,11 @@ export class DirectionalHistoryBrowserAdapter {
     const virtualizer = this.options.getVirtualizer()
     if (!scroller || !virtualizer) return
     if (virtualizer.getIndexForMessageId(followed.id) !== followed.index) return
-    // Rendered rows include the library's hold during a gesture; the offset lookup is the fallback
+    // Rendered rows include the library's hold during a gesture; the layout start is the fallback
     // for an anchor the reader scrolled out of the rendered window.
     const start =
       virtualizer.getVirtualItems().find(item => item.index === followed.index)?.start ??
-      virtualizer.getOffsetForMessageId(followed.id)
+      rowStart(virtualizer, followed.id)
     if (start === null) return
     followed.offsetFromTop = start - scroller.scrollTop
   }
@@ -251,9 +251,9 @@ export class DirectionalHistoryBrowserAdapter {
         let target: number | null = null
         let usedMethod = 'none'
         if (request.desired.messageId) {
-          const virtualOffset =
-            virtualizer?.getOffsetForMessageId(request.desired.messageId) ??
-            null
+          const virtualOffset = virtualizer
+            ? rowStart(virtualizer, request.desired.messageId)
+            : null
           if (virtualOffset !== null) {
             target = virtualOffset - placementOffset
             usedMethod = 'virtualizer-offset'
@@ -354,6 +354,17 @@ export class DirectionalHistoryBrowserAdapter {
     }
     this.settlementFrames.clear()
   }
+}
+
+/**
+ * Where a row starts in the content. The anchor math needs the real start: the clamped offset
+ * lookup reads short for a row in the final viewport, by as much as the row sits past the
+ * scrollable range, and the restore would land the anchor off by that much.
+ */
+function rowStart(virtualizer: MessageVirtualizer, messageId: string): number | null {
+  return virtualizer.getMessageStart
+    ? virtualizer.getMessageStart(messageId)
+    : virtualizer.getOffsetForMessageId(messageId)
 }
 
 function cancelKineticScroll(scroller: HTMLElement): void {

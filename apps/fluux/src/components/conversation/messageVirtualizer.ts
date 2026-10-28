@@ -72,6 +72,10 @@ export interface MessageVirtualizer {
   /** Offset (px from content top) of a message by id, whether or not it is mounted.
    *  null when the id is not in the current item set. */
   getOffsetForMessageId(id: string): number | null
+  /** Layout start of a message row (px from content top), measured or estimated, mounted or not,
+   *  and NOT clamped to the scrollable range like getOffsetForMessageId: a row in the final
+   *  viewport keeps its real start. null when the id is not in the current item set. */
+  getMessageStart?(id: string): number | null
   /** Flat virtualizer index of a message by id, or null when the id is not in the current
    *  item set. Lets callers drive the measurement-aware scrollToIndex for a message row. */
   getIndexForMessageId(id: string): number | null

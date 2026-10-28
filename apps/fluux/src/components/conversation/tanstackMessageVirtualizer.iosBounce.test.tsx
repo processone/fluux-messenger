@@ -103,11 +103,13 @@ it('runs the takeover write of a refused restore with the gesture still open', (
  * MessageList mounts them (a `data-index` wrapper around the message row), so the adapter captures
  * and restores exactly as in the app. `land` prepends older rows, as a batch from the server does.
  */
-function historyWindow(scrollTop: number) {
+function historyWindow(scrollTop: number, options: { contentHeight?: 'fixed' | 'rows' } = {}) {
   const scroller = document.body.appendChild(document.createElement('div'))
+  // 'rows' ends the scrollable range at the last row, as a browser does; 'fixed' leaves room below.
+  let contentHeight = () => 60000
   Object.defineProperties(scroller, {
     offsetHeight: { value: 796 }, offsetWidth: { value: 440 },
-    clientHeight: { value: 796 }, scrollHeight: { value: 60000 },
+    clientHeight: { value: 796 }, scrollHeight: { get: () => contentHeight() },
   })
   scroller.scrollTo = options => { scroller.scrollTop = (options as ScrollToOptions).top ?? 0 }
   const rowsFrom = (first: number, count: number) =>
@@ -117,6 +119,7 @@ function historyWindow(scrollTop: number) {
     scrollRef: { current: scroller }, estimateSize: 60,
   })
   const hook = renderHook(p => useTanstackMessageVirtualizer(p), { initialProps: props(rowsFrom(100, 200)) })
+  if (options.contentHeight === 'rows') contentHeight = () => hook.result.current.getTotalSize()
   const mount = () => {
     scroller.replaceChildren()
     for (const item of hook.result.current.getVirtualItems()) {
@@ -149,6 +152,8 @@ function historyWindow(scrollTop: number) {
     onScreen: (key: string) =>
       hook.result.current.getVirtualItems().find(item => item.key === key)!.start - scroller.scrollTop,
     land: (older: number) => act(() => hook.rerender(props(rowsFrom(100 - older, 200 + older)))),
+    /** Newer rows land at the resident cap: as many of the oldest rows leave. */
+    landNewer: (newer: number) => act(() => hook.rerender(props(rowsFrom(100 + newer, 200)))),
   }
 }
 
@@ -185,6 +190,33 @@ it.each([
   list.mount()
 
   expect(Math.abs(list.onScreen(anchor.id) - lastSeen)).toBeLessThanOrEqual(1)
+})
+
+// Intent: FLM-185 review finding R1. A reader at the end of the list, where the anchor row starts
+// past the scrollable range, scrolls it out of the rendered window before newer history lands at
+// the resident cap. The clamped offset lookup read its start short by that overhang, so the
+// restore landed the anchor off by the same amount.
+it('lands an anchor from the final viewport where the reader last saw it after newer history lands', () => {
+  const list = historyWindow(0, { contentHeight: 'rows' })
+  const maxScrollTop = list.virtualizer().getTotalSize() - 796
+  list.scrollTo(maxScrollTop)
+  const anchor = list.adapter.capture('message-100', 200)!.anchor!
+  const layoutStart = () => list.virtualizer().getMessageStart!(anchor.id)!
+  expect(layoutStart(), 'precondition: the anchor starts past the scrollable range').toBeGreaterThan(maxScrollTop)
+
+  list.scrollTo(maxScrollTop - 2200)
+  expect(
+    list.virtualizer().getVirtualItems().some(item => item.key === anchor.id),
+    'precondition: the reader scrolled the anchor out of the rendered window',
+  ).toBe(false)
+  list.adapter.observeScroll()
+  const lastSeen = layoutStart() - list.scroller.scrollTop
+
+  list.landNewer(50)
+  list.adapter.observeScroll()
+  list.adapter.createExecutor(vi.fn()).positionFrame(restoreRequest(anchor.id, anchor.offsetFromTop), lease)
+
+  expect(Math.abs(layoutStart() - list.scroller.scrollTop - lastSeen)).toBeLessThanOrEqual(1)
 })
 
 // Intent: FLM-185. After the restore write, rows between the viewport top and the anchor measured
