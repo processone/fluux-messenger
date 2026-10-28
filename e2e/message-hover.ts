@@ -398,13 +398,14 @@ for (const kind of ['chat', 'room'] as const) {
     const observations: unknown[] = []
     const record = async (stage: string) => observations.push({ stage, distance: await distance(page), held: await list.getAttribute('data-message-interaction'), panels: await list.locator('[data-message-panel]').count() })
     let openIndex = 0
-    const openMore = async (id = TARGET) => {
+    const openPanel = async (id = TARGET, panel: 'more' | 'reactions' = 'more') => {
+      const label = panel === 'more' ? 'More options' : 'More reactions'
       const target = page.locator(`.message-row[data-message-id="${id}"]`)
       await target.locator('[data-message-body]').hover()
       await waitForActions(page, id)
-      await keepJson(`open-more-${++openIndex}`, await target.evaluate(element => {
+      await keepJson(`open-panel-${++openIndex}`, await target.evaluate((element, label) => {
         const toolbar = element.querySelector('[data-message-toolbar]')!
-        const control = toolbar.querySelector('[aria-label="More options"]')!
+        const control = toolbar.querySelector(`[aria-label="${label}"]`)!
         const box = control.getBoundingClientRect()
         const style = getComputedStyle(toolbar)
         return { held: element.closest('[data-message-list]')?.getAttribute('data-message-interaction'),
@@ -412,12 +413,13 @@ for (const kind of ['chat', 'room'] as const) {
           hit: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.outerHTML,
           composing: !!element.closest('.composer-active'),
           shadow: (window as any).__fluuxScrollShadow?.() }
-      }))
-      await target.getByRole('button', { name: 'More options', exact: true }).click()
-      await expect(target.locator('[data-message-panel="more"]')).toBeVisible()
+      }, label))
+      await target.getByRole('button', { name: label, exact: true }).click()
+      await expect(target.locator(`[data-message-panel="${panel}"]`)).toBeVisible()
+      if (panel === 'reactions') await expect(target.locator('em-emoji-picker')).toBeVisible()
       return target
     }
-    await openMore()
+    await openPanel()
     await arrive(page, kind, ['navigation-arrival'])
     await wheelAwayFromBottom(page, 200, -450)
     await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
@@ -446,16 +448,16 @@ for (const kind of ['chat', 'room'] as const) {
     const historyAfter = (await historyBody.boundingBox())!.y
     expect(Math.abs(historyAfter - historyTop)).toBeLessThanOrEqual(1)
     observations.push({ stage: 'history release', id: historyId, before: historyTop, after: historyAfter })
-    const sendingRow = await openMore(historyId)
+    const sendingRow = await openPanel(historyId, 'reactions')
     const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
     await input.fill('My own send takes navigation priority.')
-    await expect(sendingRow.locator('[data-message-panel="more"]')).toHaveCount(1)
+    await expect(sendingRow.locator('[data-message-panel="reactions"]')).toHaveCount(1)
     await input.press('Enter')
     await expect(page.getByText('My own send takes navigation priority.', { exact: true }).last()).toBeVisible()
     await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
     await expect(list.locator('[data-message-panel]')).toHaveCount(0)
     await record('own send closes the menu and reaches latest')
-    await openMore()
+    await openPanel()
     await page.keyboard.press('PageUp')
     await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
     await expect(list).not.toHaveAttribute('data-message-interaction')
@@ -463,7 +465,7 @@ for (const kind of ['chat', 'room'] as const) {
     await record('keyboard scroll closes the menu')
     await page.keyboard.press('End')
     await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
-    await openMore()
+    await openPanel()
     await arrive(page, kind, ['small-arrival'])
     await expect(page.locator('[data-fab="scroll-to-bottom"]')).toHaveAttribute('tabindex', '0')
     expect(await distance(page)).toBeLessThan(AT_BOTTOM_OK_PX)
@@ -473,14 +475,14 @@ for (const kind of ['chat', 'room'] as const) {
     await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
     await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
     await record('jump closes the menu and reaches latest')
-    await openMore()
+    await openPanel()
     // Playwright forces every page focused. This checks the actual handler; native-engine
     // focus loss is verified separately with that automation override disabled.
     await page.evaluate(() => window.dispatchEvent(new Event('blur')))
     await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
     await expect(list).not.toHaveAttribute('data-message-interaction')
     await keepJson(`${kind}-blur`, { trigger: 'scripted window blur event', held: await list.getAttribute('data-message-interaction') })
-    await openMore()
+    await openPanel()
     await page.evaluate(async kind => {
       const scope = window as any
       const jid = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'

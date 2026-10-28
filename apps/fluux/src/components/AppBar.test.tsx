@@ -30,6 +30,7 @@ vi.mock('@/hooks/useIsDesktop', () => ({
 }))
 vi.mock('@/hooks/useHasHover', () => ({
   useHasHover: () => mockHasHover,
+  hasHover: () => mockHasHover,
 }))
 let mockIsFullscreen = false
 vi.mock('@/hooks/useFullscreen', () => ({

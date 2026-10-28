@@ -84,8 +84,9 @@ export function useMessageInteractionHold({
   }, [cancel, clearLeave])
 
   const setMenuOpen = useCallback((id: string, open: boolean, close: () => void, sourceRow?: HTMLElement) => {
-    if (!enabled || !hasHover()) return
+    if (!enabled) return
     if (open) {
+      if (!hasHover()) return
       const row = sourceRow ?? (scrollRef.current && findMessageRowElement(scrollRef.current, id))
       if (row) start(row, true)
       if (row && held.current?.row === row) menu.current = { row, close }

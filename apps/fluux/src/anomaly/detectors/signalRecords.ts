@@ -43,7 +43,7 @@ const LOOP_TAGS: Readonly<Record<ReassertLoopLabel, Opaque>> = Object.freeze({
   'divider-anchor': TAG.loopDividerAnchor,
   'insertion-anchor': TAG.loopInsertionAnchor,
   'width-anchor': TAG.loopWidthAnchor,
-  'interaction-anchor': TAG.loopTarget,
+  'interaction-anchor': TAG.loopInteractionAnchor,
   prepend: TAG.loopPrepend,
   'restore-anchor': TAG.loopRestoreAnchor,
   marker: TAG.loopMarker,
