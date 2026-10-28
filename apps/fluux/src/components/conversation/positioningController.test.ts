@@ -1512,6 +1512,67 @@ describe('positioning controller directional-history ownership', () => {
     expect(second.positionFrame).toHaveBeenCalledTimes(1)
   })
 
+  // FLM-204: at the resident bound an interior arrival shifts the window and spends this restore
+  // before the load's own batch lands. That batch may be restored again only while the reader
+  // still reads where the restore put them; otherwise it would pull them back to the old anchor.
+  describe('holding a settled restore for its in-flight load', () => {
+    function settledRestore(controller: PositioningController) {
+      const history = directionalHarness()
+      observeLiveEntry(controller)
+      const request = beginDirectional(controller, history.executor)
+      // Boundary input while the batch is pending is not a move: nothing has been written yet.
+      controller.observeUserInput(conversationId)
+      controller.reconcileDirectionalHistory({
+        conversationId,
+        generation: request.generation,
+        executor: history.executor,
+      })
+      for (let frame = 0; frame <= 60; frame += 1) history.runFrame()
+      expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+      return request
+    }
+
+    it('holds through ambient corrections and stops at the reader\'s own input', () => {
+      const controller = new PositioningController()
+      const request = settledRestore(controller)
+      expect(controller.holdsDirectionalReading(conversationId, request.generation)).toBe(true)
+      expect(controller.holdsDirectionalReading('other@example.test', request.generation)).toBe(false)
+
+      const media: AnchorPreservationExecutor = {
+        observeGeometry: () => {},
+        reachability: () => ({ kind: 'available', index: 5, mounted: true, placement: 'viable' }),
+        beginLoop: () => ({ schedule: () => {}, recordFrame: () => {}, finish: () => {} }),
+        positionFrame: () => ({ kind: 'positioned', scrollTop: 400, reassert: true }),
+        complete: () => {},
+      }
+      expect(controller.beginMediaPreservation({
+        conversationId,
+        desired: {
+          kind: 'anchor',
+          messageId: 'media-row',
+          placement: { kind: 'bottom-fraction', fraction: messageFraction(0.5) },
+        },
+        executor: media,
+      })).not.toBeNull()
+      expect(controller.holdsDirectionalReading(conversationId, request.generation)).toBe(true)
+
+      controller.observeUserInput(conversationId)
+      expect(controller.holdsDirectionalReading(conversationId, request.generation)).toBe(false)
+    })
+
+    it('stops holding once the reader sends a message', () => {
+      const controller = new PositioningController()
+      const request = settledRestore(controller)
+
+      expect(controller.beginLiveEdgeRequest({
+        conversationId,
+        source: { kind: 'live-update', reason: 'outgoing-message' },
+        executor: inertLiveEdgeExecutor(),
+      })).not.toBeNull()
+      expect(controller.holdsDirectionalReading(conversationId, request.generation)).toBe(false)
+    })
+  })
+
   it('drops a pending anchor when a forward load reaches the live edge without shifting', () => {
     const history = directionalHarness()
     const controller = new PositioningController()

@@ -49,7 +49,13 @@ kinetic-scroll cancellation, 2px target-shift correction, 5px clamp recovery, an
 distance-from-bottom fallback. Boundary input while the load is still pending retains the captured
 anchor because no pixel owner exists yet; takeover becomes cancellable after the initial
 positioning write, matching the former loop's timing. Explicit competing requests still supersede
-pending directional history.
+pending directional history. At the resident bound an interior arrival evicts the oldest row, so
+the first resident ID can change before the load's own batch lands and spend that restore early.
+Until the load settles, a later first-ID change restores the same anchor again with a fresh request
+in the same pre-paint pass, however long the 60-frame loop has been over. It does so only while the
+reader still reads where the last restore put them: the controller answers that from whether their
+own input, or any accepted request other than layout, media or history preservation, has come since
+that restore's generation. Once the reader moved on, the shift is left to ambient handling.
 All seven authoritative slices share the same controller-owned
 `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
 measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
@@ -97,7 +103,9 @@ Directional history windowing is mediated by a value-only
 eligibility, monotonic load identity, anchor/distance facts, loader invocation, no-shift completion,
 and false-to-true live-window cleanup. A loader promise bounds only the snapshot that invoked it:
 settlement from an older superseded load cannot release the current request, while an in-flight
-load keeps its snapshot until its own first-id shift can reconcile. Conversation entry drops the
+load keeps its snapshot until its own first-id shift can reconcile. A restored snapshot stays until
+its load settles, not only for its cooldown, so a batch that lands after an eviction-driven restore
+is restored again (see above). Conversation entry drops the
 departed conversation's snapshot, and delayed settlement or window observation from that snapshot
 cannot mutate the active conversation. A dedicated `DirectionalHistoryBrowserAdapter` owns visual
 anchor capture, the one-frame settlement scheduler, reachability probes, WebKit kinetic-scroll
@@ -488,7 +496,7 @@ deep growth and media-settle runs.
 | Media at live edge | Current or geometry-rearmed live edge | Debounced measurement stimulus; recovery uses the pre-growth eligibility captured by the caller |
 | Media while reading history | Selected target or fixed bottom-relative fractional anchor | See explicit-target maintenance and pending-batch cancellation above |
 | Unread divider moves while reading history | Selected target or fixed bottom-relative fractional anchor | Preserve the current position under the explicit-target and ambient precedence rules above |
-| Load older/newer | Fixed top-relative offset anchor | Subject to ambient request precedence above; wait for the directional window change and release if the load settles without one; if the anchor disappears after a shift, preserve captured distance from bottom and clamp |
+| Load older/newer | Fixed top-relative offset anchor | Subject to ambient request precedence above; wait for the directional window change and release if the load settles without one; restore again on each later window change until the load settles while the reader has not moved on; if the anchor disappears after a shift, preserve captured distance from bottom and clamp |
 | Home / resident-top command | Resident top | Does not itself trigger load-older; later genuine user travel can re-arm ordinary boundary loading |
 | Reaction, typing, resize, MAM completion | Reconcile current position | See selected-target maintenance and stimulus-specific live-edge eligibility above |
 

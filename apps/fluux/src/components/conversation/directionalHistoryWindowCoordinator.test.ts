@@ -28,6 +28,9 @@ function input(
   }
 }
 
+/** The reader has not moved since the restore. */
+const readingHeld = () => true
+
 describe('DirectionalHistoryWindowCoordinator', () => {
   it('owns the automatic cooldown while genuine boundary travel may bypass it', () => {
     const coordinator = new DirectionalHistoryWindowCoordinator(500)
@@ -139,7 +142,7 @@ describe('DirectionalHistoryWindowCoordinator', () => {
     })
   })
 
-  it('keeps an in-flight snapshot for the shift it produces, then ignores settlement', () => {
+  it('keeps an in-flight snapshot for the shift it produces, then releases it without a cancel on settlement', () => {
     const coordinator = new DirectionalHistoryWindowCoordinator(0)
     coordinator.enterConversation('room-a', true)
     const started = coordinator.begin(input({ mode: 'explicit' }))
@@ -150,19 +153,117 @@ describe('DirectionalHistoryWindowCoordinator', () => {
     expect(coordinator.observeWindow({
       conversationId: 'room-a',
       firstMessageId: 'older-1',
+      readingHeld,
     })).toMatchObject({
       kind: 'reconcile',
       generation: 12,
       snapshot: { requestId: started.snapshot.requestId },
     })
-    expect(coordinator.isPendingWindowShift('room-a', 'older-1')).toBe(true)
+    expect(coordinator.isPendingWindowShift('room-a', 'older-1', readingHeld)).toBe(true)
     coordinator.markRestored(started.snapshot.requestId, 1_100)
     coordinator.markLoadSettled(started.snapshot.requestId)
     expect(coordinator.releaseSettledWithoutShift({
       requestId: started.snapshot.requestId,
       conversationId: 'room-a',
       firstMessageId: 'older-1',
-    })).toEqual({ kind: 'none' })
+    })).toMatchObject({ kind: 'cleared' })
+    expect(coordinator.activeSnapshot('room-a')).toBeNull()
+  })
+
+  // FLM-204: at the resident bound an interior arrival evicts the oldest row, so the window shifts
+  // and the restore runs before the gated older batch arrives. The batch then lands as a second
+  // shift; without a second restore the reader's rows moved by the whole batch (invariant-14l).
+  describe('a window that shifts again before its load settles', () => {
+    function restoredOnArrival(coordinator: DirectionalHistoryWindowCoordinator) {
+      coordinator.enterConversation('room-a', false)
+      const started = coordinator.begin(input({ mode: 'explicit' }))
+      if (started.kind !== 'started') throw new Error('the load must start')
+      const { requestId } = started.snapshot
+      coordinator.attachGeneration(requestId, 12)
+      // The arrival evicts message-1, the oldest resident row.
+      expect(coordinator.observeWindow({
+        conversationId: 'room-a',
+        firstMessageId: 'message-2',
+        readingHeld,
+      })).toMatchObject({ kind: 'reconcile', generation: 12 })
+      coordinator.markRestored(requestId, 1_100)
+      return requestId
+    }
+
+    it('restores the batch that lands after the arrival restore', () => {
+      const coordinator = new DirectionalHistoryWindowCoordinator(500)
+      const requestId = restoredOnArrival(coordinator)
+
+      // Re-renders of the shifted window are not a new shift.
+      expect(coordinator.isPendingWindowShift('room-a', 'message-2', readingHeld)).toBe(false)
+      expect(coordinator.observeWindow({
+        conversationId: 'room-a',
+        firstMessageId: 'message-2',
+        readingHeld,
+      })).toEqual({ kind: 'none' })
+
+      // The older batch lands: ambient insertion handling must stand aside for it, and it restores.
+      expect(coordinator.isPendingWindowShift('room-a', 'older-1', readingHeld)).toBe(true)
+      expect(coordinator.observeWindow({
+        conversationId: 'room-a',
+        firstMessageId: 'older-1',
+        readingHeld,
+      })).toMatchObject({ kind: 'restart', snapshot: { requestId } })
+      expect(coordinator.attachGeneration(requestId, 14)).toBe(true)
+      expect(coordinator.observeWindow({
+        conversationId: 'room-a',
+        firstMessageId: 'older-1',
+        readingHeld,
+      })).toEqual({ kind: 'none' })
+    })
+
+    it('outlives the restore cooldown while the load is in flight, and clears once it settles', () => {
+      const coordinator = new DirectionalHistoryWindowCoordinator(500)
+      const requestId = restoredOnArrival(coordinator)
+
+      coordinator.expireRestored(requestId, 1_100)
+      expect(coordinator.activeSnapshot('room-a')?.requestId).toBe(requestId)
+
+      coordinator.markLoadSettled(requestId)
+      expect(coordinator.releaseSettledWithoutShift({
+        requestId,
+        conversationId: 'room-a',
+        firstMessageId: 'older-1',
+      })).toMatchObject({ kind: 'cleared' })
+      expect(coordinator.observeWindow({
+        conversationId: 'room-a',
+        firstMessageId: 'older-2',
+        readingHeld,
+      })).toEqual({ kind: 'none' })
+    })
+
+    it('expires after the cooldown once the load has settled', () => {
+      const coordinator = new DirectionalHistoryWindowCoordinator(500)
+      const requestId = restoredOnArrival(coordinator)
+
+      coordinator.markLoadSettled(requestId)
+      coordinator.expireRestored(requestId, 1_100)
+      expect(coordinator.activeSnapshot('room-a')).toBeNull()
+    })
+
+    it('lets the shift go once the reader has moved on since the restore', () => {
+      const coordinator = new DirectionalHistoryWindowCoordinator(500)
+      restoredOnArrival(coordinator)
+      const asked: number[] = []
+      const movedOn = (generation: number) => {
+        asked.push(generation)
+        return false
+      }
+
+      expect(coordinator.isPendingWindowShift('room-a', 'older-1', movedOn)).toBe(false)
+      expect(coordinator.observeWindow({
+        conversationId: 'room-a',
+        firstMessageId: 'older-1',
+        readingHeld: movedOn,
+      })).toMatchObject({ kind: 'dropped' })
+      expect(asked).toEqual([12, 12])
+      expect(coordinator.activeSnapshot('room-a')).toBeNull()
+    })
   })
 
   it('does not let a departed conversation settle or observe into the active conversation', () => {
@@ -186,6 +287,7 @@ describe('DirectionalHistoryWindowCoordinator', () => {
     expect(coordinator.observeWindow({
       conversationId: 'room-a',
       firstMessageId: 'older-1',
+      readingHeld,
     })).toEqual({ kind: 'none' })
 
     const active = coordinator.begin(input({

@@ -2921,12 +2921,35 @@ test.describe('Insertion drift while scrolled up', () => {
    *  (a 50-row batch) and a dropped preservation ~450px, so both regressions stay unmissable. */
   const IN_FLIGHT_DRIFT_PX = 60
 
+  /** Frames a slow archive answer is held after the arrival: twice the 60-frame re-assert budget a
+   *  directional restore runs for (DIRECTIONAL_HISTORY_REASSERT_FRAMES in positioningController),
+   *  so a restore the arrival started has certainly ended before the batch lands. */
+  const SLOW_ARCHIVE_FRAMES = 120
+
+  /** Wait for animation frames in the page, not wall-clock time: the budget it must outlast is
+   *  counted in frames. */
+  async function waitForAnimationFrames(page: Page, frames: number) {
+    await page.evaluate((count) => new Promise<void>((resolve) => {
+      let left = count
+      const tick = () => {
+        left -= 1
+        if (left <= 0) resolve()
+        else requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    }), frames)
+  }
+
   /**
    * Hold the demo's older-history MAM answer open, so an arrival can be injected while a
    * load-older is genuinely IN FLIGHT, then let the batch land and report how far the tracked
    * reading row moved across the whole sequence.
    */
-  async function insertDuringInFlightLoadOlder(page: Page, body: string) {
+  async function insertDuringInFlightLoadOlder(
+    page: Page,
+    body: string,
+    options: { slowArchive?: boolean } = {},
+  ) {
     // Gate the synthetic MAM batch. The cache path in front of it returns nothing in demo mode
     // (all seeded messages are already resident), so this is the whole delivery of a load-older.
     const gated = await page.evaluate(() => {
@@ -2998,7 +3021,24 @@ test.describe('Insertion drift while scrolled up', () => {
     await page.waitForTimeout(400)
     await syncEngineGeometry(page)
 
+    const readTrackedTop = () => page.evaluate((id) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      const el = s?.querySelector(
+        `.message-row[data-message-id="${CSS.escape(id)}"]`,
+      ) as HTMLElement | null
+      if (!s || !el) return null
+      return el.getBoundingClientRect().top - s.getBoundingClientRect().top
+    }, track.id)
+
     const midway = await readView(page)
+    const midwayTop = await readTrackedTop()
+
+    if (options.slowArchive) {
+      // A slow archive answer: the batch lands only after everything the arrival started has run
+      // its course, so no correction still in flight can hold the reader by luck.
+      await waitForAnimationFrames(page, SLOW_ARCHIVE_FRAMES)
+      await syncEngineGeometry(page)
+    }
 
     // Let the load-older deliver its batch.
     await page.evaluate(() => {
@@ -3009,14 +3049,7 @@ test.describe('Insertion drift while scrolled up', () => {
     await syncEngineGeometry(page)
 
     const after = await readView(page)
-    const trackedTop = await page.evaluate((id) => {
-      const s = document.querySelector('[data-message-list]') as HTMLElement | null
-      const el = s?.querySelector(
-        `.message-row[data-message-id="${CSS.escape(id)}"]`,
-      ) as HTMLElement | null
-      if (!s || !el) return null
-      return el.getBoundingClientRect().top - s.getBoundingClientRect().top
-    }, track.id)
+    const trackedTop = await readTrackedTop()
 
     // Read placement from the MIDWAY array: the batch that lands afterwards renumbers every index.
     const insertedIndex = midway!.ids.indexOf('delayed-arrival-0')
@@ -3026,6 +3059,8 @@ test.describe('Insertion drift while scrolled up', () => {
     return {
       trackedId: track.id,
       beforeTop: Math.round(track.top),
+      midwayTop: midwayTop === null ? null : Math.round(midwayTop),
+      midwayDrift: midwayTop === null ? Number.POSITIVE_INFINITY : Math.abs(midwayTop - track.top),
       afterTop: trackedTop === null ? null : Math.round(trackedTop),
       drift: trackedTop === null ? Number.POSITIVE_INFINITY : Math.abs(trackedTop - track.top),
       insertedAboveViewport:
@@ -3089,6 +3124,32 @@ test.describe('Insertion drift while scrolled up', () => {
     expect(
       r.drift,
       `reading position drifted ${r.drift}px when a batch landed after an eviction at the bound`,
+    ).toBeLessThan(IN_FLIGHT_DRIFT_PX)
+  })
+
+  // FLM-204: 14l passed only when the batch happened to land while the restore the arrival had
+  // started was still re-asserting. A slow archive answer lands after it, which is what a reader on
+  // a slow server gets, so this holds the batch until that restore has certainly ended.
+  test('invariant-14m: a slow older-history batch after an interior arrival at the resident bound keeps the reader\'s rows in place', async ({ page }) => {
+    await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
+    const r = await insertDuringInFlightLoadOlder(
+      page,
+      'bound delayed arrival before a slow older-history answer\n'.repeat(18),
+      { slowArchive: true },
+    )
+    console.log('── INSERTION-DRIFT bound-slow-load-older ──', JSON.stringify(r))
+    expect(r.insertedAboveViewport, 'the arrival must land ABOVE the viewport').toBe(true)
+    expect(
+      r.firstIdMidway,
+      `precondition: at the resident bound the arrival must evict the oldest row — ${JSON.stringify(r)}`,
+    ).not.toBe(r.firstIdBefore)
+    expect(
+      r.firstIdAfter,
+      `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+    ).not.toBe(r.firstIdMidway)
+    expect(
+      r.drift,
+      `reading position drifted ${r.drift}px when a slow batch landed after an eviction at the bound — ${JSON.stringify(r)}`,
     ).toBeLessThan(IN_FLIGHT_DRIFT_PX)
   })
 })

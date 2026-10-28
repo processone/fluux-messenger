@@ -819,7 +819,12 @@ export function useMessageListScroll({
       recordBottomAnchor: (id, anchor) =>
         viewportSessionRef.current?.recordBottomAnchor(id, anchor),
       isDirectionalLoadLanding: (id, first) =>
-        directionalWindowRef.current?.isPendingWindowShift(id, first) ?? false,
+        directionalWindowRef.current?.isPendingWindowShift(
+          id,
+          first,
+          (generation) =>
+            positioningControllerRef.current?.holdsDirectionalReading(id, generation) ?? false,
+        ) ?? false,
       beginLayoutPreservation: (input) => {
         if (!reconcileMessageTargetAfterResize()) positioningControllerRef.current?.beginLayoutPreservation(input)
       },
@@ -990,6 +995,7 @@ export function useMessageListScroll({
     triggerLoadNewer,
     handleLoadEarlier,
     applyReleaseDecision: applyDirectionalReleaseDecision,
+    restartRestore: restartDirectionalRestore,
   } = useDirectionalHistoryLoads({
     ports: {
       getBrowser: getDirectionalHistoryBrowser,
@@ -1968,6 +1974,8 @@ export function useMessageListScroll({
     const decision = directionalWindowRef.current?.observeWindow({
       conversationId,
       firstMessageId: firstMessageId ?? '',
+      readingHeld: (generation) =>
+        positioningControllerRef.current?.holdsDirectionalReading(conversationId, generation) ?? false,
     }) ?? { kind: 'none' as const }
     if (decision.kind === 'none') return
     const saved = decision.snapshot
@@ -1993,11 +2001,33 @@ export function useMessageListScroll({
     }
 
     if (decision.kind === 'dropped') {
-      debugLog('DIRECTIONAL HISTORY DROPPED (controller unavailable)', {
+      debugLog(
+        saved.restored
+          ? 'DIRECTIONAL HISTORY DROPPED (reader moved on before the load settled)'
+          : 'DIRECTIONAL HISTORY DROPPED (controller unavailable)',
+        {
+          oldFirstId: saved.oldFirstId,
+          firstMessageId,
+        },
+      )
+      return
+    }
+
+    // At the resident bound an interior arrival evicts the oldest row, which shifts the window
+    // before the load's own batch lands and spends the first restore on that eviction. The batch
+    // then lands as a second shift while the load is still in flight: hold the same anchor across
+    // it with a fresh request, in this same pre-paint pass (FLM-204).
+    let generation: number | null
+    if (decision.kind === 'restart') {
+      generation = restartDirectionalRestore(saved)
+      debugLog('DIRECTIONAL HISTORY RESTART (window shifted again before the load settled)', {
         oldFirstId: saved.oldFirstId,
         firstMessageId,
+        generation,
       })
-      return
+      if (generation === null) return
+    } else {
+      generation = decision.generation
     }
 
     // The controller performs the first write synchronously in this layout effect, preserving the
@@ -2005,7 +2035,7 @@ export function useMessageListScroll({
     // clamp recovery, and the full late-measurement frame budget.
     positioningControllerRef.current?.reconcileDirectionalHistory({
       conversationId,
-      generation: decision.generation,
+      generation,
       executor: buildDirectionalHistoryExecutor(saved),
     })
 
@@ -2014,6 +2044,7 @@ export function useMessageListScroll({
     conversationId,
     firstMessageId,
     messageCount,
+    restartDirectionalRestore,
     staticMode,
   ])
 
