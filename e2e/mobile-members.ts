@@ -166,7 +166,7 @@ for (const menu of ['member', 'sidebar room'] as const) {
   })
 }
 
-test('desktop Escape closes the image menu inside the lightbox, then the lightbox', async ({ page }) => {
+async function openImageMenuInLightbox(page: Page) {
   await bootDemo(page, '/demo.html?tutorial=false')
   await page.evaluate(() => {
     const demo = window as unknown as { __demoClient: DemoClient }
@@ -194,12 +194,36 @@ test('desktop Escape closes the image menu inside the lightbox, then the lightbo
   await viewer.getByRole('img').click({ button: 'right' })
   const save = page.getByRole('button', { name: 'Save image', exact: true })
   await expect(save).toBeVisible()
+  return { viewer, save }
+}
+
+test('desktop Escape closes the image menu inside the lightbox, then the lightbox', async ({ page }) => {
+  const { viewer, save } = await openImageMenuInLightbox(page)
 
   await page.keyboard.press('Escape')
   await expect(save).toHaveCount(0)
   await expect(viewer).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(viewer).toHaveCount(0)
+})
+
+// Review R6 under the same ruling. The lightbox is added at the end of the page, so shortcut
+// help opened over it is drawn behind it, and the image menu is still the overlay on top.
+test('desktop Escape closes the image menu first when shortcut help opens behind the lightbox', async ({ page }) => {
+  const { viewer, save } = await openImageMenuInLightbox(page)
+  await page.keyboard.press('Control+?')
+  const help = page.getByRole('heading', { name: 'Keyboard Shortcuts', exact: true })
+  await expect(help).toHaveCount(1)
+
+  await page.keyboard.press('Escape')
+  await expect(save).toHaveCount(0)
+  await expect(viewer).toBeVisible()
+  await expect(help).toHaveCount(1)
+  await page.keyboard.press('Escape')
+  await expect(viewer).toHaveCount(0)
+  await expect(help).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(help).toHaveCount(0)
 })
 
 // Review R5 applies the same ruling to the emoji picker. The picker's own search box keeps
