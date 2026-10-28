@@ -31,13 +31,13 @@ export function ShortcutHelp({ shortcuts, onClose }: ShortcutHelpProps) {
   const categoryOrder = ['general', 'navigation', 'actions']
 
   return (
-    // Escape to close is handled by the global escape hierarchy in
-    // useKeyboardShortcuts, so the overlay does not also bind it.
+    // Escape closes this dialog through the overlay's own handler, so it joins the overlay
+    // stack: opened over a context menu, it closes first and the menu stays (see
+    // useCloseOnEscape).
     <ModalOverlay
       onClose={onClose}
       width="max-w-lg"
       panelClassName="max-h-[80vh] overflow-hidden flex flex-col"
-      closeOnEscape={false}
     >
       {({ close }) => (
         <>

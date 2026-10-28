@@ -1,4 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
+import { useRef } from 'react'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   MenuButton,
@@ -32,9 +34,12 @@ function List() {
 
 function renderList() {
   return render(
-    <div data-testid="scrolling-list" style={{ overflowY: 'auto', height: 518, marginTop: 78 }}>
-      <SidebarListMenuProvider><List /></SidebarListMenuProvider>
-    </div>,
+    <>
+      <div data-testid="scrolling-list" style={{ overflowY: 'auto', height: 518, marginTop: 78 }}>
+        <SidebarListMenuProvider><List /></SidebarListMenuProvider>
+      </div>
+      <div data-testid="message-list" style={{ overflowY: 'auto', height: 518 }} />
+    </>,
   )
 }
 
@@ -86,5 +91,80 @@ describe('sidebar menu — issue #1790', () => {
     expect(screen.getByRole('button', { name: 'Archiver' })).toBeInTheDocument()
     fireEvent.scroll(screen.getByTestId('scrolling-list'))
     expect(screen.queryByRole('button', { name: 'Archiver' })).not.toBeInTheDocument()
+  })
+
+  // The captain's ruling on review R1: "Escape closes the menu first". The conversation's own
+  // Escape listens on window and must only run once no menu is open.
+  it('closes on Escape without passing it to the conversation, which gets the next Escape', () => {
+    const conversationEscape = vi.fn()
+    const onWindowKey = (e: KeyboardEvent) => { if (e.key === 'Escape') conversationEscape() }
+    window.addEventListener('keydown', onWindowKey)
+    try {
+      renderList()
+      fireEvent.contextMenu(screen.getByText(conversation.name), { clientX: 215, clientY: 552 })
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(screen.queryByRole('button', { name: 'Archiver' })).not.toBeInTheDocument()
+      expect(conversationEscape).not.toHaveBeenCalled()
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(conversationEscape).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener('keydown', onWindowKey)
+    }
+  })
+
+  // A message list re-pinning to a new message must not take a sidebar menu with it.
+  it('stays open while another list scrolls itself, after right-click or long press', () => {
+    vi.useFakeTimers()
+    renderList()
+    fireEvent.contextMenu(screen.getByText(conversation.name), { clientX: 215, clientY: 552 })
+    fireEvent.scroll(screen.getByTestId('message-list'))
+    expect(screen.getByRole('button', { name: 'Archiver' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Archiver' }))
+    fireEvent.touchStart(screen.getByText(conversation.name), { touches: [{ clientX: 215, clientY: 552 }] })
+    act(() => vi.advanceTimersByTime(500))
+    fireEvent.touchEnd(screen.getByText(conversation.name))
+    fireEvent.scroll(screen.getByTestId('message-list'))
+    expect(screen.getByRole('button', { name: 'Archiver' })).toBeInTheDocument()
+    fireEvent.scroll(screen.getByTestId('scrolling-list'))
+    expect(screen.queryByRole('button', { name: 'Archiver' })).not.toBeInTheDocument()
+  })
+})
+
+// The captain's ruling on review R3: with stacked overlays, Escape closes only the one on top.
+// The sidebar menu sits at the end of the page, after the help dialog, so "on top" must mean
+// "opened last", not "last in the page".
+function Help({ onClose }: { onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useCloseOnEscape(onClose, true, ref)
+  return <div ref={ref} data-modal="true">Keyboard shortcuts</div>
+}
+
+describe('sidebar menu with shortcut help stacked', () => {
+  it('closes help opened over the menu first, then the menu', () => {
+    const closeHelp = vi.fn()
+    const Page = ({ help }: { help: boolean }) => (
+      <>
+        {help && <Help onClose={closeHelp} />}
+        <SidebarListMenuProvider><List /></SidebarListMenuProvider>
+      </>
+    )
+    const { rerender } = render(<Page help={false} />)
+    fireEvent.contextMenu(screen.getByText(conversation.name), { clientX: 215, clientY: 552 })
+    rerender(<Page help />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeHelp).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Archiver' })).toBeInTheDocument()
+    rerender(<Page help={false} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByRole('button', { name: 'Archiver' })).not.toBeInTheDocument()
+  })
+
+  it('closes a menu opened over an open dialog and leaves the dialog open', () => {
+    const closeHelp = vi.fn()
+    render(<><Help onClose={closeHelp} /><SidebarListMenuProvider><List /></SidebarListMenuProvider></>)
+    fireEvent.contextMenu(screen.getByText(conversation.name), { clientX: 215, clientY: 552 })
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByRole('button', { name: 'Archiver' })).not.toBeInTheDocument()
+    expect(closeHelp).not.toHaveBeenCalled()
   })
 })

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, cleanup } from '@testing-library/react'
+import { render, cleanup, fireEvent } from '@testing-library/react'
 import { EmojiPicker } from './EmojiPicker'
+import { EscapeModal } from '@/test-utils/escapeModal'
 
 // Capture the config emoji-mart's Picker is constructed with.
 let lastPickerConfig: Record<string, unknown> | null = null
@@ -91,5 +92,49 @@ describe('EmojiPicker stability across re-renders', () => {
 
     expect(secondSelect).toHaveBeenCalledWith('🎉')
     expect(firstSelect).not.toHaveBeenCalled()
+  })
+})
+
+// The captain's ruling on review R3, applied by review R5: with stacked overlays, Escape
+// closes only the one on top.
+describe('EmojiPicker stacked with a modal', () => {
+  beforeEach(() => {
+    mockHasHover.mockReturnValue(true)
+    cleanup()
+  })
+
+  it('closes help first and keeps the picker open, then closes the picker', () => {
+    const closePicker = vi.fn()
+    const closeHelp = vi.fn()
+    const Page = ({ help }: { help: boolean }) => (
+      <>
+        <EmojiPicker onSelect={vi.fn()} onClose={closePicker} />
+        {help && <EscapeModal onClose={closeHelp} />}
+      </>
+    )
+    const { rerender } = render(<Page help={false} />)
+    rerender(<Page help />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeHelp).toHaveBeenCalledTimes(1)
+    expect(closePicker).not.toHaveBeenCalled()
+    rerender(<Page help={false} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closePicker).toHaveBeenCalledTimes(1)
+  })
+
+  // The poll window: the picker opens inside a modal that closes on Escape.
+  it('opened inside a modal, closes and keeps the modal open', () => {
+    const closePicker = vi.fn()
+    const closeModal = vi.fn()
+    const Page = ({ picker }: { picker: boolean }) => (
+      <EscapeModal onClose={closeModal}>
+        {picker && <EmojiPicker onSelect={vi.fn()} onClose={closePicker} />}
+      </EscapeModal>
+    )
+    const { rerender } = render(<Page picker={false} />)
+    rerender(<Page picker />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closePicker).toHaveBeenCalledTimes(1)
+    expect(closeModal).not.toHaveBeenCalled()
   })
 })

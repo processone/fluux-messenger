@@ -44,6 +44,7 @@ export const changelog: ChangelogEntry[] = [
         'iOS: the conversation no longer snaps back to the bottom while your finger is on it, and messages in unsupported encryption no longer shift the view after opening',
         'iOS: tapping a notification Fluux showed while running now opens its conversation or room',
         'iOS: long-press menus in the contact, room and conversation lists are no longer cut off at the bottom of the list',
+        'A member\'s menu in a room, or a menu in the conversation, room or contact list, no longer disappears when a new message scrolls the open conversation. Scrolling the list the menu came from still closes it. Escape now closes an open menu without jumping the conversation to its newest message. When one overlay sits over another, such as a menu over the image viewer, the emoji picker in the poll window, or keyboard shortcut help over a menu, the emoji picker or the encryption setup dialog, Escape closes only the one on top',
       ],
     }],
   },

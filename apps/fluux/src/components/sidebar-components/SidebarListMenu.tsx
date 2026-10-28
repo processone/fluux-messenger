@@ -22,7 +22,8 @@ import {
 } from 'react'
 import { SidebarMenuPortal } from './SidebarMenuPortal'
 import { useClickOutside, useMenuViewportClamp } from '@/hooks'
-import { getFloatingViewport } from '@/hooks/floatingViewport'
+import { useMenuScrollDismiss } from '@/hooks/useMenuScrollDismiss'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 
 // ============================================================================
 // Types
@@ -46,8 +47,8 @@ export interface SidebarListMenuState<T> {
   longPressTriggered: RefObject<boolean>
   /** Close the menu */
   close: () => void
-  /** Open menu for an item */
-  openMenu: (item: T, position: MenuPosition) => void
+  /** Open menu for an item; `anchor` is the element it opens from, if any */
+  openMenu: (item: T, position: MenuPosition, anchor?: Element | null) => void
   /** Get props to spread on an item element for context menu support */
   getItemMenuProps: (item: T) => ItemMenuProps
 }
@@ -91,6 +92,8 @@ export function SidebarListMenuProvider<T>({
   const pendingItemRef = useRef<T | null>(null)
   // Original (unadjusted) anchor, kept separate so re-clamps measure from the true point.
   const clickPosition = useRef<MenuPosition>({ x: 0, y: 0 })
+  // The element the menu was opened from; only scrolls that move it close the menu.
+  const anchorRef = useRef<Element | null>(null)
 
   useEffect(() => () => { if (longPressTimeout.current) clearTimeout(longPressTimeout.current) }, [])
 
@@ -103,18 +106,18 @@ export function SidebarListMenuProvider<T>({
   // Click outside to close
   useClickOutside(menuRef, close, isOpen)
 
-  useEffect(() => {
-    if (!isOpen) return
-    const handleScroll = (event: Event) => {
-      if (getFloatingViewport().top && event.target instanceof Node && menuRef.current?.contains(event.target)) return
-      close()
-    }
-    document.addEventListener('scroll', handleScroll, { capture: true })
-    return () => document.removeEventListener('scroll', handleScroll, { capture: true })
-  }, [isOpen, close])
+  // Close when a scroll moves the anchor, not when an unrelated list scrolls itself.
+  useMenuScrollDismiss(isOpen, menuRef, anchorRef, close)
+
+  // Escape closes the open menu first and goes no further, so it cannot also jump the
+  // conversation to its newest message. When overlays are stacked, Escape goes to the one
+  // on top: a menu in the lightbox closes before the lightbox, and shortcut help opened
+  // over a menu closes before the menu (see useCloseOnEscape).
+  useCloseOnEscape(close, isOpen)
 
   // Open menu for an item
-  const openMenu = (item: T, pos: MenuPosition) => {
+  const openMenu = (item: T, pos: MenuPosition, anchor: Element | null = null) => {
+    anchorRef.current = anchor
     clickPosition.current = pos
     setTargetItem(item)
     setPosition(pos)
@@ -129,7 +132,7 @@ export function SidebarListMenuProvider<T>({
     // Right-click handler (desktop)
     const handleContextMenu = (e: React.MouseEvent) => {
       e.preventDefault()
-      openMenu(item, { x: e.clientX, y: e.clientY })
+      openMenu(item, { x: e.clientX, y: e.clientY }, e.currentTarget instanceof Element ? e.currentTarget : null)
     }
 
     // Long-press start (mobile)
@@ -141,11 +144,13 @@ export function SidebarListMenuProvider<T>({
       pendingItemRef.current = item
       const touch = e.touches[0]
       const touchPos = { x: touch.clientX, y: touch.clientY }
+      // currentTarget is only set while the event dispatches, so read it before the timer.
+      const anchor = e.currentTarget instanceof Element ? e.currentTarget : null
 
       longPressTimeout.current = setTimeout(() => {
         longPressTriggered.current = true
         if (pendingItemRef.current) {
-          openMenu(pendingItemRef.current as T, touchPos)
+          openMenu(pendingItemRef.current as T, touchPos, anchor)
           iosHaptic('contextMenu')
         }
       }, longPressDuration)

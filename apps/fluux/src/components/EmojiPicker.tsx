@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useTranslation } from 'react-i18next'
 import { useHasHover } from '@/hooks'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 import data from '@emoji-mart/data'
 import { Picker } from 'emoji-mart'
@@ -34,17 +35,16 @@ export function EmojiPicker({ onSelect, onClose, dynamicWidth = false, closeOnEs
   // the emoji grid (especially inside the mobile reaction bottom sheet).
   const hasHover = useHasHover()
 
-  // Callers pass fresh inline onSelect/onClose closures every render. Read them
-  // through refs so the mount effect below does NOT depend on their identity —
+  // Callers pass fresh inline onSelect/onClose closures every render. Read onSelect
+  // through a ref so the mount effect below does NOT depend on its identity —
   // otherwise a parent re-render while the picker is open (background presence/
   // typing/MAM churn re-rendering the message bubble) would tear down and
   // rebuild the emoji-mart web component, which reads as a flicker ("menu
   // disappears and reappears") and swallows the in-flight emoji click.
+  // useCloseOnEscape reads the latest onClose the same way.
   const onSelectRef = useRef(onSelect)
-  const onCloseRef = useRef(onClose)
   useEffect(() => {
     onSelectRef.current = onSelect
-    onCloseRef.current = onClose
   })
 
   useEffect(() => {
@@ -79,18 +79,9 @@ export function EmojiPicker({ onSelect, onClose, dynamicWidth = false, closeOnEs
     // never on callback identity (see the ref indirection above).
   }, [theme, i18n.language, hasHover, dynamicWidth])
 
-  // Close on Escape key
-  useEffect(() => {
-    if (!closeOnEscape) return
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation()
-        onCloseRef.current()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [closeOnEscape])
+  // Escape closes the picker when it is the overlay on top. Shortcut help opened over
+  // the picker closes first and the picker stays (see useCloseOnEscape).
+  useCloseOnEscape(onClose, closeOnEscape)
 
   return <div ref={containerRef} className={dynamicWidth ? 'w-full min-w-0' : undefined} />
 }

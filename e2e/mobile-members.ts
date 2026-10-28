@@ -2,6 +2,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test'
 import type { roomStore } from '@fluux/sdk/stores'
 import type { DemoClient } from '@fluux/sdk/demo'
 import { bootDemo } from './harness/demoBoot'
+import { CLEAR_OF_BOTTOM_PX, wheelAwayFromBottom } from './harness/scrollHarness'
 
 const pageErrors = new WeakMap<Page, string[]>()
 test.beforeEach(({ page }) => {
@@ -110,6 +111,219 @@ test('desktop Whisper keeps the inline member panel open', async ({ page }) => {
   await page.getByRole('button', { name: 'Whisper', exact: true }).click()
   await expect(row).toBeVisible()
   await expect(page.locator('.message-input[contenteditable="true"]')).toHaveAttribute('aria-placeholder', `Whisper to ${nick}...`)
+})
+
+// The captain's ruling on Escape with an open menu: "Escape closes the menu first". It must not
+// also jump the history to the newest message; with no menu open, Escape still does that.
+test('desktop Escape closes an open member menu without jumping the history, then jumps once no menu is open', async ({ page }) => {
+  const nick = await openRoom(page)
+  const list = page.locator('[data-message-list]')
+  const distanceFromBottom = () => list.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)
+  // Leave the newest message with wheel input, as a reader does. The conversation counts only
+  // wheel, touch and keys as a reader's scroll, so a scrollTop written by the test can be undone by
+  // its next layout correction: in WebKit on Linux the list was back at the newest message before
+  // the menu opened.
+  await wheelAwayFromBottom(page, CLEAR_OF_BOTTOM_PX)
+  const row = page.locator('.touch-menu-row').filter({ has: page.getByText(nick, { exact: true }) }).last()
+  await row.click({ button: 'right' })
+  const whisper = page.getByRole('button', { name: 'Whisper', exact: true })
+  await expect(whisper).toBeVisible()
+  const before = await distanceFromBottom()
+  expect(before).toBeGreaterThan(CLEAR_OF_BOTTOM_PX)
+
+  await page.keyboard.press('Escape')
+  await expect(whisper).toHaveCount(0)
+  // Give a scroll started by the same key press two frames to land before measuring.
+  const after = await list.evaluate(el => new Promise<number>(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve(el.scrollHeight - el.scrollTop - el.clientHeight)))
+  }))
+  expect(Math.abs(after - before)).toBeLessThan(2)
+
+  await page.keyboard.press('Escape')
+  await expect.poll(distanceFromBottom).toBeLessThan(2)
+})
+
+// The captain's ruling on review R3: with stacked overlays, Escape closes only the one on top.
+// The member menu and the sidebar room menu come from the two menu owners; the sidebar menu is
+// added at the end of the page, after the help dialog, so "on top" means "opened last".
+for (const menu of ['member', 'sidebar room'] as const) {
+  test(`desktop Escape closes shortcut help opened over the ${menu} menu, then the menu`, async ({ page }) => {
+    const nick = await openRoom(page)
+    const item = menu === 'member'
+      ? page.getByRole('button', { name: 'Whisper', exact: true })
+      : page.getByRole('button', { name: 'Leave room', exact: true })
+    if (menu === 'member') {
+      await page.locator('.touch-menu-row').filter({ has: page.getByText(nick, { exact: true }) }).last().click({ button: 'right' })
+    } else {
+      await page.locator('.sidebar-row').filter({ hasText: 'Team Chat' }).first().click({ button: 'right' })
+    }
+    await expect(item).toBeVisible()
+    await page.keyboard.press('Control+?')
+    const help = page.getByRole('heading', { name: 'Keyboard Shortcuts', exact: true })
+    await expect(help).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(help).toHaveCount(0)
+    await expect(item).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(item).toHaveCount(0)
+  })
+}
+
+async function openImageMenuInLightbox(page: Page) {
+  await bootDemo(page, '/demo.html?tutorial=false')
+  await page.evaluate(() => {
+    const demo = window as unknown as { __demoClient: DemoClient }
+    const canvas = document.createElement('canvas')
+    canvas.width = 640
+    canvas.height = 400
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#5274a0'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    const jid = 'emma@fluux.chat'
+    demo.__demoClient.emitSDK('chat:message', {
+      message: {
+        type: 'chat', id: 'escape-stack-image', conversationId: jid,
+        stanzaId: undefined, originId: undefined, from: 'you@fluux.chat',
+        body: '', isOutgoing: true, timestamp: new Date(),
+        attachment: { url: canvas.toDataURL(), name: 'escape-stack.png', mediaType: 'image/png', width: 640, height: 400 },
+      },
+      isLiveArrival: true,
+    })
+    location.hash = `#/messages/${encodeURIComponent(jid)}`
+  })
+  await page.getByRole('img', { name: 'escape-stack.png', exact: true }).click()
+  const viewer = page.locator('[data-lightbox="image"]')
+  await expect(viewer).toBeVisible()
+  await viewer.getByRole('img').click({ button: 'right' })
+  const save = page.getByRole('button', { name: 'Save image', exact: true })
+  await expect(save).toBeVisible()
+  return { viewer, save }
+}
+
+test('desktop Escape closes the image menu inside the lightbox, then the lightbox', async ({ page }) => {
+  const { viewer, save } = await openImageMenuInLightbox(page)
+
+  await page.keyboard.press('Escape')
+  await expect(save).toHaveCount(0)
+  await expect(viewer).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(viewer).toHaveCount(0)
+})
+
+// Review R6 under the same ruling. The lightbox is added at the end of the page, so shortcut
+// help opened over it is drawn behind it, and the image menu is still the overlay on top.
+test('desktop Escape closes the image menu first when shortcut help opens behind the lightbox', async ({ page }) => {
+  const { viewer, save } = await openImageMenuInLightbox(page)
+  await page.keyboard.press('Control+?')
+  const help = page.getByRole('heading', { name: 'Keyboard Shortcuts', exact: true })
+  await expect(help).toHaveCount(1)
+
+  await page.keyboard.press('Escape')
+  await expect(save).toHaveCount(0)
+  await expect(viewer).toBeVisible()
+  await expect(help).toHaveCount(1)
+  await page.keyboard.press('Escape')
+  await expect(viewer).toHaveCount(0)
+  await expect(help).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(help).toHaveCount(0)
+})
+
+// Review R5 applies the same ruling to the emoji picker. The picker's own search box keeps
+// every key it receives, and its first Escape only leaves the search, so each journey starts
+// there.
+async function openEmojiPicker(page: Page, button: Locator) {
+  await button.click()
+  const picker = page.locator('em-emoji-picker')
+  await expect(picker).toBeVisible()
+  const search = picker.locator('input').first()
+  await search.focus()
+  await page.keyboard.press('Escape')
+  await expect(search).not.toBeFocused()
+  await expect(picker).toBeVisible()
+  return picker
+}
+
+async function openDemoAt(page: Page, hash: string) {
+  await bootDemo(page, '/demo.html?tutorial=false')
+  await page.evaluate((hash) => {
+    (window as unknown as { __demoClient: DemoClient }).__demoClient.stopAnimation()
+    location.hash = hash
+  }, hash)
+}
+
+test('desktop Escape closes shortcut help opened over the emoji picker, then the picker', async ({ page }) => {
+  await openDemoAt(page, '#/messages/emma%40fluux.chat')
+  const picker = await openEmojiPicker(page, page.locator('[class~="[grid-area:emoji]"] > button'))
+  await page.keyboard.press('Control+?')
+  const help = page.getByRole('heading', { name: 'Keyboard Shortcuts', exact: true })
+  await expect(help).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(help).toHaveCount(0)
+  await expect(picker).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(picker).toHaveCount(0)
+})
+
+test('desktop Escape closes the emoji picker in the poll window, then the window', async ({ page }) => {
+  // Reduced motion closes a window at once, so a poll window wrongly closed by the picker's
+  // Escape is already gone when the picker is. The app follows the system setting, and
+  // resets any value written to the page directly.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await openDemoAt(page, '#/rooms/team%40conference.fluux.chat')
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced')
+  await page.getByRole('button', { name: 'Attach file', exact: true }).click()
+  await page.getByRole('button', { name: 'Create Poll', exact: true }).click()
+  const poll = page.getByRole('heading', { name: 'Create Poll', exact: true })
+  await expect(poll).toBeVisible()
+  const picker = await openEmojiPicker(page, page.getByTitle('Click to change emoji', { exact: true }).last())
+
+  await page.keyboard.press('Escape')
+  await expect(picker).toHaveCount(0)
+  await expect(poll).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(poll).toHaveCount(0)
+})
+
+// The encryption setup dialog in Settings opens when this device's key cannot be unlocked.
+// The demo's key can always be unlocked, so the test tells its plugin otherwise once the
+// page is showing. The page checks again when the signed-in address changes, so the test
+// then gives the address a resource. Patching before the page shows would not work: in
+// this development build React runs the page's first check twice and the second one skips.
+test('desktop Escape closes shortcut help opened over the encryption setup dialog, then backs out of the dialog', async ({ page }) => {
+  await openDemoAt(page, '#/settings/encryption')
+  const encryption = page.getByRole('switch', { name: 'OpenPGP end-to-end encryption', exact: true })
+  await expect(encryption).toHaveAttribute('aria-checked', 'true')
+  await page.evaluate(() => {
+    const demo = window as unknown as {
+      __demoClient: { e2ee: { getPlugin(id: string): unknown } }
+      __connectionStore: { getState(): { jid: string }; setState(state: { jid: string }): void }
+    }
+    const plugin = demo.__demoClient.e2ee.getPlugin('openpgp') as { isKeyRecoveryNeeded?: () => boolean }
+    plugin.isKeyRecoveryNeeded = () => true
+    const connection = demo.__connectionStore
+    connection.setState({ jid: `${connection.getState().jid.split('/')[0]}/e2e` })
+  })
+  const setup = page.getByRole('heading', { name: 'An OpenPGP identity already exists for this account', exact: true })
+  await expect(setup).toBeVisible()
+  await page.getByRole('button', { name: /^Replace the published identity/ }).click()
+  const confirm = page.getByRole('button', { name: 'Yes, replace identity', exact: true })
+  await expect(confirm).toBeVisible()
+  await page.keyboard.press('Control+?')
+  const help = page.getByRole('heading', { name: 'Keyboard Shortcuts', exact: true })
+  await expect(help).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(help).toHaveCount(0)
+  await expect(confirm).toBeVisible()
+  await expect(encryption).toHaveAttribute('aria-checked', 'true')
+  await page.keyboard.press('Escape')
+  await expect(confirm).toHaveCount(0)
+  await expect(setup).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(setup).toHaveCount(0)
 })
 
 test('whisper stages pasted and dropped files, confirms before upload, and restores the room picker on exit', async ({ page }) => {

@@ -94,29 +94,23 @@ export function IdentityChoiceDialog({
     }
   }, [phase])
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      // This dialog owns Escape while open (ModalOverlay's own handler is off via
-      // closeOnEscape={false}). Consume it so it can't also fire the window-level
-      // conversation shortcut (scroll-to-bottom / mark-read) behind the modal —
-      // the same leak useCloseOnEscape fixes for the shared overlays.
-      e.stopPropagation()
-      if (isRestoring) return
-      // Escape backs out of the sub-phase to the chooser, NOT out of the
-      // dialog entirely — Cancel is the only path that closes, to make
-      // sure the user is making an explicit choice.
-      if (phase === 'restoring' || phase === 'confirm-replace') {
-        setPhase('choose')
-        setPassphrase('')
-        setError(null)
-      } else if (phase === 'choose') {
-        onCancel()
-      }
+  // Escape steps back instead of closing. ModalOverlay runs it only when this dialog is
+  // the overlay on top, so shortcut help over it closes first, and consumes it even
+  // while busy, so it can't also fire the window-level conversation shortcut
+  // (scroll-to-bottom / mark-read) behind the modal.
+  const handleEscape = () => {
+    if (isRestoring) return
+    // Escape backs out of the sub-phase to the chooser, NOT out of the
+    // dialog entirely — Cancel is the only path that closes, to make
+    // sure the user is making an explicit choice.
+    if (phase === 'restoring' || phase === 'confirm-replace') {
+      setPhase('choose')
+      setPassphrase('')
+      setError(null)
+    } else if (phase === 'choose') {
+      onCancel()
     }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [phase, onCancel, isRestoring])
+  }
 
   const handleStartRestore = useCallback(() => {
     setPhase('restoring')
@@ -173,7 +167,7 @@ export function IdentityChoiceDialog({
       width="max-w-lg"
       panelClassName="max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
       dismissable={!isBusy}
-      closeOnEscape={false}
+      onEscape={handleEscape}
     >
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">

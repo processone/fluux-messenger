@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { IdentityChoiceDialog } from './IdentityChoiceDialog'
+import { EscapeModal } from '@/test-utils/escapeModal'
 
 // Surface i18n keys verbatim so assertions can target them without
 // committing to specific translated copy. The real translations live
@@ -358,5 +359,80 @@ describe('IdentityChoiceDialog', () => {
     } finally {
       window.removeEventListener('keydown', windowKeydown)
     }
+  })
+})
+
+// The captain's ruling on review R3, applied by review R5: with stacked overlays, Escape
+// closes only the one on top, so closing shortcut help never cancels encryption setup.
+describe('IdentityChoiceDialog with shortcut help opened over it', () => {
+  const closeHelp = vi.fn()
+  const Page = ({ help }: { help: boolean }) => (
+    <>
+      <IdentityChoiceDialog {...baseProps} />
+      {help && <EscapeModal onClose={closeHelp} />}
+    </>
+  )
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('closes help first without cancelling, then cancels from the chooser', () => {
+    const { rerender } = render(<Page help={false} />)
+    rerender(<Page help />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeHelp).toHaveBeenCalledTimes(1)
+    expect(baseProps.onCancel).not.toHaveBeenCalled()
+    rerender(<Page help={false} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(baseProps.onCancel).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes help first and stays in the restore step', () => {
+    const { rerender } = render(<Page help={false} />)
+    fireEvent.click(
+      screen
+        .getByText('settings.encryption.identityChoice.restoreFromServerTitle')
+        .closest('button')!,
+    )
+    rerender(<Page help />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeHelp).toHaveBeenCalledTimes(1)
+    expect(
+      screen.queryByText('settings.encryption.identityChoice.importFromFileTitle'),
+    ).not.toBeInTheDocument()
+    rerender(<Page help={false} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(
+      screen.getByText('settings.encryption.identityChoice.importFromFileTitle'),
+    ).toBeInTheDocument()
+    expect(baseProps.onCancel).not.toHaveBeenCalled()
+  })
+})
+
+// Review R5: the startup dialog (App.tsx) sits later in the page than shortcut help, so it
+// is drawn over help even when help opened after it. Escape goes to the one drawn on top.
+describe('IdentityChoiceDialog drawn over shortcut help opened after it', () => {
+  const closeHelp = vi.fn()
+  const Page = ({ help, dialog }: { help: boolean; dialog: boolean }) => (
+    <>
+      {help && <EscapeModal onClose={closeHelp} />}
+      {dialog && <IdentityChoiceDialog {...baseProps} />}
+    </>
+  )
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('takes Escape first and cancels from the chooser, then help closes', () => {
+    const { rerender } = render(<Page help={false} dialog />)
+    rerender(<Page help dialog />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(baseProps.onCancel).toHaveBeenCalledTimes(1)
+    expect(closeHelp).not.toHaveBeenCalled()
+    rerender(<Page help dialog={false} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeHelp).toHaveBeenCalledTimes(1)
   })
 })
