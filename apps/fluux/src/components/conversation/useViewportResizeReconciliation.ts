@@ -28,6 +28,7 @@ export interface ViewportResizeReconciliationPorts {
     rearmEligibleFromGeometry: boolean,
   ) => boolean
   reconcileMessageTargetAfterResize: () => boolean
+  reconcileInteractionHold?: () => boolean
   reconcileContentLayout?: () => boolean
 }
 
@@ -99,6 +100,11 @@ export function useViewportResizeReconciliation({
       }
 
       const active = portsRef.current
+      if (active.reconcileInteractionHold?.()) {
+        lastHeight = newHeight
+        lastWidth = newWidth
+        return
+      }
       const liveScroller = active.getScroller()
       const shrunk = lastHeight - newHeight
       const widthChanged = newWidth !== null && lastWidth !== null && newWidth !== lastWidth

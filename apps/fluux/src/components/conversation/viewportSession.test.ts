@@ -20,6 +20,20 @@ describe('movement beyond viewport clamping', () => {
 })
 
 describe('ViewportSession', () => {
+  // FLM-229: focus/layout movement during an interaction is not deliberate conversation scrolling.
+  it('keeps engine movement separate from real scroll input while a fixed interaction holds', () => {
+    const session = new ViewportSession('room')
+    const before = geometry(393, 1000, 557)
+    session.recordProgrammaticWrite('room', 1000, before)
+    expect(session.observeGeometry('room', { ...before, top: 413 }, {
+      now: 1020, controllerOwnsPixels: false, interactionHeld: true,
+    })?.userDelta).toBe(0)
+    expect(session.hasGenuineInput('room')).toBe(false)
+    expect(session.observeGeometry('room', { ...before, top: 393 }, {
+      now: 1040, controllerOwnsPixels: false, interactionHeld: true, input: { deltaY: -20 },
+    })?.userDelta).toBe(-20)
+    expect(session.hasGenuineInput('room')).toBe(true)
+  })
   it('subtracts completed clamping from the remaining layout adjustment', () => {
     const session = new ViewportSession('room')
     session.recordProgrammaticWrite('room', 1000, {

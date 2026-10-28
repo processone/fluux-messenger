@@ -57,7 +57,7 @@ does so only while the reader still reads where the last restore put them: the c
 that from whether their own input, or any accepted request other than layout, media or history
 preservation, has come since that restore's generation. Once the reader moved on, the shift is
 left to ambient handling.
-All seven authoritative slices share the same controller-owned
+All authoritative slices share the same controller-owned
 `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
 measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
 convergence state, and lifecycle ownership moved out of the hook-local loop. Unlike unread-marker
@@ -282,7 +282,7 @@ WebKit paint correctness.
     for divider movement or delayed insertion. The fraction is validated in
     `[0, 1]`, where `0` is the row top and `1` its bottom. The exact equation is
     `rowTop + fraction * rowHeight = scrollTop + viewportHeight`;
-  - `top-offset`: directional history preservation. The equation is
+  - `top-offset`: directional history preservation and deliberate message interaction. The equation is
     `rowTop - scrollTop = offsetPx`; negative offsets are valid when the top-visible row begins
     above the viewport. The directional executor replaces the captured `offsetPx` with the
     anchor's offset at the reader's last scroll before the batch landed.
@@ -300,6 +300,40 @@ A saved content anchor remains authoritative. Its raw pixel value is a source-sp
 when that anchor is unavailable. An old saved state containing only the raw value selects the
 transitional legacy-offset position and still outranks unread/live-edge entry, preserving current
 behavior.
+
+## Message interaction holds
+
+Desktop direct conversations and rooms hold a message only after deliberate mouse movement,
+a click, keyboard action focus, or an open More/reaction panel. Row entry alone is not intent:
+content scrolling under a resting pointer must continue following latest. Toolbar visibility
+retains its existing hover delay and text-selection suppression.
+
+An `interaction` request holds the original row handle and the message body's top offset through
+the existing anchor executor and bounded controller frame loop. The virtualizer retains that row
+and suspends independent measurement compensation. Viewport observation distinguishes engine/focus
+movement under that fixed intent from real scroll input, which still cancels the hold first.
+Later layout stimuli reopen the same generation;
+arrivals, typing, media, divider changes and geometry-based rearming cannot replace an active hold,
+even after its current reconciliation settles. A growing viewport can remove the required scroll
+range, so the executor reserves only the missing bottom space; ending the hold restores it.
+
+Displayed toolbar slots remain fixed during the hold, but current capabilities still disable and
+gate execution. More and reaction panels keep the hold beyond the original row bounds. Escape closes
+the panel and restores its trigger without invoking broader conversation navigation. A disappearing
+or retracted target closes safely rather than transferring actions to another row.
+
+Pointer departure (with panels closed), or keyboard action-focus departure (with panels closed),
+releases the hold. Mouse-created focus does not keep an otherwise disengaged mouse interaction alive.
+Only a reader who was following latest before the hold resumes automatically. History reading keeps
+a settled fixed position; a deliberate scroll, own send or explicit jump takes priority and closes
+panels before moving. A manual takeover cannot rearm from the usual near-bottom band alone: actual
+bottom geometry or explicit latest navigation is required. Blur, departure and teardown clear stale
+interaction state. Touch action sheets and static previews do not acquire this hold.
+
+Beginning a hold revokes previously reported follow-edge evidence before a future offscreen arrival
+can consume it. Intersection-based message-seen reporting and canonical unread counts remain unchanged.
+While holding, the existing latest-message control also appears for arrivals below the viewport inside
+the ordinary near-bottom band; reserved layout space alone does not expose it.
 
 ## Request provenance
 

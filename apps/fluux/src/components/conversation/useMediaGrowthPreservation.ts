@@ -10,7 +10,7 @@ import { useCallback, useRef } from 'react'
 import type { ScrollAnchor } from '@/utils/scrollStateManager'
 import { decideMediaBatchOutcome } from './mediaGrowthDecisions'
 import { runScrollShadowSafely } from './scrollPositionShadow'
-import { messageFraction, type AnchorPreservationRequest } from './scrollPositionModel'
+import { messageFraction, type MediaPreservationRequest } from './scrollPositionModel'
 import type { AnchorPreservationExecutor } from './positioningController'
 
 /** Debounce window for batching media load events. */
@@ -32,7 +32,7 @@ export interface MediaGrowthPorts {
   reconcileLiveEdge: (trigger: string, rearmEligibleFromGeometry: boolean) => void
   beginMediaPreservation: (input: {
     conversationId: string
-    desired: AnchorPreservationRequest['desired']
+    desired: MediaPreservationRequest['desired']
     executor: AnchorPreservationExecutor
   }) => void
   log: (action: string, data?: Record<string, unknown>) => void
@@ -157,7 +157,7 @@ export function useMediaGrowthPreservation({
           conversationId,
           fallback: undefined,
           observe: () => {
-            const desired: AnchorPreservationRequest['desired'] = {
+            const desired: MediaPreservationRequest['desired'] = {
               kind: 'anchor',
               messageId: anchor.messageId,
               placement: {

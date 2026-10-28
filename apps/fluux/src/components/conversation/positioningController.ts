@@ -17,6 +17,7 @@ import {
   type DirectionalHistoryRequest,
   type EntryPositionFacts,
   type ExplicitTargetRequest,
+  type InteractionPositionRequest,
   type LayoutPreservationRequest,
   type LayoutPreservationReason,
   type LiveEdgeRequest,
@@ -659,11 +660,13 @@ export interface UserScrollInput extends ViewportInput {
 
 export class PositioningController {
   private currentModel: PositioningModel = initialPositioningModel()
+  private interactionWasFollowing = false
 
   constructor(
     private readonly onMessageTargetOwnership?: (owned: boolean) => void,
     private readonly onUserNavigation?: (conversationId: string) => void,
     private readonly onUserTakeover?: (conversationId: string) => void,
+    private readonly onInteractionEnd?: () => void,
   ) {}
 
   private get model(): PositioningModel {
@@ -671,10 +674,12 @@ export class PositioningController {
   }
 
   private set model(model: PositioningModel) {
-    const wasOwned = this.ownsMessageTarget()
+    const wasOwned = this.ownsPositionTarget()
+    const wasHeld = this.hasInteractionHold()
     const previousTarget = this.currentModel.active?.request.desired
     this.currentModel = model
-    const owned = this.ownsMessageTarget()
+    if (wasHeld && !this.hasInteractionHold()) this.onInteractionEnd?.()
+    const owned = this.ownsPositionTarget()
     if (wasOwned !== owned || (owned && previousTarget !== model.active?.request.desired)) {
       this.onMessageTargetOwnership?.(owned)
     }
@@ -713,10 +718,81 @@ export class PositioningController {
       execution.request.conversationId === conversationId && this.isExplicitTargetExecutionCurrent(execution)
   }
 
+  hasInteractionHold(): boolean {
+    const source = this.currentModel.active?.request.source
+    return source?.kind === 'interaction' && source.reason === 'hold'
+  }
+
+  hasInteractionPosition(): boolean {
+    return this.currentModel.active?.request.source.kind === 'interaction'
+  }
+
+  ownsPositionTarget(): boolean {
+    return this.ownsMessageTarget() || this.hasInteractionHold()
+  }
+
+  beginInteractionHold(input: {
+    conversationId: string
+    desired: InteractionPositionRequest['desired']
+    executor: AnchorPreservationExecutor
+  }): InteractionPositionRequest | null {
+    const following = this.hasInteractionHold()
+      ? this.interactionWasFollowing
+      : shouldReconcileAfterAppend(this.model, input.conversationId)
+    const request = this.beginAnchorPreservation({
+      ...input,
+      source: { kind: 'interaction', reason: 'hold' },
+    }) as InteractionPositionRequest | null
+    if (request) this.interactionWasFollowing = following
+    return request
+  }
+
+  reconcileInteractionHold(input: {
+    conversationId: string
+    executor: AnchorPreservationExecutor
+  }): boolean {
+    const active = this.model.active
+    if (!this.hasInteractionHold() || !active || active.request.conversationId !== input.conversationId) return false
+    // A new layout must land before paint even while a prior settle loop is still running.
+    // Keep the generation, but replace its leased operation rather than waiting another frame.
+    this.cancelAnchorPreservationExecution('superseded')
+    const request = active.request as InteractionPositionRequest
+    this.anchorPreservationExecution = {
+      request, executor: input.executor, operation: 0, abortController: null, loop: null,
+      framesLeft: ANCHOR_PRESERVATION_REASSERT_FRAMES, stableFrames: 0, landedTarget: null,
+    }
+    this.model = advancePhaseIfCurrent(this.model, input.conversationId, request.generation, { kind: 'reconciling' })
+    this.driveAnchorPreservation(this.anchorPreservationExecution)
+    return true
+  }
+
+  releaseInteractionHold(input: {
+    conversationId: string
+    resume: boolean
+    liveEdge: LiveEdgeExecutor
+  }): void {
+    const active = this.model.active
+    if (!this.hasInteractionHold() || !active || active.request.conversationId !== input.conversationId) return
+    const resume = input.resume && this.interactionWasFollowing
+    this.cancelAnchorPreservationExecution('superseded')
+    this.model = {
+      ...this.model,
+      active: {
+        request: { ...active.request, source: { kind: 'interaction', reason: 'released' } } as InteractionPositionRequest,
+        phase: { kind: 'settled' },
+      },
+    }
+    if (resume) this.beginLiveEdgeRequest({
+      conversationId: input.conversationId,
+      source: { kind: 'ambient-live-edge', reason: 'interaction-release' },
+      executor: input.liveEdge,
+    })
+  }
+
   preserveReadingLayout(conversationId: string, apply: () => void): boolean {
     const active = this.model.active
     if (
-      this.model.currentConversationId !== conversationId || this.ownsMessageTarget() ||
+      this.model.currentConversationId !== conversationId || this.ownsPositionTarget() ||
       (active && (active.phase.kind !== 'settled' || active.request.desired.kind === 'live-edge'))
     ) return false
     apply()
@@ -1058,7 +1134,7 @@ export class PositioningController {
     if (!execution || !active || execution.request.conversationId !== conversationId ||
       execution.request.source.kind !== 'media-preservation' ||
       !this.isAnchorPreservationExecutionCurrent(execution)) return false
-    execution.request = { ...execution.request, desired }
+    execution.request = { ...execution.request, desired } as MediaPreservationRequest
     execution.stableFrames = 0
     execution.landedTarget = null
     this.model = { ...this.model, active: { ...active, request: execution.request } }
@@ -1071,7 +1147,7 @@ export class PositioningController {
     desired: AnchorPreservationRequest['desired']
     executor: AnchorPreservationExecutor
   }): AnchorPreservationRequest | null {
-    if (this.ownsMessageTarget()) return null
+    if (this.ownsMessageTarget() && input.source.kind !== 'interaction') return null
     return runScrollShadowSafely({
       event: `${input.source.kind}-begin`,
       conversationId: input.conversationId,
@@ -1851,7 +1927,8 @@ export class PositioningController {
           PositionRequest,
           { source: { kind: 'user-navigation'; reason: 'live-edge' } }
         > | undefined =
-          atLiveEdge && this.model.active === null
+          atLiveEdge && (this.model.active === null ||
+            this.model.active.request.source.kind === 'interaction' && this.model.active.request.source.reason === 'released')
             ? {
                 generation: mintPositionGeneration(),
                 conversationId: input.conversationId,

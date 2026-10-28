@@ -5,7 +5,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
  * Uses composition to handle view-specific rendering while sharing
  * the common bubble structure.
  */
-import { useState, useMemo, useRef, useEffect, memo, type CSSProperties, type ReactNode } from 'react'
+import { useState, useMemo, useRef, useEffect, useContext, memo, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
@@ -39,6 +39,7 @@ import { PollClosedCard } from './PollClosedCard'
 import { Tooltip } from '../Tooltip'
 import { MessageActionSheet } from './MessageActionSheet'
 import { computeMessageActions } from './messageActionCapabilities'
+import { MessageInteractionContext } from './useMessageInteractionHold'
 import { downloadAttachment } from '@/utils/download'
 
 type ReplyQuoteCardStyle = CSSProperties & {
@@ -254,6 +255,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   if (prev.isLastMessage !== next.isLastMessage) return false
   if (prev.isGroupEnd !== next.isGroupEnd) return false
   if (prev.isHovered !== next.isHovered) return false
+  if ((prev.onReaction === undefined) !== (next.onReaction === undefined)) return false
 
   // Sender info
   if (prev.senderName !== next.senderName) return false
@@ -375,7 +377,11 @@ export const MessageBubble = memo(function MessageBubble({
   // positions that preview instead of no-opping or scrolling the live conversation.
   const requestMessageTarget = useRequestMessageTarget()
   const [showReactionPicker, setShowReactionPickerState] = useState(false)
-  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showMoreMenu, setShowMoreMenuState] = useState(false)
+  const interaction = useContext(MessageInteractionContext)
+  const rowId = messageRowId(message)
+  const interactionHeld = !!rowId && interaction?.heldMessageId === rowId
+  const openMenusRef = useRef({ more: false, reaction: false })
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false)
   const [showErrorDetails, setShowErrorDetails] = useState(false)
 
@@ -433,8 +439,25 @@ export const MessageBubble = memo(function MessageBubble({
     reactionsEnabled,
   })
 
-  // Wrap setShowReactionPicker to notify parent
+  const closeInteractionMenus = () => {
+    openMenusRef.current = { more: false, reaction: false }
+    setShowMoreMenuState(false)
+    setShowReactionPickerState(false)
+    onReactionPickerChange?.(false)
+  }
+  const reportMenus = () => {
+    if (rowId) interaction?.setMenuOpen(rowId,
+      openMenusRef.current.more || openMenusRef.current.reaction, closeInteractionMenus)
+  }
+  const setShowMoreMenu = (isOpen: boolean) => {
+    openMenusRef.current.more = isOpen
+    reportMenus()
+    setShowMoreMenuState(isOpen)
+  }
+  // The picker remains a list interaction even when its pointer/focus leaves the row's box.
   const setShowReactionPicker = (isOpen: boolean) => {
+    openMenusRef.current.reaction = isOpen
+    reportMenus()
     setShowReactionPickerState(isOpen)
     onReactionPickerChange?.(isOpen)
   }
@@ -607,13 +630,14 @@ export const MessageBubble = memo(function MessageBubble({
       {!message.isRetracted && (
         <MessageToolbar
           onReaction={handleReaction}
-          onReply={onReply}
-          onEdit={onEdit}
-          onDelete={onDelete}
+          onReply={() => { if (actions.canReply) onReply() }}
+          onEdit={() => { if (actions.canEdit) onEdit() }}
+          onDelete={() => { if (actions.canDelete) void onDelete() }}
           myReactions={reactionsEnabled ? myReactions : []}
           canReply={canReply}
           canEdit={canEdit}
           canDelete={canDelete}
+          interactionHeld={interactionHeld}
           isHidden={hideToolbar || false}
           isSelected={isSelected || false}
           hasKeyboardSelection={hasKeyboardSelection || false}
