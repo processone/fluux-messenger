@@ -149,6 +149,8 @@ interface Args {
  */
 // The private gesture tracker of @tanstack/virtual-core 3.19.5+ (absent before, so every use is guarded).
 type IosGestureLike = { end?: () => void }
+// Private command identity: virtual-core keeps this object when a queued command starts writing.
+type ScrollCommandLike = { phase?: string }
 
 export function useTanstackMessageVirtualizer({
   items, indexById, scrollRef, estimateSize = 64, sampleEstimateMetrics, initialMeasurements, onMeasured,
@@ -158,6 +160,7 @@ export function useTanstackMessageVirtualizer({
   const retainedIdRef = useRef<string | null>(null)
   const writeObserverRef = useRef<Parameters<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>[0]>(undefined)
   const navigationWriteRef = useRef(false)
+  const queuedNavigationRef = useRef<ScrollCommandLike | null>(null)
   // The outcome of the reader-takeover check scrollToOffset already ran before releasing a gesture.
   const precheckedRef = useRef<{ refused: boolean } | null>(null)
   // Set by cancelPendingScroll until the next navigation write. See there.
@@ -188,12 +191,12 @@ export function useTanstackMessageVirtualizer({
   }, [retainedIndex])
   // Keep row estimates independent of the mounted-window average: structural rows can skew it
   // and collapse the content height. The caller owns estimation; see useRowMetrics for calibration.
-  // @tanstack hands its offset callback to `observeElementOffset` on (re)mount; we stash it so a
-  // accepted PROGRAMMATIC write can re-window by pushing its landed offset straight into it with
-  // isScrolling=false — a non-sync notify that routes through the adapter's plain rerender()
-  // instead of flushSync. This also covers index writes deferred by an iOS gesture tail. A
-  // synthetic `scroll` DOM event would instead drive isScrolling=true → flushSync, which explodes
-  // ("flushSync from inside a lifecycle method") during a MAM-prepend restore useLayoutEffect.
+  // @tanstack hands its offset callback to `observeElementOffset` on (re)mount. At the accepted
+  // writer we push the element's actual post-write position with isScrolling=false, so rows mount
+  // without waiting for a native event. Queued navigation keeps its command identity until that
+  // first write; the caller returning does not turn it into layout reconciliation. The non-sync
+  // callback uses plain rerender() rather than a synthetic scroll event's flushSync, which is
+  // illegal during a MAM-prepend restore useLayoutEffect.
   const offsetCbRef = useRef<((offset: number, isScrolling: boolean) => void) | null>(null)
   const observeOffset = useCallback(
     (instance: Virtualizer<HTMLElement, Element>, cb: (offset: number, isScrolling: boolean) => void) => {
@@ -261,7 +264,14 @@ export function useTanstackMessageVirtualizer({
     overscan,
     rangeExtractor,
     scrollToFn: (offset, options, instance) => {
-      const source = navigationWriteRef.current ? 'navigation'
+      const command = (instance as unknown as { scrollState?: ScrollCommandLike | null }).scrollState
+      const queued = queuedNavigationRef.current
+      // _writeAwaitingCommand changes the same command's phase before its first write. A hold
+      // flush that precedes it is still queued, and a row-size adjustment is not that command.
+      const queuedWrite = queued !== null && command === queued
+        && command.phase !== 'queued' && options.adjustments === undefined
+      if (queuedWrite || (queued !== null && command !== queued)) queuedNavigationRef.current = null
+      const source = navigationWriteRef.current || queuedWrite ? 'navigation'
         : options.adjustments !== undefined ? 'measurement' : 'reconcile'
       if (source === 'navigation') cancelledTargetRef.current = false
       else if (source === 'reconcile' && cancelledTargetRef.current) return
@@ -287,16 +297,10 @@ export function useTanstackMessageVirtualizer({
       if (source !== 'measurement') {
         if (refused || generationRef.current !== generation || instance.scrollElement !== scroller) return
         elementScroll(offset, options, instance)
-        // Publish only an accepted immediate write, here rather than after the navigation call:
-        // virtual-core can queue that call during an iOS gesture tail and write after it returns.
-        // Even at this boundary scrollTop may still report the old position. Use the element-space
-        // destination we wrote, bounded by the current spacer, without a synthetic scroll event
-        // (which would flushSync inside a layout effect). Smooth writes have not landed yet;
-        // their native scroll events and the rAF observer publish their actual progress instead.
-        if (scroller && options.behavior !== 'smooth') {
-          const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-          offsetCbRef.current?.(Math.max(0, Math.min(offset + (options.adjustments ?? 0), max)), false)
-        }
+        // The DOM result is authoritative: the browser can clamp, round or drop a write. Publish
+        // its actual offset here, not a destination after a possibly still-queued command returns.
+        // Smooth writes have not landed yet; native events and rAF publish their real progress.
+        if (scroller && options.behavior !== 'smooth') offsetCbRef.current?.(scroller.scrollTop, false)
         observer?.({ phase: 'after', source, behavior: options.behavior })
         return
       }
@@ -390,19 +394,35 @@ export function useTanstackMessageVirtualizer({
     return indexById.get(id) ?? null
   }, [indexById])
 
+  const navigate = useCallback((write: () => void) => {
+    queuedNavigationRef.current = null
+    const generation = generationRef.current
+    const wasNavigation = navigationWriteRef.current
+    navigationWriteRef.current = true
+    try { write() }
+    finally {
+      navigationWriteRef.current = wasNavigation
+      // Only a command that survived the reader's takeover can own its later queued write.
+      // Store its identity, not just a flag: replacement/cancellation must not lend it authority.
+      if (generationRef.current === generation) {
+        const command = (virtualizer as unknown as { scrollState?: ScrollCommandLike | null }).scrollState
+        queuedNavigationRef.current = command?.phase === 'queued' ? command : null
+      }
+    }
+  }, [virtualizer])
+
   const ensureMessageMounted = useCallback((id: string): Promise<void> => {
     const index = indexById.get(id)
     if (index == null) return Promise.resolve()
-    navigationWriteRef.current = true
-    try { virtualizer.scrollToIndex(index, { align: 'center' }) }
-    finally { navigationWriteRef.current = false }
+    navigate(() => virtualizer.scrollToIndex(index, { align: 'center' }))
     return new Promise((resolve) => requestAnimationFrame(() => resolve()))
-  }, [indexById, virtualizer])
+  }, [indexById, navigate, virtualizer])
 
   const cancelPendingScroll = useCallback(() => {
     const scroller = scrollRef.current
     if (!scroller) return
     generationRef.current++
+    queuedNavigationRef.current = null
     const wasNavigation = navigationWriteRef.current
     navigationWriteRef.current = true
     try { virtualizer.scrollToOffset(scroller.scrollTop) }
@@ -475,20 +495,15 @@ export function useTanstackMessageVirtualizer({
         }
       }
       if (write) {
-        navigationWriteRef.current = true
-        try { virtualizer.scrollToOffset(offset, opts && { behavior: opts.behavior }) }
-        finally { navigationWriteRef.current = false; precheckedRef.current = null }
+        try { navigate(() => virtualizer.scrollToOffset(offset, opts && { behavior: opts.behavior })) }
+        finally { precheckedRef.current = null }
       }
     },
     beginAnimatedScrollToOffset: (offset) => {
-      navigationWriteRef.current = true
-      try { virtualizer.scrollToOffset(offset, { behavior: 'smooth' }) }
-      finally { navigationWriteRef.current = false }
+      navigate(() => virtualizer.scrollToOffset(offset, { behavior: 'smooth' }))
     },
     scrollToIndex: (index, opts) => {
-      navigationWriteRef.current = true
-      try { virtualizer.scrollToIndex(index, opts) }
-      finally { navigationWriteRef.current = false }
+      navigate(() => virtualizer.scrollToIndex(index, opts))
     },
   }
 }

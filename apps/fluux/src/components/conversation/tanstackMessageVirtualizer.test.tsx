@@ -215,6 +215,28 @@ describe('useTanstackMessageVirtualizer', () => {
     ).toBe(0)
   })
 
+  // Captain-approved FLM-231 F2: browser offset rounding (documented by virtual-core's
+  // pendingWrite read-back tolerance) must not be replaced with the requested fractional value.
+  it('publishes the actual post-write browser offset, not the computed destination', () => {
+    offsetNotifySpy.mockClear()
+    const el = document.createElement('div')
+    let actual = 0
+    Object.defineProperties(el, {
+      scrollHeight: { value: 2000 }, clientHeight: { value: 600 },
+      scrollTop: { get: () => actual, set: (value: number) => { actual = Math.round(value) } },
+    })
+    const { items, indexById } = makeItems(['a', 'b'])
+    const { result } = renderHook(() => useTanstackMessageVirtualizer({
+      items, indexById, scrollRef: { current: el },
+    }))
+
+    result.current.scrollToOffset(1000.4)
+
+    expect(el.scrollTop).toBe(1000)
+    expect(offsetNotifySpy).toHaveBeenLastCalledWith(el.scrollTop, false)
+    expect(offsetNotifySpy).not.toHaveBeenCalledWith(1000.4, false)
+  })
+
   it('uses a per-index estimateSize function for getTotalSize', () => {
     // The existing @tanstack mock in this file captures the config passed to useVirtualizer.
     // Render the hook with a function estimate and assert the captured config.estimateSize
