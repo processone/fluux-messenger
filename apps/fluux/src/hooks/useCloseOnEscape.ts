@@ -13,19 +13,24 @@ const handledEscapes = new WeakSet<Event>()
  * The overlay that takes the next Escape: the one opened last. When that one is a modal,
  * the modal drawn on top takes it instead. Modals share a z-index, so the last
  * `data-modal` root in the page is drawn over the others, whatever order they opened in:
- * the startup encryption dialog is drawn over shortcut help opened after it. A modal on
- * top that is not in the stack (it handles Escape itself, or not at all) leaves it to
- * nobody here.
+ * the startup encryption dialog is drawn over shortcut help opened after it. A menu opened
+ * after that modal came from it and is drawn over it, so the last such menu goes first:
+ * the image menu in the lightbox closes before the lightbox, even with shortcut help
+ * opened after it and drawn behind. A modal on top that is not in the stack (it handles
+ * Escape itself, or not at all) leaves it to nobody here.
  */
 function escapeTarget(): Overlay | undefined {
   const top = openOverlays[openOverlays.length - 1]
   if (!top?.modalRef) return top
   const modals = document.querySelectorAll('[data-modal="true"]')
   const drawnOnTop = modals[modals.length - 1]
-  for (let i = openOverlays.length - 1; i >= 0; i--) {
-    if (openOverlays[i].modalRef?.current === drawnOnTop) return openOverlays[i]
+  let modal = openOverlays.length - 1
+  while (modal >= 0 && openOverlays[modal].modalRef?.current !== drawnOnTop) modal--
+  if (modal < 0) return undefined
+  for (let i = openOverlays.length - 1; i > modal; i--) {
+    if (!openOverlays[i].modalRef) return openOverlays[i]
   }
-  return undefined
+  return openOverlays[modal]
 }
 
 /**

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useContextMenu } from './useContextMenu'
 import { useCloseOnEscape } from './useCloseOnEscape'
 const haptic = vi.hoisted(() => vi.fn())
@@ -353,6 +354,33 @@ describe('Escape with a context menu and another overlay stacked', () => {
     expect(closeLightbox).not.toHaveBeenCalled()
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(closeLightbox).toHaveBeenCalledTimes(1)
+  })
+
+  // Review R6 under the same ruling. The lightbox is added at the end of the page, so shortcut
+  // help opened after it is drawn behind it, and the menu inside the lightbox is visibly on top.
+  it('closes a menu in a lightbox first when shortcut help opened after it is drawn behind', () => {
+    const closeLightbox = vi.fn()
+    const closeHelp = vi.fn()
+    const Page = ({ lightbox, help }: { lightbox: boolean; help: boolean }) => (
+      <>
+        {help && <Modal onClose={closeHelp} />}
+        {lightbox && createPortal(<Modal onClose={closeLightbox}><TestComponent /></Modal>, document.body)}
+      </>
+    )
+    const { rerender } = render(<Page lightbox help={false} />)
+    fireEvent.contextMenu(screen.getByTestId('trigger'), { clientX: 100, clientY: 100 })
+    rerender(<Page lightbox help />)
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByTestId('menu')).not.toBeInTheDocument()
+    expect(closeLightbox).not.toHaveBeenCalled()
+    expect(closeHelp).not.toHaveBeenCalled()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeLightbox).toHaveBeenCalledTimes(1)
+    expect(closeHelp).not.toHaveBeenCalled()
+    rerender(<Page lightbox={false} help />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeHelp).toHaveBeenCalledTimes(1)
   })
 
   it('closes shortcut help opened over a menu and leaves the menu open', () => {
