@@ -24,6 +24,11 @@ export const changelog: ChangelogEntry[] = [
         'When the Fluux window is focused, a message in another conversation, or a room message that would notify you, shows a Fluux banner instead of a system notification. Tap it to open the message. When Fluux is not focused, system notifications work as before. Turn the banner off with "Show banner" in Notifications settings',
       ],
     }, {
+      type: 'changed',
+      items: [
+        'The push server component was updated for better compliance with Prosody',
+      ],
+    }, {
       type: 'fixed',
       items: [
         'A room whose picture no longer loads now shows the # tile in the Rooms list, like the Messages list and room header, and rooms keep their picture after long reconnects, on any server',
