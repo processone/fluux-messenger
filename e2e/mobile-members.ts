@@ -202,6 +202,100 @@ test('desktop Escape closes the image menu inside the lightbox, then the lightbo
   await expect(viewer).toHaveCount(0)
 })
 
+// Review R5 applies the same ruling to the emoji picker. The picker's own search box keeps
+// every key it receives, and its first Escape only leaves the search, so each journey starts
+// there.
+async function openEmojiPicker(page: Page, button: Locator) {
+  await button.click()
+  const picker = page.locator('em-emoji-picker')
+  await expect(picker).toBeVisible()
+  const search = picker.locator('input').first()
+  await search.focus()
+  await page.keyboard.press('Escape')
+  await expect(search).not.toBeFocused()
+  await expect(picker).toBeVisible()
+  return picker
+}
+
+async function openDemoAt(page: Page, hash: string) {
+  await bootDemo(page, '/demo.html?tutorial=false')
+  await page.evaluate((hash) => {
+    (window as unknown as { __demoClient: DemoClient }).__demoClient.stopAnimation()
+    location.hash = hash
+  }, hash)
+}
+
+test('desktop Escape closes shortcut help opened over the emoji picker, then the picker', async ({ page }) => {
+  await openDemoAt(page, '#/messages/emma%40fluux.chat')
+  const picker = await openEmojiPicker(page, page.locator('[class~="[grid-area:emoji]"] > button'))
+  await page.keyboard.press('Control+?')
+  const help = page.getByRole('heading', { name: 'Keyboard Shortcuts', exact: true })
+  await expect(help).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(help).toHaveCount(0)
+  await expect(picker).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(picker).toHaveCount(0)
+})
+
+test('desktop Escape closes the emoji picker in the poll window, then the window', async ({ page }) => {
+  await openDemoAt(page, '#/rooms/team%40conference.fluux.chat')
+  // Reduced motion closes a window at once, so a poll window wrongly closed by the picker's
+  // Escape is already gone when the picker is.
+  await page.evaluate(() => { document.documentElement.dataset.motion = 'reduced' })
+  await page.getByRole('button', { name: 'Attach file', exact: true }).click()
+  await page.getByRole('button', { name: 'Create Poll', exact: true }).click()
+  const poll = page.getByRole('heading', { name: 'Create Poll', exact: true })
+  await expect(poll).toBeVisible()
+  const picker = await openEmojiPicker(page, page.getByTitle('Click to change emoji', { exact: true }).last())
+
+  await page.keyboard.press('Escape')
+  await expect(picker).toHaveCount(0)
+  await expect(poll).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(poll).toHaveCount(0)
+})
+
+// The encryption setup dialog in Settings opens when this device's key cannot be unlocked.
+// The demo's key can always be unlocked, so the test tells its plugin otherwise once the
+// page is showing. The page checks again when the signed-in address changes, so the test
+// then gives the address a resource. Patching before the page shows would not work: in
+// this development build React runs the page's first check twice and the second one skips.
+test('desktop Escape closes shortcut help opened over the encryption setup dialog, then backs out of the dialog', async ({ page }) => {
+  await openDemoAt(page, '#/settings/encryption')
+  const encryption = page.getByRole('switch', { name: 'OpenPGP end-to-end encryption', exact: true })
+  await expect(encryption).toHaveAttribute('aria-checked', 'true')
+  await page.evaluate(() => {
+    const demo = window as unknown as {
+      __demoClient: { e2ee: { getPlugin(id: string): unknown } }
+      __connectionStore: { getState(): { jid: string }; setState(state: { jid: string }): void }
+    }
+    const plugin = demo.__demoClient.e2ee.getPlugin('openpgp') as { isKeyRecoveryNeeded?: () => boolean }
+    plugin.isKeyRecoveryNeeded = () => true
+    const connection = demo.__connectionStore
+    connection.setState({ jid: `${connection.getState().jid.split('/')[0]}/e2e` })
+  })
+  const setup = page.getByRole('heading', { name: 'An OpenPGP identity already exists for this account', exact: true })
+  await expect(setup).toBeVisible()
+  await page.getByRole('button', { name: /^Replace the published identity/ }).click()
+  const confirm = page.getByRole('button', { name: 'Yes, replace identity', exact: true })
+  await expect(confirm).toBeVisible()
+  await page.keyboard.press('Control+?')
+  const help = page.getByRole('heading', { name: 'Keyboard Shortcuts', exact: true })
+  await expect(help).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(help).toHaveCount(0)
+  await expect(confirm).toBeVisible()
+  await expect(encryption).toHaveAttribute('aria-checked', 'true')
+  await page.keyboard.press('Escape')
+  await expect(confirm).toHaveCount(0)
+  await expect(setup).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(setup).toHaveCount(0)
+})
+
 test('whisper stages pasted and dropped files, confirms before upload, and restores the room picker on exit', async ({ page }) => {
   const nick = await openRoom(page)
   await page.evaluate(() => {
