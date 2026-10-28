@@ -2,6 +2,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test'
 import type { roomStore } from '@fluux/sdk/stores'
 import type { DemoClient } from '@fluux/sdk/demo'
 import { bootDemo } from './harness/demoBoot'
+import { CLEAR_OF_BOTTOM_PX, wheelAwayFromBottom } from './harness/scrollHarness'
 
 const pageErrors = new WeakMap<Page, string[]>()
 test.beforeEach(({ page }) => {
@@ -118,13 +119,17 @@ test('desktop Escape closes an open member menu without jumping the history, the
   const nick = await openRoom(page)
   const list = page.locator('[data-message-list]')
   const distanceFromBottom = () => list.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)
-  await list.evaluate(el => { el.scrollTop = 0 })
-  await expect.poll(distanceFromBottom).toBeGreaterThan(100)
+  // Leave the newest message with wheel input, as a reader does. The conversation counts only
+  // wheel, touch and keys as a reader's scroll, so a scrollTop written by the test can be undone by
+  // its next layout correction: in WebKit on Linux the list was back at the newest message before
+  // the menu opened.
+  await wheelAwayFromBottom(page, CLEAR_OF_BOTTOM_PX)
   const row = page.locator('.touch-menu-row').filter({ has: page.getByText(nick, { exact: true }) }).last()
   await row.click({ button: 'right' })
   const whisper = page.getByRole('button', { name: 'Whisper', exact: true })
   await expect(whisper).toBeVisible()
   const before = await distanceFromBottom()
+  expect(before).toBeGreaterThan(CLEAR_OF_BOTTOM_PX)
 
   await page.keyboard.press('Escape')
   await expect(whisper).toHaveCount(0)
@@ -132,7 +137,6 @@ test('desktop Escape closes an open member menu without jumping the history, the
   const after = await list.evaluate(el => new Promise<number>(resolve => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve(el.scrollHeight - el.scrollTop - el.clientHeight)))
   }))
-  expect(after).toBeGreaterThan(100)
   expect(Math.abs(after - before)).toBeLessThan(2)
 
   await page.keyboard.press('Escape')
