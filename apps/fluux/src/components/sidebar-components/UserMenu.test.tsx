@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { UserMenu } from './UserMenu'
+import { EscapeModal } from '@/test-utils/escapeModal'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
 
 vi.mock('react-i18next', () => ({
@@ -67,5 +68,35 @@ describe('UserMenu — console gating', () => {
       useAdvancedModeStore.getState().setAdvancedMode(false)
     })
     expect(toggleConsoleSpy).toHaveBeenCalledTimes(1)
+  })
+})
+
+// The captain's rulings on review R1 and R3, applied by review R5: Escape closes the menu
+// and goes no further, and with stacked overlays it closes only the one on top.
+describe('UserMenu — Escape', () => {
+  it('closes shortcut help opened over it first, then closes and consumes Escape', () => {
+    const closeHelp = vi.fn()
+    const windowKeydown = vi.fn()
+    const Page = ({ help }: { help: boolean }) => (
+      <>
+        <UserMenu onLogout={vi.fn()} />
+        {help && <EscapeModal onClose={closeHelp} />}
+      </>
+    )
+    const { rerender } = render(<Page help={false} />)
+    openMenu()
+    rerender(<Page help />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeHelp).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('menu.about')).toBeInTheDocument()
+    rerender(<Page help={false} />)
+    window.addEventListener('keydown', windowKeydown)
+    try {
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(screen.queryByText('menu.about')).not.toBeInTheDocument()
+      expect(windowKeydown).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('keydown', windowKeydown)
+    }
   })
 })

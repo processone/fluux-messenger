@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Loader2, Server, FileUp, RotateCcw } from 'lucide-react'
 import { ModalOverlay } from './ModalOverlay'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import type { BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
 
 type Phase = 'choose' | 'restoring' | 'importing' | 'confirm-replace' | 'replacing'
@@ -94,29 +95,24 @@ export function IdentityChoiceDialog({
     }
   }, [phase])
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      // This dialog owns Escape while open (ModalOverlay's own handler is off via
-      // closeOnEscape={false}). Consume it so it can't also fire the window-level
-      // conversation shortcut (scroll-to-bottom / mark-read) behind the modal —
-      // the same leak useCloseOnEscape fixes for the shared overlays.
-      e.stopPropagation()
-      if (isRestoring) return
-      // Escape backs out of the sub-phase to the chooser, NOT out of the
-      // dialog entirely — Cancel is the only path that closes, to make
-      // sure the user is making an explicit choice.
-      if (phase === 'restoring' || phase === 'confirm-replace') {
-        setPhase('choose')
-        setPassphrase('')
-        setError(null)
-      } else if (phase === 'choose') {
-        onCancel()
-      }
+  // This dialog handles Escape itself (ModalOverlay's own handler is off via
+  // closeOnEscape={false}), through the shared overlay stack: it takes Escape only
+  // when it is the overlay on top, so shortcut help opened over it closes first.
+  // When it does take Escape, it consumes it, so it can't also fire the window-level
+  // conversation shortcut (scroll-to-bottom / mark-read) behind the modal.
+  useCloseOnEscape(() => {
+    if (isRestoring) return
+    // Escape backs out of the sub-phase to the chooser, NOT out of the
+    // dialog entirely — Cancel is the only path that closes, to make
+    // sure the user is making an explicit choice.
+    if (phase === 'restoring' || phase === 'confirm-replace') {
+      setPhase('choose')
+      setPassphrase('')
+      setError(null)
+    } else if (phase === 'choose') {
+      onCancel()
     }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [phase, onCancel, isRestoring])
+  })
 
   const handleStartRestore = useCallback(() => {
     setPhase('restoring')

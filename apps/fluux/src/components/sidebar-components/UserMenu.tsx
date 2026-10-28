@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside, useIsMobileWeb, useAnchoredMenu } from '@/hooks'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import { useModalStore } from '@/stores/modalStore'
 import { useConsole } from '@fluux/sdk'
 import { AboutModal } from '../AboutModal'
@@ -53,19 +54,10 @@ export function UserMenu({ onLogout }: UserMenuProps) {
   const closeMenu = () => setIsOpen(false)
   useClickOutside(menuRef, closeMenu, isOpen)
 
-  // Close menu on escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsOpen(false)
-      }
-    }
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown)
-      return () => document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isOpen])
+  // Escape closes the menu when it is the overlay on top, and goes no further, so it
+  // cannot also jump the conversation to its newest message. Shortcut help opened over
+  // the menu closes first and the menu stays (see useCloseOnEscape).
+  useCloseOnEscape(closeMenu, isOpen)
 
   return (
     <>

@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, act, fireEvent } from '@testing-library/react'
 import {
+  PresenceSelector,
   StatusDisplay,
   StatusOrPresence,
   DEGRADED_STATUS_GRACE_MS,
 } from './PresenceSelector'
+import { EscapeModal } from '@/test-utils/escapeModal'
 
 // Issue #515 reverted the top-of-layout ConnectionBanner (it lived in normal
 // flow, so every appearance reflowed the whole UI). The sidebar user-menu chip
@@ -198,5 +200,29 @@ describe('StatusOrPresence (degraded-state swap with grace)', () => {
     mockStatus = 'error'
     const { container } = render(<StatusOrPresence />)
     expect(container.textContent).toContain('status.connectionError')
+  })
+})
+
+// The captain's ruling on review R3, applied by review R5: with stacked overlays, Escape
+// closes only the one on top. The presence menu used to take every Escape first.
+describe('PresenceSelector with shortcut help opened over it', () => {
+  it('closes help first and keeps the menu open, then closes the menu', () => {
+    const closeHelp = vi.fn()
+    const Page = ({ help }: { help: boolean }) => (
+      <>
+        <PresenceSelector />
+        {help && <EscapeModal onClose={closeHelp} />}
+      </>
+    )
+    const { rerender } = render(<Page help={false} />)
+    fireEvent.click(screen.getByRole('button', { name: /presence\.online/ }))
+    expect(screen.getByText('presence.statusMessage')).toBeInTheDocument()
+    rerender(<Page help />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeHelp).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('presence.statusMessage')).toBeInTheDocument()
+    rerender(<Page help={false} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByText('presence.statusMessage')).not.toBeInTheDocument()
   })
 })

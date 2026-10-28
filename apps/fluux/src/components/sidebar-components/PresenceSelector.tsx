@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside, useAnchoredMenu } from '@/hooks'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import { usePresence, useXMPP, type PresenceStatus } from '@fluux/sdk'
 import { useConnectionStore, useEventsStore } from '@fluux/sdk/react'
 import { ChevronDown, Check, RefreshCw, X } from 'lucide-react'
@@ -55,6 +56,10 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
   const closeMenu = () => setIsOpen(false)
   useClickOutside(menuRef, closeMenu, isOpen)
 
+  // Escape closes the menu when it is the overlay on top, and goes no further. Shortcut
+  // help opened over the menu closes first and the menu stays (see useCloseOnEscape).
+  useCloseOnEscape(closeMenu, isOpen)
+
   // Handle keyboard navigation - use capture phase to intercept before sidebar list
   useEffect(() => {
     if (!isOpen) return
@@ -64,11 +69,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
       const target = e.target as HTMLElement
       const isInStatusInput = inputRef.current && target === inputRef.current
 
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        setIsOpen(false)
-      } else if (e.key === 'ArrowDown' && !isInStatusInput) {
+      if (e.key === 'ArrowDown' && !isInStatusInput) {
         e.preventDefault()
         e.stopPropagation()
         // Focus dropdown to prevent focus moving to other elements

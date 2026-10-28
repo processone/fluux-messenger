@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { ChevronDown, Check, type LucideIcon } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { useAnchoredMenu, useClickOutside } from '@/hooks'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import type { HeaderActionGroup } from './headerOverflow'
 
 interface HeaderSubmenuButtonProps {
@@ -20,12 +21,9 @@ export function HeaderSubmenuButton({ ariaLabel, tooltip, icon: Icon, active, gr
   const menu = useAnchoredMenu(open)
 
   useClickOutside(containerRef, () => setOpen(false), open)
-  useEffect(() => {
-    if (!open) return
-    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('keydown', onEsc)
-    return () => document.removeEventListener('keydown', onEsc)
-  }, [open])
+  // Escape closes the submenu when it is the overlay on top, and goes no further, so it
+  // cannot also jump the conversation to its newest message (see useCloseOnEscape).
+  useCloseOnEscape(() => setOpen(false), open)
 
   const idle = 'hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text'
   const on = 'bg-fluux-brand/20 text-fluux-brand'
