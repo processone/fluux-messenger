@@ -91,6 +91,25 @@ describe('sidebar menu — issue #1790', () => {
     expect(screen.queryByRole('button', { name: 'Archiver' })).not.toBeInTheDocument()
   })
 
+  // The captain's ruling on review R1: "Escape closes the menu first". The conversation's own
+  // Escape listens on window and must only run once no menu is open.
+  it('closes on Escape without passing it to the conversation, which gets the next Escape', () => {
+    const conversationEscape = vi.fn()
+    const onWindowKey = (e: KeyboardEvent) => { if (e.key === 'Escape') conversationEscape() }
+    window.addEventListener('keydown', onWindowKey)
+    try {
+      renderList()
+      fireEvent.contextMenu(screen.getByText(conversation.name), { clientX: 215, clientY: 552 })
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(screen.queryByRole('button', { name: 'Archiver' })).not.toBeInTheDocument()
+      expect(conversationEscape).not.toHaveBeenCalled()
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(conversationEscape).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener('keydown', onWindowKey)
+    }
+  })
+
   // A message list re-pinning to a new message must not take a sidebar menu with it.
   it('stays open while another list scrolls itself, after right-click or long press', () => {
     vi.useFakeTimers()

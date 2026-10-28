@@ -312,3 +312,24 @@ describe('scrolling elsewhere while a context menu is open', () => {
     }
   })
 })
+
+// The captain's ruling on review R1: "Escape closes the menu first". The conversation's own
+// Escape (mark read and jump to the newest message) listens on window and must not also run.
+describe('Escape while a context menu is open', () => {
+  it('closes only the menu, and reaches the conversation once no menu is open', () => {
+    const conversationEscape = vi.fn()
+    const onWindowKey = (e: KeyboardEvent) => { if (e.key === 'Escape') conversationEscape() }
+    window.addEventListener('keydown', onWindowKey)
+    try {
+      render(<TestComponent />)
+      fireEvent.contextMenu(screen.getByTestId('trigger'), { clientX: 100, clientY: 100 })
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(screen.queryByTestId('menu')).not.toBeInTheDocument()
+      expect(conversationEscape).not.toHaveBeenCalled()
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(conversationEscape).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener('keydown', onWindowKey)
+    }
+  })
+})

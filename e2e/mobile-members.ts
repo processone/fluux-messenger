@@ -112,6 +112,33 @@ test('desktop Whisper keeps the inline member panel open', async ({ page }) => {
   await expect(page.locator('.message-input[contenteditable="true"]')).toHaveAttribute('aria-placeholder', `Whisper to ${nick}...`)
 })
 
+// The captain's ruling on Escape with an open menu: "Escape closes the menu first". It must not
+// also jump the history to the newest message; with no menu open, Escape still does that.
+test('desktop Escape closes an open member menu without jumping the history, then jumps once no menu is open', async ({ page }) => {
+  const nick = await openRoom(page)
+  const list = page.locator('[data-message-list]')
+  const distanceFromBottom = () => list.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)
+  await list.evaluate(el => { el.scrollTop = 0 })
+  await expect.poll(distanceFromBottom).toBeGreaterThan(100)
+  const row = page.locator('.touch-menu-row').filter({ has: page.getByText(nick, { exact: true }) }).last()
+  await row.click({ button: 'right' })
+  const whisper = page.getByRole('button', { name: 'Whisper', exact: true })
+  await expect(whisper).toBeVisible()
+  const before = await distanceFromBottom()
+
+  await page.keyboard.press('Escape')
+  await expect(whisper).toHaveCount(0)
+  // Give a scroll started by the same key press two frames to land before measuring.
+  const after = await list.evaluate(el => new Promise<number>(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve(el.scrollHeight - el.scrollTop - el.clientHeight)))
+  }))
+  expect(after).toBeGreaterThan(100)
+  expect(Math.abs(after - before)).toBeLessThan(2)
+
+  await page.keyboard.press('Escape')
+  await expect.poll(distanceFromBottom).toBeLessThan(2)
+})
+
 test('whisper stages pasted and dropped files, confirms before upload, and restores the room picker on exit', async ({ page }) => {
   const nick = await openRoom(page)
   await page.evaluate(() => {

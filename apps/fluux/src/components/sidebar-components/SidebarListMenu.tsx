@@ -23,6 +23,7 @@ import {
 import { SidebarMenuPortal } from './SidebarMenuPortal'
 import { useClickOutside, useMenuViewportClamp } from '@/hooks'
 import { useMenuScrollDismiss } from '@/hooks/useMenuScrollDismiss'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 
 // ============================================================================
 // Types
@@ -107,6 +108,10 @@ export function SidebarListMenuProvider<T>({
 
   // Close when a scroll moves the anchor, not when an unrelated list scrolls itself.
   useMenuScrollDismiss(isOpen, menuRef, anchorRef, close)
+
+  // Escape closes the open menu first and goes no further, so it cannot also jump the
+  // conversation to its newest message (see useCloseOnEscape).
+  useCloseOnEscape(close, isOpen)
 
   // Open menu for an item
   const openMenu = (item: T, pos: MenuPosition, anchor: Element | null = null) => {

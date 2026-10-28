@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useClickOutside } from './useClickOutside'
 import { useMenuViewportClamp } from './useMenuViewportClamp'
 import { useMenuScrollDismiss } from './useMenuScrollDismiss'
+import { useCloseOnEscape } from './useCloseOnEscape'
 
 export interface ContextMenuState {
   /** Whether the context menu is currently open */
@@ -94,6 +95,10 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
 
   // Close when a scroll moves the anchor, not when an unrelated list scrolls itself.
   useMenuScrollDismiss(isOpen, menuRef, anchorRef, close)
+
+  // Escape closes the open menu first and goes no further, so it cannot also jump the
+  // conversation to its newest message (see useCloseOnEscape).
+  useCloseOnEscape(close, isOpen)
 
   // Adjust position after menu renders to keep it within the viewport
   useMenuViewportClamp(isOpen, menuRef, clickPosition, position, setPosition)
