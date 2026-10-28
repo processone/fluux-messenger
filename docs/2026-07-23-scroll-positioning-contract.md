@@ -319,7 +319,9 @@ even after its current reconciliation settles. A growing viewport can remove the
 range, so the executor reserves only the missing bottom space; ending the hold restores it.
 
 Displayed toolbar slots remain fixed during the hold, but current capabilities still disable and
-gate execution. More and reaction panels keep the hold beyond the original row bounds. Escape closes
+gate execution. More and reaction panels keep the hold beyond the original row bounds. A held
+reaction picker captures its available list space on opening, keeping its controls reachable without
+scrolling the message or resizing under arriving posts; touch/static picker sizing stays unchanged. Escape closes
 the panel and restores its trigger without invoking broader conversation navigation. A disappearing
 or retracted target closes safely rather than transferring actions to another row. Physical row
 ownership survives archive-id backfill; current action callbacks follow the qualified identity.

@@ -335,6 +335,12 @@ for (const kind of ['chat', 'room'] as const) {
     await row.getByRole('button', { name: 'More reactions', exact: true }).click()
     await row.locator('em-emoji-picker').waitFor()
     await stableFrames(page, TARGET)
+    // FLM-229: keeping the row fixed must not hide the picker's category/search controls.
+    const pickerBox = (await row.locator('em-emoji-picker').boundingBox())!
+    const listBox = (await list.boundingBox())!
+    expect(pickerBox.y).toBeGreaterThanOrEqual(listBox.y)
+    expect(pickerBox.y + pickerBox.height).toBeLessThanOrEqual(listBox.y + listBox.height)
+    await keepJson(`${kind}-picker-viewport-bounds`, { picker: pickerBox, list: listBox })
     let releaseMedia!: () => void
     const mediaReady = new Promise<void>(resolve => { releaseMedia = resolve })
     const mediaRequested = page.waitForRequest(request => request.url().includes('screenshot-chat-dark.png?interaction-media'))

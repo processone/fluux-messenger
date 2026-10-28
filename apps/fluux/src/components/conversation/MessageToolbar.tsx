@@ -91,6 +91,8 @@ export const MessageToolbar = memo(function MessageToolbar({
   const moreMenuRef = useRef<HTMLDivElement>(null)
   const reactionButtonRef = useRef<HTMLButtonElement>(null)
   const pickerDropUpRef = useRef(false)
+  const heldPickerBoundsRef = useRef<{ dropUp: boolean; maxHeight: number } | null>(null)
+  const heldPickerBounds = interactionHeld ? heldPickerBoundsRef.current : null
   const moreMenuDropUpRef = useRef(false)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
   const morePanelRef = useRef<HTMLDivElement>(null)
@@ -219,6 +221,14 @@ export const MessageToolbar = memo(function MessageToolbar({
               const rect = reactionButtonRef.current.getBoundingClientRect()
               const spaceBelow = window.innerHeight - rect.bottom
               pickerDropUpRef.current = spaceBelow < 450
+              const list = reactionButtonRef.current.closest('[data-message-list]')?.getBoundingClientRect()
+              if (list) {
+                const above = Math.max(0, rect.top - Math.max(0, list.top) - 12)
+                const below = Math.max(0, Math.min(window.innerHeight, list.bottom) - rect.bottom - 12)
+                const dropUp = below < 450 && above > below
+                // Capture once: arrivals/typing cannot resize the menu under the pointer.
+                heldPickerBoundsRef.current = { dropUp, maxHeight: dropUp ? above : below }
+              }
             }
             setShowReactionPicker(!showReactionPicker)
           }}
@@ -231,9 +241,10 @@ export const MessageToolbar = memo(function MessageToolbar({
 
         {/* Full emoji picker for reactions */}
         {showReactionPicker && (
-          <div data-message-panel="reactions" className={`absolute end-0 z-30 ${pickerDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+          <div data-message-panel="reactions" className={`absolute end-0 z-30 ${(heldPickerBounds?.dropUp ?? pickerDropUpRef.current) ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
             <Suspense fallback={null}>
               <EmojiPicker
+                maxHeight={heldPickerBounds?.maxHeight}
                 onSelect={(emoji) => handleReaction(emoji)}
                 onClose={() => {
                   setShowReactionPicker(false)
