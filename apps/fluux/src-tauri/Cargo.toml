@@ -156,6 +156,11 @@ keyring = { version = "3", features = ["windows-native", "sync-secret-service", 
 tokio = { version = "1", features = ["test-util"] }
 tower = { version = "0.5", features = ["util"] }
 
+# Same version the app's windowing already resolves to. The Windows minimize
+# tests drive a real window with it (tests/windows_minimize_to_tray.rs).
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+tao = "0.37"
+
 # user-idle for Windows (macOS uses ioreg, Linux uses direct X11 calls)
 [target.'cfg(target_os = "windows")'.dependencies]
 user-idle = "0.6"

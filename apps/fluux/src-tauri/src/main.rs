@@ -1850,6 +1850,7 @@ fn main() {
 
             // Check if window is off-screen (e.g., monitor was disconnected) and reset if needed
             if let Some(window) = app.get_webview_window("main") {
+                window_behavior::reset_unusable_window_size(&window);
                 ensure_window_visible(&window);
                 // Ensure window has keyboard focus on launch
                 let _ = window.set_focus();
@@ -2264,6 +2265,11 @@ fn main() {
                             window_hidden_to_tray_for_events.load(Ordering::Relaxed),
                         ) {
                             window_hidden_to_tray_for_events.store(true, Ordering::Relaxed);
+                            // Show desktop minimizes without WM_SYSCOMMAND, so tao
+                            // has not recorded the window as minimized. Hiding then
+                            // rewrites its style without WS_MINIMIZE and the window
+                            // comes back as a sliver (#1820). minimize() records it.
+                            let _ = window.minimize();
                             let _ = window.hide();
                         }
                     }
