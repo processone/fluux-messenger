@@ -18,7 +18,7 @@ export const jidFor = (kind: ConversationKind) => kind === 'chat' ? 'emma@fluux.
 
 export async function arrive(page: Page, kind: ConversationKind, ids: string[], own = false) {
   await page.evaluate(({ kind, ids, own }) => {
-    const scope = window as Demo
+    const scope = window as unknown as Demo
     const jid = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
     const firstTimestamp = Date.now() - ids.length
     for (const [index, id] of ids.entries()) {
@@ -42,7 +42,7 @@ export async function setupInteraction(page: Page, kind: ConversationKind, resti
   if (process.env.FLUUX_INTERACTION_TRACE) await page.evaluate(() => (window as any).__fluuxScrollDebug?.(true))
   await page.mouse.move(restingPointer ? 500 : 0, restingPointer ? 300 : 0)
   await page.evaluate(async kind => {
-    const scope = window as Demo
+    const scope = window as unknown as Demo
     scope.__demoClient.stopAnimation()
     scope.__settingsStore.getState().setThemeMode('dark')
     scope.__settingsStore.getState().setMediaAutoDownload('always')
@@ -111,7 +111,7 @@ export async function measureDuring(page: Page, targetId: string, action: () => 
   finally {
     await page.evaluate(() => { const scope = window as Window & { __holdFrame?: number }; cancelAnimationFrame(scope.__holdFrame!) })
   }
-  const samples = await page.evaluate(() => (window as Window & { __holdSamples: { row: { x: number; y: number; width: number; height: number } | null; controls: { x: number; y: number; width: number; height: number }[] }[] }).__holdSamples)
+  const samples = await page.evaluate(() => (window as unknown as Window & { __holdSamples: { row: { x: number; y: number; width: number; height: number } | null; controls: { x: number; y: number; width: number; height: number }[] }[] }).__holdSamples)
   await keepJson('all-interaction-frame-samples', samples)
   expect(samples.length).toBeGreaterThan(2)
   const first = samples[0]
