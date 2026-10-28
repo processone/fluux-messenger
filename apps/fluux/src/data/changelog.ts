@@ -26,6 +26,7 @@ export const changelog: ChangelogEntry[] = [
     }, {
       type: 'fixed',
       items: [
+        'A room whose picture no longer loads now shows the # tile in the Rooms list, like the Messages list and room header, and rooms keep their picture after long reconnects, on any server',
         'The message box no longer promises that messages will be sent on reconnection while sending is paused: it now says you can send once you are back online',
         'New-message dividers include all unread messages when new messages arrive after scrolling an unfocused room or chat',
         'Scrolling up while a message above you finishes loading no longer snaps the conversation or room back to where you were a moment earlier',

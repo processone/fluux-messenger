@@ -1898,6 +1898,26 @@ describe('XMPPClient', () => {
       expect(fetchRoomAvatarSpy).toHaveBeenCalledWith('room@conference.example.com')
     })
 
+    // FLM-195: a restored content hash lets the join fetch save the picture under it
+    it('should wire mucJoined to fetchRoomAvatar with the restored content hash', async () => {
+      const restored = '480453212d5e1637a89bf7a40a419e0d16c23972'
+      mockStores.room.getRoom.mockReturnValue(
+        createMockRoom('room@conference.example.com', {
+          name: 'Test Room',
+          joined: true,
+          avatar: undefined,
+          avatarHash: restored,
+          avatarFromPresence: false,
+        })
+      )
+
+      const fetchRoomAvatarSpy = vi.spyOn(xmppClient.profile, 'fetchRoomAvatar').mockResolvedValue()
+
+      ;(xmppClient as any).emit('mucJoined', 'room@conference.example.com', 'nickname')
+
+      expect(fetchRoomAvatarSpy).toHaveBeenCalledWith('room@conference.example.com', restored)
+    })
+
     it('should wire roomAvatarUpdate to profile.fetchRoomAvatar with hash', async () => {
       const fetchRoomAvatarSpy = vi.spyOn(xmppClient.profile, 'fetchRoomAvatar').mockResolvedValue()
 

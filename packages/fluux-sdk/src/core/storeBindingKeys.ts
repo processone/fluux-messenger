@@ -154,6 +154,7 @@ export const roomBindingMethodKeys = [
   'isNonAnonymousRoomAcknowledged',
   'setNotifyAll',
   'joinedRooms',
+  'allRooms',
   'getRoomLastTimestamp',
   'triggerAnimation',
   // XEP-0313: MAM support for MUC rooms

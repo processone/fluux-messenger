@@ -8,7 +8,6 @@ import {
   useRoomActions,
   roomStore,
   roomActivityTone,
-  generateConsistentColorHexSync,
 } from '@fluux/sdk'
 import { useChatStore, useRoomStore, useIgnoreStore } from '@fluux/sdk/react'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
@@ -17,6 +16,7 @@ import { visibleRoomTypingNicks } from '@/utils/roomTyping'
 import { roomTooltip } from '@/utils/roomTooltip'
 import { formatUnreadCount } from '@/utils/formatUnreadCount'
 import { AvatarUnreadBadge } from './AvatarUnreadBadge'
+import { RoomAvatar } from '../RoomAvatar'
 import { EditBookmarkModal } from '../EditBookmarkModal'
 import { Tooltip } from '../Tooltip'
 import { TypingIndicator } from '../conversation/TypingIndicator'
@@ -426,19 +426,14 @@ export const RoomItem = memo(function RoomItem({
       >
         {/* Room avatar or icon */}
         <div className="relative flex-shrink-0">
-          {room.avatar ? (
-            <img
-              src={room.avatar}
-              alt={room.name}
-              className={`${avatarBox} rounded-xl object-cover`}
-              draggable={false}
-            />
-          ) : isQuickChat ? (
+          {isQuickChat && !room.avatar ? (
             <Zap className={`${avatarBox} p-1.5 bg-amber-500/20 rounded-xl text-amber-500`} />
           ) : (
-            <Hash
-              className={`${avatarBox} p-1.5 rounded-xl text-white`}
-              style={{ backgroundColor: generateConsistentColorHexSync(room.jid, { saturation: 60, lightness: 45 }) }}
+            <RoomAvatar
+              identifier={room.jid}
+              name={room.name}
+              avatarUrl={room.avatar}
+              size={densityMode === 'compact' ? 'sm' : 'md'}
             />
           )}
           {room.joined && !room.isJoining && (
