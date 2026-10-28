@@ -3,11 +3,16 @@
 ### Added
 
 - While Fluux is reconnecting for more than two seconds, the open conversation or room shows the connection step ("Reconnecting in 5s", "Connecting...") under its name, and so does the list title on narrow screens
-- After reconnecting, the conversation header shows "Updating..." until the messages received while you were offline have arrived
+- After reconnecting, the open conversation's header briefly says it is fetching missed messages, then shows a small icon next to the status or topic until they have arrived
 - When the Fluux window is focused, a message in another conversation, or a room message that would notify you, shows a Fluux banner instead of a system notification. Tap it to open the message. When Fluux is not focused, system notifications work as before. Turn the banner off with "Show banner" in Notifications settings
+
+### Changed
+
+- The push server component was updated for better compliance with Prosody
 
 ### Fixed
 
+- A room whose picture no longer loads now shows the # tile in the Rooms list, like the Messages list and room header, and rooms keep their picture after long reconnects, on any server
 - The message box no longer promises that messages will be sent on reconnection while sending is paused: it now says you can send once you are back online
 - New-message dividers include all unread messages when new messages arrive after scrolling an unfocused room or chat
 - Scrolling up while a message above you finishes loading no longer snaps the conversation or room back to where you were a moment earlier
