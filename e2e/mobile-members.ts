@@ -240,10 +240,12 @@ test('desktop Escape closes shortcut help opened over the emoji picker, then the
 })
 
 test('desktop Escape closes the emoji picker in the poll window, then the window', async ({ page }) => {
-  await openDemoAt(page, '#/rooms/team%40conference.fluux.chat')
   // Reduced motion closes a window at once, so a poll window wrongly closed by the picker's
-  // Escape is already gone when the picker is.
-  await page.evaluate(() => { document.documentElement.dataset.motion = 'reduced' })
+  // Escape is already gone when the picker is. The app follows the system setting, and
+  // resets any value written to the page directly.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await openDemoAt(page, '#/rooms/team%40conference.fluux.chat')
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced')
   await page.getByRole('button', { name: 'Attach file', exact: true }).click()
   await page.getByRole('button', { name: 'Create Poll', exact: true }).click()
   const poll = page.getByRole('heading', { name: 'Create Poll', exact: true })
