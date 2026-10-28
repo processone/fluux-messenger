@@ -394,14 +394,15 @@ for (const kind of ['chat', 'room'] as const) {
   })
 
   test(`${kind}: interaction hold yields to manual navigation, sending and jumping; blur and removal close panels`, async ({ page }) => {
-    const { row, body, list } = await setupInteraction(page, kind)
+    const { row, list } = await setupInteraction(page, kind)
     const observations: unknown[] = []
     const record = async (stage: string) => observations.push({ stage, distance: await distance(page), held: await list.getAttribute('data-message-interaction'), panels: await list.locator('[data-message-panel]').count() })
     let openIndex = 0
-    const openMore = async () => {
-      await body.hover()
-      await waitForActions(page)
-      await keepJson(`open-more-${++openIndex}`, await row.evaluate(element => {
+    const openMore = async (id = TARGET) => {
+      const target = page.locator(`.message-row[data-message-id="${id}"]`)
+      await target.locator('[data-message-body]').hover()
+      await waitForActions(page, id)
+      await keepJson(`open-more-${++openIndex}`, await target.evaluate(element => {
         const toolbar = element.querySelector('[data-message-toolbar]')!
         const control = toolbar.querySelector('[aria-label="More options"]')!
         const box = control.getBoundingClientRect()
@@ -412,8 +413,9 @@ for (const kind of ['chat', 'room'] as const) {
           composing: !!element.closest('.composer-active'),
           shadow: (window as any).__fluuxScrollShadow?.() }
       }))
-      await row.getByRole('button', { name: 'More options', exact: true }).click()
-      await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
+      await target.getByRole('button', { name: 'More options', exact: true }).click()
+      await expect(target.locator('[data-message-panel="more"]')).toBeVisible()
+      return target
     }
     await openMore()
     await arrive(page, kind, ['navigation-arrival'])
@@ -444,13 +446,14 @@ for (const kind of ['chat', 'room'] as const) {
     const historyAfter = (await historyBody.boundingBox())!.y
     expect(Math.abs(historyAfter - historyTop)).toBeLessThanOrEqual(1)
     observations.push({ stage: 'history release', id: historyId, before: historyTop, after: historyAfter })
-    await openMore()
+    const sendingRow = await openMore(historyId)
     const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
     await input.fill('My own send takes navigation priority.')
-    await expect(row.locator('[data-message-panel="more"]')).toHaveCount(1)
+    await expect(sendingRow.locator('[data-message-panel="more"]')).toHaveCount(1)
     await input.press('Enter')
     await expect(page.getByText('My own send takes navigation priority.', { exact: true }).last()).toBeVisible()
     await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await expect(list.locator('[data-message-panel]')).toHaveCount(0)
     await record('own send closes the menu and reaches latest')
     await openMore()
     await page.keyboard.press('PageUp')
