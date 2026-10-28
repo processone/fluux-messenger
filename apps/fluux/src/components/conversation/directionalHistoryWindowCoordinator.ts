@@ -24,6 +24,12 @@ export interface DirectionalHistorySnapshot {
   restored: boolean
   restoredAt?: number
   loadSettled: boolean
+  /**
+   * First message id the latest restore was started for. A different first id while the load is
+   * still in flight means the window shifted again after that restore: at the resident bound an
+   * interior arrival evicts the oldest row, so the batch can land after the restore it started.
+   */
+  restoredFirstId?: string
 }
 
 export interface BeginDirectionalHistoryInput {
@@ -73,6 +79,14 @@ export type DirectionalHistoryWindowDecision =
       snapshot: DirectionalHistorySnapshot
       generation: number
     }
+  /** The window shifted again after a restore, before its load settled: restore it once more. */
+  | { kind: 'restart'; snapshot: DirectionalHistorySnapshot }
+
+/**
+ * Whether the reader still reads where the restore holding `generation` put them: nothing they did
+ * or asked for has moved them since. Answered by the positioning controller.
+ */
+export type DirectionalHistoryReadingHeld = (generation: number) => boolean
 
 /** Value-only policy owner for directional history window loads. */
 export class DirectionalHistoryWindowCoordinator {
@@ -168,12 +182,25 @@ export class DirectionalHistoryWindowCoordinator {
   isPendingWindowShift(
     conversationId: string,
     firstMessageId: string,
+    readingHeld: DirectionalHistoryReadingHeld,
   ): boolean {
     const snapshot = this.activeSnapshot(conversationId)
-    return Boolean(
-      snapshot &&
-      !snapshot.restored &&
-      snapshot.oldFirstId !== firstMessageId,
+    if (!snapshot) return false
+    if (!snapshot.restored) return snapshot.oldFirstId !== firstMessageId
+    return this.shiftedAfterRestore(snapshot, firstMessageId, readingHeld)
+  }
+
+  /** A restored load still in flight whose window shifted again, while the reader stayed put. */
+  private shiftedAfterRestore(
+    snapshot: DirectionalHistorySnapshot,
+    firstMessageId: string,
+    readingHeld: DirectionalHistoryReadingHeld,
+  ): boolean {
+    return (
+      !snapshot.loadSettled &&
+      snapshot.restoredFirstId !== firstMessageId &&
+      snapshot.generation !== undefined &&
+      readingHeld(snapshot.generation)
     )
   }
 
@@ -222,12 +249,16 @@ export class DirectionalHistoryWindowCoordinator {
       snapshot.requestId !== input.requestId ||
       snapshot.conversationId !== input.conversationId ||
       this.currentConversationId !== input.conversationId ||
-      snapshot.restored ||
-      !snapshot.loadSettled ||
-      snapshot.oldFirstId !== input.firstMessageId
+      !snapshot.loadSettled
     ) {
       return { kind: 'none' }
     }
+    if (snapshot.restored) {
+      // Its batch has landed and been restored; nothing more can shift for this load.
+      this.active = null
+      return { kind: 'cleared', snapshot }
+    }
+    if (snapshot.oldFirstId !== input.firstMessageId) return { kind: 'none' }
     if (snapshot.generation === undefined) {
       this.active = null
       return { kind: 'cleared', snapshot }
@@ -273,15 +304,34 @@ export class DirectionalHistoryWindowCoordinator {
   observeWindow(input: {
     conversationId: string
     firstMessageId: string
+    readingHeld: DirectionalHistoryReadingHeld
   }): DirectionalHistoryWindowDecision {
     const snapshot = this.active
     if (
       !snapshot ||
       snapshot.conversationId !== input.conversationId ||
-      this.currentConversationId !== input.conversationId ||
-      snapshot.restored
+      this.currentConversationId !== input.conversationId
     ) {
       return { kind: 'none' }
+    }
+    if (snapshot.restored) {
+      // An in-flight load owns its batch until the load settles, even when an eviction at the
+      // resident bound already shifted the window and spent the first restore (FLM-204). The
+      // reader moving on since that restore releases it instead.
+      if (
+        snapshot.loadSettled ||
+        snapshot.restoredFirstId === input.firstMessageId
+      ) {
+        return { kind: 'none' }
+      }
+      if (
+        !this.shiftedAfterRestore(snapshot, input.firstMessageId, input.readingHeld)
+      ) {
+        this.active = null
+        return { kind: 'dropped', snapshot }
+      }
+      snapshot.restoredFirstId = input.firstMessageId
+      return { kind: 'restart', snapshot }
     }
     if (snapshot.oldFirstId === input.firstMessageId) {
       return { kind: 'waiting', snapshot }
@@ -290,6 +340,7 @@ export class DirectionalHistoryWindowCoordinator {
       this.active = null
       return { kind: 'dropped', snapshot }
     }
+    snapshot.restoredFirstId = input.firstMessageId
     return {
       kind: 'reconcile',
       snapshot,
@@ -317,10 +368,12 @@ export class DirectionalHistoryWindowCoordinator {
     }
   }
 
+  /** Clears a restore after its cooldown, unless its load is still in flight and may yet land. */
   expireRestored(requestId: number, restoredAt: number): void {
     if (
       this.active?.requestId === requestId &&
-      this.active.restoredAt === restoredAt
+      this.active.restoredAt === restoredAt &&
+      this.active.loadSettled
     ) {
       this.active = null
     }

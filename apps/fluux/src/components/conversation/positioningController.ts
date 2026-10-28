@@ -601,6 +601,16 @@ const ANCHOR_PRESERVATION_DRIFT_PX = 8
 // Preserved from the former hook-local prepend/window-shift loop. It intentionally has no
 // early-stable exit because virtualizer measurements can arrive late after several quiet frames.
 const DIRECTIONAL_HISTORY_REASSERT_FRAMES = 60
+/**
+ * Ambient corrections that keep the reader's current reading point rather than move it. Accepting
+ * one does not mean the reader moved on, so a directional restore whose load is still in flight may
+ * still restore a later window shift (FLM-204).
+ */
+const HOLDS_READING_POINT: ReadonlySet<PositionRequest['source']['kind']> = new Set([
+  'layout-preservation',
+  'media-preservation',
+  'history-preservation',
+])
 
 let nextPositionGeneration = 1
 
@@ -670,6 +680,7 @@ export class PositioningController {
   private acceptRequest(request: PositionRequest): PositioningModel {
     const accepted = acceptPositionRequest(this.model, request)
     if (accepted !== this.model) {
+      if (!HOLDS_READING_POINT.has(request.source.kind)) this.readerMovedAt = request.generation
       if (request.source.kind === 'entry' || request.conversationId !== this.model.currentConversationId ||
         request.desired.kind === 'live-edge') this.unreadMarkerHold = null
       if (request.source.kind === 'entry' || request.conversationId !== this.model.currentConversationId) {
@@ -707,6 +718,11 @@ export class PositioningController {
     direction: number
   } | null = null
   private unreadMarkerHold: string | null = null
+  /**
+   * The newest generation at which the reader moved on: their own input took over, or a request
+   * other than an ambient correction was accepted. See {@link holdsDirectionalReading}.
+   */
+  private readerMovedAt = 0
   /**
    * The conversation whose reader is touching, dragging the scrollbar, holding a scroll key or
    * mid-wheel, from {@link holdInput} to {@link observeUserInputEnd}. No ambient
@@ -1217,6 +1233,19 @@ export class PositioningController {
     return true
   }
 
+  /**
+   * Whether the reader still reads where the directional restore with `generation` put them:
+   * neither their own input nor any request other than an ambient correction has come since. A
+   * window shift that lands while that restore's load is still in flight may then be restored
+   * again; otherwise it would pull a reader who moved on back to the captured anchor (FLM-204).
+   */
+  holdsDirectionalReading(conversationId: string, generation: number): boolean {
+    return (
+      this.model.currentConversationId === conversationId &&
+      this.readerMovedAt < generation
+    )
+  }
+
   isDirectionalHistoryPending(conversationId: string): boolean {
     const execution = this.directionalHistoryExecution
     return Boolean(
@@ -1626,7 +1655,10 @@ export class PositioningController {
           return null
         }
         const generation = active?.request.generation
-        if (generation === undefined) return null
+        if (generation === undefined) {
+          this.readerMovedAt = this.model.watermark
+          return null
+        }
         const targetExecution = this.explicitTargetExecution
         const targetWasCurrent =
           targetExecution !== null &&
@@ -1661,6 +1693,7 @@ export class PositioningController {
         if (directionalWasCurrent && directionalExecution && !directionalExecution.applied) {
           return null
         }
+        this.readerMovedAt = this.model.watermark
         this.model = cancelReconciliationForUserInput(
           this.model,
           conversationId,
