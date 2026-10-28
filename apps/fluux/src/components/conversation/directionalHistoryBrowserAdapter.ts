@@ -185,7 +185,10 @@ export class DirectionalHistoryBrowserAdapter {
     followed.offsetFromTop = start - scroller.scrollTop
   }
 
-  /** The followed offset of `messageId`, once: a later restore needs a capture of its own. */
+  /**
+   * The followed offset of `messageId`, once. A restart of the same load uses the placement this
+   * restore recorded; a new load captures its own.
+   */
   private takeFollowedOffset(messageId: string | undefined): number | null {
     const followed = this.followed
     if (!followed || followed.id !== messageId) return null
@@ -199,8 +202,13 @@ export class DirectionalHistoryBrowserAdapter {
     this.options.getVirtualizer()?.holdAnchor?.(null)
   }
 
+  /**
+   * `onPlaced` hears where the restore places its anchor, once, on its first frame, so a restart
+   * of the same load can place it there again: the followed offset is taken only once.
+   */
   createExecutor(
     complete: DirectionalHistoryExecutor['complete'],
+    onPlaced?: (offsetFromTop: number) => void,
   ): DirectionalHistoryExecutor {
     let initialized = false
     let previousTarget = 0
@@ -245,9 +253,12 @@ export class DirectionalHistoryBrowserAdapter {
           cancelKineticScroll(scroller)
         }
 
-        placementOffset ??=
-          this.takeFollowedOffset(request.desired.messageId) ??
-          request.desired.placement.offsetPx
+        if (placementOffset === null) {
+          placementOffset =
+            this.takeFollowedOffset(request.desired.messageId) ??
+            request.desired.placement.offsetPx
+          onPlaced?.(placementOffset)
+        }
         let target: number | null = null
         let usedMethod = 'none'
         if (request.desired.messageId) {

@@ -447,6 +447,58 @@ describe('MessageList — virtualized scroll integration', () => {
     expect(scrollTopSets).toContain(1000)
   })
 
+  // Intent: FLM-185 review finding R3. The reader scrolls on while an older-history load is
+  // pending. At the resident bound an arrival evicts the oldest row before the batch lands, so the
+  // first restore runs early and places the anchor where the reader last saw it; the batch then
+  // restarts the restore (FLM-204). The restart returned to the capture-time offset, moving the
+  // rows the reader was looking at by however far they had scrolled.
+  it('keeps the rows where the reader last saw them across an arrival restore and the batch that lands after it', () => {
+    const older: BaseMessage[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `older-${i}`, stanzaId: undefined, originId: undefined, from: 'user@example.com', body: `Older ${i}`,
+      timestamp: new Date(2024, 0, 1, 11, i), isOutgoing: false, type: 'chat' as const,
+    }))
+    const arrival: BaseMessage = {
+      id: 'arrival-0', stanzaId: undefined, originId: undefined, from: 'user@example.com', body: 'Arrival',
+      timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: false, type: 'chat' as const,
+    }
+    // The archive answer stays pending, so the load is still in flight when the arrival lands.
+    const props = { conversationId: 'conv-restart', onScrollToTop: vi.fn(() => new Promise(() => {})), isHistoryComplete: false, renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+    const { container, getByText, rerender } = render(<MessageList messages={makeMessages(50)} {...props} />)
+
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    let scrollTopVal = 800
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => 5000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', {
+      get: () => scrollTopVal,
+      set: (v: number) => { scrollTopVal = v },
+      configurable: true,
+    })
+    // The virtualizer reads each row where the list rendered it.
+    const startOf = (id: string) => container.querySelector(`[data-message-row-id="${id}"]`) ? rowStart(container, id) : null
+    getOffsetForMessageId.mockImplementation(startOf)
+    const onScreen = (id: string) => rowStart(container, id) - scrollTopVal
+
+    const anchorId = [...container.querySelectorAll('[data-message-row-id]')]
+      .map((row) => row.getAttribute('data-message-row-id')!)
+      .find((id) => rowStart(container, id) === 800)!
+    fireEvent.click(getByText('chat.loadEarlierMessages'))
+
+    // The reader scrolls on by 120 px while the archive answer is pending.
+    scrollTopVal = 680
+    fireEvent.scroll(scroller)
+    const lastSeen = onScreen(anchorId)
+    expect(lastSeen).toBe(120)
+
+    // The arrival evicts the oldest row: the first restore runs before the batch.
+    rerender(<MessageList messages={[...makeMessages(50).slice(1), arrival]} {...props} />)
+    expect(onScreen(anchorId), 'the arrival restore').toBe(lastSeen)
+
+    // The batch lands while the load is still in flight: the restore restarts for the same anchor.
+    rerender(<MessageList messages={[...older, ...makeMessages(50).slice(1), arrival]} {...props} />)
+    expect(onScreen(anchorId), 'the restart after the batch').toBe(lastSeen)
+  })
+
   it('restores (does not strand the view) when load-newer appends + evicts the oldest — count-constant slide DOWN', () => {
     // Sliding window, NEWER direction: the reader is near the resident bottom; load-newer APPENDS
     // newer AND EVICTS the oldest, so count stays constant and firstId becomes NEWER (the opposite
