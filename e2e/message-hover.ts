@@ -2,7 +2,7 @@ import { test, expect, type Page, type Locator } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
-import { AT_BOTTOM_OK_PX, wheelAwayFromBottom } from './harness/scrollHarness'
+import { AT_BOTTOM_OK_PX, waitForTopVisibleSettled, wheelAwayFromBottom } from './harness/scrollHarness'
 import { arrive, distance, keepJson, measureDuring, mountedMessageIndexes, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
 
 async function seedRow(page: Page, content: 'long' | 'file', mode: 'light' | 'dark' = 'dark') {
@@ -396,7 +396,11 @@ for (const kind of ['chat', 'room'] as const) {
   test(`${kind}: interaction hold yields to manual navigation, sending and jumping; blur and removal close panels`, async ({ page }) => {
     const { row, list } = await setupInteraction(page, kind)
     const observations: unknown[] = []
-    const record = async (stage: string) => observations.push({ stage, distance: await distance(page), held: await list.getAttribute('data-message-interaction'), panels: await list.locator('[data-message-panel]').count() })
+    const record = async (stage: string) => {
+      const observation = { stage, distance: await distance(page), held: await list.getAttribute('data-message-interaction'), panels: await list.locator('[data-message-panel]').count() }
+      observations.push(observation)
+      await keepJson(`${kind}-navigation-stage-${observations.length}`, observation)
+    }
     let openIndex = 0
     const openPanel = async (id = TARGET, panel: 'more' | 'reactions' = 'more') => {
       const label = panel === 'more' ? 'More options' : 'More reactions'
@@ -458,14 +462,22 @@ for (const kind of ['chat', 'room'] as const) {
     await expect(list.locator('[data-message-panel]')).toHaveCount(0)
     await record('own send closes the menu and reaches latest')
     await openPanel()
+    // Safari mouse clicks do not focus buttons; give keyboard navigation an action target.
+    await row.getByRole('button', { name: 'More options', exact: true }).focus()
     await page.keyboard.press('PageUp')
     await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
     await expect(list).not.toHaveAttribute('data-message-interaction')
     await expect.poll(() => distance(page)).toBeGreaterThan(1)
+    expect(await waitForTopVisibleSettled(page)).not.toBeNull()
     await record('keyboard scroll closes the menu')
     await page.keyboard.press('End')
+    expect(await waitForTopVisibleSettled(page)).not.toBeNull()
     await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
-    await openPanel()
+    const latestOwnId = await page.getByText('My own send takes navigation priority.', { exact: true }).last()
+      .locator('xpath=ancestor::*[@data-message-row-id][1]').getAttribute('data-message-id')
+    await openPanel(latestOwnId!)
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await record('hold begins at latest before one small arrival')
     await arrive(page, kind, ['small-arrival'])
     await expect(page.locator('[data-fab="scroll-to-bottom"]')).toHaveAttribute('tabindex', '0')
     expect(await distance(page)).toBeLessThan(AT_BOTTOM_OK_PX)

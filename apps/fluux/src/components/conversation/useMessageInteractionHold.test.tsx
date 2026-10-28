@@ -135,6 +135,17 @@ describe('deliberate message interaction', () => {
     act(() => vi.advanceTimersByTime(100))
     expect(release).toHaveBeenCalledWith(true)
   })
+  it('allows a panel to close after hover capability changes', () => {
+    const { result, release } = setup()
+    const close = vi.fn()
+    act(() => result.current.context.setMenuOpen(row.dataset.messageRowId!, true, close))
+    mouse('mousemove', document.body, 0, 0)
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })))
+    act(() => result.current.context.setMenuOpen(row.dataset.messageRowId!, false, close))
+    act(() => vi.advanceTimersByTime(100))
+    expect(release).toHaveBeenCalledWith(true)
+  })
+
   it('bridges pointer transitions and releases only after departure', () => {
     const { release } = setup()
     moveIntoRow()
