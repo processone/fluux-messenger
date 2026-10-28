@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Loader2, Server, FileUp, RotateCcw } from 'lucide-react'
 import { ModalOverlay } from './ModalOverlay'
-import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import type { BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
 
 type Phase = 'choose' | 'restoring' | 'importing' | 'confirm-replace' | 'replacing'
@@ -95,12 +94,11 @@ export function IdentityChoiceDialog({
     }
   }, [phase])
 
-  // This dialog handles Escape itself (ModalOverlay's own handler is off via
-  // closeOnEscape={false}), through the shared overlay stack: it takes Escape only
-  // when it is the overlay on top, so shortcut help opened over it closes first.
-  // When it does take Escape, it consumes it, so it can't also fire the window-level
-  // conversation shortcut (scroll-to-bottom / mark-read) behind the modal.
-  useCloseOnEscape(() => {
+  // Escape steps back instead of closing. ModalOverlay runs it only when this dialog is
+  // the overlay on top, so shortcut help over it closes first, and consumes it even
+  // while busy, so it can't also fire the window-level conversation shortcut
+  // (scroll-to-bottom / mark-read) behind the modal.
+  const handleEscape = () => {
     if (isRestoring) return
     // Escape backs out of the sub-phase to the chooser, NOT out of the
     // dialog entirely — Cancel is the only path that closes, to make
@@ -112,7 +110,7 @@ export function IdentityChoiceDialog({
     } else if (phase === 'choose') {
       onCancel()
     }
-  })
+  }
 
   const handleStartRestore = useCallback(() => {
     setPhase('restoring')
@@ -169,7 +167,7 @@ export function IdentityChoiceDialog({
       width="max-w-lg"
       panelClassName="max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
       dismissable={!isBusy}
-      closeOnEscape={false}
+      onEscape={handleEscape}
     >
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">

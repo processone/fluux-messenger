@@ -1,9 +1,32 @@
 import { useEffect, useRef, type RefObject } from 'react'
 
+interface Overlay {
+  modalRef?: RefObject<HTMLElement | null>
+}
+
 // Overlays currently listening for Escape, in the order they opened. The last one is on top.
-const openOverlays: object[] = []
+const openOverlays: Overlay[] = []
 // Escape presses already given to an overlay, so one press never closes two of them.
 const handledEscapes = new WeakSet<Event>()
+
+/**
+ * The overlay that takes the next Escape: the one opened last. When that one is a modal,
+ * the modal drawn on top takes it instead. Modals share a z-index, so the last
+ * `data-modal` root in the page is drawn over the others, whatever order they opened in:
+ * the startup encryption dialog is drawn over shortcut help opened after it. A modal on
+ * top that is not in the stack (it handles Escape itself, or not at all) leaves it to
+ * nobody here.
+ */
+function escapeTarget(): Overlay | undefined {
+  const top = openOverlays[openOverlays.length - 1]
+  if (!top?.modalRef) return top
+  const modals = document.querySelectorAll('[data-modal="true"]')
+  const drawnOnTop = modals[modals.length - 1]
+  for (let i = openOverlays.length - 1; i >= 0; i--) {
+    if (openOverlays[i].modalRef?.current === drawnOnTop) return openOverlays[i]
+  }
+  return undefined
+}
 
 /**
  * Close an overlay when Escape is pressed, CONSUMING the event so it cannot also
@@ -32,9 +55,9 @@ const handledEscapes = new WeakSet<Event>()
  * context menu opened in the image lightbox closes and the lightbox stays; shortcut help
  * opened over a context menu closes and the menu stays. Each press closes one overlay.
  *
- * For a modal, pass its `data-modal="true"` root as `modalRef`. Only the last
- * such root in document order handles Escape: stacked overlays share a z-index
- * and must mount after the overlay underneath. `stopPropagation()` alone cannot
+ * For a modal, pass its `data-modal="true"` root as `modalRef`. Among modals, the one
+ * drawn on top is the last such root in document order, and it takes Escape even when
+ * another modal opened after it (see escapeTarget). `stopPropagation()` alone cannot
  * prevent sibling document listeners from closing the rest of the stack.
  */
 export function useCloseOnEscape(
@@ -49,15 +72,11 @@ export function useCloseOnEscape(
 
   useEffect(() => {
     if (!enabled) return
-    const overlay = {}
+    const overlay: Overlay = { modalRef }
     openOverlays.push(overlay)
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || handledEscapes.has(e)) return
-      if (openOverlays[openOverlays.length - 1] !== overlay) return
-      if (modalRef) {
-        const modals = document.querySelectorAll('[data-modal="true"]')
-        if (modals[modals.length - 1] !== modalRef.current) return
-      }
+      if (escapeTarget() !== overlay) return
       handledEscapes.add(e)
       e.stopPropagation()
       onCloseRef.current()

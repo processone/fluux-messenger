@@ -54,6 +54,11 @@ interface ModalOverlayProps {
   /** Document-level Escape-to-close (default true). Set false when the caller
    *  handles Escape itself via `onPanelKeyDown`. */
   closeOnEscape?: boolean
+  /** What Escape does instead of closing, for a dialog whose Escape steps back
+   *  (e.g. from a sub-step to its chooser). Escape still reaches it only when this
+   *  modal is on top, and it is handled even while `dismissable` is false, so a
+   *  busy dialog keeps Escape from reaching the conversation behind it. */
+  onEscape?: () => void
   /** Whether backdrop-click and Escape may dismiss the modal (default true).
    *  Pass `false` while a blocking operation runs (e.g. a key deletion in
    *  flight) so the user can't dismiss mid-flow. */
@@ -95,6 +100,7 @@ export function ModalOverlay({
   panelProps,
   onPanelKeyDown,
   closeOnEscape = true,
+  onEscape,
   dismissable = true,
   children,
 }: ModalOverlayProps) {
@@ -119,7 +125,7 @@ export function ModalOverlay({
   // Keep keyboard focus inside the modal across OS window blur/refocus.
   useRestoreFocus(panelRef, focusRef)
 
-  useCloseOnEscape(close, closeOnEscape && dismissable, rootRef)
+  useCloseOnEscape(onEscape ?? close, closeOnEscape && (dismissable || !!onEscape), rootRef)
 
   return (
     <div

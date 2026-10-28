@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, fireEvent } from '@testing-library/react'
 import { useCloseOnEscape } from './useCloseOnEscape'
+import { EscapeModal } from '@/test-utils/escapeModal'
 
 function Harness({ onClose, enabled }: { onClose: () => void; enabled?: boolean }) {
   useCloseOnEscape(onClose, enabled)
@@ -119,5 +120,27 @@ describe('useCloseOnEscape with stacked overlays', () => {
     expect(upper).toHaveBeenCalledTimes(1)
     expect(first).not.toHaveBeenCalled()
     expect(second).not.toHaveBeenCalled()
+  })
+
+  // Review R5: modals share a z-index, so a modal later in the page is drawn over one
+  // opened after it, as the startup encryption dialog is over shortcut help. Escape
+  // goes to the modal a person sees on top.
+  it('gives Escape to the modal drawn on top, even when it opened first', () => {
+    const drawnUnder = vi.fn()
+    const drawnOver = vi.fn()
+    const Page = ({ under, over }: { under: boolean; over: boolean }) => (
+      <>
+        {under && <EscapeModal onClose={drawnUnder} />}
+        {over && <EscapeModal onClose={drawnOver} />}
+      </>
+    )
+    const { rerender } = render(<Page under={false} over />)
+    rerender(<Page under over />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(drawnOver).toHaveBeenCalledTimes(1)
+    expect(drawnUnder).not.toHaveBeenCalled()
+    rerender(<Page under over={false} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(drawnUnder).toHaveBeenCalledTimes(1)
   })
 })

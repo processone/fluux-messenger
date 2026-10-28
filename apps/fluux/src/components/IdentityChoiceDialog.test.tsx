@@ -409,3 +409,30 @@ describe('IdentityChoiceDialog with shortcut help opened over it', () => {
     expect(baseProps.onCancel).not.toHaveBeenCalled()
   })
 })
+
+// Review R5: the startup dialog (App.tsx) sits later in the page than shortcut help, so it
+// is drawn over help even when help opened after it. Escape goes to the one drawn on top.
+describe('IdentityChoiceDialog drawn over shortcut help opened after it', () => {
+  const closeHelp = vi.fn()
+  const Page = ({ help, dialog }: { help: boolean; dialog: boolean }) => (
+    <>
+      {help && <EscapeModal onClose={closeHelp} />}
+      {dialog && <IdentityChoiceDialog {...baseProps} />}
+    </>
+  )
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('takes Escape first and cancels from the chooser, then help closes', () => {
+    const { rerender } = render(<Page help={false} dialog />)
+    rerender(<Page help dialog />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(baseProps.onCancel).toHaveBeenCalledTimes(1)
+    expect(closeHelp).not.toHaveBeenCalled()
+    rerender(<Page help dialog={false} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeHelp).toHaveBeenCalledTimes(1)
+  })
+})
