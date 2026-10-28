@@ -326,6 +326,62 @@ it.each(['offset', 'index', 'mount'] as const)('publishes the landed viewport af
   expect(scope.scroller.scrollTop).toBe(200)
 })
 
+// FLM-186: an accepted programmatic write must re-window from the write, not an immediate
+// scrollTop read-back. A real-library fixture models WebKit reporting the old position until
+// its native scroll event. Offset navigation and mounting share the same write boundary.
+it.each(['offset', 'index', 'mount'] as const)('re-windows a landed %s write while scrollTop still reports the old offset', command => {
+  const scope = fixture({ size: 100, height: 8000 })
+  act(() => scope.result.current.scrollToOffset(800))
+  const targetId = 'row-60'
+  const destination = scope.result.current.getOffsetForMessageId(targetId)!
+    - (scope.scroller.clientHeight - 100) / 2
+  // No scroll event and no fresh read-back; the browser accepted the DOM write.
+  const writes: number[] = []
+  scope.scroller.scrollTo = options => { writes.push((options as ScrollToOptions).top ?? 0) }
+
+  act(() => {
+    if (command === 'offset') scope.result.current.scrollToOffset(destination)
+    else if (command === 'index') scope.result.current.scrollToIndex(60, { align: 'center' })
+    else void scope.result.current.ensureMessageMounted(targetId)
+  })
+
+  expect(writes.at(-1)).toBe(destination)
+  expect(scope.scroller.scrollTop).toBe(800)
+  expect(scope.result.current.getVirtualItems().some(row => row.key === targetId)).toBe(true)
+})
+
+it('publishes the bounded index write when the spacer shrinks during the authority check', () => {
+  const scope = fixture({ size: 100, height: 8000 })
+  const writes: number[] = []
+  scope.scroller.scrollTo = options => { writes.push((options as ScrollToOptions).top ?? 0) }
+  act(() => {
+    scope.result.current.setScrollWriteObserver?.(({ phase }) => {
+      if (phase === 'before') scope.grow(-1000)
+    })
+    scope.result.current.scrollToIndex(79, { align: 'end' })
+  })
+  expect(writes.at(-1)).toBe(7600)
+  // The browser can land only at 6600 after the spacer shrinks, not the original 7600 target.
+  const landed = scope.scroller.scrollHeight - scope.scroller.clientHeight
+  const visible = scope.result.current.getVirtualItems()
+  expect(visible.some(row => row.start <= landed && row.start + row.size > landed)).toBe(true)
+  expect(visible.some(row => row.key === 'row-79')).toBe(false)
+})
+
+it('does not publish the destination of a smooth index write before the animation reaches it', () => {
+  const scope = fixture({ size: 100, height: 8000 })
+  act(() => scope.result.current.scrollToOffset(800))
+  scope.scroller.scrollTo = () => {} // A native animation starts here; it has not moved yet.
+  act(() => scope.result.current.scrollToIndex(60, { align: 'center', behavior: 'smooth' }))
+  expect(scope.result.current.getVirtualItems().some(row => row.key === 'row-60')).toBe(false)
+  act(() => {
+    scope.scroller.scrollTop = 3000
+    scope.scroller.dispatchEvent(new Event('scroll'))
+  })
+  expect(scope.result.current.getVirtualItems().some(row => row.key === 'row-30')).toBe(true)
+  expect(scope.result.current.getVirtualItems().some(row => row.key === 'row-60')).toBe(false)
+})
+
 it('still re-lands a navigation issued after a cancel as its rows measure', () => {
   const scope = fixture()
   act(() => {

@@ -31,6 +31,9 @@ let capturedConfig: {
 // adapter's cb-stashing path runs and `offsetNotifySpy` becomes the captured callback.
 vi.mock('@tanstack/react-virtual', () => ({
   measureElement: (element: HTMLElement) => element.offsetHeight,
+  elementScroll: (offset: number, _options: unknown, instance: { scrollElement: HTMLElement | null }) => {
+    if (instance.scrollElement) instance.scrollElement.scrollTop = offset
+  },
   useVirtualizer: (opts: {
     count: number
     getItemKey: (i: number) => string
@@ -38,13 +41,15 @@ vi.mock('@tanstack/react-virtual', () => ({
     estimateSize: (index: number) => number
     measureElement?: (element: HTMLElement, entry: ResizeObserverEntry | undefined, instance: MeasurementInstance) => number
     initialMeasurementsCache?: Array<{ key: string | number; index: number; start: number; end: number; size: number; lane: number }>
+    scrollToFn: (offset: number, options: { behavior?: ScrollBehavior }, instance: { scrollElement: HTMLElement | null }) => void
     observeElementOffset?: (
       instance: { scrollElement: HTMLElement | null },
       cb: (offset: number, isScrolling: boolean) => void,
     ) => void | (() => void)
   }) => {
     capturedConfig = { estimateSize: opts.estimateSize, measureElement: opts.measureElement, initialMeasurementsCache: opts.initialMeasurementsCache }
-    opts.observeElementOffset?.({ scrollElement: opts.getScrollElement() }, offsetNotifySpy)
+    const instance = { scrollElement: opts.getScrollElement() }
+    opts.observeElementOffset?.(instance, offsetNotifySpy)
     return {
       getVirtualItems: () =>
         Array.from({ length: opts.count }, (_, index) => ({
@@ -68,17 +73,14 @@ vi.mock('@tanstack/react-virtual', () => ({
       // adapter is not using it.
       measurementsCache: [{ key: 'a', index: 0, size: 64 }] as Array<{ key: string | number; index: number; size: number }>,
       indexFromElement: (node: HTMLElement) => mockIndexFromElement(node),
-      // Mirror real @tanstack: scrollToIndex resolves an offset and sets the DOM scrollTop
-      // (via _scrollToOffset → scrollToFn) but does NOT update its reactive scrollOffset. The
-      // adapter must read the landed scrollTop back and re-window through the offset callback.
-      scrollToIndex: (index: number) => {
-        const el = opts.getScrollElement()
-        if (el) el.scrollTop = index * 40
+      // Mirror the real library's writer boundary: navigation resolves an offset, then calls
+      // scrollToFn. The adapter publishes its accepted immediate write through the callback.
+      scrollToIndex: (index: number, options?: { behavior?: ScrollBehavior }) => {
+        opts.scrollToFn(index * 40, { behavior: options?.behavior }, instance)
       },
-      scrollToOffset: (offset: number, options?: { behavior?: string }) => {
+      scrollToOffset: (offset: number, options?: { behavior?: ScrollBehavior }) => {
         scrollToOffsetSpy(offset, options)
-        const el = opts.getScrollElement()
-        if (el) el.scrollTop = offset
+        opts.scrollToFn(offset, { behavior: options?.behavior }, instance)
       },
     }
   },
@@ -151,6 +153,7 @@ describe('useTanstackMessageVirtualizer', () => {
     offsetNotifySpy.mockClear()
     scrollToOffsetSpy.mockClear()
     const el = document.createElement('div')
+    Object.defineProperties(el, { scrollHeight: { value: 2000 }, clientHeight: { value: 600 } })
     const dispatchSpy = vi.spyOn(el, 'dispatchEvent')
     const { items, indexById } = makeItems(['a', 'b'])
     const { result } = renderHook(() => {
@@ -182,11 +185,12 @@ describe('useTanstackMessageVirtualizer', () => {
     // scrollOffset stale until the native 'scroll' event fires. On Tauri WebKit that event is
     // withheld/coalesced for a programmatic scroll, so the mounted window never re-syncs and a
     // just-appended bottom row (the new message) is never windowed in → the view does NOT stick
-    // to the bottom. The adapter must read the landed scrollTop and push it straight into the
-    // offset callback (isScrolling=false, non-sync), exactly as scrollToOffset does. Not
-    // reproducible in Playwright (chromium/webkit fire the native event), so this is the guard.
+    // to the bottom. The adapter must publish the accepted write through the offset callback
+    // (isScrolling=false, non-sync), exactly as scrollToOffset does. Native scroll events are
+    // deliberately absent here, so this guards the explicit callback without relying on them.
     offsetNotifySpy.mockClear()
     const el = document.createElement('div')
+    Object.defineProperties(el, { scrollHeight: { value: 120 }, clientHeight: { value: 40 } })
     const dispatchSpy = vi.spyOn(el, 'dispatchEvent')
     const { items, indexById } = makeItems(['a', 'b', 'c'])
     const { result } = renderHook(() => {

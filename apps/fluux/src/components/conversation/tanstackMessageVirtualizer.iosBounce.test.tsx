@@ -20,7 +20,7 @@ beforeEach(() => {
   })
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); document.body.replaceChildren() })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.replaceChildren() })
 
 function bouncingList() {
   const scroller = document.body.appendChild(document.createElement('div'))
@@ -43,6 +43,27 @@ function bouncingList() {
   scroller.dispatchEvent(new Event('scroll'))
   return { scroller, virtualizer: hook.result.current }
 }
+
+// FLM-186: an index command queued during an iOS fling must publish the eventual write,
+// without depending on a native scroll event or publishing a destination before the write.
+it('re-windows when a queued index write lands after the caller has returned', () => {
+  const frames: FrameRequestCallback[] = []
+  const queue = (callback: FrameRequestCallback) => frames.push(callback)
+  vi.stubGlobal('requestAnimationFrame', queue)
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation(queue)
+  const { scroller, virtualizer } = bouncingList()
+  const before = virtualizer.getVirtualItems().map(row => row.key)
+  act(() => virtualizer.scrollToIndex(50, { align: 'center' }))
+  expect(scroller.scrollTop).toBe(20)
+  expect(virtualizer.getVirtualItems().map(row => row.key)).toEqual(before)
+
+  // The real library's momentum stop releases the queued command after two frames.
+  for (let frame = 0; frame < 2; frame++) {
+    act(() => { frames.splice(0).forEach(callback => callback(performance.now())) })
+  }
+  expect(scroller.scrollTop).toBe(50 * 60 - (scroller.clientHeight - 60) / 2)
+  expect(virtualizer.getVirtualItems().some(row => row.key === 'row-50')).toBe(true)
+})
 
 it('writes a restore that releases the gesture tail at once', () => {
   const { scroller, virtualizer } = bouncingList()
