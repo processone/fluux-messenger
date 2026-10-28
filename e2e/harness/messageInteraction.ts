@@ -146,3 +146,15 @@ export async function mountedMessageIndexes(page: Page) {
   return page.locator('[data-message-list] [data-virtualizer-spacer] > [data-index]')
     .evaluateAll(elements => elements.map(element => element.getAttribute('data-index')))
 }
+
+/** Read the SDK's canonical identity through its actual typed pointer contract. */
+export async function readInteractionReadState(page: Page, kind: ConversationKind) {
+  return page.evaluate(({ kind, jid }) => {
+    const scope = window as unknown as Demo
+    const current = kind === 'chat'
+      ? { meta: scope.__chatStore.getState().conversationMeta.get(jid), messages: scope.__chatStore.getState().messages.get(jid) }
+      : { meta: scope.__roomStore.getState().roomMeta.get(jid), messages: scope.__roomStore.getState().messages.get(jid) }
+    if (!current.meta || !current.messages?.length) throw new Error('Missing interaction conversation state')
+    return { unread: current.meta.unreadCount, readId: current.meta.readPointer?.identity.messageId ?? null, lastId: current.messages.at(-1)!.id }
+  }, { kind, jid: jidFor(kind) })
+}

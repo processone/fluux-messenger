@@ -3,7 +3,7 @@ import type { DemoClient } from '@fluux/sdk/demo'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
 import { AT_BOTTOM_OK_PX, waitForTopVisibleSettled, wheelAwayFromBottom } from './harness/scrollHarness'
-import { arrive, distance, keepJson, measureDuring, mountedMessageIndexes, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
+import { arrive, distance, keepJson, measureDuring, mountedMessageIndexes, readInteractionReadState, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
 
 async function seedRow(page: Page, content: 'long' | 'file', mode: 'light' | 'dark' = 'dark') {
   await bootDemo(page, '/demo.html?tutorial=false')
@@ -273,6 +273,8 @@ for (const kind of ['chat', 'room'] as const) {
 
   test(`${kind}: interaction hold starts before toolbar delay and fixes row, controls and More during arrivals`, async ({ page }) => {
     const { row, body, list } = await setupInteraction(page, kind)
+    await expect.poll(async () => (await readInteractionReadState(page, kind)).readId).not.toBeNull()
+    const initialReadState = await readInteractionReadState(page, kind)
     const box = await body.boundingBox()
     await page.mouse.move(box!.x + 150, box!.y + 15, { steps: 3 })
     await expect(list).toHaveAttribute('data-message-interaction', await row.getAttribute('data-message-row-id') as string)
@@ -293,17 +295,12 @@ for (const kind of ['chat', 'room'] as const) {
     })
     await keepJson(`${kind}-held-geometry`, samples)
     await expect(page.locator('[data-fab="scroll-to-bottom"]')).toHaveAttribute('tabindex', '0')
-    const readState = await page.evaluate(kind => {
-      const scope = window as any
-      const jid = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
-      const state = kind === 'chat' ? scope.__chatStore.getState() : scope.__roomStore.getState()
-      const meta = (kind === 'chat' ? state.conversationMeta : state.roomMeta).get(jid)
-      return { unread: meta.unreadCount, readId: meta.readPointer?.id, lastId: state.messages.get(jid).at(-1).id }
-    }, kind)
+    const readState = await readInteractionReadState(page, kind)
+    expect(readState.readId, 'the fixture establishes a real canonical pointer').not.toBeNull()
     expect(readState.unread, 'offscreen arrivals remain unread while delivery continues').toBeGreaterThan(0)
     expect(readState.readId).not.toBe(readState.lastId)
     await expect(page.locator('[data-fab="scroll-to-bottom"] span')).toHaveText(String(readState.unread))
-    await keepJson(`${kind}-held-read-state`, readState)
+    await keepJson(`${kind}-held-read-state`, { ...readState, initialReadId: initialReadState.readId })
     if (kind === 'room') {
       const capabilitySamples = await measureDuring(page, TARGET, () => page.evaluate(() => {
         const scope = window as any
