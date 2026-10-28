@@ -294,14 +294,21 @@ jobs:
       # engines. Restore-only: a pull request that saved its own copy would only duplicate
       # the main one. The fallback lets a Playwright bump start from the previous cache and
       # download only the changed browsers.
+      # The key and its fallback name the image's Ubuntu release ($ImageOS): Playwright installs
+      # each release's own WebKit build into the same folder and never replaces it, so a 24.04
+      # build restored on 26.04 cannot find the 24.04 libraries it links against.
+      - name: Compute Playwright browser cache key
+        id: playwright-cache-key
+        run: echo "prefix=$RUNNER_OS-$ImageOS-playwright-" >> "$GITHUB_OUTPUT"
+
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          key: ${{ steps.playwright-cache-key.outputs.prefix }}${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-
+            ${{ steps.playwright-cache-key.outputs.prefix }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
