@@ -196,6 +196,7 @@ export interface MessageBubbleProps {
 function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): boolean {
   // Message identity and content
   if (prev.message.id !== next.message.id) return false
+  if (messageRowId(prev.message) !== messageRowId(next.message)) return false
   if (prev.message.body !== next.message.body) return false
   if (prev.whisperWith !== next.whisperWith) return false
   if (prev.whisperThread !== next.whisperThread) return false
@@ -379,8 +380,9 @@ export const MessageBubble = memo(function MessageBubble({
   const [showReactionPicker, setShowReactionPickerState] = useState(false)
   const [showMoreMenu, setShowMoreMenuState] = useState(false)
   const interaction = useContext(MessageInteractionContext)
+  const bubbleRef = useRef<HTMLDivElement>(null)
   const rowId = messageRowId(message)
-  const interactionHeld = !!rowId && interaction?.heldMessageId === rowId
+  const interactionHeld = !!bubbleRef.current && interaction?.heldRow?.contains(bubbleRef.current) === true
   const openMenusRef = useRef({ more: false, reaction: false })
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false)
   const [showErrorDetails, setShowErrorDetails] = useState(false)
@@ -447,7 +449,8 @@ export const MessageBubble = memo(function MessageBubble({
   }
   const reportMenus = () => {
     if (rowId) interaction?.setMenuOpen(rowId,
-      openMenusRef.current.more || openMenusRef.current.reaction, closeInteractionMenus)
+      openMenusRef.current.more || openMenusRef.current.reaction, closeInteractionMenus,
+      bubbleRef.current?.closest<HTMLElement>('[data-message-row-id]') ?? undefined)
   }
   const setShowMoreMenu = (isOpen: boolean) => {
     openMenusRef.current.more = isOpen
@@ -580,6 +583,7 @@ export const MessageBubble = memo(function MessageBubble({
   const showSenderHeader = showAvatar && !isActionMessage(message.body)
   return (
     <div
+      ref={bubbleRef}
       data-message-id={message.id}
       data-message-from={senderName}
       data-message-time={formatTime(message.timestamp)}

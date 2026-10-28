@@ -312,7 +312,8 @@ An `interaction` request holds the original row handle and the message body's to
 the existing anchor executor and bounded controller frame loop. The virtualizer retains that row
 and suspends independent measurement compensation. Viewport observation distinguishes engine/focus
 movement under that fixed intent from real scroll input, which still cancels the hold first.
-Later layout stimuli reopen the same generation;
+An ongoing deliberate scroll gesture blocks acquisition; beginning an admitted hold clears stale
+input attribution from earlier gestures. Later layout stimuli reopen the same generation;
 arrivals, typing, media, divider changes and geometry-based rearming cannot replace an active hold,
 even after its current reconciliation settles. A growing viewport can remove the required scroll
 range, so the executor reserves only the missing bottom space; ending the hold restores it.
@@ -320,15 +321,18 @@ range, so the executor reserves only the missing bottom space; ending the hold r
 Displayed toolbar slots remain fixed during the hold, but current capabilities still disable and
 gate execution. More and reaction panels keep the hold beyond the original row bounds. Escape closes
 the panel and restores its trigger without invoking broader conversation navigation. A disappearing
-or retracted target closes safely rather than transferring actions to another row.
+or retracted target closes safely rather than transferring actions to another row. Physical row
+ownership survives archive-id backfill; current action callbacks follow the qualified identity.
+A conflicting known identity, disconnected row or handle resolving elsewhere ends the hold instead.
 
 Pointer departure (with panels closed), or keyboard action-focus departure (with panels closed),
 releases the hold. Mouse-created focus does not keep an otherwise disengaged mouse interaction alive.
 Only a reader who was following latest before the hold resumes automatically. History reading keeps
 a settled fixed position; a deliberate scroll, own send or explicit jump takes priority and closes
 panels before moving. A manual takeover cannot rearm from the usual near-bottom band alone: actual
-bottom geometry or explicit latest navigation is required. Blur, departure and teardown clear stale
-interaction state. Touch action sheets and static previews do not acquire this hold.
+bottom geometry or explicit latest navigation is required. Blur and target removal use the same saved
+following policy after closing panels. Conversation departure, disabling and teardown clear ownership
+without resuming the departed interaction. Touch action sheets and static previews do not acquire this hold.
 
 Beginning a hold revokes previously reported follow-edge evidence before a future offscreen arrival
 can consume it. Intersection-based message-seen reporting and canonical unread counts remain unchanged.

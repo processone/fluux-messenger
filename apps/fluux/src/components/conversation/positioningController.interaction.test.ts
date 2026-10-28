@@ -101,6 +101,15 @@ describe('interaction position ownership', () => {
       expect(controller.hasInteractionHold()).toBe(false)
     }
   })
+  it('does not let pointer intent take ownership from an ongoing deliberate scroll gesture', () => {
+    const { controller } = setup()
+    controller.holdInput(conversationId)
+    controller.observeUserInput(conversationId)
+    expect(controller.beginInteractionHold({ conversationId, desired, executor: anchor() })).toBeNull()
+    controller.observeUserInputEnd(conversationId)
+    expect(controller.beginInteractionHold({ conversationId, desired, executor: anchor() })).not.toBeNull()
+  })
+
   it('manual input ends the interaction without automatic release-resume or geometry rearm', () => {
     const { controller, close } = setup()
     controller.beginInteractionHold({ conversationId, desired, executor: anchor() })

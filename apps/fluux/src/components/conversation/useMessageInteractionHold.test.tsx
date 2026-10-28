@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Intent: FLM-229 requires deliberate input, not content moving beneath a resting pointer.
-import { act, renderHook } from '@testing-library/react'
+import { act, fireEvent, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useMessageInteractionHold } from './useMessageInteractionHold'
 
@@ -90,6 +90,27 @@ describe('deliberate message interaction', () => {
     expect(release).toHaveBeenCalledWith(true)
   })
 
+  it('keeps the same physical row held when its bare identity gains an archive id', () => {
+    row.dataset.messageRowId = 'original'
+    row.dataset.messageId = 'original'
+    const { result, release, rerender } = setup()
+    moveIntoRow()
+    row.dataset.messageRowId = 'archive-row:["original",null,"archive-42"]'
+    rerender({ conversationId: 'emma@fluux.chat' })
+    mouse('mousemove', row)
+    act(() => vi.advanceTimersByTime(200))
+    expect(result.current.context.heldRow).toBe(row)
+    expect(release).not.toHaveBeenCalled()
+  })
+  it('closes instead of retargeting when a known archive identity changes on the same element', () => {
+    const { result, release, rerender } = setup()
+    moveIntoRow()
+    row.dataset.messageRowId = 'archive-row:["original",null,"different-archive"]'
+    rerender({ conversationId: 'emma@fluux.chat' })
+    expect(result.current.context.heldMessageId).toBeNull()
+    expect(release).toHaveBeenCalledWith(true)
+  })
+
   it('a click supplies intent without any preceding movement', () => {
     const { begin } = setup()
     mouse('mousedown', row)
@@ -136,14 +157,31 @@ describe('deliberate message interaction', () => {
     act(() => vi.advanceTimersByTime(100))
     expect(release).toHaveBeenCalledWith(true)
   })
-  it('cancels menus on blur without automatic resumption or resting-pointer reacquisition', () => {
+  it.each(['disabled', 'unmounted'])('releases ownership and pending callbacks when %s', async mode => {
+    const begin = vi.fn(() => true), release = vi.fn()
+    const scrollRef = { current: container }
+    const view = renderHook(({ enabled }) => useMessageInteractionHold({
+      conversationId: 'emma@fluux.chat', scrollRef, enabled, begin, release,
+    }), { initialProps: { enabled: true } })
+    moveIntoRow()
+    fireEvent.focusOut(row.querySelector('button')!)
+    if (mode === 'disabled') view.rerender({ enabled: false })
+    else view.unmount()
+    await Promise.resolve()
+    act(() => vi.advanceTimersByTime(200))
+    fireEvent(window, new Event('blur'))
+    expect(release).toHaveBeenCalledExactlyOnceWith(false)
+    expect(begin).toHaveBeenCalledOnce()
+  })
+
+  it('cancels menus on blur using the saved-following policy without resting-pointer reacquisition', () => {
     const { result, release, begin } = setup()
     const close = vi.fn()
     act(() => result.current.context.setMenuOpen(row.dataset.messageRowId!, true, close))
     act(() => window.dispatchEvent(new Event('blur')))
     mouse('mouseover', row)
     expect(close).toHaveBeenCalledOnce()
-    expect(release).toHaveBeenCalledWith(false)
+    expect(release).toHaveBeenCalledWith(true)
     expect(begin).toHaveBeenCalledOnce()
     expect(result.current.context.heldMessageId).toBeNull()
   })
@@ -154,6 +192,6 @@ describe('deliberate message interaction', () => {
     row.replaceWith(replacement)
     rerender({ conversationId: 'emma@fluux.chat' })
     expect(result.current.context.heldMessageId).toBeNull()
-    expect(release).toHaveBeenCalledWith(false)
+    expect(release).toHaveBeenCalledWith(true)
   })
 })

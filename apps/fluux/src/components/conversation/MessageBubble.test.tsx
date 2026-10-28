@@ -92,6 +92,16 @@ function createDefaultProps(overrides: Partial<MessageBubbleProps> = {}): Messag
 }
 
 describe('MessageBubble', () => {
+  it('FLM-229 refreshes action identity when a message receives its archive id', () => {
+    const original = createTestMessage()
+    const targets: BaseMessage[] = []
+    const props = createDefaultProps({ message: original, onReaction: () => { targets.push(original) } })
+    const view = render(<MessageBubble {...props} />)
+    const stamped = { ...original, stanzaId: 's1' }
+    view.rerender(<MessageBubble {...props} message={stamped} onReaction={() => { targets.push(stamped) }} />)
+    fireEvent.click(screen.getAllByLabelText('chat.reactWith')[0])
+    expect(targets).toEqual([stamped])
+  })
   it('expands only the selected chat twin', () => {
     const height = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(700)
     useExpandedMessagesStore.getState().clear()

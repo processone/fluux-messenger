@@ -362,10 +362,19 @@ export function useMessageListScroll({
   onLiveEdgeMeasuredRef.current = onLiveEdgeMeasured
   const onInteractionEndRef = useRef(onInteractionEnd)
   onInteractionEndRef.current = onInteractionEnd
-  const interactionSpaceRef = useRef<{ scroller: HTMLElement; padding: string } | null>(null)
+  const interactionSpaceRef = useRef<{ conversationId: string; scroller: HTMLElement; padding: string } | null>(null)
   const restoreInteractionSpace = useCallback(() => {
     const saved = interactionSpaceRef.current
-    if (saved) saved.scroller.style.paddingBottom = saved.padding
+    if (saved) {
+      const top = saved.scroller.scrollTop
+      saved.scroller.style.paddingBottom = saved.padding
+      // Removing reserved range can clamp scrollTop; that is our layout write, not user input.
+      if (saved.scroller.isConnected && saved.scroller.scrollTop !== top) {
+        const session = viewportSessionRef.current
+        session?.recordProgrammaticWrite(saved.conversationId, Date.now(),
+          readViewportGeometry(saved.scroller, session.observedRowIdFor(saved.conversationId)))
+      }
+    }
     interactionSpaceRef.current = null
   }, [])
 
@@ -1095,7 +1104,7 @@ export function useMessageListScroll({
     createAnchorPreservationExecutor,
   })
 
-  const beginInteractionHold = useCallback((rowId: string): boolean => {
+  const beginInteractionHold = (rowId: string): boolean => {
     const scroller = scrollerRef.current
     const row = scroller && findMessageRowElement(scroller, rowId)
     const bubble = row?.querySelector<HTMLElement>('[data-message-body]') ?? row
@@ -1105,7 +1114,8 @@ export function useMessageListScroll({
     if (controller.hasInteractionHold() && current?.kind === 'anchor' && current.messageId === rowId) {
       return controller.reconcileInteractionHold({ conversationId, executor: createAnchorPreservationExecutor('interaction-anchor') })
     }
-    if (!interactionSpaceRef.current) interactionSpaceRef.current = { scroller, padding: scroller.style.paddingBottom }
+    observeViewportGeometry(conversationId, undefined, true)
+    if (!interactionSpaceRef.current) interactionSpaceRef.current = { conversationId, scroller, padding: scroller.style.paddingBottom }
     const request = controller.beginInteractionHold({
       conversationId,
       desired: {
@@ -1125,7 +1135,7 @@ export function useMessageListScroll({
     // read reporting continues normally; a held viewport cannot pre-read posts below it.
     onLiveEdgeMeasuredRef.current?.(false)
     return true
-  }, [staticMode, conversationId, createAnchorPreservationExecutor, assumeAwayFromBottom, cancelMediaBatch, restoreInteractionSpace])
+  }
 
   const releaseInteractionHold = useCallback((resume: boolean) => {
     positioningControllerRef.current?.releaseInteractionHold({

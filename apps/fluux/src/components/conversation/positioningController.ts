@@ -736,6 +736,7 @@ export class PositioningController {
     desired: InteractionPositionRequest['desired']
     executor: AnchorPreservationExecutor
   }): InteractionPositionRequest | null {
+    if (this.isInputHeld(input.conversationId)) return null
     const following = this.hasInteractionHold()
       ? this.interactionWasFollowing
       : shouldReconcileAfterAppend(this.model, input.conversationId)

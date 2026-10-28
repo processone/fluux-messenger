@@ -115,6 +115,7 @@ export async function measureDuring(page: Page, targetId: string, action: () => 
   await keepJson('all-interaction-frame-samples', samples)
   expect(samples.length).toBeGreaterThan(2)
   const first = samples[0]
+  expect(first.controls.length, 'geometry must include actual toolbar controls and panels').toBeGreaterThan(0)
   for (const sample of samples) {
     expect(sample.row, 'original message must remain mounted').not.toBeNull()
     expect(Math.abs(sample.row!.y - first.row!.y), 'row top drift while interacting').toBeLessThanOrEqual(1)
@@ -139,4 +140,9 @@ export async function waitForActions(page: Page, id = TARGET) {
   await expect(toolbar).toHaveClass(/opacity-100/)
   await expect(toolbar).toHaveCSS('opacity', '1')
   await stableFrames(page, id)
+}
+
+export async function mountedMessageIndexes(page: Page) {
+  return page.locator('[data-message-list] [data-virtualizer-spacer] > [data-index]')
+    .evaluateAll(elements => elements.map(element => element.getAttribute('data-index')))
 }

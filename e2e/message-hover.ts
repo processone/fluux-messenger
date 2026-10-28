@@ -2,8 +2,8 @@ import { test, expect, type Page, type Locator } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
-import { wheelAwayFromBottom } from './harness/scrollHarness'
-import { arrive, distance, keepJson, measureDuring, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
+import { AT_BOTTOM_OK_PX, wheelAwayFromBottom } from './harness/scrollHarness'
+import { arrive, distance, keepJson, measureDuring, mountedMessageIndexes, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
 
 async function seedRow(page: Page, content: 'long' | 'file', mode: 'light' | 'dark' = 'dark') {
   await bootDemo(page, '/demo.html?tutorial=false')
@@ -338,7 +338,7 @@ for (const kind of ['chat', 'room'] as const) {
     let releaseMedia!: () => void
     const mediaReady = new Promise<void>(resolve => { releaseMedia = resolve })
     const mediaRequested = page.waitForRequest(request => request.url().includes('screenshot-chat-dark.png?interaction-media'))
-    const mountedBefore = await list.locator('[data-index]').evaluateAll(elements => elements.map(element => element.getAttribute('data-index')))
+    const mountedBefore = await mountedMessageIndexes(page)
     await page.route('**/demo/screenshot-chat-dark.png?interaction-media', async route => { await mediaReady; await route.continue() })
     const samples = await measureDuring(page, TARGET, async () => {
       await page.evaluate(async kind => {
@@ -367,7 +367,7 @@ for (const kind of ['chat', 'room'] as const) {
       await expect(page.locator('[data-typing-pill]')).toHaveCount(0)
       await arrive(page, kind, Array.from({ length: 40 }, (_, i) => `virtual-shift-${i}`))
     })
-    const mountedAfter = await list.locator('[data-index]').evaluateAll(elements => elements.map(element => element.getAttribute('data-index')))
+    const mountedAfter = await mountedMessageIndexes(page)
     await keepJson(`${kind}-picker-layout-geometry`, { samples, mountedBefore, mountedAfter })
     await page.screenshot({ path: test.info().outputPath(`${kind}-picker-held.png`) })
     const picker = row.locator('em-emoji-picker')
@@ -395,6 +395,8 @@ for (const kind of ['chat', 'room'] as const) {
 
   test(`${kind}: interaction hold yields to manual navigation, sending and jumping; blur and removal close panels`, async ({ page }) => {
     const { row, body, list } = await setupInteraction(page, kind)
+    const observations: unknown[] = []
+    const record = async (stage: string) => observations.push({ stage, distance: await distance(page), held: await list.getAttribute('data-message-interaction'), panels: await list.locator('[data-message-panel]').count() })
     let openIndex = 0
     const openMore = async () => {
       await body.hover()
@@ -423,6 +425,7 @@ for (const kind of ['chat', 'room'] as const) {
     await arrive(page, kind, ['after-manual-navigation'])
     await expect(list).not.toHaveAttribute('data-message-interaction')
     await expect.poll(() => distance(page)).toBeGreaterThan(200)
+    await record('manual scroll remains away after another arrival')
     const historyId = await list.evaluate(element => {
       const viewport = element.getBoundingClientRect()
       return [...element.querySelectorAll<HTMLElement>('.message-row')].find(row => {
@@ -438,37 +441,42 @@ for (const kind of ['chat', 'room'] as const) {
     await stableFrames(page, historyId)
     await page.mouse.move(0, 0)
     await expect(list).not.toHaveAttribute('data-message-interaction')
-    expect(Math.abs((await historyBody.boundingBox())!.y - historyTop)).toBeLessThanOrEqual(1)
+    const historyAfter = (await historyBody.boundingBox())!.y
+    expect(Math.abs(historyAfter - historyTop)).toBeLessThanOrEqual(1)
+    observations.push({ stage: 'history release', id: historyId, before: historyTop, after: historyAfter })
+    await openMore()
     const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
     await input.fill('My own send takes navigation priority.')
+    await expect(row.locator('[data-message-panel="more"]')).toHaveCount(1)
     await input.press('Enter')
     await expect(page.getByText('My own send takes navigation priority.', { exact: true }).last()).toBeVisible()
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await record('own send closes the menu and reaches latest')
+    await openMore()
+    await page.keyboard.press('PageUp')
+    await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect.poll(() => distance(page)).toBeGreaterThan(1)
+    await record('keyboard scroll closes the menu')
+    await page.keyboard.press('End')
     await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
     await openMore()
     await arrive(page, kind, ['small-arrival'])
     await expect(page.locator('[data-fab="scroll-to-bottom"]')).toHaveAttribute('tabindex', '0')
+    expect(await distance(page)).toBeLessThan(AT_BOTTOM_OK_PX)
+    await record('small arrival exposes the existing jump control')
     await page.locator('[data-fab="scroll-to-bottom"]').click()
     await expect(list).not.toHaveAttribute('data-message-interaction')
     await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
     await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await record('jump closes the menu and reaches latest')
     await openMore()
-    if (process.env.FLUUX_INTERACTION_NATIVE_BLUR === '1') {
-      const otherPage = await page.context().newPage()
-      await otherPage.bringToFront()
-      await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(false)
-      await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
-      await expect(list).not.toHaveAttribute('data-message-interaction')
-      await keepJson(`${kind}-blur`, { trigger: 'native page focus', focused: await page.evaluate(() => document.hasFocus()), held: await list.getAttribute('data-message-interaction') })
-      await otherPage.close()
-      await page.bringToFront()
-    } else {
-      // Headless engines keep all pages focused. This branch tests the handler; headed proof
-      // separately exercises actual browser focus loss with FLUUX_INTERACTION_NATIVE_BLUR=1.
-      await page.evaluate(() => window.dispatchEvent(new Event('blur')))
-      await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
-      await expect(list).not.toHaveAttribute('data-message-interaction')
-      await keepJson(`${kind}-blur`, { trigger: 'scripted window blur event', held: await list.getAttribute('data-message-interaction') })
-    }
+    // Playwright forces every page focused. This checks the actual handler; native-engine
+    // focus loss is verified separately with that automation override disabled.
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+    await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await keepJson(`${kind}-blur`, { trigger: 'scripted window blur event', held: await list.getAttribute('data-message-interaction') })
     await openMore()
     await page.evaluate(async kind => {
       const scope = window as any
@@ -478,10 +486,13 @@ for (const kind of ['chat', 'room'] as const) {
     }, kind)
     await expect(row.locator('[data-message-toolbar]')).toHaveCount(0)
     await expect(list).not.toHaveAttribute('data-message-interaction')
+    await record('target retraction closes actions')
     await page.evaluate(() => { location.hash = '#/messages/ava%40fluux.chat' })
     await expect(page.getByRole('heading', { name: 'Ava Martinez', exact: true })).toBeVisible()
     await expect(row).toHaveCount(0)
     await expect(page.locator('[data-message-list]')).not.toHaveAttribute('data-message-interaction')
+    await record('conversation switch drops the original target')
+    await keepJson(`${kind}-navigation-and-lifecycle`, observations)
   })
 }
 

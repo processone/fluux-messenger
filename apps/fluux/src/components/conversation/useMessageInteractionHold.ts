@@ -4,7 +4,8 @@ import { findMessageRowElement, readMessageRowId } from './messageRowIdentity'
 
 interface InteractionContext {
   heldMessageId: string | null
-  setMenuOpen: (rowId: string, open: boolean, close: () => void) => void
+  heldRow: HTMLElement | null
+  setMenuOpen: (rowId: string, open: boolean, close: () => void, sourceRow?: HTMLElement) => void
 }
 
 export const MessageInteractionContext = createContext<InteractionContext | null>(null)
@@ -26,9 +27,9 @@ export function useMessageInteractionHold({
   ports.current = { begin, release }
   const [heldMessageId, setHeldMessageId] = useState<string | null>(null)
   const held = useRef<{ id: string; row: HTMLElement } | null>(null)
-  const pointerRow = useRef<string | null>(null)
-  const focusRow = useRef<string | null>(null)
-  const menu = useRef<{ id: string; close: () => void } | null>(null)
+  const pointerRow = useRef<HTMLElement | null>(null)
+  const focusRow = useRef<HTMLElement | null>(null)
+  const menu = useRef<{ row: HTMLElement; close: () => void } | null>(null)
   const dragging = useRef(false)
   const keyboard = useRef(true)
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -53,19 +54,20 @@ export function useMessageInteractionHold({
 
   const start = useCallback((row: HTMLElement, refresh = false) => {
     const id = readMessageRowId(row)
-    if (!id || !row.querySelector('[data-message-toolbar]')) return
+    if (!id || !row.querySelector('[data-message-toolbar]') ||
+      !scrollRef.current || findMessageRowElement(scrollRef.current, id) !== row) return
     clearLeave()
-    if (menu.current && menu.current.id !== id) return
-    if (held.current?.id === id) { if (refresh) ports.current.begin(id); return }
+    if (menu.current && menu.current.row !== row) return
+    if (held.current?.row === row) { if (refresh) ports.current.begin(held.current.id); return }
     if (!ports.current.begin(id)) return
     held.current = { id, row }
     setHeldMessageId(id)
-  }, [clearLeave])
+  }, [clearLeave, scrollRef])
 
   const maybeRelease = useCallback(() => {
     const target = held.current
-    if (!target || dragging.current || pointerRow.current === target.id ||
-      keyboard.current && focusRow.current === target.id || menu.current?.id === target.id) {
+    if (!target || dragging.current || pointerRow.current === target.row ||
+      keyboard.current && focusRow.current === target.row || menu.current?.row === target.row) {
       clearLeave()
       return
     }
@@ -74,20 +76,20 @@ export function useMessageInteractionHold({
     leaveTimer.current = setTimeout(() => {
       leaveTimer.current = null
       const target = held.current
-      if (!target || dragging.current || pointerRow.current === target.id ||
-        keyboard.current && focusRow.current === target.id || menu.current?.id === target.id) return
+      if (!target || dragging.current || pointerRow.current === target.row ||
+        keyboard.current && focusRow.current === target.row || menu.current?.row === target.row) return
       cancel()
       ports.current.release(true)
     }, 100)
   }, [cancel, clearLeave])
 
-  const setMenuOpen = useCallback((id: string, open: boolean, close: () => void) => {
+  const setMenuOpen = useCallback((id: string, open: boolean, close: () => void, sourceRow?: HTMLElement) => {
     if (!enabled || !hasHover()) return
     if (open) {
-      const row = scrollRef.current && findMessageRowElement(scrollRef.current, id)
+      const row = sourceRow ?? (scrollRef.current && findMessageRowElement(scrollRef.current, id))
       if (row) start(row, true)
-      if (held.current?.id === id) menu.current = { id, close }
-    } else if (menu.current?.id === id) {
+      if (row && held.current?.row === row) menu.current = { row, close }
+    } else if (menu.current && (!sourceRow || menu.current.row === sourceRow)) {
       menu.current = null
       maybeRelease()
     }
@@ -108,7 +110,7 @@ export function useMessageInteractionHold({
         : Boolean(event.movementX || event.movementY)
       point = { x: event.clientX, y: event.clientY }
       const row = rowFor(event.target)
-      pointerRow.current = row ? readMessageRowId(row) ?? null : null
+      pointerRow.current = row
       if (moved && hasHover()) {
         keyboard.current = false
         if (row && !dragging.current) start(row)
@@ -117,7 +119,7 @@ export function useMessageInteractionHold({
     }
     const onOut = (event: MouseEvent) => {
       const row = rowFor(event.relatedTarget)
-      pointerRow.current = row ? readMessageRowId(row) ?? null : null
+      pointerRow.current = row
       maybeRelease()
     }
     const onDown = (event: MouseEvent) => {
@@ -125,7 +127,7 @@ export function useMessageInteractionHold({
       keyboard.current = false
       const row = rowFor(event.target)
       if (row) {
-        pointerRow.current = readMessageRowId(row) ?? null
+        pointerRow.current = row
         start(row)
         dragging.current = true
       }
@@ -135,7 +137,7 @@ export function useMessageInteractionHold({
     const onFocus = (event: FocusEvent) => {
       const target = event.target instanceof Element ? event.target : null
       const row = target?.closest('[data-message-toolbar]') ? rowFor(target) : null
-      focusRow.current = row ? readMessageRowId(row) ?? null : null
+      focusRow.current = row
       if (row && hasHover()) start(row, true)
       maybeRelease()
     }
@@ -144,11 +146,11 @@ export function useMessageInteractionHold({
       queueMicrotask(() => {
         const active = document.activeElement
         const row = active?.closest('[data-message-toolbar]') ? rowFor(active) : null
-        focusRow.current = row ? readMessageRowId(row) ?? null : null
+        focusRow.current = row
         maybeRelease()
       })
     }
-    const onBlur = () => { cancel(); ports.current.release(false); point = null }
+    const onBlur = () => { cancel(); ports.current.release(true); point = null }
     document.addEventListener('mousemove', onMove, true)
     document.addEventListener('mouseout', onOut, true)
     document.addEventListener('mousedown', onDown, true)
@@ -166,21 +168,23 @@ export function useMessageInteractionHold({
       document.removeEventListener('focusin', onFocus, true)
       document.removeEventListener('focusout', onFocusOut, true)
       window.removeEventListener('blur', onBlur)
-      clearLeave()
+      cancel()
+      ports.current.release(false)
     }
-  }, [enabled, conversationId, scrollRef, start, cancel, clearLeave, maybeRelease])
+  }, [enabled, conversationId, scrollRef, start, cancel, maybeRelease])
 
   useLayoutEffect(() => {
     const target = held.current
     if (target && (!target.row.isConnected || !scrollRef.current?.contains(target.row) ||
+      findMessageRowElement(scrollRef.current, target.id) !== target.row ||
       !target.row.querySelector('[data-message-toolbar]'))) {
       cancel()
-      ports.current.release(false)
+      ports.current.release(true)
     }
   })
 
   useEffect(() => { cancel() }, [conversationId, cancel])
 
-  const context = useMemo(() => ({ heldMessageId, setMenuOpen }), [heldMessageId, setMenuOpen])
+  const context = useMemo(() => ({ heldMessageId, heldRow: held.current?.row ?? null, setMenuOpen }), [heldMessageId, setMenuOpen])
   return { context, cancel }
 }
