@@ -3154,6 +3154,13 @@ test.describe('Insertion drift while scrolled up', () => {
   })
 })
 
+/**
+ * Budget for a search test's precondition that its target is indexed. Index writes run one at a
+ * time per account, so the target waits behind the demo's seeded history (seeded through the arrival
+ * path, one index write per message). That can take tens of seconds on a loaded WebKit runner; the
+ * 5 s poll default failed the cached search precondition there (FLM-214 R1).
+ */
+const SEARCH_INDEX_WAIT_MS = 90_000
 
 test('cached search navigation preserves confirmed rows and opaque literal IDs', async ({ page }) => {
   await loadDemo(page)
@@ -3181,6 +3188,7 @@ test('cached search navigation preserves confirmed rows and opaque literal IDs',
   await expect(page.getByText(fixture.target.body, { exact: true })).toHaveCount(0)
   // Cache writes and search indexing finish independently. This scenario starts
   // with an indexed, evicted target before exercising navigation from its result.
+  // The target's index write waits behind the seeded history's.
   await expect.poll(() => page.evaluate(target => new Promise<boolean>((resolve, reject) => {
     const request = indexedDB.open('fluux-search-index')
     request.onerror = () => reject(request.error)
@@ -3196,7 +3204,10 @@ test('cached search navigation preserves confirmed rows and opaque literal IDs',
       }
       tx.onabort = () => { db.close(); reject(tx.error) }
     }
-  }), fixture.target), { message: 'precondition: the confirmed target must be indexed before searching' }).toBe(true)
+  }), fixture.target), {
+    message: 'precondition: the confirmed target must be indexed before searching',
+    timeout: SEARCH_INDEX_WAIT_MS,
+  }).toBe(true)
   await page.evaluate(() => { window.location.hash = '#/search' })
   await page.getByPlaceholder('Search messages…').fill('Navigationcached')
   const result = page.locator('[title="Go to message"]')
@@ -3246,7 +3257,7 @@ test.describe('search navigation beyond the resident bound', () => {
         }
         tx.onabort = () => { db.close(); reject(tx.error) }
       }
-    }), messageId), { message: 'precondition: the deep target must be indexed', timeout: 90_000 }).toBe(true)
+    }), messageId), { message: 'precondition: the deep target must be indexed', timeout: SEARCH_INDEX_WAIT_MS }).toBe(true)
     await page.evaluate(() => { window.location.hash = '#/search' })
     await page.getByPlaceholder('Search messages…').fill(query)
     const result = page.locator('[data-search-result-id]').filter({ hasText: conversationName })
