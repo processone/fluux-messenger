@@ -36,6 +36,7 @@ export const changelog: ChangelogEntry[] = [
         'New-message dividers include all unread messages when new messages arrive after scrolling an unfocused room or chat',
         'Scrolling up while a message above you finishes loading no longer snaps the conversation or room back to where you were a moment earlier',
         'In long conversations and rooms, older messages that finish loading just after a delayed message arrives above you no longer push the messages you are reading out of view',
+        'When older messages finish loading, the messages you are reading stay where you last saw them, even if you kept scrolling meanwhile. On iPhone this includes the bounce past the top of a conversation or room',
         'The room message box is now a single editor: the caret can no longer drift from the text (seen with inline predictive text on macOS), and @mentions stay coloured while you type',
         'macOS: saved sign-in, encryption keys and local integrations share one keychain approval after a one-time migration. Existing secrets remain available to the previous release',
         'Encrypted messages that arrive while your network is briefly down now show their text when Fluux reconnects, instead of "[OpenPGP-encrypted message]"',
