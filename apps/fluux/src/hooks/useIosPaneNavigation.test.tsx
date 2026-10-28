@@ -114,6 +114,19 @@ describe('iOS pane navigation', () => {
     dialog.remove()
   })
 
+  // On iPhone the message list stood still at the start of a swipe, then jumped: iOS holds a
+  // scroll that starts over a non-passive touchstart or touchmove listener until the page has
+  // handled the touch, and this pane holds the message list.
+  it('never makes a swipe on the message list wait for the page', () => {
+    const add = vi.spyOn(pane, 'addEventListener')
+    const ref = { current: pane }
+    renderHook(() => useIosPaneNavigation(ref, true, vi.fn()))
+    const touchListeners = add.mock.calls.filter(([type]) => type === 'touchstart' || type === 'touchmove')
+    expect(touchListeners.map(([type]) => type).sort()).toEqual(['touchmove', 'touchstart'])
+    const holding = touchListeners.filter(([, , options]) => !(typeof options === 'object' && options.passive))
+    expect(holding).toEqual([])
+  })
+
   describe('entering', () => {
     function render(entry: IosPaneEntry, id: string | null = null) {
       const ref = { current: pane }

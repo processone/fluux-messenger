@@ -27,7 +27,6 @@ import { useLoginPrefillStore } from './stores/loginPrefillStore'
 import { platform } from './platform'
 import { detectWindowChrome } from './platform/windowChrome'
 import { installMobileViewport } from './utils/mobileViewport'
-import { installMobilePageZoom } from './utils/mobilePageZoom'
 import { installKeychainFastTokens } from './utils/keychainFastTokenStorage'
 
 
@@ -42,7 +41,6 @@ import { installKeychainFastTokens } from './utils/keychainFastTokenStorage'
 if (platform().shell === 'desktop') document.documentElement.dataset.tauri = 'true'
 void detectWindowChrome()
 installMobileViewport()
-installMobilePageZoom()
 
 // Enable native TCP/TLS proxy in Tauri unless explicitly disabled
 const disableTcpProxy = localStorage.getItem('fluux:disable-tcp-proxy') === 'true'

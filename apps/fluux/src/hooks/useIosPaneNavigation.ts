@@ -183,7 +183,6 @@ export function useIosPaneNavigation(
           pane.style.willChange = 'transform'
         }
       }
-      if (event.cancelable) event.preventDefault()
       if (!reducedMotion) pane.style.transform = `translate3d(${Math.min(Math.max(0, dx), pane.getBoundingClientRect().width)}px, 0, 0)`
     }
     const onTouchEnd = (event: TouchEvent) => {
@@ -200,7 +199,10 @@ export function useIosPaneNavigation(
     }
 
     pane.addEventListener('touchstart', onTouchStart, { passive: true })
-    pane.addEventListener('touchmove', onTouchMove, { passive: false })
+    // Passive: iOS holds every scroll that starts over a non-passive touchmove listener until the
+    // page has handled the touch, and this pane holds the message list. The list may follow the
+    // finger's vertical drift during an edge swipe; holding its scroll would cost every swipe.
+    pane.addEventListener('touchmove', onTouchMove, { passive: true })
     pane.addEventListener('touchend', onTouchEnd)
     pane.addEventListener('touchcancel', onTouchCancel)
     window.addEventListener('resize', onResize)

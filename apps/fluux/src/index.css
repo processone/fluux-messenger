@@ -975,8 +975,13 @@ html, body {
 }
 
 @media (any-pointer: coarse) {
-  body {
-    /* Allow scrolling in either direction without browser pinch zoom. */
+  /* Allow scrolling in either direction without browser pinch zoom. WebKit starts touch-action
+     afresh at every scroll container, so the rule names each element, not only body. Pinch is
+     kept out here rather than by page listeners: iOS holds every scroll that starts over a
+     non-passive touchmove or gesture listener until the page has handled the touch, so a busy
+     page would freeze the message list at the start of a swipe and then jump it. */
+  body,
+  body * {
     touch-action: pan-x pan-y;
   }
 }
