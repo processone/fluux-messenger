@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
+import { useRef, type ReactNode } from 'react'
 import { useContextMenu } from './useContextMenu'
+import { useCloseOnEscape } from './useCloseOnEscape'
 const haptic = vi.hoisted(() => vi.fn())
 vi.mock('@/platform/ios/haptics', () => ({ iosHaptic: haptic }))
 
@@ -331,5 +333,39 @@ describe('Escape while a context menu is open', () => {
     } finally {
       window.removeEventListener('keydown', onWindowKey)
     }
+  })
+})
+
+// The captain's ruling on review R3: with stacked overlays, Escape closes only the one on top.
+function Modal({ onClose, children }: { onClose: () => void; children?: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useCloseOnEscape(onClose, true, ref)
+  return <div ref={ref} data-modal="true">{children}</div>
+}
+
+describe('Escape with a context menu and another overlay stacked', () => {
+  it('closes a menu opened in a lightbox and leaves the lightbox open', () => {
+    const closeLightbox = vi.fn()
+    render(<Modal onClose={closeLightbox}><TestComponent /></Modal>)
+    fireEvent.contextMenu(screen.getByTestId('trigger'), { clientX: 100, clientY: 100 })
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByTestId('menu')).not.toBeInTheDocument()
+    expect(closeLightbox).not.toHaveBeenCalled()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeLightbox).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes shortcut help opened over a menu and leaves the menu open', () => {
+    const closeHelp = vi.fn()
+    const Page = ({ help }: { help: boolean }) => <><TestComponent />{help && <Modal onClose={closeHelp} />}</>
+    const { rerender } = render(<Page help={false} />)
+    fireEvent.contextMenu(screen.getByTestId('trigger'), { clientX: 100, clientY: 100 })
+    rerender(<Page help />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeHelp).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('menu')).toBeInTheDocument()
+    rerender(<Page help={false} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByTestId('menu')).not.toBeInTheDocument()
   })
 })

@@ -110,7 +110,9 @@ export function SidebarListMenuProvider<T>({
   useMenuScrollDismiss(isOpen, menuRef, anchorRef, close)
 
   // Escape closes the open menu first and goes no further, so it cannot also jump the
-  // conversation to its newest message (see useCloseOnEscape).
+  // conversation to its newest message. When overlays are stacked, Escape goes to the one
+  // on top: a menu in the lightbox closes before the lightbox, and shortcut help opened
+  // over a menu closes before the menu (see useCloseOnEscape).
   useCloseOnEscape(close, isOpen)
 
   // Open menu for an item

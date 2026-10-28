@@ -83,3 +83,41 @@ describe('useCloseOnEscape', () => {
     }
   })
 })
+
+// The captain's ruling on review R3: with stacked overlays, Escape closes only the one on top.
+describe('useCloseOnEscape with stacked overlays', () => {
+  function Stack({ lower, upper, showUpper }: { lower: () => void; upper: () => void; showUpper: boolean }) {
+    return (
+      <>
+        <Harness onClose={lower} />
+        {showUpper && <Harness onClose={upper} />}
+      </>
+    )
+  }
+
+  it('gives each Escape to the overlay opened last, one overlay per press', () => {
+    const lower = vi.fn()
+    const upper = vi.fn()
+    const { rerender } = render(<Stack lower={lower} upper={upper} showUpper={false} />)
+    rerender(<Stack lower={lower} upper={upper} showUpper />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(upper).toHaveBeenCalledTimes(1)
+    expect(lower).not.toHaveBeenCalled()
+    rerender(<Stack lower={lower} upper={upper} showUpper={false} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(lower).toHaveBeenCalledTimes(1)
+    expect(upper).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the stack order when an overlay underneath gets a new close callback', () => {
+    const upper = vi.fn()
+    const first = vi.fn()
+    const second = vi.fn()
+    const { rerender } = render(<Stack lower={first} upper={upper} showUpper />)
+    rerender(<Stack lower={second} upper={upper} showUpper />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(upper).toHaveBeenCalledTimes(1)
+    expect(first).not.toHaveBeenCalled()
+    expect(second).not.toHaveBeenCalled()
+  })
+})

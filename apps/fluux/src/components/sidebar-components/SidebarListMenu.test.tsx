@@ -1,4 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
+import { useRef } from 'react'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   MenuButton,
@@ -125,5 +127,44 @@ describe('sidebar menu — issue #1790', () => {
     expect(screen.getByRole('button', { name: 'Archiver' })).toBeInTheDocument()
     fireEvent.scroll(screen.getByTestId('scrolling-list'))
     expect(screen.queryByRole('button', { name: 'Archiver' })).not.toBeInTheDocument()
+  })
+})
+
+// The captain's ruling on review R3: with stacked overlays, Escape closes only the one on top.
+// The sidebar menu sits at the end of the page, after the help dialog, so "on top" must mean
+// "opened last", not "last in the page".
+function Help({ onClose }: { onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useCloseOnEscape(onClose, true, ref)
+  return <div ref={ref} data-modal="true">Keyboard shortcuts</div>
+}
+
+describe('sidebar menu with shortcut help stacked', () => {
+  it('closes help opened over the menu first, then the menu', () => {
+    const closeHelp = vi.fn()
+    const Page = ({ help }: { help: boolean }) => (
+      <>
+        {help && <Help onClose={closeHelp} />}
+        <SidebarListMenuProvider><List /></SidebarListMenuProvider>
+      </>
+    )
+    const { rerender } = render(<Page help={false} />)
+    fireEvent.contextMenu(screen.getByText(conversation.name), { clientX: 215, clientY: 552 })
+    rerender(<Page help />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(closeHelp).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Archiver' })).toBeInTheDocument()
+    rerender(<Page help={false} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByRole('button', { name: 'Archiver' })).not.toBeInTheDocument()
+  })
+
+  it('closes a menu opened over an open dialog and leaves the dialog open', () => {
+    const closeHelp = vi.fn()
+    render(<><Help onClose={closeHelp} /><SidebarListMenuProvider><List /></SidebarListMenuProvider></>)
+    fireEvent.contextMenu(screen.getByText(conversation.name), { clientX: 215, clientY: 552 })
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByRole('button', { name: 'Archiver' })).not.toBeInTheDocument()
+    expect(closeHelp).not.toHaveBeenCalled()
   })
 })

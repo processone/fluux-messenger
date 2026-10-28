@@ -139,6 +139,69 @@ test('desktop Escape closes an open member menu without jumping the history, the
   await expect.poll(distanceFromBottom).toBeLessThan(2)
 })
 
+// The captain's ruling on review R3: with stacked overlays, Escape closes only the one on top.
+// The member menu and the sidebar room menu come from the two menu owners; the sidebar menu is
+// added at the end of the page, after the help dialog, so "on top" means "opened last".
+for (const menu of ['member', 'sidebar room'] as const) {
+  test(`desktop Escape closes shortcut help opened over the ${menu} menu, then the menu`, async ({ page }) => {
+    const nick = await openRoom(page)
+    const item = menu === 'member'
+      ? page.getByRole('button', { name: 'Whisper', exact: true })
+      : page.getByRole('button', { name: 'Leave room', exact: true })
+    if (menu === 'member') {
+      await page.locator('.touch-menu-row').filter({ has: page.getByText(nick, { exact: true }) }).last().click({ button: 'right' })
+    } else {
+      await page.locator('.sidebar-row').filter({ hasText: 'Team Chat' }).first().click({ button: 'right' })
+    }
+    await expect(item).toBeVisible()
+    await page.keyboard.press('Control+?')
+    const help = page.getByRole('heading', { name: 'Keyboard Shortcuts', exact: true })
+    await expect(help).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(help).toHaveCount(0)
+    await expect(item).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(item).toHaveCount(0)
+  })
+}
+
+test('desktop Escape closes the image menu inside the lightbox, then the lightbox', async ({ page }) => {
+  await bootDemo(page, '/demo.html?tutorial=false')
+  await page.evaluate(() => {
+    const demo = window as unknown as { __demoClient: DemoClient }
+    const canvas = document.createElement('canvas')
+    canvas.width = 640
+    canvas.height = 400
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#5274a0'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    const jid = 'emma@fluux.chat'
+    demo.__demoClient.emitSDK('chat:message', {
+      message: {
+        type: 'chat', id: 'escape-stack-image', conversationId: jid,
+        stanzaId: undefined, originId: undefined, from: 'you@fluux.chat',
+        body: '', isOutgoing: true, timestamp: new Date(),
+        attachment: { url: canvas.toDataURL(), name: 'escape-stack.png', mediaType: 'image/png', width: 640, height: 400 },
+      },
+      isLiveArrival: true,
+    })
+    location.hash = `#/messages/${encodeURIComponent(jid)}`
+  })
+  await page.getByRole('img', { name: 'escape-stack.png', exact: true }).click()
+  const viewer = page.locator('[data-lightbox="image"]')
+  await expect(viewer).toBeVisible()
+  await viewer.getByRole('img').click({ button: 'right' })
+  const save = page.getByRole('button', { name: 'Save image', exact: true })
+  await expect(save).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(save).toHaveCount(0)
+  await expect(viewer).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(viewer).toHaveCount(0)
+})
+
 test('whisper stages pasted and dropped files, confirms before upload, and restores the room picker on exit', async ({ page }) => {
   const nick = await openRoom(page)
   await page.evaluate(() => {
