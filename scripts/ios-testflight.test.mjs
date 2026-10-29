@@ -11,19 +11,25 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const stubs = {
   git: `case "$1" in status) printf '%s' "$DIRTY" ;; rev-parse) printf 'abc1234' ;; esac`,
   npm: ':',
-  // Records the build number it was given and leaves an IPA where Tauri exports it.
+  // Records the build number it was given and leaves the archive Tauri builds.
   tauri: `printf '%s' "$*" | sed -n 's/.*"bundleVersion":"\\([0-9]*\\)".*/\\1/p' > "$STATE/version"
 [ -n "$BUILD_FAILS" ] && exit 1
-mkdir -p "$IPA_DIR" && : > "$IPA_DIR/Fluux.ipa"`,
-  unzip: 'mkdir -p "$4/Payload/Fluux.app"',
-  plutil: `case "$2" in
+mkdir -p "$ARCHIVE_APP/PlugIns/FluuxNotification.appex" "$ARCHIVE_APP/PlugIns/FluuxShare.appex"`,
+  // Exports the archive to the IPA the script uploads.
+  xcodebuild: 'mkdir -p "$IPA_DIR" && : > "$IPA_DIR/Fluux.ipa"',
+  unzip: 'mkdir -p "$4/Payload/Fluux.app/PlugIns/FluuxNotification.appex" "$4/Payload/Fluux.app/PlugIns/FluuxShare.appex"',
+  // Reads answer by key; the last argument is the Info.plist being read.
+  plutil: `[ "$1" = -replace ] && exit 0
+case "$2" in
   CFBundleIdentifier) printf '%s' "$BUNDLE_ID" ;;
   CFBundleVersion) cat "$STATE/version" ;;
-  CFBundleShortVersionString) printf '0.17.4' ;;
+  CFBundleShortVersionString) case "$6" in *.appex/*) printf '%s' "$EXTENSION_VERSION" ;; *) printf '0.17.4' ;; esac ;;
   ITSAppUsesNonExemptEncryption) printf '%s' "$EXEMPT" ;;
+  FluuxPreviewKeychainGroup) printf '%s' "$KEYCHAIN_GROUP" ;;
 esac`,
   codesign: `if [ "$1" = -dvv ]; then printf 'Authority=%s\\nTeamIdentifier=%s\\n' "$AUTHORITY" "$TEAM_ID" >&2; exit 0; fi
-printf '<dict><key>aps-environment</key>\\n<string>%s</string></dict>' "$APS"`,
+[ "$1" = --force ] && exit 0
+printf '<dict><key>aps-environment</key>\\n<string>%s</string><key>com.apple.security.application-groups</key><array><string>%s</string></array><key>keychain-access-groups</key><array><string>%s</string></array></dict>' "$APS" "$APP_GROUP" "$KEYCHAIN_GROUP"`,
   xcrun: ':',
 }
 
@@ -39,6 +45,11 @@ function fixture(t, overrides = {}) {
   cpSync(resolve(repo, 'apps/fluux/scripts/ios-project-freshness.mjs'), resolve(app, 'scripts/ios-project-freshness.mjs'))
   mkdirSync(resolve(app, 'src-tauri/gen/apple/fluux.xcodeproj'), { recursive: true })
   writeFileSync(resolve(app, 'src-tauri/gen/apple/fluux.xcodeproj/project.pbxproj'), 'generated fixture')
+  for (const target of ['fluux_iOS', 'FluuxNotification', 'FluuxShare']) {
+    mkdirSync(resolve(app, 'src-tauri/gen/apple', target))
+    writeFileSync(resolve(app, 'src-tauri/gen/apple', target, `${target}.entitlements`),
+      '<dict><key>aps-environment</key><string>development</string></dict>')
+  }
   recordProjectInputs(app)
   const log = resolve(root, 'commands.log')
   for (const [command, body] of Object.entries(stubs)) {
@@ -52,6 +63,7 @@ function fixture(t, overrides = {}) {
     COMMAND_LOG: log,
     STATE: root,
     IPA_DIR: resolve(app, 'src-tauri/gen/apple/build/arm64'),
+    ARCHIVE_APP: resolve(app, 'src-tauri/gen/apple/build/fluux_iOS.xcarchive/Products/Applications/Fluux.app'),
     APPLE_DEVELOPMENT_TEAM: 'TESTTEAM',
     APPLE_API_KEY: 'KEYID',
     APPLE_API_ISSUER: 'ISSUER',
@@ -61,6 +73,9 @@ function fixture(t, overrides = {}) {
     APS: 'production',
     AUTHORITY: 'Apple Distribution: ProcessOne (TESTTEAM)',
     TEAM_ID: 'TESTTEAM',
+    APP_GROUP: 'group.net.processone.fluux.share',
+    KEYCHAIN_GROUP: 'TESTTEAM.net.processone.fluux.notification-preview',
+    EXTENSION_VERSION: '0.17.4',
     DIRTY: '',
     BUILD_FAILS: '',
     ...overrides,
@@ -77,7 +92,9 @@ test('builds a timestamped App Store Connect IPA and uploads it with the API key
   assert.equal(result.status, 0, result.stderr)
 
   const build = commands().find((line) => line.startsWith('tauri '))
-  assert.match(build, /^tauri ios build --target aarch64 --export-method app-store-connect --ci --config /)
+  assert.match(build, /^tauri ios build --target aarch64 --archive-only --ci --config /)
+  const exported = commands().findIndex((line) => line.startsWith('xcodebuild -exportArchive '))
+  assert.ok(exported !== -1 && exported < commands().findIndex((line) => line.startsWith('xcrun ')), 'exports before uploading')
   const version = build.match(/"bundleVersion":"(\d+)"/)[1]
   assert.equal(version.length, 12)
   assert.ok(version >= before)
@@ -129,6 +146,9 @@ for (const [name, overrides, message] of [
   ['development push signing', { APS: 'development' }, /production push/],
   ['a placeholder signature', { AUTHORITY: 'Apple Distribution: Tauri (unset)', TEAM_ID: 'unset' }, /Apple Distribution certificate of team TESTTEAM/],
   ['a development signature', { AUTHORITY: 'Apple Development: Someone (ABC)' }, /Apple Distribution certificate/],
+  ['a missing app group', { APP_GROUP: 'group.net.processone.other' }, /app group/],
+  ['another notification keychain group', { KEYCHAIN_GROUP: 'OTHERTEAM.net.processone.fluux.notification-preview' }, /keychain group/],
+  ['an extension version that differs from the app', { EXTENSION_VERSION: '0.17.3' }, /FluuxNotification\.appex has version 0\.17\.3, not the app's 0\.17\.4/],
 ]) {
   test(`refuses to upload an IPA with ${name}`, (t) => {
     const { invoke, commands } = fixture(t, overrides)

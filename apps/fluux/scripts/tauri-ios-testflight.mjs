@@ -132,6 +132,14 @@ try {
   for (const name of ['FluuxNotification.appex', 'FluuxShare.appex']) {
     if (!extensions.includes(name)) throw new Error(`The IPA is missing ${name}.`)
   }
+  // App Store Connect accepts a mismatch with warning 90473; refusing here catches a stale generated project.
+  const appVersion = value('CFBundleShortVersionString')
+  for (const name of extensions) {
+    const extensionVersion = read('plutil', ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', join(plugIns, name, 'Info.plist')])
+    if (extensionVersion !== appVersion) {
+      throw new Error(`${name} has version ${extensionVersion}, not the app's ${appVersion}. Regenerate the project with npm run tauri:ios:init.`)
+    }
+  }
   const entitlementsOf = (bundle) => read('codesign', ['-d', '--entitlements', '-', '--xml', bundle])
   const grants = (entitlements, key, value) =>
     new RegExp(`<key>${key}</key>\\s*<array>(?:(?!</array>)[^])*<string>${value.replace(/\./g, '\\.')}</string>`).test(entitlements)
