@@ -195,7 +195,7 @@ export const MessageToolbar = memo(function MessageToolbar({
       onKeyUpCapture={() => updateActionFocus(document.activeElement)}
       onFocusCapture={event => updateActionFocus(event.target)}
       onBlurCapture={event => {
-        if (!event.currentTarget.contains(event.relatedTarget)) { setActionFocused(false); setPointerPressed(false) }
+        if (!event.currentTarget.contains(event.relatedTarget)) setActionFocused(false)
       }}
       className={`hidden can-hover:block absolute -top-12 end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out ${visibilityClass}`}
     >

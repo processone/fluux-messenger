@@ -50,6 +50,8 @@ describe('held toolbar actions', () => {
     expect(container.querySelector('[data-message-toolbar]')).toHaveClass('opacity-100')
     fireEvent.mouseDown(quick, { button: 0 })
     expect(container.querySelector('[data-message-toolbar]')).toHaveClass('opacity-100')
+    fireEvent.blur(quick, { relatedTarget: document.body })
+    expect(container.querySelector('[data-message-toolbar]')).toHaveClass('opacity-100')
     fireEvent.mouseUp(quick, { button: 0 })
     fireEvent.click(quick)
     expect(original.onReaction).toHaveBeenCalledOnce()
