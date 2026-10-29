@@ -47,6 +47,16 @@ export function useViewportObserver({
   const onMessageSeenRef = useRef(onMessageSeen)
   onMessageSeenRef.current = onMessageSeen
 
+  const resetReporting = useCallback(() => {
+    lastReportedRef.current = null
+    lastReportedTimeRef.current = 0
+    pendingMessageIdRef.current = null
+    if (throttleTimerRef.current) {
+      clearTimeout(throttleTimerRef.current)
+      throttleTimerRef.current = null
+    }
+  }, [])
+
   // Wrapped in useCallback so it can be listed in useEffect deps.
   // Only reads refs — no state dependencies, so the empty dep array is correct.
   const reportMessageSeen = useCallback((rowId: string) => {
@@ -96,15 +106,9 @@ export function useViewportObserver({
         callbackForFlush?.(pendingMessageIdRef.current)
       }
       // Reset tracking state on conversation switch
-      lastReportedRef.current = null
-      lastReportedTimeRef.current = 0
-      pendingMessageIdRef.current = null
-      if (throttleTimerRef.current) {
-        clearTimeout(throttleTimerRef.current)
-        throttleTimerRef.current = null
-      }
+      resetReporting()
     }
-  }, [conversationId])
+  }, [conversationId, resetReporting])
 
   useEffect(() => {
     if (!enabled || !onMessageSeenRef.current) return
@@ -229,13 +233,7 @@ export function useViewportObserver({
     // The SDK still owns focus, live-window and current bottom-evidence guards.
     const handleFocus = () => {
       if (!document.hasFocus()) return
-      if (throttleTimerRef.current) {
-        clearTimeout(throttleTimerRef.current)
-        throttleTimerRef.current = null
-      }
-      pendingMessageIdRef.current = null
-      lastReportedRef.current = null
-      lastReportedTimeRef.current = 0
+      resetReporting()
       visibleEntries.clear()
       observer.takeRecords()
       observer.disconnect()
@@ -253,10 +251,7 @@ export function useViewportObserver({
       mutationObserver.disconnect()
       scrollContainer.removeEventListener('scroll', handleScroll)
       visibleEntries.clear()
-      if (throttleTimerRef.current) {
-        clearTimeout(throttleTimerRef.current)
-        throttleTimerRef.current = null
-      }
+      resetReporting()
     }
-  }, [conversationId, enabled, scrollContainerRef, reportMessageSeen])
+  }, [conversationId, enabled, scrollContainerRef, reportMessageSeen, resetReporting])
 }

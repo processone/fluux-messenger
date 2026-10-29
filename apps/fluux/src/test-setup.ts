@@ -230,6 +230,7 @@ if (typeof window === 'undefined') {
     observe = vi.fn()
     unobserve = vi.fn()
     disconnect = vi.fn()
+    takeRecords = vi.fn(() => [])
     constructor(_callback: IntersectionObserverCallback, _options?: IntersectionObserverInit) {}
   }
   globalThis.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver
