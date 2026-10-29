@@ -3,7 +3,7 @@ import type { DemoClient } from '@fluux/sdk/demo'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
 import { AT_BOTTOM_OK_PX, waitForTopVisibleSettled, wheelAwayFromBottom } from './harness/scrollHarness'
-import { arrive, distance, keepJson, measureDuring, mountedMessageIndexes, readInteractionReadState, readInteractionView, scrollToBottomContainer, interactionScrollFrames, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
+import { arrive, distance, keepJson, measureDuring, mountedMessageIndexes, readInteractionReadState, readInteractionView, scrollToBottomContainer, interactionScrollFrames, findAndRevealInteractionText, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
 
 async function seedRow(page: Page, content: 'long' | 'file', mode: 'light' | 'dark' = 'dark') {
   await bootDemo(page, '/demo.html?tutorial=false')
@@ -668,10 +668,11 @@ for (const kind of ['chat', 'room'] as const) {
     await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
     const findBefore = await readInteractionView(page)
     const findTargetBefore = await page.locator(`.message-row[data-message-id="${findId}"]`).boundingBox()
-    const found = await page.evaluate(query => (window as unknown as { find: (query: string) => boolean }).find(query), query)
+    const findResult = await findAndRevealInteractionText(page, query)
+    const found = findResult.found
     expect(found).toBe(true)
     const findFrames = await interactionScrollFrames(page)
-    await keepJson(`${kind}-native-find-scroll-frames`, { found, id: findId, targetBefore: findTargetBefore, before: findBefore, samples: findFrames, after: await readInteractionView(page), targetAfter: await page.locator(`.message-row[data-message-id="${findId}"]`).boundingBox() })
+    await keepJson(`${kind}-native-find-scroll-frames`, { findResult, id: findId, targetBefore: findTargetBefore, before: findBefore, samples: findFrames, after: await readInteractionView(page), targetAfter: await page.locator(`.message-row[data-message-id="${findId}"]`).boundingBox() })
     await expect(list).not.toHaveAttribute('data-message-interaction')
     await expect(row.locator('[data-message-panel]')).toHaveCount(0)
     await expect(page.locator(`.message-row[data-message-id="${findId}"]`)).toBeInViewport()

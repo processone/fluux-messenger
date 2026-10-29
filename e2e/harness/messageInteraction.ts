@@ -189,3 +189,23 @@ export async function interactionScrollFrames(page: Page, frames = 30) {
     requestAnimationFrame(frame)
   }), frames)
 }
+
+/** Legacy find selects without revealing in Chromium; exercise the native reveal used by find UI too. */
+export async function findAndRevealInteractionText(page: Page, query: string) {
+  return page.evaluate(query => {
+    const list = document.querySelector<HTMLElement>('[data-message-list]')!
+    const before = list.scrollTop
+    const found = (window as unknown as { find: (query: string) => boolean }).find(query)
+    const afterFind = list.scrollTop
+    if (found) {
+      const selection = document.getSelection()
+      if (!selection?.rangeCount) throw new Error('Native find returned no selected match')
+      const range = selection.getRangeAt(0)
+      const match = range.getBoundingClientRect(), viewport = list.getBoundingClientRect()
+      if (match.top < viewport.top || match.bottom > viewport.bottom) {
+        range.startContainer.parentElement?.scrollIntoView({ block: 'center' })
+      }
+    }
+    return { found, before, afterFind, afterReveal: list.scrollTop }
+  }, query)
+}
