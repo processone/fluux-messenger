@@ -13,8 +13,8 @@ interface InteractionContext {
 export const MessageInteractionContext = createContext<InteractionContext | null>(null)
 const noSubscription = () => () => {}
 const notHeld = () => false
-// Blink's HandleMouseMoveForMiddleClickAutoscroll changes from latched to held only outside
-// kNoMiddleClickAutoscrollRadius (15 CSS px on either axis). A smaller nudge is still latched.
+// Blink's HandleMouseMoveForMiddleClickAutoscroll turns an initial press into a held pan only
+// outside kNoMiddleClickAutoscrollRadius (15 CSS px on either axis); smaller nudges latch on release.
 const MIDDLE_PAN_DEAD_ZONE = 15
 
 /** FLM-245 F4: ownership changes update only the old and new row, not every bubble. */
