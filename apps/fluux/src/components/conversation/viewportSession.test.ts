@@ -21,12 +21,15 @@ describe('movement beyond viewport clamping', () => {
 
 describe('ViewportSession', () => {
   // Captain FLM-245 F3: selection/autoscroll/find movement wins without wheel/key attribution.
-  it.each([false, true])('FLM-245 admits unobserved held movement before reconcile or native scroll (%s)', nativeScroll => {
-    const session = new ViewportSession('room', true)
+  // H3: neither complete input observation nor a navigation-owned fling may mask a held reader.
+  it.each([false, true].flatMap(nativeScroll => [false, true].flatMap(inputAlwaysObserved =>
+    [false, true].map(navigationOwnsFling => ({ nativeScroll, inputAlwaysObserved, navigationOwnsFling })),
+  )))('FLM-245 admits held movement (native: $nativeScroll, observed: $inputAlwaysObserved, fling: $navigationOwnsFling)', ({ nativeScroll, inputAlwaysObserved, navigationOwnsFling }) => {
+    const session = new ViewportSession('room', inputAlwaysObserved)
     const before = geometry(393, 1000, 557)
     session.recordProgrammaticWrite('room', 1000, before)
     expect(session.observeGeometry('room', { ...before, top: 413 }, {
-      now: 1020, controllerOwnsPixels: true, interactionHeld: true, nativeScroll,
+      now: 1020, controllerOwnsPixels: true, interactionHeld: true, nativeScroll, navigationOwnsFling,
     })?.userDelta).toBe(20)
     expect(session.hasGenuineInput('room')).toBe(true)
   })

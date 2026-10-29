@@ -193,7 +193,7 @@ export class ViewportSession {
     controllerOwnsPixels: boolean
     /** The current new navigation has superseded the released touch's still-pending fling. */
     navigationOwnsFling?: boolean
-    /** A deliberate fixed interaction owns engine/focus movement until real scroll input takes over. */
+    /** Unobserved movement still takes over a hold; recorded writes/layout anchoring stay excluded. */
     interactionHeld?: boolean
     input?: ViewportInput
     resetInput?: boolean
