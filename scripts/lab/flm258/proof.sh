@@ -12,6 +12,7 @@ send() { mark "send $1"; echo "$1" > $LAB_DIR/ctl.fifo; }
 HERE=${0:A:h}
 mds() { (cd "$HERE" && NODE_TLS_REJECT_UNAUTHORIZED=0 node sender.mjs mds 2>&1 | grep "^MDS" | sort -u | sed "s/^/$1 /" >> "$RUN/mds.log"); }
 open -a "$APP" --stdout "$RUN/stdout.log" --stderr "$RUN/stderr.log" --args --verbose=xmpp --dangerous-insecure-tls "--log-file=$RUN/fluux.log"
+cp "$LAB_DIR/build-manifest.txt" "$RUN/" 2>/dev/null; shasum -a 256 "$APP/Contents/MacOS/fluux" > "$RUN/binary-at-run.sha256"
 mark launched; sleep 35
 # Chat: open the conversation with bob, bring Fluux to the front, hide it (Cmd-H), then send.
 send "CTRL open"; sleep 4

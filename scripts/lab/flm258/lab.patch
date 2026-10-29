@@ -60,6 +60,40 @@ index 9e769e41..5ae83846 100644
              match self
                  .query(None)
                  .load_attributes(true)
+diff --git a/apps/fluux/src-tauri/src/notifications/macos.rs b/apps/fluux/src-tauri/src/notifications/macos.rs
+index 8ea7a000..8a472218 100644
+--- a/apps/fluux/src-tauri/src/notifications/macos.rs
++++ b/apps/fluux/src-tauri/src/notifications/macos.rs
+@@ -149,6 +149,7 @@ pub fn setup(_app: &AppHandle) {
+     // status is read later via `authorization_state()`, so the async result of
+     // this request is intentionally ignored.
+     prime_authorization();
++    std::thread::spawn(|| tracing::info!("[REPRO] os-authorization at startup: {:?}", authorization_state()));
+ }
+ 
+ /// Owns only the disposable copy handed to UserNotifications, never the avatar cache.
+@@ -265,6 +266,21 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
+         }
+         if let Some(err) = unsafe { err.as_ref() } {
+             tracing::warn!(error = ?err, "native notification scheduling reported an error");
++        } else {
++            tracing::info!("[REPRO] os-accepted notification request (no error from UNUserNotificationCenter)");
++        }
++        // LAB ONLY: ask the OS what it actually has delivered for this app.
++        if let Some(center) = current_center() {
++            let list = RcBlock::new(|notes: NonNull<objc2_foundation::NSArray<objc2_user_notifications::UNNotification>>| {
++                let notes = unsafe { notes.as_ref() };
++                let mut lines = Vec::new();
++                for n in notes.iter() {
++                    let c = n.request().content();
++                    lines.push(format!("{} | {}", c.title(), c.body()));
++                }
++                tracing::info!("[REPRO] os-delivered count={} [{}]", lines.len(), lines.join(" ;; "));
++            });
++            center.getDeliveredNotificationsWithCompletionHandler(&list);
+         }
+     });
+     center.addNotificationRequest_withCompletionHandler(&request, Some(&handler));
 diff --git a/apps/fluux/src/components/LoginScreen.tsx b/apps/fluux/src/components/LoginScreen.tsx
 index 12277b04..92b0975c 100644
 --- a/apps/fluux/src/components/LoginScreen.tsx
