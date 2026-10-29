@@ -189,8 +189,9 @@ view gets no hinge information by default. See
 | --- | --- |
 | Duo | Disposable `Fluux-FLM177-Duo`, iOS 27.1 build 24A94232, WebKit 8625.1.29.10.29 |
 | Toolchain | Xcode 27.1, build 27A9275 |
-| App | Native demo `net.processone.fluux.demo` 0.18.1, built with `npm run tauri:ios:demo` |
-| Source | App sources of `d3bbf25ff4bc`; the FLM-177 branch had changed only this document |
+| App | Native demo `net.processone.fluux.demo` 0.18.1, built with `npm run tauri:ios:demo` after `npm ci` |
+| Source | App sources of `d2418a881904`, the main-line version the FLM-177 branch is based on; the branch changes only this document |
+| First pass | The same cases on app sources of `d3bbf25ff4bc` gave the same results; the tables below come from the run on `d2418a881904` |
 
 The Duo has two built-in screens, and only one shows content at a time:
 
@@ -206,6 +207,12 @@ web view frame, the composer and the layout, and saved a screenshot of every
 screen. The hardware keyboard was disconnected on this simulator only, as in
 FLM-50. The process ID of Fluux was recorded before and after each step. It
 stayed the same through every case below, so no step restarted the app.
+
+The driver waits for the software keyboard and for the typed draft to appear in
+the composer's value. Without those waits, two steps failed on the driver side
+while Fluux was fine: the keyboard check was interrupted while reading the app
+frame, and the composer's value was read before it updated. The next steps
+found the keyboard and the draft in place.
 
 Folding, unfolding and turning the inner screen need SpringBoard's display tool
 service, because the simulator has no fold control without Simulator.app.
@@ -226,13 +233,19 @@ open) and an orientation. Screen 1 stayed powered on throughout.
 | Built-in second screen | Fluux runs on the inner screen in both orientations. Keyboard, one local send, settings and switching between Emma and James worked in landscape and in portrait. |
 | Split across both halves, landscape | 951×669 web view with two panes: icon rail 0–56 points, conversation list 56–288, chat 288–867. A status strip takes the right 84 points. A typed draft stayed in the composer. |
 | Split across both halves, portrait | 669×951 web view with one pane and the “Retour aux conversations” back button. The draft survived the turn from landscape. |
-| Fold, inner to cover | Same process, same open conversation, draft kept. The cover showed one pane at 678×466. It was in landscape because the device orientation used to show the inner screen in portrait is landscape on the cover. |
+| Fold, inner to cover | Same process, same open conversation, draft kept. The cover showed one pane at 678×466. It was in landscape because the device orientation used to show the inner screen in portrait is landscape on the cover. The cover stayed black for about 17 seconds after the fold request before Fluux appeared on it. |
 | Unfold, cover to inner | Same process; back to 669×951 with one pane and the draft kept. |
 | External screen | Fluux kept running and the full journey passed with screen 2 connected, after disconnecting it, and after reconnecting it. The mirrored picture is unproven (see below). |
 
 The software keyboard covers the lower part of the inner screen in landscape,
 including the bottom of the conversation list. That is expected for a phone
 keyboard and was not classified as a defect.
+
+When the first send with screen 2 connected ran, the composer still held the
+earlier drafts. The tap that focused it put the caret before that text. The
+message was sent with the drafts after it, so the driver's exact-text check
+failed. The same journey then passed with an empty composer. This tap placement
+was seen only through XCTest and is not classified here.
 
 The external screen has two limits:
 
@@ -242,8 +255,9 @@ The external screen has two limits:
   “cloning `LCD-1` to `TVOut`” when screen 2 connects. Fluux gets no window of
   its own on that screen.
 - **The simulator does not draw that mirror.** Every capture of screen 2 was
-  black: `simctl io screenshot`, `simctl io recordVideo` and
-  `XCUIScreen.screenshot()`. So the mirrored content itself is not shown here.
+  black: `simctl io screenshot`, `simctl io recordVideo` (a single near-black
+  frame) and `XCUIScreen.screenshot()`. So the mirrored content itself is not
+  shown here.
 
 Screen 2 reported power on at boot but returned no picture: its screenshot
 timed out. Turning screen 2 (never screen 1) off and on again made SpringBoard
@@ -264,15 +278,28 @@ CSS Viewport Segments API:
 The Device Posture API adds `navigator.devicePosture` and the `device-posture`
 media query.
 
-A probe app with a default `WKWebView`, as Fluux uses, read these in each
-posture. The display tool service set the hinge to 180° (fully open) or 90°
-(half open).
+A probe app with a default `WKWebView`, as Fluux uses, read these in eight
+setups: fully open (180°) and half open (90°), in portrait and in landscape,
+with WebKit's two features at their defaults and turned on. The display tool
+service set the hinge and the orientation. The probe started fresh for each
+setup and saved its own report. The table gives the last reading of each
+setup.
 
 | Posture | Default web view | With WebKit's two features turned on |
 | --- | --- | --- |
-| Fully open (180°), portrait | No segment values; segment and posture queries never match; no `window.viewport`; no `navigator.devicePosture` | One 669×951 segment; `device-posture: continuous` |
-| Half open (90°), portrait | Same as above: nothing | Two 669×475.5 segments, one above the other, split at 475.5 points; `vertical-viewport-segments: 2`; `device-posture: folded` |
-| Half open (90°), landscape | Same as above: nothing | Two 475.5×669 segments side by side, split at 475.5 points; `horizontal-viewport-segments: 2`; `device-posture: folded` |
+| Fully open (180°), portrait | Nothing: no segment values, no segment or posture query matches, no `window.viewport`, no `navigator.devicePosture` | One segment covering the 669×951 page; `horizontal-viewport-segments: 1` and `vertical-viewport-segments: 1`; `device-posture: continuous`; no `env(viewport-segment-*)` values |
+| Fully open (180°), landscape | Nothing, as above | One segment covering the 951×669 page; the same two queries match; `device-posture: continuous`; no `env(viewport-segment-*)` values |
+| Half open (90°), portrait | Nothing, as above | Two 669×475.5 segments, one above the other, split at 475.5 points; `vertical-viewport-segments: 2`; `device-posture: folded` |
+| Half open (90°), landscape | Nothing, as above | Two segments side by side, split at 475.5 points from the left; `horizontal-viewport-segments: 2`; `device-posture: folded` |
+
+With the features off, `CSS.supports()` rejects
+`env(viewport-segment-width 0 0)`; with them on, it accepts it. The
+`env(viewport-segment-*)` values exist only when the page has two or more
+segments, so they are absent when the Duo is fully open. In the half-open
+landscape reading the page measured 867×635 points. That leaves out the
+84-point status strip on the right and 34 points at the bottom, so the second
+segment was 391.5 points wide. In the first pass, on the full 951-point page, it
+was 475.5 points wide. The hinge was at 475.5 points from the left both times.
 
 WebKit in this runtime contains both features, “Viewport Segments API” and
 “Device Posture API”, but a `WKWebView` has them off by default. WebKit labels
@@ -285,15 +312,18 @@ Fluux's iOS native code does not change these WebKit settings, so its web view
 gets nothing. With the Duo half open, Fluux keeps its flat layout:
 
 - In landscape the hinge at 475.5 points cuts through the chat pane (288–867),
-  including message bubbles and the composer.
-- In portrait the hinge runs across the middle of the open conversation.
+  including message bubbles and the composer. The system keyboard does follow
+  the hinge: half open, it splits its keys to either side of it, while flat it
+  is one piece.
+- In portrait, with the keyboard open, the hinge runs just below the composer,
+  across the strip above the keyboard.
 
 On the native side, UIKit 27.1 adds a public `UIHingeInteraction`. It reports
 the hinge state (closed, partially open, fully open) and its angle. The probe
-saw `fullyOpen` at 180° and `partiallyOpen` at 90°. UIKit offers no public
-position for the hinge, and the Duo's simulator profile declares none. A native
-layer would have to assume the middle of the inner screen, which is where
-WebKit's segments put it.
+saw `fullyOpen` at 180° and `partiallyOpen` at 90° in every setup. UIKit
+offers no public position for the hinge, and the Duo's simulator profile
+declares none. A native layer would have to assume the middle of the inner
+screen, which is where WebKit's segments put it.
 
 How Fluux should adapt is a product choice: standard CSS segments with WebKit's
 features turned on, or hinge values passed from native code as CSS variables.
@@ -344,11 +374,12 @@ locally sent. Its native frame buffer rotates content; black side bars preserve
 the whole portrait image rather than cropping it. The poster and extracted
 contact sheet were inspected. No evidence is stored in the working copy.
 
-The **FLM-177 task record** holds its own evidence: per-step driver logs and
-screenshots of every screen, the fold recording of the inner screen, the
-SpringBoard and `backboardd` display logs for screen 2, the probe app's JSON
-reports and screenshots, and the sources of the driver, the display tool and
-the probe. None of it is stored in the working copy.
+The **FLM-177 task record** holds its own evidence for both passes: per-step
+driver logs and screenshots of every screen, the fold recordings, the
+SpringBoard and `backboardd` display logs and the black captures of screen 2,
+one probe report and screenshot for each of the eight hinge setups, the build
+record of the demo, and the sources of the driver, the display tool and the
+probe. None of it is stored in the working copy.
 
 The report changes documentation only. `npm run test:local -- --base origin/main`
 selected no tests for the explicitly recognized documentation path and completed
