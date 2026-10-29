@@ -104,6 +104,21 @@ describe('submitted draft ownership', () => {
     expect(drafts.get('emma@fluux.chat')).toBe(BODY)
   })
 
+  it('recovers the original failed draft after editing another recipient and returning', async () => {
+    const { Input, drafts } = fixture()
+    const send = deferred<boolean>()
+    const view = render(<Input onSend={() => send.promise} />)
+    await act(async () => { submit() })
+    view.rerender(<Input id="oliver@fluux.chat" onSend={vi.fn()} />)
+    fireEvent.change(field(), { target: { value: 'Good catch.' } })
+    view.rerender(<Input onSend={() => send.promise} />)
+    expect(field().value).toBe('')
+    await act(async () => { send.reject(new Error('Socket not available')) })
+    expect(field().value).toBe(BODY)
+    expect(drafts.get('emma@fluux.chat')).toBe(BODY)
+    expect(drafts.get('oliver@fluux.chat')).toBe('Good catch.')
+  })
+
   it('refuses another submission while command resolution is pending', async () => {
     const command = deferred<string | 'consumed'>()
     const resolveInput = vi.fn(() => command.promise)
