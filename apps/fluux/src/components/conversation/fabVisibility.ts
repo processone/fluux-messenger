@@ -15,7 +15,8 @@ export function shouldShowScrollToBottomFab(
   threshold: number,
   pinningToBottom: boolean,
   interactionHeld = false,
+  messageMenuOpen = false,
 ): boolean {
-  if (pinningToBottom) return false
+  if (pinningToBottom || messageMenuOpen) return false
   return interactionHeld ? distFromBottom > 1 : distFromBottom >= threshold
 }

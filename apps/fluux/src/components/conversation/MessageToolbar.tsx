@@ -84,6 +84,10 @@ export const MessageToolbar = memo(function MessageToolbar({
 }: MessageToolbarProps) {
   const { t } = useTranslation()
   const [actionFocused, setActionFocused] = useState(false)
+  const keyboardFocus = useRef(true)
+  const updateActionFocus = (target: EventTarget | null) => {
+    setActionFocused(keyboardFocus.current && target instanceof Element && target.matches(':focus-visible'))
+  }
   const slotsRef = useRef({ reactions: !!onReaction, reply: canReply, edit: canEdit })
   if (!interactionHeld) slotsRef.current = { reactions: !!onReaction, reply: canReply, edit: canEdit }
   const slots = slotsRef.current
@@ -106,8 +110,10 @@ export const MessageToolbar = memo(function MessageToolbar({
   const closeMoreMenu = () => setShowMoreMenu(false)
   useClickOutside(moreMenuRef, closeMoreMenu, showMoreMenu)
   useCloseOnEscape(() => {
+    keyboardFocus.current = true
     setShowMoreMenu(false)
     moreButtonRef.current?.focus({ preventScroll: true })
+    updateActionFocus(moreButtonRef.current)
   }, showMoreMenu)
 
   // Reaction burst state
@@ -164,7 +170,10 @@ export const MessageToolbar = memo(function MessageToolbar({
     // the surrounding padding stays inert so underlying text remains selectable.
     <div
       data-message-toolbar
-      onFocusCapture={() => setActionFocused(true)}
+      onMouseDownCapture={() => { keyboardFocus.current = false; setActionFocused(false) }}
+      onKeyDownCapture={event => { keyboardFocus.current = true; updateActionFocus(event.target) }}
+      onKeyUpCapture={() => updateActionFocus(document.activeElement)}
+      onFocusCapture={event => updateActionFocus(event.target)}
       onBlurCapture={event => {
         if (!event.currentTarget.contains(event.relatedTarget)) setActionFocused(false)
       }}
@@ -247,8 +256,10 @@ export const MessageToolbar = memo(function MessageToolbar({
                 maxHeight={heldPickerBounds?.maxHeight}
                 onSelect={(emoji) => handleReaction(emoji)}
                 onClose={() => {
+                  keyboardFocus.current = true
                   setShowReactionPicker(false)
                   reactionButtonRef.current?.focus({ preventScroll: true })
+                  updateActionFocus(reactionButtonRef.current)
                 }}
               />
             </Suspense>

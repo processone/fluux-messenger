@@ -604,6 +604,7 @@ export function MessageList<T extends BaseMessage>({
   const {
     beginInteractionHold,
     releaseInteractionHold,
+    setInteractionMenuOpen,
     setScrollContainerRef: setScrollContainerRefFromHook,
     contentWrapperRef,
     commitVirtualizerLayout,
@@ -654,6 +655,7 @@ export function MessageList<T extends BaseMessage>({
     enabled: !staticMode,
     begin: beginInteractionHold,
     release: releaseInteractionHold,
+    menuChanged: setInteractionMenuOpen,
   })
   cancelInteractionRef.current = interaction.cancel
   handleVirtualRowMeasuredGrowthRef.current = handleVirtualRowMeasuredGrowth
@@ -894,7 +896,7 @@ export function MessageList<T extends BaseMessage>({
         className="flex-1 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-0 overscroll-contain"
         style={{ overflowAnchor: 'auto' }}
         data-message-list
-        data-message-interaction={interaction.context.heldMessageId ?? undefined}
+        data-message-interaction={interaction.heldMessageId ?? undefined}
       >
         {/* Loading state */}
         {showLoading && loadingState}

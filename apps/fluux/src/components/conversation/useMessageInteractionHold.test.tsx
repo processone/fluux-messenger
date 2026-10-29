@@ -206,3 +206,72 @@ describe('deliberate message interaction', () => {
     expect(release).toHaveBeenCalledWith(true)
   })
 })
+
+// Captain's FLM-245 fixes: native drag termination and composer intent must not leave stale holds.
+describe('FLM-245 interaction cleanup', () => {
+  it.each(['dragend', 'drop'])('clears dragging on %s without a mouseup', type => {
+    const { result, release } = setup()
+    mouse('mousedown', row)
+    mouse('mousemove', document.body, 0, 0)
+    act(() => vi.advanceTimersByTime(200))
+    expect(release).not.toHaveBeenCalled()
+    act(() => document.body.dispatchEvent(new Event(type, { bubbles: true })))
+    act(() => vi.advanceTimersByTime(100))
+    expect(result.current.context.heldMessageId).toBeNull()
+    expect(release).toHaveBeenCalledWith(true)
+    moveIntoRow()
+    expect(result.current.context.heldRow).toBe(row)
+  })
+  it('keeps a stable selector context while the held membership changes', () => {
+    const { result } = setup()
+    const context = result.current.context
+    const observed = vi.fn()
+    const unsubscribe = context.subscribe(observed)
+    moveIntoRow()
+    expect(result.current.context).toBe(context)
+    expect(context.isHeld(row)).toBe(true)
+    act(() => result.current.cancel())
+    expect(result.current.context).toBe(context)
+    expect(context.isHeld(row)).toBe(false)
+    expect(observed).toHaveBeenCalledTimes(2)
+    unsubscribe()
+  })
+  it('does not reacquire while a pressed selection drag continues after takeover', () => {
+    const { result, begin } = setup()
+    mouse('mousedown', row)
+    act(() => result.current.cancel())
+    act(() => row.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 120, clientY: 210, buttons: 1 })))
+    expect(begin).toHaveBeenCalledOnce()
+    expect(result.current.context.heldMessageId).toBeNull()
+  })
+  it('treats middle-click autoscroll as navigation until a new click or key', () => {
+    const { result, release, begin } = setup()
+    moveIntoRow()
+    act(() => row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 1 })))
+    mouse('mousemove', row, 130, 220)
+    expect(release).toHaveBeenCalledWith(false)
+    expect(begin).toHaveBeenCalledOnce()
+    expect(result.current.context.heldMessageId).toBeNull()
+    mouse('mousedown', row)
+    expect(result.current.context.heldRow).toBe(row)
+  })
+  it.each(['pointer', 'click', 'menu'])('composer input releases only pointer-nudge intent (%s)', intent => {
+    const { result, release } = setup()
+    const input = document.createElement('textarea')
+    input.className = 'message-input'
+    document.body.append(input)
+    try {
+      moveIntoRow()
+      if (intent === 'click') mouse('mousedown', row)
+      if (intent === 'menu') act(() => result.current.context.setMenuOpen(row.dataset.messageRowId!, true, vi.fn()))
+      fireEvent.input(input, { target: { value: 'A reply in progress' } })
+      if (intent === 'pointer') {
+        expect(result.current.context.heldMessageId).toBeNull()
+        expect(release).toHaveBeenCalledWith(true)
+      } else {
+        expect(result.current.context.heldRow).toBe(row)
+        expect(release).not.toHaveBeenCalled()
+      }
+    } finally { input.remove() }
+  })
+})

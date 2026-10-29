@@ -306,12 +306,16 @@ behavior.
 Desktop direct conversations and rooms hold a message only after deliberate mouse movement,
 a click, keyboard action focus, or an open More/reaction panel. Row entry alone is not intent:
 content scrolling under a resting pointer must continue following latest. Toolbar visibility
-retains its existing hover delay and text-selection suppression.
+retains its existing hover delay and text-selection suppression. Only keyboard focus matching
+`:focus-visible` forces the toolbar visible; mouse-created focus follows the ordinary hover lifetime.
+Row-local subscriptions expose held membership without broadcasting each target change to every bubble.
 
 An `interaction` request holds the original row handle and the message body's top offset through
 the existing anchor executor and bounded controller frame loop. The virtualizer retains that row
-and suspends independent measurement compensation. Viewport observation distinguishes engine/focus
-movement under that fixed intent from real scroll input, which still cancels the hold first.
+and suspends independent measurement compensation. Recorded positioning writes and layout anchoring
+remain excluded from navigation attribution. Other scroll movement cancels the hold even without a
+wheel/key signal: selection-edge scrolling, native drag autoscroll, middle-click autoscroll and
+find-in-page must not be corrected back to the held target.
 An ongoing deliberate scroll gesture blocks acquisition; beginning an admitted hold clears stale
 input attribution from earlier gestures. Later layout stimuli reopen the same generation;
 arrivals, typing, media, divider changes and geometry-based rearming cannot replace an active hold,
@@ -329,6 +333,9 @@ A conflicting known identity, disconnected row or handle resolving elsewhere end
 
 Pointer departure (with panels closed), or keyboard action-focus departure (with panels closed),
 releases the hold. Mouse-created focus does not keep an otherwise disengaged mouse interaction alive.
+Native `dragend` and `drop` clear dragging even when the browser delivers no `mouseup`. Typing in the
+composer disengages a hold acquired only by pointer movement, using the saved-following policy; an
+explicit click, keyboard action or open menu is not dismissed by mere composer input.
 Only a reader who was following latest before the hold resumes automatically. History reading keeps
 a settled fixed position; a deliberate scroll, own send or explicit jump takes priority and closes
 panels before moving. A manual takeover cannot rearm from the usual near-bottom band alone: actual
@@ -339,7 +346,8 @@ without resuming the departed interaction. Touch action sheets and static previe
 Beginning a hold revokes previously reported follow-edge evidence before a future offscreen arrival
 can consume it. Intersection-based message-seen reporting and canonical unread counts remain unchanged.
 While holding, the existing latest-message control also appears for arrivals below the viewport inside
-the ordinary near-bottom band; reserved layout space alone does not expose it.
+the ordinary near-bottom band; reserved layout space alone does not expose it. A message's open More
+or reaction menu hides that control until the menus close, so the jump never covers the menu.
 
 ## Request provenance
 

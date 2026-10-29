@@ -158,3 +158,18 @@ export async function readInteractionReadState(page: Page, kind: ConversationKin
     return { unread: current.meta.unreadCount, readId: current.meta.readPointer?.identity.messageId ?? null, lastId: current.messages.at(-1)!.id }
   }, { kind, jid: jidFor(kind) })
 }
+
+/** Native interaction readings shared by the review regression journeys. */
+export async function readInteractionView(page: Page, targetId = TARGET) {
+  return page.evaluate(targetId => {
+    const list = document.querySelector<HTMLElement>('[data-message-list]')!
+    const toolbar = list.querySelector(`.message-row[data-message-id="${CSS.escape(targetId)}"] [data-message-toolbar]`)
+    const active = document.activeElement
+    return { held: list.getAttribute('data-message-interaction'), top: list.scrollTop,
+      distance: list.scrollHeight - list.scrollTop - list.clientHeight,
+      panels: list.querySelectorAll('[data-message-panel]').length,
+      toolbarOpacity: toolbar ? getComputedStyle(toolbar).opacity : null,
+      focus: active?.getAttribute('aria-label'), focusVisible: active?.matches(':focus-visible') ?? false,
+      selectedText: document.getSelection()?.toString() ?? '' }
+  }, targetId)
+}

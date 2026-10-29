@@ -1,32 +1,45 @@
-import { createContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react'
 import { hasHover } from '@/hooks/useHasHover'
 import { findMessageRowElement, readMessageRowId } from './messageRowIdentity'
 
 interface InteractionContext {
-  heldMessageId: string | null
-  heldRow: HTMLElement | null
+  readonly heldMessageId: string | null
+  readonly heldRow: HTMLElement | null
+  subscribe: (listener: () => void) => () => void
+  isHeld: (element: HTMLElement | null) => boolean
   setMenuOpen: (rowId: string, open: boolean, close: () => void, sourceRow?: HTMLElement) => void
 }
 
 export const MessageInteractionContext = createContext<InteractionContext | null>(null)
+const noSubscription = () => () => {}
+const notHeld = () => false
+
+/** FLM-245 F4: ownership changes update only the old and new row, not every bubble. */
+export function useMessageInteractionHeld(ref: RefObject<HTMLElement | null>): boolean {
+  const interaction = useContext(MessageInteractionContext)
+  const snapshot = useCallback(() => interaction?.isHeld(ref.current) ?? false, [interaction, ref])
+  return useSyncExternalStore(interaction?.subscribe ?? noSubscription, snapshot, notHeld)
+}
 
 interface InteractionPorts {
   begin: (rowId: string) => boolean
   release: (resume: boolean) => void
+  menuChanged?: (open: boolean) => void
 }
 
 /** FLM-229: hover caused by moving content is not deliberate interaction. */
 export function useMessageInteractionHold({
-  scrollRef, conversationId, enabled, begin, release,
+  scrollRef, conversationId, enabled, begin, release, menuChanged,
 }: InteractionPorts & {
   scrollRef: RefObject<HTMLElement | null>
   conversationId: string
   enabled: boolean
 }) {
-  const ports = useRef({ begin, release })
-  ports.current = { begin, release }
+  const ports = useRef({ begin, release, menuChanged })
+  ports.current = { begin, release, menuChanged }
   const [heldMessageId, setHeldMessageId] = useState<string | null>(null)
-  const held = useRef<{ id: string; row: HTMLElement } | null>(null)
+  const held = useRef<{ id: string; row: HTMLElement; intent: 'pointer' | 'explicit' } | null>(null)
+  const listeners = useRef(new Set<() => void>())
   const pointerRow = useRef<HTMLElement | null>(null)
   const focusRow = useRef<HTMLElement | null>(null)
   const menu = useRef<{ row: HTMLElement; close: () => void } | null>(null)
@@ -34,6 +47,16 @@ export function useMessageInteractionHold({
   const keyboard = useRef(true)
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const notify = useCallback(() => {
+    setHeldMessageId(held.current?.id ?? null)
+    for (const listener of [...listeners.current]) listener()
+  }, [])
+  const subscribe = useCallback((listener: () => void) => {
+    listeners.current.add(listener)
+    return () => { listeners.current.delete(listener) }
+  }, [])
+  const isHeld = useCallback((element: HTMLElement | null) =>
+    element !== null && held.current?.row.contains(element) === true, [])
   const clearLeave = useCallback(() => {
     if (leaveTimer.current !== null) clearTimeout(leaveTimer.current)
     leaveTimer.current = null
@@ -49,20 +72,25 @@ export function useMessageInteractionHold({
     const closing = menu.current
     menu.current = null
     closing?.close()
-    setHeldMessageId(null)
-  }, [clearLeave])
+    if (closing) ports.current.menuChanged?.(false)
+    notify()
+  }, [clearLeave, notify])
 
-  const start = useCallback((row: HTMLElement, refresh = false) => {
+  const start = useCallback((row: HTMLElement, intent: 'pointer' | 'explicit', refresh = false) => {
     const id = readMessageRowId(row)
     if (!id || !row.querySelector('[data-message-toolbar]') ||
       !scrollRef.current || findMessageRowElement(scrollRef.current, id) !== row) return
     clearLeave()
     if (menu.current && menu.current.row !== row) return
-    if (held.current?.row === row) { if (refresh) ports.current.begin(held.current.id); return }
+    if (held.current?.row === row) {
+      if (intent === 'explicit') held.current.intent = intent
+      if (refresh) ports.current.begin(held.current.id)
+      return
+    }
     if (!ports.current.begin(id)) return
-    held.current = { id, row }
-    setHeldMessageId(id)
-  }, [clearLeave, scrollRef])
+    held.current = { id, row, intent }
+    notify()
+  }, [clearLeave, scrollRef, notify])
 
   const maybeRelease = useCallback(() => {
     const target = held.current
@@ -88,10 +116,14 @@ export function useMessageInteractionHold({
     if (open) {
       if (!hasHover()) return
       const row = sourceRow ?? (scrollRef.current && findMessageRowElement(scrollRef.current, id))
-      if (row) start(row, true)
-      if (row && held.current?.row === row) menu.current = { row, close }
+      if (row) start(row, 'explicit', true)
+      if (row && held.current?.row === row) {
+        menu.current = { row, close }
+        ports.current.menuChanged?.(true)
+      }
     } else if (menu.current && (!sourceRow || menu.current.row === sourceRow)) {
       menu.current = null
+      ports.current.menuChanged?.(false)
       maybeRelease()
     }
   }, [enabled, scrollRef, start, maybeRelease])
@@ -99,6 +131,7 @@ export function useMessageInteractionHold({
   useEffect(() => {
     if (!enabled) return
     let point: { x: number; y: number } | null = null
+    let suppressPointer = false
     const rowFor = (target: EventTarget | null) => {
       // Confirmation dialogs are DOM descendants of a row, but are not its toolbar interaction.
       if (target instanceof Element && target.closest('[data-modal]')) return null
@@ -114,60 +147,88 @@ export function useMessageInteractionHold({
       pointerRow.current = row
       if (moved && hasHover()) {
         keyboard.current = false
-        if (row && !dragging.current) start(row)
+        // An ongoing selection/drag must not reacquire after its native scrolling takes over.
+        if (row && !dragging.current && event.buttons === 0 && !suppressPointer) start(row, 'pointer')
       }
       maybeRelease()
     }
     const onOut = (event: MouseEvent) => {
-      const row = rowFor(event.relatedTarget)
-      pointerRow.current = row
+      pointerRow.current = rowFor(event.relatedTarget)
       maybeRelease()
     }
     const onDown = (event: MouseEvent) => {
-      if (event.button !== 0 || !hasHover()) return
+      if (!hasHover()) return
       keyboard.current = false
+      if (event.button === 1) {
+        // Middle-click autoscroll remains navigation until another click/key ends it.
+        suppressPointer = true
+        cancel()
+        ports.current.release(false)
+        return
+      }
+      if (event.button !== 0) return
+      suppressPointer = false
       const row = rowFor(event.target)
       if (row) {
         pointerRow.current = row
-        start(row)
+        start(row, 'explicit')
         dragging.current = true
       }
     }
     const onUp = () => { dragging.current = false; maybeRelease() }
-    const onKey = () => { keyboard.current = true }
+    const onDragFinish = (event: DragEvent) => {
+      dragging.current = false
+      pointerRow.current = rowFor(document.elementFromPoint?.(event.clientX, event.clientY) ??
+        (event.type === 'drop' ? event.target : null))
+      maybeRelease()
+    }
+    const onKey = () => { keyboard.current = true; suppressPointer = false }
     const onFocus = (event: FocusEvent) => {
       const target = event.target instanceof Element ? event.target : null
       const row = target?.closest('[data-message-toolbar]') ? rowFor(target) : null
       focusRow.current = row
-      if (row && hasHover()) start(row, true)
+      if (row && keyboard.current && hasHover()) start(row, 'explicit', true)
       maybeRelease()
     }
     const onFocusOut = () => {
       // Escape can restore the trigger in the same event; do not release between them.
       queueMicrotask(() => {
         const active = document.activeElement
-        const row = active?.closest('[data-message-toolbar]') ? rowFor(active) : null
-        focusRow.current = row
+        focusRow.current = active?.closest('[data-message-toolbar]') ? rowFor(active) : null
         maybeRelease()
       })
     }
-    const onBlur = () => { cancel(); ports.current.release(true); point = null }
+    const onInput = (event: Event) => {
+      const target = event.target instanceof Element ? event.target : null
+      if (target?.closest('.message-input') && !target.closest('[data-modal]') &&
+        held.current?.intent === 'pointer' && !menu.current) {
+        cancel()
+        ports.current.release(true)
+      }
+    }
+    const onBlur = () => { cancel(); ports.current.release(true); point = null; suppressPointer = false }
     document.addEventListener('mousemove', onMove, true)
     document.addEventListener('mouseout', onOut, true)
     document.addEventListener('mousedown', onDown, true)
     document.addEventListener('mouseup', onUp, true)
+    document.addEventListener('dragend', onDragFinish, true)
+    document.addEventListener('drop', onDragFinish, true)
     document.addEventListener('keydown', onKey, true)
     document.addEventListener('focusin', onFocus, true)
     document.addEventListener('focusout', onFocusOut, true)
+    document.addEventListener('input', onInput, true)
     window.addEventListener('blur', onBlur)
     return () => {
       document.removeEventListener('mousemove', onMove, true)
       document.removeEventListener('mouseout', onOut, true)
       document.removeEventListener('mousedown', onDown, true)
       document.removeEventListener('mouseup', onUp, true)
+      document.removeEventListener('dragend', onDragFinish, true)
+      document.removeEventListener('drop', onDragFinish, true)
       document.removeEventListener('keydown', onKey, true)
       document.removeEventListener('focusin', onFocus, true)
       document.removeEventListener('focusout', onFocusOut, true)
+      document.removeEventListener('input', onInput, true)
       window.removeEventListener('blur', onBlur)
       cancel()
       ports.current.release(false)
@@ -186,6 +247,10 @@ export function useMessageInteractionHold({
 
   useEffect(() => { cancel() }, [conversationId, cancel])
 
-  const context = useMemo(() => ({ heldMessageId, heldRow: held.current?.row ?? null, setMenuOpen }), [heldMessageId, setMenuOpen])
-  return { context, cancel }
+  const context = useMemo(() => ({
+    get heldMessageId() { return held.current?.id ?? null },
+    get heldRow() { return held.current?.row ?? null },
+    subscribe, isHeld, setMenuOpen,
+  }), [subscribe, isHeld, setMenuOpen])
+  return { context, cancel, heldMessageId }
 }

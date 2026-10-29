@@ -39,7 +39,7 @@ import { PollClosedCard } from './PollClosedCard'
 import { Tooltip } from '../Tooltip'
 import { MessageActionSheet } from './MessageActionSheet'
 import { computeMessageActions } from './messageActionCapabilities'
-import { MessageInteractionContext } from './useMessageInteractionHold'
+import { MessageInteractionContext, useMessageInteractionHeld } from './useMessageInteractionHold'
 import { downloadAttachment } from '@/utils/download'
 
 type ReplyQuoteCardStyle = CSSProperties & {
@@ -382,7 +382,7 @@ export const MessageBubble = memo(function MessageBubble({
   const interaction = useContext(MessageInteractionContext)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const rowId = messageRowId(message)
-  const interactionHeld = !!bubbleRef.current && interaction?.heldRow?.contains(bubbleRef.current) === true
+  const interactionHeld = useMessageInteractionHeld(bubbleRef)
   const openMenusRef = useRef({ more: false, reaction: false })
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false)
   const [showErrorDetails, setShowErrorDetails] = useState(false)
@@ -634,9 +634,9 @@ export const MessageBubble = memo(function MessageBubble({
       {!message.isRetracted && (
         <MessageToolbar
           onReaction={handleReaction}
-          onReply={() => { if (actions.canReply) onReply() }}
-          onEdit={() => { if (actions.canEdit) onEdit() }}
-          onDelete={() => { if (actions.canDelete) void onDelete() }}
+          onReply={onReply}
+          onEdit={onEdit}
+          onDelete={onDelete}
           myReactions={reactionsEnabled ? myReactions : []}
           canReply={canReply}
           canEdit={canEdit}

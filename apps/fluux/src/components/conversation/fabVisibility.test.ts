@@ -25,3 +25,11 @@ describe('shouldShowScrollToBottomFab', () => {
     }
   })
 })
+
+// Captain FLM-245 F6: a message menu owns this space, including the bottom row.
+it('FLM-245 hides the existing jump during a menu and restores its held small-arrival rule afterward', () => {
+  const smallArrival = AT_BOTTOM_THRESHOLD / 2
+  expect(shouldShowScrollToBottomFab(smallArrival, AT_BOTTOM_THRESHOLD, false, true, true)).toBe(false)
+  expect(shouldShowScrollToBottomFab(smallArrival, AT_BOTTOM_THRESHOLD, false, true, false)).toBe(true)
+  expect(shouldShowScrollToBottomFab(AT_BOTTOM_THRESHOLD * 2, AT_BOTTOM_THRESHOLD, false, false, true)).toBe(false)
+})

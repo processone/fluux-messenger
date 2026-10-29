@@ -20,19 +20,27 @@ describe('movement beyond viewport clamping', () => {
 })
 
 describe('ViewportSession', () => {
-  // FLM-229: focus/layout movement during an interaction is not deliberate conversation scrolling.
-  it('keeps engine movement separate from real scroll input while a fixed interaction holds', () => {
-    const session = new ViewportSession('room')
+  // Captain FLM-245 F3: selection/autoscroll/find movement wins without wheel/key attribution.
+  it.each([false, true])('FLM-245 admits unobserved held movement before reconcile or native scroll (%s)', nativeScroll => {
+    const session = new ViewportSession('room', true)
     const before = geometry(393, 1000, 557)
     session.recordProgrammaticWrite('room', 1000, before)
     expect(session.observeGeometry('room', { ...before, top: 413 }, {
-      now: 1020, controllerOwnsPixels: false, interactionHeld: true,
+      now: 1020, controllerOwnsPixels: true, interactionHeld: true, nativeScroll,
+    })?.userDelta).toBe(20)
+    expect(session.hasGenuineInput('room')).toBe(true)
+  })
+  it('FLM-245 keeps a recorded held write and layout anchoring out of navigation', () => {
+    const session = new ViewportSession('room', true)
+    const before = { ...geometry(393, 1000, 557), anchor: { rowId: 'selected', top: 920 } }
+    session.recordProgrammaticWrite('room', 1000, before)
+    expect(session.observeGeometry('room', before, {
+      now: 1020, controllerOwnsPixels: true, interactionHeld: true, nativeScroll: true,
+    })?.userDelta).toBe(0)
+    expect(session.observeGeometry('room', { ...before, top: 413, height: 1020, anchor: { rowId: 'selected', top: 940 } }, {
+      now: 1040, controllerOwnsPixels: true, interactionHeld: true, nativeScroll: true,
     })?.userDelta).toBe(0)
     expect(session.hasGenuineInput('room')).toBe(false)
-    expect(session.observeGeometry('room', { ...before, top: 393 }, {
-      now: 1040, controllerOwnsPixels: false, interactionHeld: true, input: { deltaY: -20 },
-    })?.userDelta).toBe(-20)
-    expect(session.hasGenuineInput('room')).toBe(true)
   })
   it('subtracts completed clamping from the remaining layout adjustment', () => {
     const session = new ViewportSession('room')

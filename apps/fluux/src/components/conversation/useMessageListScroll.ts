@@ -228,6 +228,7 @@ export interface UseMessageListScrollOptions {
 export interface UseMessageListScrollResult {
   beginInteractionHold: (rowId: string) => boolean
   releaseInteractionHold: (resume: boolean) => void
+  setInteractionMenuOpen: (open: boolean) => void
   observeKeyboardNavigation: (conversationId: string) => void
   reassertUnreadMarker: () => void
   setScrollContainerRef: (element: HTMLDivElement | null) => void
@@ -363,6 +364,7 @@ export function useMessageListScroll({
   const onInteractionEndRef = useRef(onInteractionEnd)
   onInteractionEndRef.current = onInteractionEnd
   const interactionSpaceRef = useRef<{ conversationId: string; scroller: HTMLElement; padding: string } | null>(null)
+  const interactionMenuOpenRef = useRef(false)
   const restoreInteractionSpace = useCallback(() => {
     const saved = interactionSpaceRef.current
     if (saved) {
@@ -638,8 +640,13 @@ export function useMessageListScroll({
   const refreshScrollToBottomFab = useStableCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
-    const show = shouldShowScrollToBottomFab(distanceBelowMessages(scroller), AT_BOTTOM_THRESHOLD, pinBottomClaim().isHeld(), positioningControllerRef.current?.hasInteractionHold())
+    const show = shouldShowScrollToBottomFab(distanceBelowMessages(scroller), AT_BOTTOM_THRESHOLD, pinBottomClaim().isHeld(), positioningControllerRef.current?.hasInteractionHold(), interactionMenuOpenRef.current)
     setShowScrollToBottom(prev => prev !== show ? show : prev)
+  })
+  const setInteractionMenuOpen = useStableCallback((open: boolean) => {
+    if (interactionMenuOpenRef.current === open) return
+    interactionMenuOpenRef.current = open
+    refreshScrollToBottomFab()
   })
 
   const rememberCurrentScrollSnapshot = useCallback(() => {
@@ -1428,7 +1435,7 @@ export function useMessageListScroll({
     // scrollTop: on WebKit a tall bottom row's post-paint growth fires 'scroll' events reporting a
     // transiently large distFromBottom before the loop re-pins, which would otherwise flash the FAB
     // on open-at-bottom (intermittent race). The loop settles AT the bottom, so the FAB stays hidden.
-    const shouldShowFab = shouldShowScrollToBottomFab(distanceBelowMessages(el), AT_BOTTOM_THRESHOLD, pinBottomClaim().isHeld(), positioningControllerRef.current?.hasInteractionHold())
+    const shouldShowFab = shouldShowScrollToBottomFab(distanceBelowMessages(el), AT_BOTTOM_THRESHOLD, pinBottomClaim().isHeld(), positioningControllerRef.current?.hasInteractionHold(), interactionMenuOpenRef.current)
     setShowScrollToBottom(prev => prev !== shouldShowFab ? shouldShowFab : prev)
 
     if (firstNewMessageId) {
@@ -2474,6 +2481,7 @@ export function useMessageListScroll({
   return {
     beginInteractionHold,
     releaseInteractionHold,
+    setInteractionMenuOpen,
     observeKeyboardNavigation,
     reassertUnreadMarker,
     setScrollContainerRef,
