@@ -37,6 +37,18 @@ describe('useWindowVisibility', () => {
     _resetViewportRegistryForTesting()
   })
 
+  // FLM-258: ⌘H hides the page but document.hasFocus() stays true and no blur fires.
+  it('treats a hidden page as not in front even while hasFocus() stays true', () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+    state.windowVisible = true
+    renderHook(() => useWindowVisibility())
+    expect(setWindowVisible).toHaveBeenLastCalledWith(false)
+    visibility.mockReturnValue('visible')
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(setWindowVisible).toHaveBeenLastCalledWith(true)
+    visibility.mockRestore()
+  })
+
   it('dismisses the active conversation notification on focus regain', () => {
     state.activeConversationId = CONV
     renderHook(() => useWindowVisibility())
