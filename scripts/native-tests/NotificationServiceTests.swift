@@ -316,8 +316,48 @@ import UniformTypeIdentifiers
         precondition(SharedNames.load(root: root).roomParticipants.isEmpty, "Logout wipes participants")
     }
 
+    /// push_gate sends the room's bare address in `from` and the occupant's nick in `muc_nick`.
+    static func mucNick() {
+        let room = "team@muc.example.com"
+        let json = #"{"account":"me@example.com","contacts":{"alice@example.com":"Alice"},"rooms":{"team@muc.example.com":"Team"},"roomParticipants":{"team@muc.example.com":{"ownNick":"Me","nicks":["Alice","Bob","Me"]}}}"#
+        let names = try! JSONDecoder().decode(SharedNames.self, from: Data(json.utf8))
+        func deliver(_ from: String, _ extra: [String: Any]) -> UNNotificationContent {
+            let content = UNMutableNotificationContent()
+            content.body = "Hello"
+            content.userInfo = ["from": from, "to": "me@example.com"].merging(extra) { $1 }
+            var output: UNNotificationContent?
+            let service = NotificationService()
+            service.loadNames = { names }
+            service.readSnapshot = { nil }
+            service.ledgerRoot = { nil }
+            service.didReceive(UNNotificationRequest(identifier: "muc-nick", content: content, trigger: nil)) { output = $0 }
+            return output!
+        }
+        let shown = deliver(room, ["muc_nick": "Alice"])
+        precondition(shown.title == "Team" && shown.subtitle == "Alice" && shown.interruptionLevel != .passive)
+        let legacy = deliver(room + "/Alice", [:])
+        precondition(legacy.title == shown.title && legacy.subtitle == shown.subtitle)
+        precondition(deliver(room + "/Alice", ["muc_nick": "Bob"]).subtitle == "Bob", "muc_nick wins over the from resource")
+        precondition(deliver(room, ["muc_nick": "Me"]).interruptionLevel == .passive, "Own nick is delivered passively")
+        for absent: [String: Any] in [[:], ["muc_nick": ""], ["muc_nick": 42]] {
+            let result = deliver(room, absent)
+            precondition(result.title == "Team" && result.subtitle.isEmpty, "\(absent)")
+        }
+        let direct = deliver("alice@example.com", ["muc_nick": "Mallory"])
+        precondition(direct.title == "Alice" && direct.subtitle.isEmpty)
+        let unknown = deliver("other@muc.example.com", ["muc_nick": "Mallory"])
+        precondition(unknown.title == "other" && unknown.subtitle.isEmpty)
+        #if os(iOS)
+        let intent = NotificationPresentation.intent(from: NotificationPresentation.sender(of: ["from": room, "muc_nick": "Alice"], names: names)!, body: "Hello", names: names)!
+        precondition(intent.sender?.displayName == "Alice" && intent.recipients?.map { $0.displayName } == ["Bob"])
+        #endif
+        print("muc_nick passed")
+    }
+
     static func main() {
         switch CommandLine.arguments[1] {
+        case "muc-nick":
+            mucNick()
         case "room-participants":
             try! roomParticipants()
         case "account-guard":

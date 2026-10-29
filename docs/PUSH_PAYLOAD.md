@@ -17,7 +17,8 @@ reads and what it does with each. For registration and deletion, see the
 | `aps.mutable-content` | `1` | Required: the notification extension only runs with it. |
 | `aps.sound`, `aps.content-available` | | Passed through. |
 | `aps.thread-id` | string | Optional. Notification Center grouping, kept as sent. It names the conversation: one value per contact or room, never including the occupant's nick. When absent, the extension uses the bare JID of `from`. |
-| `from` | string | The sender: the contact's JID, or the occupant JID `room@service/nick` for a group chat. The extension shows the room name as title and the nick as subtitle. |
+| `from` | string | The sender: the contact's JID, or for a group chat the room's bare address `room@service` (the occupant JID `room@service/nick` is also read). The extension shows the room name as title and the nick as subtitle. |
+| `muc_nick` | string | Optional, group chat only. The sender's occupant nick, sent because `from` is the bare room address. The extension reads it first and falls back to the resource of `from`; an empty or non-string value counts as absent. It applies only to rooms the app knows, and is ignored for a contact or an unknown sender. |
 | `to` | string | Optional. The account the push is for; a mismatch shows a neutral alert. |
 | `encrypted` | boolean | Optional. `false`: `aps.alert` is the message's own body. `true`: the message is encrypted and `aps.alert` is not its content. |
 
