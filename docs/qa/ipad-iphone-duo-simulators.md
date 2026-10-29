@@ -159,13 +159,51 @@ not kept as an evidence file; this is an observed, unretained message, not a
 claim supported by the retained logs. The retained test-launcher log reports
 `Host is down`, with the shell described as probably crashed. No Fluux UI
 journey ran on the secondary screen, and no post-switch application screenshot
-was obtained. These observations do not establish the cause or a Fluux crash.
-No automatic retry was made, and cleanup stopped the simulator.
+was obtained. No automatic retry was made, and cleanup stopped the simulator.
+FLM-177 later found the cause: powering off screen 1 makes every SpringBoard
+start abort. See [Why `Host is down`](#why-host-is-down).
 
 The **FLM-50 task record** holds the primary-screen journey log, display
 inventory, display-power confirmations, failed test-launcher log and the
 intentionally black secondary-screen capture. The second screen, a real Duo
 landscape and the fold transition remain untested; none is a passing result.
+
+## Duo special cases (FLM-177)
+
+FLM-177 follows FLM-50 with the remaining Duo cases: an external screen, the
+built-in second screen, the app split across both screens in portrait and in
+landscape, and the move between screens when the device folds.
+
+### Why `Host is down`
+
+Screen 1 (`LCD`, the cover screen) is the simulator's main display. FLM-50
+powered it off to reach screen 3. SpringBoard can keep running while screen 1
+is off, but any SpringBoard start then aborts while the system shell
+initializes. The assertion in
+`-[SBMainDisplayConfigurationTransformer transformDisplayConfiguration:]` reads
+“We expect a valid bounds for configuration”, for a main display whose mode is
+0×0. launchd restarts SpringBoard about every 30 seconds, and each start
+aborts again. During that loop every app launch or termination fails with “The
+system shell probably crashed”. FLM-50's test launcher reported the termination
+part as POSIX error 64, `Host is down`.
+
+FLM-177 reproduced this on a fresh Duo simulator before Fluux was installed:
+
+1. Boot with the default screen power: screens 1 and 3 on.
+2. Power off screen 1 with
+   `xcrun simctl io <udid> screenConfig --display=1 power off`.
+3. Restart SpringBoard. The shell that was already running survives step 2;
+   a new one does not.
+
+Each SpringBoard start then aborted with the same stack as FLM-50's crash
+report, and `xcrun simctl launch <udid> com.apple.Preferences` failed with the
+same shell-crashed error. Powering screen 1 back on ended the crash loop.
+Launches still hung and both screens stayed black, so the simulator had to be
+shut down. What restarted SpringBoard during FLM-50 is not recorded; it started
+one second after the test command.
+
+**Keep screen 1 powered on.** If it was powered off, power it on and shut down
+the simulator before the next run.
 
 ## Evidence record and local gate
 
