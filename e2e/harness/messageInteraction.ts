@@ -59,6 +59,13 @@ export async function setupInteraction(page: Page, kind: ConversationKind, resti
   await expect(row).toBeInViewport()
   await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
   await stableFrames(page, TARGET)
+  if (!restingPointer) {
+    // The listener mounts with the conversation: give it coordinates before a deliberate entry.
+    // A browser's first mousemove can have zero movement even when the pointer changed position.
+    await page.mouse.move(1, 1)
+    await page.mouse.move(0, 0)
+    await page.keyboard.press('Shift')
+  }
   return { row, body: row.locator('[data-message-body]'), list: page.locator('[data-message-list]') }
 }
 
