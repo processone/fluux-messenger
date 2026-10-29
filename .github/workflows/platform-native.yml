@@ -79,6 +79,9 @@ jobs:
           # Only main saves: a cache saved from a pull request is private to it.
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: npm ci
+      # Fake Xcode, Tauri and signing tools; the TestFlight and install scripts only run on macOS.
+      - name: Test iOS build, install and TestFlight scripts
+        run: npm run test:ios-build-scripts
       - run: npm run tauri:ios:init
       - name: Check share URL scheme generation
         run: |

@@ -41,6 +41,7 @@
     "test:ios-photos": "node --test scripts/ios-photo-reduction.test.mjs",
     "test:ios-generated-files": "node --test scripts/ios-generated-files.test.mjs",
     "test:ios-project": "node --test scripts/ios-project-freshness.test.mjs",
+    "test:ios-build-scripts": "node --test scripts/ios-icons.test.mjs scripts/ios-install.test.mjs scripts/ios-testflight.test.mjs scripts/ios-generated-files.test.mjs scripts/ios-project-freshness.test.mjs",
     "test:local": "node scripts/test-local.mjs",
     "test:local:policy": "node --test scripts/test-local.test.mjs",
     "test:parallel": "node scripts/test-parallel.mjs",
