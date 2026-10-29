@@ -2,13 +2,14 @@
 // even when settings navigation remounts the conversation (FLM-255).
 import { test, expect, type Page } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
+import { activateChat } from './harness/scrollHarness'
 
 const BODY = 'Et il y a aussi ce nouveau ticket dolya: https://ejabberd.atlassian.net/browse/EJABS-4575'
 const PEER = 'emma@fluux.chat'
 
 async function openChat(page: Page) {
   await bootDemo(page, '/demo.html?tutorial=false')
-  await page.evaluate((peer) => {
+  await page.evaluate(() => {
     const w = window as any
     const client = w.__demoClient
     client.stopAnimation()
@@ -25,8 +26,8 @@ async function openChat(page: Page) {
       w.__sendProbe.settled = true
       return result
     }
-    location.hash = `#/messages/${encodeURIComponent(peer)}`
-  }, PEER)
+  })
+  await activateChat(page, PEER)
   // The demo initially opens Ava. Wait for the requested recipient's actual
   // composer, not merely any visible textarea while routing is still pending.
   const field = page.getByPlaceholder('Message Emma Wilson', { exact: true })
