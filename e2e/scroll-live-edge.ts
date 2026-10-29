@@ -617,9 +617,11 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
   async function enterAtBottom(page: Page): Promise<void> {
     await loadDemo(page)
     await navigateToStressRoom(page)
+    // This suite tests ordinary ambient following, not an interaction-owned reading position.
+    // Place the pointer first; explicit latest then ends any hold before the boundary wheel.
+    await hoverList(page)
     await page.keyboard.press('End')
     await settle(page)
-    await hoverList(page)
     expect(
       (await readGeometry(page)).distFromBottom,
       'precondition: the reader starts glued to the live edge',
@@ -707,13 +709,10 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     // that leaves the reader inside the band.
     await page.mouse.wheel(0, 120)
     await page.waitForTimeout(300)
-    await wheelUntil(
-      page,
-      -NEAR_OFFSET_PX,
-      async () => (await readGeometry(page)).distFromBottom,
-      distance => distance > PIN_TOLERANCE_PX && distance < AT_BOTTOM_OK_PX,
-      { message: 'wheel input did not stop inside the at-bottom band' },
-    )
+    // One bounded step, not repeated input: a command may return before its native event arrives.
+    // Repeating after a stale zero read queues a second -100 and skips the entire 150px band.
+    await page.mouse.wheel(0, -NEAR_OFFSET_PX)
+    await expect.poll(async () => (await readGeometry(page)).distFromBottom).toBeGreaterThan(PIN_TOLERANCE_PX)
     await settle(page)
     const before = await readGeometry(page)
     expect(
@@ -730,6 +729,33 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
       (await readGeometry(page)).distFromBottom,
       'a reader inside the band must be re-pinned, exactly as an armed follow already is',
     ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
+  })
+
+  // FLM-229's approved "did not scroll" condition and FLM-245 I1: a real hover hold
+  // changes the initial policy. Native takeover keeps that reading position, even inside the band.
+  test('a held message yields to near-bottom native scrolling without re-pinning', async ({ page }, testInfo) => {
+    await enterAtBottom(page)
+    const list = page.locator('[data-message-list]').first()
+    await page.mouse.move(0, 0)
+    await hoverList(page)
+    await expect(list).toHaveAttribute('data-message-interaction', /.+/)
+    const held = await list.getAttribute('data-message-interaction')
+    await page.mouse.wheel(0, 120)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await page.mouse.wheel(0, -100)
+    await expect.poll(async () => (await readGeometry(page)).distFromBottom).toBeGreaterThan(PIN_TOLERANCE_PX)
+    await settle(page)
+    const before = await readGeometry(page)
+    expect(before.distFromBottom).toBeLessThan(AT_BOTTOM_OK_PX)
+    await setTyping(page, true)
+    await page.waitForSelector('[data-typing-pill]', { timeout: 5_000 })
+    await settle(page)
+    const after = await readGeometry(page)
+    const reading = { held, released: await list.getAttribute('data-message-interaction'), before, after }
+    await testInfo.attach('held-native-near-bottom', { body: JSON.stringify(reading), contentType: 'application/json' })
+    expect(Math.abs(after.scrollTop - before.scrollTop), 'typing must not resume after manual takeover').toBeLessThanOrEqual(1)
+    expect(after.distFromBottom).toBeGreaterThan(PIN_TOLERANCE_PX)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
   })
 
   test('a finger on the list holds the view until it lifts, then the band re-pins', async ({ page }) => {

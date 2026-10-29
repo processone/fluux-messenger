@@ -113,33 +113,21 @@ describe('interaction position ownership', () => {
     expect(controller.beginInteractionHold({ conversationId, desired, executor: anchor() })).not.toBeNull()
   })
 
-  it('manual input ends the interaction without automatic release-resume or geometry rearm', () => {
+  // FLM-229: resume only when the reader did not scroll. FLM-245 I1's real held-room
+  // capture supplies the boundary wheel geometry; a later near-bottom typing band must not resume.
+  it.each([
+    { name: 'unobserved', input: undefined },
+    { name: 'wheel', input: { deltaY: 120, geometry: { top: 3434, height: 4046, client: 612 } } },
+  ])('manual $name input ends the interaction without automatic release-resume or geometry rearm', ({ input }) => {
     const { controller, close } = setup()
     controller.beginInteractionHold({ conversationId, desired, executor: anchor() })
-    controller.observeUserInput(conversationId)
+    controller.observeUserInput(conversationId, input)
     expect(close).toHaveBeenCalledOnce()
     const position = vi.fn()
     controller.releaseInteractionHold({ conversationId, resume: true, liveEdge: live(position) })
+    controller.observeUserScroll(conversationId, -100, false)
     expect(controller.reconcileLiveEdge({ conversationId, executor: live(position), rearmEligibleFromGeometry: true })).toBe(false)
     expect(position).not.toHaveBeenCalled()
-  })
-  // FLM-245 I1: the captured held-room journey ends at 100px, then the 40px typing band
-  // must use the ordinary near-bottom policy instead of retaining a dismissed interaction.
-  it('hands an observed wheel back to ordinary geometry policy after ending a hold', () => {
-    const { controller, close } = setup()
-    controller.beginInteractionHold({ conversationId, desired, executor: anchor() })
-    controller.observeUserInput(conversationId, {
-      deltaY: 120,
-      geometry: { top: 3434, height: 4046, client: 612 },
-    })
-    expect(close).toHaveBeenCalledOnce()
-    expect(controller.hasInteractionPosition()).toBe(false)
-    const position = vi.fn()
-    expect(controller.reconcileLiveEdge({ conversationId, executor: live(position), rearmEligibleFromGeometry: false })).toBe(false)
-    expect(position).not.toHaveBeenCalled()
-    controller.observeUserScroll(conversationId, -100, false)
-    expect(controller.reconcileLiveEdge({ conversationId, executor: live(position), rearmEligibleFromGeometry: true })).toBe(true)
-    expect(position).toHaveBeenCalledOnce()
   })
   it('ignores a stale release after leaving the conversation', () => {
     const { controller } = setup()
