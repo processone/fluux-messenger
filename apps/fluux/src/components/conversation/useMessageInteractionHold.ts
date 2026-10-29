@@ -68,7 +68,7 @@ export function useMessageInteractionHold({
     held.current = null
     pointerRow.current = null
     focusRow.current = null
-    dragging.current = false
+    // Hold cancellation is not a physical mouseup; a selection drag can still be running.
     const closing = menu.current
     menu.current = null
     closing?.close()
@@ -206,7 +206,7 @@ export function useMessageInteractionHold({
         ports.current.release(true)
       }
     }
-    const onBlur = () => { cancel(); ports.current.release(true); point = null; suppressPointer = false }
+    const onBlur = () => { dragging.current = false; cancel(); ports.current.release(true); point = null; suppressPointer = false }
     document.addEventListener('mousemove', onMove, true)
     document.addEventListener('mouseout', onOut, true)
     document.addEventListener('mousedown', onDown, true)
@@ -230,6 +230,7 @@ export function useMessageInteractionHold({
       document.removeEventListener('focusout', onFocusOut, true)
       document.removeEventListener('input', onInput, true)
       window.removeEventListener('blur', onBlur)
+      dragging.current = false
       cancel()
       ports.current.release(false)
     }

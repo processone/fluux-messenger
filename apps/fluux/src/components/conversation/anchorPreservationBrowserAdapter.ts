@@ -86,7 +86,9 @@ export class AnchorPreservationBrowserAdapter {
           )
           this.options.rememberScrollSnapshot()
         }
-        this.options.recordProgrammaticWrite(request.conversationId)
+        // Ending an interaction loop is not a write. Recording here would bless a native
+        // scroll before the replacement loop observes it, and snap selection/find back.
+        if (request.source.kind !== 'interaction') this.options.recordProgrammaticWrite(request.conversationId)
         this.options.log?.('ANCHOR: controller completed preservation', {
           conversationId: request.conversationId,
           generation: request.generation,

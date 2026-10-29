@@ -236,11 +236,11 @@ describe('FLM-245 interaction cleanup', () => {
     expect(observed).toHaveBeenCalledTimes(2)
     unsubscribe()
   })
-  it('does not reacquire while a pressed selection drag continues after takeover', () => {
+  it('does not reacquire before the physical drag ends, even without a mousemove button mask', () => {
     const { result, begin } = setup()
     mouse('mousedown', row)
     act(() => result.current.cancel())
-    act(() => row.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 120, clientY: 210, buttons: 1 })))
+    act(() => row.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 120, clientY: 210, buttons: 0 })))
     expect(begin).toHaveBeenCalledOnce()
     expect(result.current.context.heldMessageId).toBeNull()
   })

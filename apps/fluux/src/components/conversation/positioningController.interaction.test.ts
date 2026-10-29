@@ -2,6 +2,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { PositioningController, type AnchorPreservationExecutor, type LiveEdgeExecutor } from './positioningController'
 import { messageFraction, pixelOffset } from './scrollPositionModel'
+import { AnchorPreservationBrowserAdapter } from './anchorPreservationBrowserAdapter'
+import { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
+import { ViewportSession } from './viewportSession'
 
 const conversationId = 'emma@fluux.chat'
 // Baseline capture: the target top was 552px in a scroller beginning at 95px.
@@ -128,4 +131,29 @@ describe('interaction position ownership', () => {
     controller.releaseInteractionHold({ conversationId, resume: true, liveEdge: live() })
     expect(controller.snapshot()).toBe(current)
   })
+})
+
+// Captain FLM-245 F3: cancelling a settle loop is not a pixel write.
+it('FLM-245 does not bless unobserved movement when an interaction loop is superseded', () => {
+  const { controller } = setup()
+  const request = controller.beginInteractionHold({ conversationId, desired, executor: anchor() })!
+  const session = new ViewportSession(conversationId, true)
+  const before = { top: 393, height: 1000, client: 557 }
+  const moved = { ...before, top: 413 }
+  session.recordProgrammaticWrite(conversationId, 1000, before)
+  const scroller = document.createElement('div')
+  const ports = { getScroller: () => scroller, getVirtualizer: () => undefined }
+  const record = vi.fn(() => session.recordProgrammaticWrite(conversationId, 1020, moved))
+  const browser = new AnchorPreservationBrowserAdapter({
+    ...ports, getActiveConversationId: () => conversationId,
+    getWindowFacts: () => ({ hasRows: true, windowAtLiveEdge: true }),
+    anchorAdapter: new BottomFractionAnchorBrowserAdapter(ports),
+    beginLoop: () => null, setAtBottom: vi.fn(), rememberScrollSnapshot: vi.fn(),
+    recordProgrammaticWrite: record, observeGeometry: vi.fn(),
+  })
+  browser.createExecutor('interaction-anchor').complete(request, 'superseded')
+  expect(record).not.toHaveBeenCalled()
+  expect(session.observeGeometry(conversationId, moved, {
+    now: 1040, controllerOwnsPixels: true, interactionHeld: true,
+  })?.userDelta).toBe(20)
 })

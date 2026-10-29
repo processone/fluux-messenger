@@ -1,3 +1,4 @@
+import { latestJumpVisible } from './fabVisibility'
 /**
  * MessageList - Renders a scrollable list of messages with date separators.
  *
@@ -605,6 +606,7 @@ export function MessageList<T extends BaseMessage>({
     beginInteractionHold,
     releaseInteractionHold,
     setInteractionMenuOpen,
+    interactionMenuOpen,
     setScrollContainerRef: setScrollContainerRefFromHook,
     contentWrapperRef,
     commitVirtualizerLayout,
@@ -851,7 +853,7 @@ export function MessageList<T extends BaseMessage>({
   // latest" — recenter the resident window to the newest slice, then scroll to the bottom. Shown
   // whenever the window is slid up (newer content exists off-screen), not only past the FAB threshold.
   const windowSlidUp = windowAtLiveEdge === false
-  const fabVisible = showScrollToBottom || windowSlidUp
+  const fabVisible = latestJumpVisible(showScrollToBottom, windowSlidUp, interactionMenuOpen)
   // The FAB badge is the ONE canonical count (never a resident-array or
   // below-viewport recount) — scrolling is navigation, not read state. Visibility (fabVisible,
   // above) is purely viewport-driven and independent of this; a fully-read conversation the reader
@@ -1067,6 +1069,8 @@ export function MessageList<T extends BaseMessage>({
 
       {/* Scroll to bottom FAB with spring animation */}
       <div
+        data-fab-container="scroll-to-bottom"
+        hidden={interactionMenuOpen}
         className={`absolute bottom-4 end-4 z-40 ${fabAnimationClass(fabVisible, hasFabBeenVisibleRef.current)}`}
         inert={!fabVisible}
       >

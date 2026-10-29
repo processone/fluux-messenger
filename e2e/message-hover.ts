@@ -3,7 +3,7 @@ import type { DemoClient } from '@fluux/sdk/demo'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
 import { AT_BOTTOM_OK_PX, waitForTopVisibleSettled, wheelAwayFromBottom } from './harness/scrollHarness'
-import { arrive, distance, keepJson, measureDuring, mountedMessageIndexes, readInteractionReadState, readInteractionView, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
+import { arrive, distance, keepJson, measureDuring, mountedMessageIndexes, readInteractionReadState, readInteractionView, scrollToBottomContainer, interactionScrollFrames, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
 
 async function seedRow(page: Page, content: 'long' | 'file', mode: 'light' | 'dark' = 'dark') {
   await bootDemo(page, '/demo.html?tutorial=false')
@@ -296,7 +296,7 @@ for (const kind of ['chat', 'room'] as const) {
     await keepJson(`${kind}-held-geometry`, samples)
     // Captain FLM-245 F6: the jump must not cover a message's open menu.
     await expect(page.locator('[data-fab="scroll-to-bottom"]')).toHaveAttribute('tabindex', '-1')
-    await expect(page.locator('[data-fab="scroll-to-bottom"]')).toHaveCSS('opacity', '0')
+    await expect(scrollToBottomContainer(page)).toBeHidden()
     const readState = await readInteractionReadState(page, kind)
     expect(readState.readId, 'the fixture establishes a real canonical pointer').not.toBeNull()
     expect(readState.unread, 'offscreen arrivals remain unread while delivery continues').toBeGreaterThan(0)
@@ -641,7 +641,9 @@ for (const kind of ['chat', 'room'] as const) {
     await page.mouse.move(box.x + 3, box.y + box.height / 2)
     await page.mouse.down()
     await page.mouse.move(box.x + Math.min(180, box.width - 3), box.y + box.height / 2, { steps: 5 })
-    await page.mouse.move(box.x + 80, view.y + view.height - 2, { steps: 12 })
+    await page.mouse.move(box.x + 80, view.y + view.height + 15, { steps: 12 })
+    const selectionFrames = await interactionScrollFrames(page)
+    await keepJson(`${kind}-native-selection-scroll-frames`, { before, samples: selectionFrames, after: await readInteractionView(page) })
     await expect.poll(async () => (await readInteractionView(page)).top).toBeGreaterThan(before.top + 1)
     await expect(list).not.toHaveAttribute('data-message-interaction')
     expect((await readInteractionView(page)).selectedText.length).toBeGreaterThan(0)
@@ -665,8 +667,11 @@ for (const kind of ['chat', 'room'] as const) {
     await row.getByRole('button', { name: 'More options', exact: true }).click()
     await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
     const findBefore = await readInteractionView(page)
+    const findTargetBefore = await page.locator(`.message-row[data-message-id="${findId}"]`).boundingBox()
     const found = await page.evaluate(query => (window as unknown as { find: (query: string) => boolean }).find(query), query)
     expect(found).toBe(true)
+    const findFrames = await interactionScrollFrames(page)
+    await keepJson(`${kind}-native-find-scroll-frames`, { found, id: findId, targetBefore: findTargetBefore, before: findBefore, samples: findFrames, after: await readInteractionView(page), targetAfter: await page.locator(`.message-row[data-message-id="${findId}"]`).boundingBox() })
     await expect(list).not.toHaveAttribute('data-message-interaction')
     await expect(row.locator('[data-message-panel]')).toHaveCount(0)
     await expect(page.locator(`.message-row[data-message-id="${findId}"]`)).toBeInViewport()

@@ -173,3 +173,19 @@ export async function readInteractionView(page: Page, targetId = TARGET) {
       selectedText: document.getSelection()?.toString() ?? '' }
   }, targetId)
 }
+
+export const scrollToBottomContainer = (page: Page) => page.locator('[data-fab-container="scroll-to-bottom"]')
+
+/** Observe actual native scrolling while the pointer remains pressed; never advance it by assignment. */
+export async function interactionScrollFrames(page: Page, frames = 30) {
+  return page.evaluate(frames => new Promise<{ top: number; held: string | null; selected: number }[]>(resolve => {
+    const samples: { top: number; held: string | null; selected: number }[] = []
+    const frame = () => {
+      const list = document.querySelector<HTMLElement>('[data-message-list]')!
+      samples.push({ top: list.scrollTop, held: list.getAttribute('data-message-interaction'), selected: document.getSelection()?.toString().length ?? 0 })
+      if (samples.length === frames) resolve(samples)
+      else requestAnimationFrame(frame)
+    }
+    requestAnimationFrame(frame)
+  }), frames)
+}
