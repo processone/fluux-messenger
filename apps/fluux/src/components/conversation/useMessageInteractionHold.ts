@@ -131,6 +131,8 @@ export function useMessageInteractionHold({
     if (!enabled) return
     let point: { x: number; y: number } | null = null
     let suppressPointer = false
+    let middlePress: { x: number; y: number } | null = null
+    let middlePressMoved = false
     const rowFor = (target: EventTarget | null) => {
       // Confirmation dialogs are DOM descendants of a row, but are not its toolbar interaction.
       if (target instanceof Element && target.closest('[data-modal]')) return null
@@ -138,6 +140,8 @@ export function useMessageInteractionHold({
       return row && scrollRef.current?.contains(row) ? row : null
     }
     const onMove = (event: MouseEvent) => {
+      if (middlePress && (event.buttons & 4) !== 0 &&
+        (middlePress.x !== event.clientX || middlePress.y !== event.clientY)) middlePressMoved = true
       const moved = point
         ? point.x !== event.clientX || point.y !== event.clientY
         : Boolean(event.movementX || event.movementY)
@@ -161,6 +165,8 @@ export function useMessageInteractionHold({
       if (event.button === 1) {
         // Resume saved following; native autoscroll consumes auxclick and keeps hover blocked.
         suppressPointer = true
+        middlePress = { x: event.clientX, y: event.clientY }
+        middlePressMoved = false
         cancel()
         ports.current.release(true)
         return
@@ -177,18 +183,24 @@ export function useMessageInteractionHold({
     const onUp = (event: MouseEvent) => {
       dragging.current = false
       // Autoscroll can consume its stopping mousedown but still deliver mouseup.
-      if (event.button !== 1 || !('onauxclick' in document.documentElement)) suppressPointer = false
+      if (event.button !== 1 || middlePressMoved || !('onauxclick' in document.documentElement)) suppressPointer = false
+      middlePress = null
+      middlePressMoved = false
       maybeRelease()
     }
-    const onAuxClick = (event: MouseEvent) => { if (event.button === 1) suppressPointer = false }
+    const onAuxClick = (event: MouseEvent) => {
+      if (event.button === 1) { suppressPointer = false; middlePress = null; middlePressMoved = false }
+    }
     const onDragFinish = (event: DragEvent) => {
       dragging.current = false
       suppressPointer = false
+      middlePress = null
+      middlePressMoved = false
       pointerRow.current = rowFor(document.elementFromPoint?.(event.clientX, event.clientY) ??
         (event.type === 'drop' ? event.target : null))
       maybeRelease()
     }
-    const onKey = () => { keyboard.current = true; suppressPointer = false }
+    const onKey = () => { keyboard.current = true; suppressPointer = false; middlePress = null; middlePressMoved = false }
     const onFocus = (event: FocusEvent) => {
       const target = event.target instanceof Element ? event.target : null
       const row = target?.closest('[data-message-toolbar]') ? rowFor(target) : null
@@ -212,7 +224,15 @@ export function useMessageInteractionHold({
         ports.current.release(true)
       }
     }
-    const onBlur = () => { dragging.current = false; cancel(); ports.current.release(true); point = null; suppressPointer = false }
+    const onBlur = () => {
+      dragging.current = false
+      cancel()
+      ports.current.release(true)
+      point = null
+      suppressPointer = false
+      middlePress = null
+      middlePressMoved = false
+    }
     document.addEventListener('mousemove', onMove, true)
     document.addEventListener('mouseout', onOut, true)
     document.addEventListener('mousedown', onDown, true)

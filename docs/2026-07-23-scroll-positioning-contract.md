@@ -339,8 +339,10 @@ Native `dragend` and `drop` clear dragging even when the browser delivers no `mo
 composer disengages any hold, including one started by a Reply click or keyboard action, using the
 saved-following policy. Only an open More/reaction menu retains its hold during composer input.
 A middle-button press also releases using the saved-following policy. An ordinary middle-click's
-`auxclick` completion clears hover suppression; native autoscroll consumes that event and keeps the
-block until a stopping click/release, key or blur. Hosts without `auxclick` clear it on mouseup.
+`auxclick` completion clears hover suppression. A held middle drag clears it on physical release,
+even when the browser consumes `auxclick`. A clicked, latched pan keeps the block until its stopping
+click/release, key or blur; actual native movement still takes priority through viewport attribution.
+Hosts without `auxclick` clear it on mouseup.
 Only a reader who was following latest before the hold resumes automatically. History reading keeps
 a settled fixed position; a deliberate scroll, own send or explicit jump takes priority and closes
 panels before moving. A manual takeover cannot rearm from the usual near-bottom band alone: actual

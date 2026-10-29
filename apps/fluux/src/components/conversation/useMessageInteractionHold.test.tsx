@@ -275,6 +275,17 @@ describe('FLM-245 interaction cleanup', () => {
     mouse('mousemove', row, 130, 220)
     expect(result.current.context.heldRow).toBe(row)
   })
+  it('G3 ends hover suppression when a held middle drag releases without auxclick', () => {
+    const { result, begin, release } = setup()
+    moveIntoRow()
+    act(() => row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 1, buttons: 4, clientX: 100, clientY: 200 })))
+    act(() => row.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 4, clientX: 100, clientY: 150 })))
+    act(() => row.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 1, buttons: 0, clientX: 100, clientY: 150 })))
+    mouse('mousemove', row, 130, 160)
+    expect(release).toHaveBeenCalledWith(true)
+    expect(begin).toHaveBeenCalledTimes(2)
+    expect(result.current.context.heldRow).toBe(row)
+  })
   it.each(['pointer', 'click', 'keyboard', 'menu'])('FLM-245 G2: composer input releases %s holds unless a menu is open', intent => {
     const { result, release } = setup()
     const input = document.createElement('textarea')
