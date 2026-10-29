@@ -275,6 +275,23 @@ describe('FLM-245 interaction cleanup', () => {
     mouse('mousemove', row, 130, 220)
     expect(result.current.context.heldRow).toBe(row)
   })
+  // FLM-245 H1: the kept native room pan moves one pixel before latching on release.
+  it('keeps every row blocked when middle-button jitter releases into a latched pan', () => {
+    const { result, begin } = setup()
+    moveIntoRow()
+    act(() => row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 1, buttons: 4, clientX: 100, clientY: 200 })))
+    expect(result.current.context.heldMessageId).toBeNull()
+    act(() => row.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 4, clientX: 101, clientY: 200 })))
+    act(() => row.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 1, buttons: 0, clientX: 101, clientY: 200 })))
+    const arrival = row.cloneNode(true) as HTMLDivElement
+    arrival.dataset.messageRowId = 'jitter-latched-7'
+    container.append(arrival)
+    mouse('mousemove', arrival, 100, 150)
+    expect(begin).toHaveBeenCalledOnce()
+    expect(result.current.context.heldMessageId).toBeNull()
+    mouse('mousemove', row, 100, 140)
+    expect(begin).toHaveBeenCalledOnce()
+  })
   it('G3 ends hover suppression when a held middle drag releases without auxclick', () => {
     const { result, begin, release } = setup()
     moveIntoRow()

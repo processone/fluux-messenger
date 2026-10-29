@@ -340,7 +340,9 @@ composer disengages any hold, including one started by a Reply click or keyboard
 saved-following policy. Only an open More/reaction menu retains its hold during composer input.
 A middle-button press also releases using the saved-following policy. An ordinary middle-click's
 `auxclick` completion clears hover suppression. A held middle drag clears it on physical release,
-even when the browser consumes `auxclick`. A clicked, latched pan keeps the block until its stopping
+even when the browser consumes `auxclick`. Sub-dead-zone pointer jitter does not count as a held drag:
+Blink changes its middle-pan mode only outside its 15-CSS-pixel dead zone on either axis. Such jitter
+must keep every row blocked when release latches the pan. A clicked, latched pan keeps the block until its stopping
 click/release, key or blur; actual native movement still takes priority through viewport attribution.
 Hosts without `auxclick` clear it on mouseup.
 Only a reader who was following latest before the hold resumes automatically. History reading keeps

@@ -13,6 +13,9 @@ interface InteractionContext {
 export const MessageInteractionContext = createContext<InteractionContext | null>(null)
 const noSubscription = () => () => {}
 const notHeld = () => false
+// Blink's HandleMouseMoveForMiddleClickAutoscroll changes from latched to held only outside
+// kNoMiddleClickAutoscrollRadius (15 CSS px on either axis). A smaller nudge is still latched.
+const MIDDLE_PAN_DEAD_ZONE = 15
 
 /** FLM-245 F4: ownership changes update only the old and new row, not every bubble. */
 export function useMessageInteractionHeld(ref: RefObject<HTMLElement | null>): boolean {
@@ -141,7 +144,8 @@ export function useMessageInteractionHold({
     }
     const onMove = (event: MouseEvent) => {
       if (middlePress && (event.buttons & 4) !== 0 &&
-        (middlePress.x !== event.clientX || middlePress.y !== event.clientY)) middlePressMoved = true
+        (Math.abs(middlePress.x - event.clientX) > MIDDLE_PAN_DEAD_ZONE ||
+          Math.abs(middlePress.y - event.clientY) > MIDDLE_PAN_DEAD_ZONE)) middlePressMoved = true
       const moved = point
         ? point.x !== event.clientX || point.y !== event.clientY
         : Boolean(event.movementX || event.movementY)
