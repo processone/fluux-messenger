@@ -686,9 +686,21 @@ for (const kind of ['chat', 'room'] as const) {
     expect((await readInteractionView(page)).selectedText.length).toBeGreaterThan(0)
     await page.mouse.up()
     observations.push({ stage: 'native selection autoscroll takes over', before, after: await readInteractionView(page) })
+    await page.evaluate(() => document.getSelection()?.removeAllRanges())
+    await body.hover()
+    await waitForActions(page)
+    await row.getByRole('button', { name: 'More options', exact: true }).click()
+    await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
+    // F3/G1: native find can reveal an offscreen DOM match, not a virtualized-away row.
+    // Hovering the original can re-window the list, so choose its nearest mounted match last.
     const findId = await list.evaluate(element => {
       const view = element.getBoundingClientRect()
-      return [...element.querySelectorAll<HTMLElement>('.message-row')].find(row => row.getBoundingClientRect().bottom < view.top - 5)!.dataset.messageId!
+      const candidates = [...element.querySelectorAll<HTMLElement>('.message-row')]
+        .map(row => ({ id: row.dataset.messageId!, bottom: row.getBoundingClientRect().bottom }))
+        .filter(row => row.bottom < view.top - 5)
+        .sort((a, b) => b.bottom - a.bottom)
+      if (!candidates.length) throw new Error('No mounted offscreen message for native find')
+      return candidates[0].id
     })
     const query = 'An earlier conversation message to find'
     await page.evaluate(async ({ kind, id, query }) => {
@@ -696,15 +708,13 @@ for (const kind of ['chat', 'room'] as const) {
       const jid = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
       const store = kind === 'chat' ? scope.__chatStore : scope.__roomStore
       await store.getState().updateMessage(jid, id, { body: query })
-      document.getSelection()?.removeAllRanges()
     }, { kind, id: findId, query })
-    await expect(page.locator(`.message-row[data-message-id="${findId}"]`)).not.toBeInViewport()
-    await body.hover()
-    await waitForActions(page)
-    await row.getByRole('button', { name: 'More options', exact: true }).click()
-    await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
+    const findTarget = page.locator(`.message-row[data-message-id="${findId}"]`)
+    await expect(findTarget).toContainText(query)
+    await expect(findTarget).toBeAttached()
+    await expect(findTarget).not.toBeInViewport()
     const findBefore = await readInteractionView(page)
-    const findTargetBefore = await page.locator(`.message-row[data-message-id="${findId}"]`).boundingBox()
+    const findTargetBefore = await findTarget.boundingBox()
     const findResult = await findAndRevealInteractionText(page, query)
     const found = findResult.found
     expect(found).toBe(true)
