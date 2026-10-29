@@ -498,21 +498,31 @@ export function useMessageListScroll({
       placement: { kind: 'bottom-fraction', fraction: messageFraction(anchor.fraction) },
     })) virtualizerRef.current?.cancelPendingScroll?.()
   }
+  // Accepting a new target retires the old input, but its released fling can still move the DOM
+  // before the deferred writer runs. Attribute only that known tail to the current navigation;
+  // a new contact, input packet, settled target, or missing gesture state retains the reader veto.
+  const navigationOwnsFling = (id: string): boolean => {
+    return positioningControllerRef.current?.hasPendingMessageNavigation(id) === true &&
+      virtualizerRef.current?.hasPendingFling?.() === true
+  }
   const observeViewportGeometry = (id: string, input?: UserScrollInput, resetInput = false) => {
     const scroller = scrollerRef.current
     const session = viewportSessionRef.current
     if (!scroller || !session) return null
     const previous = session.snapshotFor(id)?.geometry
     const geometry = readViewportGeometry(scroller, session.observedRowIdFor(id))
+    const ownsFling = !input && navigationOwnsFling(id)
     const movement = session.observeGeometry(id, geometry, {
       now: Date.now(),
       controllerOwnsPixels: reassertLoopRef.current !== null,
       input,
       resetInput,
+      navigationOwnsFling: ownsFling,
     })
     if (DEBUG) debugLog('VIEWPORT observation', {
       generation: positioningControllerRef.current?.snapshot().active?.request.generation,
       previous, geometry, movement, controllerOwnsPixels: reassertLoopRef.current !== null,
+      navigationOwnsFling: ownsFling,
     })
     if (movement?.userDelta) {
       session.recordViewport(id, geometry, findBottomAnchor(scroller))
@@ -1290,16 +1300,19 @@ export function useMessageListScroll({
     rememberReadingWidthAnchor(conversationId, el, bottomAnchor)
     const previousGeometry = viewportSessionRef.current?.snapshotFor(conversationId)?.geometry
     const geometry = readViewportGeometry(el, viewportSessionRef.current?.observedRowIdFor(conversationId))
+    const ownsFling = navigationOwnsFling(conversationId)
     const viewportObservation = viewportSessionRef.current?.observeScroll({
       conversationId,
       geometry,
       bottomAnchor,
       controllerOwnsPixels: programmaticScroll,
+      navigationOwnsFling: ownsFling,
       now,
     })
     if (DEBUG) debugLog('SCROLL observation', {
       generation: positioningControllerRef.current?.snapshot().active?.request.generation,
       previousGeometry, geometry, viewportObservation, controllerOwnsPixels: programmaticScroll,
+      navigationOwnsFling: ownsFling,
     })
     rebaseViewportAfterResize(conversationId, el, previousGeometry, geometry, viewportObservation?.userDelta ?? 0)
     const genuineUserScroll = viewportObservation?.genuineUserScroll ?? false

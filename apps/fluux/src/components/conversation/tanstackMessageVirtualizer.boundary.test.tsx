@@ -57,7 +57,10 @@ function fixture({
     offsetHeight: { value: client }, offsetWidth: { value: 800 },
     clientHeight: { value: client }, scrollHeight: { get: () => height },
   })
-  scroller.scrollTo = options => { scroller.scrollTop = (options as ScrollToOptions).top ?? 0 }
+  scroller.scrollTo = options => {
+    const top = (options as ScrollToOptions).top ?? 0
+    scroller.scrollTop = Math.max(0, Math.min(top, scroller.scrollHeight - scroller.clientHeight))
+  }
   const items = Array.from({ length: count }, (_, index) => ({ key: `row-${index}` }))
   const measured = vi.fn()
   const hook = renderHook(({ items }) => {
@@ -324,6 +327,69 @@ it.each(['offset', 'index', 'mount'] as const)('publishes the landed viewport af
   expect(scope.scroller.scrollTop).toBe(880)
   act(() => scope.result.current.scrollToOffset(200))
   expect(scope.scroller.scrollTop).toBe(200)
+})
+
+// Captain-approved FLM-231 F2: publish what the element actually did, at the accepted writer
+// boundary. No synthetic/native scroll event is needed for offset, index or mounting writes.
+it.each(['offset', 'index', 'mount'] as const)('re-windows the actual landed %s write without a scroll event', command => {
+  const size = 100
+  const scope = fixture({ size, height: 8000 })
+  act(() => scope.result.current.scrollToOffset(800))
+  const targetId = 'row-60'
+  const destination = scope.result.current.getOffsetForMessageId(targetId)!
+    - (scope.scroller.clientHeight - size) / 2
+  const writer = vi.spyOn(scope.scroller, 'scrollTo')
+
+  act(() => {
+    if (command === 'offset') scope.result.current.scrollToOffset(destination)
+    else if (command === 'index') scope.result.current.scrollToIndex(60, { align: 'center' })
+    else void scope.result.current.ensureMessageMounted(targetId)
+  })
+
+  expect(writer).toHaveBeenCalledWith(expect.objectContaining({ top: destination }))
+  expect(scope.scroller.scrollTop).toBe(destination)
+  expect(scope.result.current.getVirtualItems().some(row => row.key === targetId)).toBe(true)
+})
+
+it('publishes the bounded index write when the spacer shrinks during the authority check', () => {
+  const scope = fixture({ size: 100, height: 8000 })
+  const originalMax = scope.scroller.scrollHeight - scope.scroller.clientHeight
+  const writer = vi.spyOn(scope.scroller, 'scrollTo')
+  act(() => {
+    scope.result.current.setScrollWriteObserver?.(({ phase }) => {
+      if (phase === 'before') scope.grow(-1000)
+    })
+    scope.result.current.scrollToIndex(79, { align: 'end' })
+  })
+  expect(writer).toHaveBeenCalledWith(expect.objectContaining({ top: originalMax }))
+  // The element lands at the reduced range, not the destination decided before the shrink.
+  const landed = scope.scroller.scrollHeight - scope.scroller.clientHeight
+  expect(scope.scroller.scrollTop).toBe(landed)
+  const visible = scope.result.current.getVirtualItems()
+  expect(visible.some(row => row.start <= landed && row.start + row.size > landed)).toBe(true)
+  expect(visible.some(row => row.key === 'row-79')).toBe(false)
+})
+
+it('does not publish the destination of a smooth index write before the animation reaches it', () => {
+  const scope = fixture({ size: 100, height: 8000 })
+  act(() => scope.result.current.scrollToOffset(800))
+  const write = scope.scroller.scrollTo.bind(scope.scroller)
+  scope.scroller.scrollTo = options => {
+    const target = (options as ScrollToOptions).top ?? 0
+    const start = scope.scroller.scrollTop
+    // Model a real animation step: it moves on the next frame and reports its actual progress.
+    requestAnimationFrame(() => {
+      write({ top: (start + target) / 2 })
+      scope.scroller.dispatchEvent(new Event('scroll'))
+    })
+  }
+  act(() => scope.result.current.scrollToIndex(60, { align: 'center', behavior: 'smooth' }))
+  expect(scope.result.current.getVirtualItems().some(row => row.key === 'row-60')).toBe(false)
+  paintFrame()
+  const currentIndex = Math.floor(scope.scroller.scrollTop / 100)
+  expect(scope.scroller.scrollTop).toBeGreaterThan(800)
+  expect(scope.result.current.getVirtualItems().some(row => row.index === currentIndex)).toBe(true)
+  expect(scope.result.current.getVirtualItems().some(row => row.key === 'row-60')).toBe(false)
 })
 
 it('still re-lands a navigation issued after a cancel as its rows measure', () => {

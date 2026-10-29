@@ -86,9 +86,11 @@ function harness(virtualized: boolean, contentHeight = 1000, targetInset = 0, hi
   }
   const retained = vi.fn()
   let automaticAdjustmentEnabled = true
+  let pendingFling = false
   let writeObserver: Parameters<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>[0]
   const virtualizer: MessageVirtualizer | undefined = virtualized ? {
     retainMessage: retained,
+    hasPendingFling: () => pendingFling,
     setScrollWriteObserver: observer => { writeObserver = observer },
     setAutomaticScrollAdjustmentEnabled: enabled => { automaticAdjustmentEnabled = enabled },
     getVirtualItems: () => [{ index: 19, start: geometry.targetTop, size: geometry.targetHeight, key: 'selected' }],
@@ -217,6 +219,8 @@ function harness(virtualized: boolean, contentHeight = 1000, targetInset = 0, hi
       return detached!
     },
     setScrollDelivery: (enabled: boolean) => { deliverScrollEvents = enabled },
+    setPendingFling: (pending: boolean) => { pendingFling = pending },
+    beforeMeasure: () => act(() => { writeObserver?.({ phase: 'before-measure', source: 'measurement' }) }),
     search: () => act(() => setSearchTarget('selected')),
     nativeScroll: (top: number) => {
       scrollTop = Math.max(0, Math.min(top, geometry.height - geometry.client))
@@ -280,6 +284,57 @@ function harness(virtualized: boolean, contentHeight = 1000, targetInset = 0, hi
     },
   }
 }
+
+// Captain's reopened FLM-186 failure: the old fling moved 4469 -> 4439 at height 9878/client
+// 646 before the target write, without another touch. Replay those readings through the actual
+// scroll hook, session and controller. The virtualizer is a writer fixture, not device proof.
+describe('new message-jump handoff from a released fling', () => {
+  it.each([
+    { pendingFling: true, observation: 'frame', newInput: false },
+    { pendingFling: true, observation: 'measurement', newInput: false },
+    { pendingFling: true, observation: 'native', newInput: false },
+    { pendingFling: false, observation: 'frame', newInput: false },
+    { pendingFling: false, observation: 'measurement', newInput: false },
+    { pendingFling: false, observation: 'native', newInput: false },
+    { pendingFling: true, observation: 'measurement', newInput: true },
+  ] as const)('preserves the reader veto (fling: $pendingFling, sample: $observation, new input: $newInput)', test => {
+    const scope = harness(true, 9878, 0, true)
+    scope.geometry.client = 646
+    scope.geometry.targetTop = 2114
+    scope.geometry.targetHeight = 68
+    scope.setScrollDelivery(false)
+    scope.nativeScroll(4469)
+    scope.setPendingFling(test.pendingFling)
+    const decisions: Array<Record<string, unknown>> = []
+    const original = PositioningController.prototype.observeUserScroll
+    const observe = vi.spyOn(PositioningController.prototype, 'observeUserScroll')
+      .mockImplementation(function (this: PositioningController, id, delta, atLiveEdge) {
+        decisions.push({ event: 'user-scroll', delta, before: this.snapshot().active?.phase })
+        original.call(this, id, delta, atLiveEdge)
+        decisions.push({ event: 'after-user-scroll', active: this.snapshot().active })
+      })
+    try {
+      scope.search()
+      scope.scroller.scrollTop = 4439
+      scope.writes.length = 0
+      if (test.newInput) scope.wheel(-20)
+      if (test.observation === 'measurement') scope.beforeMeasure()
+      if (test.observation === 'native') scope.nativeScroll(4439)
+      runFrame()
+
+      const shouldPosition = test.pendingFling && !test.newInput
+      const expected = shouldPosition
+        ? scope.geometry.targetTop + scope.geometry.targetHeight / 2 - scope.geometry.client / 2
+        : 4439
+      expect(scope.scroller.scrollTop, JSON.stringify({ decisions, writes: scope.writes })).toBe(expected)
+      if (shouldPosition) expect(scope.writes.length).toBeGreaterThan(0)
+      else expect(scope.writes).toEqual([])
+      settle()
+    } finally {
+      observe.mockRestore()
+    }
+  })
+})
 
 function startInput(scroller: HTMLDivElement, kind: 'touch' | 'keyboard' | 'scrollbar') {
   switch (kind) {

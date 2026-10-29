@@ -134,6 +134,12 @@ reading-layout corrections.
 
 Explicit target navigation uses immediate center writes: restarting a smooth animation while
 remeasurement moves the target makes convergence samples unreliable and recreates scroll fighting.
+Before settlement, the accepted navigation can own motion from the released iOS fling that preceded
+it. The shared viewport observer requires both the current positioning lease and the virtualizer's
+actual pending-fling state; it applies the same attribution to native events and measurement/frame
+observations. New input still takes over, and a new finger ends the old fling. Settled maintenance,
+missing gesture state and ordinary unobserved reader movement keep their existing vetoes. The writer
+still publishes actual post-write offsets and runs its unchanged before-write authority check.
 After settlement, layout changes maintain only the selected row's visibility. Correction moves the
 viewport only far enough to expose a clipped edge; an already-visible row, or a tall row spanning
 the viewport, is not recentered. This maintenance keeps the existing generation, requires a mounted

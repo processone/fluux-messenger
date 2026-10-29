@@ -148,7 +148,9 @@ interface Args {
  * not the index, so it survives MAM prepend (which shifts every index).
  */
 // The private gesture tracker of @tanstack/virtual-core 3.19.5+ (absent before, so every use is guarded).
-type IosGestureLike = { end?: () => void }
+type IosGestureLike = { end?: () => void; tail?: () => 'tap' | 'fling' | null }
+// Private command identity: virtual-core keeps this object when a queued command starts writing.
+type ScrollCommandLike = { phase?: string }
 
 export function useTanstackMessageVirtualizer({
   items, indexById, scrollRef, estimateSize = 64, sampleEstimateMetrics, initialMeasurements, onMeasured,
@@ -158,6 +160,7 @@ export function useTanstackMessageVirtualizer({
   const retainedIdRef = useRef<string | null>(null)
   const writeObserverRef = useRef<Parameters<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>[0]>(undefined)
   const navigationWriteRef = useRef(false)
+  const queuedNavigationRef = useRef<ScrollCommandLike | null>(null)
   // The outcome of the reader-takeover check scrollToOffset already ran before releasing a gesture.
   const precheckedRef = useRef<{ refused: boolean } | null>(null)
   // Set by cancelPendingScroll until the next navigation write. See there.
@@ -188,12 +191,12 @@ export function useTanstackMessageVirtualizer({
   }, [retainedIndex])
   // Keep row estimates independent of the mounted-window average: structural rows can skew it
   // and collapse the content height. The caller owns estimation; see useRowMetrics for calibration.
-  // @tanstack hands its offset callback to `observeElementOffset` on (re)mount; we stash it so a
-  // PROGRAMMATIC scroll (scrollToOffset) can re-window by pushing the new offset straight into it
-  // with isScrolling=false — a non-sync notify that routes through the adapter's plain rerender()
-  // instead of flushSync. A synthetic `scroll` DOM event would instead drive isScrolling=true →
-  // flushSync, which explodes ("flushSync from inside a lifecycle method") when scrollToOffset is
-  // called from the MAM-prepend restore useLayoutEffect, spamming a render-loop storm. See scrollToOffset.
+  // @tanstack hands its offset callback to `observeElementOffset` on (re)mount. At the accepted
+  // writer we push the element's actual post-write position with isScrolling=false, so rows mount
+  // without waiting for a native event. Queued navigation keeps its command identity until that
+  // first write; the caller returning does not turn it into layout reconciliation. The non-sync
+  // callback uses plain rerender() rather than a synthetic scroll event's flushSync, which is
+  // illegal during a MAM-prepend restore useLayoutEffect.
   const offsetCbRef = useRef<((offset: number, isScrolling: boolean) => void) | null>(null)
   const observeOffset = useCallback(
     (instance: Virtualizer<HTMLElement, Element>, cb: (offset: number, isScrolling: boolean) => void) => {
@@ -261,7 +264,14 @@ export function useTanstackMessageVirtualizer({
     overscan,
     rangeExtractor,
     scrollToFn: (offset, options, instance) => {
-      const source = navigationWriteRef.current ? 'navigation'
+      const command = (instance as unknown as { scrollState?: ScrollCommandLike | null }).scrollState
+      const queued = queuedNavigationRef.current
+      // _writeAwaitingCommand changes the same command's phase before its first write. A hold
+      // flush that precedes it is still queued, and a row-size adjustment is not that command.
+      const queuedWrite = queued !== null && command === queued
+        && command.phase !== 'queued' && options.adjustments === undefined
+      if (queuedWrite || (queued !== null && command !== queued)) queuedNavigationRef.current = null
+      const source = navigationWriteRef.current || queuedWrite ? 'navigation'
         : options.adjustments !== undefined ? 'measurement' : 'reconcile'
       if (source === 'navigation') cancelledTargetRef.current = false
       else if (source === 'reconcile' && cancelledTargetRef.current) return
@@ -287,6 +297,10 @@ export function useTanstackMessageVirtualizer({
       if (source !== 'measurement') {
         if (refused || generationRef.current !== generation || instance.scrollElement !== scroller) return
         elementScroll(offset, options, instance)
+        // The DOM result is authoritative: the browser can clamp, round or drop a write. Publish
+        // its actual offset here, not a destination after a possibly still-queued command returns.
+        // Smooth writes have not landed yet; native events and rAF publish their real progress.
+        if (scroller && options.behavior !== 'smooth') offsetCbRef.current?.(scroller.scrollTop, false)
         observer?.({ phase: 'after', source, behavior: options.behavior })
         return
       }
@@ -380,19 +394,35 @@ export function useTanstackMessageVirtualizer({
     return indexById.get(id) ?? null
   }, [indexById])
 
+  const navigate = useCallback((write: () => void) => {
+    queuedNavigationRef.current = null
+    const generation = generationRef.current
+    const wasNavigation = navigationWriteRef.current
+    navigationWriteRef.current = true
+    try { write() }
+    finally {
+      navigationWriteRef.current = wasNavigation
+      // Only a command that survived the reader's takeover can own its later queued write.
+      // Store its identity, not just a flag: replacement/cancellation must not lend it authority.
+      if (generationRef.current === generation) {
+        const command = (virtualizer as unknown as { scrollState?: ScrollCommandLike | null }).scrollState
+        queuedNavigationRef.current = command?.phase === 'queued' ? command : null
+      }
+    }
+  }, [virtualizer])
+
   const ensureMessageMounted = useCallback((id: string): Promise<void> => {
     const index = indexById.get(id)
     if (index == null) return Promise.resolve()
-    navigationWriteRef.current = true
-    try { virtualizer.scrollToIndex(index, { align: 'center' }) }
-    finally { navigationWriteRef.current = false }
+    navigate(() => virtualizer.scrollToIndex(index, { align: 'center' }))
     return new Promise((resolve) => requestAnimationFrame(() => resolve()))
-  }, [indexById, virtualizer])
+  }, [indexById, navigate, virtualizer])
 
   const cancelPendingScroll = useCallback(() => {
     const scroller = scrollRef.current
     if (!scroller) return
     generationRef.current++
+    queuedNavigationRef.current = null
     const wasNavigation = navigationWriteRef.current
     navigationWriteRef.current = true
     try { virtualizer.scrollToOffset(scroller.scrollTop) }
@@ -409,6 +439,8 @@ export function useTanstackMessageVirtualizer({
 
   return {
     cancelPendingScroll,
+    hasPendingFling: () =>
+      (virtualizer as unknown as { _iosGesture?: IosGestureLike })._iosGesture?.tail?.() === 'fling',
     refreshEstimates: (sync) => {
       // virtual-core re-derives the estimates of unmeasured rows only when its measurement options
       // change or a row resizes, and getOffsetForIndex reads the last derivation. A new getItemKey
@@ -465,45 +497,15 @@ export function useTanstackMessageVirtualizer({
         }
       }
       if (write) {
-        navigationWriteRef.current = true
-        try { virtualizer.scrollToOffset(offset, opts && { behavior: opts.behavior }) }
-        finally { navigationWriteRef.current = false; precheckedRef.current = null }
+        try { navigate(() => virtualizer.scrollToOffset(offset, opts && { behavior: opts.behavior })) }
+        finally { precheckedRef.current = null }
       }
-      // @tanstack updates its reactive scrollOffset ONLY from the scroll element's 'scroll' DOM
-      // event (observeElementOffset). scrollToOffset sets the DOM scrollTop (via _scrollToOffset)
-      // but leaves scrollOffset stale until that event fires. The MAM-prepend restore calls this
-      // from a useLayoutEffect right after a count change; the browser's pending scroll event does
-      // not re-window before paint, so the mounted window keeps the old (top) rows and the viewport
-      // renders BLANK until the user scrolls again. Push the restored offset straight into
-      // @tanstack's offset callback with isScrolling=false: this updates scrollOffset and
-      // recalculates the window synchronously (re-windowed before paint, same as the old synthetic
-      // scroll dispatch) BUT routes through the adapter's plain rerender() rather than flushSync.
-      // A synthetic `scroll` event would hardcode isScrolling=true → flushSync → "flushSync from
-      // inside a lifecycle method" + a render-loop storm when called during the layout-effect commit.
-      const el = scrollRef.current
-      if (el) offsetCbRef.current?.(el.scrollTop, false)
     },
     beginAnimatedScrollToOffset: (offset) => {
-      navigationWriteRef.current = true
-      try { virtualizer.scrollToOffset(offset, { behavior: 'smooth' }) }
-      finally { navigationWriteRef.current = false }
+      navigate(() => virtualizer.scrollToOffset(offset, { behavior: 'smooth' }))
     },
     scrollToIndex: (index, opts) => {
-      navigationWriteRef.current = true
-      try { virtualizer.scrollToIndex(index, opts) }
-      finally { navigationWriteRef.current = false }
-      // Same scrollOffset-desync guard as scrollToOffset above, on the stick-to-bottom path.
-      // @tanstack's scrollToIndex sets the DOM scrollTop (via _scrollToOffset → scrollToFn) but
-      // leaves its reactive scrollOffset stale until the scroll element's native 'scroll' event
-      // fires. On Tauri WebKit that event is withheld/coalesced for a programmatic scroll, so the
-      // mounted window never re-windows and a just-appended bottom row (new message — send OR
-      // receive, via the live-edge executor) is never windowed in: the view fails to stick to the
-      // bottom. Push the landed scrollTop straight into @tanstack's offset callback with
-      // isScrolling=false (non-sync, plain rerender — NOT a synthetic scroll event, which would
-      // flushSync mid-commit) to re-window before paint. Chromium fires the native event promptly
-      // so this is a redundant no-op there; the bug is WebKit-only (not reproducible in Playwright).
-      const el = scrollRef.current
-      if (el) offsetCbRef.current?.(el.scrollTop, false)
+      navigate(() => virtualizer.scrollToIndex(index, opts))
     },
   }
 }

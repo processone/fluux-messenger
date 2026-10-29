@@ -20,7 +20,7 @@ beforeEach(() => {
   })
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); document.body.replaceChildren() })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.replaceChildren() })
 
 function bouncingList() {
   const scroller = document.body.appendChild(document.createElement('div'))
@@ -43,6 +43,175 @@ function bouncingList() {
   scroller.dispatchEvent(new Event('scroll'))
   return { scroller, virtualizer: hook.result.current }
 }
+
+function queuedFrames() {
+  const frames: FrameRequestCallback[] = []
+  const queue = (callback: FrameRequestCallback) => frames.push(callback)
+  vi.stubGlobal('requestAnimationFrame', queue)
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation(queue)
+  return () => act(() => { frames.splice(0).forEach(callback => callback(performance.now())) })
+}
+
+// FLM-186's failed jump may rebase an old fling only, never a new reader contact or a tap.
+it('reports a pending fling only for motion after the finger has lifted', () => {
+  const { scroller, virtualizer } = bouncingList()
+  expect(virtualizer.hasPendingFling?.()).toBe(true)
+  scroller.dispatchEvent(new Event('touchstart'))
+  expect(virtualizer.hasPendingFling?.()).toBe(false)
+  scroller.dispatchEvent(new Event('touchend'))
+  expect(virtualizer.hasPendingFling?.()).toBe(false)
+})
+
+// Captain-approved FLM-231 F1: all callers share these command shapes. The app refuses
+// reconcile writes with user movement, and a prior takeover also leaves the reconcile skip set.
+// The first delayed write is still navigation; later layout reconciliation is not.
+const queuedCommands = [
+  { callers: 'live-edge / bottom-fraction end', kind: 'end', target: 999, offset: 59400 },
+  { callers: 'explicit-target center', kind: 'center', target: 50, offset: 2730 },
+  { callers: 'unread-marker start', kind: 'start', target: 50, offset: 3000 },
+  { callers: 'ensureMessageMounted', kind: 'mount', target: 50, offset: 2730 },
+  { callers: 'saved-position / resident-top / explicit-target / bottom-fraction offset', kind: 'offset', target: 50, offset: 3000 },
+  { callers: 'animated offset', kind: 'smooth', target: 50, offset: 3000 },
+] as const
+
+it.each(queuedCommands)('keeps the queued $callers command as navigation after a prior cancel', command => {
+  const paint = queuedFrames()
+  const { scroller, virtualizer } = bouncingList()
+  act(() => virtualizer.cancelPendingScroll?.())
+  const before = virtualizer.getVirtualItems().map(row => row.key)
+  const sources: string[] = []
+  const writer = vi.spyOn(scroller, 'scrollTo')
+  act(() => {
+    virtualizer.setScrollWriteObserver?.(write => {
+      if (write.phase !== 'before') return
+      sources.push(write.source)
+      // Same refusal as the app's reconcile-plus-userDelta branch.
+      if (write.source === 'reconcile') return false
+    })
+    if (command.kind === 'mount') void virtualizer.ensureMessageMounted(`row-${command.target}`)
+    else if (command.kind === 'offset') virtualizer.scrollToOffset(command.offset)
+    else if (command.kind === 'smooth') virtualizer.beginAnimatedScrollToOffset(command.offset)
+    else virtualizer.scrollToIndex(command.target, { align: command.kind })
+  })
+  expect(writer).not.toHaveBeenCalled()
+  expect(virtualizer.getVirtualItems().map(row => row.key)).toEqual(before)
+
+  // Real virtual-core stops momentum and issues the queued command two frames later.
+  paint()
+  paint()
+  expect(sources).toEqual(['navigation'])
+  expect(writer).toHaveBeenCalledOnce()
+  expect(scroller.scrollTop).toBe(command.offset)
+  if (command.kind === 'smooth') {
+    // Entry overscan grows after a paint; only an early destination window would be wrong.
+    expect(virtualizer.getVirtualItems().some(row => row.key === `row-${command.target}`)).toBe(false)
+    act(() => scroller.dispatchEvent(new Event('scroll')))
+  }
+  expect(virtualizer.getVirtualItems().some(row => row.key === `row-${command.target}`)).toBe(true)
+})
+
+it('does not mistake a queued navigation for reconciliation when the observer sees user movement', () => {
+  const paint = queuedFrames()
+  const { scroller, virtualizer } = bouncingList()
+  const sources: string[] = []
+  act(() => {
+    virtualizer.setScrollWriteObserver?.(write => {
+      if (write.phase === 'before') {
+        sources.push(write.source)
+        if (write.source === 'reconcile') return false
+      }
+    })
+    virtualizer.scrollToIndex(50, { align: 'center' })
+  })
+  paint()
+  paint()
+  expect(sources).toEqual(['navigation'])
+  expect(scroller.scrollTop).toBe(2730)
+  expect(virtualizer.getVirtualItems().some(row => row.key === 'row-50')).toBe(true)
+})
+
+it('does not give a cancelled queued target navigation authority', () => {
+  const paint = queuedFrames()
+  const { scroller, virtualizer } = bouncingList()
+  const writer = vi.spyOn(scroller, 'scrollTo')
+  act(() => {
+    virtualizer.scrollToIndex(50, { align: 'center' })
+    virtualizer.cancelPendingScroll?.()
+  })
+  paint()
+  paint()
+  expect(writer).not.toHaveBeenCalled()
+  expect(scroller.scrollTop).toBe(20)
+  expect(virtualizer.getVirtualItems().some(row => row.key === 'row-50')).toBe(false)
+})
+
+it('gives only the replacement queued command navigation authority', () => {
+  const paint = queuedFrames()
+  const { scroller, virtualizer } = bouncingList()
+  const writer = vi.spyOn(scroller, 'scrollTo')
+  act(() => {
+    virtualizer.cancelPendingScroll?.()
+    virtualizer.setScrollWriteObserver?.(write => {
+      if (write.phase === 'before' && write.source === 'reconcile') return false
+    })
+    virtualizer.scrollToIndex(50, { align: 'center' })
+    virtualizer.scrollToIndex(80, { align: 'center' })
+  })
+  paint()
+  paint()
+  expect(writer).toHaveBeenCalledOnce()
+  expect(scroller.scrollTop).toBe(80 * 60 - (scroller.clientHeight - 60) / 2)
+  expect(virtualizer.getVirtualItems().some(row => row.key === 'row-80')).toBe(true)
+})
+
+it('consumes queued navigation authority before later layout reconciliation', () => {
+  const paint = queuedFrames()
+  const { scroller, virtualizer } = bouncingList()
+  const sources: string[] = []
+  act(() => {
+    virtualizer.setAutomaticScrollAdjustmentEnabled?.(false)
+    virtualizer.setScrollWriteObserver?.(write => {
+      if (write.phase === 'before') {
+        sources.push(write.source)
+        if (write.source === 'reconcile') return false
+      }
+    })
+    virtualizer.scrollToIndex(50, { align: 'center' })
+  })
+  paint()
+  paint()
+  const landed = scroller.scrollTop
+  expect(sources).toEqual(['navigation'])
+  const row = scroller.appendChild(document.createElement('div'))
+  row.dataset.index = '0'
+  row.getBoundingClientRect = () => new DOMRect(0, 0, 800, 100)
+  act(() => virtualizer.measureElement(row))
+  paint()
+  expect(sources).toContain('reconcile')
+  expect(sources.filter(source => source === 'navigation')).toHaveLength(1)
+  expect(scroller.scrollTop).toBe(landed)
+})
+
+it('still runs a reader veto before a queued navigation writes', () => {
+  const paint = queuedFrames()
+  const { scroller, virtualizer } = bouncingList()
+  let vetoed = false
+  act(() => {
+    virtualizer.setScrollWriteObserver?.(write => {
+      if (write.phase === 'before' && !vetoed) {
+        vetoed = true
+        virtualizer.cancelPendingScroll?.()
+        return false
+      }
+    })
+    virtualizer.scrollToIndex(50, { align: 'center' })
+  })
+  paint()
+  paint()
+  expect(vetoed).toBe(true)
+  expect(scroller.scrollTop).toBe(20)
+  expect(virtualizer.getVirtualItems().some(row => row.key === 'row-50')).toBe(false)
+})
 
 it('writes a restore that releases the gesture tail at once', () => {
   const { scroller, virtualizer } = bouncingList()
