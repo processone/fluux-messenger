@@ -613,7 +613,7 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     if (awaitRow) await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
   }
 
-  /** Enter the stress room and take the live edge the way a reader does, then hover the list. */
+  /** Place the pointer in the stress room, then explicitly take latest without an active hold. */
   async function enterAtBottom(page: Page): Promise<void> {
     await loadDemo(page)
     await navigateToStressRoom(page)
@@ -704,6 +704,7 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     const NEAR_OFFSET_PX = 100
 
     await enterAtBottom(page)
+    await expect(page.locator('[data-message-list]').first()).not.toHaveAttribute('data-message-interaction')
 
     // The dead state first: a wheel down that cannot move anything, then a small deliberate move up
     // that leaves the reader inside the band.
