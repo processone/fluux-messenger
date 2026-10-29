@@ -1282,9 +1282,9 @@ export const MessageInput = memo(function MessageInput({
     // happen plaintext-or-ciphertext-with-no-recipient (depending on
     // `encryptAttachment` below) and the send would fail at encrypt
     // time, leaving an orphaned upload on the server. Opening the
-    // unlock dialog routes the user to the passphrase prompt; the
-    // typed text stays in the composer (we return `false` here, which
-    // skips the `setText('')` clear in MessageComposer).
+    // unlock dialog routes the user to the passphrase prompt. Returning
+    // `false` restores the draft through the composer's rollback after
+    // it was cleared at submission.
     if (encryptionState.kind === 'keyLocked') {
       openWebUnlockDialog()
       return false
