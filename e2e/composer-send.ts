@@ -41,7 +41,7 @@ for (const remount of [false, true]) {
     const field = await openChat(page)
     await field.fill(BODY)
     // Observe actual persisted draft rather than relying on a debounce sleep.
-    await expect(page.locator('body')).toContainText(BODY)
+    await expect.poll(() => page.evaluate(peer => (window as any).__chatStore.getState().getDraft(peer), PEER)).toBe(BODY)
     await field.press('Enter')
     await expect.poll(() => calls(page)).toBe(1)
     if (remount) {
@@ -53,6 +53,9 @@ for (const remount of [false, true]) {
     await field.click()
     await field.press('Enter')
     const during = { text: await field.inputValue(), calls: await calls(page) }
+    console.log(JSON.stringify({ remount, during }))
+    expect(during.text).toBe('')
+    expect(during.calls).toBe(1)
     await page.evaluate(() => (window as any).__sendProbe.complete())
     await expect.poll(() => page.evaluate(() => (window as any).__sendProbe.settled)).toBe(true)
     await field.click()
