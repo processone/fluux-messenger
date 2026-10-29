@@ -71,6 +71,10 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
     getTotalSize: () => args.items.length * 40,
     itemCount: args.items.length,
     getOffsetForMessageId,
+    getIndexForMessageId: (id: string) => {
+      const index = args.items.findIndex((it) => it.key === id)
+      return index >= 0 ? index : null
+    },
     ensureMessageMounted: vi.fn(() => Promise.resolve()),
     measureElement: () => {},
     scrollToOffset: (offset: number) => {
@@ -203,9 +207,6 @@ describe('MessageList — re-assert loops are single-flight (at most one active)
   })
 
   it('re-pins the directional anchor after a content-shrink clamp without treating it as takeover', () => {
-    getOffsetForMessageId.mockImplementation((id) =>
-      id === 'msg-0' ? 0 : null,
-    )
     const { container, getByText, rerender } = render(
       <MessageList
         messages={makeMessages(50)}
@@ -217,9 +218,13 @@ describe('MessageList — re-assert loops are single-flight (at most one active)
     const geometry = instrumentScroller(scroller, 5000)
     rafQueue.length = 0
 
+    // At scrollTop 0 the load anchors on the first message after the window's first (FLM-185).
+    const wrapper = container.querySelector('[data-message-row-id="msg-1"]')?.closest('[data-index]') as HTMLElement
+    const anchorStart = parseFloat(wrapper.style.top)
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-1' ? anchorStart : null))
     fireEvent.click(getByText('chat.loadEarlierMessages'))
     getOffsetForMessageId.mockImplementation((id) =>
-      id === 'msg-0' ? 1000 : null,
+      id === 'msg-1' ? anchorStart + 1000 : null,
     )
     rerender(
       <MessageList

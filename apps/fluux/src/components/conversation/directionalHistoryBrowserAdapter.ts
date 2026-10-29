@@ -33,6 +33,17 @@ export interface DirectionalHistoryBrowserAdapterOptions {
 }
 
 /**
+ * The captured anchor as the reader last saw it. On an iPhone a load is captured early in the
+ * bounce past the top, and the bounce goes on deepening (by up to 102 px in device traces) until
+ * the batch lands; the commit then clamps scrollTop to 0, so the restore can no longer read it.
+ */
+interface FollowedAnchor {
+  id: string
+  index: number | null
+  offsetFromTop: number
+}
+
+/**
  * Browser-only mechanics for directional history preservation.
  *
  * The window coordinator decides whether and how long a load owns a snapshot, while the
@@ -43,6 +54,9 @@ export interface DirectionalHistoryBrowserAdapterOptions {
 export class DirectionalHistoryBrowserAdapter {
   private readonly settlementFrames = new Set<number>()
   private disposed = false
+  private followed: FollowedAnchor | null = null
+  // The executor whose restore holds its anchor in the virtualizer, so only it lets go.
+  private anchorHolder: object | null = null
 
   constructor(private readonly options: DirectionalHistoryBrowserAdapterOptions) {}
 
@@ -59,18 +73,25 @@ export class DirectionalHistoryBrowserAdapter {
     const virtualizer = this.options.getVirtualizer()
     const { scrollTop, scrollHeight, clientHeight } = scroller
     let anchor: DirectionalHistoryBrowserCapture['anchor'] = null
+    const items = virtualizer?.getVirtualItems() ?? []
 
-    if (virtualizer && scrollTop === 0 && firstMessageId) {
+    // At scrollTop 0 the first message is on screen. A virtual window that does not reach the top
+    // is stale (WebKit can hold back the scroll that re-windows it), so its rows cannot name the
+    // anchor; the first message can. A current window takes the row after it, as below.
+    if (
+      virtualizer && scrollTop === 0 && firstMessageId &&
+      !items.some(item => item.start <= 0 && item.start + item.size > 0)
+    ) {
       anchor = {
         id: firstMessageId,
-        offsetFromTop: virtualizer.getOffsetForMessageId(firstMessageId) ?? 0,
+        offsetFromTop: rowStart(virtualizer, firstMessageId) ?? 0,
       }
     } else if (virtualizer) {
       // The window's first row is the one prepended history changes: it stops heading its group
       // and loses its sender line (~43 px) when older messages of the same sender land above it.
       // Anchoring on it would keep its top still while the text under the reader jumps, so the
       // anchor is the first visible row after it; it falls back to the first row alone.
-      for (const item of virtualizer.getVirtualItems()) {
+      for (const item of items) {
         const viewportOffset = item.start - scrollTop
         if (viewportOffset < -item.size / 2) continue
         const wrapper = scroller.querySelector(
@@ -88,7 +109,7 @@ export class DirectionalHistoryBrowserAdapter {
         anchor = {
           id: firstMessageId,
           offsetFromTop:
-            (virtualizer.getOffsetForMessageId(firstMessageId) ?? 0) -
+            (rowStart(virtualizer, firstMessageId) ?? 0) -
             scrollTop,
         }
       }
@@ -119,6 +140,13 @@ export class DirectionalHistoryBrowserAdapter {
       }
     }
 
+    this.followed = virtualizer && anchor
+      ? {
+          id: anchor.id,
+          index: virtualizer.getIndexForMessageId(anchor.id),
+          offsetFromTop: anchor.offsetFromTop,
+        }
+      : null
     const geometry = { scrollTop, scrollHeight, clientHeight }
     const result = {
       anchor,
@@ -135,12 +163,59 @@ export class DirectionalHistoryBrowserAdapter {
     return result
   }
 
+  /**
+   * Follow the captured anchor with the reader's scroll until the batch lands. Called on every
+   * scroll event; it stops once rows land before the anchor (its index changes): they move it, and
+   * only the restore, which runs in that same commit, may place it from then on. Rows added after
+   * it, such as a live message, do not move it.
+   */
+  observeScroll(): void {
+    const followed = this.followed
+    if (!followed) return
+    const scroller = this.options.getScroller()
+    const virtualizer = this.options.getVirtualizer()
+    if (!scroller || !virtualizer) return
+    if (virtualizer.getIndexForMessageId(followed.id) !== followed.index) return
+    // Rendered rows include the library's hold during a gesture; the layout start is the fallback
+    // for an anchor the reader scrolled out of the rendered window.
+    const start =
+      virtualizer.getVirtualItems().find(item => item.index === followed.index)?.start ??
+      rowStart(virtualizer, followed.id)
+    if (start === null) return
+    followed.offsetFromTop = start - scroller.scrollTop
+  }
+
+  /**
+   * The followed offset of `messageId`, once. A restart of the same load uses the placement this
+   * restore recorded; a new load captures its own.
+   */
+  private takeFollowedOffset(messageId: string | undefined): number | null {
+    const followed = this.followed
+    if (!followed || followed.id !== messageId) return null
+    this.followed = null
+    return followed.offsetFromTop
+  }
+
+  private releaseAnchor(holder: object): void {
+    if (this.anchorHolder !== holder) return
+    this.anchorHolder = null
+    this.options.getVirtualizer()?.holdAnchor?.(null)
+  }
+
+  /**
+   * `onPlaced` hears where the restore places its anchor, once, on its first frame, so a restart
+   * of the same load can place it there again: the followed offset is taken only once.
+   */
   createExecutor(
     complete: DirectionalHistoryExecutor['complete'],
+    onPlaced?: (offsetFromTop: number) => void,
   ): DirectionalHistoryExecutor {
     let initialized = false
     let previousTarget = 0
     let usedFallback = false
+    // Where the anchor goes, fixed on the first frame: where the reader last saw it.
+    let placementOffset: number | null = null
+    const holder = {}
 
     return {
       reachability: (desired) => {
@@ -178,19 +253,25 @@ export class DirectionalHistoryBrowserAdapter {
           cancelKineticScroll(scroller)
         }
 
+        if (placementOffset === null) {
+          placementOffset =
+            this.takeFollowedOffset(request.desired.messageId) ??
+            request.desired.placement.offsetPx
+          onPlaced?.(placementOffset)
+        }
         let target: number | null = null
         let usedMethod = 'none'
         if (request.desired.messageId) {
-          const virtualOffset =
-            virtualizer?.getOffsetForMessageId(request.desired.messageId) ??
-            null
+          const virtualOffset = virtualizer
+            ? rowStart(virtualizer, request.desired.messageId)
+            : null
           if (virtualOffset !== null) {
-            target = virtualOffset - request.desired.placement.offsetPx
+            target = virtualOffset - placementOffset
             usedMethod = 'virtualizer-offset'
           } else {
             const anchor = findMessageRowElement(scroller, request.desired.messageId)
             if (anchor) {
-              target = anchor.offsetTop - request.desired.placement.offsetPx
+              target = anchor.offsetTop - placementOffset
               usedMethod = 'element-based'
             }
           }
@@ -223,6 +304,15 @@ export class DirectionalHistoryBrowserAdapter {
         const geometryDrift =
           initialized && Math.abs(scroller.scrollTop - boundedTarget) > 5
         const shouldWrite = !initialized || targetMoved || geometryDrift
+        if (
+          virtualizer?.holdAnchor && request.desired.messageId &&
+          usedMethod === 'virtualizer-offset' && this.anchorHolder !== holder
+        ) {
+          // Rows that measure after the write, between the viewport top and the anchor, would
+          // otherwise move it until the next frame's correction, which the reader's touch cancels.
+          virtualizer.holdAnchor(request.desired.messageId)
+          this.anchorHolder = holder
+        }
         if (shouldWrite) {
           if (virtualizer) virtualizer.scrollToOffset(boundedTarget, { releaseGesture: true })
           else scroller.scrollTop = boundedTarget
@@ -233,6 +323,7 @@ export class DirectionalHistoryBrowserAdapter {
         this.options.log?.('DIRECTIONAL HISTORY POSITION', {
           generation: request.generation,
           usedMethod,
+          placementOffset,
           target: boundedTarget,
           targetMoved,
           geometryDrift,
@@ -245,7 +336,10 @@ export class DirectionalHistoryBrowserAdapter {
           reassert: Boolean(virtualizer && !usedFallback),
         }
       },
-      complete,
+      complete: (request, outcome) => {
+        if (outcome !== 'applied') this.releaseAnchor(holder)
+        complete(request, outcome)
+      },
     }
   }
 
@@ -264,11 +358,24 @@ export class DirectionalHistoryBrowserAdapter {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.followed = null
+    if (this.anchorHolder) this.releaseAnchor(this.anchorHolder)
     for (const frame of this.settlementFrames) {
       this.options.cancelFrame(frame)
     }
     this.settlementFrames.clear()
   }
+}
+
+/**
+ * Where a row starts in the content. The anchor math needs the real start: the clamped offset
+ * lookup reads short for a row in the final viewport, by as much as the row sits past the
+ * scrollable range, and the restore would land the anchor off by that much.
+ */
+function rowStart(virtualizer: MessageVirtualizer, messageId: string): number | null {
+  return virtualizer.getMessageStart
+    ? virtualizer.getMessageStart(messageId)
+    : virtualizer.getOffsetForMessageId(messageId)
 }
 
 function cancelKineticScroll(scroller: HTMLElement): void {

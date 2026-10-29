@@ -54,6 +54,14 @@ export interface MessageVirtualizer {
     behavior?: ScrollBehavior
   }) => boolean | void) | undefined): void
   setAutomaticScrollAdjustmentEnabled?(enabled: boolean): void
+  /**
+   * Keep the row of `messageId` still on screen while rows resize, instead of the viewport top:
+   * every row before it that changes height is compensated, in view or not, and rows after it are
+   * not. A history restore holds its anchor so rows measuring between the viewport top and the
+   * anchor cannot move what the reader is looking at. `null` returns to the library's rule.
+   * Disabled automatic adjustment still wins.
+   */
+  holdAnchor?(messageId: string | null): void
   /** Rows to render: visible range, overscan, and any retained message, with start offsets. */
   getVirtualItems(): VirtualWindowItem[]
   /** Total content height from measured rows and current estimates. The caller renders the
@@ -64,6 +72,10 @@ export interface MessageVirtualizer {
   /** Offset (px from content top) of a message by id, whether or not it is mounted.
    *  null when the id is not in the current item set. */
   getOffsetForMessageId(id: string): number | null
+  /** Layout start of a message row (px from content top), measured or estimated, mounted or not,
+   *  and NOT clamped to the scrollable range like getOffsetForMessageId: a row in the final
+   *  viewport keeps its real start. null when the id is not in the current item set. */
+  getMessageStart?(id: string): number | null
   /** Flat virtualizer index of a message by id, or null when the id is not in the current
    *  item set. Lets callers drive the measurement-aware scrollToIndex for a message row. */
   getIndexForMessageId(id: string): number | null

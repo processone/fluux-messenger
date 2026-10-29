@@ -172,6 +172,80 @@ it('applies a measurement adjustment the observer refused, and still refuses a n
   unmount()
 })
 
+// Intent: FLM-185. After an older-history restore on an iPhone, rows between the viewport top and
+// the restore's anchor measured 22 px taller and pushed the rows the reader was looking at down;
+// the library compensates only rows above the viewport top. A held anchor stays still instead.
+it('keeps a held anchor still when a row between the viewport top and it resizes', () => {
+  const scroller = document.createElement('div')
+  document.body.append(scroller)
+  Object.defineProperties(scroller, {
+    offsetHeight: { value: 600 },
+    offsetWidth: { value: 800 },
+    clientHeight: { value: 600 },
+    scrollHeight: { value: 2000 },
+  })
+  scroller.getBoundingClientRect = () => new DOMRect(0, 0, 800, 600)
+  scroller.scrollTo = vi.fn((options?: ScrollToOptions | number, top?: number) => {
+    scroller.scrollTop = typeof options === 'number' ? top ?? 0 : options?.top ?? 0
+  })
+  const items = Array.from({ length: 20 }, (_, index) => ({ key: `row-${index}` }))
+  const indexById = new Map(items.map((item, index) => [item.key, index]))
+  const { result, unmount } = renderHook(() => useTanstackMessageVirtualizer({
+    items, indexById, scrollRef: { current: scroller }, estimateSize: 100,
+  }))
+  act(() => {
+    scroller.scrollTop = 400
+    scroller.dispatchEvent(new Event('scroll'))
+    result.current.scrollToOffset(400)
+  })
+  const rowWithHeight = (index: number, height: () => number) => {
+    const row = scroller.appendChild(document.createElement('div'))
+    row.dataset.index = String(index)
+    Object.defineProperty(row, 'offsetHeight', { get: height })
+    row.getBoundingClientRect = () => new DOMRect(0, 0, 800, height())
+    return row
+  }
+  // Where the rendered row sits in the viewport.
+  const onScreen = (key: string) =>
+    result.current.getVirtualItems().find(item => item.key === key)!.start - scroller.scrollTop
+  // The viewport shows 400..1000: row 5 (500..600) is in view above the anchor, row 9 below it.
+  let between = 122
+  const betweenRow = rowWithHeight(5, () => between)
+  const belowRow = rowWithHeight(9, () => 140)
+
+  act(() => {
+    result.current.holdAnchor!('row-7')
+    result.current.measureElement(betweenRow)
+  })
+  expect(onScreen('row-7')).toBe(300)
+  expect(scroller.scrollTop).toBe(422)
+  act(() => {
+    between = 100
+    result.current.measureElement(betweenRow)
+    result.current.measureElement(belowRow)
+  })
+  expect(onScreen('row-7')).toBe(300)
+  expect(scroller.scrollTop).toBe(400)
+
+  // Disabled adjustment still wins over a hold, and a released hold is the library's rule again.
+  act(() => {
+    result.current.setAutomaticScrollAdjustmentEnabled!(false)
+    between = 130
+    result.current.measureElement(betweenRow)
+  })
+  expect(scroller.scrollTop).toBe(400)
+  act(() => {
+    result.current.setAutomaticScrollAdjustmentEnabled!(true)
+    result.current.holdAnchor!(null)
+    between = 150
+    result.current.measureElement(betweenRow)
+  })
+  expect(scroller.scrollTop).toBe(400)
+  expect(onScreen('row-7')).toBe(350)
+
+  unmount()
+})
+
 it('keeps compensating rows measured above the reader after the native event of a programmatic write', () => {
   const scroller = document.createElement('div')
   document.body.append(scroller)

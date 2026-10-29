@@ -169,6 +169,14 @@ export function useTanstackMessageVirtualizer({
   const setScrollWriteObserver = useCallback<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>(
     observer => { writeObserverRef.current = observer }, [],
   )
+  // Which rows a resize compensates: the library's rule (rows above the viewport top), none while
+  // the caller owns the pixels, or the rows before a held anchor. See holdAnchor.
+  const adjustmentEnabledRef = useRef(true)
+  const heldAnchorRef = useRef<string | null>(null)
+  const indexByIdRef = useRef(indexById)
+  indexByIdRef.current = indexById
+  const heldAnchorIndex = () =>
+    heldAnchorRef.current === null ? undefined : indexByIdRef.current.get(heldAnchorRef.current)
   const retainedIndex = retainedId === null ? undefined : indexById.get(retainedId)
   const rangeExtractor = useCallback((range: Parameters<typeof defaultRangeExtractor>[0]) => {
     const indexes = defaultRangeExtractor(range)
@@ -292,7 +300,9 @@ export function useTanstackMessageVirtualizer({
       const sameRow = measuring !== null
         && instance.scrollElement === scroller && itemKeyRef.current?.items === rows
         && instance.options.getItemKey(measuring.index) === measuring.key
-      const above = sameRow && (measuring.first ? measuring.start < live + hold : measuring.end <= live + hold)
+      const anchorIndex = heldAnchorIndex()
+      const above = sameRow && (anchorIndex !== undefined ? measuring.index < anchorIndex
+        : measuring.first ? measuring.start < live + hold : measuring.end <= live + hold)
       const delta = above ? options.adjustments ?? 0 : 0
       retargetLibraryWrite(instance, live + hold, delta)
       elementScroll(live, { ...options, adjustments: delta }, instance)
@@ -335,6 +345,20 @@ export function useTanstackMessageVirtualizer({
     ...(initialMeasurementsCacheRef.current !== undefined ? { initialMeasurementsCache: initialMeasurementsCacheRef.current } : {}),
   })
 
+  // A held anchor stays still: a row before it that resizes moves the scroll position by the same
+  // amount, wherever it sits, so a row between the viewport top and the anchor (which the library
+  // leaves alone) cannot push the anchor down. An anchor that left the rows compensates nothing
+  // until the holder lets go.
+  const applyAdjustmentRule = () => {
+    virtualizer.shouldAdjustScrollPositionOnItemSizeChange = !adjustmentEnabledRef.current
+      ? suppressScrollAdjustment
+      : heldAnchorRef.current === null ? undefined
+      : (item) => {
+          const anchorIndex = heldAnchorIndex()
+          return anchorIndex !== undefined && item.index < anchorIndex
+        }
+  }
+
   const getOffsetForMessageId = useCallback((id: string): number | null => {
     const index = indexById.get(id)
     if (index == null) return null
@@ -343,6 +367,13 @@ export function useTanstackMessageVirtualizer({
     // is clamped to the scrollable range, which only diverges from the raw start for rows in
     // the final viewport — the bottom-anchor path reads getVirtualItems() directly instead.
     return virtualizer.getOffsetForIndex(index, 'start')?.[0] ?? null
+  }, [indexById, virtualizer])
+
+  const getMessageStart = useCallback((id: string): number | null => {
+    const index = indexById.get(id)
+    if (index == null) return null
+    // The same layout read as getOffsetForMessageId, without the scrollable-range clamp.
+    return virtualizer.measurementsCache[index]?.start ?? null
   }, [indexById, virtualizer])
 
   const getIndexForMessageId = useCallback((id: string): number | null => {
@@ -397,13 +428,19 @@ export function useTanstackMessageVirtualizer({
     },
     setScrollWriteObserver,
     setAutomaticScrollAdjustmentEnabled: (enabled) => {
-      virtualizer.shouldAdjustScrollPositionOnItemSizeChange = enabled ? undefined : suppressScrollAdjustment
+      adjustmentEnabledRef.current = enabled
+      applyAdjustmentRule()
+    },
+    holdAnchor: (messageId) => {
+      heldAnchorRef.current = messageId
+      applyAdjustmentRule()
     },
     getVirtualItems: () =>
       virtualizer.getVirtualItems().map((v) => ({ index: v.index, start: v.start, size: v.size, key: String(v.key) })),
     getTotalSize: () => virtualizer.getTotalSize(),
     itemCount: items.length,
     getOffsetForMessageId,
+    getMessageStart,
     getIndexForMessageId,
     ensureMessageMounted,
     measureElement: virtualizer.measureElement,

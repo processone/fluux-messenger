@@ -99,9 +99,13 @@ function beginRestoreRequest(
       desired: {
         kind: 'anchor',
         messageId: saved.anchorMessageId,
+        // A restart keeps the place the load's first restore gave the anchor, which follows the
+        // reader's scroll after capture; the capture offset is only where the reader started.
         placement: {
           kind: 'top-offset',
-          offsetPx: pixelOffset(saved.anchorOffsetFromTop),
+          offsetPx: pixelOffset(
+            saved.placementOffsetFromTop ?? saved.anchorOffsetFromTop,
+          ),
         },
       },
       distanceFromBottom: pixelOffset(saved.distanceFromBottom),

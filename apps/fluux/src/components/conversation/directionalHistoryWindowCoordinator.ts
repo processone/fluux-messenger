@@ -30,6 +30,12 @@ export interface DirectionalHistorySnapshot {
    * interior arrival evicts the oldest row, so the batch can land after the restore it started.
    */
   restoredFirstId?: string
+  /**
+   * Where this load's restore placed its anchor: where the reader last saw it, which differs from
+   * the capture when the reader scrolled on while the load was pending. A restart of the same load
+   * places it there again, since the reader has not moved since that restore.
+   */
+  placementOffsetFromTop?: number
 }
 
 export interface BeginDirectionalHistoryInput {
@@ -345,6 +351,13 @@ export class DirectionalHistoryWindowCoordinator {
       kind: 'reconcile',
       snapshot,
       generation: snapshot.generation,
+    }
+  }
+
+  /** Remember where a restore of this load placed its anchor, for a restart of the same load. */
+  recordPlacement(requestId: number, offsetFromTop: number): void {
+    if (this.active?.requestId === requestId) {
+      this.active.placementOffsetFromTop = offsetFromTop
     }
   }
 

@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { cleanup, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook } from '@testing-library/react'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
+import { DirectionalHistoryBrowserAdapter } from './directionalHistoryBrowserAdapter'
+import type { PositionExecutionLease } from './positioningController'
+import { pixelOffset, type DirectionalHistoryRequest } from './scrollPositionModel'
 
 // Intent: the captain's report of jerky scrolling on mobile (FLM-174, FLM-180). On an iPhone
 // (iOS 27.0.1) the older-history restore ran while the list was still in a drag-and-bounce tail.
@@ -93,4 +96,150 @@ it('runs the takeover write of a refused restore with the gesture still open', (
   virtualizer.setScrollWriteObserver?.(undefined)
   virtualizer.scrollToOffset(1956)
   expect(scroller.scrollTop).toBe(20)
+})
+
+/**
+ * A history window of the real library behind the restore adapter, with its rows mounted the way
+ * MessageList mounts them (a `data-index` wrapper around the message row), so the adapter captures
+ * and restores exactly as in the app. `land` prepends older rows, as a batch from the server does.
+ */
+function historyWindow(scrollTop: number, options: { contentHeight?: 'fixed' | 'rows' } = {}) {
+  const scroller = document.body.appendChild(document.createElement('div'))
+  // 'rows' ends the scrollable range at the last row, as a browser does; 'fixed' leaves room below.
+  let contentHeight = () => 60000
+  Object.defineProperties(scroller, {
+    offsetHeight: { value: 796 }, offsetWidth: { value: 440 },
+    clientHeight: { value: 796 }, scrollHeight: { get: () => contentHeight() },
+  })
+  scroller.scrollTo = options => { scroller.scrollTop = (options as ScrollToOptions).top ?? 0 }
+  const rowsFrom = (first: number, count: number) =>
+    Array.from({ length: count }, (_, i) => ({ key: `message-${first + i}` }))
+  const props = (items: { key: string }[]) => ({
+    items, indexById: new Map(items.map((item, index) => [item.key, index])),
+    scrollRef: { current: scroller }, estimateSize: 60,
+  })
+  const hook = renderHook(p => useTanstackMessageVirtualizer(p), { initialProps: props(rowsFrom(100, 200)) })
+  if (options.contentHeight === 'rows') contentHeight = () => hook.result.current.getTotalSize()
+  const mount = () => {
+    scroller.replaceChildren()
+    for (const item of hook.result.current.getVirtualItems()) {
+      const wrapper = scroller.appendChild(document.createElement('div'))
+      wrapper.dataset.index = String(item.index)
+      const row = wrapper.appendChild(document.createElement('div'))
+      row.dataset.messageId = item.key
+    }
+  }
+  const scrollTo = (top: number) => {
+    act(() => {
+      scroller.scrollTop = top
+      scroller.dispatchEvent(new Event('scroll'))
+    })
+    mount()
+  }
+  scrollTo(scrollTop)
+  const adapter = new DirectionalHistoryBrowserAdapter({
+    getScroller: () => scroller,
+    getVirtualizer: () => hook.result.current,
+    getActiveConversationId: () => 'room-a',
+    beginLoop: () => null,
+    requestFrame: () => 1,
+    cancelFrame: () => {},
+  })
+  return {
+    scroller, adapter, scrollTo, mount,
+    virtualizer: () => hook.result.current,
+    /** Where a row sits in the viewport, as rendered. */
+    onScreen: (key: string) =>
+      hook.result.current.getVirtualItems().find(item => item.key === key)!.start - scroller.scrollTop,
+    land: (older: number) => act(() => hook.rerender(props(rowsFrom(100 - older, 200 + older)))),
+    /** Newer rows land at the resident cap: as many of the oldest rows leave. */
+    landNewer: (newer: number) => act(() => hook.rerender(props(rowsFrom(100 + newer, 200)))),
+  }
+}
+
+const lease: PositionExecutionLease = {
+  conversationId: 'room-a', generation: 1, operation: 1, frameBudget: 60,
+  signal: new AbortController().signal, isCurrent: () => true, markApplied: () => true, settle: () => true,
+}
+const restoreRequest = (messageId: string, offsetPx: number): DirectionalHistoryRequest => ({
+  generation: 1, conversationId: 'room-a',
+  source: { kind: 'history-preservation', reason: 'window-shift' },
+  desired: { kind: 'anchor', messageId, placement: { kind: 'top-offset', offsetPx: pixelOffset(offsetPx) } },
+  onUnavailable: { kind: 'distance-from-bottom', distancePx: pixelOffset(0) },
+})
+
+// Intent: FLM-185, kept rows landing up to 99 px from where the reader last saw them after an
+// older-history load on an iPhone. In the FLM-176 device trace a load was captured 12 px into the
+// bounce past the top, the bounce reached 114 px before the batch landed, and the landing commit
+// read scrollTop 0. The reader can also scroll on during a load. Either way the rows stay where
+// the reader last saw them.
+it.each([
+  { case: 'the bounce deepens', start: -12, last: -114 },
+  { case: 'the reader scrolls on', start: 300, last: 180 },
+])('lands the anchor where the reader last saw it when $case before the batch', ({ start, last }) => {
+  const list = historyWindow(start)
+  const anchor = list.adapter.capture('message-100', 200)!.anchor!
+  list.scrollTo(last)
+  list.adapter.observeScroll()
+  const lastSeen = list.onScreen(anchor.id)
+
+  list.land(100)
+  list.scroller.scrollTop = 0
+  list.adapter.observeScroll()
+  list.adapter.createExecutor(vi.fn()).positionFrame(restoreRequest(anchor.id, anchor.offsetFromTop), lease)
+  list.mount()
+
+  expect(Math.abs(list.onScreen(anchor.id) - lastSeen)).toBeLessThanOrEqual(1)
+})
+
+// Intent: FLM-185 review finding R1. A reader at the end of the list, where the anchor row starts
+// past the scrollable range, scrolls it out of the rendered window before newer history lands at
+// the resident cap. The clamped offset lookup read its start short by that overhang, so the
+// restore landed the anchor off by the same amount.
+it('lands an anchor from the final viewport where the reader last saw it after newer history lands', () => {
+  const list = historyWindow(0, { contentHeight: 'rows' })
+  const maxScrollTop = list.virtualizer().getTotalSize() - 796
+  list.scrollTo(maxScrollTop)
+  const anchor = list.adapter.capture('message-100', 200)!.anchor!
+  const layoutStart = () => list.virtualizer().getMessageStart!(anchor.id)!
+  expect(layoutStart(), 'precondition: the anchor starts past the scrollable range').toBeGreaterThan(maxScrollTop)
+
+  list.scrollTo(maxScrollTop - 2200)
+  expect(
+    list.virtualizer().getVirtualItems().some(item => item.key === anchor.id),
+    'precondition: the reader scrolled the anchor out of the rendered window',
+  ).toBe(false)
+  list.adapter.observeScroll()
+  const lastSeen = layoutStart() - list.scroller.scrollTop
+
+  list.landNewer(50)
+  list.adapter.observeScroll()
+  list.adapter.createExecutor(vi.fn()).positionFrame(restoreRequest(anchor.id, anchor.offsetFromTop), lease)
+
+  expect(Math.abs(layoutStart() - list.scroller.scrollTop - lastSeen)).toBeLessThanOrEqual(1)
+})
+
+// Intent: FLM-185. After the restore write, rows between the viewport top and the anchor measured
+// 22 px taller than their estimate and pushed the anchor down; the reader's next touch ended the
+// restore before its next frame corrected it. The anchor now stays in the same task.
+it('keeps the restored anchor still when a row above it in view measures taller', () => {
+  // Bounced past the top, the window's first message is on screen and the anchor is the row after
+  // it. Once the batch lands, that first message sits between the viewport top and the anchor.
+  const list = historyWindow(-12)
+  const anchor = list.adapter.capture('message-100', 200)!.anchor!
+  expect(anchor.id).toBe('message-101')
+  list.land(100)
+  list.scroller.scrollTop = 0
+  const executor = list.adapter.createExecutor(vi.fn())
+  executor.positionFrame(restoreRequest(anchor.id, anchor.offsetFromTop), lease)
+  list.mount()
+  const restored = list.onScreen(anchor.id)
+  expect(list.onScreen('message-100')).toBeGreaterThanOrEqual(0)
+
+  const between = list.virtualizer().getVirtualItems().find(item => item.key === 'message-100')!
+  const row = list.scroller.querySelector(`[data-index="${between.index}"]`) as HTMLElement
+  row.getBoundingClientRect = () => new DOMRect(0, 0, 440, between.size + 22)
+  act(() => list.virtualizer().measureElement(row))
+  expect(list.onScreen(anchor.id)).toBe(restored)
+  executor.complete(restoreRequest(anchor.id, anchor.offsetFromTop), 'user-takeover')
 })

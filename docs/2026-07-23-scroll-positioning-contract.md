@@ -51,11 +51,12 @@ anchor because no pixel owner exists yet; takeover becomes cancellable after the
 positioning write, matching the former loop's timing. Explicit competing requests still supersede
 pending directional history. At the resident bound an interior arrival evicts the oldest row, so
 the first resident ID can change before the load's own batch lands and spend that restore early.
-Until the load settles, a later first-ID change restores the same anchor again with a fresh request
-in the same pre-paint pass, however long the 60-frame loop has been over. It does so only while the
-reader still reads where the last restore put them: the controller answers that from whether their
-own input, or any accepted request other than layout, media or history preservation, has come since
-that restore's generation. Once the reader moved on, the shift is left to ambient handling.
+Until the load settles, a later first-ID change restores the same anchor to the same place again
+with a fresh request in the same pre-paint pass, however long the 60-frame loop has been over. It
+does so only while the reader still reads where the last restore put them: the controller answers
+that from whether their own input, or any accepted request other than layout, media or history
+preservation, has come since that restore's generation. Once the reader moved on, the shift is
+left to ambient handling.
 All seven authoritative slices share the same controller-owned
 `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
 measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
@@ -109,7 +110,15 @@ is restored again (see above). Conversation entry drops the
 departed conversation's snapshot, and delayed settlement or window observation from that snapshot
 cannot mutate the active conversation. A dedicated `DirectionalHistoryBrowserAdapter` owns visual
 anchor capture, the one-frame settlement scheduler, reachability probes, WebKit kinetic-scroll
-cancellation, and anchor/fallback pixel writes under the controller lease.
+cancellation, and anchor/fallback pixel writes under the controller lease. Between capture and the
+batch landing it follows the captured anchor on every scroll event, so the restore's first frame
+places the anchor where the reader last saw it rather than at its capture-time `offsetPx` (an iOS
+bounce past the top keeps moving the rows after capture, and the landing commit clamps `scrollTop`
+to 0). The load's snapshot records that placement, and a restart of the same load requests it
+instead of the capture offset, so the rows stay where the first restore put them. From its first
+write until its execution ends, the restore holds that anchor in the virtualizer: every row before
+the anchor that resizes is compensated, including rows between the viewport top and the anchor,
+which the library alone leaves to move it.
 `useDirectionalHistoryLoads` invokes the adapter and supplies lifecycle completion callbacks; the
 orchestration hook only wires its ports and consumes its triggers. The coordinator imports no DOM,
 virtualizer, frame scheduler, positioning controller, or pixel-write capability.
@@ -238,7 +247,8 @@ WebKit paint correctness.
     `rowTop + fraction * rowHeight = scrollTop + viewportHeight`;
   - `top-offset`: directional history preservation. The equation is
     `rowTop - scrollTop = offsetPx`; negative offsets are valid when the top-visible row begins
-    above the viewport.
+    above the viewport. The directional executor replaces the captured `offsetPx` with the
+    anchor's offset at the reader's last scroll before the batch landed.
 - **Message target:** place a message at start, top-third, center, or end for
   unread/reply/search/activity navigation.
 - **Resident top:** move to the top of the currently loaded window; ordinary history loading may
