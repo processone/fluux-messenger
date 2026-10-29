@@ -27,8 +27,11 @@ async function openChat(page: Page) {
     }
     location.hash = `#/messages/${encodeURIComponent(peer)}`
   }, PEER)
-  const field = page.locator('textarea.message-input').first()
+  // The demo initially opens Ava. Wait for the requested recipient's actual
+  // composer, not merely any visible textarea while routing is still pending.
+  const field = page.getByPlaceholder('Message Emma Wilson', { exact: true })
   await expect(field).toBeVisible()
+  await expect.poll(() => page.evaluate(() => (window as any).__chatStore.getState().activeConversationId)).toBe(PEER)
   return field
 }
 
