@@ -1225,7 +1225,7 @@ export const MessageInput = memo(function MessageInput({
   const { resolveInput, classifyInput } = useSlashCommands(chatCommandContext)
 
   // Draft persistence - saves on conversation change, restores on load
-  const [text, setText] = useConversationDraft({
+  const [text, setText, consumeDraft] = useConversationDraft({
     conversationId,
     draftOperations: { getDraft, setDraft, clearDraft },
     composerRef,
@@ -1339,8 +1339,7 @@ export const MessageInput = memo(function MessageInput({
       onRemovePendingAttachment?.()
     }
 
-    // Clear draft immediately so sidebar updates
-    clearDraft(conversationId)
+    // The composer consumed this draft before sending; a newer draft belongs to the user.
 
     // Process link preview in background (don't block on it)
     // Skip when encrypted — the fastening would leak URL/title/image in cleartext
@@ -1372,6 +1371,7 @@ export const MessageInput = memo(function MessageInput({
         onSendCorrection={handleCorrection}
         onRetractMessage={handleRetract}
         onComposingChange={onComposingChange}
+        onConsumeDraft={consumeDraft}
         onSend={(text) => trackSend(handleSend(text))}
         onSendEasterEgg={(animation) => sendEasterEgg(conversationId, type, animation)}
         onSendTypingState={handleTypingState}

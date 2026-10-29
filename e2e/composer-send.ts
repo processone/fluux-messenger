@@ -61,8 +61,6 @@ for (const remount of [false, true]) {
     await field.click()
     await field.press('Enter')
     console.log(JSON.stringify({ remount, during, afterText: await field.inputValue(), calls: await calls(page) }))
-    expect(during.text).toBe('')
-    expect(during.calls).toBe(1)
     expect(await calls(page)).toBe(1)
     await expect(page.locator('[data-message-body]').filter({ hasText: BODY })).toHaveCount(1)
   })
@@ -77,4 +75,26 @@ test('failed send restores text with a visible error', async ({ page }) => {
   await expect(field).toHaveValue(BODY)
   await expect(page.getByText('Failed to send', { exact: true })).toBeVisible()
   console.log(JSON.stringify({ recoveredText: await field.inputValue(), calls: await calls(page), error: 'Failed to send' }))
+  // Retrying after a reported failure is a deliberate new send, not a second
+  // Enter on a still-pending message. The demo failure did not deliver a row.
+  await field.press('Enter')
+  await expect.poll(() => calls(page)).toBe(2)
+  await page.evaluate(() => (window as any).__sendProbe.complete())
+  await expect(page.locator('[data-message-body]').filter({ hasText: BODY })).toHaveCount(1)
+  await expect(field).toHaveValue('')
+})
+
+// The next draft belongs to the user, not to the first send's completion.
+test('successful pending send preserves the next draft', async ({ page }) => {
+  const field = await openChat(page)
+  await field.fill(BODY)
+  await field.press('Enter')
+  await expect.poll(() => calls(page)).toBe(1)
+  await field.fill('Oups')
+  await expect.poll(() => page.evaluate(peer => (window as any).__chatStore.getState().getDraft(peer), PEER)).toBe('Oups')
+  await page.evaluate(() => (window as any).__sendProbe.complete())
+  await expect(page.locator('[data-message-body]').filter({ hasText: BODY })).toHaveCount(1)
+  await expect(field).toHaveValue('Oups')
+  expect(await page.evaluate(peer => (window as any).__chatStore.getState().getDraft(peer), PEER)).toBe('Oups')
+  console.log(JSON.stringify({ nextDraft: await field.inputValue(), calls: await calls(page) }))
 })

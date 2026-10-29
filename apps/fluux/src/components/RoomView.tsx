@@ -2014,7 +2014,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   const handleDraftRestored = useCallback(() => clearReferencesRef.current(), [])
 
   // Draft persistence - saves on room change, restores on load, clears references
-  const [text, setText] = useConversationDraft({
+  const [text, setText, consumeDraft] = useConversationDraft({
     conversationId: roomJid,
     draftOperations: { getDraft, setDraft, clearDraft },
     composerRef,
@@ -2216,7 +2216,6 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         onRemovePendingAttachment?.()
       }
       onMessageIdSent?.(messageId)
-      clearDraft(roomJid)
       setTimeout(() => clearFirstNewMessageId(roomJid), 500)
       return true
     }
@@ -2250,7 +2249,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     const body = sendText || attachment?.url || ''
     const messageId = await sendMessage(roomJid, body, { replyTo, references: references.length > 0 ? references : undefined, attachment: attachment ?? undefined })
     void donateIOSConversation(sendingAccount, roomJid, 'groupchat')
-    setReferences([])
+    // The composer cleared the submitted references with the text.
 
     // Notify parent of sent message ID for animation
     onMessageIdSent?.(messageId)
@@ -2260,8 +2259,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
       onRemovePendingAttachment?.()
     }
 
-    // Clear draft immediately so sidebar updates
-    clearDraft(roomJid)
+    // The composer consumed this draft before sending; do not clear a newer draft.
 
     // Whisper sends return early above, so a private URL never reaches link-preview generation (no room broadcast).
     // Process link preview in background (don't block on it)
@@ -2496,6 +2494,13 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         onSendCorrection={handleCorrection}
         onRetractMessage={handleRetract}
         onComposingChange={onComposingChange}
+        onConsumeDraft={() => {
+          const submittedReferences = references
+          const restore = consumeDraft()
+          return () => {
+            if (restore()) setReferences(submittedReferences)
+          }
+        }}
         onSend={(sendText) => trackSend(handleSend(sendText))}
         onSendEasterEgg={(animation) => sendEasterEgg(roomJid, animation)}
         onCreatePoll={() => setShowPollCreator(true)}

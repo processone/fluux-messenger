@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { getStorageScopeJid } from '@fluux/sdk'
 import type { MessageComposerHandle } from '@/components/MessageComposer'
 
 export interface DraftOperations {
@@ -28,14 +29,14 @@ export interface UseConversationDraftOptions {
  * - Clearing draft immediately when text becomes empty
  * - Debounced saving while typing (for sidebar preview)
  *
- * @returns [text, setText] - controlled text state for the input
+ * @returns [text, setText, consumeDraft] - controlled text state for the input
  */
 export function useConversationDraft({
   conversationId,
   draftOperations,
   composerRef,
   onDraftRestored,
-}: UseConversationDraftOptions): [string, React.Dispatch<React.SetStateAction<string>>] {
+}: UseConversationDraftOptions): [string, React.Dispatch<React.SetStateAction<string>>, () => () => boolean] {
   const { getDraft, setDraft, clearDraft } = draftOperations
 
   // Controlled text state
@@ -58,13 +59,22 @@ export function useConversationDraft({
   const onDraftRestoredRef = useRef(onDraftRestored)
   onDraftRestoredRef.current = onDraftRestored
 
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
   // Debounce timer ref
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const textRevision = useRef(0)
 
   // Wrapper around setText that tags the text as belonging to the current conversation
   const userSetText: React.Dispatch<React.SetStateAction<string>> = useCallback(
     (action) => {
       textConversationIdRef.current = conversationIdRef.current
+      textRevision.current++
       setText(action)
     },
     []
@@ -144,5 +154,35 @@ export function useConversationDraft({
     }
   }, [text, conversationId, setDraft, clearDraft])
 
-  return [text, userSetText]
+  // A submission owns its snapshot, not the currently rendered conversation.
+  // Cancel the pending save synchronously, so remount cannot restore sent text.
+  const consumeDraft = useCallback(() => {
+    const id = conversationId
+    const scope = getStorageScopeJid()
+    const composer = composerRef.current
+    const submitted = composer?.getText() ?? text
+    const revision = textRevision.current
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
+    clearDraft(id)
+    return () => {
+      if (getStorageScopeJid() !== scope) return false
+      // Never overwrite a newer draft or apply a failure to another recipient.
+      if (getDraft(id)) return false
+      let restoredHere = false
+      if (mounted.current && conversationIdRef.current === id) {
+        // Clearing at submission is one edit; later edits belong to the user,
+        // including an intentionally empty replacement draft.
+        if (textRevision.current !== revision + 1 || composerRef.current?.getText()) return false
+        composerRef.current?.setText(submitted)
+        restoredHere = true
+      }
+      if (submitted.trim()) setDraft(id, submitted)
+      return restoredHere
+    }
+  }, [conversationId, composerRef, text, clearDraft, getDraft, setDraft])
+
+  return [text, userSetText, consumeDraft]
 }
