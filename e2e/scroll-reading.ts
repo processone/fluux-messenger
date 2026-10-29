@@ -4129,3 +4129,89 @@ test('unfocused room scrolling recreates the divider at the first unread message
   await expect(page.locator('[data-new-message-marker]')).toHaveText('4 new messages')
   await expect(page.getByLabel('4 unread messages', { exact: true })).toBeVisible()
 })
+
+// FLM-250, grounded in FLM-249: the hidden newest-row report is rejected by
+// the SDK, then focus returns before unread-marker bottom positioning settles.
+for (const kind of ['chat', 'room'] as const) {
+  test(`${kind} re-reports the visible reply when focus returns before bottom confirmation`, async ({ page }, testInfo) => {
+    await loadDemo(page)
+    await stopDemoTimeline(page)
+    const jid = kind === 'chat' ? 'ava@fluux.chat' : STRESS_ROOM_JID
+    await page.evaluate(async ({ kind, jid }) => {
+      // The demo's public store seams exercise the real bindings and read tracker.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      Object.defineProperty(document, 'hasFocus', { value: () => true, configurable: true })
+      window.dispatchEvent(new Event('focus'))
+      if (kind === 'chat') await w.__chatStore.getState().activateConversation(jid)
+      else await w.__roomStore.getState().activateRoom(jid)
+      location.hash = `#/${kind === 'chat' ? 'messages' : 'rooms'}/${encodeURIComponent(jid)}`
+    }, { kind, jid })
+    await expect(page.locator('[data-message-list] .message-row').first()).toBeVisible()
+    await scrollToBottom(page)
+    await page.evaluate(async ({ kind, jid }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      const store = kind === 'chat' ? w.__chatStore : w.__roomStore
+      store.getState().markReadToNewest(jid)
+      await w.__chatStore.getState().activateConversation('james@fluux.chat')
+      location.hash = '#/messages/james%40fluux.chat'
+      Object.defineProperty(document, 'hasFocus', { value: () => false, configurable: true })
+      window.dispatchEvent(new Event('blur'))
+    }, { kind, jid })
+    await expect(page.locator('[data-message-list] .message-row').first()).toBeVisible()
+    await page.evaluate(async ({ kind, jid }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      const store = kind === 'chat' ? w.__chatStore : w.__roomStore
+      const id = 'focus-recovery-reply'
+      const message = { type: kind === 'chat' ? 'chat' : 'groupchat', id, stanzaId: `sid-${id}`,
+        from: kind === 'chat' ? jid : `${jid}/prefiks`, conversationId: jid, roomJid: jid,
+        nick: 'prefiks', body: 'Aaaaaah', timestamp: new Date(), isOutgoing: false }
+      w.__demoClient.emitSDK(`${kind}:message`, { message, roomJid: jid, isLiveArrival: true })
+      const coverageKey = kind === 'chat' ? 'conversationCoverage' : 'roomCoverage'
+      const coverage = new Map(store.getState()[coverageKey])
+      coverage.delete(jid)
+      store.setState({ [coverageKey]: coverage })
+      const original = store.getState().advanceReadPointer
+      w.__focusRecovery = { hiddenReports: 0, before: null }
+      store.setState({ advanceReadPointer: (entityId: string, row: { id: string }) => {
+        original(entityId, row)
+        if (entityId !== jid || row.id !== id || document.hasFocus()) return
+        w.__focusRecovery.hiddenReports++
+        w.__focusRecovery.before = {
+          unread: kind === 'chat' ? store.getState().conversationMeta.get(jid)?.unreadCount : store.getState().rooms.get(jid)?.unreadCount,
+          pointer: (kind === 'chat' ? store.getState().conversationMeta : store.getState().roomMeta).get(jid)?.readPointer?.identity.messageId,
+        }
+        // After the rejected report, before the next layout/bottom measurement.
+        queueMicrotask(() => {
+          Object.defineProperty(document, 'hasFocus', { value: () => true, configurable: true })
+          window.dispatchEvent(new Event('focus'))
+        })
+      } })
+      if (kind === 'chat') await store.getState().activateConversation(jid)
+      else await store.getState().activateRoom(jid)
+      location.hash = `#/${kind === 'chat' ? 'messages' : 'rooms'}/${encodeURIComponent(jid)}`
+    }, { kind, jid })
+    await expect.poll(() => page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (window as any).__focusRecovery.hiddenReports
+    })).toBe(1)
+    const read = () => page.evaluate(({ kind, jid }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      const state = (kind === 'chat' ? w.__chatStore : w.__roomStore).getState()
+      const meta = (kind === 'chat' ? state.conversationMeta : state.roomMeta).get(jid)
+      return { before: w.__focusRecovery.before,
+        unread: kind === 'chat' ? meta?.unreadCount : state.rooms.get(jid)?.unreadCount,
+        pointer: meta?.readPointer?.identity.messageId, focused: document.hasFocus() }
+    }, { kind, jid })
+    await expect.poll(async () => (await read()).unread).toBe(0)
+    const result = await read()
+    expect(result.before.unread).toBe(1)
+    expect(result.before.pointer).not.toBe('focus-recovery-reply')
+    expect(result.pointer).toBe('focus-recovery-reply')
+    expect(result.focused).toBe(true)
+    await testInfo.attach('focus-recovery', { body: JSON.stringify(result, null, 2), contentType: 'application/json' })
+  })
+}

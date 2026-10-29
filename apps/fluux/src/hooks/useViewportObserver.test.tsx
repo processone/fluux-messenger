@@ -13,6 +13,7 @@ class MockIntersectionObserver {
   observe = vi.fn()
   unobserve = vi.fn()
   disconnect = vi.fn()
+  takeRecords = vi.fn(() => [])
 
   constructor(callback: IntersectionObserverCallback, _options?: IntersectionObserverInit) {
     ioCallback = callback
@@ -96,6 +97,66 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('useViewportObserver', () => {
+  // FLM-250 / FLM-249: a hidden newest-row report is ignored by the SDK.
+  // Focus before bottom confirmation must allow a fresh report of that same row.
+  describe('focus recovery', () => {
+    it('reobserves and reports the same visible row after regaining focus', () => {
+      const onMessageSeen = vi.fn()
+      const scrollContainerRef = createScrollContainer(['reply'])
+      vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+      renderHook(() => useViewportObserver({ scrollContainerRef, conversationId: 'ava', onMessageSeen }))
+      act(() => ioCallback([makeEntry('reply', true, 200)], {} as IntersectionObserver))
+      expect(onMessageSeen).toHaveBeenCalledTimes(1)
+
+      vi.mocked(document.hasFocus).mockReturnValue(true)
+      act(() => window.dispatchEvent(new Event('focus')))
+      // Re-observation must obtain new intersections, not replay the hidden cache.
+      expect(ioInstances[0].disconnect).toHaveBeenCalledTimes(1)
+      expect(ioInstances[0].observe).toHaveBeenCalledTimes(2)
+      expect(onMessageSeen).toHaveBeenCalledTimes(1)
+      act(() => {
+        ioCallback([makeEntry('reply', true, 200)], {} as IntersectionObserver)
+        vi.advanceTimersByTime(300)
+      })
+      expect(onMessageSeen).toHaveBeenCalledTimes(2)
+      expect(onMessageSeen).toHaveBeenLastCalledWith('reply')
+    })
+
+    it('does not refresh on hidden visibility events, and removes recovery listeners on unmount', () => {
+      const onMessageSeen = vi.fn()
+      const scrollContainerRef = createScrollContainer(['reply'])
+      vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+      const { unmount } = renderHook(() => useViewportObserver({ scrollContainerRef, conversationId: 'ava', onMessageSeen }))
+      act(() => document.dispatchEvent(new Event('visibilitychange')))
+      expect(ioInstances[0].disconnect).not.toHaveBeenCalled()
+      unmount()
+      vi.mocked(document.hasFocus).mockReturnValue(true)
+      act(() => window.dispatchEvent(new Event('focus')))
+      expect(ioInstances[0].observe).toHaveBeenCalledTimes(1)
+      expect(onMessageSeen).not.toHaveBeenCalled()
+    })
+
+    it('discards a throttled hidden row and waits for the newly visible history row', () => {
+      const onMessageSeen = vi.fn()
+      const scrollContainerRef = createScrollContainer(['history', 'reply'])
+      vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+      renderHook(() => useViewportObserver({ scrollContainerRef, conversationId: 'ava', onMessageSeen }))
+      act(() => {
+        ioCallback([makeEntry('history', true, 100)], {} as IntersectionObserver)
+        ioCallback([makeEntry('reply', true, 200)], {} as IntersectionObserver)
+      })
+      onMessageSeen.mockClear()
+      vi.mocked(document.hasFocus).mockReturnValue(true)
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+        vi.advanceTimersByTime(300)
+      })
+      expect(onMessageSeen).not.toHaveBeenCalled()
+      act(() => ioCallback([makeEntry('history', true, 100)], {} as IntersectionObserver))
+      expect(onMessageSeen).toHaveBeenCalledExactlyOnceWith('history')
+    })
+  })
+
   // ========================================================================
   // Basic callback behaviour
   // ========================================================================

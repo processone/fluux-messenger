@@ -13,6 +13,7 @@
  * - Tracks the bottom-most visible message (closest to the scroll bottom)
  * - Throttles callbacks to avoid excessive store updates
  * - Re-observes when messages change (new messages added, conversation switch)
+ * - Refreshes intersections on focus recovery so hidden reports can be retried
  * - Cleanup on unmount or conversation switch
  */
 import { useCallback, useEffect, useRef } from 'react'
@@ -45,6 +46,16 @@ export function useViewportObserver({
   // Stable callback ref to avoid re-creating the observer when onMessageSeen changes
   const onMessageSeenRef = useRef(onMessageSeen)
   onMessageSeenRef.current = onMessageSeen
+
+  const resetReporting = useCallback(() => {
+    lastReportedRef.current = null
+    lastReportedTimeRef.current = 0
+    pendingMessageIdRef.current = null
+    if (throttleTimerRef.current) {
+      clearTimeout(throttleTimerRef.current)
+      throttleTimerRef.current = null
+    }
+  }, [])
 
   // Wrapped in useCallback so it can be listed in useEffect deps.
   // Only reads refs — no state dependencies, so the empty dep array is correct.
@@ -95,15 +106,9 @@ export function useViewportObserver({
         callbackForFlush?.(pendingMessageIdRef.current)
       }
       // Reset tracking state on conversation switch
-      lastReportedRef.current = null
-      lastReportedTimeRef.current = 0
-      pendingMessageIdRef.current = null
-      if (throttleTimerRef.current) {
-        clearTimeout(throttleTimerRef.current)
-        throttleTimerRef.current = null
-      }
+      resetReporting()
     }
-  }, [conversationId])
+  }, [conversationId, resetReporting])
 
   useEffect(() => {
     if (!enabled || !onMessageSeenRef.current) return
@@ -221,17 +226,32 @@ export function useViewportObserver({
       }
     }
 
+    // FLM-250: a row reported while unfocused is correctly ignored by the SDK.
+    // It can remain visible across focus recovery without another IO transition.
+    // Forget that report and ask IO for CURRENT intersections, rather than replay
+    // a cached row (the reader may have scrolled while the window was hidden).
+    // The SDK still owns focus, live-window and current bottom-evidence guards.
+    const handleFocus = () => {
+      if (!document.hasFocus()) return
+      resetReporting()
+      visibleEntries.clear()
+      observer.takeRecords()
+      observer.disconnect()
+      scrollContainer.querySelectorAll('[data-message-id]').forEach(el => observer.observe(el))
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
 
     return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
       observer.disconnect()
       mutationObserver.disconnect()
       scrollContainer.removeEventListener('scroll', handleScroll)
       visibleEntries.clear()
-      if (throttleTimerRef.current) {
-        clearTimeout(throttleTimerRef.current)
-        throttleTimerRef.current = null
-      }
+      resetReporting()
     }
-  }, [conversationId, enabled, scrollContainerRef, reportMessageSeen])
+  }, [conversationId, enabled, scrollContainerRef, reportMessageSeen, resetReporting])
 }
