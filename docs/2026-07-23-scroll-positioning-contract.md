@@ -343,7 +343,8 @@ A middle-button press also releases using the saved-following policy. An ordinar
 even when the browser consumes `auxclick`. Sub-dead-zone pointer jitter does not count as a held drag:
 Blink changes its middle-pan mode only outside its 15-CSS-pixel dead zone on either axis. Such jitter
 must keep every row blocked when release latches the pan. A clicked, latched pan keeps the block until its stopping
-click/release, key or blur; actual native movement still takes priority through viewport attribution.
+click/release, key or blur; a middle release with no matching observed press ends the block when the
+browser consumes the stopping press. Actual native movement still takes priority through viewport attribution.
 Hosts without `auxclick` clear it on mouseup.
 Only a reader who was following latest before the hold resumes automatically. History reading keeps
 a settled fixed position; a deliberate scroll, own send or explicit jump takes priority and closes

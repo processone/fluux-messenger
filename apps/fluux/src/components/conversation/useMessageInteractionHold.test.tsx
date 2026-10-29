@@ -267,12 +267,16 @@ describe('FLM-245 interaction cleanup', () => {
     expect(begin).toHaveBeenCalledTimes(2)
     expect(result.current.context.heldRow).toBe(row)
   })
-  it('G3 clears an autoscroll block when the browser consumes the stopping mousedown but delivers mouseup', () => {
-    const { result } = setup()
+  // H2: the kept native trace consumes the stopping press; only its release reaches the page.
+  it.each([0, 1])('ends latched suppression on unmatched stop release (button %s)', button => {
+    const { result, begin } = setup()
     moveIntoRow()
     act(() => row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 1, buttons: 4 })))
-    act(() => row.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, buttons: 0 })))
+    act(() => row.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 1, buttons: 0 })))
+    expect(result.current.context.heldMessageId).toBeNull()
+    act(() => row.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button, buttons: 0 })))
     mouse('mousemove', row, 130, 220)
+    expect(begin).toHaveBeenCalledTimes(2)
     expect(result.current.context.heldRow).toBe(row)
   })
   // FLM-245 H1: the kept native room pan moves one pixel before latching on release.

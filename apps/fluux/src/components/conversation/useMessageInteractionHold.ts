@@ -187,7 +187,8 @@ export function useMessageInteractionHold({
     const onUp = (event: MouseEvent) => {
       dragging.current = false
       // Autoscroll can consume its stopping mousedown but still deliver mouseup.
-      if (event.button !== 1 || middlePressMoved || !('onauxclick' in document.documentElement)) suppressPointer = false
+      if (event.button !== 1 || middlePress === null || middlePressMoved ||
+        !('onauxclick' in document.documentElement)) suppressPointer = false
       middlePress = null
       middlePressMoved = false
       maybeRelease()
