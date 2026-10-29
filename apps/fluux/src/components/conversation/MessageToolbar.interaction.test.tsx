@@ -39,6 +39,24 @@ describe('held toolbar actions', () => {
     expect(screen.queryByLabelText('chat.editMessage')).not.toBeInTheDocument()
   })
 
+  it('keeps a keyboard-visible action clickable through mouse-down before hover intent catches up', () => {
+    // FLM-230 failed WebKit reading: the visible action disappeared between down and up.
+    const original = props()
+    const { container } = render(<MessageToolbar {...original} isHovered={false} />)
+    const quick = screen.getAllByLabelText('chat.reactWith')[0]
+    const matches = quick.matches.bind(quick)
+    vi.spyOn(quick, 'matches').mockImplementation(selector => selector === ':focus-visible' || matches(selector))
+    fireEvent.focus(quick)
+    expect(container.querySelector('[data-message-toolbar]')).toHaveClass('opacity-100')
+    fireEvent.mouseDown(quick, { button: 0 })
+    expect(container.querySelector('[data-message-toolbar]')).toHaveClass('opacity-100')
+    fireEvent.mouseUp(quick, { button: 0 })
+    fireEvent.click(quick)
+    expect(original.onReaction).toHaveBeenCalledOnce()
+    fireEvent.mouseLeave(quick.closest('[data-message-toolbar]')!)
+    expect(container.querySelector('[data-message-toolbar]')).toHaveClass('opacity-0')
+  })
+
   it('Escape closes More and restores its trigger before a broader conversation shortcut runs', () => {
     const outer = vi.fn()
     function Toolbar() {

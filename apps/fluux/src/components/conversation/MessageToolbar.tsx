@@ -1,4 +1,4 @@
-import { useCallback, useRef, memo, Suspense, lazy, useState } from 'react'
+import { useCallback, useRef, memo, Suspense, lazy, useState, useEffect } from 'react'
 import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import { useTranslation } from 'react-i18next'
@@ -84,6 +84,21 @@ export const MessageToolbar = memo(function MessageToolbar({
 }: MessageToolbarProps) {
   const { t } = useTranslation()
   const [actionFocused, setActionFocused] = useState(false)
+  const [pointerPressed, setPointerPressed] = useState(false)
+  // A keyboard-visible control must remain interactive until its native click is dispatched.
+  useEffect(() => {
+    if (!pointerPressed) return
+    let releaseTimer: ReturnType<typeof setTimeout> | undefined
+    const clear = () => setPointerPressed(false)
+    const afterMouseUp = () => { releaseTimer = setTimeout(clear, 0) }
+    document.addEventListener('mouseup', afterMouseUp, true)
+    window.addEventListener('blur', clear)
+    return () => {
+      clearTimeout(releaseTimer)
+      document.removeEventListener('mouseup', afterMouseUp, true)
+      window.removeEventListener('blur', clear)
+    }
+  }, [pointerPressed])
   const keyboardFocus = useRef(true)
   const updateActionFocus = (target: EventTarget | null) => {
     setActionFocused(keyboardFocus.current && target instanceof Element && target.matches(':focus-visible'))
@@ -141,7 +156,7 @@ export const MessageToolbar = memo(function MessageToolbar({
   const useControlledHover = isHovered !== undefined
   const visibility: 'visible' | 'hidden' | 'css' = isHidden
     ? 'hidden'
-    : actionFocused || showReactionPicker || showMoreMenu || (isSelected && showToolbarForSelection)
+    : pointerPressed || actionFocused || showReactionPicker || showMoreMenu || (isSelected && showToolbarForSelection)
       ? 'visible'
       : hasKeyboardSelection
         ? 'hidden'
@@ -170,12 +185,17 @@ export const MessageToolbar = memo(function MessageToolbar({
     // the surrounding padding stays inert so underlying text remains selectable.
     <div
       data-message-toolbar
-      onMouseDownCapture={() => { keyboardFocus.current = false; setActionFocused(false) }}
+      onMouseDownCapture={event => {
+        setPointerPressed(event.button === 0 && actionFocused)
+        keyboardFocus.current = false
+        setActionFocused(false)
+      }}
+      onClickCapture={() => setPointerPressed(false)}
       onKeyDownCapture={event => { keyboardFocus.current = true; updateActionFocus(event.target) }}
       onKeyUpCapture={() => updateActionFocus(document.activeElement)}
       onFocusCapture={event => updateActionFocus(event.target)}
       onBlurCapture={event => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setActionFocused(false)
+        if (!event.currentTarget.contains(event.relatedTarget)) { setActionFocused(false); setPointerPressed(false) }
       }}
       className={`hidden can-hover:block absolute -top-12 end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out ${visibilityClass}`}
     >
