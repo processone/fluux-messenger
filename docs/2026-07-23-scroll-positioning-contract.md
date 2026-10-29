@@ -308,6 +308,8 @@ a click, keyboard action focus, or an open More/reaction panel. Row entry alone 
 content scrolling under a resting pointer must continue following latest. Toolbar visibility
 retains its existing hover delay and text-selection suppression. Only keyboard focus matching
 `:focus-visible` forces the toolbar visible; mouse-created focus follows the ordinary hover lifetime.
+A keyboard-visible control remains interactive through a physical mouse activation, even before the
+hover-intent delay finishes; clearing keyboard-only visibility must not discard the pending click.
 Row-local subscriptions expose held membership without broadcasting each target change to every bubble.
 
 An `interaction` request holds the original row handle and the message body's top offset through
@@ -336,6 +338,9 @@ releases the hold. Mouse-created focus does not keep an otherwise disengaged mou
 Native `dragend` and `drop` clear dragging even when the browser delivers no `mouseup`. Typing in the
 composer disengages any hold, including one started by a Reply click or keyboard action, using the
 saved-following policy. Only an open More/reaction menu retains its hold during composer input.
+A middle-button press also releases using the saved-following policy. An ordinary middle-click's
+`auxclick` completion clears hover suppression; native autoscroll consumes that event and keeps the
+block until a stopping click/release, key or blur. Hosts without `auxclick` clear it on mouseup.
 Only a reader who was following latest before the hold resumes automatically. History reading keeps
 a settled fixed position; a deliberate scroll, own send or explicit jump takes priority and closes
 panels before moving. A manual takeover cannot rearm from the usual near-bottom band alone: actual

@@ -598,6 +598,34 @@ for (const kind of ['chat', 'room'] as const) {
     await expect(row.locator('[data-message-toolbar]')).toHaveCSS('opacity', '0')
     await expect(list).not.toHaveAttribute('data-message-interaction')
     observations.push({ stage: 'mouse focus does not retain toolbar visibility', ...await readInteractionView(page) })
+    // Captain G3: an ordinary middle click resumes saved following and ends its hover block.
+    await body.hover()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    await arrive(page, kind, ['middle-held-arrival'])
+    await page.evaluate(() => {
+      const scope = window as any
+      scope.__middleEvents = []
+      for (const type of ['mousedown', 'mouseup', 'auxclick']) {
+        document.addEventListener(type, event => {
+          const mouse = event as MouseEvent
+          scope.__middleEvents.push({ type, button: mouse.button, buttons: mouse.buttons, trusted: event.isTrusted })
+        }, true)
+      }
+    })
+    const middleBox = (await body.boundingBox())!
+    await page.mouse.click(middleBox.x + 180, middleBox.y + 12, { button: 'middle' })
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await arrive(page, kind, ['middle-after-release'])
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    observations.push({ stage: 'ordinary middle click resumes prior following', events: await page.evaluate(() => (window as any).__middleEvents), ...await readInteractionView(page) })
+    await page.mouse.move(0, 0)
+    await body.hover()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    observations.push({ stage: 'ordinary middle completion permits new deliberate pointer interest', ...await readInteractionView(page) })
+    await page.mouse.move(0, 0)
+    await input.focus()
+    await expect(list).not.toHaveAttribute('data-message-interaction')
     await page.route('https://example.invalid/**', route => route.abort())
     await page.evaluate(async kind => {
       const scope = window as any

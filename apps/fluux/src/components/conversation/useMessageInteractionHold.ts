@@ -159,10 +159,10 @@ export function useMessageInteractionHold({
       if (!hasHover()) return
       keyboard.current = false
       if (event.button === 1) {
-        // Middle-click autoscroll remains navigation until another click/key ends it.
+        // Resume saved following; native autoscroll consumes auxclick and keeps hover blocked.
         suppressPointer = true
         cancel()
-        ports.current.release(false)
+        ports.current.release(true)
         return
       }
       if (event.button !== 0) return
@@ -174,9 +174,16 @@ export function useMessageInteractionHold({
         dragging.current = true
       }
     }
-    const onUp = () => { dragging.current = false; maybeRelease() }
+    const onUp = (event: MouseEvent) => {
+      dragging.current = false
+      // Autoscroll can consume its stopping mousedown but still deliver mouseup.
+      if (event.button !== 1 || !('onauxclick' in document.documentElement)) suppressPointer = false
+      maybeRelease()
+    }
+    const onAuxClick = (event: MouseEvent) => { if (event.button === 1) suppressPointer = false }
     const onDragFinish = (event: DragEvent) => {
       dragging.current = false
+      suppressPointer = false
       pointerRow.current = rowFor(document.elementFromPoint?.(event.clientX, event.clientY) ??
         (event.type === 'drop' ? event.target : null))
       maybeRelease()
@@ -210,9 +217,11 @@ export function useMessageInteractionHold({
     document.addEventListener('mouseout', onOut, true)
     document.addEventListener('mousedown', onDown, true)
     document.addEventListener('mouseup', onUp, true)
+    document.addEventListener('auxclick', onAuxClick, true)
     document.addEventListener('dragend', onDragFinish, true)
     document.addEventListener('drop', onDragFinish, true)
     document.addEventListener('keydown', onKey, true)
+    document.addEventListener('keyup', onKey, true)
     document.addEventListener('focusin', onFocus, true)
     document.addEventListener('focusout', onFocusOut, true)
     document.addEventListener('input', onInput, true)
@@ -222,9 +231,11 @@ export function useMessageInteractionHold({
       document.removeEventListener('mouseout', onOut, true)
       document.removeEventListener('mousedown', onDown, true)
       document.removeEventListener('mouseup', onUp, true)
+      document.removeEventListener('auxclick', onAuxClick, true)
       document.removeEventListener('dragend', onDragFinish, true)
       document.removeEventListener('drop', onDragFinish, true)
       document.removeEventListener('keydown', onKey, true)
+      document.removeEventListener('keyup', onKey, true)
       document.removeEventListener('focusin', onFocus, true)
       document.removeEventListener('focusout', onFocusOut, true)
       document.removeEventListener('input', onInput, true)
