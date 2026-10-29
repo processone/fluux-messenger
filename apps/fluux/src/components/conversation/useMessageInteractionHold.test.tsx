@@ -255,17 +255,18 @@ describe('FLM-245 interaction cleanup', () => {
     mouse('mousedown', row)
     expect(result.current.context.heldRow).toBe(row)
   })
-  it.each(['pointer', 'click', 'menu'])('composer input releases only pointer-nudge intent (%s)', intent => {
+  it.each(['pointer', 'click', 'keyboard', 'menu'])('FLM-245 G2: composer input releases %s holds unless a menu is open', intent => {
     const { result, release } = setup()
     const input = document.createElement('textarea')
     input.className = 'message-input'
     document.body.append(input)
     try {
       moveIntoRow()
-      if (intent === 'click') mouse('mousedown', row)
+      if (intent === 'click') { mouse('mousedown', row); mouse('mouseup', row) }
+      if (intent === 'keyboard') { fireEvent.keyDown(action, { key: 'Tab' }); act(() => action.focus()) }
       if (intent === 'menu') act(() => result.current.context.setMenuOpen(row.dataset.messageRowId!, true, vi.fn()))
       fireEvent.input(input, { target: { value: 'A reply in progress' } })
-      if (intent === 'pointer') {
+      if (intent !== 'menu') {
         expect(result.current.context.heldMessageId).toBeNull()
         expect(release).toHaveBeenCalledWith(true)
       } else {

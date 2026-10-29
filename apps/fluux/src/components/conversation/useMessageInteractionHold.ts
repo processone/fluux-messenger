@@ -38,7 +38,7 @@ export function useMessageInteractionHold({
   const ports = useRef({ begin, release, menuChanged })
   ports.current = { begin, release, menuChanged }
   const [heldMessageId, setHeldMessageId] = useState<string | null>(null)
-  const held = useRef<{ id: string; row: HTMLElement; intent: 'pointer' | 'explicit' } | null>(null)
+  const held = useRef<{ id: string; row: HTMLElement } | null>(null)
   const listeners = useRef(new Set<() => void>())
   const pointerRow = useRef<HTMLElement | null>(null)
   const focusRow = useRef<HTMLElement | null>(null)
@@ -76,19 +76,18 @@ export function useMessageInteractionHold({
     notify()
   }, [clearLeave, notify])
 
-  const start = useCallback((row: HTMLElement, intent: 'pointer' | 'explicit', refresh = false) => {
+  const start = useCallback((row: HTMLElement, refresh = false) => {
     const id = readMessageRowId(row)
     if (!id || !row.querySelector('[data-message-toolbar]') ||
       !scrollRef.current || findMessageRowElement(scrollRef.current, id) !== row) return
     clearLeave()
     if (menu.current && menu.current.row !== row) return
     if (held.current?.row === row) {
-      if (intent === 'explicit') held.current.intent = intent
       if (refresh) ports.current.begin(held.current.id)
       return
     }
     if (!ports.current.begin(id)) return
-    held.current = { id, row, intent }
+    held.current = { id, row }
     notify()
   }, [clearLeave, scrollRef, notify])
 
@@ -116,7 +115,7 @@ export function useMessageInteractionHold({
     if (open) {
       if (!hasHover()) return
       const row = sourceRow ?? (scrollRef.current && findMessageRowElement(scrollRef.current, id))
-      if (row) start(row, 'explicit', true)
+      if (row) start(row, true)
       if (row && held.current?.row === row) {
         menu.current = { row, close }
         ports.current.menuChanged?.(true)
@@ -148,7 +147,7 @@ export function useMessageInteractionHold({
       if (moved && hasHover()) {
         keyboard.current = false
         // An ongoing selection/drag must not reacquire after its native scrolling takes over.
-        if (row && !dragging.current && event.buttons === 0 && !suppressPointer) start(row, 'pointer')
+        if (row && !dragging.current && event.buttons === 0 && !suppressPointer) start(row)
       }
       maybeRelease()
     }
@@ -171,7 +170,7 @@ export function useMessageInteractionHold({
       const row = rowFor(event.target)
       if (row) {
         pointerRow.current = row
-        start(row, 'explicit')
+        start(row)
         dragging.current = true
       }
     }
@@ -187,7 +186,7 @@ export function useMessageInteractionHold({
       const target = event.target instanceof Element ? event.target : null
       const row = target?.closest('[data-message-toolbar]') ? rowFor(target) : null
       focusRow.current = row
-      if (row && keyboard.current && hasHover()) start(row, 'explicit', true)
+      if (row && keyboard.current && hasHover()) start(row, true)
       maybeRelease()
     }
     const onFocusOut = () => {
@@ -201,7 +200,7 @@ export function useMessageInteractionHold({
     const onInput = (event: Event) => {
       const target = event.target instanceof Element ? event.target : null
       if (target?.closest('.message-input') && !target.closest('[data-modal]') &&
-        held.current?.intent === 'pointer' && !menu.current) {
+        held.current !== null && !menu.current) {
         cancel()
         ports.current.release(true)
       }

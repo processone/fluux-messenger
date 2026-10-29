@@ -334,8 +334,8 @@ A conflicting known identity, disconnected row or handle resolving elsewhere end
 Pointer departure (with panels closed), or keyboard action-focus departure (with panels closed),
 releases the hold. Mouse-created focus does not keep an otherwise disengaged mouse interaction alive.
 Native `dragend` and `drop` clear dragging even when the browser delivers no `mouseup`. Typing in the
-composer disengages a hold acquired only by pointer movement, using the saved-following policy; an
-explicit click, keyboard action or open menu is not dismissed by mere composer input.
+composer disengages any hold, including one started by a Reply click or keyboard action, using the
+saved-following policy. Only an open More/reaction menu retains its hold during composer input.
 Only a reader who was following latest before the hold resumes automatically. History reading keeps
 a settled fixed position; a deliberate scroll, own send or explicit jump takes priority and closes
 panels before moving. A manual takeover cannot rearm from the usual near-bottom band alone: actual

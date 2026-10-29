@@ -561,9 +561,9 @@ for (const kind of ['chat', 'room'] as const) {
   })
 }
 
-// Captain FLM-245 F1/F2/F7: weak pointer intent must yield to composing and native drag completion.
+// Captain FLM-245 F1/F2/F7 and G2: composing yields every hold unless a menu is open; native drags must finish.
 for (const kind of ['chat', 'room'] as const) {
-  test(`${kind}: interaction hold releases pointer-only composing, mouse focus and completed native drags`, async ({ page }) => {
+  test(`${kind}: interaction hold releases composing, mouse focus and completed native drags`, async ({ page }) => {
     const { row, body, list } = await setupInteraction(page, kind)
     const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
     const observations: unknown[] = []
@@ -575,6 +575,15 @@ for (const kind of ['chat', 'room'] as const) {
     await arrive(page, kind, ['composer-after-nudge'])
     await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
     observations.push({ stage: 'typing releases pointer-only intent', ...await readInteractionView(page) })
+    await body.hover()
+    await waitForActions(page)
+    await row.getByRole('button', { name: 'Reply', exact: true }).click()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    await input.pressSequentially(' after choosing Reply')
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await arrive(page, kind, ['composer-after-reply-click'])
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    observations.push({ stage: 'typing after Reply click releases and resumes prior following', ...await readInteractionView(page) })
     await body.hover()
     await waitForActions(page)
     const more = row.getByRole('button', { name: 'More options', exact: true })
