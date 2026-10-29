@@ -2689,6 +2689,25 @@ describe('positioning controller explicit-target ownership', () => {
     }
   }
 
+  // FLM-186's old-fling attribution must never exempt settled-target visibility maintenance.
+  it('reports pending message navigation only for the initial current execution', () => {
+    const harness = targetHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    expect(controller.hasPendingMessageNavigation(conversationId)).toBe(false)
+    harness.setFrameResult({ kind: 'positioned', scrollTop: 400, wrote: true })
+    controller.beginExplicitTarget({ conversationId, messageId: 'target-a', executor: harness.executor })
+    expect(controller.hasPendingMessageNavigation(conversationId)).toBe(true)
+    expect(controller.hasPendingMessageNavigation('another-room')).toBe(false)
+
+    while (harness.callbacks.length) harness.runFrame()
+    expect(controller.hasPendingMessageNavigation(conversationId)).toBe(false)
+    expect(controller.reconcileMessageTargetAfterResize({ conversationId, executor: harness.executor })).toBe(true)
+    expect(controller.hasPendingMessageNavigation(conversationId)).toBe(false)
+    controller.observeUserInput(conversationId)
+    expect(controller.hasPendingMessageNavigation(conversationId)).toBe(false)
+  })
+
   it('reconciles a settled message target after resize without acquiring follow-live', () => {
     const harness = targetHarness()
     const controller = new PositioningController()

@@ -703,6 +703,13 @@ export class PositioningController {
     return source?.kind === 'user-navigation' && source.reason === 'message-target'
   }
 
+  /** Initial message navigation only, not visibility maintenance of an already-settled target. */
+  hasPendingMessageNavigation(conversationId: string): boolean {
+    const execution = this.explicitTargetExecution
+    return execution !== null && execution.purpose === 'navigation' &&
+      execution.request.conversationId === conversationId && this.isExplicitTargetExecutionCurrent(execution)
+  }
+
   preserveReadingLayout(conversationId: string, apply: () => void): boolean {
     const active = this.model.active
     if (

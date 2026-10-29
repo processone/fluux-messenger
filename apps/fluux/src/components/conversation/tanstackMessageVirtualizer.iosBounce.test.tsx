@@ -52,6 +52,16 @@ function queuedFrames() {
   return () => act(() => { frames.splice(0).forEach(callback => callback(performance.now())) })
 }
 
+// FLM-186's failed jump may rebase an old fling only, never a new reader contact or a tap.
+it('reports a pending fling only for motion after the finger has lifted', () => {
+  const { scroller, virtualizer } = bouncingList()
+  expect(virtualizer.hasPendingFling?.()).toBe(true)
+  scroller.dispatchEvent(new Event('touchstart'))
+  expect(virtualizer.hasPendingFling?.()).toBe(false)
+  scroller.dispatchEvent(new Event('touchend'))
+  expect(virtualizer.hasPendingFling?.()).toBe(false)
+})
+
 // Captain-approved FLM-231 F1: all callers share these command shapes. The app refuses
 // reconcile writes with user movement, and a prior takeover also leaves the reconcile skip set.
 // The first delayed write is still navigation; later layout reconciliation is not.

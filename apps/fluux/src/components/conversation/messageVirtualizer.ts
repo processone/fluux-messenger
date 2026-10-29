@@ -30,6 +30,8 @@ export interface VirtualWindowItem {
 
 export interface MessageVirtualizer {
   cancelPendingScroll?(): void
+  /** A released touch still has kinetic motion. False while a new finger owns the list. */
+  hasPendingFling?(): boolean
   /**
    * Re-derive the estimates of unmeasured rows from the current metrics. Offsets read afterwards
    * use the new estimates either way; `sync` also commits the re-render before returning, which

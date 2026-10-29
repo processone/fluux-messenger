@@ -148,7 +148,7 @@ interface Args {
  * not the index, so it survives MAM prepend (which shifts every index).
  */
 // The private gesture tracker of @tanstack/virtual-core 3.19.5+ (absent before, so every use is guarded).
-type IosGestureLike = { end?: () => void }
+type IosGestureLike = { end?: () => void; tail?: () => 'tap' | 'fling' | null }
 // Private command identity: virtual-core keeps this object when a queued command starts writing.
 type ScrollCommandLike = { phase?: string }
 
@@ -439,6 +439,8 @@ export function useTanstackMessageVirtualizer({
 
   return {
     cancelPendingScroll,
+    hasPendingFling: () =>
+      (virtualizer as unknown as { _iosGesture?: IosGestureLike })._iosGesture?.tail?.() === 'fling',
     refreshEstimates: (sync) => {
       // virtual-core re-derives the estimates of unmeasured rows only when its measurement options
       // change or a row resizes, and getOffsetForIndex reads the last derivation. A new getItemKey

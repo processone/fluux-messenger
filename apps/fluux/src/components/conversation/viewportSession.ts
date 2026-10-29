@@ -191,6 +191,8 @@ export class ViewportSession {
   observeGeometry(conversationId: string, geometry: ViewportGeometry, context: {
     now: number
     controllerOwnsPixels: boolean
+    /** The current new navigation has superseded the released touch's still-pending fling. */
+    navigationOwnsFling?: boolean
     input?: ViewportInput
     resetInput?: boolean
     nativeScroll?: boolean
@@ -236,9 +238,12 @@ export class ViewportSession {
     // Where every scroll gesture starts with observed input, that input cancels the controller
     // before the reader's movement lands, so movement while it owns the pixels is the engine's.
     // WebKit on iOS reports such movement, far beyond rounding, while a virtualized list swaps
-    // estimates for measurements as its pane appears.
+    // estimates for measurements as its pane appears. A new navigation can also own the previous
+    // released fling on the web: its caller requires a live navigation lease and real gesture
+    // state, not an inferred destination or a timer. Matching fresh input still wins.
     const engineMovement =
-      this.inputAlwaysObserved && context.controllerOwnsPixels && !trustedInputMatchesMovement
+      (this.inputAlwaysObserved || context.navigationOwnsFling === true) &&
+      context.controllerOwnsPixels && !trustedInputMatchesMovement
     const userDelta = controllerGrowthJitter || engineMovement || layoutAnchored ? 0 : delta
     if (sameAnchor && previous) {
       this.pendingLayoutAdjustment += layoutDelta - (
@@ -276,6 +281,7 @@ export class ViewportSession {
     geometry: ViewportGeometry
     bottomAnchor: ScrollAnchor | null
     controllerOwnsPixels: boolean
+    navigationOwnsFling?: boolean
     now: number
   }): ViewportScrollObservation | null {
     if (!this.isCurrent(facts.conversationId)) return null
