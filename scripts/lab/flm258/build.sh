@@ -15,7 +15,7 @@ ln -sfn "$ROOT/packages/fluux-sdk/dist" "$SRC/packages/fluux-sdk/dist"
 git -C "$SRC" apply "$HERE/lab.patch"
 cd "$SRC/apps/fluux"
 VITE_REPRO_JID=alice@localhost VITE_REPRO_PASSWORD="$(cat "$LAB_DIR/alice.pw")" VITE_REPRO_SERVER=tcp://127.0.0.1:15222 npx vite build
-CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$LAB_DIR/target} nice -n 5 npx tauri build --debug --config "$HERE/repro.conf.json"
+CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$LAB_DIR/target} nice -n 5 npx tauri build --debug --ignore-version-mismatches --config "$HERE/repro.conf.json"
 APP="${CARGO_TARGET_DIR:-$LAB_DIR/target}/debug/bundle/macos/Fluux Repro FLM258.app"
 {
   echo "source commit: $(git -C "$ROOT" rev-parse HEAD)"
