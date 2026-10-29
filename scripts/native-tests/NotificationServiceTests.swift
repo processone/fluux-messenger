@@ -347,10 +347,8 @@ import UniformTypeIdentifiers
         precondition(direct.title == "Alice" && direct.subtitle.isEmpty)
         let unknown = deliver("other@muc.example.com", ["muc_nick": "Mallory"])
         precondition(unknown.title == "other" && unknown.subtitle.isEmpty)
-        #if os(iOS)
         let intent = NotificationPresentation.intent(from: NotificationPresentation.sender(of: ["from": room, "muc_nick": "Alice"], names: names)!, body: "Hello", names: names)!
         precondition(intent.sender?.displayName == "Alice" && intent.recipients?.map { $0.displayName } == ["Bob"])
-        #endif
         print("muc_nick passed")
     }
 
