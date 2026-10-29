@@ -68,13 +68,14 @@ export function useConversationDraft({
   // Debounce timer ref
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const textRevision = useRef(0)
+  const textRevisions = useRef(new Map<string, number>())
 
   // Wrapper around setText that tags the text as belonging to the current conversation
   const userSetText: React.Dispatch<React.SetStateAction<string>> = useCallback(
     (action) => {
       textConversationIdRef.current = conversationIdRef.current
-      textRevision.current++
+      const id = conversationIdRef.current
+      textRevisions.current.set(id, (textRevisions.current.get(id) ?? 0) + 1)
       setText(action)
     },
     []
@@ -161,7 +162,7 @@ export function useConversationDraft({
     const scope = getStorageScopeJid()
     const composer = composerRef.current
     const submitted = composer?.getText() ?? text
-    const revision = textRevision.current
+    const revision = textRevisions.current.get(id) ?? 0
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current)
       debounceTimerRef.current = null
@@ -175,7 +176,7 @@ export function useConversationDraft({
       if (mounted.current && conversationIdRef.current === id) {
         // Clearing at submission is one edit; later edits belong to the user,
         // including an intentionally empty replacement draft.
-        if (textRevision.current !== revision + 1 || composerRef.current?.getText()) return false
+        if (textRevisions.current.get(id) !== revision + 1 || composerRef.current?.getText()) return false
         composerRef.current?.setText(submitted)
         restoredHere = true
       }
