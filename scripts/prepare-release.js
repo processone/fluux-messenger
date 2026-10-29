@@ -152,6 +152,31 @@ try {
   console.error('  Warning: cargo check failed — Cargo.lock and schemas may be out of date')
 }
 
+// 4c. Update the generated iOS project, when this checkout has one. `tauri ios build` sets the
+// marketing version in the app's Info.plist only; the extensions keep the one rendered by
+// `tauri ios init`, and App Store Connect warns on the mismatch (90473).
+const IOS_PROJECT_DIR = 'apps/fluux/src-tauri/gen/apple'
+const iosProjectDir = path.join(ROOT, IOS_PROJECT_DIR)
+if (fs.existsSync(iosProjectDir)) {
+  console.log('\nUpdating the generated iOS project...')
+  const iosFiles = [
+    ['project.yml', /^(\s*CFBundleShortVersionString:\s*).*$/gm, `$1${baseVersion}`],
+    ...fs.readdirSync(iosProjectDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(iosProjectDir, entry.name, 'Info.plist')))
+      .map((entry) => [
+        path.join(entry.name, 'Info.plist'),
+        /(<key>CFBundleShortVersionString<\/key>\s*<string>)[^<]*(<\/string>)/g,
+        `$1${baseVersion}$2`,
+      ]),
+  ]
+  for (const [file, pattern, replacement] of iosFiles) {
+    const filePath = path.join(iosProjectDir, file)
+    if (!fs.existsSync(filePath)) continue
+    fs.writeFileSync(filePath, fs.readFileSync(filePath, 'utf-8').replace(pattern, replacement))
+    console.log(`  ${IOS_PROJECT_DIR}/${file}: ${baseVersion}`)
+  }
+}
+
 // 5. Update packaging version numbers
 console.log('\nUpdating packaging files...')
 

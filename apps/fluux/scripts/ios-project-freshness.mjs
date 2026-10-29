@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url'
 // `tauri ios init` renders the project.yml template through XcodeGen into a fixed list of
 // sources. Editing the template, the iOS config, or adding a file under a directory the template
 // lists leaves an existing generated project stale, and Xcode then fails on a missing symbol.
+// The base config carries the app version: `tauri ios build` refreshes it in the app's Info.plist
+// only, so the extensions keep the version rendered at init and App Store Connect warns (90473).
 const TEMPLATE = 'src-tauri/mobile/ios/project.yml'
-const CONFIG = 'src-tauri/tauri.ios.conf.json'
+const CONFIGS = ['src-tauri/tauri.conf.json', 'src-tauri/tauri.ios.conf.json']
 const GENERATED_DIR = 'src-tauri/gen/apple'
 const PROJECT = `${GENERATED_DIR}/fluux.xcodeproj/project.pbxproj`
 const STAMP = `${GENERATED_DIR}/.fluux-project-inputs`
@@ -25,7 +27,7 @@ function listFiles(path) {
 /** Digest of everything `tauri ios init` reads to decide the generated project's file list. */
 export function projectInputsDigest(appDir) {
   const hash = createHash('sha256')
-  for (const file of [TEMPLATE, CONFIG]) {
+  for (const file of [TEMPLATE, ...CONFIGS]) {
     const path = join(appDir, file)
     hash.update(`${file}\0${existsSync(path) ? readFileSync(path) : 'missing'}\0`)
   }

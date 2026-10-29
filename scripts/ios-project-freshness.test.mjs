@@ -20,6 +20,7 @@ function fixture(t) {
     '      - path: ../../mobile/ios/Service.swift',
     '      - path: {{app.name}}_iOS',
   ].join('\n'))
+  write('src-tauri/tauri.conf.json', '{"version":"0.18.0"}')
   write('src-tauri/tauri.ios.conf.json', '{"identifier":"net.processone.fluux"}')
   write('src-tauri/plugins/push/ios/Sources/Shared/Store.swift', 'struct Store {}')
   write('src-tauri/mobile/ios/Service.swift', 'final class Service {}')
@@ -42,9 +43,10 @@ test('a file added under a listed source directory makes the project stale', t =
   assert.equal(isProjectCurrent(appDir), false)
 })
 
-test('a template or iOS config edit makes the project stale', t => {
+test('a template, version or iOS config edit makes the project stale', t => {
   for (const [path, contents] of [
     ['src-tauri/mobile/ios/project.yml', 'targets: {}'],
+    ['src-tauri/tauri.conf.json', '{"version":"0.18.1"}'],
     ['src-tauri/tauri.ios.conf.json', '{"identifier":"net.processone.other"}'],
   ]) {
     const { appDir, write } = fixture(t)

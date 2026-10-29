@@ -52,6 +52,16 @@ for (const { version, date, tag = false } of [
     write('packaging/debian/changelog', 'fluux-messenger (0.17.4-1) unstable; urgency=medium\n\n -- Maintainer  Tue, 15 Sep 2026 12:00:00 +0000\n')
     write('packaging/flatpak/net.processone.fluux.metainfo.xml', '<component>\n  <releases>\n  </releases>\n</component>\n')
     write('fluux-messenger.doap', '<Project>\n  <!-- Releases -->\n</Project>\n')
+    // Only some checkouts have a generated iOS project; the --tag runs cover its absence.
+    const iosTargets = ['fluux_iOS', 'FluuxNotification', 'FluuxShare']
+    if (!tag) {
+      write('apps/fluux/src-tauri/gen/apple/project.yml', iosTargets.map((target) =>
+        `  ${target}:\n    info:\n      properties:\n        CFBundleShortVersionString: 0.17.4\n        CFBundleVersion: "0.17.4"\n`).join(''))
+      for (const target of iosTargets) {
+        write(`apps/fluux/src-tauri/gen/apple/${target}/Info.plist`,
+          '<dict>\n\t<key>CFBundleShortVersionString</key>\n\t<string>0.17.4</string>\n\t<key>CFBundleVersion</key>\n\t<string>202610290944</string>\n</dict>\n')
+      }
+    }
     write('isolate-toolchain.mjs', `
       import childProcess from 'node:child_process'
       import { appendFileSync } from 'node:fs'
@@ -103,6 +113,18 @@ for (const { version, date, tag = false } of [
     assert.ok(read('packaging/debian/changelog').includes(`  ${debDate}\n`))
     assert.ok(read('packaging/flatpak/net.processone.fluux.metainfo.xml').includes(`<release version="0.18.0" date="${releaseDate}">`))
     assert.ok(read('fluux-messenger.doap').includes(`<created>${releaseDate}</created>`))
+    if (!tag) {
+      const project = read('apps/fluux/src-tauri/gen/apple/project.yml')
+      assert.equal(project.match(/CFBundleShortVersionString: 0\.18\.0\n/g)?.length, 3)
+      assert.equal(project.match(/CFBundleVersion: "0\.17\.4"/g)?.length, 3, 'build numbers stay with Tauri')
+      for (const target of iosTargets) {
+        const plist = read(`apps/fluux/src-tauri/gen/apple/${target}/Info.plist`)
+        assert.ok(plist.includes('<key>CFBundleShortVersionString</key>\n\t<string>0.18.0</string>'), target)
+        assert.ok(plist.includes('<string>202610290944</string>'), `${target} keeps its build number`)
+      }
+    } else {
+      assert.equal(existsSync(join(fixture, 'apps/fluux/src-tauri/gen/apple')), false)
+    }
 
     const firstChangelog = changelog
     const firstMarkdown = read('CHANGELOG.md')
