@@ -323,6 +323,26 @@ describe('useScrollContainerBinding attachment', () => {
     expect(observeUserInput).not.toHaveBeenCalled()
   })
 
+  // FLM-267: the composer keeps focus after Send, so a downward drag lowers the keyboard.
+  it('blurs the focused composer on a downward drag but not on an upward one', () => {
+    const { result, observeUserInput } = mount()
+    const scroller = scrollerElement().el
+    const composer = document.createElement('textarea')
+    document.body.append(composer)
+    result.current.setScrollContainerRef(scroller)
+    const touch = (clientY: number) => ({ identifier: 1, clientY }) as Touch
+    scroller.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(300)] }))
+    composer.focus()
+    scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(290)] }))
+    scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(250)] }))
+    expect(document.activeElement).toBe(composer)
+    scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(260)] }))
+    expect(document.activeElement).toBe(composer)
+    scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(300)] }))
+    expect(document.activeElement).toBe(document.body)
+    expect(observeUserInput).toHaveBeenLastCalledWith('room-a', expect.objectContaining({ deltaY: -40 }))
+  })
+
   it.each(['pointerup', 'pointercancel'] as const)('matches scrollbar %s to its pointer and waits for held keys', (endEvent) => {
     const { result, observeUserInputEnd } = mount()
     const scroller = scrollerElement().el
