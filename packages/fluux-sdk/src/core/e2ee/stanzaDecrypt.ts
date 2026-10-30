@@ -160,6 +160,12 @@ export interface DecryptInPlaceResult {
    */
   encryptedPayloadXml?: string
   /**
+   * Set when decrypt succeeded but the signature could not be checked yet
+   * (the sender's key is not cached). The stanza holds the plaintext and
+   * `encryptedPayloadXml` the original, kept for the later signature check.
+   */
+  awaitsVerification?: true
+  /**
    * Set when the stanza is encrypted with a protocol this client has no plugin
    * for (e.g. OMEMO when only OpenPGP is wired). Mutually exclusive with
    * `encryptedPayloadXml`. Callers tag the message and surface its fallback
@@ -471,6 +477,7 @@ export async function decryptStanzaInPlace(
     ...((failureReason !== null && !terminalFailure && !sessionNeedsRepair && securityContext?.trust !== 'rejected' || needsDeferredVerification) && {
       encryptedPayloadXml: originalStanzaXml,
     }),
+    ...(needsDeferredVerification && { awaitsVerification: true as const }),
   }
 }
 

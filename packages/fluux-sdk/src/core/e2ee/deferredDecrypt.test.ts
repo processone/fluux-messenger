@@ -26,7 +26,7 @@ import { E2EEPluginError } from './errors'
 import { serialize as serializePayloadEnvelope } from './payloadEnvelope'
 import { COULD_NOT_DECRYPT_BODY, MESSAGE_REJECTED_BODY } from './stanzaDecrypt'
 import { createMockStores, type MockStoreBindings } from '../test-utils'
-import type { StoreBindings } from '../types'
+import type { StoreBindings, MessageSecurityContext } from '../types'
 import type { Message } from '../types/chat'
 import * as messageCache from '../../utils/messageCache'
 import * as searchIndex from '../../utils/searchIndex'
@@ -251,6 +251,71 @@ describe('DeferredDecryptEngine', () => {
 
     expect(stores.chat.updateMessage).toHaveBeenCalledTimes(1)
     expect(stores.chat.refreshLastMessageContent).not.toHaveBeenCalled()
+  })
+
+  // FLM-163: the pass stores an unverified decrypt's text and keeps the
+  // encrypted copy for the signature check, so every later pass decrypts it
+  // again. It must not write the message again, nor undo the trust the plugin
+  // reported after checking the signature.
+  it.each([
+    ['untrusted, as first stored', { protocolId: 'dummy-plaintext', trust: 'untrusted', notes: ['dummy plugin — plaintext transport'] }],
+    ['tofu, after the plugin checked the signature', { protocolId: 'dummy-plaintext', trust: 'tofu' }],
+  ] as Array<[string, MessageSecurityContext]>)('leaves an unverified message alone once its text is stored, %s', async (_, securityContext) => {
+    const stored = (conversationId: string): Message => ({
+      type: 'chat', id: `shown-${conversationId}`, stanzaId: undefined, originId: undefined,
+      conversationId, from: conversationId, body: 'hello', timestamp: new Date(), isOutgoing: false,
+      securityContext,
+      encryptedPayload: DUMMY_PAYLOAD_XML,
+    })
+    const loaded = stored('bob@example.com')
+    const durable = stored('carol@example.com')
+    const preview = stored('dave@example.com')
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: loaded.conversationId!, messages: [loaded] }])
+    vi.mocked(cache.getMessagesWithEncryptedPayload).mockResolvedValue([{ ...durable, cacheKey: messageCache.chatCacheKey(durable) }])
+    stores.chat.getEncryptedPreviews.mockReturnValue([{ conversationId: preview.conversationId!, lastMessage: preview }])
+    const decrypt = vi.spyOn(manager, 'decryptArchive')
+
+    const count = await engine.retryPending()
+
+    // The test plugin decrypts each to 'hello', untrusted.
+    expect(decrypt).toHaveBeenCalledTimes(3)
+    expect(count).toBe(0)
+    expect(stores.chat.updateMessage).not.toHaveBeenCalled()
+    expect(cache.updateMessage).not.toHaveBeenCalled()
+    expect(stores.chat.refreshLastMessageContent).not.toHaveBeenCalled()
+  })
+
+  // FLM-163: a recovered signal changes another message and removes its
+  // placeholder with the encrypted copy. An unverified one would act before the
+  // signature check, so it waits for the sender's key.
+  it.each([
+    ['reaction', xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: 'signal-target' }, xml('reaction', {}, '👍'))],
+    ['retraction', xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: 'signal-target' })],
+    ['correction', [xml('body', {}, 'fixed'), xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'signal-target' })]],
+  ] as const)('keeps an unverified %s pending until its signature is checked', async (_, signal) => {
+    vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+      plaintext: new TextEncoder().encode(serializePayloadEnvelope([signal].flat())),
+      senderDevice: { jid: 'bob@example.com', deviceId: 'test' },
+      securityContext: { protocolId: 'dummy-plaintext', trust: 'untrusted', notes: ['peer key not cached'] },
+    })
+    const target: Message = {
+      type: 'chat', id: 'signal-target', stanzaId: undefined, originId: undefined, conversationId: 'bob@example.com',
+      from: 'bob@example.com', body: 'original', timestamp: new Date(1_700_000_000_000), isOutgoing: false,
+    }
+    const placeholder: Message = {
+      ...target, id: 'signal', body: COULD_NOT_DECRYPT_BODY, timestamp: new Date(1_700_000_001_000),
+      encryptedPayload: DUMMY_PAYLOAD_XML,
+    }
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [target, placeholder] }])
+    stores.chat.getConversationMessages.mockReturnValue([target, placeholder])
+
+    expect(await engine.retryPending()).toBe(0)
+
+    expect(stores.chat.updateReactions).not.toHaveBeenCalled()
+    expect(stores.chat.recordPendingRetraction).not.toHaveBeenCalled()
+    expect(stores.chat.updateMessage).not.toHaveBeenCalled()
+    expect(stores.chat.removeMessage).not.toHaveBeenCalled()
+    expect(cache.deleteMessage).not.toHaveBeenCalled()
   })
 
   it('repairs each archive-distinct durable row that reuses a client id', async () => {
