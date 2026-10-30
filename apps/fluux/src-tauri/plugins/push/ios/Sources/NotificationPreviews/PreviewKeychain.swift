@@ -123,12 +123,24 @@ struct PreviewToken: Codable, Equatable {
     /// Runs `body` while holding an exclusive lock shared by the app and the extension, so that
     /// publishing or revoking the capability and storing a token never interleave.
     static func exclusively<T>(root: URL?, _ body: () throws -> T) rethrows -> T {
-        guard let root = root else { return try body() }
-        let descriptor = open(root.appendingPathComponent("fast-token.lock").path, O_CREAT | O_RDWR, 0o600)
-        guard descriptor >= 0 else { return try body() }
-        flock(descriptor, LOCK_EX)
+        guard let root = root, let descriptor = lock(root: root) else { return try body() }
         defer { flock(descriptor, LOCK_UN); close(descriptor) }
         return try body()
+    }
+
+    private static func lock(root: URL) -> Int32? {
+        let descriptor = open(root.appendingPathComponent("fast-token.lock").path, O_CREAT | O_RDWR, 0o600)
+        guard descriptor >= 0 else { return nil }
+        guard flock(descriptor, LOCK_EX) == 0 else { close(descriptor); return nil }
+        return descriptor
+    }
+
+    /// Sign-ins must not proceed without the shared lock. Unlike best-effort cleanup,
+    /// an unlocked network request can rotate the server token behind another lookup.
+    static func withSignInLock<T>(root: URL, _ body: () -> T) -> T? {
+        guard let descriptor = lock(root: root) else { return nil }
+        defer { flock(descriptor, LOCK_UN); close(descriptor) }
+        return body()
     }
 
     /// Stores the outcome of an extension run that started from `used`.
@@ -136,8 +148,15 @@ struct PreviewToken: Codable, Equatable {
     static func record(_ change: Change, after used: PreviewToken, root: URL?, snapshotCurrent: () -> Bool,
                        group: String? = PreviewKeychain.group) -> Bool {
         exclusively(root: root) {
-            guard let next = resolve(used: used, stored: stored(group: group), snapshotCurrent: snapshotCurrent(), change: change) else { return false }
-            return (try? next.save(group: group)) != nil
+            recordLocked(change, after: used, snapshotCurrent: snapshotCurrent, group: group)
         }
+    }
+
+    /// Caller holds fast-token.lock across credential loading, sign-in and this write.
+    @discardableResult
+    static func recordLocked(_ change: Change, after used: PreviewToken, snapshotCurrent: () -> Bool,
+                             group: String? = PreviewKeychain.group) -> Bool {
+        guard let next = resolve(used: used, stored: stored(group: group), snapshotCurrent: snapshotCurrent(), change: change) else { return false }
+        return (try? next.save(group: group)) != nil
     }
 }

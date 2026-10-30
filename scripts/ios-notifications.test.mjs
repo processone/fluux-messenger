@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-function compileNotificationTests(scratch, main, ios = false) {
+function compileNotificationTests(scratch, main, ios = false, realEngine = false) {
   const binary = join(scratch, ios ? 'notification-test.dylib' : 'notification-test')
   const target = ios ? ['-emit-library', '-sdk', execFileSync('xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-path'], { encoding: 'utf8' }).trim(),
     '-target', `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-ios15.0-simulator`] : []
@@ -19,7 +19,7 @@ function compileNotificationTests(scratch, main, ios = false) {
     fileURLToPath(new URL('../apps/fluux/src-tauri/plugins/push/ios/Sources/ShareSuggestions.swift', import.meta.url)),
     ...['PreviewKeychain.swift', 'PreviewDelivery.swift', 'PreviewLedger.swift', 'PreviewResult.swift', 'PreviewTrace.swift'].map(name =>
       fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/${name}`, import.meta.url))),
-    fileURLToPath(new URL('./native-tests/NotificationPreviewEngineStub.swift', import.meta.url)),
+    fileURLToPath(new URL(realEngine ? '../apps/fluux/src-tauri/mobile/ios/NotificationPreviewEngine.swift' : './native-tests/NotificationPreviewEngineStub.swift', import.meta.url)),
     fileURLToPath(new URL(`./native-tests/${main}`, import.meta.url)),
     '-lsqlite3', '-o', binary], { timeout: 120000 })
   return binary
@@ -120,10 +120,23 @@ test('notification extension FAST token store', { skip: process.platform !== 'da
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
 
+test('notification extension serializes FAST sign-ins without a keychain', { skip: process.platform !== 'darwin' }, () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'fluux-signin-test-'))
+  try {
+    const binary = compileNotificationTests(scratch, 'NotificationPreviewEngineTests.swift', false, true)
+    const output = execFileSync(binary, { encoding: 'utf8', timeout: 30000 })
+    assert.match(output, /passed/)
+    console.log(output.trim())
+    compileNotificationTests(scratch, 'NotificationPreviewEngineTests.swift', true, true)
+  } finally { rmSync(scratch, { recursive: true, force: true }) }
+})
+
 test('shared notification content contract on native iOS paths', { skip: process.platform !== 'darwin' }, () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-content-test-'))
   try {
     const binary = compileNotificationTests(scratch, 'NotificationContentTests.swift')
-    assert.match(execFileSync(binary, [fileURLToPath(new URL('../tests/fixtures/notification-content.json', import.meta.url))], { encoding: 'utf8' }), /passed/)
+    const output = execFileSync(binary, [fileURLToPath(new URL('../tests/fixtures/notification-content.json', import.meta.url))], { encoding: 'utf8' })
+    assert.match(output, /passed/)
+    console.log(output.trim())
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })

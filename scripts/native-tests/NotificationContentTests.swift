@@ -20,6 +20,7 @@ import UserNotifications
         let signedOut: Bool?
         let mismatch: Bool?
         let archiveUnavailable: Bool?
+        let failure: Bool?
         let events: [PreviewEvent]?
     }
     struct Fixture: Decodable { let id: String; let ios: Input? }
@@ -56,34 +57,39 @@ import UserNotifications
                 try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
                 defer { try? FileManager.default.removeItem(at: root) }
                 let ledger = try PreviewLedger(root: root)
-                let session = try ledger.capability(account: account, purge: false, now: 100)!
+                let session = try ledger.capability(account: account, purge: false, now: Date().timeIntervalSince1970)!
                 let events = input.events ?? []
                 let result = PreviewResult(events: events, complete: input.complete != false, archiveUnavailable: input.archiveUnavailable)
                 if input.duplicate == true {
-                    _ = try ledger.claim(result, session: session, conversation: peer, request: "prior", nickname: "Alice", words: corpus.words, now: 100)
+                    _ = try ledger.claim(result, session: session, conversation: peer, request: "prior", nickname: "Alice", words: corpus.words, now: Date().timeIntervalSince1970)
                 }
                 if input.read == true {
-                    _ = try ledger.merge([PreviewLedger.Delta(account: account, epoch: session.epoch, conversation: peer, uid: "one", archiveAuthority: account, key: PreviewLedger.archiveKey("one"), read: true, notified: false)], now: 100)
+                    _ = try ledger.merge([PreviewLedger.Delta(account: account, epoch: session.epoch, conversation: peer, uid: "one", archiveAuthority: account, key: PreviewLedger.archiveKey("one"), read: true, notified: false)], now: Date().timeIntervalSince1970)
                 }
-                let snapshot = try JSONSerialization.data(withJSONObject: ["opt_in": input.optIn != false, "peers": [peer: []]])
-                let content = NotificationPresentation.content(for: original, names: names)
-                let fallback = content.mutableCopy() as! UNMutableNotificationContent
-                fallback.body = corpus.words.activity
-                let delivery = PreviewDelivery(removeRequests: { _ in })
+                // FLM-294: exercise the real service's fallback policy, not a duplicate wiring.
+                let sessionValue = try JSONSerialization.jsonObject(with: JSONEncoder().encode(session))
+                let wordsValue = try JSONSerialization.jsonObject(with: JSONEncoder().encode(corpus.words))
+                let snapshot = try JSONSerialization.data(withJSONObject: ["account": account, "opt_in": input.optIn != false,
+                    "peers": [peer: []], "ledger": sessionValue, "words": wordsValue])
+                let service = NotificationService()
+                service.loadNames = { names }
+                service.readSnapshot = { input.current == false ? nil : snapshot }
+                service.ledgerRoot = { root }
+                service.previewsAllowed = { [weak service] complete in
+                    if input.expired == true { service?.serviceExtensionTimeWillExpire() }
+                    complete(input.allowed != false)
+                }
+                service.runPreview = { _, _, _, _, complete in
+                    complete(input.failure == true ? nil : result)
+                    return {}
+                }
                 var completions = 0
-                delivery.begin(content) { completions += 1; output = $0 }
-                delivery.updateFallback(fallback)
-                if input.expired == true { delivery.finish() }
-                delivery.start(fallback, snapshot: snapshot, sender: peer, allowed: input.allowed != false,
-                               isCurrent: { _ in input.current != false }, engine: { _, complete in complete(result); return {} },
-                               select: { result in
-                    var selected = (try? ledger.claim(result, session: session, conversation: peer, request: fixture.id, nickname: "Alice", words: corpus.words, now: 100)) ?? PreviewSelection()
-                    if (try? ledger.deliverable(selected, session: session, conversation: peer, now: 100)) != true { selected.body = nil }
-                    return selected
-                }, completion: { _ in preconditionFailure("begin owns completion") })
-                delivery.finish()
+                service.didReceive(UNNotificationRequest(identifier: fixture.id, content: original, trigger: nil)) {
+                    completions += 1; output = $0
+                }
                 precondition(completions == 1, fixture.id + ": completion must occur once")
             }
+            print("\(fixture.id): \(output?.title ?? "nil") / \(output?.body ?? "nil")")
             if output?.title != input.expected.title || output?.body != input.expected.body || output?.subtitle != (input.expected.subtitle ?? "") {
                 failures.append("\(fixture.id): expected \(input.expected.title) / \(input.expected.body), got \(output?.title ?? "nil") / \(output?.body ?? "nil")")
             }
