@@ -99,9 +99,13 @@ test.describe('half open in landscape', () => {
 test.describe('half open in portrait', () => {
   test.use({ viewport: PORTRAIT, hasTouch: true, isMobile: true })
 
-  for (const [name, nav] of [['Emma Wilson', 'messages'], ['Team Chat', 'rooms']] as const) {
-    test(`messages above the hinge and the composer below it, ${nav}`, async ({ page }) => {
+  for (const [name, nav, dir] of [
+    ['Emma Wilson', 'messages', 'ltr'], ['Team Chat', 'rooms', 'ltr'],
+    ['Emma Wilson', 'messages', 'rtl'], ['Team Chat', 'rooms', 'rtl'],
+  ] as const) {
+    test(`messages above the hinge and the composer below it, ${nav}, ${dir}`, async ({ page }) => {
       await bootDemo(page, DEMO_URL)
+      await page.evaluate((dir) => { document.documentElement.dir = dir }, dir)
       await openConversation(page, name, nav)
       const messages = page.locator('[data-conversation-column] > .focus-zone')
       const composer = page.locator('[data-conversation-column] .composer-form')
@@ -116,7 +120,7 @@ test.describe('half open in portrait', () => {
       const below = (await composer.boundingBox())!
       expect(Math.abs(below.y - (HINGE + MARGIN))).toBeLessThanOrEqual(EPSILON)
       expect(await controlsNearHinge(page, 'y')).toEqual([])
-      await page.screenshot({ path: test.info().outputPath(`portrait-folded-${nav}.png`) })
+      await page.screenshot({ path: test.info().outputPath(`portrait-folded-${nav}-${dir}.png`) })
 
       // The keyboard fills the band and the half below it, so iOS ends the page above the band
       // and the composer sits on the keyboard.
