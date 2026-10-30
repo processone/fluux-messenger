@@ -46,7 +46,9 @@ type RetryModification = ArchiveSignal['effect']
  * - `rejected`: signature is invalid (final, never retryable) — a real message placeholder is
  *   replaced with a "[Message rejected]" body; a bodiless-signal placeholder (forged reaction/
  *   retraction) is removed entirely so it never surfaces as a ghost bubble.
- * - `pending`: still cannot decrypt (key locked / plugin not ready) — leave `encryptedPayload`.
+ * - `pending`: still cannot decrypt (key locked / plugin not ready), an unverified signal
+ *   waits for its signature check, or the message already shows this unverified text —
+ *   leave `encryptedPayload`.
  */
 type RetryOutcome =
   | { kind: 'decrypted'; authoredAt?: Date; body: string; securityContext?: MessageSecurityContext; attachment?: FileAttachment; unverified?: true }
