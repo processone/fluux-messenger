@@ -759,7 +759,8 @@ export class DeferredDecryptEngine {
 
   /**
    * Re-attempt deferred decrypts AND upgrade stale trust for a specific
-   * peer, triggered when that peer's PEP key material changes.
+   * peer, triggered when that peer's PEP key material changes, or when a
+   * plugin reports a held signature check done (the key is now cached).
    *
    * Two categories of stored messages are handled:
    *
