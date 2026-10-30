@@ -402,9 +402,15 @@ impl<S: Backend> SecretStore for Secrets<S> {
         })
         .map_err(|error| error.to_string())?;
         if !already {
-            self.store
-                .mark_fresh_account(account)
-                .map_err(|error| error.to_string())?;
+            if let Err(error) = self.store.mark_fresh_account(account) {
+                // The record may have been published before the failure (its
+                // directory sync). Then it is in use: confirm it again, never
+                // report a failure that the next read contradicts.
+                let published = self.is_fresh(account).unwrap_or(false);
+                if !published || self.store.mark_fresh_account(account).is_err() {
+                    return Err(error.to_string());
+                }
+            }
         }
         Ok(())
     }
@@ -1262,6 +1268,8 @@ mod tests {
         concurrent_migration_bundle: Mutex<Option<Bundle>>,
         fresh: Mutex<Vec<String>>,
         fresh_unreadable: Mutex<bool>,
+        // Publish the record, then fail (a directory sync that errors).
+        mark_failures_after_publish: Mutex<usize>,
     }
     impl SecretStore for FakeStore {
         fn get(&self, account: &str) -> Result<Option<String>, String> {
@@ -1313,6 +1321,11 @@ mod tests {
         }
         fn mark_fresh_account(&self, account: &str) -> StoreResult<()> {
             self.fresh.lock().unwrap().push(account.into());
+            let mut failures = self.mark_failures_after_publish.lock().unwrap();
+            if *failures > 0 {
+                *failures -= 1;
+                return Err("directory sync failed".into());
+            }
             Ok(())
         }
         fn read(&self, account: &str) -> StoreResult<Option<String>> {
@@ -1700,6 +1713,25 @@ mod tests {
         let fresh: Bundle =
             serde_json::from_str(&store.store.get(FRESH_ACCOUNT).unwrap().unwrap()).unwrap();
         assert_eq!(fresh.items.len(), 1, "no staged copy remains");
+    }
+
+    // FLM-302 R10: a record published before its directory sync failed is in
+    // use. Commit confirms it again instead of reporting a failure the next
+    // read contradicts.
+    #[test]
+    fn commit_confirms_a_record_published_before_the_sync_failed() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        *store.store.mark_failures_after_publish.lock().unwrap() = 1;
+        store.fresh_write(alice, "restored").unwrap();
+        store.commit_fresh(alice).unwrap();
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("restored"));
+        // When it cannot be confirmed, the failure is reported.
+        let other = "openpgp_passphrase:bob@example.org";
+        *store.store.mark_failures_after_publish.lock().unwrap() = 2;
+        store.fresh_write(other, "restored").unwrap();
+        assert!(store.commit_fresh(other).is_err());
+        assert!(store.restored(other).unwrap(), "yet it is published and in use");
     }
 
     // FLM-302 R3: startup loading after a restore must not read the restored
