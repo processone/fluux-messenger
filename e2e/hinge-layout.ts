@@ -45,21 +45,115 @@ async function openConversation(page: Page, name: string, nav: 'messages' | 'roo
   await expect(page.locator('[data-conversation-column]')).toBeVisible()
 }
 
-/** Every visible control whose box comes within the hinge margin of the line along `axis`. */
+/** Every control whose rendered, unclipped box comes within the hinge margin along `axis`. */
 async function controlsNearHinge(page: Page, axis: 'x' | 'y') {
   return page.evaluate(({ axis, hinge, margin }) => {
     const selector = 'button, a[href], input, select, textarea, [contenteditable="true"], [role="button"], [role="separator"]'
     return [...document.querySelectorAll<HTMLElement>(selector)].flatMap((el) => {
       const r = el.getBoundingClientRect()
-      const style = getComputedStyle(el)
-      if (r.width === 0 || r.height === 0 || style.visibility === 'hidden' || el.closest('[inert]')) return []
-      if (r.right <= 0 || r.bottom <= 0 || r.left >= innerWidth || r.top >= innerHeight) return []
-      const [start, end] = axis === 'x' ? [r.left, r.right] : [r.top, r.bottom]
+      if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) || el.closest('[inert]')) return []
+      let left = Math.max(0, r.left)
+      let top = Math.max(0, r.top)
+      let right = Math.min(innerWidth, r.right)
+      let bottom = Math.min(innerHeight, r.bottom)
+      // Virtualized attachments and poll buttons can extend past the message scroller.
+      // Their layout boxes still cross the hinge even when those portions are not painted.
+      for (let ancestor = el.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        const style = getComputedStyle(ancestor)
+        const clipX = ['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowX)
+        const clipY = ['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowY)
+        if (!clipX && !clipY) continue
+        const clip = ancestor.getBoundingClientRect()
+        const innerLeft = clip.left + ancestor.clientLeft
+        const innerTop = clip.top + ancestor.clientTop
+        if (clipX) {
+          left = Math.max(left, innerLeft)
+          right = Math.min(right, innerLeft + ancestor.clientWidth, clip.right - parseFloat(style.borderRightWidth))
+        }
+        if (clipY) {
+          top = Math.max(top, innerTop)
+          bottom = Math.min(bottom, innerTop + ancestor.clientHeight, clip.bottom - parseFloat(style.borderBottomWidth))
+        }
+      }
+      if (right <= left || bottom <= top) return []
+      const [start, end] = axis === 'x' ? [left, right] : [top, bottom]
       if (end <= hinge - margin || start >= hinge + margin) return []
       return [`${el.tagName.toLowerCase()} "${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 40)}" ${start.toFixed(1)}-${end.toFixed(1)}`]
     })
   }, { axis, hinge: HINGE, margin: MARGIN })
 }
+
+/** A stable copy of the real demo attachment and its clipping scroller, without virtualizer movement. */
+async function hingeControlFixture(page: Page, axis: 'x' | 'y') {
+  await bootDemo(page, DEMO_URL)
+  await openConversation(page, 'Emma Wilson')
+  const attachment = page.locator('.message-row button').filter({ has: page.locator('img') }).first()
+  await expect(attachment).toBeVisible()
+  await attachment.evaluate((source, { axis, hinge, margin }) => {
+    const scroller = source.closest('.overflow-y-auto')!
+    const bounds = scroller.getBoundingClientRect()
+    const controlBounds = source.getBoundingClientRect()
+    const clip = scroller.cloneNode(false) as HTMLElement
+    clip.id = 'hinge-control-clip'
+    // Use real app markup and measured dimensions, but place its edge outside the band.
+    Object.assign(clip.style, {
+      position: 'fixed', left: `${bounds.left}px`, top: `${bounds.top}px`,
+      width: `${bounds.width}px`, height: `${bounds.height}px`, padding: '0', zIndex: '100',
+      [axis === 'x' ? 'width' : 'height']: `${hinge - margin - (axis === 'x' ? bounds.left : bounds.top)}px`,
+    })
+    const control = source.cloneNode(true) as HTMLElement
+    control.setAttribute('aria-label', 'Hinge attachment probe')
+    Object.assign(control.style, {
+      position: 'absolute', left: '0', top: '0', margin: '0',
+      width: `${controlBounds.width}px`, height: `${controlBounds.height}px`,
+      [axis === 'x' ? 'left' : 'top']: `${hinge - 2 * margin - (axis === 'x' ? bounds.left : bounds.top)}px`,
+    })
+    clip.append(control)
+    document.body.append(clip)
+  }, { axis, hinge: HINGE, margin: MARGIN })
+}
+
+test.describe('visible hinge control measurement (FLM-306)', () => {
+  test.use({ viewport: PORTRAIT })
+
+  for (const axis of ['x', 'y'] as const) {
+    test(`counts only the unclipped portion of a control on ${axis}`, async ({ page }) => {
+      // FLM-306: a real attachment's box crossed the hinge, but its scroller ended before it.
+      await hingeControlFixture(page, axis)
+      const probeIsNear = async () => (await controlsNearHinge(page, axis))
+        .some(control => control.includes('Hinge attachment probe'))
+      expect(await probeIsNear()).toBe(false)
+
+      // Expose only part of the control inside the band: clipping must not hide this crossing.
+      const clip = page.locator('#hinge-control-clip')
+      await clip.evaluate((el, { axis, hinge }) => {
+        const bounds = el.getBoundingClientRect()
+        el.style[axis === 'x' ? 'width' : 'height'] = `${hinge - (axis === 'x' ? bounds.left : bounds.top)}px`
+      }, { axis, hinge: HINGE })
+      expect(await probeIsNear()).toBe(true)
+
+      // A visible overflow axis must not be clipped just because the other axis clips.
+      await clip.evaluate((el, axis) => {
+        el.style.overflowX = axis === 'x' ? 'visible' : 'clip'
+        el.style.overflowY = axis === 'y' ? 'visible' : 'clip'
+        el.style[axis === 'x' ? 'width' : 'height'] = '1px'
+      }, axis)
+      expect(await probeIsNear()).toBe(true)
+    })
+
+    test(`ignores a transparent ancestor, not a translucent one, on ${axis}`, async ({ page }) => {
+      // FLM-306's visible-controls contract also applies to hidden message-toolbar ancestors.
+      await hingeControlFixture(page, axis)
+      const clip = page.locator('#hinge-control-clip')
+      await clip.evaluate(el => { el.style.overflow = 'visible'; el.style.opacity = '0' })
+      const probeIsNear = async () => (await controlsNearHinge(page, axis))
+        .some(control => control.includes('Hinge attachment probe'))
+      expect(await probeIsNear()).toBe(false)
+      await clip.evaluate(el => { el.style.opacity = '0.5' })
+      expect(await probeIsNear()).toBe(true)
+    })
+  }
+})
 
 test.describe('half open in landscape', () => {
   test.use({ viewport: LANDSCAPE })
