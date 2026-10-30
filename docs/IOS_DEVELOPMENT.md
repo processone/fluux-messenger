@@ -332,6 +332,11 @@ APIs from iOS 27.1:
 - `--fluux-hinge-margin`: how far buttons keep from the fold on each side, from
   the region's margins: 20 points on the Duo.
 
+UIKit sends no update when the division region appears. Unfolding from the
+cover screen, the hinge reports half open before the inner screen has its band,
+so while half open without a line the host looks again every quarter second,
+for up to ten seconds after the last change.
+
 Half open in landscape, the rail and the conversation list end at the fold and
 the chat starts there. The list's resize handle is hidden, and the saved width
 returns when the device opens flat. Half open in portrait, the messages end

@@ -21,6 +21,13 @@ final class HingeReporter {
     private var loadingObservation: NSKeyValueObservation?
     /// What the current document already has; a new document starts with nothing set.
     private var applied = HingeLayout.script(for: nil)
+    /// UIKit reports no change to the division regions. Unfolding from the cover screen, the hinge
+    /// reports half open before the inner screen has its band, so while half open without a line,
+    /// look again every quarter second, up to ten seconds after the last change.
+    private static let recheckDelay = 0.25
+    private static let rechecks = 40
+    private var rechecksLeft = 0
+    private var recheck: DispatchWorkItem?
 
     init(webView: WKWebView) {
         self.webView = webView
@@ -34,7 +41,7 @@ final class HingeReporter {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.applied = HingeLayout.script(for: nil)
-                self.update()
+                self.changed()
             }
         }
     }
@@ -43,7 +50,7 @@ final class HingeReporter {
         folded = hinge.map { $0.status == .partiallyOpen }
         // UIKit also calls this when the web view moves to another window, so follow its scene.
         observe(webView?.window?.windowScene)
-        update()
+        changed()
     }
 
     /// The division moves between axes when the interface turns, without a hinge update.
@@ -51,11 +58,18 @@ final class HingeReporter {
         guard scene !== observedScene else { return }
         observedScene = scene
         geometryObservation = scene?.observe(\.effectiveGeometry) { [weak self] _, _ in
-            DispatchQueue.main.async { self?.update() }
+            DispatchQueue.main.async { self?.changed() }
         }
     }
 
+    private func changed() {
+        rechecksLeft = Self.rechecks
+        update()
+    }
+
     private func update() {
+        recheck?.cancel()
+        recheck = nil
         guard let webView else { return }
         var layout: HingeLayout?
         if let folded {
@@ -67,6 +81,12 @@ final class HingeReporter {
                                      bottom: $0.margins.bottom, right: $0.margins.right)
             } : []
             layout = HingeLayout(folded: folded, divisions: divisions, bounds: webView.bounds)
+        }
+        if let layout, layout.posture == .folded, layout.line == nil, rechecksLeft > 0 {
+            rechecksLeft -= 1
+            let item = DispatchWorkItem { [weak self] in self?.update() }
+            recheck = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.recheckDelay, execute: item)
         }
         let script = HingeLayout.script(for: layout)
         guard script != applied else { return }
