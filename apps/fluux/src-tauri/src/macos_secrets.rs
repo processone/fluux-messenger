@@ -16,6 +16,9 @@ fn is_bundle(account: &str) -> bool {
     account == ACCOUNT || account == FRESH_ACCOUNT
 }
 const BACKUP_PREFIX: &str = "identity-migration-backup:";
+// Staged restore secret in the fresh item. It protects nothing until promoted,
+// so a failed restore never replaces the live protection of an active key.
+const PENDING_PREFIX: &str = "pending-fresh:";
 const RECOVERY_PREFIX: &str = "keychain-recovery:";
 fn recovery_prefix(account: &str) -> String {
     format!("{RECOVERY_PREFIX}{}:{account}:", account.len())
@@ -81,8 +84,10 @@ pub trait Backend: SecretStore {
     fn accounts(&self) -> StoreResult<Vec<String>>;
     /// Accounts whose secret the user restored from a backup instead of
     /// migrating. Their secrets live only in the fresh item.
-    fn fresh_accounts(&self) -> Vec<String> {
-        Vec::new()
+    /// An unreadable record is an error, never an empty list: silently
+    /// routing back to the old items could overwrite a restored key.
+    fn fresh_accounts(&self) -> StoreResult<Vec<String>> {
+        Ok(Vec::new())
     }
     /// Persist that an account is fresh; it must outlive this process.
     fn mark_fresh_account(&self, _account: &str) -> StoreResult<()> {
@@ -127,8 +132,8 @@ impl<S: Backend> Secrets<S> {
             fresh_cache: Mutex::new(None),
         }
     }
-    fn is_fresh(&self, account: &str) -> bool {
-        self.store.fresh_accounts().iter().any(|name| name == account)
+    fn is_fresh(&self, account: &str) -> StoreResult<bool> {
+        Ok(self.store.fresh_accounts()?.iter().any(|name| name == account))
     }
     fn load_fresh(&self) -> StoreResult<Bundle> {
         match self.store.read(FRESH_ACCOUNT)? {
@@ -194,8 +199,18 @@ impl<S: Backend> Secrets<S> {
             return Ok(bundle);
         }
         let mut bundle = Bundle::default();
+        // A restored account and its aliases live in the fresh item. Their old
+        // originals may be refused: never read them again, only erase them.
+        let restored = self.store.fresh_accounts()?;
+        let is_restored_copy = |name: &str| {
+            restored.iter().any(|account| {
+                name == account
+                    || name.strip_prefix(BACKUP_PREFIX) == Some(account)
+                    || name.starts_with(&recovery_prefix(account))
+            })
+        };
         for account in self.store.accounts()? {
-            if is_bundle(&account) {
+            if is_bundle(&account) || is_restored_copy(&account) {
                 continue;
             }
             if let Some(secret) = self.store.read(&account)? {
@@ -358,13 +373,37 @@ impl<S: Backend> Secrets<S> {
 }
 impl<S: Backend> SecretStore for Secrets<S> {
     fn fresh_write(&self, account: &str, secret: &str) -> Result<(), String> {
-        self.fresh_set(account, Some(secret))
+        self.fresh_set(&format!("{PENDING_PREFIX}{account}"), Some(secret))
+            .map_err(|error| error.to_string())
+    }
+    fn abort_fresh(&self, account: &str) -> Result<(), String> {
+        self.fresh_set(&format!("{PENDING_PREFIX}{account}"), None)
             .map_err(|error| error.to_string())
     }
     fn commit_fresh(&self, account: &str) -> Result<(), String> {
-        self.store
-            .mark_fresh_account(account)
-            .map_err(|error| error.to_string())
+        let already = self.is_fresh(account).map_err(|e| e.to_string())?;
+        let pending = format!("{PENDING_PREFIX}{account}");
+        // One write replaces the live secret with the staged one. Only then is
+        // a new account routed to the fresh item, so a failure before that
+        // leaves every read, and an active key's protection, unchanged.
+        self.fresh_access(|bundle| {
+            let mut updated = bundle.clone();
+            let secret = updated
+                .items
+                .remove(&pending)
+                .ok_or_else(|| StoreError::from("No staged secret to promote"))?;
+            updated.items.insert(account.into(), secret);
+            self.store.set(FRESH_ACCOUNT, &Self::encode(&updated)?)?;
+            *bundle = updated;
+            Ok(())
+        })
+        .map_err(|error| error.to_string())?;
+        if !already {
+            self.store
+                .mark_fresh_account(account)
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
     }
     fn retry_denied_access(&self) -> Result<(), String> {
         let mut cache = self
@@ -377,25 +416,25 @@ impl<S: Backend> SecretStore for Secrets<S> {
         Ok(())
     }
     fn legacy_candidate(&self, account: &str) -> Result<Option<String>, String> {
-        if self.is_fresh(account) {
+        if self.is_fresh(account).map_err(|e| e.to_string())? {
             return Ok(None);
         }
         Secrets::legacy_candidate(self, account)
     }
     fn recovery_candidates(&self, account: &str) -> Result<Vec<String>, String> {
-        if self.is_fresh(account) {
+        if self.is_fresh(account).map_err(|e| e.to_string())? {
             return Ok(Vec::new());
         }
         Secrets::recovery_candidates(self, account)
     }
     fn adopt_legacy(&self, account: &str, secret: &str) -> Result<(), String> {
-        if self.is_fresh(account) {
+        if self.is_fresh(account).map_err(|e| e.to_string())? {
             return Err("A restored account never adopts old items".into());
         }
         Secrets::adopt_legacy(self, account, secret)
     }
     fn get(&self, account: &str) -> Result<Option<String>, String> {
-        if self.is_fresh(account) {
+        if self.is_fresh(account).map_err(|e| e.to_string())? {
             return self
                 .fresh_access(|bundle| Ok(bundle.items.get(account).cloned()))
                 .map_err(|error| error.to_string());
@@ -404,7 +443,7 @@ impl<S: Backend> SecretStore for Secrets<S> {
             .map_err(|error| error.to_string())
     }
     fn set(&self, account: &str, secret: &str) -> Result<(), String> {
-        if self.is_fresh(account) {
+        if self.is_fresh(account).map_err(|e| e.to_string())? {
             return self
                 .fresh_set(account, Some(secret))
                 .map_err(|error| error.to_string());
@@ -434,25 +473,36 @@ impl<S: Backend> SecretStore for Secrets<S> {
     }
     fn delete(&self, account: &str) -> Result<(), String> {
         // A restored account keeps a copy in the fresh item and may still have
-        // old copies. Try both, and say which one could not be erased.
-        if !self.is_fresh(account) {
-            return self.delete_old(account);
-        }
-        let failures: Vec<String> = [
-            self.fresh_set(account, None)
-                .err()
-                .map(|error| format!("restored copy ({error})")),
-            self.delete_old(account)
-                .err()
-                .map(|error| format!("old copy ({error})")),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
-        if failures.is_empty() {
+        // old copies; a failed restore may have left a staged one. Try all, and
+        // say which could not be erased.
+        let restored = self.is_fresh(account).map_err(|e| e.to_string())?;
+        let fresh = self.fresh_access(|bundle| {
+            let mut updated = bundle.clone();
+            updated.items.remove(account);
+            updated.items.remove(&format!("{PENDING_PREFIX}{account}"));
+            if updated.items != bundle.items {
+                self.store.set(FRESH_ACCOUNT, &Self::encode(&updated)?)?;
+                *bundle = updated;
+            }
             Ok(())
-        } else {
-            Err(format!("Not erased: {}", failures.join("; ")))
+        });
+        let old = self.delete_old(account);
+        match (fresh, old) {
+            (Ok(()), old) if !restored => old,
+            (fresh, old) => {
+                let failures: Vec<String> = [
+                    fresh.err().map(|error| format!("restored copy ({error})")),
+                    old.err().map(|error| format!("old copy ({error})")),
+                ]
+                .into_iter()
+                .flatten()
+                .collect();
+                if failures.is_empty() {
+                    Ok(())
+                } else {
+                    Err(format!("Not erased: {}", failures.join("; ")))
+                }
+            }
         }
     }
 }
@@ -696,11 +746,12 @@ mod native {
         }
     }
     impl Backend for Keychain {
-        fn fresh_accounts(&self) -> Vec<String> {
-            self.fresh_marker_path()
-                .and_then(|path| std::fs::read_to_string(path).map_err(|e| e.to_string()))
-                .map(|text| text.lines().map(str::to_string).collect())
-                .unwrap_or_default()
+        fn fresh_accounts(&self) -> StoreResult<Vec<String>> {
+            match std::fs::read_to_string(self.fresh_marker_path()?) {
+                Ok(text) => Ok(text.lines().map(str::to_string).collect()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+                Err(e) => Err(format!("Could not read the fresh-start record: {e}").into()),
+            }
         }
 
         fn mark_fresh_account(&self, account: &str) -> StoreResult<()> {
@@ -711,7 +762,7 @@ mod native {
             // revision, so a running sibling's cached bundles can no longer be
             // written. It must quit and reopen, as for any other stale write.
             let _revision = self.bump_revision(None)?;
-            let mut accounts = self.fresh_accounts();
+            let mut accounts = self.fresh_accounts()?;
             if !accounts.iter().any(|name| name == account) {
                 accounts.push(account.into());
             }
@@ -798,9 +849,9 @@ mod native {
             .lock()
             .unwrap()
             .extend([(FRESH_ACCOUNT.to_string(), 0), (ACCOUNT.to_string(), 0)]);
-        assert!(restoring.fresh_accounts().is_empty());
+        assert!(restoring.fresh_accounts().unwrap().is_empty());
         restoring.mark_fresh_account("openpgp_passphrase:a@x").unwrap();
-        assert_eq!(sibling.fresh_accounts(), ["openpgp_passphrase:a@x"]);
+        assert_eq!(sibling.fresh_accounts().unwrap(), ["openpgp_passphrase:a@x"]);
         for account in [ACCOUNT, FRESH_ACCOUNT] {
             let error = sibling.begin_write(account).unwrap_err();
             assert!(error.contains("quit and reopen"), "{error}");
@@ -821,6 +872,23 @@ mod native {
             .insert(ACCOUNT.into(), 2);
         assert!(sibling.begin_write(FRESH_ACCOUNT).is_err());
         sibling.begin_write(ACCOUNT).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // FLM-302 R9: a marker that cannot be read is an error, and a commit does
+    // not overwrite it. Touches only files in a temporary directory.
+    #[test]
+    fn unreadable_marker_is_an_error_not_an_empty_list() {
+        let dir = std::env::temp_dir().join(format!("fluux-marker-{}", uuid::Uuid::new_v4()));
+        let keychain = Keychain {
+            revision_dir: Some(dir.clone()),
+            ..Keychain::default()
+        };
+        assert!(keychain.fresh_accounts().unwrap().is_empty());
+        // A directory where the record belongs cannot be read as text.
+        std::fs::create_dir_all(keychain.fresh_marker_path().unwrap()).unwrap();
+        assert!(keychain.fresh_accounts().is_err());
+        assert!(keychain.mark_fresh_account("openpgp_passphrase:a@x").is_err());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1143,6 +1211,7 @@ mod tests {
         corrupt_write: Mutex<bool>,
         concurrent_migration_bundle: Mutex<Option<Bundle>>,
         fresh: Mutex<Vec<String>>,
+        fresh_unreadable: Mutex<bool>,
     }
     impl SecretStore for FakeStore {
         fn get(&self, account: &str) -> Result<Option<String>, String> {
@@ -1186,15 +1255,21 @@ mod tests {
         }
     }
     impl Backend for FakeStore {
-        fn fresh_accounts(&self) -> Vec<String> {
-            self.fresh.lock().unwrap().clone()
+        fn fresh_accounts(&self) -> StoreResult<Vec<String>> {
+            if *self.fresh_unreadable.lock().unwrap() {
+                return Err("marker unreadable".into());
+            }
+            Ok(self.fresh.lock().unwrap().clone())
         }
         fn mark_fresh_account(&self, account: &str) -> StoreResult<()> {
             self.fresh.lock().unwrap().push(account.into());
             Ok(())
         }
         fn read(&self, account: &str) -> StoreResult<Option<String>> {
-            self.reads.lock().unwrap().push(account.into());
+            // `reads` pins the old layout; the fresh item is a separate store.
+            if account != FRESH_ACCOUNT {
+                self.reads.lock().unwrap().push(account.into());
+            }
             if account == ACCOUNT {
                 if let Some((error, remaining)) = self.read_error.lock().unwrap().as_mut() {
                     if *remaining > 0 {
@@ -1554,6 +1629,86 @@ mod tests {
         let error = store.delete(alice).unwrap_err();
         assert!(error.starts_with("Not erased: old copy"), "{error}");
         assert_eq!(store.get(alice).unwrap(), None);
+    }
+
+    // FLM-302 R2 (store level): a staged restore secret never replaces the live
+    // protection of an active key until it is promoted.
+    #[test]
+    fn staged_secret_replaces_the_live_one_only_on_commit() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        store.fresh_write(alice, "first").unwrap();
+        store.commit_fresh(alice).unwrap();
+        store.fresh_write(alice, "second").unwrap();
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("first"));
+        store.abort_fresh(alice).unwrap();
+        assert!(store.commit_fresh(alice).is_err(), "nothing left to promote");
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("first"));
+        store.fresh_write(alice, "second").unwrap();
+        store.commit_fresh(alice).unwrap();
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("second"));
+        let fresh: Bundle =
+            serde_json::from_str(&store.store.get(FRESH_ACCOUNT).unwrap().unwrap()).unwrap();
+        assert_eq!(fresh.items.len(), 1, "no staged copy remains");
+    }
+
+    // FLM-302 R3: startup loading after a restore must not read the restored
+    // account's refused originals or their aliases again.
+    #[test]
+    fn migration_skips_restored_accounts_and_their_aliases() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let raw = legacy();
+        raw.set(&format!("{BACKUP_PREFIX}{alice}"), "YmFja3Vw").unwrap();
+        raw.set(&format!("{}uuid", recovery_prefix(alice)), "cmVjb3Zlcnk=")
+            .unwrap();
+        raw.fresh.lock().unwrap().push(alice.into());
+        let store = Secrets::new(raw);
+        assert!(crate::credentials::load(&store).unwrap().is_some());
+        assert_eq!(store.get("mcp-token").unwrap().as_deref(), Some("test-token"));
+        let reads = store.store.reads.lock().unwrap().clone();
+        assert!(
+            !reads.iter().any(|name| name.contains("alice@example.com")
+                && name != "alice@example.com"),
+            "read {reads:?}"
+        );
+        // Explicit erasure still reaches the retained originals.
+        store.delete(alice).unwrap();
+        let items = store.store.items.lock().unwrap();
+        assert!(!items.contains_key(alice));
+        assert!(!items.keys().any(|name| name.contains(&format!(":{alice}"))));
+    }
+
+    // FLM-302 R5: a staged secret from a failed restore is erased by forget,
+    // even though the account was never routed to the fresh item.
+    #[test]
+    fn forgetting_erases_a_staged_secret_left_by_a_failed_restore() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        store.fresh_write(alice, "staged").unwrap();
+        store.delete(alice).unwrap();
+        let fresh: Bundle =
+            serde_json::from_str(&store.store.get(FRESH_ACCOUNT).unwrap().unwrap()).unwrap();
+        assert!(fresh.items.is_empty(), "{:?}", fresh.items.keys());
+    }
+
+    // FLM-302 R9: an unreadable record of restored accounts is an error, never
+    // an empty list that sends reads and writes back to the old items.
+    #[test]
+    fn unreadable_fresh_record_preserves_routes_instead_of_reverting() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        store.fresh_write(alice, "restored").unwrap();
+        store.commit_fresh(alice).unwrap();
+        *store.store.fresh_unreadable.lock().unwrap() = true;
+        let writes = store.store.writes.lock().unwrap().len();
+        assert!(store.get(alice).is_err());
+        assert!(store.set(alice, "x").is_err());
+        assert!(store.delete(alice).is_err());
+        assert!(store.fresh_write(alice, "again").is_ok(), "staging touches nothing live");
+        assert!(store.commit_fresh(alice).is_err());
+        assert_eq!(store.store.writes.lock().unwrap().len(), writes + 1);
+        *store.store.fresh_unreadable.lock().unwrap() = false;
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("restored"));
     }
 
     // FLM-79 F7: identical saves and missing deletes must not invalidate other caches.

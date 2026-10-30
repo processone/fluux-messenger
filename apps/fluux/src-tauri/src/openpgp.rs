@@ -2482,8 +2482,8 @@ mod tests {
             fn accounts(&self) -> Result<Vec<String>, StoreError> {
                 Ok(self.items.lock().unwrap().keys().cloned().collect())
             }
-            fn fresh_accounts(&self) -> Vec<String> {
-                self.fresh.lock().unwrap().clone()
+            fn fresh_accounts(&self) -> Result<Vec<String>, StoreError> {
+                Ok(self.fresh.lock().unwrap().clone())
             }
             fn mark_fresh_account(&self, account: &str) -> Result<(), StoreError> {
                 self.fresh.lock().unwrap().push(account.into());
