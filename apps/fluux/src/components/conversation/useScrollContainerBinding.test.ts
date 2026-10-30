@@ -323,24 +323,78 @@ describe('useScrollContainerBinding attachment', () => {
     expect(observeUserInput).not.toHaveBeenCalled()
   })
 
-  // FLM-267: the composer keeps focus after Send, so a downward drag lowers the keyboard.
-  it('blurs the focused composer on a downward drag but not on an upward one', () => {
-    const { result, observeUserInput } = mount()
-    const scroller = scrollerElement().el
-    const composer = document.createElement('textarea')
-    document.body.append(composer)
-    result.current.setScrollContainerRef(scroller)
+  // FLM-267 / FLM-278: the composer keeps focus after Send, so on iOS a downward drag lowers the keyboard.
+  describe('keyboard dismissal on a downward drag', () => {
     const touch = (clientY: number) => ({ identifier: 1, clientY }) as Touch
-    scroller.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(300)] }))
-    composer.focus()
-    scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(290)] }))
-    scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(250)] }))
-    expect(document.activeElement).toBe(composer)
-    scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(260)] }))
-    expect(document.activeElement).toBe(composer)
-    scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(300)] }))
-    expect(document.activeElement).toBe(document.body)
-    expect(observeUserInput).toHaveBeenLastCalledWith('room-a', expect.objectContaining({ deltaY: -40 }))
+    const composers = {
+      'chat textarea': () => document.createElement('textarea'),
+      'room contenteditable': () => {
+        const el = document.createElement('div')
+        el.setAttribute('contenteditable', 'true')
+        el.tabIndex = 0
+        return el
+      },
+    }
+    const iosAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15'
+    const stubAgent = (userAgent: string, platformName = '', maxTouchPoints = 5) => {
+      vi.stubGlobal('navigator', { userAgent, platform: platformName, maxTouchPoints })
+    }
+
+    function drag(composer: HTMLElement, moves: number[]) {
+      const { result, observeUserInput } = mount()
+      const scroller = scrollerElement().el
+      document.body.append(composer)
+      result.current.setScrollContainerRef(scroller)
+      scroller.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(300)] }))
+      composer.focus()
+      for (const y of moves) scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(y)] }))
+      return { observeUserInput, scroller }
+    }
+
+    it.each(Object.entries(composers))('blurs the %s on iOS once the drag passes the threshold, still scrolling', (_name, make) => {
+      stubAgent(iosAgent)
+      const composer = make()
+      const { observeUserInput, scroller } = drag(composer, [310])
+      expect(document.activeElement).toBe(composer)
+      scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(350)] }))
+      expect(document.activeElement).not.toBe(composer)
+      expect(observeUserInput).toHaveBeenLastCalledWith('room-a', expect.objectContaining({ deltaY: -40 }))
+    })
+
+    it('treats an iPad whose Safari reports a Mac user agent as iOS', () => {
+      stubAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'MacIntel', 5)
+      const composer = composers['chat textarea']()
+      drag(composer, [310, 350])
+      expect(document.activeElement).not.toBe(composer)
+    })
+
+    it.each([
+      ['Android', 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36', 'Linux armv81', 5],
+      ['a touchscreen Windows computer', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Win32', 10],
+      ['a Mac without touch', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'MacIntel', 0],
+    ])('leaves the composer focused on %s', (_name, agent, platformName, points) => {
+      stubAgent(agent, platformName, points)
+      const composer = composers['chat textarea']()
+      drag(composer, [310, 350, 400])
+      expect(document.activeElement).toBe(composer)
+    })
+
+    it('leaves the composer focused on a tap and on an upward drag', () => {
+      stubAgent(iosAgent)
+      const composer = composers['chat textarea']()
+      drag(composer, [])
+      expect(document.activeElement).toBe(composer)
+      const up = composers['room contenteditable']()
+      drag(up, [290, 250, 200])
+      expect(document.activeElement).toBe(up)
+    })
+
+    it('resets the count on an upward move', () => {
+      stubAgent(iosAgent)
+      const composer = composers['chat textarea']()
+      drag(composer, [315, 305, 320])
+      expect(document.activeElement).toBe(composer)
+    })
   })
 
   it.each(['pointerup', 'pointercancel'] as const)('matches scrollbar %s to its pointer and waits for held keys', (endEvent) => {
