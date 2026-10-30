@@ -1,6 +1,6 @@
 // Intent: FLM-256 / captain's Enter, click, Enter sequence must not resend a
 // pending draft. FLM-255 established that a remount resurrected submitted text.
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, type ComponentProps } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { useConversationDraft, type DraftOperations } from '@/hooks/useConversationDraft'
@@ -30,7 +30,12 @@ function fixture() {
     setDraft: (id, value) => { drafts.set(id, value) },
     clearDraft: id => { drafts.delete(id) },
   }
-  function Input({ onSend, id = 'emma@fluux.chat' }: { onSend: (text: string) => Promise<boolean>; id?: string }) {
+  function Input({ onSend, id = 'emma@fluux.chat', editingMessage, onCancelEdit, onSendCorrection }: {
+    onSend: (text: string) => Promise<boolean>; id?: string
+    editingMessage?: ComponentProps<typeof MessageComposer>['editingMessage']
+    onCancelEdit?: () => void
+    onSendCorrection?: ComponentProps<typeof MessageComposer>['onSendCorrection']
+  }) {
     const ref = useRef<MessageComposerHandle>(null)
     // Real useChatActions wraps these actions anew on each mount.
     const wrapped = useMemo(() => ({
@@ -39,9 +44,10 @@ function fixture() {
       setDraft: (id: string, value: string) => operations.setDraft(id, value),
       clearDraft: (id: string) => operations.clearDraft(id),
     }), [operations])
-    const [text, setText, consumeDraft] = useConversationDraft({ conversationId: id, draftOperations: wrapped, composerRef: ref })
+    const [text, setText, consumeDraft] = useConversationDraft({ conversationId: id, draftOperations: wrapped, composerRef: ref, isEditing: !!editingMessage })
     return <MessageComposer ref={ref} placeholder="Message" value={text} onValueChange={setText}
-      onConsumeDraft={consumeDraft} onSend={onSend} />
+      onConsumeDraft={consumeDraft} onSend={onSend} editingMessage={editingMessage}
+      onCancelEdit={onCancelEdit} onSendCorrection={onSendCorrection} />
   }
   return { drafts, Input }
 }
@@ -49,6 +55,30 @@ function field() { return screen.getByPlaceholderText('Message') as HTMLTextArea
 function submit() { fireEvent.keyDown(field(), { key: 'Enter', code: 'Enter' }) }
 
 describe('submitted draft ownership', () => {
+  // N1: captain chose holding failed text until a different message's edit ends.
+  it.each(['cancel', 'save'] as const)('holds a failed send outside another message edit until %s', async finish => {
+    const { Input, drafts } = fixture()
+    const send = deferred<boolean>()
+    const onSend = vi.fn(() => send.promise)
+    const onSendCorrection = vi.fn().mockResolvedValue(true)
+    const onCancelEdit = vi.fn()
+    const view = render(<Input onSend={onSend} />)
+    await act(async () => { submit() })
+    view.rerender(<Input onSend={onSend} editingMessage={{ id: 'earlier-message', body: 'Good catch.' }}
+      onCancelEdit={onCancelEdit} onSendCorrection={onSendCorrection} />)
+    await act(async () => { send.reject(new Error('Socket not available')) })
+    expect(field().value).toBe('Good catch.')
+    expect(drafts.get('emma@fluux.chat')).toBe(BODY)
+    if (finish === 'cancel') fireEvent.keyDown(field(), { key: 'Escape' })
+    else await act(async () => { submit() })
+    expect(onCancelEdit).toHaveBeenCalledOnce()
+    view.rerender(<Input onSend={onSend} />)
+    expect(field().value).toBe(BODY)
+    expect(drafts.get('emma@fluux.chat')).toBe(BODY)
+    if (finish === 'save') expect(onSendCorrection).toHaveBeenCalledExactlyOnceWith('earlier-message', 'Good catch.', undefined)
+    expect(onSend).toHaveBeenCalledTimes(1)
+  })
+
   it('consumes the field and saved draft before sending, including an immediate remount', async () => {
     const { Input, drafts } = fixture()
     const send = deferred<boolean>()

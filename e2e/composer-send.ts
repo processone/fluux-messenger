@@ -14,10 +14,11 @@ async function openChat(page: Page) {
     const client = w.__demoClient
     client.stopAnimation()
     client.messages.sendChatState = async () => {}
-    w.__sendProbe = { calls: [], settled: false }
+    w.__sendProbe = { calls: [], options: [], settled: false }
     const original = client.messages.sendMessage.bind(client.messages)
     client.messages.sendMessage = async (...args: unknown[]) => {
       w.__sendProbe.calls.push(args[1])
+      w.__sendProbe.options.push(args[2])
       await new Promise<void>((resolve, reject) => {
         w.__sendProbe.complete = resolve
         w.__sendProbe.fail = () => reject(new Error('Socket not available'))
@@ -158,6 +159,69 @@ test('failure after deleting newer input still retains the failed draft', async 
   await expect(field).toHaveValue(BODY)
   await expect.poll(() => page.evaluate(peer => (window as any).__chatStore.getState().getDraft(peer), PEER)).toBe(BODY)
 })
+
+// N1: captain chose waiting until another message's edit finishes.
+for (const finish of ['cancel', 'save'] as const) {
+  test(`failed text waits outside another message edit until ${finish}`, async ({ page }) => {
+    const field = await openChat(page)
+    await field.fill('Good catch.')
+    await field.press('Enter')
+    await expect.poll(() => calls(page)).toBe(1)
+    await page.evaluate(() => (window as any).__sendProbe.complete())
+    await expect(page.locator('[data-message-body]').filter({ hasText: 'Good catch.' }).last()).toBeVisible()
+    await field.fill(BODY)
+    await field.press('Enter')
+    await expect.poll(() => calls(page)).toBe(2)
+    await field.press('ArrowUp')
+    await expect(field).toHaveValue('Good catch.')
+    await page.evaluate(() => (window as any).__sendProbe.fail())
+    await expect(page.getByText('Failed to send message', { exact: true })).toBeVisible()
+    await captureState(page)
+    await expect(field).toHaveValue('Good catch.')
+    await field.press(finish === 'cancel' ? 'Escape' : 'Enter')
+    await expect(page.getByText('Editing message', { exact: true })).toHaveCount(0)
+    await expect(field).toHaveValue(BODY)
+    expect(await calls(page)).toBe(2)
+    console.log(JSON.stringify({ finding: 'N1', finish, recovered: await field.inputValue(), calls: await calls(page) }))
+  })
+}
+
+// N2: mention chips and outgoing references must survive the failed-send remount.
+for (const newer of ['', 'Oups']) {
+  test(`room mentions survive failed-send remount with newer=${newer || 'empty'}`, async ({ page }) => {
+    await openChat(page)
+    await page.locator('[data-nav="rooms"]').click()
+    await page.getByText('Team Chat', { exact: true }).first().click()
+    const editor = page.locator('.message-input[contenteditable="true"]').first()
+    await expect(editor).toBeVisible()
+    await editor.click()
+    await page.keyboard.type('@')
+    await page.keyboard.press('Enter') // Select the real @all completion.
+    await expect(editor.locator('[data-mention]')).toHaveCount(1)
+    await editor.press('Enter')
+    await expect.poll(() => calls(page)).toBe(1)
+    const original = await page.evaluate(() => (window as any).__sendProbe.options[0].references)
+    const roomJid = await page.evaluate(() => (window as any).__roomStore.getState().activeRoomJid)
+    await page.evaluate(() => { location.hash = '#/settings' })
+    await expect(editor).toHaveCount(0)
+    await page.evaluate(id => { location.hash = `#/rooms/${encodeURIComponent(id)}` }, roomJid)
+    await expect(editor).toBeVisible()
+    if (newer) await editor.fill(newer)
+    await page.evaluate(() => (window as any).__sendProbe.fail())
+    await expect(page.getByText('Failed to send message', { exact: true })).toBeVisible()
+    await captureState(page)
+    await expect(editor.locator('[data-mention]')).toHaveCount(1)
+    await editor.press('End')
+    await page.keyboard.insertText('!')
+    await editor.press('Enter')
+    await expect.poll(() => calls(page)).toBe(2)
+    const retried = await page.evaluate(() => (window as any).__sendProbe.options[1].references)
+    const offset = newer ? newer.length + 2 : 0
+    expect(retried).toEqual(original.map((ref: any) => ({ ...ref, begin: ref.begin + offset, end: ref.end + offset })))
+    await page.evaluate(() => (window as any).__sendProbe.complete())
+    console.log(JSON.stringify({ finding: 'N2', newer, original, retried, calls: await calls(page) }))
+  })
+}
 
 for (const action of ['correction', 'retraction'] as const) {
   test(`failed action has chat-specific wording: ${action}`, async ({ page }) => {

@@ -1,7 +1,7 @@
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useState, type ComponentProps } from 'react'
+import { useState, type ComponentProps, type ReactElement } from 'react'
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // Count MessageComposer renders via a spy module mock.
@@ -13,6 +13,7 @@ interface CapturedComposerProps {
   pendingAttachment?: PendingAttachment | null
   onSend?: (body: string) => Promise<boolean>
   onConsumeDraft?: () => () => void
+  renderInput?: ComponentProps<typeof import('./MessageComposer').MessageComposer>['renderInput']
   onSendCorrection?: (messageId: string, body: string) => Promise<boolean>
   onRetractMessage?: (messageId: string) => Promise<void>
 }
@@ -55,7 +56,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 })
 
 import { RoomMessageInput } from './RoomView'
-import type { RoomMessage, FileAttachment } from '@fluux/sdk'
+import type { RoomMessage, FileAttachment, MentionReference } from '@fluux/sdk'
 import { clearAllMessages, saveRoomMessage, getRoomMessage } from '@fluux/sdk/cache'
 import { roomStore } from '@fluux/sdk/stores'
 import type { PendingAttachment, ReplyInfo } from './MessageComposer'
@@ -141,6 +142,40 @@ function moderateStagedReply() {
     ...stagedOriginal, isRetracted: true, isModerated: true, moderationReason: 'Spam',
   }]]]) })
 }
+
+// N2: captain requires real mention references, not plain text, after remount.
+it.each(['', 'Oups'])('retains room mention references through failed-send remount with newer %s', async newer => {
+  roomStore.setState({ drafts: new Map() })
+  const sendMessage = vi.fn().mockResolvedValue('sent')
+  const first = render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
+  const body = '@James '
+  const reference: MentionReference = { begin: 0, end: '@James'.length, type: 'mention', uri: `xmpp:${STABLE.roomJid}/James` }
+  // Same contract RoomComposerEditor reports after selecting a mention.
+  const editor = capturedComposer.props!.renderInput!({} as never) as ReactElement<{
+    onEdit: (text: string, references: MentionReference[]) => void
+  }>
+  act(() => {
+    editor.props.onEdit(body, [reference])
+    capturedComposer.props!.onValueChange!(body)
+  })
+  let restore!: () => void
+  act(() => {
+    restore = capturedComposer.props!.onConsumeDraft!()
+    capturedComposer.props!.onValueChange!('')
+  })
+  first.unmount()
+  render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
+  if (newer) act(() => capturedComposer.props!.onValueChange!(newer))
+  act(() => restore())
+  const recovered = capturedComposer.props!.value!
+  expect(recovered).toBe(newer ? `${newer}\n\n${body}` : body)
+  act(() => capturedComposer.props!.onValueChange!(`${recovered}!`))
+  await act(async () => { await capturedComposer.props!.onSend!(`${recovered}!`) })
+  const offset = newer ? newer.length + 2 : 0
+  expect(sendMessage).toHaveBeenCalledExactlyOnceWith(STABLE.roomJid, `${recovered}!`, expect.objectContaining({
+    references: [{ ...reference, begin: offset, end: offset + reference.end }],
+  }))
+})
 
 describe('ordinary room sends', () => {
   beforeEach(async () => {
