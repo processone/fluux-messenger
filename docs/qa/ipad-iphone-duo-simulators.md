@@ -178,7 +178,8 @@ built-in second screen, the app split across both screens in portrait and in
 landscape, and the move between screens when the device folds.
 
 **Result: Fluux worked in every case, with no confirmed Fluux defect.** The
-external screen's mirrored picture could not be captured in the simulator. When
+external screen's mirrored picture could not be captured in the simulator; it
+is recorded as an accepted gap, not a pass. When
 the Duo is half open, the hinge runs through Fluux's chat pane, because the web
 view gets no hinge information by default. See
 [Hinge and viewport segments](#hinge-and-viewport-segments).
@@ -235,7 +236,7 @@ open) and an orientation. Screen 1 stayed powered on throughout.
 | Split across both halves, portrait | 669×951 web view with one pane and the “Retour aux conversations” back button. The draft survived the turn from landscape. |
 | Fold, inner to cover | Same process, same open conversation, draft kept. The cover showed one pane at 678×466. It was in landscape because the device orientation used to show the inner screen in portrait is landscape on the cover. The cover stayed black for about 17 seconds after the fold request before Fluux appeared on it. |
 | Unfold, cover to inner | Same process; back to 669×951 with one pane and the draft kept. |
-| External screen | Fluux kept running and the full journey passed with screen 2 connected, after disconnecting it, and after reconnecting it. The mirrored picture is unproven (see below). |
+| External screen | Fluux kept running and the full journey passed with screen 2 connected, after disconnecting it, and after reconnecting it. The mirrored picture is unproven, an accepted gap (see below). |
 
 The software keyboard covers the lower part of the inner screen in landscape,
 including the bottom of the conversation list. That is expected for a phone
@@ -258,6 +259,12 @@ The external screen has two limits:
   black: `simctl io screenshot`, `simctl io recordVideo` (a single near-black
   frame) and `XCUIScreen.screenshot()`. So the mirrored content itself is not
   shown here.
+
+**Gap exception.** On 30 October 2026 the captain accepted the external
+screen's picture as unproven on the FLM-177 task, because the simulator cannot
+draw screen 2. The external-screen case is therefore not a full pass: Fluux's
+behavior with screen 2 connected, disconnected and reconnected was shown, but
+what the mirror displays still needs a physical Duo connected to a display.
 
 Screen 2 reported power on at boot but returned no picture: its screenshot
 timed out. Turning screen 2 (never screen 1) off and on again made SpringBoard
@@ -325,9 +332,15 @@ offers no public position for the hinge, and the Duo's simulator profile
 declares none. A native layer would have to assume the middle of the inner
 screen, which is where WebKit's segments put it.
 
-How Fluux should adapt is a product choice: standard CSS segments with WebKit's
-features turned on, or hinge values passed from native code as CSS variables.
-It was proposed to the captain on the FLM-177 task and is not built here.
+How Fluux should adapt was a product choice between standard CSS segments
+with WebKit's features turned on and hinge values passed from native code as
+CSS variables. On 30 October 2026 the captain chose the native values: Fluux's
+iOS code reads `UIHingeInteraction` and sets the posture and the hinge line on
+the page as CSS variables, with the hinge assumed at the middle of the inner
+screen. Half open, the layout is to split at the hinge: the conversation list
+and the chat on either side in landscape, the messages above and the composer
+with the keyboard below in portrait. That change is separate work and is not
+built here.
 
 ### Why `Host is down`
 
