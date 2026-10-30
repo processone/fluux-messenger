@@ -783,8 +783,9 @@ Revocation and sign-out can therefore clear the capability and credentials while
 is active; its late result cannot restore them. A queued worker loads the latest credential
 only after taking the sign-in lock, and checks cancellation and capability under the state
 lock before signing in. Missing locks skip the lookup instead of signing in concurrently.
-If the state lock cannot be opened, revoke/purge still delete the published capability;
-publication remains refused, and the app reports that the remaining cleanup was unavailable.
+If the state lock cannot be opened, revoke/purge still delete the published capability,
+and purge also deletes the FAST token. Routine revoke preserves that token. Publication
+remains refused, and the app reports that the remaining cleanup was unavailable.
 The delivery deadline/system expiry still completes independently while a worker waits.
 Settings/preparation time and lock waiting consume the same seven-second lookup budget,
 leaving one second for handoff before the delivery deadline. Workers pass only the

@@ -180,7 +180,7 @@ class PushPlugin: Plugin {
                         // A failed lock must not leave the password/secret-key capability
                         // published after revoke or sign-out. Still report incomplete cleanup.
                         if args.operation == "revoke" || args.operation == "purge" {
-                            try PreviewKeychain.write(nil)
+                            try PreviewToken.revokeWithoutLock(purge: args.operation == "purge")
                         }
                     }) {
                         try PreviewKeychain.write(nil)

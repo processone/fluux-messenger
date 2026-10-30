@@ -122,6 +122,15 @@ struct PreviewToken: Codable, Equatable {
         return next
     }
 
+    /// Fail-safe deletion when the state lock is unavailable. This never publishes
+    /// credentials; purge also removes the token, while routine revoke preserves it.
+    static func revokeWithoutLock(purge: Bool,
+                                  clearCapability: () throws -> Void = { try PreviewKeychain.write(nil) },
+                                  clearToken: () throws -> Void = { try PreviewToken.delete() }) throws {
+        try clearCapability()
+        if purge { try clearToken() }
+    }
+
     enum LockFailure: Error { case unavailable }
 
     /// Short state transactions serialize capability publication/revocation with credential

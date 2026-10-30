@@ -78,10 +78,15 @@ func check(_ condition: Bool, _ message: String) {
         let published = Data("{\"account\":\"alice@example.com\",\"opt_in\":true}".utf8)
         for operation in ["publish", "revoke", "purge"] {
             var capability: Data? = published
+            var credential: PreviewToken? = token("t1")
             var ranTransaction = false
             do {
                 try PreviewToken.withStateLock(root: blocked, onUnavailable: {
-                    if operation == "revoke" || operation == "purge" { capability = nil }
+                    if operation == "revoke" || operation == "purge" {
+                        // S5: execute the production deletion helper with isolated storage.
+                        try PreviewToken.revokeWithoutLock(purge: operation == "purge",
+                            clearCapability: { capability = nil }, clearToken: { credential = nil })
+                    }
                 }) {
                     ranTransaction = true
                 }
@@ -89,13 +94,14 @@ func check(_ condition: Bool, _ message: String) {
             } catch PreviewToken.LockFailure.unavailable {}
             check(!ranTransaction, "state transaction never runs unlocked: \(operation)")
             check((capability == nil) == (operation != "publish"), "only revocation deletes the capability without the lock: \(operation)")
+            check((credential == nil) == (operation == "purge"), "purge must delete the FAST token; publish/revoke preserve it: \(operation)")
         }
         var lockedTransaction = false
         try PreviewToken.withStateLock(root: root, onUnavailable: { check(false, "healthy lock must not use the fallback") }) {
             lockedTransaction = true
         }
         check(lockedTransaction, "healthy state transaction still runs")
-        print("unavailable state lock: publish refused; revoke/purge delete capability and report incomplete cleanup")
+        print("unavailable state lock: publish refused; revoke deletes capability; purge deletes capability and FAST token; incomplete cleanup reported")
         // FLM-294 R1: no late token write after revocation, even if cleanup retains
         // the old token temporarily. Rotation and refusal obey the same capability check.
         check(PreviewToken.resolve(used: token("t1"), stored: token("t1"), snapshotCurrent: false, change: rotate) == nil,
