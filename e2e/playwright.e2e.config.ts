@@ -124,6 +124,13 @@ export default defineConfig({
   },
 
   projects: [
+    // Chromium implements native middle-click autoscroll; WebKit does not. This enables the
+    // actual browser input path rather than simulating its movement with scrollTop assignments.
+    {
+      name: 'scroll-native-pan-chromium',
+      testMatch: 'scroll-native-pan.ts',
+      use: { ...devices['Desktop Chrome'], launchOptions: { args: ['--enable-blink-features=MiddleClickAutoscroll'] } },
+    },
     ...SUITES.flatMap(suite =>
       ENGINES.map(engine => ({
         name: `${suite.name}-${engine.name}`,

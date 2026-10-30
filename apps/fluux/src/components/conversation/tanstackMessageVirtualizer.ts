@@ -172,8 +172,8 @@ export function useTanstackMessageVirtualizer({
   const setScrollWriteObserver = useCallback<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>(
     observer => { writeObserverRef.current = observer }, [],
   )
-  // Which rows a resize compensates: the library's rule (rows above the viewport top), none while
-  // the caller owns the pixels, or the rows before a held anchor. See holdAnchor.
+  // Which rows a resize compensates: the library's fold rule, including shrink during backward
+  // motion, none while the caller owns the pixels, or rows before a held anchor. See holdAnchor.
   const adjustmentEnabledRef = useRef(true)
   const heldAnchorRef = useRef<string | null>(null)
   const indexByIdRef = useRef(indexById)
@@ -366,12 +366,20 @@ export function useTanstackMessageVirtualizer({
   const applyAdjustmentRule = () => {
     virtualizer.shouldAdjustScrollPositionOnItemSizeChange = !adjustmentEnabledRef.current
       ? suppressScrollAdjustment
-      : heldAnchorRef.current === null ? undefined
-      : (item) => {
+      : (item, delta, instance) => {
           const anchorIndex = heldAnchorIndex()
-          return anchorIndex !== undefined && item.index < anchorIndex
+          if (heldAnchorRef.current !== null) return anchorIndex !== undefined && item.index < anchorIndex
+          const offset = instance.scrollOffset ?? 0
+          // The library skips remeasurement compensation during backward scrolling. Shrinking
+          // a cached row entirely above the reader then moves visible rows against the native
+          // upward pan. Compensate that shrink, preserving the library's other fold/direction
+          // rules: growth during backward motion and remeasurements spanning the fold stay alone.
+          return instance.itemSizeCache.has(item.key)
+            ? item.end <= offset && (delta < 0 || instance.scrollDirection !== 'backward')
+            : item.start < offset
         }
   }
+  applyAdjustmentRule()
 
   const getOffsetForMessageId = useCallback((id: string): number | null => {
     const index = indexById.get(id)

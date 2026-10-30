@@ -3,7 +3,7 @@
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { messageRowId, findMessageRowElement, messageTargetRowId } from './messageRowIdentity'
 import { MessageTargetProvider } from './messageTargetContext'
-import { pickChromeSampleEl } from './useRowMetrics'
+import { pickChromeSampleEl, pickWidthSampleEl } from './useRowMetrics'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act, within } from '@testing-library/react'
 import { MessageBubble, buildReplyContext, type MessageBubbleProps } from './MessageBubble'
@@ -407,6 +407,19 @@ describe('MessageBubble', () => {
   })
 
   describe('Row chrome sampling', () => {
+    // Intent: FLM-276. Whisper cards have 22px of horizontal inset and 8px of
+    // vertical padding in the native room reproduction; neither is ordinary row geometry.
+    it.each((['start', 'middle', 'end', 'solo'] as const).flatMap(whisperThread =>
+      [true, false].flatMap(showAvatar => [true, false].map(isOutgoing => ({ whisperThread, showAvatar, isOutgoing }))),
+    ))('does not calibrate ordinary rows from $whisperThread whispers (header=$showAvatar, own=$isOutgoing)', ({ whisperThread, showAvatar, isOutgoing }) => {
+      const { container } = render(<MessageBubble {...createDefaultProps({
+        whisperThread, showAvatar, whisperWith: 'Olivia', message: createTestMessage({ isOutgoing }),
+      })} />)
+      expect(container.querySelector('[data-msg-text]')).not.toBeNull()
+      expect(pickWidthSampleEl(container)).toBeNull()
+      expect(pickChromeSampleEl(container, showAvatar ? 'header' : 'cont')).toBeNull()
+    })
+
     const replyContext = {
       senderName: 'Bob', senderColor: 'rgb(0, 255, 0)', body: 'Original message',
       messageId: 'original-msg-1', avatarIdentifier: 'bob@example.com',

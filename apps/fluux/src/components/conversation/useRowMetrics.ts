@@ -39,7 +39,8 @@ export const ROW_METRICS_FALLBACK: RowEstimatorContext = {
  *
  * Own bubbles are `w-fit` (hug width): their `[data-msg-text]` is only as wide as the text,
  * so sampling whichever row happens to be first poisons the width (and therefore the height
- * cache's width-bucket validity tag) with an essentially random value. Prefer the first text
+ * cache's width-bucket validity tag) with an essentially random value. Whisper cards have their
+ * own inset and padding, so neither their width nor chrome calibrates ordinary rows. Prefer the first text
  * element OUTSIDE `[data-msg-own]`; if only own rows are mounted, the widest own text box is
  * the best available lower bound.
  */
@@ -47,6 +48,7 @@ export function pickWidthSampleEl(root: HTMLElement): HTMLElement | null {
   const all = root.querySelectorAll<HTMLElement>('[data-msg-text]')
   let widestOwn: HTMLElement | null = null
   for (const el of all) {
+    if (el.closest('[data-msg-whisper]')) continue
     if (!el.closest('[data-msg-own]')) return el
     if (!widestOwn || el.clientWidth > widestOwn.clientWidth) widestOwn = el
   }
@@ -66,7 +68,7 @@ export function pickChromeSampleEl(
 ): HTMLElement | null {
   const rows = root.querySelectorAll<HTMLElement>(`[data-msg-chrome="${shape}"]`)
   for (const row of rows) {
-    if (row.hasAttribute('data-msg-own')) continue
+    if (row.hasAttribute('data-msg-own') || row.hasAttribute('data-msg-whisper')) continue
     if (isPlainTextRow(row, shape)) return row
   }
   return null

@@ -641,6 +641,8 @@ export const MessageBubble = memo(function MessageBubble({
         data-msg-chrome={showAvatar ? 'header' : 'cont'}
         // See pickWidthSampleEl in useRowMetrics for the hug-width sampling policy.
         data-msg-own={ownTint ? '' : undefined}
+        // Whisper borders/padding are not the ordinary row's width or chrome.
+        data-msg-whisper={inThread ? '' : undefined}
         // Paint selection on the outer row without changing this content box.
         data-msg-selected={isSelected ? '' : undefined}
         onTouchStart={handleContentTouchStart}

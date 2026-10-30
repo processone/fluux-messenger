@@ -86,6 +86,19 @@ event to consume once; a later layout or application destination cannot replace 
 A released keyboard input retains ownership of its matching later native scroll event until an
 independently observed layout change ends that causal chain.
 
+Native upward panning retains visible progress when a previously measured row entirely above
+the viewport shrinks. The virtualizer compensates that shrink even during backward scrolling,
+using the existing measurement writer and live-offset rebasing. Other library fold/direction rules
+remain unchanged: backward growth and remeasurements spanning the viewport top are not compensated.
+Explicit adjustment suppression and held-anchor rules still take precedence. Ordinary-row metric
+sampling excludes whisper cards, whose borders and padding otherwise alternate the sampled width
+and chrome as rows enter the window, re-estimating unrelated offscreen rows without a resize.
+`e2e/scroll-native-pan.ts` exercises actual Chromium middle-click autoscroll in direct chats and
+rooms, with held, jitter-latched and middle-stopped journeys. It checks stable message identity,
+order and viewport-relative placement rather than treating raw scroll offsets as reading progress.
+WebKit has no equivalent middle-click mode; its shared measurement and reading paths retain their
+existing browser coverage.
+
 Automatic older/newer pagination requires that independently observed movement geometry reach
 the relevant boundary, subject to the directional coordinator's eligibility checks. Layout-only
 resize, typing, media growth, clamping, and delayed correction events supply no such evidence.
