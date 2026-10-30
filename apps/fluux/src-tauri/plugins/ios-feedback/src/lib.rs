@@ -1,4 +1,5 @@
-//! Native iOS gesture feedback and app-switcher snapshot privacy, in the app's light/dark theme.
+//! Native iOS gesture feedback, app-switcher snapshot privacy in the app's light/dark theme, and
+//! the hinge of a foldable iPhone reported to the page (`HingeReporter.swift`).
 #[cfg(target_os = "ios")]
 mod platform {
     use tauri::{

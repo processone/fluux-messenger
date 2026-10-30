@@ -180,8 +180,9 @@ landscape, and the move between screens when the device folds.
 **Result: Fluux worked in every case, with no confirmed Fluux defect.** The
 external screen's mirrored picture could not be captured in the simulator; it
 is recorded as an accepted gap, not a pass. When
-the Duo is half open, the hinge runs through Fluux's chat pane, because the web
-view gets no hinge information by default. See
+the Duo is half open, the hinge ran through Fluux's chat pane, because the web
+view gets no hinge information by default; since FLM-279, Fluux splits its
+layout at the hinge. See
 [Hinge and viewport segments](#hinge-and-viewport-segments).
 
 ### FLM-177 environment and method
@@ -316,7 +317,7 @@ width in WebKit's report: the two segments touch. These are simulator results;
 a physical Duo may report differently.
 
 Fluux's iOS native code does not change these WebKit settings, so its web view
-gets nothing. With the Duo half open, Fluux keeps its flat layout:
+gets nothing. Before FLM-279, Fluux kept its flat layout with the Duo half open:
 
 - In landscape the hinge at 475.5 points cuts through the chat pane (288–867),
   including message bubbles and the composer. The system keyboard does follow
@@ -327,10 +328,26 @@ gets nothing. With the Duo half open, Fluux keeps its flat layout:
 
 On the native side, UIKit 27.1 adds a public `UIHingeInteraction`. It reports
 the hinge state (closed, partially open, fully open) and its angle. The probe
-saw `fullyOpen` at 180° and `partiallyOpen` at 90° in every setup. UIKit
-offers no public position for the hinge, and the Duo's simulator profile
-declares none. A native layer would have to assume the middle of the inner
-screen, which is where WebKit's segments put it.
+saw `fullyOpen` at 180° and `partiallyOpen` at 90° in every setup.
+
+FLM-177 also concluded that UIKit offers no public position for the hinge.
+That was wrong: UIKit 27.1 adds `UIView.reservedRegions(kind:options:)`, and
+its `.division` kind is where the screen divides. FLM-279 read it from Fluux's
+web view on the Duo's inner screen:
+
+| State | Division region |
+| --- | --- |
+| Half open, landscape | Frame x 455.5–495.5 points, full height; margins 20 points left and right; active |
+| Half open, portrait | Frame y 455.5–495.5 points, full width; margins 20 points top and bottom; active |
+| Fully open, either orientation | The same frame and margins; inactive |
+| Closed, cover screen | No region, active or inactive |
+
+The margins are the room UIKit asks buttons to keep from the fold, so the fold
+itself is at 475.5 points, where WebKit's segments put it. Folding from fully
+open, `UIHingeInteraction` reported partially open about 0.75 seconds before
+the region turned active. Unfolding from the cover screen, both changed
+together. While the device closed, `UIHingeInteraction` still reported
+partially open for a moment on the cover screen.
 
 How Fluux should adapt was a product choice between standard CSS segments
 with WebKit's features turned on and hinge values passed from native code as
@@ -339,8 +356,9 @@ iOS code reads `UIHingeInteraction` and sets the posture and the hinge line on
 the page as CSS variables, with the hinge assumed at the middle of the inner
 screen. Half open, the layout is to split at the hinge: the conversation list
 and the chat on either side in landscape, the messages above and the composer
-with the keyboard below in portrait. That change is separate work and is not
-built here.
+with the keyboard below in portrait. FLM-279 built it, taking the hinge line
+and its margin from the division region instead of assuming the middle; see
+[Foldable iPhone hinge](../IOS_DEVELOPMENT.md#foldable-iphone-hinge).
 
 ### Why `Host is down`
 

@@ -159,6 +159,9 @@ test('Swift and native test fixtures route to their runtime owner rather than Vi
   for (const path of ['apps/fluux/src-tauri/mobile/ios/NotificationService.swift', 'scripts/native-tests/PreviewTokenTests.swift', 'scripts/native-tests/preview-identity-fixtures.json', 'tests/fixtures/notification-content.json', 'scripts/ios-notification-diagnostic.test.mjs']) {
     assert.ok(ids(planFor([path])).includes('test:ios-notifications'))
   }
+  for (const path of ['apps/fluux/src-tauri/plugins/ios-feedback/ios/Sources/HingeLayout.swift', 'scripts/native-tests/HingeLayoutTests.swift', 'scripts/ios-hinge-layout.test.mjs']) {
+    assert.ok(ids(planFor([path])).includes('test:ios-hinge'))
+  }
   const diagnostic = planFor(['scripts/native-tests/ios-diagnostic/UITests.swift'])
   assert.ok(ids(diagnostic).includes('test:ios-diagnostic'))
   assert.ok(ids(diagnostic).includes('test:ios-notifications'))
