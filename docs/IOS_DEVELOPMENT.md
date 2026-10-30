@@ -767,9 +767,31 @@ rollback is conservative. A selected original or app notification is reserved be
 handoff: a crash or submission failure may miss a preview, and that claim is never retried.
 Read/revocation checks narrow the final handoff race; OS presentation is not transactional.
 
-Pushes carry no exact event ID. Catch-up can select a later eligible message, and a completed
-archive query cannot identify a transient event or an event not yet visible in MAM. Such empty
-results remain generic. Exact targeting needs the independent push-server change.
+Standard pushes carry no exact event ID. Catch-up can select a later eligible message,
+and a completed archive query cannot identify a transient event or an event not yet visible
+in MAM. Empty, failed or duplicate-only lookups retain the individual push's filtered
+transport body; only encrypted/recognized placeholders remain generic. Matching stays
+best-effort and entirely client-side, with no custom push ID or ejabberd change required.
+Further improvements must work with standard payloads or wait for Apple's notification
+filtering entitlement; an exact server-pairing change is not planned.
+
+Preview workers hold `fast-token.lock` from credential loading through the network lookup
+and recording its FAST successor/refusal. The app never waits on that network lock:
+`preview-state.lock` protects only short capability and credential transactions, including
+app publication/revocation, worker credential loading and the final capability-check/write.
+Revocation and sign-out can therefore clear the capability and credentials while a lookup
+is active; its late result cannot restore them. A queued worker loads the latest credential
+only after taking the sign-in lock, and checks cancellation and capability under the state
+lock before signing in. Missing locks skip the lookup instead of signing in concurrently.
+If the state lock cannot be opened, revoke/purge still delete the published capability,
+and purge also deletes the FAST token. Routine revoke preserves that token. Publication
+remains refused, and the app reports that the remaining cleanup was unavailable.
+The delivery deadline/system expiry still completes independently while a worker waits.
+Settings/preparation time and lock waiting consume the same seven-second lookup budget,
+leaving one second for handoff before the delivery deadline. Workers pass only the
+remaining time to the lookup and skip sign-in below 250 ms instead of starting a fresh
+seven-second request. An already-active server session may finish after local revocation,
+but it cannot restore the revoked capability, credentials or decrypted notification text.
 
 `npm run test:ios-notifications` covers synthetic Swift delivery/ledger paths and locale
 generation; run `cargo test --locked --manifest-path apps/fluux/src-tauri/nse-openpgp/Cargo.toml`

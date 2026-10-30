@@ -142,19 +142,19 @@ class PushPlugin: Plugin {
             let args = try invoke.parseArgs(PreviewArguments.self)
             mirrorQueue.async {
                 do {
+                    guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
                     if args.operation == "fastToken" {
                         guard let account = args.account else { throw PreviewLedger.Failure.invalid }
-                        let token = PreviewToken.load(for: account)
+                        let token = try PreviewToken.withStateLock(root: root) { PreviewToken.load(for: account) }
                         invoke.resolve(["userAgentId": token.userAgentId, "present": !token.token.isEmpty])
                         return
                     }
                     if args.operation == "storeFastToken" {
                         guard let token = args.fastToken, !token.token.isEmpty, token.userAgentId.count >= 32,
                               NotificationPresentation.bareJid(token.account) == token.account else { throw PreviewLedger.Failure.invalid }
-                        try token.save()
+                        try PreviewToken.withStateLock(root: root) { try token.save() }
                         invoke.resolve(); return
                     }
-                    guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
                     let ledger = try PreviewLedger(root: root)
                     if args.operation == "claimApp" {
                         guard let delta = args.deltas?.first, args.deltas?.count == 1, let request = args.requestId else { throw PreviewLedger.Failure.invalid }
@@ -173,25 +173,31 @@ class PushPlugin: Plugin {
                     // Revoke the capability before retiring history or publishing a new revision.
                     var snapshot = args.snapshot.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
                     let account = snapshot?["account"] as? String
-                    // A purge or another account retires the extension's FAST token with the capability;
-                    // the app has the server invalidate the released token. The lock keeps an extension run
-                    // that is finishing from storing a token after the capability is gone.
+                    // Revocation shares only the short state lock with worker reads/writes.
+                    // It must complete even while an extension holds fast-token.lock on network I/O.
                     var released: PreviewToken?
-                    try PreviewToken.exclusively(root: root) {
+                    let session = try PreviewToken.withStateLock(root: root, onUnavailable: {
+                        // A failed lock must not leave the password/secret-key capability
+                        // published after revoke or sign-out. Still report incomplete cleanup.
+                        if args.operation == "revoke" || args.operation == "purge" {
+                            try PreviewToken.revokeWithoutLock(purge: args.operation == "purge")
+                        }
+                    }) {
                         try PreviewKeychain.write(nil)
                         if args.operation == "purge" || (account != nil && PreviewToken.stored()?.account != account) {
                             released = PreviewToken.stored().flatMap { $0.token.isEmpty ? nil : $0 }
                             try PreviewToken.delete()
                         }
+                        let session = try ledger.capability(account: account, purge: args.operation == "purge")
+                        if let session = session, snapshot != nil {
+                            snapshot?["ledger"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(session))
+                        }
+                        let data = try snapshot.map { try JSONSerialization.data(withJSONObject: $0) }
+                        try PreviewKeychain.write(data)
+                        return session
                     }
-                    let session = try ledger.capability(account: account, purge: args.operation == "purge")
                     UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ledger.retiredRequests)
                     UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ledger.retiredRequests)
-                    if let session = session, snapshot != nil {
-                        snapshot?["ledger"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(session))
-                    }
-                    let data = try snapshot.map { try JSONSerialization.data(withJSONObject: $0) }
-                    try PreviewKeychain.write(data)
                     var result: [String: Any] = session.map { ["account": $0.account, "epoch": $0.epoch] } ?? [:]
                     if let released = released {
                         result["released"] = ["account": released.account, "userAgentId": released.userAgentId, "token": released.token]

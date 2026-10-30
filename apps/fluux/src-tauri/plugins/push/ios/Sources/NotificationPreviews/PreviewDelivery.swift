@@ -5,21 +5,23 @@ import UserNotifications
 final class PreviewDelivery {
     typealias Engine = (Data, @escaping (PreviewResult?) -> Void) -> (() -> Void)
     private let removeRequests: ([String]) -> Void
+    private let uptime: () -> TimeInterval
     init(removeRequests: @escaping ([String]) -> Void = { identifiers in
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: identifiers)
         center.removeDeliveredNotifications(withIdentifiers: identifiers)
-    }) {
+    }, uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.removeRequests = removeRequests
+        self.uptime = uptime
     }
     private let lock = NSLock()
     private var handler: ((UNNotificationContent) -> Void)?
     private var fallback: UNNotificationContent?
-    private var pushed: UNNotificationContent?
     private var cancel: (() -> Void)?
     private var ended = false
     private var timer: DispatchWorkItem?
     private var started = Date()
+    private var startedUptime: TimeInterval = 0
     /// Receives each delivery decision, for `PreviewTrace`.
     var diagnostic: (PreviewDecision, Int?) -> Void = { _, _ in }
     var trace: (String) -> Void = { _ in }
@@ -27,15 +29,11 @@ final class PreviewDelivery {
     func begin(_ content: UNNotificationContent, completion: @escaping (UNNotificationContent) -> Void) {
         lock.lock()
         guard !ended else { lock.unlock(); return }
-        handler = completion; fallback = content; pushed = content; started = Date()
+        handler = completion; fallback = content; started = Date(); startedUptime = uptime()
         let deadline = DispatchWorkItem { [weak self] in self?.finish(expiration: .deadline) }
         timer = deadline
         lock.unlock()
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 8, execute: deadline)
-    }
-    func updateFallback(_ content: UNNotificationContent) {
-        lock.lock(); defer { lock.unlock() }
-        if !ended { fallback = content }
     }
     /// Whether an opted-in snapshot lets the engine look for `sender`'s messages.
     static func covers(_ sender: String, snapshot: Data) -> Bool {
@@ -60,7 +58,12 @@ final class PreviewDelivery {
         guard isCurrent(snapshot) else { diagnostic(.capabilityChanged, nil); trace("no preview, capability changed"); finish(); return }
         guard prepare(&input) else { diagnostic(.windowUnavailable, nil); trace("no preview, ledger window unavailable"); finish(); return }
         input["sender"] = sender
-        input["deadline_ms"] = 7000
+        // Keep a second for final handoff within the eight-second delivery deadline.
+        // Preparation/settings time is part of the budget, not a fresh seven seconds.
+        lock.lock()
+        let remaining = max(0, 7 - (uptime() - startedUptime))
+        lock.unlock()
+        input["deadline_ms"] = Int(remaining * 1000)
         guard let bytes = try? JSONSerialization.data(withJSONObject: input) else { finish(); return }
         let cancellation = engine(bytes) { [weak self] result in
             guard let self = self else { return }
@@ -75,20 +78,19 @@ final class PreviewDelivery {
         lock.lock()
         let completion = handler
         let content = fallback
-        let original = pushed
         let cancellation = cancel
         ended = true
-        handler = nil; fallback = nil; pushed = nil; cancel = nil
+        handler = nil; fallback = nil; cancel = nil
         timer?.cancel(); timer = nil
         lock.unlock()
         cancellation?()
         guard let completion = completion, let content = content else { return }
         let elapsed = Int(Date().timeIntervalSince(started) * 1000)
         // Without an archive, keep the transport-safe push content.
-        if result?.archiveUnavailable == true, isCurrent(), let original = original {
+        if result?.archiveUnavailable == true, isCurrent() {
             diagnostic(.archiveUnavailable, elapsed)
             trace("push content, archive unavailable, \(elapsed) ms")
-            completion(original)
+            completion(content)
             return
         }
         let selected = result.flatMap { isCurrent() ? select($0) : nil }

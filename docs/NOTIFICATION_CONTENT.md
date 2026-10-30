@@ -23,7 +23,7 @@ No executable formatter is shared between Swift and TypeScript.
 | Plain body | SDK preview text | Transport body | Transport body, or selected archived plain body |
 | Decrypted and accepted body | SDK preview text | Already-rendered transport body only | Verified, opted-in OX archive body |
 | Pending decryption/verification, failed or rejected content | Silent; the existing arrival may be reconsidered once on recovery | Generic `New message` when marked encrypted | Generic localized `New activity` unless an opted-in preview succeeds |
-| Unsupported encryption | Localized named or unnamed unsupported-method notice; never the sender's fallback | Keep an already-rendered notice when supplied as plain content | Keep an already-rendered plain notice; an unknown archive event yields generic activity |
+| Unsupported encryption | Localized named or unnamed unsupported-method notice; never the sender's fallback | Keep an already-rendered notice when supplied as plain content | Keep an already-rendered plain notice even when the archive lookup is unknown |
 | Empty/whitespace body without another previewable feature | Silent | Generic `New message` | Generic `New activity`; a blank archive body is not a candidate |
 | Attachment or poll | SDK preview emoji and caption/name/title | Server-rendered text only | Archive body only; the NSE does not synthesize attachment or poll labels |
 | Correction | Current resolved message preview; eligibility/dedup belong to the SDK, not the builder | Server-rendered text only | Ledger replaces a unique verified candidate, or formats the existing localized edit notice |
@@ -48,7 +48,11 @@ whitespace): `This message is encrypted`, `[OpenPGP-encrypted message]`, and
 literal nonblank plaintext, including those same words. Arbitrary sender-selected
 fallbacks cannot be recognized without encryption metadata; an unmarked,
 nonblank body remains opaque server text. Neither remote path decrypts the push
-body itself. No push-server schema change is required.
+body itself. No push-server schema change is required. When the signed-in account's
+preview snapshot publishes app wording, the NSE uses its `words.activity` for generic
+transport fallback, even if the device language differs. Without matching published
+wording, it falls back to the extension's device-localized wording; readable transport text
+is never replaced solely to localize an alert.
 
 The web SW cannot inspect SDK message state or keys. It must surface an alert for
 a received push; lookup/show failures retain its existing generic fallback.
@@ -60,8 +64,12 @@ remains compatible with signed-in legacy pushes. Only covered direct senders wit
 a current opted-in snapshot may use OX previews; rooms and explicitly unencrypted
 pushes bypass that work. Preview opt-out, hidden previews, expiry, unavailable keys,
 incomplete/unknown results, duplicate/read messages or revoked capability cannot
-reveal a decrypted body. Generic activity remains a nonempty stage-1 alert;
-suppression requires Apple's notification-filtering entitlement.
+reveal a decrypted body. These outcomes retain the individual push's transport-safe
+body: readable unmarked server text stays readable, while an encrypted or recognized
+placeholder remains generic activity. This includes duplicate-only results after an
+earlier lookup claimed every message in a burst. The extension does not infer an exact
+push-to-message identity from a standard push. Suppression requires Apple's
+notification-filtering entitlement.
 
 When the server has no archive, the transport-safe push is the only content
 source: apply the transport fallback rules above. The catch-up ledger still owns identity, read/notification claims,

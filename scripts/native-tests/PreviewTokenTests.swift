@@ -51,7 +51,7 @@ func check(_ condition: Bool, _ message: String) {
             group.enter()
             DispatchQueue.global().async {
                 for _ in 0..<50 {
-                    PreviewToken.exclusively(root: root) {
+                    try! PreviewToken.withStateLock(root: root) {
                         if inside { overlap = true }
                         inside = true
                         let value = counter
@@ -65,7 +65,49 @@ func check(_ condition: Bool, _ message: String) {
         }
         group.wait()
         check(!overlap && counter == 400, "lock serialises critical sections (counter \(counter))")
-        check(PreviewToken.exclusively(root: nil) { 7 } == 7, "no root runs unlocked")
+        var ranUnlocked = false
+        do {
+            try PreviewToken.withStateLock(root: root.appendingPathComponent("missing")) { ranUnlocked = true }
+            check(false, "missing state lock must fail")
+        } catch PreviewToken.LockFailure.unavailable {}
+        check(!ranUnlocked, "missing state lock never runs an unlocked transaction")
+        // FLM-294 S2 / selected R1: lock failure must not leave a revoked capability
+        // published. Model the keychain as isolated bytes; no Security API is called.
+        let blocked = root.appendingPathComponent("blocked")
+        try FileManager.default.createDirectory(at: blocked.appendingPathComponent("preview-state.lock"), withIntermediateDirectories: true)
+        let published = Data("{\"account\":\"alice@example.com\",\"opt_in\":true}".utf8)
+        for operation in ["publish", "revoke", "purge"] {
+            var capability: Data? = published
+            var credential: PreviewToken? = token("t1")
+            var ranTransaction = false
+            do {
+                try PreviewToken.withStateLock(root: blocked, onUnavailable: {
+                    if operation == "revoke" || operation == "purge" {
+                        // S5: execute the production deletion helper with isolated storage.
+                        try PreviewToken.revokeWithoutLock(purge: operation == "purge",
+                            clearCapability: { capability = nil }, clearToken: { credential = nil })
+                    }
+                }) {
+                    ranTransaction = true
+                }
+                check(false, "unavailable lock must still report incomplete cleanup: \(operation)")
+            } catch PreviewToken.LockFailure.unavailable {}
+            check(!ranTransaction, "state transaction never runs unlocked: \(operation)")
+            check((capability == nil) == (operation != "publish"), "only revocation deletes the capability without the lock: \(operation)")
+            check((credential == nil) == (operation == "purge"), "purge must delete the FAST token; publish/revoke preserve it: \(operation)")
+        }
+        var lockedTransaction = false
+        try PreviewToken.withStateLock(root: root, onUnavailable: { check(false, "healthy lock must not use the fallback") }) {
+            lockedTransaction = true
+        }
+        check(lockedTransaction, "healthy state transaction still runs")
+        print("unavailable state lock: publish refused; revoke deletes capability; purge deletes capability and FAST token; incomplete cleanup reported")
+        // FLM-294 R1: no late token write after revocation, even if cleanup retains
+        // the old token temporarily. Rotation and refusal obey the same capability check.
+        check(PreviewToken.resolve(used: token("t1"), stored: token("t1"), snapshotCurrent: false, change: rotate) == nil,
+              "revocation rejects a late successor")
+        check(PreviewToken.resolve(used: token("t1"), stored: token("t1"), snapshotCurrent: false, change: .clear) == nil,
+              "revocation rejects a late refusal write")
 
         print("passed")
 

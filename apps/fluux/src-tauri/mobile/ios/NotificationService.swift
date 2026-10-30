@@ -6,6 +6,12 @@ final class NotificationService: UNNotificationServiceExtension {
     var loadNames: () -> SharedNames = { SharedNames.load() }
     var readSnapshot: () -> Data? = { PreviewKeychain.read() }
     var ledgerRoot: () -> URL? = { NotificationMirror.root }
+    var previewsAllowed: (@escaping (Bool) -> Void) -> Void = { complete in
+        UNUserNotificationCenter.current().getNotificationSettings { complete($0.showPreviewsSetting != .never) }
+    }
+    var runPreview: (Data, String, URL, @escaping () -> Bool, @escaping (PreviewResult?) -> Void) -> (() -> Void) = {
+        NotificationPreviewEngine.run($0, account: $1, root: $2, isCurrent: $3, completion: $4)
+    }
     override func didReceive(_ request: UNNotificationRequest,
                              withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
         delivery?.finish()
@@ -34,10 +40,16 @@ final class NotificationService: UNNotificationServiceExtension {
             contentHandler(NotificationPresentation.belongsToSignedInAccount(request.content, names: loadNames())
                            ? content : NotificationPresentation.neutralContent())
         }
-        let content = NotificationPresentation.content(for: request.content, names: names)
+        let snapshot = readSnapshot()
+        let values = snapshot.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+        // Use only this signed-in account's published app wording. Device wording is
+        // the fallback when there is no matching capability, not a replacement for it.
+        let wordValue = values?["account"] as? String == names.account ? values?["words"] : nil
+        let words = wordValue.flatMap { JSONSerialization.isValidJSONObject($0) ? try? JSONSerialization.data(withJSONObject: $0) : nil }
+            .flatMap { try? JSONDecoder().decode(PreviewWords.self, from: $0) } ?? PreviewWords.localized
+        let content = NotificationPresentation.content(for: request.content, names: names, activity: words.activity)
         delivery.begin(content, completion: finish)
         let sender = (content.userInfo["from"] as? String).flatMap(NotificationPresentation.bareJid)
-        let snapshot = readSnapshot()
         let skip = { (decision: PreviewDecision, reason: String) in
             diagnostic(decision, nil)
             delivery.trace("no preview, \(reason)")
@@ -52,7 +64,7 @@ final class NotificationService: UNNotificationServiceExtension {
         }
         guard let snapshot = snapshot else { return skip(.previewsOff, "previews off") }
         guard PreviewDelivery.covers(sender, snapshot: snapshot) else { return skip(.senderNotCovered, "sender not covered") }
-        guard let values = (try? JSONSerialization.jsonObject(with: snapshot)) as? [String: Any],
+        guard let values = values,
               let account = values["account"] as? String, account == names.account else {
             return skip(.snapshotChanged, "snapshot for another account")
         }
@@ -63,33 +75,17 @@ final class NotificationService: UNNotificationServiceExtension {
             return skip(.noSession, "no ledger session")
         }
         guard let root = ledgerRoot(), let ledger = try? PreviewLedger(root: root) else { return skip(.ledgerUnavailable, "ledger unavailable") }
-        let words = values["words"].flatMap { JSONSerialization.isValidJSONObject($0) ? try? JSONSerialization.data(withJSONObject: $0) : nil }
-            .flatMap { try? JSONDecoder().decode(PreviewWords.self, from: $0) } ?? PreviewWords.localized
-        let credential = PreviewToken.load(for: account)
-        let fallback = content.mutableCopy() as? UNMutableNotificationContent
-        fallback?.body = words.activity
-        // Expiry, unknown events and duplicates all keep a nonempty stage-1 alert.
-        let original: UNNotificationContent = fallback ?? content
-        delivery.updateFallback(original)
-        UNUserNotificationCenter.current().getNotificationSettings { [delivery] settings in
-            delivery.start(original, snapshot: snapshot, sender: sender, allowed: settings.showPreviewsSetting != .never,
-                           isCurrent: { PreviewKeychain.read() == $0 && (try? ledger.current()) == session },
+        // Presentation already filtered encrypted placeholders. A lookup miss must not
+        // discard readable text from this push, including a later push in a burst.
+        previewsAllowed { [delivery, readSnapshot, runPreview] allowed in
+            delivery.start(content, snapshot: snapshot, sender: sender, allowed: allowed,
+                           isCurrent: { readSnapshot() == $0 && (try? ledger.current()) == session },
                            engine: { input, completion in
-                               NotificationPreviewEngine.run(input) { result in
-                                   // The server has already rotated or refused the token; keep that whatever happens to
-                                   // the preview, unless the capability was revoked or another run changed the token.
-                                   let change = result?.fastToken.map { PreviewToken.Change.rotate(token: $0.token, expiry: $0.expiry) }
-                                       ?? (result?.tokenRefused == true ? .clear : nil)
-                                   if let change = change {
-                                       PreviewToken.record(change, after: credential, root: root,
-                                                           snapshotCurrent: { PreviewKeychain.publishedAccount() == account })
-                                   }
-                                   completion(result)
-                               }
+                               runPreview(input, account, root, {
+                                   readSnapshot() == snapshot && (try? ledger.current()) == session
+                               }, completion)
                            },
                            prepare: { input in
-                               input["user_agent_id"] = credential.userAgentId
-                               input["fast_token"] = credential.token
                                let now = Date()
                                guard now.timeIntervalSince1970 >= session.activated else { return false }
                                let formatter = ISO8601DateFormatter()
