@@ -424,12 +424,16 @@ impl OpenpgpState {
         account_jid: String,
         backup_message: String,
         passphrase: String,
+        without_migration: bool,
     ) -> Result<KeyBundle, String> {
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
             let tsk_armored =
                 crate::openpgp_backup::decrypt_tsk_with_passphrase(&backup_message, &passphrase)
                     .map_err(anyhow_to_string)?;
+            if without_migration {
+                this.storage.start_fresh_secrets().map_err(anyhow_to_string)?;
+            }
             let cert = Cert::from_bytes(tsk_armored.as_bytes())
                 .map_err(|e| format!("parse imported TSK: {e}"))?;
             let cert = ensure_account_user_id(cert, &account_jid).map_err(anyhow_to_string)?;
@@ -501,6 +505,7 @@ impl OpenpgpState {
         backup_message: String,
         passphrase: String,
         selected_fingerprint: String,
+        without_migration: bool,
     ) -> Result<KeyBundle, String> {
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
@@ -524,6 +529,9 @@ impl OpenpgpState {
 
             let cert = Cert::from_bytes(tsk_armored.as_bytes())
                 .map_err(|e| format!("parse selected TSK: {e}"))?;
+            if without_migration {
+                this.storage.start_fresh_secrets().map_err(anyhow_to_string)?;
+            }
             let cert = ensure_account_user_id(cert, &account_jid).map_err(anyhow_to_string)?;
             let backing = this
                 .storage
@@ -893,10 +901,16 @@ pub async fn openpgp_backup_import(
     account_jid: String,
     backup_message: String,
     passphrase: String,
+    without_migration: Option<bool>,
     state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<PublicKeyInfo, String> {
     Arc::clone(&state)
-        .import_backup(account_jid, backup_message, passphrase)
+        .import_backup(
+            account_jid,
+            backup_message,
+            passphrase,
+            without_migration.unwrap_or(false),
+        )
         .await
         .map(|bundle| PublicKeyInfo::from(&bundle))
 }
@@ -923,6 +937,7 @@ pub async fn openpgp_backup_import_selected(
     backup_message: String,
     passphrase: String,
     selected_fingerprint: String,
+    without_migration: Option<bool>,
     state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<PublicKeyInfo, String> {
     Arc::clone(&state)
@@ -931,6 +946,7 @@ pub async fn openpgp_backup_import_selected(
             backup_message,
             passphrase,
             selected_fingerprint,
+            without_migration.unwrap_or(false),
         )
         .await
         .map(|bundle| PublicKeyInfo::from(&bundle))
@@ -2392,6 +2408,7 @@ mod tests {
                 "alice@example.com".into(),
                 backup,
                 "correct-horse-battery-staple".into(),
+                false,
             )
             .await
             .unwrap();
@@ -3000,6 +3017,7 @@ mod tests {
                 "alice@example.com".into(),
                 web_backup,
                 backup_passphrase.into(),
+                false,
             ))
             .expect("Sequoia must decrypt a backup created by openpgp.js");
         assert_eq!(
@@ -3017,6 +3035,7 @@ mod tests {
                 "bob@example.com".into(),
                 bob_backup,
                 backup_passphrase.into(),
+                false,
             ))
             .expect("Sequoia must decrypt Bob's web backup");
 
@@ -3056,7 +3075,7 @@ mod tests {
 
         let device_b = Arc::new(OpenpgpState::for_testing(fresh_tmp_dir()));
         let err = device_b
-            .import_backup("alice@example.com".into(), backup, "wrong".into())
+            .import_backup("alice@example.com".into(), backup, "wrong".into(), false)
             .await;
         assert!(err.is_err(), "wrong passphrase must not yield a bundle");
 

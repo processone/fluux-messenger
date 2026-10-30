@@ -22,6 +22,11 @@ pub trait SecretStore {
     fn set(&self, account: &str, secret: &str) -> Result<(), String>;
     /// Succeeds when the item does not exist.
     fn delete(&self, account: &str) -> Result<(), String>;
+    /// Leave the old layout behind for good and use a fresh item from now on.
+    #[cfg(any(target_os = "macos", test))]
+    fn start_fresh(&self) -> Result<(), String> {
+        Err("Fresh start is unavailable for this store".into())
+    }
     /// Explicit erase may retry a startup denial once; ordinary logout must not.
     #[cfg(any(target_os = "macos", test))]
     fn retry_denied_access(&self) -> Result<(), String> { Ok(()) }

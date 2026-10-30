@@ -309,6 +309,19 @@ impl KeyStorage {
         Err(anyhow!("Legacy adoption is unavailable for this store"))
     }
 
+    /// Stop reading the old keychain items, now and on every later launch, and
+    /// protect keys with a fresh item the user's refusal cannot have blocked.
+    /// For a restore from backup; the old items and keys are left untouched.
+    pub fn start_fresh_secrets(&self) -> Result<()> {
+        #[cfg(any(target_os = "macos", test))]
+        if self.use_keychain {
+            if let Some(store) = self.secret_store() {
+                return store.start_fresh().map_err(|error| anyhow!(error));
+            }
+        }
+        Ok(())
+    }
+
     /// Persist `cert` for `jid`. Reuses the account's existing passphrase
     /// when one is already stored (keychain preferred, file fallback);
     /// otherwise mints and stores a fresh random one. Then writes the
@@ -2084,6 +2097,104 @@ mod tests {
             fs::remove_dir_all(dir).unwrap();
         }
     }
+    // FLM-299 / FLM-298: the user refused the old keychain items, so migration
+    // can never finish. Restoring the same key from a backup into a fresh item
+    // must work now and after relaunch, without reading or erasing the old items.
+    #[cfg(not(target_os = "ios"))]
+    #[test]
+    fn flm299_backup_restore_works_after_refused_migration_and_never_remigrates() {
+        use crate::{
+            credentials::SecretStore,
+            macos_secrets::{Backend, Secrets, StoreError},
+        };
+        use std::{
+            collections::BTreeMap,
+            sync::{
+                atomic::{AtomicBool, AtomicUsize, Ordering},
+                Arc, Mutex,
+            },
+        };
+        #[derive(Clone, Default)]
+        struct Memory {
+            items: Arc<Mutex<BTreeMap<String, String>>>,
+            old_reads: Arc<AtomicUsize>,
+            fresh: Arc<AtomicBool>,
+        }
+        impl SecretStore for Memory {
+            fn get(&self, a: &str) -> std::result::Result<Option<String>, String> {
+                Ok(self.items.lock().unwrap().get(a).cloned())
+            }
+            fn set(&self, a: &str, v: &str) -> std::result::Result<(), String> {
+                self.items.lock().unwrap().insert(a.into(), v.into());
+                Ok(())
+            }
+            fn delete(&self, a: &str) -> std::result::Result<(), String> {
+                self.items.lock().unwrap().remove(a);
+                Ok(())
+            }
+        }
+        impl Backend for Memory {
+            fn read(&self, a: &str) -> std::result::Result<Option<String>, StoreError> {
+                // The user refuses every pre-combined item, as in the report.
+                if !a.starts_with("secrets-") {
+                    self.old_reads.fetch_add(1, Ordering::SeqCst);
+                    return Err(StoreError::denied());
+                }
+                self.get(a).map_err(Into::into)
+            }
+            fn accounts(&self) -> std::result::Result<Vec<String>, StoreError> {
+                Ok(self.items.lock().unwrap().keys().cloned().collect())
+            }
+            fn fresh_start(&self) -> bool {
+                self.fresh.load(Ordering::SeqCst)
+            }
+            fn mark_fresh_start(&self) -> std::result::Result<(), StoreError> {
+                self.fresh.store(true, Ordering::SeqCst);
+                Ok(())
+            }
+        }
+        let jid = "alice@example.com";
+        let raw = Memory::default();
+        raw.set("mcp-token", "old-mcp-token").unwrap();
+        raw.set(&keyring_account(jid), &B64.encode(b"old-passphrase")).unwrap();
+        let old_items = raw.items.lock().unwrap().clone();
+        let cert = generate_cert(jid);
+        let storage_over = |secrets: Arc<Secrets<Memory>>, dir: &PathBuf| {
+            let mut storage = KeyStorage::for_testing(dir.clone());
+            storage.use_keychain = true;
+            storage.allow_file_fallback = false;
+            storage.store_override = Some(secrets);
+            storage
+        };
+        let dir = fresh_tmp_dir();
+        let storage = storage_over(Arc::new(Secrets::new(raw.clone())), &dir);
+        // Before: the restore itself fails on the refused old items.
+        assert!(storage.save(jid, &cert).is_err());
+
+        storage.start_fresh_secrets().unwrap();
+        storage.save(jid, &cert).unwrap();
+        assert_eq!(
+            storage.load(jid).unwrap().unwrap().cert.fingerprint(),
+            cert.fingerprint()
+        );
+        let reads_after_restore = raw.old_reads.load(Ordering::SeqCst);
+
+        // Relaunch: a new process cache over the same storage and marker.
+        let relaunched = storage_over(Arc::new(Secrets::new(raw.clone())), &dir);
+        assert_eq!(
+            relaunched.load(jid).unwrap().unwrap().cert.fingerprint(),
+            cert.fingerprint()
+        );
+        assert_eq!(raw.old_reads.load(Ordering::SeqCst), reads_after_restore);
+        let items = raw.items.lock().unwrap();
+        for (name, value) in &old_items {
+            assert_eq!(items.get(name), Some(value), "old item {name} is preserved");
+        }
+        assert!(items.contains_key("secrets-fresh-v1"));
+        assert!(!items.contains_key("secrets-v1"));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
     // FLM-93 F4: save/load/forget must use the same injected logical store.
     #[test]
     fn injected_store_owns_new_passphrase_and_explicit_forget() {

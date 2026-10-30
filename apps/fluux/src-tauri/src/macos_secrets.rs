@@ -8,6 +8,13 @@ use std::{
 };
 
 const ACCOUNT: &str = "secrets-v1";
+// Combined item of a user who restored from a backup instead of migrating. It
+// never coexists with the old items' access lists, so a refused or inaccessible
+// legacy item cannot block it.
+const FRESH_ACCOUNT: &str = "secrets-fresh-v1";
+fn is_bundle(account: &str) -> bool {
+    account == ACCOUNT || account == FRESH_ACCOUNT
+}
 const BACKUP_PREFIX: &str = "identity-migration-backup:";
 const RECOVERY_PREFIX: &str = "keychain-recovery:";
 fn recovery_prefix(account: &str) -> String {
@@ -28,6 +35,10 @@ impl StoreError {
             invalid_item: false,
             message: message.into(),
         }
+    }
+    #[cfg(test)]
+    pub(crate) fn denied() -> Self {
+        Self::native(-25293, "authorization refused")
     }
     fn user_denial(&self) -> bool {
         matches!(self.code, Some(-25293 | -128))
@@ -68,6 +79,14 @@ pub trait Backend: SecretStore {
     fn read(&self, account: &str) -> StoreResult<Option<String>>;
     /// Account attributes only; this must not decrypt secrets.
     fn accounts(&self) -> StoreResult<Vec<String>>;
+    /// Whether the user chose to leave the old items behind for good.
+    fn fresh_start(&self) -> bool {
+        false
+    }
+    /// Persist that choice; it must outlive this process.
+    fn mark_fresh_start(&self) -> StoreResult<()> {
+        Err("Fresh start is unavailable for this store".into())
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -106,8 +125,16 @@ impl<S: Backend> Secrets<S> {
     fn encode(bundle: &Bundle) -> StoreResult<String> {
         serde_json::to_string(bundle).map_err(|_| "Could not encode macOS secrets".into())
     }
+    fn account(&self) -> &'static str {
+        if self.store.fresh_start() {
+            FRESH_ACCOUNT
+        } else {
+            ACCOUNT
+        }
+    }
     fn load(&self) -> StoreResult<Bundle> {
-        if let Some(json) = self.store.read(ACCOUNT)? {
+        let fresh = self.store.fresh_start();
+        if let Some(json) = self.store.read(self.account())? {
             let bundle: Bundle = serde_json::from_str(&json).map_err(|_| {
                 StoreError::invalid_item("Invalid macOS secrets item; refusing to overwrite it")
             })?;
@@ -120,9 +147,13 @@ impl<S: Backend> Secrets<S> {
             // ignore pending_cleanup from an earlier development build.
             return Ok(bundle);
         }
+        if fresh {
+            // Nothing is read from, or cleaned up in, the old layout.
+            return Ok(Bundle::default());
+        }
         let mut bundle = Bundle::default();
         for account in self.store.accounts()? {
-            if account == ACCOUNT {
+            if is_bundle(&account) {
                 continue;
             }
             if let Some(secret) = self.store.read(&account)? {
@@ -141,11 +172,11 @@ impl<S: Backend> Secrets<S> {
             let json = Self::encode(&bundle)?;
             let migrated = self
                 .store
-                .set(ACCOUNT, &json)
+                .set(self.account(), &json)
                 .map_err(StoreError::from)
                 .and_then(|()| {
                     self.store
-                        .read(ACCOUNT)?
+                        .read(self.account())?
                         .and_then(|json| serde_json::from_str::<Bundle>(&json).ok())
                         .ok_or_else(|| "Could not verify migrated macOS secrets".into())
                 });
@@ -220,7 +251,7 @@ impl<S: Backend> Secrets<S> {
             }
             if bundle.legacy {
                 // An unverified combined item must not survive either legacy write.
-                self.store.delete(ACCOUNT)?;
+                self.store.delete(self.account())?;
             }
             let mut adopted = bundle.clone();
             if let Some(previous) = bundle.items.get(account).cloned().filter(|previous| {
@@ -243,7 +274,7 @@ impl<S: Backend> Secrets<S> {
             if bundle.legacy {
                 self.store.set(account, secret)?;
             } else {
-                self.store.set(ACCOUNT, &Self::encode(&adopted)?)?;
+                self.store.set(self.account(), &Self::encode(&adopted)?)?;
             }
             *bundle = adopted;
             Ok(())
@@ -284,6 +315,18 @@ impl<S: Backend> Secrets<S> {
     }
 }
 impl<S: Backend> SecretStore for Secrets<S> {
+    fn start_fresh(&self) -> Result<(), String> {
+        let mut cache = self
+            .cache
+            .lock()
+            .map_err(|_| "macOS secrets lock poisoned".to_string())?;
+        self.store
+            .mark_fresh_start()
+            .map_err(|error| error.to_string())?;
+        // Drop a cached denial of the old items: they are never read again.
+        *cache = None;
+        Ok(())
+    }
     fn retry_denied_access(&self) -> Result<(), String> {
         let mut cache = self
             .cache
@@ -321,10 +364,10 @@ impl<S: Backend> SecretStore for Secrets<S> {
             if bundle.legacy {
                 // Only discard an unverified replacement created by this failed
                 // migration, never an original or another process's newer item.
-                self.store.delete(ACCOUNT)?;
+                self.store.delete(self.account())?;
                 self.store.set(account, secret)?;
             } else {
-                self.store.set(ACCOUNT, &Self::encode(&updated)?)?;
+                self.store.set(self.account(), &Self::encode(&updated)?)?;
             }
             *bundle = updated;
             Ok(())
@@ -350,9 +393,9 @@ impl<S: Backend> SecretStore for Secrets<S> {
                 updated.legacy_reads.insert(name.clone(), Ok(None));
             }
             if bundle.legacy {
-                self.store.delete(ACCOUNT)?;
+                self.store.delete(self.account())?;
             } else if changed {
-                self.store.set(ACCOUNT, &Self::encode(&updated)?)?;
+                self.store.set(self.account(), &Self::encode(&updated)?)?;
             }
             *bundle = updated;
             // The keychain's attributes reveal retained recovery names without
@@ -417,6 +460,16 @@ mod native {
                     .join("net.processone.fluux")
                     .join(".secrets-revision"))
             }
+        }
+        // Secret-free marker of the choice to restore from a backup rather than
+        // migrate. Shared by Release and Dev like the revision file.
+        fn fresh_marker_path(&self) -> Result<std::path::PathBuf, String> {
+            let revision = self.revision_path()?;
+            Ok(if self.keychain.is_some() {
+                revision.with_extension("fresh")
+            } else {
+                revision.with_file_name(".secrets-fresh-start")
+            })
         }
         fn revision(
             &self,
@@ -499,7 +552,7 @@ mod native {
             self.read(account).map_err(|error| error.to_string())
         }
         fn set(&self, account: &str, secret: &str) -> Result<(), String> {
-            let _revision = if account == ACCOUNT {
+            let _revision = if is_bundle(account) {
                 Some(self.begin_write()?)
             } else {
                 None
@@ -528,7 +581,7 @@ mod native {
         }
 
         fn delete(&self, account: &str) -> Result<(), String> {
-            let _revision = if account == ACCOUNT {
+            let _revision = if is_bundle(account) {
                 Some(self.begin_write()?)
             } else {
                 None
@@ -541,13 +594,24 @@ mod native {
         }
     }
     impl Backend for Keychain {
+        fn fresh_start(&self) -> bool {
+            self.fresh_marker_path().is_ok_and(|path| path.exists())
+        }
+
+        fn mark_fresh_start(&self) -> StoreResult<()> {
+            let path = self.fresh_marker_path()?;
+            std::fs::create_dir_all(path.parent().ok_or("Missing marker directory")?)
+                .and_then(|()| std::fs::write(&path, b"1"))
+                .map_err(|e| format!("Could not record the fresh start: {e}").into())
+        }
+
         fn read(&self, account: &str) -> StoreResult<Option<String>> {
-            let revision = if account == ACCOUNT {
+            let revision = if is_bundle(account) {
                 self.revision(false).ok()
             } else {
                 None
             };
-            if account == ACCOUNT {
+            if is_bundle(account) {
                 *self
                     .observed_revision
                     .lock()
@@ -560,7 +624,7 @@ mod native {
                 account,
             ) {
                 Ok((bytes, _)) => String::from_utf8(bytes.to_vec()).map(Some).map_err(|_| {
-                    if account == ACCOUNT {
+                    if is_bundle(account) {
                         StoreError::invalid_item("Invalid keychain text")
                     } else {
                         "Invalid keychain text".into()
@@ -933,7 +997,7 @@ mod tests {
                     secret.into()
                 },
             );
-            if account == ACCOUNT {
+            if is_bundle(account) {
                 let stored = self.items.lock().unwrap().get(account).cloned().unwrap();
                 if let Ok(bundle) = serde_json::from_str::<Bundle>(&stored) {
                     self.snapshots.lock().unwrap().push(bundle.items);
@@ -960,7 +1024,7 @@ mod tests {
     impl Backend for FakeStore {
         fn read(&self, account: &str) -> StoreResult<Option<String>> {
             self.reads.lock().unwrap().push(account.into());
-            if account == ACCOUNT {
+            if is_bundle(account) {
                 if let Some((error, remaining)) = self.read_error.lock().unwrap().as_mut() {
                     if *remaining > 0 {
                         *remaining -= 1;
