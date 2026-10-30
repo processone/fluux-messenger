@@ -31,7 +31,7 @@ import { RoomComposerEditor } from './composer/RoomComposerEditor'
 import { useMentionReferences } from './composer/useMentionReferences'
 import { composerAutocompleteAriaProps } from './composer/autocompleteAria'
 import { usesMobileEnterKey } from './composer/mobileEnter'
-import { ConversationColumn } from './conversation/ConversationColumn'
+import { ConversationColumn, ConversationTail } from './conversation/ConversationColumn'
 import { RoomHeader } from './RoomHeader'
 import { RoomVoiceControls } from './RoomVoiceControls'
 import { OccupantPanel } from './OccupantPanel'
@@ -698,62 +698,64 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             </MediaAutoloadProvider>
           </div>
 
-          {/* Reaction mention pills — pinned above the composer */}
-          <ReactionMentions conversationId={activeRoom.jid} onSee={(id) => roomStore.getState().setTargetMessageId(id)} />
-          <EasterEggMentions conversationId={activeRoom.jid} onReplay={(animation, senderName) => roomStore.getState().triggerAnimation(activeRoom.jid, animation, senderName)} />
+          <ConversationTail>
+            {/* Reaction mention pills — pinned above the composer */}
+            <ReactionMentions conversationId={activeRoom.jid} onSee={(id) => roomStore.getState().setTargetMessageId(id)} />
+            <EasterEggMentions conversationId={activeRoom.jid} onReplay={(animation, senderName) => roomStore.getState().triggerAnimation(activeRoom.jid, animation, senderName)} />
 
-          {/* Input - show composer if joined, join prompt if not */}
-          {activeRoom.joined ? (
-            <RoomVoiceControls room={activeRoom} isConnected={isConnected} allowWhisper={!!whisperTarget}>
-              <RoomMessageInput
-                key={activeRoom.jid}
-                ref={composerHandleRef}
-                roomJid={activeRoom.jid}
-                textareaRef={composerRef as React.RefObject<ComposerInputElement | null>}
-                sendMessage={sendMessage}
-                sendCorrection={sendCorrection}
-                retractMessage={retractMessage}
-                sendChatState={sendChatState}
-                sendWhisperChatState={sendWhisperChatState}
-                sendEasterEgg={sendEasterEgg}
-                sendPoll={sendPoll}
-                replyingTo={replyingTo}
-                onCancelReply={handleCancelReply}
-                editingMessage={editingMessage}
-                onCancelEdit={handleCancelEdit}
-                onEditLastMessage={handleEditLastMessage}
-                onComposingChange={setIsComposing}
-                uploadState={uploadStateObj}
-                isUploadSupported={isSupported}
-                onFileSelect={handleFileDrop}
-                uploadFile={uploadFile}
-                pendingAttachment={pendingAttachment}
-                onRemovePendingAttachment={handleRemovePendingAttachment}
-                onChoosePhoto={choosePhoto}
-                processLinkPreview={processMessageForLinkPreview}
-                isConnected={isConnected}
-                onMessageIdSent={handleMessageIdSent}
-                whisperTarget={whisperTarget}
-                onClearWhisper={handleClearWhisperTarget}
-                sendWhisper={sendWhisper}
-                isDarkMode={resolvedMode === 'dark'}
-              />
-            </RoomVoiceControls>
-          ) : (
-            <RoomJoinPrompt
-              onJoin={async () => {
-                // Issue #37: warn before joining a room that would expose the user's real JID.
-                if (await confirmJoin(activeRoom.jid)) {
-                  try {
-                    // Prompts for the room password when the server asks for one.
-                    await joinRoomWithPassword(activeRoom.jid, activeRoom.nickname)
-                  } catch (err) {
-                    addToast('error', getRoomJoinErrorMessage(t, err))
+            {/* Input - show composer if joined, join prompt if not */}
+            {activeRoom.joined ? (
+              <RoomVoiceControls room={activeRoom} isConnected={isConnected} allowWhisper={!!whisperTarget}>
+                <RoomMessageInput
+                  key={activeRoom.jid}
+                  ref={composerHandleRef}
+                  roomJid={activeRoom.jid}
+                  textareaRef={composerRef as React.RefObject<ComposerInputElement | null>}
+                  sendMessage={sendMessage}
+                  sendCorrection={sendCorrection}
+                  retractMessage={retractMessage}
+                  sendChatState={sendChatState}
+                  sendWhisperChatState={sendWhisperChatState}
+                  sendEasterEgg={sendEasterEgg}
+                  sendPoll={sendPoll}
+                  replyingTo={replyingTo}
+                  onCancelReply={handleCancelReply}
+                  editingMessage={editingMessage}
+                  onCancelEdit={handleCancelEdit}
+                  onEditLastMessage={handleEditLastMessage}
+                  onComposingChange={setIsComposing}
+                  uploadState={uploadStateObj}
+                  isUploadSupported={isSupported}
+                  onFileSelect={handleFileDrop}
+                  uploadFile={uploadFile}
+                  pendingAttachment={pendingAttachment}
+                  onRemovePendingAttachment={handleRemovePendingAttachment}
+                  onChoosePhoto={choosePhoto}
+                  processLinkPreview={processMessageForLinkPreview}
+                  isConnected={isConnected}
+                  onMessageIdSent={handleMessageIdSent}
+                  whisperTarget={whisperTarget}
+                  onClearWhisper={handleClearWhisperTarget}
+                  sendWhisper={sendWhisper}
+                  isDarkMode={resolvedMode === 'dark'}
+                />
+              </RoomVoiceControls>
+            ) : (
+              <RoomJoinPrompt
+                onJoin={async () => {
+                  // Issue #37: warn before joining a room that would expose the user's real JID.
+                  if (await confirmJoin(activeRoom.jid)) {
+                    try {
+                      // Prompts for the room password when the server asks for one.
+                      await joinRoomWithPassword(activeRoom.jid, activeRoom.nickname)
+                    } catch (err) {
+                      addToast('error', getRoomJoinErrorMessage(t, err))
+                    }
                   }
-                }
-              }}
-            />
-          )}
+                }}
+              />
+            )}
+          </ConversationTail>
         </ConversationColumn>
         {warningDialog}
         {passwordDialog}

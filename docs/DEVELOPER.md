@@ -80,6 +80,7 @@ script `scripts/test-affected.sh` uses this same implementation, not another rul
 | Rust plugin | Plugin package through the main locked manifest, plus application consumer and platform tests |
 | `nse-openpgp` | Its own locked manifest, application consumer and notification contracts |
 | `PhotoPreparation.swift`, `ShareInboxPlugin.swift`, photo fixture | `test:ios-photos` and platform contracts |
+| `HingeLayout.swift`, hinge layout fixture | `test:ios-hinge` and platform contracts |
 | `ShareViewController.swift`, share integration fixtures/schemes | `test:ios-extensions`, `test:ios-share`, `macos-share.test.mjs` and platform contracts |
 | Push/NotificationAvatars/NotificationPreviews, notification fixtures | `test:ios-notifications` and platform contracts; diagnostic integration fixtures also run `test:ios-diagnostic` |
 | iOS project/generation/configuration | Project/generated-file/extension contracts and conservative fallback; review additional native steps |

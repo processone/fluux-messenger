@@ -52,6 +52,7 @@ const SUITES = [
   { name: 'history-loading', testMatch: 'history-loading.ts' },
   { name: 'presence-burst', testMatch: 'presence-burst.ts' },
   { name: 'connection-step', testMatch: 'connection-step.ts' },
+  { name: 'hinge-layout', testMatch: 'hinge-layout.ts' },
 ] as const
 
 /**

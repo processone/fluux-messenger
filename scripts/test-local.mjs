@@ -233,6 +233,9 @@ export function createPlan(changes, cwd = root) {
     if (/PhotoPreparation\.swift$|ShareInboxPlugin\.swift$|scripts\/ios-photo-reduction\.test\.mjs$|scripts\/native-tests\/PhotoPreparationTests\.swift$/.test(path)) {
       photos(reason); platform(reason); continue
     }
+    if (/HingeLayout\.swift$|scripts\/ios-hinge-layout\.test\.mjs$|scripts\/native-tests\/HingeLayoutTests\.swift$/.test(path)) {
+      npm('test:ios-hinge', reason, { requires: 'mac' }); platform(reason); continue
+    }
     if (/ShareViewController\.swift$|scripts\/native-tests\/(ios-share\/|SharedURLTests\.swift$)|scripts\/(macos-share|ios-extension-identifiers|ios-share-schemes)\.test\.mjs$/.test(path)) {
       share(reason); platform(reason); continue
     }

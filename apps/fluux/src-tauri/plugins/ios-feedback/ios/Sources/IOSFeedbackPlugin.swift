@@ -6,9 +6,15 @@ private struct Haptic: Decodable { let kind: String }
 private struct Appearance: Decodable { let style: String? }
 class IOSFeedbackPlugin: Plugin {
     private var privacy: PrivacyCover?
+    private var hinge: AnyObject?
     override func load(webview: WKWebView) {
-        if Thread.isMainThread { privacy = PrivacyCover() }
-        else { DispatchQueue.main.sync { self.privacy = PrivacyCover() } }
+        let start = {
+            self.privacy = PrivacyCover()
+            #if canImport(UIKit, _version: 9127.0.85)
+            if #available(iOS 27.1, *) { self.hinge = HingeReporter(webView: webview) }
+            #endif
+        }
+        if Thread.isMainThread { start() } else { DispatchQueue.main.sync(execute: start) }
     }
     @objc public func setAppearance(_ invoke: Invoke) {
         do {

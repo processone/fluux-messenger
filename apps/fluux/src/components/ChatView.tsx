@@ -24,7 +24,7 @@ import { usePendingAttachment } from '@/hooks/usePendingAttachment'
 import { useConversationEncryptionState, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { EasterEggAnimation } from './easter-eggs/EasterEggAnimation'
-import { ConversationColumn } from './conversation/ConversationColumn'
+import { ConversationColumn, ConversationTail } from './conversation/ConversationColumn'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
 import { useSlashCommands } from '@/hooks/useSlashCommands'
@@ -592,54 +592,56 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           </MediaAutoloadProvider>
         </div>
 
-        {/* Reaction mention pills — pinned above the composer */}
-        <ReactionMentions conversationId={activeConversation.id} onSee={(id) => chatStore.getState().setTargetMessageId(id)} />
-        <EasterEggMentions conversationId={activeConversation.id} onReplay={(animation, senderName) => chatStore.getState().triggerAnimation(activeConversation.id, animation, senderName)} />
+        <ConversationTail>
+          {/* Reaction mention pills — pinned above the composer */}
+          <ReactionMentions conversationId={activeConversation.id} onSee={(id) => chatStore.getState().setTargetMessageId(id)} />
+          <EasterEggMentions conversationId={activeConversation.id} onReplay={(animation, senderName) => chatStore.getState().triggerAnimation(activeConversation.id, animation, senderName)} />
 
-        {/* Input */}
-        <MessageInput
-          composerRef={composerHandleRef}
-          textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
-          conversationId={activeConversation.id}
-          conversationName={activeConversation.name}
-          type={activeConversation.type}
-          onMessageIdSent={handleMessageIdSent}
-          replyingTo={replyingTo}
-          onCancelReply={handleCancelReply}
-          editingMessage={editingMessage}
-          onCancelEdit={handleCancelEdit}
-          onEditLastMessage={handleEditLastMessage}
-          sendMessage={sendMessage}
-          sendCorrection={sendCorrection}
-          retractMessage={retractMessage}
-          sendChatState={sendChatState}
-          isArchived={isArchived}
-          unarchiveConversation={unarchiveConversation}
-          setDraft={setDraft}
-          getDraft={getDraft}
-          clearDraft={clearDraft}
-          clearFirstNewMessageId={clearFirstNewMessageId}
-          contactsByJid={contactsByJid}
-          onComposingChange={setIsComposing}
-          sendEasterEgg={sendEasterEgg}
-          uploadState={uploadStateObj}
-          isUploadSupported={isSupported}
-          onFileSelect={handleFileDrop}
-          uploadFile={uploadFile}
-          pendingAttachment={pendingAttachment}
-          onRemovePendingAttachment={handleRemovePendingAttachment}
-          onChoosePhoto={choosePhoto}
-          processLinkPreview={processMessageForLinkPreview}
-          isConnected={isConnected}
-          onSwitchToMessages={onSwitchToMessages}
-          encryptionState={encryptionState}
-          onEncryptionClick={
-            encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked'
-              ? handleOpenVerify
-              : undefined
-          }
-          isDarkMode={resolvedMode === 'dark'}
-        />
+          {/* Input */}
+          <MessageInput
+            composerRef={composerHandleRef}
+            textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
+            conversationId={activeConversation.id}
+            conversationName={activeConversation.name}
+            type={activeConversation.type}
+            onMessageIdSent={handleMessageIdSent}
+            replyingTo={replyingTo}
+            onCancelReply={handleCancelReply}
+            editingMessage={editingMessage}
+            onCancelEdit={handleCancelEdit}
+            onEditLastMessage={handleEditLastMessage}
+            sendMessage={sendMessage}
+            sendCorrection={sendCorrection}
+            retractMessage={retractMessage}
+            sendChatState={sendChatState}
+            isArchived={isArchived}
+            unarchiveConversation={unarchiveConversation}
+            setDraft={setDraft}
+            getDraft={getDraft}
+            clearDraft={clearDraft}
+            clearFirstNewMessageId={clearFirstNewMessageId}
+            contactsByJid={contactsByJid}
+            onComposingChange={setIsComposing}
+            sendEasterEgg={sendEasterEgg}
+            uploadState={uploadStateObj}
+            isUploadSupported={isSupported}
+            onFileSelect={handleFileDrop}
+            uploadFile={uploadFile}
+            pendingAttachment={pendingAttachment}
+            onRemovePendingAttachment={handleRemovePendingAttachment}
+            onChoosePhoto={choosePhoto}
+            processLinkPreview={processMessageForLinkPreview}
+            isConnected={isConnected}
+            onSwitchToMessages={onSwitchToMessages}
+            encryptionState={encryptionState}
+            onEncryptionClick={
+              encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked'
+                ? handleOpenVerify
+                : undefined
+            }
+            isDarkMode={resolvedMode === 'dark'}
+          />
+        </ConversationTail>
 
       </ConversationColumn>
 

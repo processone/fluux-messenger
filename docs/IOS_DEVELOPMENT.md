@@ -294,6 +294,8 @@ What runs natively:
   [Receive a shared link, document, or image](#receive-a-shared-link-document-or-image)).
 - **`xmpp:` links.** The app registers the `xmpp` URL scheme. A link opens the
   conversation, or prefills the login screen when no account is connected.
+- **Foldable iPhone hinge.** Half open, the layout splits at the hinge (see
+  [Foldable iPhone hinge](#foldable-iphone-hinge)).
 
 Not available yet:
 
@@ -313,6 +315,48 @@ Not available yet:
 - **Distribution.** TestFlight only; there is no App Store release yet.
 
 Validate on a device before trusting a build with existing accounts or keys.
+
+## Foldable iPhone hinge
+
+On a foldable iPhone, such as the iPhone Duo, the native host reports the hinge
+to the page as CSS variables on `<html>` (`HingeReporter.swift`,
+`HingeLayout.swift` in the `ios-feedback` plugin). It uses only public UIKit
+APIs from iOS 27.1:
+
+- `--fluux-device-posture`: `folded` while `UIHingeInteraction` reports the
+  hinge partially open, `flat` when it is fully open or closed.
+- `--fluux-hinge-x` or `--fluux-hinge-y`: the fold, in CSS pixels from the web
+  view's left or top edge. It is the middle of the web view's division region,
+  `UIView.reservedRegions(kind: .division)`. The Duo's inner screen reports a
+  40-point band around 475.5 points; the cover screen reports none.
+- `--fluux-hinge-margin`: how far buttons keep from the fold on each side, from
+  the region's margins: 20 points on the Duo.
+
+UIKit sends no update when the division region appears. Unfolding from the
+cover screen, the hinge reports half open before the inner screen has its band,
+so while half open without a line the host looks again every quarter second,
+for up to ten seconds after the last change.
+
+Half open in landscape, the rail and the conversation list end at the fold and
+the chat starts there. The list's resize handle is hidden, and the saved width
+returns when the device opens flat. Half open in portrait, the messages end
+above the fold and the composer starts below it. Both sides keep their content
+the margin away from the fold. Fully open, closed, and every other device keep
+the usual layout.
+
+Known limit, accepted: half open in portrait with the keyboard open, the
+composer stays just above the fold. iOS docks the keyboard below the fold and
+ends the page above it, so the page has no room below the fold for the
+composer. The `hinge-layout` suite keeps this case: with the page ending above
+the fold, the composer sits at the bottom of the page.
+
+Building the reporter needs the iOS 27.1 SDK. Older SDKs, such as the one CI
+uses, leave it out, and the page then lays out flat.
+`npm run test:ios-hinge` checks the line and margin against the regions the
+Duo simulator reported. The `hinge-layout` Playwright suite
+(`e2e/hinge-layout.ts`) checks the layouts with the same variables. To drive
+the Duo's hinge in Simulator, see
+[iPad and iPhone Duo simulators](qa/ipad-iphone-duo-simulators.md#flm-177-environment-and-method).
 
 ## Native localStorage
 
