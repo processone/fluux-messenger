@@ -1,0 +1,10 @@
+{
+  "productName": "Fluux Repro FLM258",
+  "identifier": "org.fluuxrepro.flm258",
+  "build": { "beforeBuildCommand": "", "beforeBundleCommand": "", "features": [] },
+  "bundle": {
+    "targets": ["app"],
+    "createUpdaterArtifacts": false,
+    "macOS": { "files": { "PlugIns/FluuxShare.appex": null }, "entitlements": "Entitlements.plist", "infoPlist": "Info.plist" }
+  }
+}

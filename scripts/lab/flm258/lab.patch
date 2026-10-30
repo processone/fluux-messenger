@@ -1,0 +1,312 @@
+diff --git a/apps/fluux/src-tauri/capabilities/default.json b/apps/fluux/src-tauri/capabilities/default.json
+index 3206d55f..b5d614a8 100644
+--- a/apps/fluux/src-tauri/capabilities/default.json
++++ b/apps/fluux/src-tauri/capabilities/default.json
+@@ -18,6 +18,7 @@
+     "core:window:allow-unmaximize",
+     "core:window:allow-show",
+     "core:window:allow-hide",
++    "core:app:allow-app-hide",
+     "core:window:allow-set-focus",
+     "core:window:allow-set-theme",
+     "core:window:allow-set-title",
+diff --git a/apps/fluux/src-tauri/gen/schemas/capabilities.json b/apps/fluux/src-tauri/gen/schemas/capabilities.json
+index 4cb2100d..88e4cf74 100644
+--- a/apps/fluux/src-tauri/gen/schemas/capabilities.json
++++ b/apps/fluux/src-tauri/gen/schemas/capabilities.json
+@@ -1 +1 @@
+-{"android":{"identifier":"android","description":"Android shell with native XMPP TCP/TLS proxy","local":true,"windows":["main"],"permissions":["core:default","os:default","opener:default","share-inbox:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-register-listener","notification:allow-remove-listener","notification:allow-create-channel"],"platforms":["android"]},"default":{"identifier":"default","description":"Default capabilities for the XMPP client","local":true,"windows":["main"],"permissions":["core:default","core:path:default","core:window:allow-start-dragging","core:window:allow-close","core:window:allow-destroy","core:window:allow-is-fullscreen","core:window:allow-is-maximized","core:window:allow-is-minimized","core:window:allow-minimize","core:window:allow-maximize","core:window:allow-unmaximize","core:window:allow-show","core:window:allow-hide","core:window:allow-set-focus","core:window:allow-set-theme","core:window:allow-set-title","core:window:allow-request-user-attention","core:webview:allow-webview-position","core:webview:allow-set-webview-focus","core:webview:allow-create-webview-window","core:window:allow-create","shell:allow-open","opener:default","os:default","core:window:allow-set-badge-count","notification:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-show","notification:allow-register-listener","notification:allow-register-action-types","notification:allow-remove-active","window-state:default","fs:allow-temp-write-recursive","fs:allow-appcache-write-recursive","fs:allow-appcache-read-recursive","fs:allow-appcache-meta-recursive","fs:allow-appconfig-write-recursive","fs:allow-appconfig-read-recursive",{"identifier":"fs:allow-read-file","allow":[{"path":"**/*"}]},{"identifier":"fs:allow-write-file","allow":[{"path":"$HOME/**"}]},"clipboard-manager:allow-read-image","deep-link:default","dialog:allow-open","dialog:allow-save","updater:default","process:allow-restart",{"identifier":"http:default","allow":[{"url":"https://*"},{"url":"https://*:*/**"},{"url":"http://*"},{"url":"http://*:*/**"}]},"http:allow-fetch-read-body","http:allow-fetch-cancel"],"platforms":["macOS","windows","linux"]},"ios":{"identifier":"ios","description":"iOS shell with native XMPP TCP/TLS proxy, uploads, media cache and link previews","local":true,"windows":["main"],"permissions":["core:default","core:path:default","fs:allow-appcache-write-recursive","fs:allow-appcache-read-recursive","fs:allow-appcache-meta-recursive",{"identifier":"http:default","allow":[{"url":"https://*"},{"url":"https://*:*/**"},{"url":"http://*"},{"url":"http://*:*/**"}]},"http:allow-fetch-read-body","http:allow-fetch-cancel","os:default","opener:default",{"identifier":"opener:allow-open-url","allow":[{"url":"app-settings:*"}]},"share-inbox:default","share-inbox:photos","push:default","share-sheet:default","background-task:default","ios-feedback:default","deep-link:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-register-listener","notification:allow-remove-listener"],"platforms":["iOS"]},"macos-share":{"identifier":"macos-share","description":"Receive imported content from the macOS Share Extension","local":true,"windows":["main"],"permissions":["share-inbox:default"],"platforms":["macOS"]}}
+\ No newline at end of file
++{"android":{"identifier":"android","description":"Android shell with native XMPP TCP/TLS proxy","local":true,"windows":["main"],"permissions":["core:default","os:default","opener:default","share-inbox:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-register-listener","notification:allow-remove-listener","notification:allow-create-channel"],"platforms":["android"]},"default":{"identifier":"default","description":"Default capabilities for the XMPP client","local":true,"windows":["main"],"permissions":["core:default","core:path:default","core:window:allow-start-dragging","core:window:allow-close","core:window:allow-destroy","core:window:allow-is-fullscreen","core:window:allow-is-maximized","core:window:allow-is-minimized","core:window:allow-minimize","core:window:allow-maximize","core:window:allow-unmaximize","core:window:allow-show","core:window:allow-hide","core:app:allow-app-hide","core:window:allow-set-focus","core:window:allow-set-theme","core:window:allow-set-title","core:window:allow-request-user-attention","core:webview:allow-webview-position","core:webview:allow-set-webview-focus","core:webview:allow-create-webview-window","core:window:allow-create","shell:allow-open","opener:default","os:default","core:window:allow-set-badge-count","notification:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-show","notification:allow-register-listener","notification:allow-register-action-types","notification:allow-remove-active","window-state:default","fs:allow-temp-write-recursive","fs:allow-appcache-write-recursive","fs:allow-appcache-read-recursive","fs:allow-appcache-meta-recursive","fs:allow-appconfig-write-recursive","fs:allow-appconfig-read-recursive",{"identifier":"fs:allow-read-file","allow":[{"path":"**/*"}]},{"identifier":"fs:allow-write-file","allow":[{"path":"$HOME/**"}]},"clipboard-manager:allow-read-image","deep-link:default","dialog:allow-open","dialog:allow-save","updater:default","process:allow-restart",{"identifier":"http:default","allow":[{"url":"https://*"},{"url":"https://*:*/**"},{"url":"http://*"},{"url":"http://*:*/**"}]},"http:allow-fetch-read-body","http:allow-fetch-cancel"],"platforms":["macOS","windows","linux"]},"ios":{"identifier":"ios","description":"iOS shell with native XMPP TCP/TLS proxy, uploads, media cache and link previews","local":true,"windows":["main"],"permissions":["core:default","core:path:default","fs:allow-appcache-write-recursive","fs:allow-appcache-read-recursive","fs:allow-appcache-meta-recursive",{"identifier":"http:default","allow":[{"url":"https://*"},{"url":"https://*:*/**"},{"url":"http://*"},{"url":"http://*:*/**"}]},"http:allow-fetch-read-body","http:allow-fetch-cancel","os:default","opener:default",{"identifier":"opener:allow-open-url","allow":[{"url":"app-settings:*"}]},"share-inbox:default","share-inbox:photos","push:default","share-sheet:default","background-task:default","ios-feedback:default","deep-link:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-register-listener","notification:allow-remove-listener"],"platforms":["iOS"]},"macos-share":{"identifier":"macos-share","description":"Receive imported content from the macOS Share Extension","local":true,"windows":["main"],"permissions":["share-inbox:default"],"platforms":["macOS"]}}
+\ No newline at end of file
+diff --git a/apps/fluux/src-tauri/src/macos_secrets.rs b/apps/fluux/src-tauri/src/macos_secrets.rs
+index 9e769e41..5ae83846 100644
+--- a/apps/fluux/src-tauri/src/macos_secrets.rs
++++ b/apps/fluux/src-tauri/src/macos_secrets.rs
+@@ -496,9 +496,12 @@ mod native {
+     }
+     impl SecretStore for Keychain {
+         fn get(&self, account: &str) -> Result<Option<String>, String> {
++            // LAB ONLY (FLM-258): the scratch build never touches the real keychain.
++            if self.keychain.is_none() { let _ = account; return Ok(None); }
+             self.read(account).map_err(|error| error.to_string())
+         }
+         fn set(&self, account: &str, secret: &str) -> Result<(), String> {
++            if self.keychain.is_none() { let _ = (account, secret); return Ok(()); }
+             let _revision = if account == ACCOUNT {
+                 Some(self.begin_write()?)
+             } else {
+@@ -528,6 +531,7 @@ mod native {
+         }
+ 
+         fn delete(&self, account: &str) -> Result<(), String> {
++            if self.keychain.is_none() { let _ = account; return Ok(()); }
+             let _revision = if account == ACCOUNT {
+                 Some(self.begin_write()?)
+             } else {
+@@ -542,6 +546,7 @@ mod native {
+     }
+     impl Backend for Keychain {
+         fn read(&self, account: &str) -> StoreResult<Option<String>> {
++            if self.keychain.is_none() { let _ = account; return Ok(None); }
+             let revision = if account == ACCOUNT {
+                 self.revision(false).ok()
+             } else {
+@@ -575,6 +580,7 @@ mod native {
+         }
+ 
+         fn accounts(&self) -> StoreResult<Vec<String>> {
++            if self.keychain.is_none() { return Ok(Vec::new()); }
+             match self
+                 .query(None)
+                 .load_attributes(true)
+diff --git a/apps/fluux/src-tauri/src/notifications/macos.rs b/apps/fluux/src-tauri/src/notifications/macos.rs
+index 8ea7a000..8a472218 100644
+--- a/apps/fluux/src-tauri/src/notifications/macos.rs
++++ b/apps/fluux/src-tauri/src/notifications/macos.rs
+@@ -149,6 +149,7 @@ pub fn setup(_app: &AppHandle) {
+     // status is read later via `authorization_state()`, so the async result of
+     // this request is intentionally ignored.
+     prime_authorization();
++    std::thread::spawn(|| tracing::info!("[REPRO] os-authorization at startup: {:?}", authorization_state()));
+ }
+ 
+ /// Owns only the disposable copy handed to UserNotifications, never the avatar cache.
+@@ -265,6 +266,21 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
+         }
+         if let Some(err) = unsafe { err.as_ref() } {
+             tracing::warn!(error = ?err, "native notification scheduling reported an error");
++        } else {
++            tracing::info!("[REPRO] os-accepted notification request (no error from UNUserNotificationCenter)");
++        }
++        // LAB ONLY: ask the OS what it actually has delivered for this app.
++        if let Some(center) = current_center() {
++            let list = RcBlock::new(|notes: NonNull<objc2_foundation::NSArray<objc2_user_notifications::UNNotification>>| {
++                let notes = unsafe { notes.as_ref() };
++                let mut lines = Vec::new();
++                for n in notes.iter() {
++                    let c = n.request().content();
++                    lines.push(format!("{} | {}", c.title(), c.body()));
++                }
++                tracing::info!("[REPRO] os-delivered count={} [{}]", lines.len(), lines.join(" ;; "));
++            });
++            center.getDeliveredNotificationsWithCompletionHandler(&list);
+         }
+     });
+     center.addNotificationRequest_withCompletionHandler(&request, Some(&handler));
+diff --git a/apps/fluux/src/components/LoginScreen.tsx b/apps/fluux/src/components/LoginScreen.tsx
+index 12277b04..92b0975c 100644
+--- a/apps/fluux/src/components/LoginScreen.tsx
++++ b/apps/fluux/src/components/LoginScreen.tsx
+@@ -259,6 +259,22 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
+   }, [])
+ 
+ 
++  // LAB ONLY (FLM-258 reproduction, never committed): log in with build-time
++  // scratch credentials so the repro build needs no typing.
++  const reproLoginDone = useRef(false)
++  useEffect(() => {
++    const reproJid = import.meta.env.VITE_REPRO_JID as string | undefined
++    const reproPassword = import.meta.env.VITE_REPRO_PASSWORD as string | undefined
++    const reproServer = (import.meta.env.VITE_REPRO_SERVER as string | undefined) ?? ''
++    if (!reproJid || !reproPassword || reproLoginDone.current) return
++    if (status === 'connecting' || status === 'online') return
++    reproLoginDone.current = true
++    const serverOptions = getConnectionServerOptions(reproJid, reproServer)
++    console.log('[REPRO] auto-login', reproJid, JSON.stringify(serverOptions))
++    void connect({ jid: reproJid, password: reproPassword, ...serverOptions, resource: getResource(), lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: false })
++      .catch((err: unknown) => console.error('[REPRO] auto-login failed', err))
++  }, [status, connect, i18n.language])
++
+   // Auto-connect when credentials are loaded from keychain
+   useEffect(() => {
+     // Only auto-connect once, when credentials are loaded from keychain
+diff --git a/apps/fluux/src/hooks/useDesktopNotifications.ts b/apps/fluux/src/hooks/useDesktopNotifications.ts
+index b836e650..1d78b431 100644
+--- a/apps/fluux/src/hooks/useDesktopNotifications.ts
++++ b/apps/fluux/src/hooks/useDesktopNotifications.ts
+@@ -31,6 +31,7 @@ import { useToastStore } from '@/stores/toastStore'
+ import { useSettingsStore } from '@/stores/settingsStore'
+ import { iosHaptic } from '@/platform/ios/haptics'
+ import { platform } from '@/platform'
++import { repro, setReproOpen, setReproOpenRoom, startReproProbe } from '@/utils/reproProbe'
+ 
+ /** Duration of the post-reconnect window during which offline-delivery
+  *  notifications are coalesced to one per conversation. */
+@@ -58,6 +59,9 @@ export function useDesktopNotifications(): void {
+     navigateToRoomInvitations,
+   } = useNavigateToTarget()
+   useNotificationPermission()
++  startReproProbe()
++  setReproOpen((jid) => navigateToConversationRef.current(jid))
++  setReproOpenRoom((jid) => navigateToRoomRef.current(jid))
+   const { presenceStatus } = usePresence()
+   const { t, i18n } = useTranslation()
+ 
+@@ -300,10 +304,12 @@ export function useDesktopNotifications(): void {
+     if (!notification) return false
+     requestAttention()
+     if (connectionStore.getState().windowVisible) {
++      repro('decision-inapp-banner', `body=${JSON.stringify(notification.body.slice(0, 60))}`)
+       showInAppBanner(notification, arrival, accountId)
+       return true
+     }
+     if (!getNotificationPermissionGranted()) {
++      repro('decision-no-permission', `body=${JSON.stringify(notification.body.slice(0, 60))}`)
+       notificationDebug.desktopNotification({ title: notification.title, body: '(permission not granted)',
+         ...(target.kind === 'chat' ? { conversationId: target.entity.id } : { roomJid: target.entity.jid }) })
+       return true
+@@ -339,6 +345,7 @@ export function useDesktopNotifications(): void {
+     const { title, body, navType, navTarget, messageId, count } = notification
+     notificationDebug.desktopNotification({ title, body: '(message preview)',
+       ...(target.kind === 'chat' ? { conversationId: navTarget } : { roomJid: navTarget }) })
++    repro('decision-os-notification', `body=${JSON.stringify(notification.body.slice(0, 60))}`)
+     if (desktop) {
+       if (!mobile) {
+         const communication = communicationMetadata(target)
+@@ -456,6 +463,8 @@ export function useDesktopNotifications(): void {
+ 
+   // Route conversation notifications through the coalescer while the window is open.
+   const handleConversationMessage = async (conv: Conversation, message: Message) => {
++    repro('arrival', `id=${message.id} body=${JSON.stringify(message.body?.slice(0, 60))}`)
++    if (/^CTRL /.test(message.body ?? '')) return
+     if (announcedByPush(message)) return
+     const coalescer = coalescerRef.current
+     if (coalescer.isOpen()) {
+diff --git a/apps/fluux/src/hooks/useNotificationPermission.ts b/apps/fluux/src/hooks/useNotificationPermission.ts
+index 6af0b3c0..47356c1e 100644
+--- a/apps/fluux/src/hooks/useNotificationPermission.ts
++++ b/apps/fluux/src/hooks/useNotificationPermission.ts
+@@ -22,7 +22,8 @@ let granted = false
+ 
+ /** Current notification permission, as last read. Read by the notification hooks. */
+ export function getNotificationPermissionGranted(): boolean {
+-  return granted
++  // LAB ONLY (FLM-258): stand-in grant so the scratch build runs the full native post path.
++  return granted || Boolean(import.meta.env.VITE_REPRO_JID)
+ }
+ 
+ /**
+diff --git a/apps/fluux/src/utils/nativeNotification.ts b/apps/fluux/src/utils/nativeNotification.ts
+index 13192db3..6fcc1d2e 100644
+--- a/apps/fluux/src/utils/nativeNotification.ts
++++ b/apps/fluux/src/utils/nativeNotification.ts
+@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
+ import { connectionStore, getBareJid } from '@fluux/sdk'
+ import { osNotificationSilent } from './notificationSound'
+ import { communicationTestAvailable } from '@/platform'
++import { repro } from '@/utils/reproProbe'
+ 
+ export interface NotificationNames {
+   title: string
+@@ -69,8 +70,9 @@ export async function postNativeDesktopNotification(
+       }
+       // The captain chose prototype-only revalidation: null retains legacy desktop eligibility.
+     }
+-    if (await superseded()) return
++    if (await superseded()) { repro('post-superseded'); return }
+     await invoke('post_notification', { ...legacyPayload, silent: osNotificationSilent() })
++    repro('post-notification-done', `body=${JSON.stringify(payload.body.slice(0, 60))}`)
+   } catch (error) {
+     console.error('[Notifications] Native notification failed:', error)
+   }
+diff --git a/apps/fluux/src/utils/reproProbe.ts b/apps/fluux/src/utils/reproProbe.ts
+new file mode 100644
+index 00000000..b8befb50
+--- /dev/null
++++ b/apps/fluux/src/utils/reproProbe.ts
+@@ -0,0 +1,94 @@
++// LAB ONLY (FLM-258 reproduction, never committed): timestamped probe lines
++// forwarded to the native log through console.log.
++import { connectionStore, chatStore, roomStore } from '@fluux/sdk'
++
++function state(): string {
++  let focus = 'n/a'
++  try { focus = String(document.hasFocus()) } catch { /* ignore */ }
++  return `vis=${document.visibilityState} hasFocus=${focus} windowVisible=${connectionStore.getState().windowVisible} status=${connectionStore.getState().status}`
++}
++
++export function repro(event: string, detail = ''): void {
++  const now = Date.now()
++  console.log(`[REPRO] t=${now} ${event} ${detail} | ${state()}`)
++}
++
++let started = false
++let openRoom: ((jid: string) => unknown) | undefined
++export function setReproOpenRoom(fn: (jid: string) => unknown): void { openRoom = fn }
++let openConv: ((jid: string) => unknown) | undefined
++export function setReproOpen(fn: (jid: string) => unknown): void { openConv = fn }
++export function startReproProbe(): void {
++  if (started) return
++  started = true
++  repro('probe-start')
++  // 1 s timer: a late tick means JS timers were throttled or the process was suspended.
++  let last = Date.now()
++  let ticks = 0
++  setInterval(() => {
++    const now = Date.now()
++    const gap = now - last
++    last = now
++    ticks++
++    if (gap > 1500) repro('timer-late', `gapMs=${gap}`)
++    if (ticks % 15 === 0) repro('heartbeat', `gapMs=${gap}`)
++  }, 1000)
++  // Store-level arrival, before any notification filter.
++  const seen = new Map<string, string>()
++  for (const [id, m] of chatStore.getState().lastArrivedMessage ?? new Map()) seen.set(id, m.id)
++  chatStore.subscribe((st) => {
++    for (const [id, m] of st.lastArrivedMessage ?? new Map()) {
++      if (seen.get(id) === m.id) continue
++      seen.set(id, m.id)
++      const conv = st.conversations.get(id)
++      repro('store-arrival', `conv=${id} active=${st.activeConversationId === id} unread=${conv?.unreadCount} body=${JSON.stringify(m.body?.slice(0, 60))}`)
++      reproControl(m.body, openConv)
++    }
++  })
++  const seenRoom = new Map<string, string>()
++  for (const [id, m] of roomStore.getState().lastArrivedMessage ?? new Map()) seenRoom.set(id, m.id)
++  roomStore.subscribe((st) => {
++    for (const [id, m] of st.lastArrivedMessage ?? new Map()) {
++      if (seenRoom.get(id) === m.id) continue
++      seenRoom.set(id, m.id)
++      const meta = st.roomMeta.get(id)
++      repro('store-arrival-room', `room=${id} active=${st.activeRoomJid === id} unread=${meta?.unreadCount} body=${JSON.stringify(m.body?.slice(0, 60))}`)
++      reproControl(m.body, openConv)
++    }
++  })
++  document.addEventListener('visibilitychange', () => repro('visibilitychange'))
++  window.addEventListener('focus', () => repro('focus'))
++  window.addEventListener('blur', () => repro('blur'))
++}
++
++/** LAB ONLY: a chat body "CTRL close|hide|minimize" drives the window like the user would. */
++export function reproControl(body: string | undefined, openConversation?: (jid: string) => unknown): boolean {
++  const m = /^CTRL (\w+)/.exec(body ?? '')
++  if (!m) return false
++  const action = m[1]
++  repro('control', action)
++  void (async () => {
++    try {
++      if (action === 'close') {
++        const { getCurrentWindow } = await import('@tauri-apps/api/window')
++        await getCurrentWindow().close()
++      } else if (action === 'hide') {
++        const { hide } = await import('@tauri-apps/api/app')
++        await hide()
++      } else if (action === 'open') {
++        await openConversation?.('bob@localhost')
++      } else if (action === 'openroom') {
++        await openRoom?.('lab@conference.localhost')
++      } else if (action === 'unselect') {
++        chatStore.getState().setActiveConversation(null)
++      } else if (action === 'minimize') {
++        const { getCurrentWindow } = await import('@tauri-apps/api/window')
++        await getCurrentWindow().minimize()
++      }
++      repro('control-done', action)
++    } catch (err) {
++      repro('control-failed', `${action} ${String(err)}`)
++    }
++  })()
++  return true
++}

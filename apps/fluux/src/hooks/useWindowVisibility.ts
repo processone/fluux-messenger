@@ -26,7 +26,10 @@ export function useWindowVisibility(): void {
       refreshCurrentDay()
 
       const wasFocused = connectionStore.getState().windowVisible
-      const isFocused = document.hasFocus()
+      // ⌘H hides the page without a blur: hasFocus() stays true, so a hidden
+      // page must also count as not-in-front or its messages are marked read
+      // and its notifications suppressed.
+      const isFocused = document.hasFocus() && document.visibilityState === 'visible'
 
       // Update store directly without going through React state
       connectionStore.getState().setWindowVisible(isFocused)
