@@ -440,16 +440,15 @@ impl OpenpgpState {
             let tsk_armored =
                 crate::openpgp_backup::decrypt_tsk_with_passphrase(&backup_message, &passphrase)
                     .map_err(anyhow_to_string)?;
-            if without_migration {
-                this.storage.start_fresh_secrets().map_err(anyhow_to_string)?;
-            }
             let cert = Cert::from_bytes(tsk_armored.as_bytes())
                 .map_err(|e| format!("parse imported TSK: {e}"))?;
             let cert = ensure_account_user_id(cert, &account_jid).map_err(anyhow_to_string)?;
-            let backing = this
-                .storage
-                .save(&account_jid, &cert)
-                .map_err(anyhow_to_string)?;
+            let backing = if without_migration {
+                this.storage.save_fresh(&account_jid, &cert)
+            } else {
+                this.storage.save(&account_jid, &cert)
+            }
+            .map_err(anyhow_to_string)?;
             let bundle = bundle_from_cert(&cert, backing).map_err(anyhow_to_string)?;
 
             // Replace any existing cell so the next ensure_key observes
@@ -538,14 +537,13 @@ impl OpenpgpState {
 
             let cert = Cert::from_bytes(tsk_armored.as_bytes())
                 .map_err(|e| format!("parse selected TSK: {e}"))?;
-            if without_migration {
-                this.storage.start_fresh_secrets().map_err(anyhow_to_string)?;
-            }
             let cert = ensure_account_user_id(cert, &account_jid).map_err(anyhow_to_string)?;
-            let backing = this
-                .storage
-                .save(&account_jid, &cert)
-                .map_err(anyhow_to_string)?;
+            let backing = if without_migration {
+                this.storage.save_fresh(&account_jid, &cert)
+            } else {
+                this.storage.save(&account_jid, &cert)
+            }
+            .map_err(anyhow_to_string)?;
             let bundle = bundle_from_cert(&cert, backing).map_err(anyhow_to_string)?;
 
             let mut entries = this.entries.lock().unwrap();
@@ -2439,23 +2437,24 @@ mod tests {
         );
     }
 
-    /// FLM-299 / FLM-298: the user refused the old keychain items (or the old
-    /// combined item), so migration can never finish. Both production imports,
-    /// told to skip migration, must restore the same identity into fresh
-    /// storage, decrypt the original ciphertext, and keep doing so after a
-    /// restart without touching the refused items again.
+    /// FLM-299 / FLM-298: the user refused the old keychain items (legacy
+    /// items only, or the old combined item too), so migration can never
+    /// finish. Both production imports, told to skip migration, must restore
+    /// the same identity through the very store that cached the refusal,
+    /// decrypt the original ciphertext, and keep doing so after a restart
+    /// without reading the refused items again. Other accounts are untouched.
     #[test]
     fn flm299_backup_import_without_migration_recovers_after_refused_keychain() {
         use crate::{
             credentials::SecretStore,
             macos_secrets::{Backend, Secrets, StoreError},
         };
-        use std::sync::atomic::{AtomicBool, Ordering as O};
+        use std::sync::atomic::{AtomicUsize, Ordering as O};
         #[derive(Clone, Default)]
         struct Memory {
             items: Arc<Mutex<std::collections::BTreeMap<String, String>>>,
-            refused_reads: Arc<std::sync::atomic::AtomicUsize>,
-            fresh: Arc<AtomicBool>,
+            refused_reads: Arc<AtomicUsize>,
+            fresh: Arc<Mutex<Vec<String>>>,
         }
         impl SecretStore for Memory {
             fn get(&self, a: &str) -> Result<Option<String>, String> {
@@ -2472,26 +2471,27 @@ mod tests {
         }
         impl Backend for Memory {
             fn read(&self, a: &str) -> Result<Option<String>, StoreError> {
-                // Everything the user was asked about is refused, including the
-                // old combined item; only the fresh item is readable.
-                if a != "secrets-fresh-v1" {
-                    self.refused_reads.fetch_add(1, O::SeqCst);
-                    return Err(StoreError::denied());
+                // The fresh item reads normally, and so does an absent old
+                // combined item; every old item that exists is refused.
+                if a == "secrets-fresh-v1" || !self.items.lock().unwrap().contains_key(a) {
+                    return self.get(a).map_err(Into::into);
                 }
-                self.get(a).map_err(Into::into)
+                self.refused_reads.fetch_add(1, O::SeqCst);
+                Err(StoreError::denied())
             }
             fn accounts(&self) -> Result<Vec<String>, StoreError> {
                 Ok(self.items.lock().unwrap().keys().cloned().collect())
             }
-            fn fresh_start(&self) -> bool {
-                self.fresh.load(O::SeqCst)
+            fn fresh_accounts(&self) -> Vec<String> {
+                self.fresh.lock().unwrap().clone()
             }
-            fn mark_fresh_start(&self) -> Result<(), StoreError> {
-                self.fresh.store(true, O::SeqCst);
+            fn mark_fresh_account(&self, account: &str) -> Result<(), StoreError> {
+                self.fresh.lock().unwrap().push(account.into());
                 Ok(())
             }
         }
         let jid = "alice@example.com";
+        let bob_account = "openpgp_passphrase:bob@example.com";
         let device_a = new_state();
         let original = device_a.ensure_key_sync(jid, "Alice").unwrap();
         device_a.ensure_key_sync("bob@example.com", "Bob").unwrap();
@@ -2513,18 +2513,18 @@ mod tests {
                 let raw = Memory::default();
                 raw.set("mcp-token", "old-mcp-token").unwrap();
                 raw.set("openpgp_passphrase:alice@example.com", "b2xk").unwrap();
+                raw.set(bob_account, "b3RoZXI=").unwrap();
                 if old_combined {
                     raw.set("secrets-v1", "{\"version\":1,\"items\":{}}").unwrap();
                 }
                 let old_items = raw.items.lock().unwrap().clone();
                 let dir = fresh_tmp_dir();
-                let open = || {
-                    OpenpgpState::for_testing_with_storage(KeyStorage::for_testing_with_store(
-                        dir.clone(),
-                        Arc::new(Secrets::new(raw.clone())),
+                let open = |secrets: Arc<Secrets<Memory>>| {
+                    Arc::new(OpenpgpState::for_testing_with_storage(
+                        KeyStorage::for_testing_with_store(dir.clone(), secrets),
                     ))
                 };
-                let import = |state: Arc<OpenpgpState>, without_migration: bool| {
+                let import = |state: &Arc<OpenpgpState>, without_migration: bool| {
                     if selected {
                         rt.block_on(state.import_backup_selected(
                             jid.into(),
@@ -2542,19 +2542,25 @@ mod tests {
                         ))
                     }
                 };
-                // Before: without the opt-out the refused items block the restore.
-                assert!(import(Arc::new(open()), false).is_err());
-                let state = Arc::new(open());
-                let restored = import(state.clone(), true).unwrap();
+                // One store, whose cache remembers the refusal, for the whole
+                // session: the restore must work through it.
+                let secrets = Arc::new(Secrets::new(raw.clone()));
+                let state = open(secrets.clone());
+                assert!(import(&state, false).is_err());
+                assert!(raw.refused_reads.load(O::SeqCst) > 0, "the refusal happened");
+                let restored = import(&state, true).unwrap();
                 assert_eq!(restored.fingerprint, original.fingerprint);
                 assert_eq!(
                     state.decrypt(jid, &ciphertext, &[]).unwrap().plaintext,
                     "old message"
                 );
+                // Other accounts keep their old route, and its refusal.
+                assert_eq!(*raw.fresh.lock().unwrap(), ["openpgp_passphrase:alice@example.com"]);
+                assert!(secrets.get(bob_account).is_err());
 
-                // Restart: a new process cache; the choice persists in the store.
+                // Restart: a new cache over the same storage.
                 let refused_before = raw.refused_reads.load(O::SeqCst);
-                let restarted = Arc::new(open());
+                let restarted = open(Arc::new(Secrets::new(raw.clone())));
                 let bundle = rt
                     .block_on(restarted.ensure_key(jid.into(), "Alice".into()))
                     .unwrap();

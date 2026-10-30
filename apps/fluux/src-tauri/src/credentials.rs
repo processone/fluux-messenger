@@ -22,9 +22,15 @@ pub trait SecretStore {
     fn set(&self, account: &str, secret: &str) -> Result<(), String>;
     /// Succeeds when the item does not exist.
     fn delete(&self, account: &str) -> Result<(), String>;
-    /// Leave the old layout behind for good and use a fresh item from now on.
+    /// Restore: write an account's secret to the fresh item only. Nothing
+    /// routes to it until `commit_fresh`, so a failed restore changes no read.
     #[cfg(any(target_os = "macos", test))]
-    fn start_fresh(&self) -> Result<(), String> {
+    fn fresh_write(&self, _account: &str, _secret: &str) -> Result<(), String> {
+        Err("Fresh start is unavailable for this store".into())
+    }
+    /// Route the account to the fresh item from now on, in every launch.
+    #[cfg(any(target_os = "macos", test))]
+    fn commit_fresh(&self, _account: &str) -> Result<(), String> {
         Err("Fresh start is unavailable for this store".into())
     }
     /// Explicit erase may retry a startup denial once; ordinary logout must not.

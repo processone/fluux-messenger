@@ -324,17 +324,47 @@ impl KeyStorage {
         Err(anyhow!("Legacy adoption is unavailable for this store"))
     }
 
-    /// Stop reading the old keychain items, now and on every later launch, and
-    /// protect keys with a fresh item the user's refusal cannot have blocked.
-    /// For a restore from backup; the old items and keys are left untouched.
-    pub fn start_fresh_secrets(&self) -> Result<()> {
+    /// Restore `cert` for `jid` from a backup without migrating: its protecting
+    /// passphrase goes to the fresh item, never read from or written to the old
+    /// items. Only after the key file is saved is the account routed to the
+    /// fresh item for good; a failure before that leaves every read, and the
+    /// previous key file, as they were. Other accounts keep their old access.
+    pub fn save_fresh(&self, jid: &str, cert: &Cert) -> Result<PassphraseBacking> {
         #[cfg(any(target_os = "macos", test))]
         if self.use_keychain {
             if let Some(store) = self.secret_store() {
-                return store.start_fresh().map_err(|error| anyhow!(error));
+                let account = keyring_account(jid);
+                let key_path = self.key_file_path(jid)?;
+                let previous = fs::read(&key_path).ok();
+                let passphrase = random_passphrase()?;
+                store
+                    .fresh_write(&account, &B64.encode(&passphrase))
+                    .map_err(|error| anyhow!(error))?;
+                let encrypted = encrypt_cert_secrets(
+                    cert.clone(),
+                    &Password::from(passphrase),
+                    self.argon2_override,
+                )?;
+                let armored = encrypted
+                    .as_tsk()
+                    .armored()
+                    .to_vec()
+                    .context("serialize encrypted TSK")?;
+                atomic_write(&key_path, &armored)?;
+                #[cfg(unix)]
+                restrict_permissions(&key_path);
+                if let Err(error) = store.commit_fresh(&account) {
+                    // The old protection still applies: put the old key back.
+                    let _ = match previous {
+                        Some(bytes) => atomic_write(&key_path, &bytes),
+                        None => fs::remove_file(&key_path).map_err(Into::into),
+                    };
+                    return Err(anyhow!(error));
+                }
+                return Ok(PassphraseBacking::Keychain);
             }
         }
-        Ok(())
+        self.save(jid, cert)
     }
 
     /// Persist `cert` for `jid`. Reuses the account's existing passphrase
@@ -2111,6 +2141,51 @@ mod tests {
             }
             fs::remove_dir_all(dir).unwrap();
         }
+    }
+    // FLM-298 review R2: the choice not to migrate is recorded only once the
+    // restore has saved. If recording fails, the previous key and its old
+    // protection must still work.
+    #[test]
+    fn failed_fresh_commit_leaves_the_previous_key_and_routing_intact() {
+        use crate::credentials::SecretStore;
+        use std::{collections::BTreeMap, sync::Mutex};
+        #[derive(Default)]
+        struct Memory(Mutex<BTreeMap<String, String>>);
+        impl SecretStore for Memory {
+            fn get(&self, a: &str) -> std::result::Result<Option<String>, String> {
+                Ok(self.0.lock().unwrap().get(a).cloned())
+            }
+            fn set(&self, a: &str, v: &str) -> std::result::Result<(), String> {
+                self.0.lock().unwrap().insert(a.into(), v.into());
+                Ok(())
+            }
+            fn delete(&self, a: &str) -> std::result::Result<(), String> {
+                self.0.lock().unwrap().remove(a);
+                Ok(())
+            }
+            fn fresh_write(&self, a: &str, v: &str) -> std::result::Result<(), String> {
+                self.0.lock().unwrap().insert(format!("fresh:{a}"), v.into());
+                Ok(())
+            }
+            fn commit_fresh(&self, _: &str) -> std::result::Result<(), String> {
+                Err("marker not writable".into())
+            }
+        }
+        let storage = KeyStorage::for_testing_with_store(
+            fresh_tmp_dir(),
+            std::sync::Arc::new(Memory::default()),
+        );
+        let jid = "alice@example.com";
+        let original = generate_cert(jid);
+        storage.save(jid, &original).unwrap();
+        let before = fs::read(storage.key_file_path(jid).unwrap()).unwrap();
+        let error = storage.save_fresh(jid, &generate_cert(jid)).unwrap_err();
+        assert!(format!("{error:#}").contains("marker not writable"));
+        assert_eq!(fs::read(storage.key_file_path(jid).unwrap()).unwrap(), before);
+        assert_eq!(
+            storage.load(jid).unwrap().unwrap().cert.fingerprint(),
+            original.fingerprint()
+        );
     }
     // FLM-93 F4: save/load/forget must use the same injected logical store.
     #[test]
