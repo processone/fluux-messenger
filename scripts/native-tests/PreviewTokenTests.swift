@@ -51,7 +51,7 @@ func check(_ condition: Bool, _ message: String) {
             group.enter()
             DispatchQueue.global().async {
                 for _ in 0..<50 {
-                    PreviewToken.exclusively(root: root) {
+                    try! PreviewToken.withStateLock(root: root) {
                         if inside { overlap = true }
                         inside = true
                         let value = counter
@@ -65,7 +65,18 @@ func check(_ condition: Bool, _ message: String) {
         }
         group.wait()
         check(!overlap && counter == 400, "lock serialises critical sections (counter \(counter))")
-        check(PreviewToken.exclusively(root: nil) { 7 } == 7, "no root runs unlocked")
+        var ranUnlocked = false
+        do {
+            try PreviewToken.withStateLock(root: root.appendingPathComponent("missing")) { ranUnlocked = true }
+            check(false, "missing state lock must fail")
+        } catch PreviewToken.LockFailure.unavailable {}
+        check(!ranUnlocked, "missing state lock never runs an unlocked transaction")
+        // FLM-294 R1: no late token write after revocation, even if cleanup retains
+        // the old token temporarily. Rotation and refusal obey the same capability check.
+        check(PreviewToken.resolve(used: token("t1"), stored: token("t1"), snapshotCurrent: false, change: rotate) == nil,
+              "revocation rejects a late successor")
+        check(PreviewToken.resolve(used: token("t1"), stored: token("t1"), snapshotCurrent: false, change: .clear) == nil,
+              "revocation rejects a late refusal write")
 
         print("passed")
 

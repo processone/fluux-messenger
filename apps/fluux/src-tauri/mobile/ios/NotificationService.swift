@@ -40,10 +40,16 @@ final class NotificationService: UNNotificationServiceExtension {
             contentHandler(NotificationPresentation.belongsToSignedInAccount(request.content, names: loadNames())
                            ? content : NotificationPresentation.neutralContent())
         }
-        let content = NotificationPresentation.content(for: request.content, names: names)
+        let snapshot = readSnapshot()
+        let values = snapshot.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+        // Use only this signed-in account's published app wording. Device wording is
+        // the fallback when there is no matching capability, not a replacement for it.
+        let wordValue = values?["account"] as? String == names.account ? values?["words"] : nil
+        let words = wordValue.flatMap { JSONSerialization.isValidJSONObject($0) ? try? JSONSerialization.data(withJSONObject: $0) : nil }
+            .flatMap { try? JSONDecoder().decode(PreviewWords.self, from: $0) } ?? PreviewWords.localized
+        let content = NotificationPresentation.content(for: request.content, names: names, activity: words.activity)
         delivery.begin(content, completion: finish)
         let sender = (content.userInfo["from"] as? String).flatMap(NotificationPresentation.bareJid)
-        let snapshot = readSnapshot()
         let skip = { (decision: PreviewDecision, reason: String) in
             diagnostic(decision, nil)
             delivery.trace("no preview, \(reason)")
@@ -58,7 +64,7 @@ final class NotificationService: UNNotificationServiceExtension {
         }
         guard let snapshot = snapshot else { return skip(.previewsOff, "previews off") }
         guard PreviewDelivery.covers(sender, snapshot: snapshot) else { return skip(.senderNotCovered, "sender not covered") }
-        guard let values = (try? JSONSerialization.jsonObject(with: snapshot)) as? [String: Any],
+        guard let values = values,
               let account = values["account"] as? String, account == names.account else {
             return skip(.snapshotChanged, "snapshot for another account")
         }
@@ -69,8 +75,6 @@ final class NotificationService: UNNotificationServiceExtension {
             return skip(.noSession, "no ledger session")
         }
         guard let root = ledgerRoot(), let ledger = try? PreviewLedger(root: root) else { return skip(.ledgerUnavailable, "ledger unavailable") }
-        let words = values["words"].flatMap { JSONSerialization.isValidJSONObject($0) ? try? JSONSerialization.data(withJSONObject: $0) : nil }
-            .flatMap { try? JSONDecoder().decode(PreviewWords.self, from: $0) } ?? PreviewWords.localized
         // Presentation already filtered encrypted placeholders. A lookup miss must not
         // discard readable text from this push, including a later push in a burst.
         previewsAllowed { [delivery, readSnapshot, runPreview] allowed in

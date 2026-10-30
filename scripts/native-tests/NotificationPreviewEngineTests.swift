@@ -9,17 +9,19 @@ private enum Server {
     static var current = "t0"
     static var next = "t1"
     static var issued = 1
-    static var stored = PreviewToken(account: "me@example.test", userAgentId: "fixture-agent", token: "t1", expiry: "future")
+    static var capability = true
+    static var stored: PreviewToken? = PreviewToken(account: "me@example.test", userAgentId: "fixture-agent", token: "t1", expiry: "future")
     static var loads = 0
     static var calls = 0
     static var records = 0
+    static var deadlines: [Int] = []
     static var refuse = false
     static var hold = false
     static let entered = DispatchSemaphore(value: 0)
     static let release = DispatchSemaphore(value: 0)
 
-    static func requireFileLock() {
-        let fd = open(root.appendingPathComponent("fast-token.lock").path, O_RDWR)
+    static func requireFileLock(_ name: String = "fast-token.lock") {
+        let fd = open(root.appendingPathComponent(name).path, O_RDWR)
         guard fd >= 0 else { print("failed: sign-in began without the shared lock file"); exit(1) }
         defer { close(fd) }
         let result = flock(fd, LOCK_EX | LOCK_NB)
@@ -31,14 +33,18 @@ private enum Server {
     static func load(_ account: String) -> PreviewToken {
         requireFileLock()
         mutex.lock(); defer { mutex.unlock() }
-        precondition(account == stored.account)
+        requireFileLock("preview-state.lock")
+        precondition(account == stored?.account)
         loads += 1
-        return stored
+        return stored!
     }
     static func record(_ change: PreviewToken.Change, _ used: PreviewToken) {
         requireFileLock()
         mutex.lock(); defer { mutex.unlock() }
-        guard let value = PreviewToken.resolve(used: used, stored: stored, snapshotCurrent: true, change: change) else {
+        requireFileLock("preview-state.lock")
+        let resolved = PreviewToken.resolve(used: used, stored: stored, snapshotCurrent: capability, change: change)
+        precondition(capability, "The worker must reject a revoked generation before calling storage")
+        guard let value = resolved else {
             preconditionFailure("A serialized sign-in must record the successor of its own credential")
         }
         stored = value
@@ -55,8 +61,9 @@ private enum Server {
     let values = try! JSONSerialization.jsonObject(with: Data(bytes: input, count: count)) as! [String: Any]
     Server.mutex.lock()
     let token = values["fast_token"] as! String
-    precondition(values["user_agent_id"] as? String == Server.stored.userAgentId)
+    precondition(values["user_agent_id"] as? String == Server.stored?.userAgentId)
     Server.calls += 1
+    Server.deadlines.append(values["deadline_ms"] as! Int)
     let refused = Server.refuse
     let accepted = refused || token == Server.current || token == Server.next
     precondition(accepted, "A later lookup must authenticate with a token the server still accepts")
@@ -87,10 +94,11 @@ private enum Server {
         Server.root = root
         let input = Data("{\"deadline_ms\":7000}".utf8)
         let finished = DispatchGroup()
-        func run(current: @escaping () -> Bool = { true }, expectResult: Bool = true, directory: URL? = nil) -> () -> Void {
+        func run(current: @escaping () -> Bool = { Server.capability }, expectResult: Bool = true, directory: URL? = nil,
+                 uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) -> () -> Void {
             finished.enter()
             return NotificationPreviewEngine.run(input, account: "me@example.test", root: directory ?? root,
-                isCurrent: current, loadToken: Server.load, recordToken: Server.record) { result in
+                isCurrent: current, loadToken: Server.load, recordToken: Server.record, uptime: uptime) { result in
                     precondition((result != nil) == expectResult)
                     finished.leave()
                 }
@@ -101,7 +109,7 @@ private enum Server {
         precondition(finished.wait(timeout: .now() + 10) == .success)
         _ = run()
         precondition(finished.wait(timeout: .now() + 5) == .success)
-        precondition(Server.calls == 9 && Server.records == 9 && Server.stored.token == Server.next)
+        precondition(Server.calls == 9 && Server.records == 9 && Server.stored?.token == Server.next)
         print("burst: 9 sign-ins accepted; every credential load and successor write held the shared lock")
 
         Server.hold = true
@@ -123,6 +131,28 @@ private enum Server {
         precondition(finished.wait(timeout: .now() + 5) == .success)
         precondition(Server.loads == 10 && Server.calls == 10)
         print("unavailable lock: no unlocked sign-in")
+        // FLM-294 R6: a monotonic clock stand-in advances while a real worker
+        // holds the actual file lock. No sleep or network-timeout guessing is needed.
+        for elapsed: TimeInterval in [6.5, 6.9] {
+            Server.hold = true
+            _ = run()
+            precondition(Server.entered.wait(timeout: .now() + 5) == .success)
+            let callsBefore = Server.calls
+            let loadsBefore = Server.loads
+            var clock: TimeInterval = 100
+            _ = run(expectResult: elapsed == 6.5, uptime: { clock })
+            clock += elapsed
+            Server.release.signal()
+            precondition(finished.wait(timeout: .now() + 5) == .success)
+            if elapsed == 6.5 {
+                precondition(Server.calls == callsBefore + 1 && Server.deadlines.last == 500,
+                             "Queued sign-in must receive only the remaining 500 ms")
+            } else {
+                precondition(Server.calls == callsBefore && Server.loads == loadsBefore,
+                             "Below 250 ms, skip credential loading and sign-in")
+            }
+        }
+        print("queued budget: 500 ms passed to sign-in; below 250 ms skips credentials and network")
         Server.refuse = true
         finished.enter()
         _ = NotificationPreviewEngine.run(input, account: "me@example.test", root: root, isCurrent: { true },
@@ -131,12 +161,34 @@ private enum Server {
                 // No other worker is running. Reacquiring here also proves completion is
                 // outside the token lock, so normal synchronous callers cannot deadlock.
                 PreviewToken.withSignInLock(root: root) {
-                    precondition(Server.stored.token.isEmpty && Server.stored.expiry.isEmpty)
+                    precondition(Server.stored?.token == "" && Server.stored?.expiry == "")
                 }
                 finished.leave()
             }
         precondition(finished.wait(timeout: .now() + 5) == .success)
         print("refused token cleared before completion; completion can reacquire the shared lock")
+        // FLM-294 R1: the app can revoke and delete credentials while a worker
+        // remains blocked in actual network-call position under the sign-in lock.
+        Server.refuse = false
+        Server.stored = PreviewToken(account: "me@example.test", userAgentId: "fixture-agent", token: Server.next, expiry: "future")
+        Server.hold = true
+        _ = run()
+        precondition(Server.entered.wait(timeout: .now() + 5) == .success)
+        let recordsBeforeRevoke = Server.records
+        let revoked = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            try! PreviewToken.withStateLock(root: root) {
+                Server.capability = false
+                Server.stored = nil
+            }
+            revoked.signal()
+        }
+        let prompt = revoked.wait(timeout: .now() + 1)
+        Server.release.signal()
+        precondition(finished.wait(timeout: .now() + 5) == .success)
+        precondition(prompt == .success, "App revocation must not wait for the network/sign-in lock")
+        precondition(Server.stored == nil && Server.records == recordsBeforeRevoke, "Late lookup cannot recreate a deleted credential")
+        print("revocation completed while sign-in was blocked; late rotation did not recreate credentials")
         print("passed")
     }
 }

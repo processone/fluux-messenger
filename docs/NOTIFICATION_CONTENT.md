@@ -48,7 +48,11 @@ whitespace): `This message is encrypted`, `[OpenPGP-encrypted message]`, and
 literal nonblank plaintext, including those same words. Arbitrary sender-selected
 fallbacks cannot be recognized without encryption metadata; an unmarked,
 nonblank body remains opaque server text. Neither remote path decrypts the push
-body itself. No push-server schema change is required.
+body itself. No push-server schema change is required. When the signed-in account's
+preview snapshot publishes app wording, the NSE uses its `words.activity` for generic
+transport fallback, even if the device language differs. Without matching published
+wording, it falls back to the extension's device-localized wording; readable transport text
+is never replaced solely to localize an alert.
 
 The web SW cannot inspect SDK message state or keys. It must surface an alert for
 a received push; lookup/show failures retain its existing generic fallback.

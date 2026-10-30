@@ -100,12 +100,14 @@ struct PreviewToken: Codable, Equatable {
     /// The record to store after an extension run that used `used`, or nil to leave the keychain
     /// as it is. A run only changes the token it started from: a newer token, or a deletion by a
     /// sign-out or an account change, wins. A run that started without a token may create the
-    /// first one only while the capability it ran under is still published.
+    /// first one only while the capability it ran under is still published. Revocation
+    /// rejects every late write, including when the old credential is still stored.
     static func resolve(used: PreviewToken, stored: PreviewToken?, snapshotCurrent: Bool, change: Change) -> PreviewToken? {
+        guard snapshotCurrent else { return nil }
         if let stored = stored {
             guard stored == used else { return nil }
         } else {
-            guard used.token.isEmpty, snapshotCurrent else { return nil }
+            guard used.token.isEmpty else { return nil }
         }
         var next = used
         switch change {
@@ -120,16 +122,18 @@ struct PreviewToken: Codable, Equatable {
         return next
     }
 
-    /// Runs `body` while holding an exclusive lock shared by the app and the extension, so that
-    /// publishing or revoking the capability and storing a token never interleave.
-    static func exclusively<T>(root: URL?, _ body: () throws -> T) rethrows -> T {
-        guard let root = root, let descriptor = lock(root: root) else { return try body() }
+    enum LockFailure: Error { case unavailable }
+
+    /// Short state transactions serialize capability publication/revocation with credential
+    /// reads/writes, never network work. The app must not wait on the sign-in lock to revoke.
+    static func withStateLock<T>(root: URL, _ body: () throws -> T) throws -> T {
+        guard let descriptor = lock(root: root, name: "preview-state.lock") else { throw LockFailure.unavailable }
         defer { flock(descriptor, LOCK_UN); close(descriptor) }
         return try body()
     }
 
-    private static func lock(root: URL) -> Int32? {
-        let descriptor = open(root.appendingPathComponent("fast-token.lock").path, O_CREAT | O_RDWR, 0o600)
+    private static func lock(root: URL, name: String) -> Int32? {
+        let descriptor = open(root.appendingPathComponent(name).path, O_CREAT | O_RDWR, 0o600)
         guard descriptor >= 0 else { return nil }
         guard flock(descriptor, LOCK_EX) == 0 else { close(descriptor); return nil }
         return descriptor
@@ -138,21 +142,13 @@ struct PreviewToken: Codable, Equatable {
     /// Sign-ins must not proceed without the shared lock. Unlike best-effort cleanup,
     /// an unlocked network request can rotate the server token behind another lookup.
     static func withSignInLock<T>(root: URL, _ body: () -> T) -> T? {
-        guard let descriptor = lock(root: root) else { return nil }
+        guard let descriptor = lock(root: root, name: "fast-token.lock") else { return nil }
         defer { flock(descriptor, LOCK_UN); close(descriptor) }
         return body()
     }
 
-    /// Stores the outcome of an extension run that started from `used`.
-    @discardableResult
-    static func record(_ change: Change, after used: PreviewToken, root: URL?, snapshotCurrent: () -> Bool,
-                       group: String? = PreviewKeychain.group) -> Bool {
-        exclusively(root: root) {
-            recordLocked(change, after: used, snapshotCurrent: snapshotCurrent, group: group)
-        }
-    }
-
-    /// Caller holds fast-token.lock across credential loading, sign-in and this write.
+    /// Caller holds preview-state.lock for this write and its capability check.
+    /// The worker separately holds fast-token.lock across the whole sign-in.
     @discardableResult
     static func recordLocked(_ change: Change, after used: PreviewToken, snapshotCurrent: () -> Bool,
                              group: String? = PreviewKeychain.group) -> Bool {

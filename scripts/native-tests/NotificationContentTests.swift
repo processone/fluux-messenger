@@ -21,6 +21,8 @@ import UserNotifications
         let mismatch: Bool?
         let archiveUnavailable: Bool?
         let failure: Bool?
+        let words: PreviewWords?
+        let snapshotAccount: String?
         let events: [PreviewEvent]?
     }
     struct Fixture: Decodable { let id: String; let ios: Input? }
@@ -33,6 +35,7 @@ import UserNotifications
         for fixture in corpus.cases {
             guard let input = fixture.ios else { continue }
             count += 1
+            let words = input.words ?? corpus.words
             let peer = "alice@example.test"
             let room = "team@conference.example.test"
             let account = "me@example.test"
@@ -57,29 +60,39 @@ import UserNotifications
                 try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
                 defer { try? FileManager.default.removeItem(at: root) }
                 let ledger = try PreviewLedger(root: root)
+                let diagnostic = try NotificationDiagnostic(root: root)
+                try diagnostic.activate()
                 let session = try ledger.capability(account: account, purge: false, now: Date().timeIntervalSince1970)!
                 let events = input.events ?? []
                 let result = PreviewResult(events: events, complete: input.complete != false, archiveUnavailable: input.archiveUnavailable)
                 if input.duplicate == true {
-                    _ = try ledger.claim(result, session: session, conversation: peer, request: "prior", nickname: "Alice", words: corpus.words, now: Date().timeIntervalSince1970)
+                    _ = try ledger.claim(result, session: session, conversation: peer, request: "prior", nickname: "Alice", words: words, now: Date().timeIntervalSince1970)
                 }
                 if input.read == true {
                     _ = try ledger.merge([PreviewLedger.Delta(account: account, epoch: session.epoch, conversation: peer, uid: "one", archiveAuthority: account, key: PreviewLedger.archiveKey("one"), read: true, notified: false)], now: Date().timeIntervalSince1970)
                 }
                 // FLM-294: exercise the real service's fallback policy, not a duplicate wiring.
                 let sessionValue = try JSONSerialization.jsonObject(with: JSONEncoder().encode(session))
-                let wordsValue = try JSONSerialization.jsonObject(with: JSONEncoder().encode(corpus.words))
-                let snapshot = try JSONSerialization.data(withJSONObject: ["account": account, "opt_in": input.optIn != false,
+                let wordsValue = try JSONSerialization.jsonObject(with: JSONEncoder().encode(words))
+                let snapshot = try JSONSerialization.data(withJSONObject: ["account": input.snapshotAccount ?? account, "opt_in": input.optIn != false,
                     "peers": [peer: []], "ledger": sessionValue, "words": wordsValue])
                 let service = NotificationService()
                 service.loadNames = { names }
-                service.readSnapshot = { input.current == false ? nil : snapshot }
+                var current = true
+                service.readSnapshot = { current ? snapshot : nil }
                 service.ledgerRoot = { root }
                 service.previewsAllowed = { [weak service] complete in
                     if input.expired == true { service?.serviceExtensionTimeWillExpire() }
                     complete(input.allowed != false)
                 }
-                service.runPreview = { _, _, _, _, complete in
+                var fetches = 0
+                service.runPreview = { _, _, _, isCurrent, complete in
+                    fetches += 1
+                    precondition(isCurrent(), "The service must begin with a current capability")
+                    if input.current == false {
+                        current = false
+                        precondition(!isCurrent(), "The worker's service guard must observe mid-lookup revocation")
+                    }
                     complete(input.failure == true ? nil : result)
                     return {}
                 }
@@ -88,6 +101,12 @@ import UserNotifications
                     completions += 1; output = $0
                 }
                 precondition(completions == 1, fixture.id + ": completion must occur once")
+                if input.current == false {
+                    precondition(fetches == 1, "Revocation must occur during a lookup, not before it starts")
+                    let entries = try JSONDecoder().decode([NotificationDiagnostic.Entry].self, from: diagnostic.export())
+                    precondition(entries.contains { $0.decision == .capabilityChanged })
+                    print("revoked during lookup: service worker guard rejected the snapshot; delivery recorded capabilityChanged")
+                }
             }
             print("\(fixture.id): \(output?.title ?? "nil") / \(output?.body ?? "nil")")
             if output?.title != input.expected.title || output?.body != input.expected.body || output?.subtitle != (input.expected.subtitle ?? "") {

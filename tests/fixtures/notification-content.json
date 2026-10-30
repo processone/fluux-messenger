@@ -240,6 +240,26 @@
     {
       "id": "plain-lookup-read",
       "ios": {"body": "Only server copy", "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "Archived copy"}], "expected": {"title": "Alice", "body": "Only server copy"}, "read": true}
+    },
+    {
+      "id": "app-language-encrypted",
+      "ios": {"body": "[OpenPGP-encrypted message]", "preview": true, "events": [], "words": {"activity": "Nouvelle activité", "reaction": "{{nickname}} a réagi : {{text}}", "edit": "{{nickname}} (edit) : {{text}}", "retraction": "{{nickname}} a supprimé un message", "messages": "{{nickname}} : {{count}} nouveaux messages"}, "expected": {"title": "Alice", "body": "Nouvelle activité"}, "encrypted": true}
+    },
+    {
+      "id": "app-language-legacy",
+      "ios": {"body": "This message is encrypted", "preview": true, "events": [], "words": {"activity": "Nouvelle activité", "reaction": "{{nickname}} a réagi : {{text}}", "edit": "{{nickname}} (edit) : {{text}}", "retraction": "{{nickname}} a supprimé un message", "messages": "{{nickname}} : {{count}} nouveaux messages"}, "expected": {"title": "Alice", "body": "Nouvelle activité"}}
+    },
+    {
+      "id": "app-language-empty",
+      "ios": {"body": "", "preview": true, "events": [], "words": {"activity": "Nouvelle activité", "reaction": "{{nickname}} a réagi : {{text}}", "edit": "{{nickname}} (edit) : {{text}}", "retraction": "{{nickname}} a supprimé un message", "messages": "{{nickname}} : {{count}} nouveaux messages"}, "expected": {"title": "Alice", "body": "Nouvelle activité"}}
+    },
+    {
+      "id": "app-language-plain",
+      "ios": {"body": "Only server copy", "preview": true, "events": [], "words": {"activity": "Nouvelle activité", "reaction": "{{nickname}} a réagi : {{text}}", "edit": "{{nickname}} (edit) : {{text}}", "retraction": "{{nickname}} a supprimé un message", "messages": "{{nickname}} : {{count}} nouveaux messages"}, "expected": {"title": "Alice", "body": "Only server copy"}}
+    },
+    {
+      "id": "app-language-other-account",
+      "ios": {"body": "[OpenPGP-encrypted message]", "preview": true, "events": [], "words": {"activity": "Nouvelle activité", "reaction": "{{nickname}} a réagi : {{text}}", "edit": "{{nickname}} (edit) : {{text}}", "retraction": "{{nickname}} a supprimé un message", "messages": "{{nickname}} : {{count}} nouveaux messages"}, "snapshotAccount": "other@example.test", "expected": {"title": "Alice", "body": "New activity"}}
     }
   ]
 }

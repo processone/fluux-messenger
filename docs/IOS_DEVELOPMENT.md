@@ -775,13 +775,20 @@ best-effort and entirely client-side, with no custom push ID or ejabberd change 
 Further improvements must work with standard payloads or wait for Apple's notification
 filtering entitlement; an exact server-pairing change is not planned.
 
-Preview workers hold the shared `fast-token.lock` from credential loading through the
-network lookup and recording its FAST successor/refusal. A queued worker loads the latest
-credential only after that lock is acquired, and checks cancellation and capability again
-before signing in. A missing lock skips the lookup instead of signing in concurrently.
+Preview workers hold `fast-token.lock` from credential loading through the network lookup
+and recording its FAST successor/refusal. The app never waits on that network lock:
+`preview-state.lock` protects only short capability and credential transactions, including
+app publication/revocation, worker credential loading and the final capability-check/write.
+Revocation and sign-out can therefore clear the capability and credentials while a lookup
+is active; its late result cannot restore them. A queued worker loads the latest credential
+only after taking the sign-in lock, and checks cancellation and capability under the state
+lock before signing in. Missing locks skip the lookup instead of signing in concurrently.
 The delivery deadline/system expiry still completes independently while a worker waits.
-The lock also serializes capability publication/revocation, which can wait for an active
-lookup's bounded network work.
+Settings/preparation time and lock waiting consume the same seven-second lookup budget,
+leaving one second for handoff before the delivery deadline. Workers pass only the
+remaining time to the lookup and skip sign-in below 250 ms instead of starting a fresh
+seven-second request. An already-active server session may finish after local revocation,
+but it cannot restore the revoked capability, credentials or decrypted notification text.
 
 `npm run test:ios-notifications` covers synthetic Swift delivery/ledger paths and locale
 generation; run `cargo test --locked --manifest-path apps/fluux/src-tauri/nse-openpgp/Cargo.toml`

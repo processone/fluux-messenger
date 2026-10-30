@@ -25,15 +25,29 @@ enum NotificationPreviewEngine {
                     recordToken: @escaping (PreviewToken.Change, PreviewToken) -> Void = { change, credential in
                         PreviewToken.recordLocked(change, after: credential,
                             snapshotCurrent: { PreviewKeychain.publishedAccount() == credential.account })
-                    }, completion: @escaping (PreviewResult?) -> Void) -> () -> Void {
+                    }, uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+                    completion: @escaping (PreviewResult?) -> Void) -> () -> Void {
         let invocation = RustPreviewInvocation()
+        let queuedAt = uptime()
         DispatchQueue.global(qos: .utility).async {
             // The server rotates FAST tokens during sign-in, not during local storage.
             // Read the latest credential only after the previous lookup has stored its successor.
             let result: PreviewResult? = PreviewToken.withSignInLock(root: root) {
-                guard !invocation.isCancelled, isCurrent(),
-                      var values = (try? JSONSerialization.jsonObject(with: input)) as? [String: Any] else { return nil }
-                let credential = loadToken(account)
+                guard !invocation.isCancelled,
+                      var values = (try? JSONSerialization.jsonObject(with: input)) as? [String: Any],
+                      let budget = values["deadline_ms"] as? Int else { return nil }
+                let deadline = queuedAt + Double(min(7000, max(0, budget))) / 1000
+                // Queueing uses the same delivery budget. Below 250 ms, skip sign-in
+                // rather than rotate a token for a notification about to expire.
+                guard deadline - uptime() >= 0.25 else { return nil }
+                let credential: PreviewToken? = (try? PreviewToken.withStateLock(root: root) {
+                    guard !invocation.isCancelled, isCurrent() else { return nil }
+                    return loadToken(account)
+                }) ?? nil
+                guard let credential else { return nil }
+                let remaining = Int(max(0, deadline - uptime()) * 1000)
+                guard remaining >= 250, !invocation.isCancelled else { return nil }
+                values["deadline_ms"] = remaining
                 values["user_agent_id"] = credential.userAgentId
                 values["fast_token"] = credential.token
                 guard let bytes = try? JSONSerialization.data(withJSONObject: values) else { return nil }
@@ -46,11 +60,16 @@ enum NotificationPreviewEngine {
                 guard count > 0, count <= output.count,
                       let result = try? JSONDecoder().decode(PreviewResult.self, from: Data(output.prefix(count))),
                       result.events.count <= 100 else { return nil }
-                // Preserve server rotation/refusal even when delivery expired. Do not reacquire
-                // the same file lock here; capability publication/revocation shares this lock.
+                // Preserve rotation/refusal after delivery expiry, but serialize the capability
+                // check and write with immediate app revocation, not with its network work.
                 let change = result.fastToken.map { PreviewToken.Change.rotate(token: $0.token, expiry: $0.expiry) }
                     ?? (result.tokenRefused == true ? .clear : nil)
-                if let change = change { recordToken(change, credential) }
+                if let change = change {
+                    try? PreviewToken.withStateLock(root: root) {
+                        guard isCurrent() else { return }
+                        recordToken(change, credential)
+                    }
+                }
                 return result
             } ?? nil
             completion(result)

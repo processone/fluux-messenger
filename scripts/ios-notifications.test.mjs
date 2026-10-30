@@ -134,6 +134,11 @@ test('notification extension serializes FAST sign-ins without a keychain', { ski
 test('shared notification content contract on native iOS paths', { skip: process.platform !== 'darwin' }, () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-content-test-'))
   try {
+    const corpus = JSON.parse(readFileSync(new URL('../tests/fixtures/notification-content.json', import.meta.url), 'utf8'))
+    const frenchWords = JSON.parse(readFileSync(new URL('../apps/fluux/src/i18n/locales/fr.json', import.meta.url), 'utf8')).notificationPreview
+    for (const fixture of corpus.cases) {
+      if (fixture.ios?.words) assert.deepEqual(fixture.ios.words, frenchWords, `${fixture.id}: app wording must come from its translation source`)
+    }
     const binary = compileNotificationTests(scratch, 'NotificationContentTests.swift')
     const output = execFileSync(binary, [fileURLToPath(new URL('../tests/fixtures/notification-content.json', import.meta.url))], { encoding: 'utf8' })
     assert.match(output, /passed/)
