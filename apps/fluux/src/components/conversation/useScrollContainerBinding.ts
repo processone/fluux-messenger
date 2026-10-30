@@ -30,6 +30,7 @@ import {
   slowCorrectionSignal,
 } from './slowCorrectionMonitor'
 import { signalAnomaly } from '@/utils/anomalySignal'
+import { isIosDevice } from '@/platform'
 
 export interface ScrollContainerBindingPorts {
   /** Publish the attached scroller: the caller's own ref plus any external one it mirrors. */
@@ -61,6 +62,11 @@ export interface ScrollContainerBinding {
   detachUserInputListeners: () => void
   resetPendingInput: () => void
 }
+
+/** Downward finger travel, in px, before a drag on the conversation lowers the keyboard. */
+const KEYBOARD_DISMISS_DRAG_PX = 24
+/** The chat textarea and the room composer's contenteditable. */
+const TEXT_INPUT_SELECTOR = 'textarea, input, [contenteditable]:not([contenteditable="false"])'
 
 export function readUserScrollInput(scroller: HTMLElement, deltaY = 0): UserScrollInput {
   return {
@@ -282,6 +288,7 @@ export function useScrollContainerBinding(
           let wheelPending = false
           let touchPending = false
           let touchPoint: { id: number; y: number } | null = null
+          let downwardDrag = 0
           let scrollbar: { id: number; y: number } | null = null
           const pressedKeys = new Set<string>()
           const resetPendingInput = () => {
@@ -289,6 +296,7 @@ export function useScrollContainerBinding(
             wheelPending = false
             touchPending = false
             touchPoint = null
+            downwardDrag = 0
             scrollbar = null
             pressedKeys.clear()
             if (wheelEndRaf !== null) cancelAnimationFrame(wheelEndRaf)
@@ -321,6 +329,7 @@ export function useScrollContainerBinding(
             touchPending = true
             const touch = event.touches[0]
             if (touch && !touchPoint) touchPoint = { id: touch.identifier, y: touch.clientY }
+            downwardDrag = 0
             observeInput()
           }
           const onTouchMove = (event: TouchEvent) => {
@@ -330,6 +339,14 @@ export function useScrollContainerBinding(
             const deltaY = touchPoint.y - touch.clientY
             touchPoint.y = touch.clientY
             if (deltaY !== 0) observeInput(deltaY, 'gesture')
+            // On iOS, lower the keyboard on a downward drag, like Messages: the composer keeps focus
+            // after a send, so the drag is the way to put the keyboard away. Scrolling continues.
+            downwardDrag = deltaY < 0 ? downwardDrag - deltaY : 0
+            if (downwardDrag >= KEYBOARD_DISMISS_DRAG_PX) {
+              downwardDrag = 0
+              const focused = el.ownerDocument.activeElement
+              if (focused instanceof HTMLElement && focused.matches(TEXT_INPUT_SELECTOR) && isIosDevice()) focused.blur()
+            }
           }
           const onTouchEnd = (event: TouchEvent) => {
             if (!touchPending) return

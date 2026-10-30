@@ -61,6 +61,18 @@ export function detectOS(): PlatformOS {
   return 'other'
 }
 
+/**
+ * True on an iPhone or iPad, in the app or in Safari. The platform capabilities only know iOS inside
+ * the native app, and an iPad's Safari reports a Mac user agent, so the browser case is read from
+ * the user agent plus touch support (a touch-capable "Mac" is an iPad).
+ */
+export function isIosDevice(): boolean {
+  if (platform().shell === 'mobile') return platform().os === 'ios'
+  if (typeof navigator === 'undefined') return false
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent ?? '')) return true
+  return navigator.platform === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1
+}
+
 let current: PlatformCapabilities | null = null
 
 /**
