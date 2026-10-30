@@ -442,6 +442,8 @@ mod native {
         // keychain, never changing the user's default or search list.
         keychain: Option<SecKeychain>,
         observed_revision: Mutex<Option<u64>>,
+        #[cfg(test)]
+        revision_dir: Option<std::path::PathBuf>,
     }
     impl Keychain {
         // Release and Dev share the item but not their memory caches. A shared,
@@ -449,6 +451,10 @@ mod native {
         // keychain read (which could prompt again). Never silently overwrite a
         // password, logout or token rotation saved by another running identity.
         fn revision_path(&self) -> Result<std::path::PathBuf, String> {
+            #[cfg(test)]
+            if let Some(dir) = &self.revision_dir {
+                return Ok(dir.join(".secrets-revision"));
+            }
             if self.keychain.is_some() {
                 Ok(std::path::PathBuf::from(
                     std::env::var_os("FLUUX_PROBE_KEYCHAIN").ok_or("Missing scratch path")?,
@@ -507,13 +513,18 @@ mod native {
             Ok((file, path, revision))
         }
         fn begin_write(&self) -> Result<std::fs::File, String> {
+            self.bump_revision(true)
+        }
+        // `verify` is false only for the fresh-start transition, which must
+        // advance the revision even when this process never observed one.
+        fn bump_revision(&self, verify: bool) -> Result<std::fs::File, String> {
             use std::{fs::OpenOptions, io::Write, os::unix::fs::OpenOptionsExt};
             let (lock, path, revision) = self.revision(true)?;
             let mut observed = self
                 .observed_revision
                 .lock()
                 .map_err(|_| "Revision lock poisoned")?;
-            if *observed != Some(revision) {
+            if verify && *observed != Some(revision) {
                 return Err("Secrets changed or revision tracking was unavailable; quit and reopen this app before saving".into());
             }
             let next = revision.checked_add(1).ok_or("Secrets revision overflow")?;
@@ -601,7 +612,13 @@ mod native {
         fn mark_fresh_start(&self) -> StoreResult<()> {
             let path = self.fresh_marker_path()?;
             std::fs::create_dir_all(path.parent().ok_or("Missing marker directory")?)
-                .and_then(|()| std::fs::write(&path, b"1"))
+                .map_err(|e| e.to_string())?;
+            // Hold the exclusive revision lock across the switch and advance the
+            // revision, so a running sibling's cached bundle can no longer be
+            // written into the new item. It must quit and reopen, as for any
+            // other stale write.
+            let _revision = self.bump_revision(false)?;
+            std::fs::write(&path, b"1")
                 .map_err(|e| format!("Could not record the fresh start: {e}").into())
         }
 
@@ -661,6 +678,25 @@ mod native {
             }
         }
     }
+    // FLM-298 review R4: switching to fresh storage must reject a running
+    // sibling's stale cached bundle. Touches only files in a temporary directory.
+    #[test]
+    fn fresh_start_transition_rejects_a_stale_sibling_write() {
+        let dir = std::env::temp_dir().join(format!("fluux-fresh-{}", uuid::Uuid::new_v4()));
+        let make = || Keychain {
+            revision_dir: Some(dir.clone()),
+            ..Keychain::default()
+        };
+        let (sibling, restoring) = (make(), make());
+        *sibling.observed_revision.lock().unwrap() = Some(0);
+        assert!(!sibling.fresh_start());
+        restoring.mark_fresh_start().unwrap();
+        assert!(sibling.fresh_start() && restoring.fresh_start());
+        let error = sibling.begin_write().unwrap_err();
+        assert!(error.contains("quit and reopen"), "{error}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     // FLM-66 / FLM-79: production backend, explicit disposable keychains only.
     #[cfg(test)]
     #[test]

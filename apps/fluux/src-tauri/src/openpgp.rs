@@ -222,6 +222,15 @@ impl OpenpgpState {
         }
     }
 
+    #[cfg(test)]
+    pub fn for_testing_with_storage(storage: KeyStorage) -> Self {
+        Self {
+            entries: Mutex::new(HashMap::new()),
+            storage: Arc::new(storage),
+            blocking_runs: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
     /// Load-or-generate an OpenPGP identity for `account_jid`. The KDF
     /// work runs on a blocking worker thread so we never hold up the IPC
     /// runtime. Concurrent calls for the same JID coalesce to a single
@@ -2428,6 +2437,140 @@ mod tests {
             0,
             "import_backup must prime the cell so ensure_key skips the KDF"
         );
+    }
+
+    /// FLM-299 / FLM-298: the user refused the old keychain items (or the old
+    /// combined item), so migration can never finish. Both production imports,
+    /// told to skip migration, must restore the same identity into fresh
+    /// storage, decrypt the original ciphertext, and keep doing so after a
+    /// restart without touching the refused items again.
+    #[test]
+    fn flm299_backup_import_without_migration_recovers_after_refused_keychain() {
+        use crate::{
+            credentials::SecretStore,
+            macos_secrets::{Backend, Secrets, StoreError},
+        };
+        use std::sync::atomic::{AtomicBool, Ordering as O};
+        #[derive(Clone, Default)]
+        struct Memory {
+            items: Arc<Mutex<std::collections::BTreeMap<String, String>>>,
+            refused_reads: Arc<std::sync::atomic::AtomicUsize>,
+            fresh: Arc<AtomicBool>,
+        }
+        impl SecretStore for Memory {
+            fn get(&self, a: &str) -> Result<Option<String>, String> {
+                Ok(self.items.lock().unwrap().get(a).cloned())
+            }
+            fn set(&self, a: &str, v: &str) -> Result<(), String> {
+                self.items.lock().unwrap().insert(a.into(), v.into());
+                Ok(())
+            }
+            fn delete(&self, a: &str) -> Result<(), String> {
+                self.items.lock().unwrap().remove(a);
+                Ok(())
+            }
+        }
+        impl Backend for Memory {
+            fn read(&self, a: &str) -> Result<Option<String>, StoreError> {
+                // Everything the user was asked about is refused, including the
+                // old combined item; only the fresh item is readable.
+                if a != "secrets-fresh-v1" {
+                    self.refused_reads.fetch_add(1, O::SeqCst);
+                    return Err(StoreError::denied());
+                }
+                self.get(a).map_err(Into::into)
+            }
+            fn accounts(&self) -> Result<Vec<String>, StoreError> {
+                Ok(self.items.lock().unwrap().keys().cloned().collect())
+            }
+            fn fresh_start(&self) -> bool {
+                self.fresh.load(O::SeqCst)
+            }
+            fn mark_fresh_start(&self) -> Result<(), StoreError> {
+                self.fresh.store(true, O::SeqCst);
+                Ok(())
+            }
+        }
+        let jid = "alice@example.com";
+        let device_a = new_state();
+        let original = device_a.ensure_key_sync(jid, "Alice").unwrap();
+        device_a.ensure_key_sync("bob@example.com", "Bob").unwrap();
+        let ciphertext = device_a
+            .encrypt("bob@example.com", &[original.public_armored.clone()], "old message")
+            .unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let backup = rt
+            .block_on(device_a.encrypt_backup(jid.into(), "backup-code".into()))
+            .unwrap();
+        let fingerprint = rt
+            .block_on(device_a.import_backup_all(backup.clone(), "backup-code".into()))
+            .unwrap()[0]
+            .fingerprint
+            .clone();
+
+        for selected in [false, true] {
+            for old_combined in [false, true] {
+                let raw = Memory::default();
+                raw.set("mcp-token", "old-mcp-token").unwrap();
+                raw.set("openpgp_passphrase:alice@example.com", "b2xk").unwrap();
+                if old_combined {
+                    raw.set("secrets-v1", "{\"version\":1,\"items\":{}}").unwrap();
+                }
+                let old_items = raw.items.lock().unwrap().clone();
+                let dir = fresh_tmp_dir();
+                let open = || {
+                    OpenpgpState::for_testing_with_storage(KeyStorage::for_testing_with_store(
+                        dir.clone(),
+                        Arc::new(Secrets::new(raw.clone())),
+                    ))
+                };
+                let import = |state: Arc<OpenpgpState>, without_migration: bool| {
+                    if selected {
+                        rt.block_on(state.import_backup_selected(
+                            jid.into(),
+                            backup.clone(),
+                            "backup-code".into(),
+                            fingerprint.clone(),
+                            without_migration,
+                        ))
+                    } else {
+                        rt.block_on(state.import_backup(
+                            jid.into(),
+                            backup.clone(),
+                            "backup-code".into(),
+                            without_migration,
+                        ))
+                    }
+                };
+                // Before: without the opt-out the refused items block the restore.
+                assert!(import(Arc::new(open()), false).is_err());
+                let state = Arc::new(open());
+                let restored = import(state.clone(), true).unwrap();
+                assert_eq!(restored.fingerprint, original.fingerprint);
+                assert_eq!(
+                    state.decrypt(jid, &ciphertext, &[]).unwrap().plaintext,
+                    "old message"
+                );
+
+                // Restart: a new process cache; the choice persists in the store.
+                let refused_before = raw.refused_reads.load(O::SeqCst);
+                let restarted = Arc::new(open());
+                let bundle = rt
+                    .block_on(restarted.ensure_key(jid.into(), "Alice".into()))
+                    .unwrap();
+                assert_eq!(bundle.fingerprint, original.fingerprint);
+                assert_eq!(
+                    restarted.decrypt(jid, &ciphertext, &[]).unwrap().plaintext,
+                    "old message"
+                );
+                assert_eq!(raw.refused_reads.load(O::SeqCst), refused_before);
+                let items = raw.items.lock().unwrap();
+                for (name, value) in &old_items {
+                    assert_eq!(items.get(name), Some(value), "{name} preserved");
+                }
+                assert!(items.contains_key("secrets-fresh-v1"));
+            }
+        }
     }
 
     // ---- encryption-subkey rotation --------------------------------
