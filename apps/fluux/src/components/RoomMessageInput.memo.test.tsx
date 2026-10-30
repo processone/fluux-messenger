@@ -12,6 +12,7 @@ interface CapturedComposerProps {
   onValueChange?: (value: string) => void
   pendingAttachment?: PendingAttachment | null
   onSend?: (body: string) => Promise<boolean>
+  onConsumeDraft?: () => () => void
   onSendCorrection?: (messageId: string, body: string) => Promise<boolean>
   onRetractMessage?: (messageId: string) => Promise<void>
 }
@@ -371,5 +372,42 @@ describe('selected reply archive identity', () => {
       },
     }))
     expect(JSON.stringify(sendMessage.mock.calls)).not.toContain(sibling.body)
+  })
+})
+
+// W1/W2 must preserve the existing XEP-0045 rule: exiting a whisper discards
+// private text rather than recovering it into a public room composer.
+describe('failed whisper draft isolation', () => {
+  beforeEach(() => { roomStore.setState({ drafts: new Map() }) })
+
+  function consumePrivateDraft() {
+    let restore!: () => void
+    act(() => capturedComposer.props!.onValueChange!('Private note for James'))
+    act(() => {
+      restore = capturedComposer.props!.onConsumeDraft!()
+      capturedComposer.props!.onValueChange!('')
+    })
+    return restore
+  }
+
+  it('does not recover private text after an explicit Escape cancellation', () => {
+    const onClearWhisper = vi.fn()
+    render(<RoomMessageInput {...STABLE} whisperTarget={{ nick: 'James' }} onClearWhisper={onClearWhisper} />)
+    const restore = consumePrivateDraft()
+    fireEvent.keyDown(screen.getByTestId('composer'), { key: 'Escape' })
+    expect(onClearWhisper).toHaveBeenCalledOnce()
+    act(() => restore())
+    expect(capturedComposer.props!.value).toBe('')
+    expect(roomStore.getState().getDraft(STABLE.roomJid)).toBe('')
+  })
+
+  it('does not recover an unmounted whisper into a newly mounted public composer', () => {
+    const old = render(<RoomMessageInput {...STABLE} whisperTarget={{ nick: 'James' }} />)
+    const restore = consumePrivateDraft()
+    old.unmount()
+    render(<RoomMessageInput {...STABLE} />)
+    act(() => restore())
+    expect(capturedComposer.props!.value).toBe('')
+    expect(roomStore.getState().getDraft(STABLE.roomJid)).toBe('')
   })
 })
