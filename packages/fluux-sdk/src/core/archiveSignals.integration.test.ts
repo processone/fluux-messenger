@@ -61,6 +61,7 @@ describe('durable archive signals across fresh sessions', () => {
   let decryptMode: 'locked' | 'verified' | 'untrusted' | 'bad-payload'
   let reactionEmojis: string[]
   let reactionTarget: string, plainReactions: Map<string, { targetId: string; emojis: string[] }>
+  let plainCorrections: Map<string, { targetId: string; body: string }>
   let decryptedKind: 'reaction' | 'body' | 'retract' | 'correction', decryptAttempts: number
   const envelope = '<payload xmlns="jabber:client"><reactions xmlns="urn:xmpp:reactions:0" id="own"><reaction>👍</reaction></reactions></payload>'
   async function readyManager() {
@@ -111,7 +112,7 @@ describe('durable archive signals across fresh sessions', () => {
     cleanup = []; archive = []; logs = []; verdicts = []; transitions = []; queries = 0; ownResource = '/desktop'; pageSize = Infinity
     manager = null; encryptedRows = new Set(); decryptMode = 'locked'
     decryptedKind = 'reaction'; decryptAttempts = 0
-    reactionTarget = 'own'; reactionEmojis = ['👍']; plainReactions = new Map()
+    reactionTarget = 'own'; reactionEmojis = ['👍']; plainReactions = new Map(); plainCorrections = new Map()
     _resetUnreadLogForTesting(); resetDiagnosticsForTesting(); setLogSink((_level, line) => logs.push(line))
     cleanup.push(subscribeDiagnostics(event => { if (event.kind === 'unread-recount') verdicts.push(event) }))
     cleanup.push(chatStore.subscribe((s, p) => {
@@ -157,7 +158,10 @@ describe('durable archive signals across fresh sessions', () => {
                   : plainReactions.has(r.id)
                     ? [xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: plainReactions.get(r.id)!.targetId },
                       ...plainReactions.get(r.id)!.emojis.map(emoji => xml('reaction', {}, emoji)))]
-                    : [xml('body', {}, r.body)]))))))
+                    : plainCorrections.has(r.id)
+                      ? [xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: plainCorrections.get(r.id)!.targetId }),
+                        xml('body', {}, plainCorrections.get(r.id)!.body)]
+                      : [xml('body', {}, r.body)]))))))
         return xml('iq', { type: 'result' }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: String(complete) },
           xml('set', { xmlns: 'http://jabber.org/protocol/rsm' },
             ...(page.length ? [xml('first', {}, page[0].stanzaId!), xml('last', {}, page.at(-1)!.stanzaId!)] : []))))
@@ -289,6 +293,35 @@ describe('durable archive signals across fresh sessions', () => {
       expect(pointer()).toBe('own')
     },
   )
+
+  it('lands a plaintext correction whose target only loads on a later history page (FLM-261)', async () => {
+    // Intent (FLM-261): an edit archived above a long run of signal-only
+    // entries must still land when "Load earlier messages" reaches its
+    // target in a later walk, carried by the journal rather than MAM memory.
+    const older = row('older', -4), filler = row('filler', -3), correction = row('correction', -2)
+    const read = row('read', 0), own = row('own', 2, true)
+    await seedState(own, [read, own])
+    chatStore.getState().setActiveConversation(PEER)
+    await chatStore.getState().loadMessagesFromCache(PEER)
+    archive = [older, filler, correction, read, own]
+    plainCorrections.set('correction', { targetId: 'older', body: 'corrected' })
+    pageSize = 2
+    const first = await mam.queryArchive({ with: PEER, before: 's-read' })
+    await settle(1000)
+    expect(first.messages.map(message => message.id)).toEqual(['filler'])
+    expect(await cache.getArchiveSignal(PEER, 's-correction', PEER)).toMatchObject({
+      effect: { type: 'update', targetId: 'older', authorOnly: true },
+    })
+    expect(await cache.getMessage(PEER, 'older')).toBeNull()
+    const second = await mam.queryArchive({ with: PEER, before: 's-filler' })
+    await settle(1000)
+    expect(second.complete).toBe(true)
+    const corrected = { body: 'corrected', isEdited: true, originalBody: 'synthetic' }
+    expect(second.messages.find(message => message.id === 'older')).toMatchObject(corrected)
+    expect(await cache.getMessage(PEER, 'older')).toMatchObject(corrected)
+    expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'older')).toMatchObject(corrected)
+    expect(chatStore.getState().messages.get(PEER)?.some(message => message.id === 'correction')).toBe(false)
+  })
 
   it.each(['encrypted', 'plaintext'] as const)('keeps %s effects on the canonical client-id row outside resident, page and search subsets', async mode => {
     const target = row('42', 1), collision = { ...row('other', 2), stanzaId: '42' }

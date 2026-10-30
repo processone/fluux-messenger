@@ -3004,9 +3004,15 @@ export class MAM extends BaseModule {
         return true
       }
     }
-    if (archiveId && !encrypted && chat?.rememberArchiveSignal && parseReactionsSignal(messageEl)?.targetId) {
+    // A plaintext reaction or correction is journaled like a decrypted one.
+    // The journal applies the effect when its target row is saved, so an
+    // edit whose target only loads on a later history page (or in a later
+    // session) is never lost, and nothing is held in memory between walks.
+    const plaintextEffect = !encrypted && (parseReactionsSignal(messageEl)?.targetId ? 'reactions'
+      : parseCorrectionSignal(messageEl)?.targetId && messageEl.getChildText('body') ? 'update' : undefined)
+    if (archiveId && plaintextEffect && chat?.rememberArchiveSignal) {
       const signal = this.archiveSignal(messageEl, peer, archiveId, archiveTimestamp)
-      if (signal?.effect.type === 'reactions') {
+      if (signal?.effect.type === plaintextEffect) {
         await chat.rememberArchiveSignal(signal, scope.jid)
         session.assertCurrent()
         const persisted = await chat.getArchiveSignal?.(peer, archiveId, from)
