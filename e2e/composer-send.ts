@@ -37,6 +37,15 @@ async function openChat(page: Page) {
   return field
 }
 
+async function openRoom(page: Page) {
+  await openChat(page)
+  await page.locator('[data-nav="rooms"]').click()
+  await page.getByText('Team Chat', { exact: true }).first().click()
+  const editor = page.locator('.message-input[contenteditable="true"]').first()
+  await expect(editor).toBeVisible()
+  return editor
+}
+
 async function captureState(page: Page) {
   if (process.env.FLUUX_COMPOSER_PROOF) {
     await page.screenshot({ path: test.info().outputPath('recovery-state.png'), animations: 'disabled' })
@@ -162,8 +171,10 @@ test('failure after deleting newer input still retains the failed draft', async 
 
 // N1: captain chose waiting until another message's edit finishes.
 for (const finish of ['cancel', 'save'] as const) {
-  test(`failed text waits outside another message edit until ${finish}`, async ({ page }) => {
-    const field = await openChat(page)
+ for (const room of [false, true]) {
+  test(`failed text waits outside another message edit until ${finish}${room ? ' in room' : ''}`, async ({ page }) => {
+    const field = room ? await openRoom(page) : await openChat(page)
+    const expectText = (text: string) => room ? expect(field).toHaveText(text) : expect(field).toHaveValue(text)
     await field.fill('Good catch.')
     await field.press('Enter')
     await expect.poll(() => calls(page)).toBe(1)
@@ -173,27 +184,24 @@ for (const finish of ['cancel', 'save'] as const) {
     await field.press('Enter')
     await expect.poll(() => calls(page)).toBe(2)
     await field.press('ArrowUp')
-    await expect(field).toHaveValue('Good catch.')
+    await expectText('Good catch.')
     await page.evaluate(() => (window as any).__sendProbe.fail())
     await expect(page.getByText('Failed to send message', { exact: true })).toBeVisible()
     await captureState(page)
-    await expect(field).toHaveValue('Good catch.')
+    await expectText('Good catch.')
     await field.press(finish === 'cancel' ? 'Escape' : 'Enter')
     await expect(page.getByText('Editing message', { exact: true })).toHaveCount(0)
-    await expect(field).toHaveValue(BODY)
+    await expectText(BODY)
     expect(await calls(page)).toBe(2)
-    console.log(JSON.stringify({ finding: 'N1', finish, recovered: await field.inputValue(), calls: await calls(page) }))
+    console.log(JSON.stringify({ finding: 'N1', finish, room, recovered: BODY, calls: await calls(page) }))
   })
+ }
 }
 
 // N2: mention chips and outgoing references must survive the failed-send remount.
 for (const newer of ['', 'Oups']) {
   test(`room mentions survive failed-send remount with newer=${newer || 'empty'}`, async ({ page }) => {
-    await openChat(page)
-    await page.locator('[data-nav="rooms"]').click()
-    await page.getByText('Team Chat', { exact: true }).first().click()
-    const editor = page.locator('.message-input[contenteditable="true"]').first()
-    await expect(editor).toBeVisible()
+    const editor = await openRoom(page)
     await editor.click()
     await page.keyboard.type('@')
     await page.keyboard.press('Enter') // Select the real @all completion.
