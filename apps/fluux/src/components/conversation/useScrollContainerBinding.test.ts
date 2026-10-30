@@ -340,21 +340,22 @@ describe('useScrollContainerBinding attachment', () => {
       vi.stubGlobal('navigator', { userAgent, platform: platformName, maxTouchPoints })
     }
 
-    function drag(composer: HTMLElement, moves: number[]) {
+    function drag(composer: HTMLElement, moves: number[], end = true) {
       const { result, observeUserInput } = mount()
       const scroller = scrollerElement().el
       document.body.append(composer)
       result.current.setScrollContainerRef(scroller)
-      scroller.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(300)] }))
       composer.focus()
+      scroller.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(300)] }))
       for (const y of moves) scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(y)] }))
+      if (end) window.dispatchEvent(new TouchEvent('touchend', { changedTouches: [touch(moves.at(-1) ?? 300)] }))
       return { observeUserInput, scroller }
     }
 
     it.each(Object.entries(composers))('blurs the %s on iOS once the drag passes the threshold, still scrolling', (_name, make) => {
       stubAgent(iosAgent)
       const composer = make()
-      const { observeUserInput, scroller } = drag(composer, [310])
+      const { observeUserInput, scroller } = drag(composer, [310], false)
       expect(document.activeElement).toBe(composer)
       scroller.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(350)] }))
       expect(document.activeElement).not.toBe(composer)
