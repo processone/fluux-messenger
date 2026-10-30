@@ -344,6 +344,12 @@ above the fold and the composer starts below it. Both sides keep their content
 the margin away from the fold. Fully open, closed, and every other device keep
 the usual layout.
 
+Known limit, accepted: half open in portrait with the keyboard open, the
+composer stays just above the fold. iOS docks the keyboard below the fold and
+ends the page above it, so the page has no room below the fold for the
+composer. The `hinge-layout` suite keeps this case: with the page ending above
+the fold, the composer sits at the bottom of the page.
+
 Building the reporter needs the iOS 27.1 SDK. Older SDKs, such as the one CI
 uses, leave it out, and the page then lays out flat.
 `npm run test:ios-hinge` checks the line and margin against the regions the
