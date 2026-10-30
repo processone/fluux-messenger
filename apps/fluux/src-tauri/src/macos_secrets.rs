@@ -920,6 +920,30 @@ mod native {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    // FLM-302 C3: with no sibling at all, the process that records a restored
+    // account stays writable for the items it had in sync, without any new
+    // read, for the following fresh restore and erasure.
+    #[test]
+    fn committer_keeps_writing_after_its_own_record_without_a_new_read() {
+        let dir = std::env::temp_dir().join(format!("fluux-fresh-{}", uuid::Uuid::new_v4()));
+        let only = Keychain {
+            revision_dir: Some(dir.clone()),
+            ..Keychain::default()
+        };
+        // It read both items once, as the secrets cache does when it loads.
+        only.observed_revision
+            .lock()
+            .unwrap()
+            .extend([(FRESH_ACCOUNT.to_string(), 0), (ACCOUNT.to_string(), 0)]);
+        only.mark_fresh_account("openpgp_passphrase:a@x").unwrap();
+        // A second restore and an erasure follow; neither re-reads first.
+        only.mark_fresh_account("openpgp_passphrase:b@x").unwrap();
+        only.begin_write(FRESH_ACCOUNT).unwrap();
+        only.begin_write(ACCOUNT).unwrap();
+        only.begin_write(FRESH_ACCOUNT).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     // FLM-302 R9: a marker that cannot be read is an error, and a commit does
     // not overwrite it. Touches only files in a temporary directory.
     #[test]
