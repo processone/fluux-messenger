@@ -31,6 +31,9 @@
  *   are cached with the sender's fallback body. The deferred-decrypt pass the
  *   registration starts must store their decrypted text in the message cache
  *   and the conversation preview, before the sign-in sync's own pass runs.
+ *   Once the plugin has fetched Bob's key and checked the signatures, no
+ *   message may keep its encrypted copy, which the app shows as "could not
+ *   decrypt", also before that pass.
  *
  * Skipped unless FLUUX_LIVE_ACCOUNTS names a JSON file:
  *   { "ws": "ws://127.0.0.1:5280/ws",
@@ -561,15 +564,24 @@ describe.skipIf(!accountsPath || !latePlugin)(`OpenPGP messages stored before th
         rows.length === MESSAGES && rows.every((m) => m.body === plaintexts.get(m.id))
       let cached = await cachedRows()
       note('cache', { rows: state(cached) })
-      while (!allReadable(cached) && catchingUp()) {
-        await new Promise((r) => setTimeout(r, 50))
-        const next = await cachedRows()
-        if (JSON.stringify(state(next)) !== JSON.stringify(state(cached))) note('cache', { rows: state(next) })
-        cached = next
+      const readCacheUntil = async (done: (rows: typeof cached) => boolean) => {
+        while (!done(cached) && catchingUp()) {
+          await new Promise((r) => setTimeout(r, 50))
+          const next = await cachedRows()
+          if (JSON.stringify(state(next)) !== JSON.stringify(state(cached))) note('cache', { rows: state(next) })
+          cached = next
+        }
       }
+      await readCacheUntil(allReadable)
       const syncStillRunning = catchingUp()
       const afterPluginPass = { cache: state(cached), preview: preview() }
       note('after-plugin-pass', { syncStillRunning, ...afterPluginPass })
+      // A message stored before its signature was checked keeps its encrypted
+      // copy. Once the plugin fetches Bob's key, it reports each check done,
+      // and the client decrypts the message again without the copy.
+      await readCacheUntil((rows) => allReadable(rows) && rows.every((m) => !m.encryptedPayload))
+      const checksDone = { syncStillRunning: catchingUp(), cache: state(cached), preview: preview() }
+      note('checks-done', checksDone)
 
       // Then the end of the sync, and its own pass, for the transcript.
       await waitFor(() => !catchingUp(), 60_000, 'sign-in sync')
@@ -584,6 +596,12 @@ describe.skipIf(!accountsPath || !latePlugin)(`OpenPGP messages stored before th
         .toEqual(Object.fromEntries(plaintexts))
       expect(afterPluginPass.preview.body).toBe([...plaintexts.values()].at(-1))
       for (const m of stored()) expect(m.body).toBe(plaintexts.get(m.id))
+      // Every check done and every copy gone, still before the sync's pass, so
+      // the app shows each message's text, in the list too.
+      expect(checksDone.syncStillRunning).toBe(true)
+      expect(Object.values(checksDone.cache).map((row) => [row.trust, row.encryptedCopy]))
+        .toEqual([...plaintexts.keys()].map(() => ['tofu', false]))
+      expect(checksDone.preview.shown).toBe([...plaintexts.values()].at(-1))
     } finally {
       await run.finish()
     }
