@@ -43,13 +43,23 @@ const COMPOSING_THROTTLE_MS = 2000
 const PAUSED_TIMEOUT_MS = 5000
 const COMPOSING_UI_TIMEOUT_MS = 1500
 
+/**
+ * Focuses the input and puts the caret at `position` in `text` once the new text
+ * has rendered. `position` only means something for `text`: when the person typed
+ * before this runs (a busy page handles queued keystrokes before timers), their
+ * caret already sits after what they typed, and moving it would pull it back.
+ */
 function restoreTextareaCursor(
   inputRef: RefObject<ComposerInputElement | null>,
+  text: string,
   position: number,
 ) {
+  // The text may not have rendered yet when this is scheduled.
+  const scheduledOver = inputRef.current?.value
   setTimeout(() => {
     const input = inputRef.current
     if (!input) return
+    if (input.value !== text && input.value !== scheduledOver) return
     input.focus()
     input.setSelectionRange(position, position)
   }, 0)
@@ -404,7 +414,7 @@ export function MessageComposer({
     setText: (t: string) => setText(t),
     placeCaret: (t: string, position: number) => {
       updateCaret(t, position)
-      restoreTextareaCursor(inputRef, position)
+      restoreTextareaCursor(inputRef, t, position)
     },
   }), [text, setText, updateCaret])
 
@@ -457,7 +467,7 @@ export function MessageComposer({
       setText(editingMessage.body)
       setEditAttachmentRemoved(false) // Reset attachment removal state
       // Focus and move cursor to end
-      restoreTextareaCursor(inputRef, editingMessage.body.length)
+      restoreTextareaCursor(inputRef, editingMessage.body, editingMessage.body.length)
     } else if (!editingMessage) {
       // Reset when editing is cancelled
       lastEditedRowIdRef.current = null
@@ -621,7 +631,7 @@ export function MessageComposer({
     if (closedShortcode) {
       setText(closedShortcode.newText)
       updateCaret(closedShortcode.newText, closedShortcode.newCursorPosition)
-      restoreTextareaCursor(inputRef, closedShortcode.newCursorPosition)
+      restoreTextareaCursor(inputRef, closedShortcode.newText, closedShortcode.newCursorPosition)
     } else {
       setText(e.target.value)
       updateCaret(e.target.value, e.target.selectionStart)
@@ -754,7 +764,7 @@ export function MessageComposer({
     setText(newText)
     updateCaret(newText, newCursorPosition)
     emojiAutocomplete.dismiss()
-    restoreTextareaCursor(inputRef, newCursorPosition)
+    restoreTextareaCursor(inputRef, newText, newCursorPosition)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<ComposerInputElement>) => {
@@ -904,7 +914,7 @@ export function MessageComposer({
     // Restore focus and set cursor after emoji
     const newCursorPos = cursorPos + emoji.length
     updateCaret(newText, newCursorPos)
-    restoreTextareaCursor(inputRef, newCursorPos)
+    restoreTextareaCursor(inputRef, newText, newCursorPos)
   }
 
   // Default input renderer (simple textarea)

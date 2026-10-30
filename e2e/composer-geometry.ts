@@ -568,28 +568,28 @@ test.describe('composer geometry', () => {
     await page.keyboard.type('ping @')
     await page.keyboard.press('Enter')
     await expect(editor.locator('[data-mention]')).toHaveCount(1)
-    // Picking a mention puts the caret after it on a timer. Typing before that
-    // lands would have the timer pull the caret back behind what was typed, so
-    // wait for it, as a person's pause would.
+    const mention = (await editor.locator('[data-mention]').textContent())!
+    // Typed straight after the pick, as a quick person would. The pick places
+    // the caret on a timer, and a busy page runs queued keys first; that
+    // placement must not pull the caret back behind what was typed (FLM-170).
+    await page.keyboard.type('now')
+    const typed = `ping ${mention} now`
     const state = () => editor.evaluate((el) => {
       const input = el as unknown as { value: string; selectionStart: number }
-      return input.selectionStart === input.value.length
+      return { value: input.value, caret: input.selectionStart }
     })
-    await expect.poll(state).toBe(true)
-    await page.keyboard.type('now')
+    await expect.poll(state).toEqual({ value: typed, caret: typed.length })
     // Keys outrun the browser's selectionchange, which is how the editor learns
     // where the caret is; a person types slower. Step one key at a time and wait
     // until the editor has seen each move, as a person's pace would allow.
     const caret = () => editor.evaluate((el) => (el as unknown as { selectionStart: number }).selectionStart)
-    const afterMention = 'ping '.length + (await editor.locator('[data-mention]').textContent())!.length
-    await expect.poll(state).toBe(true)
-    let expected = await caret()
+    let expected = typed.length
     for (let i = 0; i < 4; i++) { // before " now"
       await page.keyboard.press('ArrowLeft')
       expected -= 1
       await expect.poll(caret).toBe(expected)
     }
-    expect(expected).toBe(afterMention)
+    expect(expected).toBe('ping '.length + mention.length)
     await page.keyboard.press('Backspace')
     await expect(editor.locator('[data-mention]')).toHaveCount(0)
     expect(await editor.evaluate((el) => (el as unknown as { value: string }).value)).toBe('ping  now')

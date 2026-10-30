@@ -1,4 +1,4 @@
-import { createRef } from 'react'
+import { createRef, useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
@@ -124,6 +124,43 @@ describe('MessageComposer caret reporting', () => {
       expect(textarea.selectionStart).toBe(11)
       expect(document.activeElement).toBe(textarea)
     })
+  })
+
+  /**
+   * FLM-170: the placement after a picked mention runs on a timer. On a busy
+   * page the browser handles keystrokes queued behind the pick before that
+   * timer, so `ping @Emma |` became `ping @Emma |now` and the next keystroke
+   * landed in the middle of the word just typed.
+   */
+  it('keeps the caret after text typed before the placement lands', async () => {
+    const ref = createRef<MessageComposerHandle>()
+    function Room() {
+      const [value, setValue] = useState('ping @Em')
+      return (
+        <MessageComposer
+          ref={ref}
+          placeholder="Type a message"
+          onSend={vi.fn().mockResolvedValue(true)}
+          value={value}
+          onValueChange={setValue}
+        />
+      )
+    }
+    render(<Room />)
+    const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement
+
+    act(() => {
+      ref.current?.setText('ping @Emma ')
+      ref.current?.placeCaret('ping @Emma ', 11)
+    })
+    fireEvent.change(textarea, {
+      target: { value: 'ping @Emma now', selectionStart: 14, selectionEnd: 14 },
+    })
+    // Lets the composer's zero-delay placement, scheduled first, run.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+
+    expect(textarea.value).toBe('ping @Emma now')
+    expect(textarea.selectionStart).toBe(14)
   })
 
   it('reports the caret the completion moved it to', async () => {
