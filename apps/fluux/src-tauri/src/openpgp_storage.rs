@@ -425,6 +425,7 @@ impl KeyStorage {
     /// when the account is routed to the fresh item and the key file unlocks
     /// with the live secret there. An unreadable file is an error, not an
     /// absent one.
+    #[cfg(any(target_os = "macos", test))]
     fn snapshot_key(
         &self,
         store: &dyn crate::credentials::SecretStore,
@@ -1253,6 +1254,7 @@ fn remove_durably(path: &Path) -> Result<()> {
     sync_parent(path)
 }
 
+#[cfg(any(target_os = "macos", test))]
 enum SavedKey {
     /// An interrupted restore's original: put it back on failure.
     Current,
@@ -1267,6 +1269,7 @@ enum SavedKey {
 /// account not routed yet has no restore committed; its old protection cannot
 /// be read here without prompting, so the saved key stays the original.
 /// Read failures are errors, never "not committed".
+#[cfg(any(target_os = "macos", test))]
 fn saved_key_state(
     store: &dyn crate::credentials::SecretStore,
     account: &str,
@@ -1286,7 +1289,6 @@ fn saved_key_state(
     );
     let unlocks = |bytes: &[u8]| {
         Cert::from_bytes(bytes)
-            .map_err(anyhow::Error::from)
             .and_then(|cert| decrypt_cert_secrets(cert, &live))
             .is_ok()
     };
