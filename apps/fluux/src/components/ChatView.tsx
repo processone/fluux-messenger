@@ -1227,7 +1227,7 @@ export const MessageInput = memo(function MessageInput({
   // Draft persistence - saves on conversation change, restores on load
   const [text, setText, consumeDraft] = useConversationDraft({
     conversationId,
-    draftOperations: { getDraft, setDraft, clearDraft },
+    draftOperations: { owner: chatStore, getDraft, setDraft, clearDraft },
     composerRef,
   })
 

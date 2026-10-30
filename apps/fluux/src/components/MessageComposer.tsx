@@ -16,6 +16,7 @@ const emojiPickerImport = () => import('./EmojiPicker').then(m => ({ default: m.
 const EmojiPicker = lazy(emojiPickerImport)
 import type { FileAttachment } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
+import { mergeFailedDraft } from '@/utils/mergeFailedDraft'
 import { encryptionSendErrorKey } from '@/e2ee/encryptionSendError'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { trustVisual } from '@/e2ee/trustVisual'
@@ -309,7 +310,6 @@ export function MessageComposer({
   const text = controlledValue !== undefined ? controlledValue : internalText
   const textRef = useRef(text)
   textRef.current = text
-  const textRevision = useRef(0)
   const mounted = useRef(false)
   useEffect(() => {
     mounted.current = true
@@ -318,7 +318,6 @@ export function MessageComposer({
   const setTextRef = useRef((_t: string) => {})
   setTextRef.current = (t: string) => {
     textRef.current = t
-    textRevision.current++
     if (controlledValue !== undefined) {
       onValueChange?.(t)
     } else {
@@ -717,12 +716,12 @@ export function MessageComposer({
     const submittedText = text
     const rollbackDraft = !editingMessage ? onConsumeDraft?.() : undefined
     if (!editingMessage) setText('')
-    const submittedRevision = textRevision.current
     const restore = () => {
       if (rollbackDraft) rollbackDraft()
-      else if (mounted.current && textRevision.current === submittedRevision) setText(submittedText)
+      else if (mounted.current) setText(mergeFailedDraft(textRef.current, submittedText))
     }
 
+    let failureKey = 'chat.failedToSendMessage'
     try {
       let outgoingText = trimmed
       if (commandsEnabled !== false && !replyingTo && !editingMessage && trimmed && resolveInput) {
@@ -742,12 +741,14 @@ export function MessageComposer({
 
       if (editingMessage && isEmptyEdit && onRetractMessage) {
         // Edit resulted in empty message - retract it instead
+        failureKey = 'chat.failedToDeleteMessage'
         await onRetractMessage(editingMessage.id)
         setText('')
         onCancelEdit?.()
         inputRef.current?.focus()
       } else if (editingMessage && onSendCorrection) {
         // Pass the kept attachment, or undefined to remove it.
+        failureKey = 'chat.failedToEditMessage'
         const handled = await onSendCorrection(editingMessage.id, trimmed, attachmentToKeep)
         if (handled) {
           setText('')
@@ -769,7 +770,7 @@ export function MessageComposer({
     } catch (err) {
       if (!editingMessage) restore()
       const toastKey = encryptionSendErrorKey(err)
-      addToast('error', t(toastKey ?? 'console.failedToSend'))
+      addToast('error', t(toastKey ?? failureKey))
       if (!toastKey) console.error('Failed to send message:', err)
     } finally {
       submitting.current = false

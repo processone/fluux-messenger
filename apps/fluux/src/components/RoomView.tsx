@@ -1980,6 +1980,9 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   const [attachmentWarning, setAttachmentWarning] = useState(false)
   const warningResolve = useRef<((confirmed: boolean) => void) | null>(null)
   const whisperSendGeneration = useRef(0)
+  // Private draft recovery expires on route exit, not attachment changes.
+  const whisperDraftGeneration = useRef(0)
+  useEffect(() => () => { whisperDraftGeneration.current += 1 }, [roomJid, whisperTarget])
   const currentWhisper = useRef(whisperTarget)
   currentWhisper.current = whisperTarget
   const currentAttachment = useRef(pendingAttachment)
@@ -2016,7 +2019,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // Draft persistence - saves on room change, restores on load, clears references
   const [text, setText, consumeDraft] = useConversationDraft({
     conversationId: roomJid,
-    draftOperations: { getDraft, setDraft, clearDraft },
+    draftOperations: { owner: roomStore, getDraft, setDraft, clearDraft },
     composerRef,
     onDraftRestored: handleDraftRestored,
   })
@@ -2029,6 +2032,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // composer and could be sent to the whole room. Discarding upholds the invariant:
   // private text is never converted into a public message (XEP-0045 §7.5).
   const handleClearWhisper = () => {
+    whisperDraftGeneration.current += 1
     setText('')
     clearDraft(roomJid)
     onClearWhisper?.()
@@ -2496,8 +2500,11 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         onComposingChange={onComposingChange}
         onConsumeDraft={() => {
           const submittedReferences = references
+          const privateGeneration = whisperDraftGeneration.current
           const restore = consumeDraft()
           return () => {
+            // Cancelling/leaving private mode must never reveal its text publicly.
+            if (whisperTarget && whisperDraftGeneration.current !== privateGeneration) return
             if (restore()) setReferences(submittedReferences)
           }
         }}

@@ -1,6 +1,6 @@
 // Intent: FLM-256 / captain's Enter, click, Enter sequence must not resend a
 // pending draft. FLM-255 established that a remount resurrected submitted text.
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { useConversationDraft, type DraftOperations } from '@/hooks/useConversationDraft'
@@ -25,13 +25,21 @@ function deferred<T>() {
 function fixture() {
   const drafts = new Map<string, string>([['emma@fluux.chat', BODY]])
   const operations: DraftOperations = {
+    owner: {},
     getDraft: id => drafts.get(id) ?? '',
     setDraft: (id, value) => { drafts.set(id, value) },
     clearDraft: id => { drafts.delete(id) },
   }
   function Input({ onSend, id = 'emma@fluux.chat' }: { onSend: (text: string) => Promise<boolean>; id?: string }) {
     const ref = useRef<MessageComposerHandle>(null)
-    const [text, setText, consumeDraft] = useConversationDraft({ conversationId: id, draftOperations: operations, composerRef: ref })
+    // Real useChatActions wraps these actions anew on each mount.
+    const wrapped = useMemo(() => ({
+      owner: operations.owner,
+      getDraft: (id: string) => operations.getDraft(id),
+      setDraft: (id: string, value: string) => operations.setDraft(id, value),
+      clearDraft: (id: string) => operations.clearDraft(id),
+    }), [operations])
+    const [text, setText, consumeDraft] = useConversationDraft({ conversationId: id, draftOperations: wrapped, composerRef: ref })
     return <MessageComposer ref={ref} placeholder="Message" value={text} onValueChange={setText}
       onConsumeDraft={consumeDraft} onSend={onSend} />
   }

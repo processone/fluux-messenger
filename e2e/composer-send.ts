@@ -16,7 +16,6 @@ async function openChat(page: Page) {
     client.messages.sendChatState = async () => {}
     w.__sendProbe = { calls: [], settled: false }
     const original = client.messages.sendMessage.bind(client.messages)
-    w.__sendProbe.original = original
     client.messages.sendMessage = async (...args: unknown[]) => {
       w.__sendProbe.calls.push(args[1])
       await new Promise<void>((resolve, reject) => {

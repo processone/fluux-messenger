@@ -13,6 +13,7 @@ describe('useConversationDraft', () => {
     drafts = new Map()
 
     mockDraftOperations = {
+      owner: {},
       getDraft: vi.fn((id: string) => drafts.get(id) || ''),
       setDraft: vi.fn((id: string, text: string) => {
         drafts.set(id, text)

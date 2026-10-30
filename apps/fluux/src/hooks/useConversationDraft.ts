@@ -1,12 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { getStorageScopeJid } from '@fluux/sdk'
+import { mergeFailedDraft } from '@/utils/mergeFailedDraft'
 import type { MessageComposerHandle } from '@/components/MessageComposer'
 
 export interface DraftOperations {
+  /** Stable backing-store identity, shared by remounted editors. */
+  owner: object
   getDraft: (conversationId: string) => string
   setDraft: (conversationId: string, text: string) => void
   clearDraft: (conversationId: string) => void
 }
+
+// Recovery targets the currently mounted editor, not the instance that sent.
+// Action wrappers can change on remount, so the backing store owns this key.
+const draftOwners = new WeakMap<object, Map<string, (failed: string) => boolean>>()
 
 export interface UseConversationDraftOptions {
   /** Current conversation/room ID */
@@ -37,10 +44,11 @@ export function useConversationDraft({
   composerRef,
   onDraftRestored,
 }: UseConversationDraftOptions): [string, React.Dispatch<React.SetStateAction<string>>, () => () => boolean] {
-  const { getDraft, setDraft, clearDraft } = draftOperations
+  const { owner, getDraft, setDraft, clearDraft } = draftOperations
 
   // Controlled text state
   const [text, setText] = useState('')
+  const currentTextRef = useRef('')
 
   // Track previous conversationId to detect changes
   const prevConversationIdRef = useRef<string | null>(null)
@@ -59,26 +67,23 @@ export function useConversationDraft({
   const onDraftRestoredRef = useRef(onDraftRestored)
   onDraftRestoredRef.current = onDraftRestored
 
-  const mounted = useRef(false)
-  useEffect(() => {
-    mounted.current = true
-    return () => { mounted.current = false }
-  }, [])
-
   // Debounce timer ref
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const textRevisions = useRef(new Map<string, number>())
+  const cancelPendingSave = useCallback(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    debounceTimerRef.current = null
+  }, [])
 
   // Wrapper around setText that tags the text as belonging to the current conversation
   const userSetText: React.Dispatch<React.SetStateAction<string>> = useCallback(
     (action) => {
       textConversationIdRef.current = conversationIdRef.current
-      const id = conversationIdRef.current
-      textRevisions.current.set(id, (textRevisions.current.get(id) ?? 0) + 1)
-      setText(action)
+      cancelPendingSave()
+      const next = typeof action === 'function' ? action(currentTextRef.current) : action
+      currentTextRef.current = next
+      setText(next)
     },
-    []
+    [cancelPendingSave]
   )
 
   // Save draft on conversation change or unmount, restore draft on conversation change
@@ -102,6 +107,7 @@ export function useConversationDraft({
       // writing stale text to the new conversation
       textConversationIdRef.current = null
       const draft = getDraft(conversationId)
+      currentTextRef.current = draft
       setText(draft)
 
       // Notify caller that draft was restored (e.g., to reset mention references)
@@ -130,7 +136,7 @@ export function useConversationDraft({
   useEffect(() => {
     // Skip if text doesn't belong to the current conversation
     // (e.g., it was restored programmatically during a conversation switch)
-    if (textConversationIdRef.current !== conversationId) return
+    if (textConversationIdRef.current !== conversationId || text !== currentTextRef.current) return
 
     // Clear any pending debounce
     if (debounceTimerRef.current) {
@@ -155,35 +161,51 @@ export function useConversationDraft({
     }
   }, [text, conversationId, setDraft, clearDraft])
 
-  // A submission owns its snapshot, not the currently rendered conversation.
-  // Cancel the pending save synchronously, so remount cannot restore sent text.
+  const account = getStorageScopeJid()
+  const ownerKey = JSON.stringify([account, conversationId])
+  useEffect(() => {
+    let editors = draftOwners.get(owner)
+    if (!editors) {
+      editors = new Map()
+      draftOwners.set(owner, editors)
+    }
+    const recoverHere = (failed: string) => {
+      if (getStorageScopeJid() !== account || !failed.trim()) return false
+      const current = composerRef.current?.getText() ?? currentTextRef.current
+      const recovered = mergeFailedDraft(current, failed)
+      cancelPendingSave()
+      if (composerRef.current) composerRef.current.setText(recovered)
+      else userSetText(recovered)
+      setDraft(conversationId, recovered)
+      // Only an exact restoration can reuse the submitted mention references.
+      return !current
+    }
+    editors.set(ownerKey, recoverHere)
+    return () => {
+      if (editors.get(ownerKey) === recoverHere) editors.delete(ownerKey)
+      if (editors.size === 0) draftOwners.delete(owner)
+    }
+  }, [owner, ownerKey, account, conversationId, composerRef, cancelPendingSave, userSetText, setDraft])
+
+  // Consume before awaiting; rollback belongs to the original account and ID,
+  // but reads the current editor (or persisted draft) to preserve newer input.
   const consumeDraft = useCallback(() => {
     const id = conversationId
     const scope = getStorageScopeJid()
-    const composer = composerRef.current
-    const submitted = composer?.getText() ?? text
-    const revision = textRevisions.current.get(id) ?? 0
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current)
-      debounceTimerRef.current = null
-    }
+    const key = JSON.stringify([scope, id])
+    const submitted = composerRef.current?.getText() ?? currentTextRef.current
+    let recovered = false
+    cancelPendingSave()
     clearDraft(id)
     return () => {
-      if (getStorageScopeJid() !== scope) return false
-      // Never overwrite a newer draft or apply a failure to another recipient.
-      if (getDraft(id)) return false
-      let restoredHere = false
-      if (mounted.current && conversationIdRef.current === id) {
-        // Clearing at submission is one edit; later edits belong to the user,
-        // including an intentionally empty replacement draft.
-        if (textRevisions.current.get(id) !== revision + 1 || composerRef.current?.getText()) return false
-        composerRef.current?.setText(submitted)
-        restoredHere = true
-      }
-      if (submitted.trim()) setDraft(id, submitted)
-      return restoredHere
+      if (recovered || getStorageScopeJid() !== scope) return false
+      recovered = true
+      const editor = draftOwners.get(owner)?.get(key)
+      if (editor) return editor(submitted)
+      if (submitted.trim()) setDraft(id, mergeFailedDraft(getDraft(id), submitted))
+      return false
     }
-  }, [conversationId, composerRef, text, clearDraft, getDraft, setDraft])
+  }, [conversationId, owner, composerRef, cancelPendingSave, clearDraft, getDraft, setDraft])
 
   return [text, userSetText, consumeDraft]
 }
