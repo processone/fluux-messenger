@@ -479,7 +479,8 @@ export interface PluginContext {
    * Plugin-driven channel for telling the host that a previously-delivered
    * message's security context has changed (e.g. signature verified after a
    * peer's key arrived). The host re-publishes this through its SDK event
-   * surface so any UI bound to the message re-renders. Wired by
+   * surface so any UI bound to the message re-renders, then decrypts that
+   * peer's messages that still keep their encrypted copy again. Wired by
    * {@link E2EEManager} when it constructs the context; plugins must NOT
    * call it during a `decrypt` call (that path returns a fresh
    * {@link SecurityContext} via {@link DecryptResult} instead).

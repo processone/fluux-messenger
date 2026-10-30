@@ -21,7 +21,7 @@ import { xml, Element } from '@xmpp/client'
 import * as ltx from 'ltx'
 import type { E2EEManager } from '.'
 import { decryptStanzaInPlace, COULD_NOT_DECRYPT_BODY, MESSAGE_REJECTED_BODY } from './stanzaDecrypt'
-import { parseMessageContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, applyCorrection, parseOgpFastening } from '../modules/messagingUtils'
+import { parseMessageContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, applyCorrection, parseOgpFastening, isMessageSignal } from '../modules/messagingUtils'
 import { getBareJid, getDomain } from '../jid'
 import { logDebug, logInfo, logWarn } from '../logger'
 import type { StoreBindings, MessageSecurityContext, FileAttachment, Message } from '../types'
@@ -38,16 +38,20 @@ type RetryModification = ArchiveSignal['effect']
 /**
  * Result of a single deferred-decrypt attempt.
  * - `decrypted`: plaintext recovered — update body/security/attachment, clear `encryptedPayload`.
+ *   When `unverified`, the signature waits for the sender's key: the text is stored
+ *   untrusted and `encryptedPayload` stays for the later signature check.
  * - `modification`: decrypt surfaced a signal targeting another message —
  *   durably record it, apply its target effect and remove the placeholder.
  * - `unsupported`: protocol we have no plugin for — clear `encryptedPayload`, tag `unsupportedEncryption`, keep body.
  * - `rejected`: signature is invalid (final, never retryable) — a real message placeholder is
  *   replaced with a "[Message rejected]" body; a bodiless-signal placeholder (forged reaction/
  *   retraction) is removed entirely so it never surfaces as a ghost bubble.
- * - `pending`: still cannot decrypt (key locked / plugin not ready) — leave `encryptedPayload`.
+ * - `pending`: still cannot decrypt (key locked / plugin not ready), an unverified signal
+ *   waits for its signature check, or the message already shows this unverified text —
+ *   leave `encryptedPayload`.
  */
 type RetryOutcome =
-  | { kind: 'decrypted'; authoredAt?: Date; body: string; securityContext?: MessageSecurityContext; attachment?: FileAttachment }
+  | { kind: 'decrypted'; authoredAt?: Date; body: string; securityContext?: MessageSecurityContext; attachment?: FileAttachment; unverified?: true }
   | { kind: 'modification'; modification: RetryModification; stanza: string; securityContext?: MessageSecurityContext; authoredAt?: Date }
   | { kind: 'unsupported'; info: { namespace: string; name: string } }
   | { kind: 'rejected'; securityContext?: MessageSecurityContext }
@@ -140,8 +144,25 @@ function recoveredUpdates(
       correctionRevision: message.correctionRevision,
       ...(outcome.authoredAt && { correctionTimestamp: outcome.authoredAt.getTime(), correctionTimestampSource: 'authored' as const }),
     }),
-    encryptedPayload: undefined,
+    ...(!outcome.unverified && { encryptedPayload: undefined }),
   }, accountScope)
+}
+
+/**
+ * An unverified decrypt repeats on every pass until the sender's key arrives.
+ * Once the message shows its text, a later pass leaves it alone: rewriting it
+ * would only repeat the write, or undo a trust upgrade the plugin reported
+ * in between.
+ */
+function unlessShown(
+  message: { body?: string; securityContext?: MessageSecurityContext },
+  outcome: RetryOutcome,
+): RetryOutcome {
+  if (outcome.kind !== 'decrypted' || !outcome.unverified) return outcome
+  const shown = message.securityContext
+  if (!shown || message.body !== outcome.body) return outcome
+  const sameNotes = JSON.stringify(shown.notes ?? []) === JSON.stringify(outcome.securityContext?.notes ?? [])
+  return shown.trust !== 'untrusted' || sameNotes ? { kind: 'pending' } : outcome
 }
 
 export interface CorrectionRecovery {
@@ -237,7 +258,7 @@ export class DeferredDecryptEngine {
         if (peer && (room || conversationId !== peer)) continue
         if (room) handledRoomKeys.add(JSON.stringify([message.roomJid, message.stanzaId ?? message.id, message.from, message.occupantId]))
         else handledChatKeys.add(chatCacheKey(message))
-        const outcome = await this.decryptSingle(manager, message.encryptedPayload!, message.from, conversationId, room ? 'room' : 'chat', room ? undefined : message as StoredMessage)
+        const outcome = unlessShown(message, await this.decryptSingle(manager, message.encryptedPayload!, message.from, conversationId, room ? 'room' : 'chat', room ? undefined : message as StoredMessage))
         if (accountChanged()) return decryptedCount
         if (this.correctionRecoveries.get(key) !== request) continue
         if (!request.isCurrent()) { this.correctionRecoveries.delete(key); continue }
@@ -266,9 +287,9 @@ export class DeferredDecryptEngine {
         for (const msg of messages) {
           if (!msg.encryptedPayload || handledChatKeys.has(chatCacheKey(msg))) continue
           handledChatKeys.add(chatCacheKey(msg))
-          const outcome = await this.decryptSingle(
+          const outcome = unlessShown(msg, await this.decryptSingle(
             manager, msg.encryptedPayload, msg.from, conversationId, 'chat', msg,
-          )
+          ))
           if (accountChanged()) return decryptedCount
           if (outcome.kind === 'decrypted') {
             chatBindings.updateMessage(conversationId, msg, recoveredUpdates(msg, outcome, accountScope))
@@ -300,9 +321,9 @@ export class DeferredDecryptEngine {
       for (const { jid: roomJid, messages } of peer ? [] : roomBindings.getAllRoomMessages()) {
         for (const msg of messages) {
           if (!msg.encryptedPayload || handledRoomKeys.has(JSON.stringify([roomJid, msg.stanzaId ?? msg.id, msg.from, msg.occupantId]))) continue
-          const outcome = await this.decryptSingle(
+          const outcome = unlessShown(msg, await this.decryptSingle(
             manager, msg.encryptedPayload, msg.from, roomJid, 'room',
-          )
+          ))
           if (accountChanged()) return decryptedCount
           if (outcome.kind === 'decrypted') {
             roomBindings.updateMessage(roomJid, msg.id, recoveredUpdates(msg, outcome, accountScope))
@@ -357,9 +378,9 @@ export class DeferredDecryptEngine {
         // Record so the preview-heal pass below skips a message this pass
         // already repaired (it heals the preview via refreshLastMessageContent).
         handledChatKeys.add(msg.cacheKey)
-        const outcome = await this.decryptSingle(
+        const outcome = unlessShown(msg, await this.decryptSingle(
           manager, msg.encryptedPayload, msg.from, conversationId, 'chat', msg,
-        )
+        ))
         if (accountChanged()) return decryptedCount
         if (outcome.kind === 'decrypted') {
           const updates = recoveredUpdates(msg, outcome, accountScope)
@@ -422,9 +443,9 @@ export class DeferredDecryptEngine {
         // heals the preview in place (updateMessage / refreshLastMessageContent),
         // so re-decrypting here would be redundant work.
         if (handledChatKeys.has(chatCacheKey(lastMessage))) continue
-        const outcome = await this.decryptSingle(
+        const outcome = unlessShown(lastMessage, await this.decryptSingle(
           manager, lastMessage.encryptedPayload, lastMessage.from, conversationId, 'chat', lastMessage,
-        )
+        ))
         if (accountChanged()) return decryptedCount
         if (outcome.kind === 'decrypted') {
           chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, recoveredUpdates(lastMessage, outcome, accountScope))
@@ -603,8 +624,17 @@ export class DeferredDecryptEngine {
         return { kind: 'unsupported', info: result.unsupportedEncryption }
       }
 
-      if (!result.attempted || result.encryptedPayloadXml) {
+      // Decrypted, but the signature waits for the sender's key. Its text is
+      // stored below, untrusted, as the live path stores it.
+      const unverified = !!result.awaitsVerification
+      if (!result.attempted || (result.encryptedPayloadXml && !unverified)) {
         // Still can't decrypt
+        return { kind: 'pending' }
+      }
+      // A reaction, retraction, link preview or correction changes another
+      // message and removes its placeholder, which would also drop the
+      // encrypted copy before the signature check. It waits for that check.
+      if (unverified && (isMessageSignal(stanza) || stanza.getChild('apply-to', NS_FASTEN))) {
         return { kind: 'pending' }
       }
 
@@ -688,6 +718,7 @@ export class DeferredDecryptEngine {
         body: processedBody,
         ...(securityContext && { securityContext }),
         ...(attachment && { attachment }),
+        ...(unverified && { unverified: true as const }),
       }
       const correction = parseCorrectionSignal(stanza)
       if (correction?.targetId && archiveMessage && !archiveMessage.isEdited) {
@@ -728,7 +759,8 @@ export class DeferredDecryptEngine {
 
   /**
    * Re-attempt deferred decrypts AND upgrade stale trust for a specific
-   * peer, triggered when that peer's PEP key material changes.
+   * peer, triggered when that peer's PEP key material changes, or when a
+   * plugin reports a held signature check done (the key is now cached).
    *
    * Two categories of stored messages are handled:
    *

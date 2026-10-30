@@ -25,6 +25,15 @@
  *   outage, which Alice never hears about. Her first message in the new
  *   session must not be encrypted to the withdrawn key, and her public key
  *   must reach the server.
+ * - Sign-in with a late plugin (FLM-163): Bob sends 5 OpenPGP messages while
+ *   Alice is signed out, and Alice has no cached key for Bob, as on a new
+ *   device. Alice signs in, and her plugin registers only once the messages
+ *   are cached with the sender's fallback body. The deferred-decrypt pass the
+ *   registration starts must store their decrypted text in the message cache
+ *   and the conversation preview, before the sign-in sync's own pass runs.
+ *   Once the plugin has fetched Bob's key and checked the signatures, no
+ *   message may keep its encrypted copy, which the app shows as "could not
+ *   decrypt", also before that pass.
  *
  * Skipped unless FLUUX_LIVE_ACCOUNTS names a JSON file:
  *   { "ws": "ws://127.0.0.1:5280/ws",
@@ -33,7 +42,8 @@
  * for a server with WebSocket, Stream Management resumption and PEP, and two
  * throwaway accounts with no OpenPGP keys published yet (each check publishes
  * new ones, so give each run new accounts). FLUUX_LIVE_SESSION=new runs the
- * new-session check instead of the resume one. FLUUX_LIVE_RESUME=traditional
+ * new-session check instead of the resume one, and FLUUX_LIVE_SESSION=late-plugin
+ * the sign-in check. FLUUX_LIVE_RESUME=traditional
  * hides SASL2 from Alice's client. FLUUX_LIVE_TRANSCRIPT=path writes the
  * timeline as JSON.
  *
@@ -50,7 +60,10 @@ vi.unmock('@fluux/sdk')
 
 const accountsPath = process.env.FLUUX_LIVE_ACCOUNTS
 const mode = process.env.FLUUX_LIVE_RESUME === 'traditional' ? 'traditional' : 'sasl2'
-const newSession = process.env.FLUUX_LIVE_SESSION === 'new'
+const session = process.env.FLUUX_LIVE_SESSION === 'new' || process.env.FLUUX_LIVE_SESSION === 'late-plugin'
+  ? process.env.FLUUX_LIVE_SESSION : 'resumed'
+const newSession = session === 'new'
+const latePlugin = session === 'late-plugin'
 const MESSAGES = 5
 const OX_NS = 'urn:xmpp:openpgp:0'
 const KEY_LIST_NODE = 'urn:xmpp:openpgp:0:public-keys'
@@ -226,10 +239,15 @@ async function startRun(accounts: Accounts) {
   connectionStore.subscribe((s) => s.status, (value) => note('status', { value }))
   connectionStore.subscribe((s) => s.isCatchingUp, (value) => note('isCatchingUp', { value }))
   // The app: register the plugins on every E2EE manager the client builds.
+  // A check can hold the registration back until `registration.hold` settles.
+  const registration: { hold: Promise<void> | null } = { hold: null }
   alice.subscribe('e2ee:manager-ready', () => {
     note('e2ee:manager-ready')
     useEncryptionSettingsStore.setState({ openpgpEnabled: true })
-    void registerE2EEPlugins(alice).then(() => note('registration-done', { registered: !!alice.e2ee?.getPlugin('openpgp') }))
+    void (registration.hold ?? Promise.resolve())
+      .then(() => registerE2EEPlugins(alice))
+      .then(() => note('registration-done', { registered: !!alice.e2ee?.getPlugin('openpgp') }))
+      .catch((error) => note('registration-failed', { error: String(error) }))
   })
 
   /** Alice's first session: online, plugin registered, caught up, Bob a contact. */
@@ -248,7 +266,7 @@ async function startRun(accounts: Accounts) {
     note('end', { conversations: [...chatStore.getState().conversations.values()].map((c) => ({ id: c.id, last: c.lastMessage?.body })) })
     if (process.env.FLUUX_LIVE_TRANSCRIPT) {
       writeFileSync(process.env.FLUUX_LIVE_TRANSCRIPT, JSON.stringify({
-        mode, session: newSession ? 'new' : 'resumed', timeline, ...extra,
+        mode, session, timeline, ...extra,
         log: logLines.filter((l) => /E2EE|OpenPGP|SM session|Stream Management|decrypt|publish/i.test(l)),
       }, null, 2))
     }
@@ -264,11 +282,11 @@ async function startRun(accounts: Accounts) {
 
   return {
     t0, note, waitFor, xml, toElement, bob, bobPrimitives, bobE2EE, net, sent, loseNetwork,
-    alice, connectionStore, chatStore, logLines, connectAlice, finish,
+    alice, connectionStore, chatStore, logLines, connectAlice, finish, registration,
   }
 }
 
-describe.skipIf(!accountsPath || newSession)(`OpenPGP resume replay against a live server (${mode})`, () => {
+describe.skipIf(!accountsPath || session !== 'resumed')(`OpenPGP resume replay against a live server (${mode})`, () => {
   it('stores the replayed OpenPGP messages with their decrypted text on arrival', async () => {
     const accounts = JSON.parse(readFileSync(accountsPath!, 'utf8')) as Accounts
     const run = await startRun(accounts)
@@ -460,6 +478,132 @@ describe.skipIf(!accountsPath || !newSession)(`OpenPGP after a session the serve
         resumeRequests: sent.flatMap((f) => f.data.match(/<resume [^>]*>/g)?.map((resume) => ({ ms: f.ms, resume })) ?? []),
         keyRequests: sent.filter((f) => f.data.includes(KEY_LIST_NODE)).map((f) => ({ ms: f.ms, data: f.data.slice(0, 300) })),
       })
+    }
+  }, 180_000)
+})
+
+describe.skipIf(!accountsPath || !latePlugin)(`OpenPGP messages stored before the plugin registers at sign-in (${mode})`, () => {
+  it('stores their decrypted text in the message cache and the preview', async () => {
+    const accounts = JSON.parse(readFileSync(accountsPath!, 'utf8')) as Accounts
+    const run = await startRun(accounts)
+    const { t0, note, waitFor, xml, toElement, bob, bobE2EE, alice, connectionStore, chatStore, registration } = run
+    const { serializePayloadEnvelope } = await import('@fluux/sdk')
+    const { getMessages } = await import('@fluux/sdk/cache')
+    const { formatLocalizedPreview } = await import('@/utils/messagePreviewText')
+
+    const runTag = `openpgp late plugin ${t0} `
+    const plaintexts = new Map<string, string>()
+    alice.subscribe('message:security-updated', ({ messageId, securityContext }) => {
+      if (plaintexts.has(messageId)) note('security-updated', { id: messageId, trust: securityContext.trust })
+    })
+    // Bob's conversation is not open, so its messages are kept in the message
+    // cache; the in-memory store holds only those of a loaded conversation.
+    const stored = () => (chatStore.getState().messages.get(accounts.bob.jid) ?? []).filter((m) => plaintexts.has(m.id))
+    const cachedRows = async () => (await getMessages(accounts.bob.jid)).filter((m) => plaintexts.has(m.id))
+    // The body each message was first cached with.
+    const firstBody = new Map<string, string | undefined>()
+    const cachedBeforePlugin = async () => {
+      for (const until = Date.now() + 60_000; firstBody.size < MESSAGES; await new Promise((r) => setTimeout(r, 20))) {
+        if (Date.now() > until) throw new Error('Timed out waiting for messages cached before the plugin')
+        for (const m of await cachedRows()) if (!firstBody.has(m.id)) firstBody.set(m.id, m.body)
+      }
+    }
+    const state = (rows: Array<{ id: string; body: string; encryptedPayload?: string; securityContext?: { trust: string } }>) =>
+      Object.fromEntries(rows.map((m) => [m.id, { body: m.body, trust: m.securityContext?.trust, encryptedCopy: !!m.encryptedPayload }]))
+    const preview = () => {
+      const lastMessage = chatStore.getState().conversations.get(accounts.bob.jid)?.lastMessage
+      // What the conversation list shows, with translation keys untranslated.
+      return { body: lastMessage?.body, shown: lastMessage && formatLocalizedPreview(lastMessage, (key: string) => key) }
+    }
+
+    try {
+      await run.connectAlice()
+      await alice.disconnect()
+      await waitFor(() => connectionStore.getState().status !== 'online', 10_000, 'signed out')
+      await waitFor(() => alice.e2ee === null, 10_000, 'encryption manager released')
+      // A new device: no key of Bob's is cached.
+      const peerKeyCache = `fluux:e2ee:peer-keys:${accounts.alice.jid}`
+      note('signed-out', { hadCachedPeerKeys: localStorage.getItem(peerKeyCache) !== null })
+      localStorage.removeItem(peerKeyCache)
+
+      // Bob encrypts to Alice's published key and sends, as Chat.applyE2EEToOutboundChat does.
+      let fallback = ''
+      for (let i = 1; i <= MESSAGES; i++) {
+        const id = `openpgp-late-${t0}-${i}`
+        const text = `${runTag}${i}`
+        plaintexts.set(id, text)
+        const result = await bobE2EE.encryptOutbound(
+          { kind: 'direct', peer: accounts.alice.jid },
+          new TextEncoder().encode(serializePayloadEnvelope([xml('body', {}, text)])),
+        )
+        expect(result?.plugin.descriptor.id).toBe('openpgp')
+        fallback = result!.payload.fallbackBody ?? '[encrypted message]'
+        await bob.send(xml('message', { to: accounts.alice.jid, type: 'chat', id },
+          xml('body', {}, fallback),
+          toElement(result!.payload.stanzaElement),
+          xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: result!.payload.stanzaElement.attrs.xmlns ?? OX_NS }),
+          xml('store', { xmlns: 'urn:xmpp:hints' })))
+      }
+      note('sent-while-signed-out', { count: MESSAGES, fallback })
+
+      // Alice signs in. Her plugin registers only once all 5 messages are stored.
+      registration.hold = cachedBeforePlugin()
+        .then(async () => { note('cached-before-plugin', { cache: state(await cachedRows()), store: state(stored()), preview: preview() }) })
+      await alice.connect({ jid: accounts.alice.jid, password: accounts.alice.password, server: accounts.ws, resource: 'web' })
+      await waitFor(() => connectionStore.getState().status === 'online', 30_000, 'signed in')
+      await registration.hold
+      await waitFor(() => !!alice.e2ee?.getPlugin('openpgp'), 30_000, 'OpenPGP plugin registered')
+
+      // The sign-in sync runs a deferred-decrypt pass of its own when it ends.
+      // The cache and the preview are read before then, so only the pass the
+      // plugin registration starts counts.
+      const catchingUp = () => connectionStore.getState().isCatchingUp
+      note('plugin-ready', { catchingUp: catchingUp() })
+      expect(catchingUp()).toBe(true)
+      const allReadable = (rows: Array<{ id: string; body: string }>) =>
+        rows.length === MESSAGES && rows.every((m) => m.body === plaintexts.get(m.id))
+      let cached = await cachedRows()
+      note('cache', { rows: state(cached) })
+      const readCacheUntil = async (done: (rows: typeof cached) => boolean) => {
+        while (!done(cached) && catchingUp()) {
+          await new Promise((r) => setTimeout(r, 50))
+          const next = await cachedRows()
+          if (JSON.stringify(state(next)) !== JSON.stringify(state(cached))) note('cache', { rows: state(next) })
+          cached = next
+        }
+      }
+      await readCacheUntil(allReadable)
+      const syncStillRunning = catchingUp()
+      const afterPluginPass = { cache: state(cached), preview: preview() }
+      note('after-plugin-pass', { syncStillRunning, ...afterPluginPass })
+      // A message stored before its signature was checked keeps its encrypted
+      // copy. Once the plugin fetches Bob's key, it reports each check done,
+      // and the client decrypts the message again without the copy.
+      await readCacheUntil((rows) => allReadable(rows) && rows.every((m) => !m.encryptedPayload))
+      const checksDone = { syncStillRunning: catchingUp(), cache: state(cached), preview: preview() }
+      note('checks-done', checksDone)
+
+      // Then the end of the sync, and its own pass, for the transcript.
+      await waitFor(() => !catchingUp(), 60_000, 'sign-in sync')
+      await new Promise((r) => setTimeout(r, 3_000))
+      note('settled', { store: state(stored()), cache: state(await cachedRows()), preview: preview() })
+
+      // Cached first with the sender's fallback body: the plugin was not there yet.
+      expect([...plaintexts.keys()].map((id) => firstBody.get(id))).toEqual([...plaintexts.keys()].map(() => fallback))
+      // The plugin's own pass stored the text, before the sync's pass ran.
+      expect(syncStillRunning).toBe(true)
+      expect(Object.fromEntries(Object.entries(afterPluginPass.cache).map(([id, row]) => [id, row.body])))
+        .toEqual(Object.fromEntries(plaintexts))
+      expect(afterPluginPass.preview.body).toBe([...plaintexts.values()].at(-1))
+      for (const m of stored()) expect(m.body).toBe(plaintexts.get(m.id))
+      // Every check done and every copy gone, still before the sync's pass, so
+      // the app shows each message's text, in the list too.
+      expect(checksDone.syncStillRunning).toBe(true)
+      expect(Object.values(checksDone.cache).map((row) => [row.trust, row.encryptedCopy]))
+        .toEqual([...plaintexts.keys()].map(() => ['tofu', false]))
+      expect(checksDone.preview.shown).toBe([...plaintexts.values()].at(-1))
+    } finally {
+      await run.finish()
     }
   }, 180_000)
 })

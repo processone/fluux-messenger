@@ -1932,6 +1932,13 @@ export class XMPPClient {
         securityContext,
         ...(body !== undefined && { body }),
       })
+      // The check is done, so the sender's key is now cached. Decrypt this
+      // sender's messages that still keep their encrypted copy again: they
+      // lose the copy, which the app shows as "could not decrypt", and the
+      // message cache gets the new trust, also for conversations not open.
+      this.deferredDecrypt.retryForPeer(peer).catch((err: unknown) => {
+        e2eeLogger.warn(`retry after a signature check failed for ${getDomain(peer)}: ${err instanceof Error ? err.message : String(err)}`)
+      })
     })
     // When a plugin registers, emit a SDK event so backgroundSync (and other
     // listeners) can trigger deferred decryption of messages that arrived
