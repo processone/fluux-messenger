@@ -143,6 +143,35 @@ export function isDisjointFromResidentWindow(
 }
 
 /**
+ * Re-open "load older" after a window write that evicted the resident window's oldest row
+ * (or emptied the window, which is rehydrated from the cache as the newest slice only).
+ *
+ * `isHistoryComplete` says the archive has nothing older than the resident top. A keep-newest
+ * trim (jump-to-latest, load-newer slide, live append past the bound) moves that top up, so
+ * the claim no longer holds: the rows it dropped are older history again. Clearing it is always
+ * safe — the next load-older answers `complete` again at no cost beyond one query.
+ *
+ * @returns the new states, or `null` when nothing needs clearing.
+ */
+export function clearHistoryCompleteIfOldestDropped<T>(
+  states: Map<string, HistoryQueryState>,
+  id: string,
+  before: readonly T[] | undefined,
+  after: readonly T[],
+  sameMessage: (a: T, b: T) => boolean
+): Map<string, HistoryQueryState> | null {
+  const current = states.get(id)
+  if (!current?.isHistoryComplete || !before || before.length === 0) return null
+  // An emptied window (conversation switch) drops every row; what rehydrates may be only the newest slice.
+  if (after.length > 0) {
+    if (before[0] === after[0]) return null
+    const oldest = before[0]
+    if (after.some((row) => sameMessage(oldest, row))) return null
+  }
+  return new Map(states).set(id, { ...current, isHistoryComplete: false })
+}
+
+/**
  * Create a new MAM states map with query completed state.
  *
  * @param states - Current MAM states map

@@ -61,6 +61,7 @@ import {
   MAM_ROOM_FORWARD_MAX_PAGES,
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
   MAM_BACKWARD_SIGNAL_RETRY_PAGES,
+  MAM_BACKWARD_SCROLL_UP_MAX_PAGES,
   MAM_CATCHUP_FORWARD_BAIL_PAGES,
   MAM_POINTER_STITCH_MAX_PAGES,
   MAM_POINTER_SEED_PROBE_LIMIT,
@@ -559,7 +560,14 @@ export class MAM extends BaseModule {
     // contiguity with the existing record, and the trigger for
     // the floor jump.
     let sawCoverageTop = false
-    const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : MAM_BACKWARD_SIGNAL_RETRY_PAGES // cap to avoid infinite loops
+    // Backward walks retry past signal-only pages. A fetch-latest gives up after
+    // a few pages and persists its extent (the coverage record) as the resume
+    // point. A scroll-up walk has no such resume point — its caller restarts
+    // from the same resident oldest row — so it keeps walking until displayable
+    // messages or the archive start, bounded only by a runaway backstop; every
+    // modification it collects on the way resolves in the single pass below.
+    const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt
+      : canJumpToFloor ? MAM_BACKWARD_SIGNAL_RETRY_PAGES : MAM_BACKWARD_SCROLL_UP_MAX_PAGES
 
     this.deps.emitSDK('chat:history-loading', { conversationId, requestId, isLoading: true })
 
@@ -711,6 +719,10 @@ export class MAM extends BaseModule {
                 preJumpCursor = pageInfo.first
                 currentBefore = coverageRecord.bottomId
                 jumpedToFloor = true
+              } else if (pageInfo.first === currentBefore) {
+                // The cursor did not advance: a server answering the same page
+                // again would otherwise be walked until the page cap.
+                break
               } else {
                 currentBefore = pageInfo.first
               }
@@ -842,9 +854,13 @@ export class MAM extends BaseModule {
     // User-initiated repair passes a higher cap (maxAutoPagesOpt) so it fills large
     // gaps to completion instead of stopping at the background limit.
     // Backward queries retry past signal-only pages (zero displayable messages)
-    // under the same cap as the 1:1 path — the caller still controls real
-    // pagination (the loop stops as soon as a page yields displayable messages).
-    const maxAutoPages = isForward ? (maxAutoPagesOpt ?? MAM_ROOM_FORWARD_MAX_PAGES) : MAM_BACKWARD_SIGNAL_RETRY_PAGES
+    // under the same caps as the 1:1 path: a fetch-latest gives up after a few
+    // pages (its extent persists as the coverage record), a scroll-up walk keeps
+    // going until displayable messages or the archive start (see
+    // MAM_BACKWARD_SCROLL_UP_MAX_PAGES). The loop stops as soon as a page
+    // yields displayable messages.
+    const maxAutoPages = isForward ? (maxAutoPagesOpt ?? MAM_ROOM_FORWARD_MAX_PAGES)
+      : !before ? MAM_BACKWARD_SIGNAL_RETRY_PAGES : MAM_BACKWARD_SCROLL_UP_MAX_PAGES
     const allMessages: RoomMessage[] = []
     let isComplete = false
     let lastPage: PageInfo = {}
@@ -1067,6 +1083,10 @@ export class MAM extends BaseModule {
                 preJumpCursor = pageInfo.first
                 currentBefore = coverageRecord.bottomId
                 jumpedToFloor = true
+              } else if (pageInfo.first === currentBefore) {
+                // The cursor did not advance: a server answering the same page
+                // again would otherwise be walked until the page cap.
+                break
               } else {
                 currentBefore = pageInfo.first
               }
@@ -2984,9 +3004,15 @@ export class MAM extends BaseModule {
         return true
       }
     }
-    if (archiveId && !encrypted && chat?.rememberArchiveSignal && parseReactionsSignal(messageEl)?.targetId) {
+    // A plaintext reaction or correction is journaled like a decrypted one.
+    // The journal applies the effect when its target row is saved, so an
+    // edit whose target only loads on a later history page (or in a later
+    // session) is never lost, and nothing is held in memory between walks.
+    const plaintextEffect = !encrypted && (parseReactionsSignal(messageEl)?.targetId ? 'reactions'
+      : parseCorrectionSignal(messageEl)?.targetId && messageEl.getChildText('body') ? 'update' : undefined)
+    if (archiveId && plaintextEffect && chat?.rememberArchiveSignal) {
       const signal = this.archiveSignal(messageEl, peer, archiveId, archiveTimestamp)
-      if (signal?.effect.type === 'reactions') {
+      if (signal?.effect.type === plaintextEffect) {
         await chat.rememberArchiveSignal(signal, scope.jid)
         session.assertCurrent()
         const persisted = await chat.getArchiveSignal?.(peer, archiveId, from)

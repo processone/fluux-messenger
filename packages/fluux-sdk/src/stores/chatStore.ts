@@ -186,11 +186,11 @@ type LiveEdgeClaim =
  *   notification.
  */
 function withChatMessageWindow(
-  state: Pick<ChatState, 'messages' | 'windowAtLiveEdge'>,
+  state: Pick<ChatState, 'messages' | 'windowAtLiveEdge' | 'mamQueryStates'>,
   conversationId: string,
-  change: { messages?: Message[] | null; atLiveEdge?: LiveEdgeClaim },
-): Partial<Pick<ChatState, 'messages' | 'windowAtLiveEdge'>> | null {
-  const written: Partial<Pick<ChatState, 'messages' | 'windowAtLiveEdge'>> = {}
+  change: { messages?: Message[] | null; atLiveEdge?: LiveEdgeClaim; mamStates?: ChatState['mamQueryStates'] },
+): Partial<Pick<ChatState, 'messages' | 'windowAtLiveEdge' | 'mamQueryStates'>> | null {
+  const written: Partial<Pick<ChatState, 'messages' | 'windowAtLiveEdge' | 'mamQueryStates'>> = {}
 
   if (change.messages !== undefined) {
     const current = state.messages.get(conversationId)
@@ -199,9 +199,18 @@ function withChatMessageWindow(
         const next = new Map(state.messages)
         next.delete(conversationId)
         written.messages = next
+        const reopened = mamState.clearHistoryCompleteIfOldestDropped(
+          change.mamStates ?? state.mamQueryStates, conversationId, current, [], chatTimelineConfig().sameMessage
+        )
+        if (reopened) written.mamQueryStates = reopened
       }
     } else if (current !== change.messages) {
       written.messages = new Map(state.messages).set(conversationId, change.messages)
+      // A trim that evicted the oldest resident row makes "reached the start" stale.
+      const reopened = mamState.clearHistoryCompleteIfOldestDropped(
+        change.mamStates ?? state.mamQueryStates, conversationId, current, change.messages, chatTimelineConfig().sameMessage
+      )
+      if (reopened) written.mamQueryStates = reopened
     }
   }
 
@@ -218,7 +227,7 @@ function withChatMessageWindow(
     }
   }
 
-  return written.messages || written.windowAtLiveEdge ? written : null
+  return written.messages || written.windowAtLiveEdge || written.mamQueryStates ? written : null
 }
 
 function reconcileCachedChatRows(resident: Message[], cached: Message[]): Message[] {
@@ -2742,7 +2751,7 @@ export const chatStore = createStore<ChatState>()(
             if (patched.length === 0 || !isActive) {
               return { ...draft.commit(), mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
             }
-            return { ...withChatMessageWindow(state, conversationId, { messages: resident }), ...draft.commit(), mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
+            return { mamQueryStates: newStates, ...withChatMessageWindow(state, conversationId, { messages: resident, mamStates: newStates }), ...draft.commit(), conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
           }
 
           // Sidebar preview via the shared policy: the newest previewable message
@@ -2792,6 +2801,7 @@ export const chatStore = createStore<ChatState>()(
           // restore then degrades to an estimate rather than an exact reposition.
           const window = withChatMessageWindow(state, conversationId, {
             messages: resident,
+            mamStates: newStates,
             ...(newestEvicted
               ? { atLiveEdge: false }
               : isFetchLatest && newMessages.length > 0 && !gated
@@ -2802,10 +2812,10 @@ export const chatStore = createStore<ChatState>()(
           if (previewUpdate) {
             const draft = draftConversationMaps(state)
             draft.patchMeta(conversationId, { lastMessage })
-            return { ...window, mamQueryStates: newStates, ...draft.commit(), conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
+            return { mamQueryStates: newStates, ...window, ...draft.commit(), conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
           }
 
-          return { ...window, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
+          return { mamQueryStates: newStates, ...window, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
         })
 
         reviveArchivedConversation(conversationId, mamMessages)

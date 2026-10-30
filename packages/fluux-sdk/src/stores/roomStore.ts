@@ -852,7 +852,7 @@ function resolveRoomPendingRetractions(
  *   — the same miss the call sites already guarded on.
  */
 function withRoomMessageWindow(
-  state: Pick<RoomState, 'rooms' | 'messages' | 'windowAtLiveEdge'>,
+  state: Pick<RoomState, 'rooms' | 'messages' | 'windowAtLiveEdge' | 'mamQueryStates'>,
   roomJid: string,
   messages: RoomMessage[],
   options: {
@@ -860,8 +860,10 @@ function withRoomMessageWindow(
     roomPatch?: Partial<Room>
     /** Move the live-edge flag. Absent leaves it as it was. */
     atLiveEdge?: boolean
+    /** MAM states to test for a stale "reached the start" claim; defaults to the state's own. */
+    mamStates?: RoomState['mamQueryStates']
   } = {}
-): Pick<RoomState, 'rooms' | 'messages' | 'windowAtLiveEdge'> | null {
+): (Pick<RoomState, 'rooms' | 'messages' | 'windowAtLiveEdge'> & Partial<Pick<RoomState, 'mamQueryStates'>>) | null {
   const existing = state.rooms.get(roomJid)
   if (!existing) return null
 
@@ -883,7 +885,11 @@ function withRoomMessageWindow(
     options.atLiveEdge === undefined
       ? state.windowAtLiveEdge
       : new Map(state.windowAtLiveEdge).set(roomJid, options.atLiveEdge)
-  return { rooms, messages: nextMessages, windowAtLiveEdge: nextEdge }
+  // A trim that evicted the oldest resident row makes "reached the start" stale.
+  const reopened = sameSlice ? null : mamState.clearHistoryCompleteIfOldestDropped(
+    options.mamStates ?? state.mamQueryStates, roomJid, current, messages, roomTimelineConfig().sameMessage
+  )
+  return { rooms, messages: nextMessages, windowAtLiveEdge: nextEdge, ...(reopened ? { mamQueryStates: reopened } : {}) }
 }
 
 /**
@@ -3735,8 +3741,8 @@ export const roomStore = createStore<RoomState>()(
         if (patched.length === 0 || state.activeRoomJid !== roomJid) {
           return { mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
         }
-        const backfilled = withRoomMessageWindow(state, roomJid, resident)
-        return { ...backfilled, mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
+        const backfilled = withRoomMessageWindow(state, roomJid, resident, { mamStates: newStates })
+        return { mamQueryStates: newStates, ...backfilled, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
       }
 
       // Sidebar preview via the shared policy: only replace when the merged set's
@@ -3780,6 +3786,7 @@ export const roomStore = createStore<RoomState>()(
       // ACTIVE room: populate the resident array (foreground catch-up / scroll-up).
       const written = withRoomMessageWindow(state, roomJid, resident, {
         roomPatch: { lastMessage },
+        mamStates: newStates,
         ...(newestEvicted
           ? { atLiveEdge: false }
           : isFetchLatest && newFromMAM.length > 0 && !gated
@@ -3793,7 +3800,7 @@ export const roomStore = createStore<RoomState>()(
       // jump-to-latest. The content-anchor scroll restore then degrades to an
       // estimate rather than an exact reposition.
 
-      return { ...written, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
+      return { mamQueryStates: newStates, ...written, roomMeta: newMeta, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
     })
 
     run.settled({ merged: mergedForMarker, recount: shouldRecountAfterMerge })
