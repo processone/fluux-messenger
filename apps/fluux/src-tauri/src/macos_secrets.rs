@@ -406,9 +406,19 @@ impl<S: Backend> SecretStore for Secrets<S> {
                 // The record may have been published before the failure (its
                 // directory sync). Then it is in use: confirm it again, never
                 // report a failure that the next read contradicts.
-                let published = self.is_fresh(account).unwrap_or(false);
-                if !published || self.store.mark_fresh_account(account).is_err() {
-                    return Err(error.to_string());
+                match self.is_fresh(account) {
+                    Ok(true) => {
+                        if self.store.mark_fresh_account(account).is_err() {
+                            return Err(error.to_string());
+                        }
+                    }
+                    Ok(false) => return Err(error.to_string()),
+                    // Not knowing is not "absent": say so, so no caller rolls back.
+                    Err(probe) => {
+                        return Err(format!(
+                            "{error}; whether the record was published could not be confirmed: {probe}"
+                        ))
+                    }
                 }
             }
         }
@@ -1270,6 +1280,8 @@ mod tests {
         fresh_unreadable: Mutex<bool>,
         // Publish the record, then fail (a directory sync that errors).
         mark_failures_after_publish: Mutex<usize>,
+        // After a failed mark, the record can no longer be read back.
+        unreadable_after_failed_mark: Mutex<bool>,
     }
     impl SecretStore for FakeStore {
         fn get(&self, account: &str) -> Result<Option<String>, String> {
@@ -1324,6 +1336,9 @@ mod tests {
             let mut failures = self.mark_failures_after_publish.lock().unwrap();
             if *failures > 0 {
                 *failures -= 1;
+                if *self.unreadable_after_failed_mark.lock().unwrap() {
+                    *self.fresh_unreadable.lock().unwrap() = true;
+                }
                 return Err("directory sync failed".into());
             }
             Ok(())
@@ -1732,6 +1747,21 @@ mod tests {
         store.fresh_write(other, "restored").unwrap();
         assert!(store.commit_fresh(other).is_err());
         assert!(store.restored(other).unwrap(), "yet it is published and in use");
+    }
+
+    // FLM-302 R10 (round 3): a failed record write followed by a failed read
+    // back leaves publication unknown; commit says so instead of "absent".
+    #[test]
+    fn commit_reports_unknown_publication_when_the_probe_fails() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        *store.store.mark_failures_after_publish.lock().unwrap() = 1;
+        *store.store.unreadable_after_failed_mark.lock().unwrap() = true;
+        store.fresh_write(alice, "restored").unwrap();
+        let error = store.commit_fresh(alice).unwrap_err();
+        assert!(error.contains("could not be confirmed"), "{error}");
+        // The probe itself is an error, never "not restored".
+        assert!(store.restored(alice).is_err());
     }
 
     // FLM-302 R3: startup loading after a restore must not read the restored

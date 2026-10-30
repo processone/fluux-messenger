@@ -371,12 +371,26 @@ impl KeyStorage {
                     // A failure after the route was published (its directory
                     // sync failed) must not roll back the key: the promoted
                     // secret now protects the restored one.
-                    if !was_restored && store.restored(&account).unwrap_or(false) {
-                        return Err(anyhow!(
-                            "{error:#}; the restored key is in use but its record is not confirmed \
-                             durable. The previous key is kept at {}",
-                            backup_path.display()
-                        ));
+                    match store.restored(&account) {
+                        Ok(true) if !was_restored => {
+                            return Err(anyhow!(
+                                "{error:#}; the restored key is in use but its record is not \
+                                 confirmed durable. The previous key is kept at {}",
+                                backup_path.display()
+                            ));
+                        }
+                        // Unknown is not absent: the secret may already be
+                        // promoted, so keep the key file, the staged secret and
+                        // the backup exactly as they are.
+                        Err(probe) => {
+                            return Err(anyhow!(
+                                "{error:#}; whether the restored key's record was published could \
+                                 not be read back ({probe}). Nothing was rolled back; the previous \
+                                 key is kept at {}",
+                                backup_path.display()
+                            ));
+                        }
+                        _ => {}
                     }
                     let mut notes = String::new();
                     if let Err(e) = store.abort_fresh(&account) {
@@ -476,6 +490,11 @@ impl KeyStorage {
         atomic_write(&key_path, &armored)?;
         #[cfg(unix)]
         restrict_permissions(&key_path);
+        // A newer key makes any copy kept by an interrupted restore obsolete:
+        // retire it so a later failed restore cannot put the older key back.
+        remove_durably(&pre_restore_path(&key_path)).context(
+            "the key was saved, but the copy kept by an earlier restore could not be removed",
+        )?;
         Ok(backing)
     }
 
@@ -2383,6 +2402,8 @@ mod tests {
         fresh_sets: std::sync::Arc<std::sync::atomic::AtomicUsize>,
         fail_fresh_set_at: std::sync::Arc<std::sync::Mutex<Option<usize>>>,
         publish_then_fail: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        unreadable_after_fail: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        records_unreadable: std::sync::Arc<std::sync::atomic::AtomicBool>,
     }
     #[cfg(unix)]
     impl crate::credentials::SecretStore for HookedMemory {
@@ -2419,6 +2440,9 @@ mod tests {
             Ok(self.items.lock().unwrap().keys().cloned().collect())
         }
         fn fresh_accounts(&self) -> std::result::Result<Vec<String>, crate::macos_secrets::StoreError> {
+            if self.records_unreadable.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err("record unreadable".into());
+            }
             Ok(self.fresh.lock().unwrap().clone())
         }
         fn mark_fresh_account(&self, account: &str) -> std::result::Result<(), crate::macos_secrets::StoreError> {
@@ -2429,6 +2453,9 @@ mod tests {
             note_durability("mark");
             self.fresh.lock().unwrap().push(account.into());
             if self.publish_then_fail.load(std::sync::atomic::Ordering::SeqCst) {
+                if self.unreadable_after_fail.load(std::sync::atomic::Ordering::SeqCst) {
+                    self.records_unreadable.store(true, std::sync::atomic::Ordering::SeqCst);
+                }
                 return Err("directory sync failed".into());
             }
             Ok(())
@@ -2620,6 +2647,55 @@ mod tests {
         assert_eq!(
             hooked_storage(&raw, &dir).load(jid).unwrap().unwrap().cert.fingerprint(),
             restored.fingerprint()
+        );
+    }
+
+    // FLM-302 R10 (round 3): a published marker whose sync and read-back both
+    // fail is unknown, not absent: neither file may be rolled back.
+    #[cfg(unix)]
+    #[test]
+    fn unknown_publication_preserves_the_key_file_and_the_backup() {
+        let raw = HookedMemory::default();
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        let restored = generate_cert(jid);
+        hooked_storage(&raw, &dir).save(jid, &generate_cert(jid)).unwrap();
+        raw.publish_then_fail.store(true, std::sync::atomic::Ordering::SeqCst);
+        raw.unreadable_after_fail.store(true, std::sync::atomic::Ordering::SeqCst);
+        let error = hooked_storage(&raw, &dir).save_fresh(jid, &restored).unwrap_err();
+        assert!(format!("{error:#}").contains("Nothing was rolled back"), "{error:#}");
+        // The record becomes readable again: the restored key still unlocks.
+        raw.records_unreadable.store(false, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            hooked_storage(&raw, &dir).load(jid).unwrap().unwrap().cert.fingerprint(),
+            restored.fingerprint()
+        );
+        assert!(pre_restore_path(&hooked_storage(&raw, &dir).key_file_path(jid).unwrap()).exists());
+    }
+
+    // FLM-302 R8 (round 3): a copy left by an interrupted restore must not
+    // outlive a newer key saved by a normal write.
+    #[cfg(unix)]
+    #[test]
+    fn a_newer_saved_key_retires_the_interrupted_restore_copy() {
+        let raw = HookedMemory::default();
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        let original = generate_cert(jid);
+        let newer = generate_cert(jid);
+        hooked_storage(&raw, &dir).save(jid, &original).unwrap();
+        // An interrupted restore: the copy stays, the account is not routed.
+        let key_path = hooked_storage(&raw, &dir).key_file_path(jid).unwrap();
+        fs::copy(&key_path, pre_restore_path(&key_path)).unwrap();
+        hooked_storage(&raw, &dir).save(jid, &newer).unwrap();
+        // A later opt-out import fails when the secret is promoted; it must
+        // put back `newer`.
+        *raw.fail_fresh_set_at.lock().unwrap() = Some(2);
+        let result = hooked_storage(&raw, &dir).save_fresh(jid, &generate_cert(jid));
+        assert!(result.is_err());
+        assert_eq!(
+            hooked_storage(&raw, &dir).load(jid).unwrap().unwrap().cert.fingerprint(),
+            newer.fingerprint()
         );
     }
 
