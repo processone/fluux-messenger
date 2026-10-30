@@ -209,6 +209,7 @@ for (const newer of ['', 'Oups']) {
     await editor.press('Enter')
     await expect.poll(() => calls(page)).toBe(1)
     const original = await page.evaluate(() => (window as any).__sendProbe.options[0].references)
+    const originalBody = await page.evaluate(() => (window as any).__sendProbe.calls[0])
     const roomJid = await page.evaluate(() => (window as any).__roomStore.getState().activeRoomJid)
     await page.evaluate(() => { location.hash = '#/settings' })
     await expect(editor).toHaveCount(0)
@@ -224,8 +225,17 @@ for (const newer of ['', 'Oups']) {
     await editor.press('Enter')
     await expect.poll(() => calls(page)).toBe(2)
     const retried = await page.evaluate(() => (window as any).__sendProbe.options[1].references)
-    const offset = newer ? newer.length + 2 : 0
-    expect(retried).toEqual(original.map((ref: any) => ({ ...ref, begin: ref.begin + offset, end: ref.end + offset })))
+    const retriedBody = await page.evaluate(() => (window as any).__sendProbe.calls[1])
+    expect(retriedBody).toContain('!')
+    if (newer) expect(retriedBody).toContain(newer)
+    // A subsequent keystroke can move a mention. Its reference must describe
+    // the actual outgoing body, not the caret position assumed by this test.
+    expect(retried).toEqual(original.map((ref: any) => {
+      const mentioned = originalBody.slice(ref.begin, ref.end)
+      expect(retriedBody).toContain(mentioned)
+      const begin = retriedBody.indexOf(mentioned)
+      return { ...ref, begin, end: begin + mentioned.length }
+    }))
     await page.evaluate(() => (window as any).__sendProbe.complete())
     console.log(JSON.stringify({ finding: 'N2', newer, original, retried, calls: await calls(page) }))
   })
