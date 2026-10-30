@@ -8,7 +8,17 @@ use std::{
 };
 
 const ACCOUNT: &str = "secrets-v1";
+// Combined item of a user who restored from a backup instead of migrating. It
+// never coexists with the old items' access lists, so a refused or inaccessible
+// legacy item cannot block it.
+const FRESH_ACCOUNT: &str = "secrets-fresh-v1";
+fn is_bundle(account: &str) -> bool {
+    account == ACCOUNT || account == FRESH_ACCOUNT
+}
 const BACKUP_PREFIX: &str = "identity-migration-backup:";
+// Staged restore secret in the fresh item. It protects nothing until promoted,
+// so a failed restore never replaces the live protection of an active key.
+const PENDING_PREFIX: &str = "pending-fresh:";
 const RECOVERY_PREFIX: &str = "keychain-recovery:";
 fn recovery_prefix(account: &str) -> String {
     format!("{RECOVERY_PREFIX}{}:{account}:", account.len())
@@ -28,6 +38,10 @@ impl StoreError {
             invalid_item: false,
             message: message.into(),
         }
+    }
+    #[cfg(test)]
+    pub(crate) fn denied() -> Self {
+        Self::native(-25293, "authorization refused")
     }
     fn user_denial(&self) -> bool {
         matches!(self.code, Some(-25293 | -128))
@@ -68,6 +82,17 @@ pub trait Backend: SecretStore {
     fn read(&self, account: &str) -> StoreResult<Option<String>>;
     /// Account attributes only; this must not decrypt secrets.
     fn accounts(&self) -> StoreResult<Vec<String>>;
+    /// Accounts whose secret the user restored from a backup instead of
+    /// migrating. Their secrets live only in the fresh item.
+    /// An unreadable record is an error, never an empty list: silently
+    /// routing back to the old items could overwrite a restored key.
+    fn fresh_accounts(&self) -> StoreResult<Vec<String>> {
+        Ok(Vec::new())
+    }
+    /// Persist that an account is fresh; it must outlive this process.
+    fn mark_fresh_account(&self, _account: &str) -> StoreResult<()> {
+        Err("Fresh start is unavailable for this store".into())
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -95,13 +120,66 @@ pub struct Secrets<S> {
     // Denial/cancel and deterministic combined-item decode/version failures
     // are shared for this launch. Transient failures leave the cache empty.
     cache: Mutex<Option<StoreResult<Bundle>>>,
+    // The fresh item is independent of the old one: a refusal of the old items
+    // is cached above and never reaches it.
+    fresh_cache: Mutex<Option<StoreResult<Bundle>>>,
 }
 impl<S: Backend> Secrets<S> {
     pub fn new(store: S) -> Self {
         Self {
             store,
             cache: Mutex::new(None),
+            fresh_cache: Mutex::new(None),
         }
+    }
+    fn is_fresh(&self, account: &str) -> StoreResult<bool> {
+        Ok(self.store.fresh_accounts()?.iter().any(|name| name == account))
+    }
+    fn load_fresh(&self) -> StoreResult<Bundle> {
+        match self.store.read(FRESH_ACCOUNT)? {
+            None => Ok(Bundle::default()),
+            Some(json) => match serde_json::from_str::<Bundle>(&json) {
+                Ok(bundle) if bundle.version == 1 => Ok(bundle),
+                _ => Err(StoreError::invalid_item("Invalid fresh macOS secrets item")),
+            },
+        }
+    }
+    fn fresh_access<T>(
+        &self,
+        f: impl FnOnce(&mut Bundle) -> StoreResult<T>,
+    ) -> StoreResult<T> {
+        let mut cache = self
+            .fresh_cache
+            .lock()
+            .map_err(|_| StoreError::from("macOS secrets lock poisoned"))?;
+        if cache.is_none() {
+            *cache = Some(self.load_fresh());
+        }
+        match cache.as_mut().expect("initialized above") {
+            Ok(bundle) => f(bundle),
+            Err(error) => {
+                let error = error.clone();
+                // Only deterministic failures stay cached; retry the rest.
+                if !(error.user_denial() || error.invalid_item) {
+                    *cache = None;
+                }
+                Err(error)
+            }
+        }
+    }
+    fn fresh_set(&self, account: &str, secret: Option<&str>) -> StoreResult<()> {
+        self.fresh_access(|bundle| {
+            let mut updated = bundle.clone();
+            match secret {
+                Some(secret) => updated.items.insert(account.into(), secret.into()),
+                None => updated.items.remove(account),
+            };
+            if updated.items != bundle.items {
+                self.store.set(FRESH_ACCOUNT, &Self::encode(&updated)?)?;
+                *bundle = updated;
+            }
+            Ok(())
+        })
     }
     fn encode(bundle: &Bundle) -> StoreResult<String> {
         serde_json::to_string(bundle).map_err(|_| "Could not encode macOS secrets".into())
@@ -121,8 +199,18 @@ impl<S: Backend> Secrets<S> {
             return Ok(bundle);
         }
         let mut bundle = Bundle::default();
+        // A restored account and its aliases live in the fresh item. Their old
+        // originals may be refused: never read them again, only erase them.
+        let restored = self.store.fresh_accounts()?;
+        let is_restored_copy = |name: &str| {
+            restored.iter().any(|account| {
+                name == account
+                    || name.strip_prefix(BACKUP_PREFIX) == Some(account)
+                    || name.starts_with(&recovery_prefix(account))
+            })
+        };
         for account in self.store.accounts()? {
-            if account == ACCOUNT {
+            if is_bundle(&account) || is_restored_copy(&account) {
                 continue;
             }
             if let Some(secret) = self.store.read(&account)? {
@@ -284,6 +372,58 @@ impl<S: Backend> Secrets<S> {
     }
 }
 impl<S: Backend> SecretStore for Secrets<S> {
+    fn fresh_write(&self, account: &str, secret: &str) -> Result<(), String> {
+        self.fresh_set(&format!("{PENDING_PREFIX}{account}"), Some(secret))
+            .map_err(|error| error.to_string())
+    }
+    fn restored(&self, account: &str) -> Result<bool, String> {
+        self.is_fresh(account).map_err(|error| error.to_string())
+    }
+    fn abort_fresh(&self, account: &str) -> Result<(), String> {
+        self.fresh_set(&format!("{PENDING_PREFIX}{account}"), None)
+            .map_err(|error| error.to_string())
+    }
+    fn commit_fresh(&self, account: &str) -> Result<(), String> {
+        let already = self.is_fresh(account).map_err(|e| e.to_string())?;
+        let pending = format!("{PENDING_PREFIX}{account}");
+        // One write replaces the live secret with the staged one. Only then is
+        // a new account routed to the fresh item, so a failure before that
+        // leaves every read, and an active key's protection, unchanged.
+        self.fresh_access(|bundle| {
+            let mut updated = bundle.clone();
+            let secret = updated
+                .items
+                .remove(&pending)
+                .ok_or_else(|| StoreError::from("No staged secret to promote"))?;
+            updated.items.insert(account.into(), secret);
+            self.store.set(FRESH_ACCOUNT, &Self::encode(&updated)?)?;
+            *bundle = updated;
+            Ok(())
+        })
+        .map_err(|error| error.to_string())?;
+        if !already {
+            if let Err(error) = self.store.mark_fresh_account(account) {
+                // The record may have been published before the failure (its
+                // directory sync). Then it is in use: confirm it again, never
+                // report a failure that the next read contradicts.
+                match self.is_fresh(account) {
+                    Ok(true) => {
+                        if self.store.mark_fresh_account(account).is_err() {
+                            return Err(error.to_string());
+                        }
+                    }
+                    Ok(false) => return Err(error.to_string()),
+                    // Not knowing is not "absent": say so, so no caller rolls back.
+                    Err(probe) => {
+                        return Err(format!(
+                            "{error}; whether the record was published could not be confirmed: {probe}"
+                        ))
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
     fn retry_denied_access(&self) -> Result<(), String> {
         let mut cache = self
             .cache
@@ -295,19 +435,38 @@ impl<S: Backend> SecretStore for Secrets<S> {
         Ok(())
     }
     fn legacy_candidate(&self, account: &str) -> Result<Option<String>, String> {
+        if self.is_fresh(account).map_err(|e| e.to_string())? {
+            return Ok(None);
+        }
         Secrets::legacy_candidate(self, account)
     }
     fn recovery_candidates(&self, account: &str) -> Result<Vec<String>, String> {
+        if self.is_fresh(account).map_err(|e| e.to_string())? {
+            return Ok(Vec::new());
+        }
         Secrets::recovery_candidates(self, account)
     }
     fn adopt_legacy(&self, account: &str, secret: &str) -> Result<(), String> {
+        if self.is_fresh(account).map_err(|e| e.to_string())? {
+            return Err("A restored account never adopts old items".into());
+        }
         Secrets::adopt_legacy(self, account, secret)
     }
     fn get(&self, account: &str) -> Result<Option<String>, String> {
+        if self.is_fresh(account).map_err(|e| e.to_string())? {
+            return self
+                .fresh_access(|bundle| Ok(bundle.items.get(account).cloned()))
+                .map_err(|error| error.to_string());
+        }
         self.access("read", |bundle| Ok(bundle.items.get(account).cloned()))
             .map_err(|error| error.to_string())
     }
     fn set(&self, account: &str, secret: &str) -> Result<(), String> {
+        if self.is_fresh(account).map_err(|e| e.to_string())? {
+            return self
+                .fresh_set(account, Some(secret))
+                .map_err(|error| error.to_string());
+        }
         self.access("write", |bundle| {
             if bundle
                 .items
@@ -332,6 +491,42 @@ impl<S: Backend> SecretStore for Secrets<S> {
         .map_err(|error| error.to_string())
     }
     fn delete(&self, account: &str) -> Result<(), String> {
+        // A restored account keeps a copy in the fresh item and may still have
+        // old copies; a failed restore may have left a staged one. Try all, and
+        // say which could not be erased.
+        let restored = self.is_fresh(account).map_err(|e| e.to_string())?;
+        let fresh = self.fresh_access(|bundle| {
+            let mut updated = bundle.clone();
+            updated.items.remove(account);
+            updated.items.remove(&format!("{PENDING_PREFIX}{account}"));
+            if updated.items != bundle.items {
+                self.store.set(FRESH_ACCOUNT, &Self::encode(&updated)?)?;
+                *bundle = updated;
+            }
+            Ok(())
+        });
+        let old = self.delete_old(account);
+        match (fresh, old) {
+            (Ok(()), old) if !restored => old,
+            (fresh, old) => {
+                let failures: Vec<String> = [
+                    fresh.err().map(|error| format!("restored copy ({error})")),
+                    old.err().map(|error| format!("old copy ({error})")),
+                ]
+                .into_iter()
+                .flatten()
+                .collect();
+                if failures.is_empty() {
+                    Ok(())
+                } else {
+                    Err(format!("Not erased: {}", failures.join("; ")))
+                }
+            }
+        }
+    }
+}
+impl<S: Backend> Secrets<S> {
+    fn delete_old(&self, account: &str) -> Result<(), String> {
         self.access("delete", |bundle| {
             let prefix = recovery_prefix(account);
             let backup = format!("{BACKUP_PREFIX}{account}");
@@ -390,6 +585,34 @@ mod native {
     };
     use std::sync::OnceLock;
 
+    // The record routes reads to the fresh item. It reaches the disk, and its
+    // rename does too, before the caller goes on, so a power loss cannot keep a
+    // promoted secret while losing the route to it.
+    fn write_durably(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+        use std::io::Write;
+        let temporary = path.with_extension("tmp");
+        let mut file = std::fs::File::create(&temporary)?;
+        file.write_all(data)?;
+        file.sync_all()?;
+        note_durability("file-sync");
+        std::fs::rename(&temporary, path)?;
+        note_durability("rename");
+        if let Some(dir) = path.parent() {
+            std::fs::File::open(dir)?.sync_all()?;
+            note_durability("dir-sync");
+        }
+        Ok(())
+    }
+    #[cfg(test)]
+    thread_local! {
+        static DURABILITY: std::cell::RefCell<Vec<&'static str>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+    }
+    fn note_durability(_step: &'static str) {
+        #[cfg(test)]
+        DURABILITY.with(|log| log.borrow_mut().push(_step));
+    }
+
     // Sharing between release and Dev is retained; separate Dev storage was not
     // selected. Neither identity re-creates the other's items anymore.
     const SERVICE: &str = "com.processone.fluux";
@@ -398,7 +621,11 @@ mod native {
         // None in the app; the native regression supplies an explicit scratch
         // keychain, never changing the user's default or search list.
         keychain: Option<SecKeychain>,
-        observed_revision: Mutex<Option<u64>>,
+        // Per item: a revision observed while reading one item says nothing
+        // about the cached contents of the other.
+        observed_revision: Mutex<BTreeMap<String, u64>>,
+        #[cfg(test)]
+        revision_dir: Option<std::path::PathBuf>,
     }
     impl Keychain {
         // Release and Dev share the item but not their memory caches. A shared,
@@ -406,6 +633,10 @@ mod native {
         // keychain read (which could prompt again). Never silently overwrite a
         // password, logout or token rotation saved by another running identity.
         fn revision_path(&self) -> Result<std::path::PathBuf, String> {
+            #[cfg(test)]
+            if let Some(dir) = &self.revision_dir {
+                return Ok(dir.join(".secrets-revision"));
+            }
             if self.keychain.is_some() {
                 Ok(std::path::PathBuf::from(
                     std::env::var_os("FLUUX_PROBE_KEYCHAIN").ok_or("Missing scratch path")?,
@@ -417,6 +648,16 @@ mod native {
                     .join("net.processone.fluux")
                     .join(".secrets-revision"))
             }
+        }
+        // Secret-free marker of the choice to restore from a backup rather than
+        // migrate. Shared by Release and Dev like the revision file.
+        fn fresh_marker_path(&self) -> Result<std::path::PathBuf, String> {
+            let revision = self.revision_path()?;
+            Ok(if self.keychain.is_some() {
+                revision.with_extension("fresh")
+            } else {
+                revision.with_file_name(".secrets-fresh-start")
+            })
         }
         fn revision(
             &self,
@@ -453,14 +694,19 @@ mod native {
             };
             Ok((file, path, revision))
         }
-        fn begin_write(&self) -> Result<std::fs::File, String> {
+        fn begin_write(&self, account: &str) -> Result<std::fs::File, String> {
+            self.bump_revision(Some(account))
+        }
+        // `verify` is None only for the fresh-start transition, which must
+        // advance the revision even when this process never observed one.
+        fn bump_revision(&self, verify: Option<&str>) -> Result<std::fs::File, String> {
             use std::{fs::OpenOptions, io::Write, os::unix::fs::OpenOptionsExt};
             let (lock, path, revision) = self.revision(true)?;
             let mut observed = self
                 .observed_revision
                 .lock()
                 .map_err(|_| "Revision lock poisoned")?;
-            if *observed != Some(revision) {
+            if verify.is_some_and(|account| observed.get(account) != Some(&revision)) {
                 return Err("Secrets changed or revision tracking was unavailable; quit and reopen this app before saving".into());
             }
             let next = revision.checked_add(1).ok_or("Secrets revision overflow")?;
@@ -478,7 +724,13 @@ mod native {
             std::fs::File::open(path.parent().ok_or("Missing revision directory")?)
                 .and_then(|dir| dir.sync_all())
                 .map_err(|e| e.to_string())?;
-            *observed = Some(next);
+            // Items this process had in sync stay in sync after its own write.
+            for value in observed.values_mut().filter(|value| **value == revision) {
+                *value = next;
+            }
+            if let Some(account) = verify {
+                observed.insert(account.into(), next);
+            }
             Ok(lock)
         }
 
@@ -499,8 +751,8 @@ mod native {
             self.read(account).map_err(|error| error.to_string())
         }
         fn set(&self, account: &str, secret: &str) -> Result<(), String> {
-            let _revision = if account == ACCOUNT {
-                Some(self.begin_write()?)
+            let _revision = if is_bundle(account) {
+                Some(self.begin_write(account)?)
             } else {
                 None
             };
@@ -528,8 +780,8 @@ mod native {
         }
 
         fn delete(&self, account: &str) -> Result<(), String> {
-            let _revision = if account == ACCOUNT {
-                Some(self.begin_write()?)
+            let _revision = if is_bundle(account) {
+                Some(self.begin_write(account)?)
             } else {
                 None
             };
@@ -541,18 +793,45 @@ mod native {
         }
     }
     impl Backend for Keychain {
+        fn fresh_accounts(&self) -> StoreResult<Vec<String>> {
+            match std::fs::read_to_string(self.fresh_marker_path()?) {
+                Ok(text) => Ok(text.lines().map(str::to_string).collect()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+                Err(e) => Err(format!("Could not read the fresh-start record: {e}").into()),
+            }
+        }
+
+        fn mark_fresh_account(&self, account: &str) -> StoreResult<()> {
+            let path = self.fresh_marker_path()?;
+            std::fs::create_dir_all(path.parent().ok_or("Missing marker directory")?)
+                .map_err(|e| e.to_string())?;
+            // Hold the exclusive revision lock across the switch and advance the
+            // revision, so a running sibling's cached bundles can no longer be
+            // written. It must quit and reopen, as for any other stale write.
+            let _revision = self.bump_revision(None)?;
+            let mut accounts = self.fresh_accounts()?;
+            if !accounts.iter().any(|name| name == account) {
+                accounts.push(account.into());
+            }
+            write_durably(&path, accounts.join("\n").as_bytes())
+                .map_err(|e| format!("Could not record the fresh start: {e}").into())
+        }
+
         fn read(&self, account: &str) -> StoreResult<Option<String>> {
-            let revision = if account == ACCOUNT {
+            let revision = if is_bundle(account) {
                 self.revision(false).ok()
             } else {
                 None
             };
-            if account == ACCOUNT {
-                *self
+            if is_bundle(account) {
+                let mut observed = self
                     .observed_revision
                     .lock()
-                    .map_err(|_| "Revision lock poisoned")? =
-                    revision.as_ref().map(|(_, _, value)| *value);
+                    .map_err(|_| "Revision lock poisoned")?;
+                match revision.as_ref() {
+                    Some((_, _, value)) => observed.insert(account.into(), *value),
+                    None => observed.remove(account),
+                };
             }
             match find_generic_password(
                 self.keychain.as_ref().map(std::slice::from_ref),
@@ -560,7 +839,7 @@ mod native {
                 account,
             ) {
                 Ok((bytes, _)) => String::from_utf8(bytes.to_vec()).map(Some).map_err(|_| {
-                    if account == ACCOUNT {
+                    if is_bundle(account) {
                         StoreError::invalid_item("Invalid keychain text")
                     } else {
                         "Invalid keychain text".into()
@@ -597,6 +876,112 @@ mod native {
             }
         }
     }
+    // FLM-298 review R4: switching an account to fresh storage must reject a
+    // running sibling's stale cached bundles, whichever item it holds, and one
+    // item's observed revision must not vouch for the other. Touches only files
+    // in a temporary directory.
+    #[test]
+    fn fresh_commit_rejects_stale_sibling_writes_per_item() {
+        let dir = std::env::temp_dir().join(format!("fluux-fresh-{}", uuid::Uuid::new_v4()));
+        let make = || Keychain {
+            revision_dir: Some(dir.clone()),
+            ..Keychain::default()
+        };
+        let (sibling, restoring) = (make(), make());
+        // The sibling read the fresh item (empty) and then the old one.
+        sibling
+            .observed_revision
+            .lock()
+            .unwrap()
+            .extend([(FRESH_ACCOUNT.to_string(), 0), (ACCOUNT.to_string(), 0)]);
+        assert!(restoring.fresh_accounts().unwrap().is_empty());
+        restoring.mark_fresh_account("openpgp_passphrase:a@x").unwrap();
+        assert_eq!(sibling.fresh_accounts().unwrap(), ["openpgp_passphrase:a@x"]);
+        for account in [ACCOUNT, FRESH_ACCOUNT] {
+            let error = sibling.begin_write(account).unwrap_err();
+            assert!(error.contains("quit and reopen"), "{error}");
+        }
+        // The committing process stays writable for what it had in sync.
+        restoring
+            .observed_revision
+            .lock()
+            .unwrap()
+            .insert(FRESH_ACCOUNT.into(), 1);
+        restoring.begin_write(FRESH_ACCOUNT).unwrap();
+        // A sibling that re-read only the old item at the new revision still
+        // cannot write its stale copy of the fresh item.
+        sibling
+            .observed_revision
+            .lock()
+            .unwrap()
+            .insert(ACCOUNT.into(), 2);
+        assert!(sibling.begin_write(FRESH_ACCOUNT).is_err());
+        sibling.begin_write(ACCOUNT).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // FLM-302 C3: with no sibling at all, the process that records a restored
+    // account stays writable for the items it had in sync, without any new
+    // read, for the following fresh restore and erasure.
+    #[test]
+    fn committer_keeps_writing_after_its_own_record_without_a_new_read() {
+        let dir = std::env::temp_dir().join(format!("fluux-fresh-{}", uuid::Uuid::new_v4()));
+        let only = Keychain {
+            revision_dir: Some(dir.clone()),
+            ..Keychain::default()
+        };
+        // It read both items once, as the secrets cache does when it loads.
+        only.observed_revision
+            .lock()
+            .unwrap()
+            .extend([(FRESH_ACCOUNT.to_string(), 0), (ACCOUNT.to_string(), 0)]);
+        only.mark_fresh_account("openpgp_passphrase:a@x").unwrap();
+        // A second restore and an erasure follow; neither re-reads first.
+        only.mark_fresh_account("openpgp_passphrase:b@x").unwrap();
+        only.begin_write(FRESH_ACCOUNT).unwrap();
+        only.begin_write(ACCOUNT).unwrap();
+        only.begin_write(FRESH_ACCOUNT).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // FLM-302 R9: a marker that cannot be read is an error, and a commit does
+    // not overwrite it. Touches only files in a temporary directory.
+    #[test]
+    fn unreadable_marker_is_an_error_not_an_empty_list() {
+        let dir = std::env::temp_dir().join(format!("fluux-marker-{}", uuid::Uuid::new_v4()));
+        let keychain = Keychain {
+            revision_dir: Some(dir.clone()),
+            ..Keychain::default()
+        };
+        assert!(keychain.fresh_accounts().unwrap().is_empty());
+        // A directory where the record belongs cannot be read as text.
+        std::fs::create_dir_all(keychain.fresh_marker_path().unwrap()).unwrap();
+        assert!(keychain.fresh_accounts().is_err());
+        assert!(keychain.mark_fresh_account("openpgp_passphrase:a@x").is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // FLM-302 R10: the record of restored accounts is on disk, renamed and
+    // directory-synced, before the commit returns.
+    #[test]
+    fn recording_a_restored_account_is_durable() {
+        let dir = std::env::temp_dir().join(format!("fluux-durable-{}", uuid::Uuid::new_v4()));
+        let keychain = Keychain {
+            revision_dir: Some(dir.clone()),
+            ..Keychain::default()
+        };
+        DURABILITY.with(|log| log.borrow_mut().clear());
+        keychain.mark_fresh_account("openpgp_passphrase:a@x").unwrap();
+        let log = DURABILITY.with(|log| log.borrow().clone());
+        // The revision bump comes first, then the record itself.
+        assert!(
+            log.ends_with(&["file-sync", "rename", "dir-sync"]),
+            "{log:?}"
+        );
+        assert_eq!(keychain.fresh_accounts().unwrap(), ["openpgp_passphrase:a@x"]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     // FLM-66 / FLM-79: production backend, explicit disposable keychains only.
     #[cfg(test)]
     #[test]
@@ -624,7 +1009,7 @@ mod native {
         }
         if action == "exclusive-write" {
             assert!(raw.get(ACCOUNT).unwrap().is_some());
-            let _write = raw.begin_write().unwrap();
+            let _write = raw.begin_write(ACCOUNT).unwrap();
             let contender = std::fs::OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -915,6 +1300,12 @@ mod tests {
         fail_delete: Mutex<bool>,
         corrupt_write: Mutex<bool>,
         concurrent_migration_bundle: Mutex<Option<Bundle>>,
+        fresh: Mutex<Vec<String>>,
+        fresh_unreadable: Mutex<bool>,
+        // Publish the record, then fail (a directory sync that errors).
+        mark_failures_after_publish: Mutex<usize>,
+        // After a failed mark, the record can no longer be read back.
+        unreadable_after_failed_mark: Mutex<bool>,
     }
     impl SecretStore for FakeStore {
         fn get(&self, account: &str) -> Result<Option<String>, String> {
@@ -933,7 +1324,7 @@ mod tests {
                     secret.into()
                 },
             );
-            if account == ACCOUNT {
+            if is_bundle(account) {
                 let stored = self.items.lock().unwrap().get(account).cloned().unwrap();
                 if let Ok(bundle) = serde_json::from_str::<Bundle>(&stored) {
                     self.snapshots.lock().unwrap().push(bundle.items);
@@ -958,8 +1349,29 @@ mod tests {
         }
     }
     impl Backend for FakeStore {
+        fn fresh_accounts(&self) -> StoreResult<Vec<String>> {
+            if *self.fresh_unreadable.lock().unwrap() {
+                return Err("marker unreadable".into());
+            }
+            Ok(self.fresh.lock().unwrap().clone())
+        }
+        fn mark_fresh_account(&self, account: &str) -> StoreResult<()> {
+            self.fresh.lock().unwrap().push(account.into());
+            let mut failures = self.mark_failures_after_publish.lock().unwrap();
+            if *failures > 0 {
+                *failures -= 1;
+                if *self.unreadable_after_failed_mark.lock().unwrap() {
+                    *self.fresh_unreadable.lock().unwrap() = true;
+                }
+                return Err("directory sync failed".into());
+            }
+            Ok(())
+        }
         fn read(&self, account: &str) -> StoreResult<Option<String>> {
-            self.reads.lock().unwrap().push(account.into());
+            // `reads` pins the old layout; the fresh item is a separate store.
+            if account != FRESH_ACCOUNT {
+                self.reads.lock().unwrap().push(account.into());
+            }
             if account == ACCOUNT {
                 if let Some((error, remaining)) = self.read_error.lock().unwrap().as_mut() {
                     if *remaining > 0 {
@@ -1244,6 +1656,197 @@ mod tests {
             }
         }
     }
+    // FLM-298 review R1: restoring one account moves only that account. The
+    // others, and the shared credentials, keep reading the old item.
+    #[test]
+    fn fresh_account_is_isolated_from_old_items_and_other_accounts() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let bob = "openpgp_passphrase:bob@example.org";
+        let store = combined();
+        store.fresh_write(alice, "restored").unwrap();
+        // Nothing routes to the fresh item before the commit.
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("dGVzdC1wYXNz"));
+        store.commit_fresh(alice).unwrap();
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("restored"));
+        assert_eq!(store.get(bob).unwrap().as_deref(), Some("aW5hY3RpdmUta2V5"));
+        assert_eq!(store.get("mcp-token").unwrap().as_deref(), Some("test-token"));
+        assert!(crate::credentials::load(&store).unwrap().is_some());
+        // Never an old-layout candidate for the restored account.
+        assert_eq!(SecretStore::legacy_candidate(&store, alice).unwrap(), None);
+        assert!(SecretStore::recovery_candidates(&store, alice).unwrap().is_empty());
+        // Later writes stay in the fresh item.
+        store.set(alice, "rotated").unwrap();
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("rotated"));
+        let old: Bundle =
+            serde_json::from_str(&store.store.get(ACCOUNT).unwrap().unwrap()).unwrap();
+        assert_eq!(old.items[alice], "dGVzdC1wYXNz");
+    }
+
+    // FLM-298 review R1/R3: a refused old item never reaches a restored
+    // account, and is not retried for the others.
+    #[test]
+    fn refused_old_items_do_not_block_a_restored_account() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = Secrets::new(legacy());
+        *store.store.read_error.lock().unwrap() = Some((StoreError::denied(), usize::MAX));
+        store.fresh_write(alice, "restored").unwrap();
+        store.commit_fresh(alice).unwrap();
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("restored"));
+        assert!(store.get("mcp-token").is_err());
+        let reads = store.store.reads.lock().unwrap().len();
+        assert!(store.get("mcp-token").is_err());
+        assert_eq!(store.store.reads.lock().unwrap().len(), reads, "no retry");
+        // A relaunch over the same storage still reads the restored secret.
+        let relaunched = Secrets::new(store.store);
+        assert_eq!(relaunched.get(alice).unwrap().as_deref(), Some("restored"));
+    }
+
+    // FLM-298 review R5: forgetting a restored account erases both storages,
+    // or says which copy it could not erase.
+    #[test]
+    fn forgetting_a_restored_account_erases_both_copies_or_reports() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        store.fresh_write(alice, "restored").unwrap();
+        store.commit_fresh(alice).unwrap();
+        store.delete(alice).unwrap();
+        assert_eq!(store.get(alice).unwrap(), None);
+        let old: Bundle =
+            serde_json::from_str(&store.store.get(ACCOUNT).unwrap().unwrap()).unwrap();
+        assert!(!old.items.contains_key(alice));
+        assert!(store.store.get(alice).unwrap().is_none());
+
+        let store = combined();
+        store.fresh_write(alice, "restored").unwrap();
+        store.commit_fresh(alice).unwrap();
+        *store.store.fail_delete.lock().unwrap() = true;
+        let error = store.delete(alice).unwrap_err();
+        assert!(error.contains("old copy") && !error.contains("restored copy"), "{error}");
+        assert_eq!(store.get(alice).unwrap(), None, "the restored copy is gone");
+
+        let store = Secrets::new(legacy());
+        *store.store.read_error.lock().unwrap() = Some((StoreError::denied(), usize::MAX));
+        store.fresh_write(alice, "restored").unwrap();
+        store.commit_fresh(alice).unwrap();
+        let error = store.delete(alice).unwrap_err();
+        assert!(error.starts_with("Not erased: old copy"), "{error}");
+        assert_eq!(store.get(alice).unwrap(), None);
+    }
+
+    // FLM-302 R2 (store level): a staged restore secret never replaces the live
+    // protection of an active key until it is promoted.
+    #[test]
+    fn staged_secret_replaces_the_live_one_only_on_commit() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        store.fresh_write(alice, "first").unwrap();
+        store.commit_fresh(alice).unwrap();
+        store.fresh_write(alice, "second").unwrap();
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("first"));
+        store.abort_fresh(alice).unwrap();
+        assert!(store.commit_fresh(alice).is_err(), "nothing left to promote");
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("first"));
+        store.fresh_write(alice, "second").unwrap();
+        store.commit_fresh(alice).unwrap();
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("second"));
+        let fresh: Bundle =
+            serde_json::from_str(&store.store.get(FRESH_ACCOUNT).unwrap().unwrap()).unwrap();
+        assert_eq!(fresh.items.len(), 1, "no staged copy remains");
+    }
+
+    // FLM-302 R10: a record published before its directory sync failed is in
+    // use. Commit confirms it again instead of reporting a failure the next
+    // read contradicts.
+    #[test]
+    fn commit_confirms_a_record_published_before_the_sync_failed() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        *store.store.mark_failures_after_publish.lock().unwrap() = 1;
+        store.fresh_write(alice, "restored").unwrap();
+        store.commit_fresh(alice).unwrap();
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("restored"));
+        // When it cannot be confirmed, the failure is reported.
+        let other = "openpgp_passphrase:bob@example.org";
+        *store.store.mark_failures_after_publish.lock().unwrap() = 2;
+        store.fresh_write(other, "restored").unwrap();
+        assert!(store.commit_fresh(other).is_err());
+        assert!(store.restored(other).unwrap(), "yet it is published and in use");
+    }
+
+    // FLM-302 R10 (round 3): a failed record write followed by a failed read
+    // back leaves publication unknown; commit says so instead of "absent".
+    #[test]
+    fn commit_reports_unknown_publication_when_the_probe_fails() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        *store.store.mark_failures_after_publish.lock().unwrap() = 1;
+        *store.store.unreadable_after_failed_mark.lock().unwrap() = true;
+        store.fresh_write(alice, "restored").unwrap();
+        let error = store.commit_fresh(alice).unwrap_err();
+        assert!(error.contains("could not be confirmed"), "{error}");
+        // The probe itself is an error, never "not restored".
+        assert!(store.restored(alice).is_err());
+    }
+
+    // FLM-302 R3: startup loading after a restore must not read the restored
+    // account's refused originals or their aliases again.
+    #[test]
+    fn migration_skips_restored_accounts_and_their_aliases() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let raw = legacy();
+        raw.set(&format!("{BACKUP_PREFIX}{alice}"), "YmFja3Vw").unwrap();
+        raw.set(&format!("{}uuid", recovery_prefix(alice)), "cmVjb3Zlcnk=")
+            .unwrap();
+        raw.fresh.lock().unwrap().push(alice.into());
+        let store = Secrets::new(raw);
+        assert!(crate::credentials::load(&store).unwrap().is_some());
+        assert_eq!(store.get("mcp-token").unwrap().as_deref(), Some("test-token"));
+        let reads = store.store.reads.lock().unwrap().clone();
+        assert!(
+            !reads.iter().any(|name| name.contains("alice@example.com")
+                && name != "alice@example.com"),
+            "read {reads:?}"
+        );
+        // Explicit erasure still reaches the retained originals.
+        store.delete(alice).unwrap();
+        let items = store.store.items.lock().unwrap();
+        assert!(!items.contains_key(alice));
+        assert!(!items.keys().any(|name| name.contains(&format!(":{alice}"))));
+    }
+
+    // FLM-302 R5: a staged secret from a failed restore is erased by forget,
+    // even though the account was never routed to the fresh item.
+    #[test]
+    fn forgetting_erases_a_staged_secret_left_by_a_failed_restore() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        store.fresh_write(alice, "staged").unwrap();
+        store.delete(alice).unwrap();
+        let fresh: Bundle =
+            serde_json::from_str(&store.store.get(FRESH_ACCOUNT).unwrap().unwrap()).unwrap();
+        assert!(fresh.items.is_empty(), "{:?}", fresh.items.keys());
+    }
+
+    // FLM-302 R9: an unreadable record of restored accounts is an error, never
+    // an empty list that sends reads and writes back to the old items.
+    #[test]
+    fn unreadable_fresh_record_preserves_routes_instead_of_reverting() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        store.fresh_write(alice, "restored").unwrap();
+        store.commit_fresh(alice).unwrap();
+        *store.store.fresh_unreadable.lock().unwrap() = true;
+        let writes = store.store.writes.lock().unwrap().len();
+        assert!(store.get(alice).is_err());
+        assert!(store.set(alice, "x").is_err());
+        assert!(store.delete(alice).is_err());
+        assert!(store.fresh_write(alice, "again").is_ok(), "staging touches nothing live");
+        assert!(store.commit_fresh(alice).is_err());
+        assert_eq!(store.store.writes.lock().unwrap().len(), writes + 1);
+        *store.store.fresh_unreadable.lock().unwrap() = false;
+        assert_eq!(store.get(alice).unwrap().as_deref(), Some("restored"));
+    }
+
     // FLM-79 F7: identical saves and missing deletes must not invalidate other caches.
     #[test]
     fn no_op_changes_do_not_write_or_delete() {

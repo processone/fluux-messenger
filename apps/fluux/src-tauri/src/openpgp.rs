@@ -222,6 +222,15 @@ impl OpenpgpState {
         }
     }
 
+    #[cfg(test)]
+    pub fn for_testing_with_storage(storage: KeyStorage) -> Self {
+        Self {
+            entries: Mutex::new(HashMap::new()),
+            storage: Arc::new(storage),
+            blocking_runs: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
     /// Load-or-generate an OpenPGP identity for `account_jid`. The KDF
     /// work runs on a blocking worker thread so we never hold up the IPC
     /// runtime. Concurrent calls for the same JID coalesce to a single
@@ -424,6 +433,7 @@ impl OpenpgpState {
         account_jid: String,
         backup_message: String,
         passphrase: String,
+        without_migration: bool,
     ) -> Result<KeyBundle, String> {
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
@@ -433,10 +443,12 @@ impl OpenpgpState {
             let cert = Cert::from_bytes(tsk_armored.as_bytes())
                 .map_err(|e| format!("parse imported TSK: {e}"))?;
             let cert = ensure_account_user_id(cert, &account_jid).map_err(anyhow_to_string)?;
-            let backing = this
-                .storage
-                .save(&account_jid, &cert)
-                .map_err(anyhow_to_string)?;
+            let backing = if without_migration {
+                this.storage.save_fresh(&account_jid, &cert)
+            } else {
+                this.storage.save(&account_jid, &cert)
+            }
+            .map_err(anyhow_to_string)?;
             let bundle = bundle_from_cert(&cert, backing).map_err(anyhow_to_string)?;
 
             // Replace any existing cell so the next ensure_key observes
@@ -501,6 +513,7 @@ impl OpenpgpState {
         backup_message: String,
         passphrase: String,
         selected_fingerprint: String,
+        without_migration: bool,
     ) -> Result<KeyBundle, String> {
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
@@ -525,10 +538,12 @@ impl OpenpgpState {
             let cert = Cert::from_bytes(tsk_armored.as_bytes())
                 .map_err(|e| format!("parse selected TSK: {e}"))?;
             let cert = ensure_account_user_id(cert, &account_jid).map_err(anyhow_to_string)?;
-            let backing = this
-                .storage
-                .save(&account_jid, &cert)
-                .map_err(anyhow_to_string)?;
+            let backing = if without_migration {
+                this.storage.save_fresh(&account_jid, &cert)
+            } else {
+                this.storage.save(&account_jid, &cert)
+            }
+            .map_err(anyhow_to_string)?;
             let bundle = bundle_from_cert(&cert, backing).map_err(anyhow_to_string)?;
 
             let mut entries = this.entries.lock().unwrap();
@@ -893,10 +908,16 @@ pub async fn openpgp_backup_import(
     account_jid: String,
     backup_message: String,
     passphrase: String,
+    without_migration: Option<bool>,
     state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<PublicKeyInfo, String> {
     Arc::clone(&state)
-        .import_backup(account_jid, backup_message, passphrase)
+        .import_backup(
+            account_jid,
+            backup_message,
+            passphrase,
+            without_migration.unwrap_or(false),
+        )
         .await
         .map(|bundle| PublicKeyInfo::from(&bundle))
 }
@@ -923,6 +944,7 @@ pub async fn openpgp_backup_import_selected(
     backup_message: String,
     passphrase: String,
     selected_fingerprint: String,
+    without_migration: Option<bool>,
     state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<PublicKeyInfo, String> {
     Arc::clone(&state)
@@ -931,6 +953,7 @@ pub async fn openpgp_backup_import_selected(
             backup_message,
             passphrase,
             selected_fingerprint,
+            without_migration.unwrap_or(false),
         )
         .await
         .map(|bundle| PublicKeyInfo::from(&bundle))
@@ -2392,6 +2415,7 @@ mod tests {
                 "alice@example.com".into(),
                 backup,
                 "correct-horse-battery-staple".into(),
+                false,
             )
             .await
             .unwrap();
@@ -2411,6 +2435,148 @@ mod tests {
             0,
             "import_backup must prime the cell so ensure_key skips the KDF"
         );
+    }
+
+    /// FLM-299 / FLM-298: the user refused the old keychain items (legacy
+    /// items only, or the old combined item too), so migration can never
+    /// finish. Both production imports, told to skip migration, must restore
+    /// the same identity through the very store that cached the refusal,
+    /// decrypt the original ciphertext, and keep doing so after a restart
+    /// without reading the refused items again. Other accounts are untouched.
+    #[test]
+    fn flm299_backup_import_without_migration_recovers_after_refused_keychain() {
+        use crate::{
+            credentials::SecretStore,
+            macos_secrets::{Backend, Secrets, StoreError},
+        };
+        use std::sync::atomic::{AtomicUsize, Ordering as O};
+        #[derive(Clone, Default)]
+        struct Memory {
+            items: Arc<Mutex<std::collections::BTreeMap<String, String>>>,
+            refused_reads: Arc<AtomicUsize>,
+            fresh: Arc<Mutex<Vec<String>>>,
+        }
+        impl SecretStore for Memory {
+            fn get(&self, a: &str) -> Result<Option<String>, String> {
+                Ok(self.items.lock().unwrap().get(a).cloned())
+            }
+            fn set(&self, a: &str, v: &str) -> Result<(), String> {
+                self.items.lock().unwrap().insert(a.into(), v.into());
+                Ok(())
+            }
+            fn delete(&self, a: &str) -> Result<(), String> {
+                self.items.lock().unwrap().remove(a);
+                Ok(())
+            }
+        }
+        impl Backend for Memory {
+            fn read(&self, a: &str) -> Result<Option<String>, StoreError> {
+                // The fresh item reads normally, and so does an absent old
+                // combined item; every old item that exists is refused.
+                if a == "secrets-fresh-v1" || !self.items.lock().unwrap().contains_key(a) {
+                    return self.get(a).map_err(Into::into);
+                }
+                self.refused_reads.fetch_add(1, O::SeqCst);
+                Err(StoreError::denied())
+            }
+            fn accounts(&self) -> Result<Vec<String>, StoreError> {
+                Ok(self.items.lock().unwrap().keys().cloned().collect())
+            }
+            fn fresh_accounts(&self) -> Result<Vec<String>, StoreError> {
+                Ok(self.fresh.lock().unwrap().clone())
+            }
+            fn mark_fresh_account(&self, account: &str) -> Result<(), StoreError> {
+                self.fresh.lock().unwrap().push(account.into());
+                Ok(())
+            }
+        }
+        let jid = "alice@example.com";
+        let bob_account = "openpgp_passphrase:bob@example.com";
+        let device_a = new_state();
+        let original = device_a.ensure_key_sync(jid, "Alice").unwrap();
+        device_a.ensure_key_sync("bob@example.com", "Bob").unwrap();
+        let ciphertext = device_a
+            .encrypt("bob@example.com", &[original.public_armored.clone()], "old message")
+            .unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let backup = rt
+            .block_on(device_a.encrypt_backup(jid.into(), "backup-code".into()))
+            .unwrap();
+        let fingerprint = rt
+            .block_on(device_a.import_backup_all(backup.clone(), "backup-code".into()))
+            .unwrap()[0]
+            .fingerprint
+            .clone();
+
+        for selected in [false, true] {
+            for old_combined in [false, true] {
+                let raw = Memory::default();
+                raw.set("mcp-token", "old-mcp-token").unwrap();
+                raw.set("openpgp_passphrase:alice@example.com", "b2xk").unwrap();
+                raw.set(bob_account, "b3RoZXI=").unwrap();
+                if old_combined {
+                    raw.set("secrets-v1", "{\"version\":1,\"items\":{}}").unwrap();
+                }
+                let old_items = raw.items.lock().unwrap().clone();
+                let dir = fresh_tmp_dir();
+                let open = |secrets: Arc<Secrets<Memory>>| {
+                    Arc::new(OpenpgpState::for_testing_with_storage(
+                        KeyStorage::for_testing_with_store(dir.clone(), secrets),
+                    ))
+                };
+                let import = |state: &Arc<OpenpgpState>, without_migration: bool| {
+                    if selected {
+                        rt.block_on(state.import_backup_selected(
+                            jid.into(),
+                            backup.clone(),
+                            "backup-code".into(),
+                            fingerprint.clone(),
+                            without_migration,
+                        ))
+                    } else {
+                        rt.block_on(state.import_backup(
+                            jid.into(),
+                            backup.clone(),
+                            "backup-code".into(),
+                            without_migration,
+                        ))
+                    }
+                };
+                // One store, whose cache remembers the refusal, for the whole
+                // session: the restore must work through it.
+                let secrets = Arc::new(Secrets::new(raw.clone()));
+                let state = open(secrets.clone());
+                assert!(import(&state, false).is_err());
+                assert!(raw.refused_reads.load(O::SeqCst) > 0, "the refusal happened");
+                let restored = import(&state, true).unwrap();
+                assert_eq!(restored.fingerprint, original.fingerprint);
+                assert_eq!(
+                    state.decrypt(jid, &ciphertext, &[]).unwrap().plaintext,
+                    "old message"
+                );
+                // Other accounts keep their old route, and its refusal.
+                assert_eq!(*raw.fresh.lock().unwrap(), ["openpgp_passphrase:alice@example.com"]);
+                assert!(secrets.get(bob_account).is_err());
+
+                // Restart: a new cache over the same storage.
+                let refused_before = raw.refused_reads.load(O::SeqCst);
+                let restarted = open(Arc::new(Secrets::new(raw.clone())));
+                let bundle = rt
+                    .block_on(restarted.ensure_key(jid.into(), "Alice".into()))
+                    .unwrap();
+                assert_eq!(bundle.fingerprint, original.fingerprint);
+                assert_eq!(
+                    restarted.decrypt(jid, &ciphertext, &[]).unwrap().plaintext,
+                    "old message"
+                );
+                assert_eq!(raw.refused_reads.load(O::SeqCst), refused_before);
+                let items = raw.items.lock().unwrap();
+                for (name, value) in &old_items {
+                    assert_eq!(items.get(name), Some(value), "{name} preserved");
+                }
+                assert!(items.contains_key("secrets-fresh-v1"));
+            }
+        }
     }
 
     // ---- encryption-subkey rotation --------------------------------
@@ -3000,6 +3166,7 @@ mod tests {
                 "alice@example.com".into(),
                 web_backup,
                 backup_passphrase.into(),
+                false,
             ))
             .expect("Sequoia must decrypt a backup created by openpgp.js");
         assert_eq!(
@@ -3017,6 +3184,7 @@ mod tests {
                 "bob@example.com".into(),
                 bob_backup,
                 backup_passphrase.into(),
+                false,
             ))
             .expect("Sequoia must decrypt Bob's web backup");
 
@@ -3056,7 +3224,7 @@ mod tests {
 
         let device_b = Arc::new(OpenpgpState::for_testing(fresh_tmp_dir()));
         let err = device_b
-            .import_backup("alice@example.com".into(), backup, "wrong".into())
+            .import_backup("alice@example.com".into(), backup, "wrong".into(), false)
             .await;
         assert!(err.is_err(), "wrong passphrase must not yield a bundle");
 

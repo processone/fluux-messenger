@@ -22,6 +22,28 @@ pub trait SecretStore {
     fn set(&self, account: &str, secret: &str) -> Result<(), String>;
     /// Succeeds when the item does not exist.
     fn delete(&self, account: &str) -> Result<(), String>;
+    /// Restore: stage an account's new secret in the fresh item only. It
+    /// protects nothing until `commit_fresh`, so a failed restore changes no read.
+    #[cfg(any(target_os = "macos", test))]
+    fn fresh_write(&self, _account: &str, _secret: &str) -> Result<(), String> {
+        Err("Fresh start is unavailable for this store".into())
+    }
+    /// Whether the account was restored into the fresh item.
+    #[cfg(any(target_os = "macos", test))]
+    fn restored(&self, _account: &str) -> Result<bool, String> {
+        Ok(false)
+    }
+    /// Drop a staged secret after a failed restore.
+    #[cfg(any(target_os = "macos", test))]
+    fn abort_fresh(&self, _account: &str) -> Result<(), String> {
+        Ok(())
+    }
+    /// Promote the staged secret and route the account to the fresh item from
+    /// now on, in every launch.
+    #[cfg(any(target_os = "macos", test))]
+    fn commit_fresh(&self, _account: &str) -> Result<(), String> {
+        Err("Fresh start is unavailable for this store".into())
+    }
     /// Explicit erase may retry a startup denial once; ordinary logout must not.
     #[cfg(any(target_os = "macos", test))]
     fn retry_denied_access(&self) -> Result<(), String> { Ok(()) }
