@@ -4,6 +4,7 @@ import type { Message, Conversation, ConversationMetadata } from '../core/types'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, setStorageScopeJid, getStorageScopeJid } from '../utils/storageScope'
 import { setResidentWindowSize } from './shared/residentWindow'
+import { getMAMQueryState } from './shared/mamState'
 import { selectCatchUpQuery } from '../utils/mamCatchUpUtils'
 import { _clearAllTransientForTesting, transientCounts } from './shared/transientUnread'
 import {
@@ -5091,6 +5092,66 @@ describe('chatStore', () => {
       expect(chatStore.getState().windowAtLiveEdge.get(conversationId) ?? true).toBe(true)
       const messages = chatStore.getState().messages.get(conversationId)
       expect(messages?.some((m) => m.id === 'latest-1')).toBe(true)
+    })
+
+    // Older history stuck on iPhone: scrolling to the real start sets isHistoryComplete, then
+    // jumping to the latest evicts the oldest rows — "Beginning of conversation" must not stay.
+    it('re-opens load-older when jump-to-latest evicts the rows that reached the start', async () => {
+      const resident: Message[] = []
+      for (let i = 0; i < RESIDENT_WINDOW_SIZE; i++) {
+        resident.push(chatMsgAt(`resident-${i}`, i))
+      }
+      chatStore.setState((state) => ({
+        messages: new Map(state.messages).set(conversationId, resident),
+        windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(conversationId, false),
+        mamQueryStates: new Map(state.mamQueryStates).set(conversationId, {
+          ...getMAMQueryState(state.mamQueryStates, conversationId),
+          isHistoryComplete: true,
+        }),
+      }))
+
+      vi.mocked(messageCache.getMessages).mockResolvedValue(
+        Array.from({ length: RESIDENT_WINDOW_SIZE }, (_, i) => chatMsgAt(`latest-${i}`, RESIDENT_WINDOW_SIZE + 600 + i))
+      )
+      await chatStore.getState().recenterToLatest(conversationId)
+
+      const window = chatStore.getState().messages.get(conversationId)
+      expect(window?.some((m) => m.id === 'resident-0')).toBe(false)
+      expect(chatStore.getState().mamQueryStates.get(conversationId)?.isHistoryComplete).toBe(false)
+    })
+
+    // Review R2: leaving a conversation empties its window; reopening rehydrates only the newest cache slice.
+    it('re-opens load-older when the window is emptied by switching away', async () => {
+      chatStore.setState((state) => ({
+        activeConversationId: conversationId,
+        messages: new Map(state.messages).set(conversationId, [chatMsgAt('resident-0', 0), chatMsgAt('resident-1', 1)]),
+        mamQueryStates: new Map(state.mamQueryStates).set(conversationId, {
+          ...getMAMQueryState(state.mamQueryStates, conversationId),
+          isHistoryComplete: true,
+        }),
+      }))
+
+      chatStore.getState().setActiveConversation('bob@example.com')
+
+      expect(chatStore.getState().messages.get(conversationId)).toBeUndefined()
+      expect(chatStore.getState().mamQueryStates.get(conversationId)?.isHistoryComplete).toBe(false)
+    })
+
+    it('keeps the reached-the-start claim while the oldest row stays resident', async () => {
+      const resident = [chatMsgAt('resident-0', 0), chatMsgAt('resident-1', 1)]
+      chatStore.setState((state) => ({
+        messages: new Map(state.messages).set(conversationId, resident),
+        mamQueryStates: new Map(state.mamQueryStates).set(conversationId, {
+          ...getMAMQueryState(state.mamQueryStates, conversationId),
+          isHistoryComplete: true,
+        }),
+      }))
+
+      vi.mocked(messageCache.getMessages).mockResolvedValue([chatMsgAt('latest-1', 10)])
+      await chatStore.getState().recenterToLatest(conversationId)
+
+      expect(chatStore.getState().messages.get(conversationId)?.map((m) => m.id)).toEqual(['resident-0', 'resident-1', 'latest-1'])
+      expect(chatStore.getState().mamQueryStates.get(conversationId)?.isHistoryComplete).toBe(true)
     })
 
     it('sets windowAtLiveEdge true even when the cache has nothing newer (already-resident latest window)', async () => {

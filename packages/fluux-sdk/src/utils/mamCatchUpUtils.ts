@@ -47,12 +47,25 @@ export const MAM_ROOM_FORWARD_MAX_PAGES = 50
  *  `complete=true`; this is only a runaway backstop. */
 export const MAM_ROOM_FORWARD_MAX_PAGES_MANUAL = 500
 
-/** Max BACKWARD pages to walk past signal-only pages (reactions/receipts —
- *  zero displayable messages) before giving up. Shared by the 1:1 and room
- *  backward paths so both retry the same distance: a conversation/room whose
- *  newest page is all signals must not render empty (or be marked
- *  caught-up-to-live) while older real messages exist. */
+/** Max BACKWARD pages a FETCH-LATEST walk (`before: ''`) retries past
+ *  signal-only pages (reactions/receipts — zero displayable messages) before
+ *  giving up. Shared by the 1:1 and room paths so both retry the same distance:
+ *  a conversation/room whose newest page is all signals must not render empty
+ *  (or be marked caught-up-to-live) while older real messages exist. The walk
+ *  extent persists as the coverage record, so the next fetch-latest resumes
+ *  below it instead of re-walking the same pages. */
 export const MAM_BACKWARD_SIGNAL_RETRY_PAGES = 5
+
+/** Runaway backstop for a SCROLL-UP backward walk (`before` is an archive
+ *  cursor). Unlike a fetch-latest, a scroll-up has no persisted resume point:
+ *  its caller restarts from the same resident oldest row on every "Load earlier
+ *  messages", so a walk that gave up after a few signal-only pages would re-walk
+ *  the same pages on every click and never get past a long run of receipts or
+ *  chat markers. The walk therefore continues until it reaches displayable
+ *  messages or the archive start; it still stops on `complete`, on a page
+ *  without an RSM cursor and on a cursor that does not advance. This cap
+ *  (500 × 50 = 25 000 entries per click) only bounds a misbehaving server. */
+export const MAM_BACKWARD_SCROLL_UP_MAX_PAGES = 500
 
 /** Max auto-pages for the INITIAL forward catch-up phase before bailing to a
  *  fetch-latest (3 × 100 = 300 messages fetched exactly). Beyond this the
