@@ -2673,6 +2673,31 @@ mod tests {
         assert!(pre_restore_path(&hooked_storage(&raw, &dir).key_file_path(jid).unwrap()).exists());
     }
 
+    // FLM-302 C1: when the stale copy cannot be removed after a save, the
+    // error says the key was saved, and after a restart the new key unlocks.
+    #[cfg(unix)]
+    #[test]
+    fn failed_removal_of_the_stale_copy_reports_a_partial_save() {
+        let raw = HookedMemory::default();
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        let newer = generate_cert(jid);
+        hooked_storage(&raw, &dir).save(jid, &generate_cert(jid)).unwrap();
+        // A directory in the copy's place cannot be removed as a file.
+        let key_path = hooked_storage(&raw, &dir).key_file_path(jid).unwrap();
+        fs::create_dir(pre_restore_path(&key_path)).unwrap();
+        let error = hooked_storage(&raw, &dir).save(jid, &newer).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("the key was saved, but the copy kept by an earlier restore"),
+            "{error:#}"
+        );
+        // A new instance over the same files and secrets stands for a restart.
+        assert_eq!(
+            hooked_storage(&raw, &dir).load(jid).unwrap().unwrap().cert.fingerprint(),
+            newer.fingerprint()
+        );
+    }
+
     // FLM-302 R8 (round 3): a copy left by an interrupted restore must not
     // outlive a newer key saved by a normal write.
     #[cfg(unix)]
