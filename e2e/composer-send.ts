@@ -3,6 +3,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
 import { activateChat } from './harness/scrollHarness'
+import { DESIGN_ROOM_JID } from '../apps/fluux/src/demo/constants'
 
 const BODY = 'Et il y a aussi ce nouveau ticket dolya: https://ejabberd.atlassian.net/browse/EJABS-4575'
 const PEER = 'emma@fluux.chat'
@@ -168,6 +169,43 @@ test('failure after deleting newer input still retains the failed draft', async 
   await expect(field).toHaveValue(BODY)
   await expect.poll(() => page.evaluate(peer => (window as any).__chatStore.getState().getDraft(peer), PEER)).toBe(BODY)
 })
+
+// E1: actual parent navigation clears the previous edit in a later effect.
+for (const room of [false, true]) {
+  test(`destination draft survives leaving an edit in ${room ? 'room' : 'chat'}`, async ({ page }) => {
+    const field = room ? await openRoom(page) : await openChat(page)
+    await field.fill('Good catch.')
+    await field.press('Enter')
+    await expect.poll(() => calls(page)).toBe(1)
+    await page.evaluate(() => (window as any).__sendProbe.complete())
+    await expect(page.locator('[data-message-body]').filter({ hasText: 'Good catch.' }).last()).toBeVisible()
+    await field.press('ArrowUp')
+    await expect(page.getByText('Editing message', { exact: true })).toBeVisible()
+    const destination = room ? DESIGN_ROOM_JID : 'sophia@fluux.chat'
+    const draft = 'Another ordinary draft'
+    await page.evaluate(({ room, destination, draft }) => {
+      const w = window as any
+      const store = room ? w.__roomStore : w.__chatStore
+      store.getState().setDraft(destination, draft)
+    }, { room, destination, draft })
+    if (room) {
+      await page.evaluate(id => { location.hash = `#/rooms/${encodeURIComponent(id)}` }, destination)
+      await expect.poll(() => page.evaluate(() => (window as any).__roomStore.getState().activeRoomJid)).toBe(destination)
+    } else await activateChat(page, destination)
+    await expect(page.getByText('Editing message', { exact: true })).toHaveCount(0)
+    const target = room ? page.locator('.message-input[contenteditable="true"]').first() : page.locator('textarea.message-input')
+    await expect(target).toBeVisible()
+    await captureState(page)
+    if (room) await expect(target).toHaveText(draft)
+    else await expect(target).toHaveValue(draft)
+    const saved = await page.evaluate(({ room, destination }) => {
+      const w = window as any
+      return (room ? w.__roomStore : w.__chatStore).getState().getDraft(destination)
+    }, { room, destination })
+    expect(saved).toBe(draft)
+    console.log(JSON.stringify({ finding: 'E1', room, destination, saved }))
+  })
+}
 
 // N1: captain chose waiting until another message's edit finishes.
 for (const finish of ['cancel', 'save'] as const) {

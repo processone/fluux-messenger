@@ -32,7 +32,7 @@ function fixture() {
   }
   function Input({ onSend, id = 'emma@fluux.chat', editingMessage, onCancelEdit, onSendCorrection }: {
     onSend: (text: string) => Promise<boolean>; id?: string
-    editingMessage?: ComponentProps<typeof MessageComposer>['editingMessage']
+    editingMessage?: ComponentProps<typeof MessageComposer>['editingMessage'] & { conversationId?: string }
     onCancelEdit?: () => void
     onSendCorrection?: ComponentProps<typeof MessageComposer>['onSendCorrection']
   }) {
@@ -44,7 +44,8 @@ function fixture() {
       setDraft: (id: string, value: string) => operations.setDraft(id, value),
       clearDraft: (id: string) => operations.clearDraft(id),
     }), [operations])
-    const [text, setText, consumeDraft] = useConversationDraft({ conversationId: id, draftOperations: wrapped, composerRef: ref, isEditing: !!editingMessage })
+    const [text, setText, consumeDraft] = useConversationDraft({ conversationId: id, draftOperations: wrapped, composerRef: ref, isEditing: !!editingMessage,
+      editingConversationId: editingMessage ? (editingMessage.conversationId ?? id) : undefined })
     return <MessageComposer ref={ref} placeholder="Message" value={text} onValueChange={setText}
       onConsumeDraft={consumeDraft} onSend={onSend} editingMessage={editingMessage}
       onCancelEdit={onCancelEdit} onSendCorrection={onSendCorrection} />
@@ -104,8 +105,12 @@ describe('submitted draft ownership', () => {
     const onSend = () => send.promise
     const view = render(<Input onSend={onSend} />)
     await act(async () => { submit() })
-    view.rerender(<Input onSend={onSend} editingMessage={{ id: 'earlier-message', body: 'Good catch.' }} />)
+    const editingMessage = { id: 'earlier-message', body: 'Good catch.', conversationId: 'emma@fluux.chat' }
+    view.rerender(<Input onSend={onSend} editingMessage={editingMessage} />)
     await act(async () => { send.reject(new Error('Socket not available')) })
+    // E1: the real parent drops the old edit only in its next effect/render.
+    view.rerender(<Input onSend={onSend} id="oliver@fluux.chat" editingMessage={editingMessage} />)
+    expect(field().value).toBe('Another ordinary draft')
     view.rerender(<Input onSend={onSend} id="oliver@fluux.chat" />)
     expect(field().value).toBe('Another ordinary draft')
     expect(drafts.get('oliver@fluux.chat')).toBe('Another ordinary draft')

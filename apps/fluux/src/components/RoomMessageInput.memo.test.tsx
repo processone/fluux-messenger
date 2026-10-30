@@ -144,7 +144,9 @@ function moderateStagedReply() {
 }
 
 // N2: captain requires real mention references, not plain text, after remount.
-it.each(['', 'Oups', '@Emma '])('retains room mention references through failed-send remount with newer %s', async newer => {
+it.each([
+  ['', false], ['Oups', false], ['@Emma ', false], ['@Emma ', true],
+] as const)('retains room mentions with newer %s and failure while unmounted %s', async (newer, unmounted) => {
   roomStore.setState({ drafts: new Map() })
   const sendMessage = vi.fn().mockResolvedValue('sent')
   const first = render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
@@ -164,7 +166,7 @@ it.each(['', 'Oups', '@Emma '])('retains room mention references through failed-
     capturedComposer.props!.onValueChange!('')
   })
   first.unmount()
-  const second = render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
+  let second = render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
   const newerReferences: MentionReference[] = newer.startsWith('@')
     ? [{ begin: 0, end: '@Emma'.length, type: 'mention', uri: `xmpp:${STABLE.roomJid}/Emma` }] : []
   if (newer) act(() => {
@@ -172,7 +174,13 @@ it.each(['', 'Oups', '@Emma '])('retains room mention references through failed-
     currentEditor.props.onEdit(newer, newerReferences)
     capturedComposer.props!.onValueChange!(newer)
   })
-  act(() => restore())
+  if (unmounted) {
+    // I4: a saved newer mention must survive failure with no active owner.
+    await waitFor(() => expect(roomStore.getState().getDraft(STABLE.roomJid)).toBe(newer))
+    second.unmount()
+    act(() => restore())
+    second = render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
+  } else act(() => restore())
   const recovered = capturedComposer.props!.value!
   expect(recovered).toBe(newer ? `${newer}\n\n${body}` : body)
   second.unmount()
