@@ -191,7 +191,7 @@ view gets no hinge information by default. See
 | Duo | Disposable `Fluux-FLM177-Duo`, iOS 27.1 build 24A94232, WebKit 8625.1.29.10.29 |
 | Toolchain | Xcode 27.1, build 27A9275 |
 | App | Native demo `net.processone.fluux.demo` 0.18.1, built with `npm run tauri:ios:demo` after `npm ci` |
-| Source | App sources of `d2418a881904`, the main-line version the FLM-177 branch is based on; the branch changes only this document |
+| Source | The tested binary comes from the app sources of `d2418a881904`. The FLM-177 branch was later brought up to date with `f8dabfe7ef6d`, whose only product change is in the notification service extension, a separate target that these screen cases do not exercise. The branch changes only this document |
 | First pass | The same cases on app sources of `d3bbf25ff4bc` gave the same results; the tables below come from the run on `d2418a881904` |
 
 The Duo has two built-in screens, and only one shows content at a time:
