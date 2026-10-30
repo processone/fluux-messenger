@@ -56,7 +56,7 @@ async function setup(page: Page, kind: Kind) {
   const target = page.locator(`.message-row[data-message-id="${targetId}"]`)
   await expect(target).toBeInViewport()
   await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
-  await waitForTopVisibleSettled(page)
+  expect(await waitForTopVisibleSettled(page), 'the initial view must settle').not.toBeNull()
   return target
 }
 
@@ -72,7 +72,7 @@ for (const kind of ['chat', 'room'] as const) {
       await page.mouse.move(x, y)
       await page.mouse.down({ button: 'middle' })
       await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
-      await waitForTopVisibleSettled(page)
+      expect(await waitForTopVisibleSettled(page), 'the released live edge must settle').not.toBeNull()
       if (mode !== 'held') {
         if (mode === 'jitter-latched') await page.mouse.move(x + 1, y)
         await page.mouse.up({ button: 'middle' })
@@ -118,7 +118,7 @@ for (const kind of ['chat', 'room'] as const) {
       else await page.mouse.click(x, y - 50, { button: mode === 'middle-stopped' ? 'middle' : 'left' })
       // Returning from the stop click does not drain the compositor's last native step.
       // Observe the stopped geometry before testing the next deliberate navigation.
-      await waitForTopVisibleSettled(page)
+      expect(await waitForTopVisibleSettled(page), 'native panning must stop before navigation').not.toBeNull()
       await test.info().attach('native-pan-frames', { body: JSON.stringify(result, null, 2), contentType: 'application/json' })
       expect(result.inputs.length).toBeGreaterThan(0)
       expect(result.inputs.every(input => input.trusted)).toBe(true)
