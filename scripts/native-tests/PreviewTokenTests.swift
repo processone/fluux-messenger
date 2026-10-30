@@ -71,6 +71,31 @@ func check(_ condition: Bool, _ message: String) {
             check(false, "missing state lock must fail")
         } catch PreviewToken.LockFailure.unavailable {}
         check(!ranUnlocked, "missing state lock never runs an unlocked transaction")
+        // FLM-294 S2 / selected R1: lock failure must not leave a revoked capability
+        // published. Model the keychain as isolated bytes; no Security API is called.
+        let blocked = root.appendingPathComponent("blocked")
+        try FileManager.default.createDirectory(at: blocked.appendingPathComponent("preview-state.lock"), withIntermediateDirectories: true)
+        let published = Data("{\"account\":\"alice@example.com\",\"opt_in\":true}".utf8)
+        for operation in ["publish", "revoke", "purge"] {
+            var capability: Data? = published
+            var ranTransaction = false
+            do {
+                try PreviewToken.withStateLock(root: blocked, onUnavailable: {
+                    if operation == "revoke" || operation == "purge" { capability = nil }
+                }) {
+                    ranTransaction = true
+                }
+                check(false, "unavailable lock must still report incomplete cleanup: \(operation)")
+            } catch PreviewToken.LockFailure.unavailable {}
+            check(!ranTransaction, "state transaction never runs unlocked: \(operation)")
+            check((capability == nil) == (operation != "publish"), "only revocation deletes the capability without the lock: \(operation)")
+        }
+        var lockedTransaction = false
+        try PreviewToken.withStateLock(root: root, onUnavailable: { check(false, "healthy lock must not use the fallback") }) {
+            lockedTransaction = true
+        }
+        check(lockedTransaction, "healthy state transaction still runs")
+        print("unavailable state lock: publish refused; revoke/purge delete capability and report incomplete cleanup")
         // FLM-294 R1: no late token write after revocation, even if cleanup retains
         // the old token temporarily. Rotation and refusal obey the same capability check.
         check(PreviewToken.resolve(used: token("t1"), stored: token("t1"), snapshotCurrent: false, change: rotate) == nil,

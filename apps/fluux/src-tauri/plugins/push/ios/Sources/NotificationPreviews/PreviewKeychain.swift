@@ -126,8 +126,13 @@ struct PreviewToken: Codable, Equatable {
 
     /// Short state transactions serialize capability publication/revocation with credential
     /// reads/writes, never network work. The app must not wait on the sign-in lock to revoke.
-    static func withStateLock<T>(root: URL, _ body: () throws -> T) throws -> T {
-        guard let descriptor = lock(root: root, name: "preview-state.lock") else { throw LockFailure.unavailable }
+    static func withStateLock<T>(root: URL, onUnavailable: () throws -> Void = {}, _ body: () throws -> T) throws -> T {
+        guard let descriptor = lock(root: root, name: "preview-state.lock") else {
+            // Revocation may still delete the published capability, but publication and
+            // the rest of the state transaction must never proceed without the lock.
+            try onUnavailable()
+            throw LockFailure.unavailable
+        }
         defer { flock(descriptor, LOCK_UN); close(descriptor) }
         return try body()
     }

@@ -176,7 +176,13 @@ class PushPlugin: Plugin {
                     // Revocation shares only the short state lock with worker reads/writes.
                     // It must complete even while an extension holds fast-token.lock on network I/O.
                     var released: PreviewToken?
-                    let session = try PreviewToken.withStateLock(root: root) {
+                    let session = try PreviewToken.withStateLock(root: root, onUnavailable: {
+                        // A failed lock must not leave the password/secret-key capability
+                        // published after revoke or sign-out. Still report incomplete cleanup.
+                        if args.operation == "revoke" || args.operation == "purge" {
+                            try PreviewKeychain.write(nil)
+                        }
+                    }) {
                         try PreviewKeychain.write(nil)
                         if args.operation == "purge" || (account != nil && PreviewToken.stored()?.account != account) {
                             released = PreviewToken.stored().flatMap { $0.token.isEmpty ? nil : $0 }
