@@ -116,6 +116,9 @@ for (const kind of ['chat', 'room'] as const) {
       }).stopNativePanCapture())
       if (mode === 'held') await page.mouse.up({ button: 'middle' })
       else await page.mouse.click(x, y - 50, { button: mode === 'middle-stopped' ? 'middle' : 'left' })
+      // Returning from the stop click does not drain the compositor's last native step.
+      // Observe the stopped geometry before testing the next deliberate navigation.
+      await waitForTopVisibleSettled(page)
       await test.info().attach('native-pan-frames', { body: JSON.stringify(result, null, 2), contentType: 'application/json' })
       expect(result.inputs.length).toBeGreaterThan(0)
       expect(result.inputs.every(input => input.trusted)).toBe(true)
