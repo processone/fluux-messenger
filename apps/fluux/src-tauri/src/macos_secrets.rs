@@ -376,6 +376,9 @@ impl<S: Backend> SecretStore for Secrets<S> {
         self.fresh_set(&format!("{PENDING_PREFIX}{account}"), Some(secret))
             .map_err(|error| error.to_string())
     }
+    fn restored(&self, account: &str) -> Result<bool, String> {
+        self.is_fresh(account).map_err(|error| error.to_string())
+    }
     fn abort_fresh(&self, account: &str) -> Result<(), String> {
         self.fresh_set(&format!("{PENDING_PREFIX}{account}"), None)
             .map_err(|error| error.to_string())
@@ -565,6 +568,34 @@ mod native {
         os::macos::{keychain::SecKeychain, passwords::find_generic_password},
     };
     use std::sync::OnceLock;
+
+    // The record routes reads to the fresh item. It reaches the disk, and its
+    // rename does too, before the caller goes on, so a power loss cannot keep a
+    // promoted secret while losing the route to it.
+    fn write_durably(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+        use std::io::Write;
+        let temporary = path.with_extension("tmp");
+        let mut file = std::fs::File::create(&temporary)?;
+        file.write_all(data)?;
+        file.sync_all()?;
+        note_durability("file-sync");
+        std::fs::rename(&temporary, path)?;
+        note_durability("rename");
+        if let Some(dir) = path.parent() {
+            std::fs::File::open(dir)?.sync_all()?;
+            note_durability("dir-sync");
+        }
+        Ok(())
+    }
+    #[cfg(test)]
+    thread_local! {
+        static DURABILITY: std::cell::RefCell<Vec<&'static str>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+    }
+    fn note_durability(_step: &'static str) {
+        #[cfg(test)]
+        DURABILITY.with(|log| log.borrow_mut().push(_step));
+    }
 
     // Sharing between release and Dev is retained; separate Dev storage was not
     // selected. Neither identity re-creates the other's items anymore.
@@ -766,9 +797,7 @@ mod native {
             if !accounts.iter().any(|name| name == account) {
                 accounts.push(account.into());
             }
-            let temporary = path.with_extension("tmp");
-            std::fs::write(&temporary, accounts.join("\n"))
-                .and_then(|()| std::fs::rename(&temporary, &path))
+            write_durably(&path, accounts.join("\n").as_bytes())
                 .map_err(|e| format!("Could not record the fresh start: {e}").into())
         }
 
@@ -889,6 +918,27 @@ mod native {
         std::fs::create_dir_all(keychain.fresh_marker_path().unwrap()).unwrap();
         assert!(keychain.fresh_accounts().is_err());
         assert!(keychain.mark_fresh_account("openpgp_passphrase:a@x").is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // FLM-302 R10: the record of restored accounts is on disk, renamed and
+    // directory-synced, before the commit returns.
+    #[test]
+    fn recording_a_restored_account_is_durable() {
+        let dir = std::env::temp_dir().join(format!("fluux-durable-{}", uuid::Uuid::new_v4()));
+        let keychain = Keychain {
+            revision_dir: Some(dir.clone()),
+            ..Keychain::default()
+        };
+        DURABILITY.with(|log| log.borrow_mut().clear());
+        keychain.mark_fresh_account("openpgp_passphrase:a@x").unwrap();
+        let log = DURABILITY.with(|log| log.borrow().clone());
+        // The revision bump comes first, then the record itself.
+        assert!(
+            log.ends_with(&["file-sync", "rename", "dir-sync"]),
+            "{log:?}"
+        );
+        assert_eq!(keychain.fresh_accounts().unwrap(), ["openpgp_passphrase:a@x"]);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

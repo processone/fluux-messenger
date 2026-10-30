@@ -28,6 +28,11 @@ pub trait SecretStore {
     fn fresh_write(&self, _account: &str, _secret: &str) -> Result<(), String> {
         Err("Fresh start is unavailable for this store".into())
     }
+    /// Whether the account was restored into the fresh item.
+    #[cfg(any(target_os = "macos", test))]
+    fn restored(&self, _account: &str) -> Result<bool, String> {
+        Ok(false)
+    }
     /// Drop a staged secret after a failed restore.
     #[cfg(any(target_os = "macos", test))]
     fn abort_fresh(&self, _account: &str) -> Result<(), String> {

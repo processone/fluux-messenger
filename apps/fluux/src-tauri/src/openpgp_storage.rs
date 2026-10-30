@@ -343,7 +343,7 @@ impl KeyStorage {
                     .fresh_write(&account, &B64.encode(&passphrase))
                     .map_err(|error| anyhow!(error))?;
                 // An earlier interrupted restore leaves the real original here.
-                let previous = match self.snapshot_key(&key_path, &backup_path) {
+                let previous = match self.snapshot_key(store, &account, &key_path, &backup_path) {
                     Ok(previous) => previous,
                     Err(error) => {
                         let _ = store.abort_fresh(&account);
@@ -373,11 +373,11 @@ impl KeyStorage {
                     }
                     let put_back = match &previous {
                         Some(bytes) => atomic_write(&key_path, bytes),
-                        None => fs::remove_file(&key_path).map_err(Into::into),
+                        None => remove_durably(&key_path),
                     };
                     match put_back {
                         Ok(()) => {
-                            let _ = fs::remove_file(&backup_path);
+                            let _ = remove_durably(&backup_path);
                         }
                         Err(e) => notes.push_str(&format!(
                             "; could not put the previous key back, it is kept at {}: {e}",
@@ -386,7 +386,8 @@ impl KeyStorage {
                     }
                     return Err(anyhow!("{error:#}{notes}"));
                 }
-                let _ = fs::remove_file(&backup_path);
+                // Best effort: a copy left behind is recognised as obsolete.
+                let _ = remove_durably(&backup_path);
                 return Ok(PassphraseBacking::Keychain);
             }
         }
@@ -394,11 +395,25 @@ impl KeyStorage {
     }
 
     /// The key file as it must be restored on failure: the durable copy of an
-    /// interrupted earlier restore if one exists, else a fresh durable copy.
-    /// An unreadable file is an error, not an absent one.
-    fn snapshot_key(&self, key_path: &Path, backup_path: &Path) -> Result<Option<Vec<u8>>> {
+    /// interrupted earlier restore if one is still current, else a fresh
+    /// durable copy. A copy is obsolete once its restore committed, which is
+    /// when the account is routed to the fresh item and the key file unlocks
+    /// with the live secret there. An unreadable file is an error, not an
+    /// absent one.
+    fn snapshot_key(
+        &self,
+        store: &dyn crate::credentials::SecretStore,
+        account: &str,
+        key_path: &Path,
+        backup_path: &Path,
+    ) -> Result<Option<Vec<u8>>> {
         match fs::read(backup_path) {
-            Ok(bytes) => return Ok(Some(bytes)),
+            Ok(bytes) => {
+                if !restore_committed(store, account, key_path)? {
+                    return Ok(Some(bytes));
+                }
+                remove_durably(backup_path).context("remove the obsolete previous key")?;
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(anyhow!(e).context("read the saved previous key")),
         }
@@ -1162,14 +1177,83 @@ fn sanitize_jid(jid: &str) -> String {
 /// sibling temp file, fsync implicitly via `rename` on Unix. If the
 /// process dies between write and rename, the temp file is left behind
 /// but the original is untouched.
+///
+/// The data reaches the disk before the rename, and the rename before the
+/// caller goes on, so a transaction step that depends on this file (a promoted
+/// secret, a removed backup) never outlives a power loss that loses the file.
 fn atomic_write(path: &Path, data: &[u8]) -> Result<()> {
+    use std::io::Write;
     let mut tmp = path.as_os_str().to_os_string();
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
-    fs::write(&tmp, data).with_context(|| format!("write {}", tmp.display()))?;
+    let mut file =
+        fs::File::create(&tmp).with_context(|| format!("write {}", tmp.display()))?;
+    file.write_all(data)
+        .and_then(|()| file.sync_all())
+        .with_context(|| format!("write {}", tmp.display()))?;
+    note_durability("file-sync");
     fs::rename(&tmp, path)
         .with_context(|| format!("rename {} -> {}", tmp.display(), path.display()))?;
+    note_durability("rename");
+    sync_parent(path)
+}
+
+/// Make a rename or removal in `path`'s directory durable.
+fn sync_parent(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    if let Some(dir) = path.parent() {
+        fs::File::open(dir)
+            .and_then(|dir| dir.sync_all())
+            .with_context(|| format!("sync {}", dir.display()))?;
+        note_durability("dir-sync");
+    }
+    #[cfg(not(unix))]
+    let _ = path;
     Ok(())
+}
+
+/// Remove a file, tolerating its absence, and make the removal durable.
+fn remove_durably(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(anyhow!(e).context(format!("remove {}", path.display()))),
+    }
+    note_durability("remove");
+    sync_parent(path)
+}
+
+/// Whether a restore of `account` has committed: it is routed to the fresh
+/// item and the key file at `key_path` unlocks with the secret live there.
+fn restore_committed(
+    store: &dyn crate::credentials::SecretStore,
+    account: &str,
+    key_path: &Path,
+) -> Result<bool> {
+    if !store.restored(account).map_err(|error| anyhow!(error))? {
+        return Ok(false);
+    }
+    let Some(live) = store.get(account).map_err(|error| anyhow!(error))? else {
+        return Ok(false);
+    };
+    let Ok(live) = B64.decode(live.trim()) else {
+        return Ok(false);
+    };
+    let Ok(cert) = fs::read(key_path).map_err(anyhow::Error::from).and_then(|bytes| {
+        Cert::from_bytes(&bytes).map_err(anyhow::Error::from)
+    }) else {
+        return Ok(false);
+    };
+    Ok(decrypt_cert_secrets(cert, &Password::from(live)).is_ok())
+}
+
+#[cfg(test)]
+thread_local! {
+    static DURABILITY: std::cell::RefCell<Vec<&'static str>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+fn note_durability(_step: &'static str) {
+    #[cfg(test)]
+    DURABILITY.with(|log| log.borrow_mut().push(_step));
 }
 
 #[cfg(unix)]
@@ -2255,6 +2339,8 @@ mod tests {
         fresh: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
         on_stage: std::sync::Arc<std::sync::Mutex<Option<Box<dyn Fn() + Send>>>>,
         on_mark: std::sync::Arc<std::sync::Mutex<Option<Box<dyn Fn() + Send>>>>,
+        fresh_sets: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        fail_fresh_set_at: std::sync::Arc<std::sync::Mutex<Option<usize>>>,
     }
     #[cfg(unix)]
     impl crate::credentials::SecretStore for HookedMemory {
@@ -2262,6 +2348,13 @@ mod tests {
             Ok(self.items.lock().unwrap().get(a).cloned())
         }
         fn set(&self, a: &str, v: &str) -> std::result::Result<(), String> {
+            if a == "secrets-fresh-v1" {
+                let n = self.fresh_sets.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                if *self.fail_fresh_set_at.lock().unwrap() == Some(n) {
+                    return Err("fresh item not writable".into());
+                }
+                note_durability("fresh-set");
+            }
             self.items.lock().unwrap().insert(a.into(), v.into());
             if a == "secrets-fresh-v1" {
                 if let Some(hook) = self.on_stage.lock().unwrap().as_ref() {
@@ -2291,6 +2384,7 @@ mod tests {
                 hook();
                 return Err("marker not writable".into());
             }
+            note_durability("mark");
             self.fresh.lock().unwrap().push(account.into());
             Ok(())
         }
@@ -2376,6 +2470,65 @@ mod tests {
             .save_fresh(jid, &generate_cert(jid))
             .unwrap();
         assert!(!saved.exists());
+    }
+
+    // FLM-302 R8: a saved previous key left behind by a restore that committed
+    // is obsolete. A later failed restore must put back the healthy key, not it.
+    #[cfg(unix)]
+    #[test]
+    fn obsolete_saved_key_is_not_preferred_over_the_healthy_one() {
+        let raw = HookedMemory::default();
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        let first = generate_cert(jid);
+        let storage = hooked_storage(&raw, &dir);
+        storage.save_fresh(jid, &first).unwrap();
+        // A crash (or a failed cleanup) after promotion left an older key here.
+        let stale = encrypt_cert_secrets(
+            generate_cert(jid),
+            &Password::from(b"an older protection secret".to_vec()),
+            Some(Argon2Params::CHEAP_FOR_TESTS),
+        )
+        .unwrap();
+        let saved = pre_restore_path(&storage.key_file_path(jid).unwrap());
+        fs::write(&saved, stale.as_tsk().armored().to_vec().unwrap()).unwrap();
+        // The next restore fails when it promotes its secret (third write to
+        // the fresh item: stage, promote, stage, promote -> the fourth).
+        *raw.fail_fresh_set_at.lock().unwrap() = Some(4);
+        assert!(hooked_storage(&raw, &dir)
+            .save_fresh(jid, &generate_cert(jid))
+            .is_err());
+        assert_eq!(
+            hooked_storage(&raw, &dir).load(jid).unwrap().unwrap().cert.fingerprint(),
+            first.fingerprint()
+        );
+        assert!(!saved.exists());
+    }
+
+    // FLM-302 R10: every transaction dependency reaches the disk before the
+    // step that relies on it: backup and key file (data, rename, directory)
+    // before the secret is promoted and the account recorded, and the backup's
+    // removal after.
+    #[cfg(unix)]
+    #[test]
+    fn restore_persists_each_dependency_before_the_next_step() {
+        let raw = HookedMemory::default();
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        let storage = hooked_storage(&raw, &dir);
+        storage.save(jid, &generate_cert(jid)).unwrap();
+        DURABILITY.with(|log| log.borrow_mut().clear());
+        storage.save_fresh(jid, &generate_cert(jid)).unwrap();
+        let log = DURABILITY.with(|log| log.borrow().clone());
+        let durable = ["file-sync", "rename", "dir-sync"];
+        let expected: Vec<&str> = ["fresh-set"] // stage
+            .into_iter()
+            .chain(durable) // previous key kept
+            .chain(durable) // new key saved
+            .chain(["fresh-set", "mark"]) // promote, then route
+            .chain(["remove", "dir-sync"]) // backup dropped
+            .collect();
+        assert_eq!(log, expected);
     }
 
     // FLM-93 F4: save/load/forget must use the same injected logical store.
