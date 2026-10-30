@@ -79,6 +79,41 @@ describe('submitted draft ownership', () => {
     expect(onSend).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps held failed text through an edit remount before the edit ends', async () => {
+    const { Input, drafts } = fixture()
+    const send = deferred<boolean>()
+    const onSend = () => send.promise
+    const editingMessage = { id: 'earlier-message', body: 'Good catch.' }
+    const first = render(<Input onSend={onSend} />)
+    await act(async () => { submit() })
+    first.rerender(<Input onSend={onSend} editingMessage={editingMessage} />)
+    await act(async () => { send.reject(new Error('Socket not available')) })
+    expect(field().value).toBe('Good catch.')
+    first.unmount()
+    const second = render(<Input onSend={onSend} editingMessage={editingMessage} />)
+    expect(field().value).toBe('Good catch.')
+    second.rerender(<Input onSend={onSend} />)
+    expect(field().value).toBe(BODY)
+    expect(drafts.get('emma@fluux.chat')).toBe(BODY)
+  })
+
+  it('keeps a held failure with its recipient when leaving an edit for another conversation', async () => {
+    const { Input, drafts } = fixture()
+    drafts.set('oliver@fluux.chat', 'Another ordinary draft')
+    const send = deferred<boolean>()
+    const onSend = () => send.promise
+    const view = render(<Input onSend={onSend} />)
+    await act(async () => { submit() })
+    view.rerender(<Input onSend={onSend} editingMessage={{ id: 'earlier-message', body: 'Good catch.' }} />)
+    await act(async () => { send.reject(new Error('Socket not available')) })
+    view.rerender(<Input onSend={onSend} id="oliver@fluux.chat" />)
+    expect(field().value).toBe('Another ordinary draft')
+    expect(drafts.get('oliver@fluux.chat')).toBe('Another ordinary draft')
+    expect(drafts.get('emma@fluux.chat')).toBe(BODY)
+    view.rerender(<Input onSend={onSend} />)
+    expect(field().value).toBe(BODY)
+  })
+
   it('consumes the field and saved draft before sending, including an immediate remount', async () => {
     const { Input, drafts } = fixture()
     const send = deferred<boolean>()

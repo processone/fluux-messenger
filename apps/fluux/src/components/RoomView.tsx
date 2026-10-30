@@ -2016,15 +2016,24 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   const clearReferencesRef = useRef<() => void>(() => {})
   const handleDraftRestored = useCallback(() => clearReferencesRef.current(), [])
 
-  // Draft persistence - saves on room change, restores on load, clears references
-  const [text, setText, consumeDraft] = useConversationDraft({
+  const mentionRecovery = useRef<{
+    references: MentionReference[]
+    restore: (text: string, references: MentionReference[]) => void
+  }>({ references: [], restore: () => {} })
+
+  // The current mounted room owns both recovered text and its mention metadata.
+  const [text, setText, consumeDraft, discardDraft] = useConversationDraft({
     conversationId: roomJid,
     draftOperations: { owner: roomStore, getDraft, setDraft, clearDraft },
     composerRef,
     onDraftRestored: handleDraftRestored,
+    isEditing: !!editingMessage,
+    getReferences: () => mentionRecovery.current.references,
+    onDraftRecovered: (text, references) => mentionRecovery.current.restore(text, references),
   })
 
-  const { references, setReferences, handleEditorEdit, handleValueChange, insertMention } = useMentionReferences(setText)
+  const { references, setReferences, handleEditorEdit, handleValueChange, insertMention, restoreReferences } = useMentionReferences(setText)
+  mentionRecovery.current = { references, restore: restoreReferences }
   clearReferencesRef.current = () => setReferences([])
 
   // Exit whisper mode AND discard the typed text. The composer draft is keyed only
@@ -2033,8 +2042,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // private text is never converted into a public message (XEP-0045 §7.5).
   const handleClearWhisper = () => {
     whisperDraftGeneration.current += 1
-    setText('')
-    clearDraft(roomJid)
+    discardDraft()
     onClearWhisper?.()
   }
 
@@ -2289,12 +2297,8 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     else if (route.target === 'room') void sendChatState(roomJid, state)
   }
 
-  // Clear references when text is cleared
-  useEffect(() => {
-    if (text === '') {
-      setReferences([])
-    }
-  }, [text, setReferences])
+  // handleValueChange and draft recovery update text and references together.
+  // An empty-text effect here would erase metadata restored during mounting.
 
   // Mention autocomplete dropdown
   const isMentionListboxOpen = mentionState.isActive && mentionState.matches.length > 0
@@ -2499,14 +2503,9 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         onRetractMessage={handleRetract}
         onComposingChange={onComposingChange}
         onConsumeDraft={() => {
-          const submittedReferences = references
           const privateGeneration = whisperDraftGeneration.current
-          const restore = consumeDraft()
-          return () => {
-            // Cancelling/leaving private mode must never reveal its text publicly.
-            if (whisperTarget && whisperDraftGeneration.current !== privateGeneration) return
-            if (restore()) setReferences(submittedReferences)
-          }
+          // Validate again when a held failure is applied after an edit/remount.
+          return consumeDraft(() => !whisperTarget || whisperDraftGeneration.current === privateGeneration)
         }}
         onSend={(sendText) => trackSend(handleSend(sendText))}
         onSendEasterEgg={(animation) => sendEasterEgg(roomJid, animation)}

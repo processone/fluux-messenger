@@ -144,7 +144,7 @@ function moderateStagedReply() {
 }
 
 // N2: captain requires real mention references, not plain text, after remount.
-it.each(['', 'Oups'])('retains room mention references through failed-send remount with newer %s', async newer => {
+it.each(['', 'Oups', '@Emma '])('retains room mention references through failed-send remount with newer %s', async newer => {
   roomStore.setState({ drafts: new Map() })
   const sendMessage = vi.fn().mockResolvedValue('sent')
   const first = render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
@@ -164,16 +164,25 @@ it.each(['', 'Oups'])('retains room mention references through failed-send remou
     capturedComposer.props!.onValueChange!('')
   })
   first.unmount()
-  render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
-  if (newer) act(() => capturedComposer.props!.onValueChange!(newer))
+  const second = render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
+  const newerReferences: MentionReference[] = newer.startsWith('@')
+    ? [{ begin: 0, end: '@Emma'.length, type: 'mention', uri: `xmpp:${STABLE.roomJid}/Emma` }] : []
+  if (newer) act(() => {
+    const currentEditor = capturedComposer.props!.renderInput!({} as never) as typeof editor
+    currentEditor.props.onEdit(newer, newerReferences)
+    capturedComposer.props!.onValueChange!(newer)
+  })
   act(() => restore())
   const recovered = capturedComposer.props!.value!
   expect(recovered).toBe(newer ? `${newer}\n\n${body}` : body)
+  second.unmount()
+  render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
+  expect(capturedComposer.props!.value).toBe(recovered)
   act(() => capturedComposer.props!.onValueChange!(`${recovered}!`))
   await act(async () => { await capturedComposer.props!.onSend!(`${recovered}!`) })
   const offset = newer ? newer.length + 2 : 0
   expect(sendMessage).toHaveBeenCalledExactlyOnceWith(STABLE.roomJid, `${recovered}!`, expect.objectContaining({
-    references: [{ ...reference, begin: offset, end: offset + reference.end }],
+    references: [...newerReferences, { ...reference, begin: offset, end: offset + reference.end }],
   }))
 })
 

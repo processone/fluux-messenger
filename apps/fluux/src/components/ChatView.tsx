@@ -1229,6 +1229,7 @@ export const MessageInput = memo(function MessageInput({
     conversationId,
     draftOperations: { owner: chatStore, getDraft, setDraft, clearDraft },
     composerRef,
+    isEditing: !!editingMessage,
   })
 
   // Convert Message to ReplyInfo for the composer

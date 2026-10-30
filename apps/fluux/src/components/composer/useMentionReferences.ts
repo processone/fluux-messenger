@@ -39,5 +39,12 @@ export function useMentionReferences(setText: (text: string) => void) {
     setReferences((prev) => [...reconcileReferences(from, newText, prev), reference])
   }, [setText])
 
-  return { references, setReferences, handleEditorEdit, handleValueChange, insertMention }
+  // Bind recovered metadata to its text before the next edit reconciles offsets.
+  const restoreReferences = useCallback((text: string, restored: MentionReference[]) => {
+    sourceText.current = text
+    editorText.current = null
+    setReferences(restored)
+  }, [])
+
+  return { references, setReferences, handleEditorEdit, handleValueChange, insertMention, restoreReferences }
 }
