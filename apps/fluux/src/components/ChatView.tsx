@@ -1225,10 +1225,11 @@ export const MessageInput = memo(function MessageInput({
   const { resolveInput, classifyInput } = useSlashCommands(chatCommandContext)
 
   // Draft persistence - saves on conversation change, restores on load
-  const [text, setText] = useConversationDraft({
+  const [text, setText, consumeDraft] = useConversationDraft({
     conversationId,
-    draftOperations: { getDraft, setDraft, clearDraft },
+    draftOperations: { owner: chatStore, getDraft, setDraft, clearDraft },
     composerRef,
+    editingConversationId: editingMessage?.conversationId,
   })
 
   // Convert Message to ReplyInfo for the composer
@@ -1257,7 +1258,7 @@ export const MessageInput = memo(function MessageInput({
     isEncryptedSource(replyingTo)
 
   // Convert Message to EditInfo for the composer
-  const editInfo: EditInfo | null = editingMessage
+  const editInfo: EditInfo | null = editingMessage?.conversationId === conversationId
     ? {
         id: editingMessage.id,
         rowId: messageRowId(editingMessage),
@@ -1282,9 +1283,9 @@ export const MessageInput = memo(function MessageInput({
     // happen plaintext-or-ciphertext-with-no-recipient (depending on
     // `encryptAttachment` below) and the send would fail at encrypt
     // time, leaving an orphaned upload on the server. Opening the
-    // unlock dialog routes the user to the passphrase prompt; the
-    // typed text stays in the composer (we return `false` here, which
-    // skips the `setText('')` clear in MessageComposer).
+    // unlock dialog routes the user to the passphrase prompt. Returning
+    // `false` restores the draft through the composer's rollback after
+    // it was cleared at submission.
     if (encryptionState.kind === 'keyLocked') {
       openWebUnlockDialog()
       return false
@@ -1339,8 +1340,7 @@ export const MessageInput = memo(function MessageInput({
       onRemovePendingAttachment?.()
     }
 
-    // Clear draft immediately so sidebar updates
-    clearDraft(conversationId)
+    // The composer consumed this draft before sending; a newer draft belongs to the user.
 
     // Process link preview in background (don't block on it)
     // Skip when encrypted — the fastening would leak URL/title/image in cleartext
@@ -1372,6 +1372,7 @@ export const MessageInput = memo(function MessageInput({
         onSendCorrection={handleCorrection}
         onRetractMessage={handleRetract}
         onComposingChange={onComposingChange}
+        onConsumeDraft={consumeDraft}
         onSend={(text) => trackSend(handleSend(text))}
         onSendEasterEgg={(animation) => sendEasterEgg(conversationId, type, animation)}
         onSendTypingState={handleTypingState}

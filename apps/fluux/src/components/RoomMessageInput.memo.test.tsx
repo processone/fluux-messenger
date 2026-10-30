@@ -1,7 +1,7 @@
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useState, type ComponentProps } from 'react'
+import { useState, type ComponentProps, type ReactElement } from 'react'
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // Count MessageComposer renders via a spy module mock.
@@ -12,6 +12,8 @@ interface CapturedComposerProps {
   onValueChange?: (value: string) => void
   pendingAttachment?: PendingAttachment | null
   onSend?: (body: string) => Promise<boolean>
+  onConsumeDraft?: () => () => void
+  renderInput?: ComponentProps<typeof import('./MessageComposer').MessageComposer>['renderInput']
   onSendCorrection?: (messageId: string, body: string) => Promise<boolean>
   onRetractMessage?: (messageId: string) => Promise<void>
 }
@@ -54,7 +56,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 })
 
 import { RoomMessageInput } from './RoomView'
-import type { RoomMessage, FileAttachment } from '@fluux/sdk'
+import type { RoomMessage, FileAttachment, MentionReference } from '@fluux/sdk'
 import { clearAllMessages, saveRoomMessage, getRoomMessage } from '@fluux/sdk/cache'
 import { roomStore } from '@fluux/sdk/stores'
 import type { PendingAttachment, ReplyInfo } from './MessageComposer'
@@ -140,6 +142,57 @@ function moderateStagedReply() {
     ...stagedOriginal, isRetracted: true, isModerated: true, moderationReason: 'Spam',
   }]]]) })
 }
+
+// N2: captain requires real mention references, not plain text, after remount.
+it.each([
+  ['', false], ['Oups', false], ['@Emma ', false], ['@Emma ', true],
+] as const)('retains room mentions with newer %s and failure while unmounted %s', async (newer, unmounted) => {
+  roomStore.setState({ drafts: new Map() })
+  const sendMessage = vi.fn().mockResolvedValue('sent')
+  const first = render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
+  const body = '@James '
+  const reference: MentionReference = { begin: 0, end: '@James'.length, type: 'mention', uri: `xmpp:${STABLE.roomJid}/James` }
+  // Same contract RoomComposerEditor reports after selecting a mention.
+  const editor = capturedComposer.props!.renderInput!({} as never) as ReactElement<{
+    onEdit: (text: string, references: MentionReference[]) => void
+  }>
+  act(() => {
+    editor.props.onEdit(body, [reference])
+    capturedComposer.props!.onValueChange!(body)
+  })
+  let restore!: () => void
+  act(() => {
+    restore = capturedComposer.props!.onConsumeDraft!()
+    capturedComposer.props!.onValueChange!('')
+  })
+  first.unmount()
+  let second = render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
+  const newerReferences: MentionReference[] = newer.startsWith('@')
+    ? [{ begin: 0, end: '@Emma'.length, type: 'mention', uri: `xmpp:${STABLE.roomJid}/Emma` }] : []
+  if (newer) act(() => {
+    const currentEditor = capturedComposer.props!.renderInput!({} as never) as typeof editor
+    currentEditor.props.onEdit(newer, newerReferences)
+    capturedComposer.props!.onValueChange!(newer)
+  })
+  if (unmounted) {
+    // I4: a saved newer mention must survive failure with no active owner.
+    await waitFor(() => expect(roomStore.getState().getDraft(STABLE.roomJid)).toBe(newer))
+    second.unmount()
+    act(() => restore())
+    second = render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
+  } else act(() => restore())
+  const recovered = capturedComposer.props!.value!
+  expect(recovered).toBe(newer ? `${newer}\n\n${body}` : body)
+  second.unmount()
+  render(<RoomMessageInput {...STABLE} sendMessage={sendMessage} />)
+  expect(capturedComposer.props!.value).toBe(recovered)
+  act(() => capturedComposer.props!.onValueChange!(`${recovered}!`))
+  await act(async () => { await capturedComposer.props!.onSend!(`${recovered}!`) })
+  const offset = newer ? newer.length + 2 : 0
+  expect(sendMessage).toHaveBeenCalledExactlyOnceWith(STABLE.roomJid, `${recovered}!`, expect.objectContaining({
+    references: [...newerReferences, { ...reference, begin: offset, end: offset + reference.end }],
+  }))
+})
 
 describe('ordinary room sends', () => {
   beforeEach(async () => {
@@ -371,5 +424,42 @@ describe('selected reply archive identity', () => {
       },
     }))
     expect(JSON.stringify(sendMessage.mock.calls)).not.toContain(sibling.body)
+  })
+})
+
+// W1/W2 must preserve the existing XEP-0045 rule: exiting a whisper discards
+// private text rather than recovering it into a public room composer.
+describe('failed whisper draft isolation', () => {
+  beforeEach(() => { roomStore.setState({ drafts: new Map() }) })
+
+  function consumePrivateDraft() {
+    let restore!: () => void
+    act(() => capturedComposer.props!.onValueChange!('Private note for James'))
+    act(() => {
+      restore = capturedComposer.props!.onConsumeDraft!()
+      capturedComposer.props!.onValueChange!('')
+    })
+    return restore
+  }
+
+  it('does not recover private text after an explicit Escape cancellation', () => {
+    const onClearWhisper = vi.fn()
+    render(<RoomMessageInput {...STABLE} whisperTarget={{ nick: 'James' }} onClearWhisper={onClearWhisper} />)
+    const restore = consumePrivateDraft()
+    fireEvent.keyDown(screen.getByTestId('composer'), { key: 'Escape' })
+    expect(onClearWhisper).toHaveBeenCalledOnce()
+    act(() => restore())
+    expect(capturedComposer.props!.value).toBe('')
+    expect(roomStore.getState().getDraft(STABLE.roomJid)).toBe('')
+  })
+
+  it('does not recover an unmounted whisper into a newly mounted public composer', () => {
+    const old = render(<RoomMessageInput {...STABLE} whisperTarget={{ nick: 'James' }} />)
+    const restore = consumePrivateDraft()
+    old.unmount()
+    render(<RoomMessageInput {...STABLE} />)
+    act(() => restore())
+    expect(capturedComposer.props!.value).toBe('')
+    expect(roomStore.getState().getDraft(STABLE.roomJid)).toBe('')
   })
 })

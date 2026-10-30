@@ -1980,6 +1980,9 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   const [attachmentWarning, setAttachmentWarning] = useState(false)
   const warningResolve = useRef<((confirmed: boolean) => void) | null>(null)
   const whisperSendGeneration = useRef(0)
+  // Private draft recovery expires on route exit, not attachment changes.
+  const whisperDraftGeneration = useRef(0)
+  useEffect(() => () => { whisperDraftGeneration.current += 1 }, [roomJid, whisperTarget])
   const currentWhisper = useRef(whisperTarget)
   currentWhisper.current = whisperTarget
   const currentAttachment = useRef(pendingAttachment)
@@ -2013,15 +2016,24 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   const clearReferencesRef = useRef<() => void>(() => {})
   const handleDraftRestored = useCallback(() => clearReferencesRef.current(), [])
 
-  // Draft persistence - saves on room change, restores on load, clears references
-  const [text, setText] = useConversationDraft({
+  const mentionRecovery = useRef<{
+    references: MentionReference[]
+    restore: (text: string, references: MentionReference[]) => void
+  }>({ references: [], restore: () => {} })
+
+  // The current mounted room owns both recovered text and its mention metadata.
+  const [text, setText, consumeDraft, discardDraft] = useConversationDraft({
     conversationId: roomJid,
-    draftOperations: { getDraft, setDraft, clearDraft },
+    draftOperations: { owner: roomStore, getDraft, setDraft, clearDraft },
     composerRef,
     onDraftRestored: handleDraftRestored,
+    editingConversationId: editingMessage?.roomJid,
+    getReferences: () => mentionRecovery.current.references,
+    onDraftRecovered: (text, references) => mentionRecovery.current.restore(text, references),
   })
 
-  const { references, setReferences, handleEditorEdit, handleValueChange, insertMention } = useMentionReferences(setText)
+  const { references, setReferences, handleEditorEdit, handleValueChange, insertMention, restoreReferences } = useMentionReferences(setText)
+  mentionRecovery.current = { references, restore: restoreReferences }
   clearReferencesRef.current = () => setReferences([])
 
   // Exit whisper mode AND discard the typed text. The composer draft is keyed only
@@ -2029,8 +2041,8 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // composer and could be sent to the whole room. Discarding upholds the invariant:
   // private text is never converted into a public message (XEP-0045 §7.5).
   const handleClearWhisper = () => {
-    setText('')
-    clearDraft(roomJid)
+    whisperDraftGeneration.current += 1
+    discardDraft()
     onClearWhisper?.()
   }
 
@@ -2112,7 +2124,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     : null
 
   // Convert RoomMessage to EditInfo for the composer
-  const editInfo: EditInfo | null = editingMessage
+  const editInfo: EditInfo | null = editingMessage?.roomJid === roomJid
     ? {
         id: editingMessage.id,
         body: editingMessage.body,
@@ -2216,7 +2228,6 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         onRemovePendingAttachment?.()
       }
       onMessageIdSent?.(messageId)
-      clearDraft(roomJid)
       setTimeout(() => clearFirstNewMessageId(roomJid), 500)
       return true
     }
@@ -2250,7 +2261,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     const body = sendText || attachment?.url || ''
     const messageId = await sendMessage(roomJid, body, { replyTo, references: references.length > 0 ? references : undefined, attachment: attachment ?? undefined })
     void donateIOSConversation(sendingAccount, roomJid, 'groupchat')
-    setReferences([])
+    // The composer cleared the submitted references with the text.
 
     // Notify parent of sent message ID for animation
     onMessageIdSent?.(messageId)
@@ -2260,8 +2271,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
       onRemovePendingAttachment?.()
     }
 
-    // Clear draft immediately so sidebar updates
-    clearDraft(roomJid)
+    // The composer consumed this draft before sending; do not clear a newer draft.
 
     // Whisper sends return early above, so a private URL never reaches link-preview generation (no room broadcast).
     // Process link preview in background (don't block on it)
@@ -2287,12 +2297,8 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     else if (route.target === 'room') void sendChatState(roomJid, state)
   }
 
-  // Clear references when text is cleared
-  useEffect(() => {
-    if (text === '') {
-      setReferences([])
-    }
-  }, [text, setReferences])
+  // handleValueChange and draft recovery update text and references together.
+  // An empty-text effect here would erase metadata restored during mounting.
 
   // Mention autocomplete dropdown
   const isMentionListboxOpen = mentionState.isActive && mentionState.matches.length > 0
@@ -2496,6 +2502,11 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         onSendCorrection={handleCorrection}
         onRetractMessage={handleRetract}
         onComposingChange={onComposingChange}
+        onConsumeDraft={() => {
+          const privateGeneration = whisperDraftGeneration.current
+          // Validate again when a held failure is applied after an edit/remount.
+          return consumeDraft(() => !whisperTarget || whisperDraftGeneration.current === privateGeneration)
+        }}
         onSend={(sendText) => trackSend(handleSend(sendText))}
         onSendEasterEgg={(animation) => sendEasterEgg(roomJid, animation)}
         onCreatePoll={() => setShowPollCreator(true)}
