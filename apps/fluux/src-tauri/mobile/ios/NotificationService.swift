@@ -47,7 +47,7 @@ final class NotificationService: UNNotificationServiceExtension {
         guard content.userInfo["encrypted"] as? Bool != false else { return skip(.notEncrypted, "not encrypted") }
         guard let sender = sender else { return skip(.noSender, "no sender") }
         guard names.rooms[sender] == nil else {
-            let nick = (content.userInfo["from"] as? String)?.contains("/") == true
+            let nick = NotificationPresentation.sender(of: content.userInfo, names: names)?.contains("/") == true
             return skip(.groupChat, "group chat, occupant nick \(nick ? "present" : "absent"), own nick \(names.roomParticipants[sender] == nil ? "unknown" : "known")")
         }
         guard let snapshot = snapshot else { return skip(.previewsOff, "previews off") }

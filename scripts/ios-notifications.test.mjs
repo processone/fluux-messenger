@@ -103,7 +103,7 @@ test('iOS notification conversation grouping', { skip: process.platform !== 'dar
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-notification-test-'))
   try {
     const binary = compileNotificationTests(scratch, 'NotificationServiceTests.swift')
-    for (const scenario of ['room-participants', 'signed-out', 'account-guard', 'stalled-mirror-cleanup', 'uncovered-body', 'server-plaintext', 'direct', 'room', 'existing', 'missing', 'mirror', 'intents', 'conversations']) {
+    for (const scenario of ['room-participants', 'signed-out', 'account-guard', 'stalled-mirror-cleanup', 'uncovered-body', 'server-plaintext', 'direct', 'room', 'existing', 'missing', 'mirror', 'intents', 'conversations', 'muc-nick']) {
       await t.test(scenario, () => {
         assert.match(execFileSync(binary, [scenario]).toString(), /passed/)
       })

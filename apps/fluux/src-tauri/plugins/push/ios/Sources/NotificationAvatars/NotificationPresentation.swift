@@ -34,10 +34,20 @@ enum NotificationPresentation {
         return bare == account
     }
 
+    /// The sender as `from`, with a known room's occupant nick taken from `muc_nick` when the
+    /// gateway sends the room's bare address there. Without a usable `muc_nick`, `from` is kept
+    /// as sent, so a full occupant JID still names its nick.
+    static func sender(of userInfo: [AnyHashable: Any], names: SharedNames) -> String? {
+        guard let from = userInfo["from"] as? String else { return nil }
+        guard let bare = bareJid(from), names.rooms[bare] != nil,
+              let nick = userInfo["muc_nick"] as? String, !nick.isEmpty else { return from }
+        return bare + "/" + nick
+    }
+
     /// A room sends each groupchat message back to every resource of its sender, so a message
     /// the user posts from another client can reach this device as a push.
     static func isOwnRoomMessage(_ content: UNNotificationContent, names: SharedNames) -> Bool {
-        guard let from = content.userInfo["from"] as? String, let bare = bareJid(from), names.rooms[bare] != nil,
+        guard let from = sender(of: content.userInfo, names: names), let bare = bareJid(from), names.rooms[bare] != nil,
               let nick = from.split(separator: "/", maxSplits: 1).dropFirst().first.map(String.init),
               let participants = names.roomParticipants[bare] else { return false }
         return nick == participants.ownNick
@@ -47,7 +57,7 @@ enum NotificationPresentation {
     /// Apple's notification-filtering entitlement.
     static func ownMessageContent(_ original: UNNotificationContent, names: SharedNames) -> UNNotificationContent {
         guard let content = original.mutableCopy() as? UNMutableNotificationContent else { return original }
-        if let from = content.userInfo["from"] as? String {
+        if let from = sender(of: content.userInfo, names: names) {
             let sender = SenderTitle(from: from, names: names)
             content.title = sender.title
             if let subtitle = sender.subtitle { content.subtitle = subtitle }
@@ -129,7 +139,7 @@ enum NotificationPresentation {
         guard let content = original.mutableCopy() as? UNMutableNotificationContent else { return original }
         content.body = NotificationContent.transportBody(content.body, encrypted: content.userInfo["encrypted"] as? Bool,
                                                         activity: PreviewWords.localized.activity)
-        guard let from = content.userInfo["from"] as? String else { return content }
+        guard let from = sender(of: content.userInfo, names: names) else { return content }
         if content.threadIdentifier.isEmpty, let bare = bareJid(from) { content.threadIdentifier = bare }
         if let settings = NotificationSoundSettings.load(root: NotificationMirror.root), settings.account != nil, settings.account == names.account {
             let sound = settings.soundName(originalHasSound: content.sound != nil, owner: names.account)

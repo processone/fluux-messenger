@@ -532,7 +532,7 @@ and the extension rechecks ownership at handoff.
 The app server sends notifications with `mutable-content`. For notifications belonging to the signed-in account,
 the `FluuxNotification` service extension replaces the title with the sender's name, read from `NotificationNames.json` in the App Group container, which the app keeps up to
 date with the roster and the joined rooms. A contact shows its name. A room shows the room name as title and the
-nick as subtitle, provided the app server keeps the occupant's resource in `from`. An unknown sender shows the local
+nick as subtitle. The nick comes from the push's `muc_nick` attribute when the app server sends the room's bare address in `from`, otherwise from the resource of `from` (see [PUSH_PAYLOAD.md](PUSH_PAYLOAD.md)). Without either, the room name is shown alone. An unknown sender shows the local
 part of its JID. Enable the App Group `group.net.processone.fluux.share` for the App ID
 `net.processone.fluux.notification` as well, and regenerate its provisioning profile.
 
