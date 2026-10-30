@@ -2,10 +2,18 @@
 // pending draft. FLM-255 established that a remount resurrected submitted text.
 import { useRef } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { useConversationDraft, type DraftOperations } from '@/hooks/useConversationDraft'
 import { useToastStore } from '@/stores/toastStore'
 import { MessageComposer, type MessageComposerHandle } from './MessageComposer'
+
+// W1/W2/I2: captain selected draft recovery, live restoration and action wording.
+const account = vi.hoisted(() => ({ jid: 'mickael@fluux.chat' }))
+vi.mock('@fluux/sdk', async importOriginal => ({
+  ...await importOriginal<typeof import('@fluux/sdk')>(),
+  getStorageScopeJid: () => account.jid,
+}))
+afterEach(() => { account.jid = 'mickael@fluux.chat' })
 
 const BODY = 'Et il y a aussi ce nouveau ticket dolya: https://ejabberd.atlassian.net/browse/EJABS-4575'
 function deferred<T>() {
@@ -60,11 +68,17 @@ describe('submitted draft ownership', () => {
       if (result === 'reject') send.reject(new Error('Socket not available'))
       else send.resolve(result)
     })
-    expect(field().value).toBe('Oups')
-    expect(drafts.get('emma@fluux.chat')).not.toBe(BODY)
+    expect(field().value).toContain('Oups')
+    if (result === true) {
+      expect(field().value).toBe('Oups')
+      expect(drafts.get('emma@fluux.chat')).not.toBe(BODY)
+    } else {
+      expect(field().value).toContain(BODY)
+      expect(drafts.get('emma@fluux.chat')).toBe(field().value)
+    }
   })
 
-  it('does not resurrect submitted text after the user types and deletes a newer draft', async () => {
+  it('keeps failed text as a draft after the user types and deletes newer input', async () => {
     const { Input, drafts } = fixture()
     const send = deferred<boolean>()
     render(<Input onSend={() => send.promise} />)
@@ -72,8 +86,8 @@ describe('submitted draft ownership', () => {
     fireEvent.change(field(), { target: { value: 'Oups' } })
     fireEvent.change(field(), { target: { value: '' } })
     await act(async () => { send.resolve(false) })
-    expect(field().value).toBe('')
-    expect(drafts.has('emma@fluux.chat')).toBe(false)
+    expect(field().value).toBe(BODY)
+    expect(drafts.get('emma@fluux.chat')).toBe(BODY)
   })
 
   it.each([false, 'reject'] as const)('restores an unhandled send without losing whitespace: %s', async result => {
@@ -89,7 +103,7 @@ describe('submitted draft ownership', () => {
     })
     expect(field().value).toBe(`  ${BODY}  `)
     expect(drafts.get('emma@fluux.chat')).toBe(`  ${BODY}  `)
-    if (result === 'reject') expect(useToastStore.getState().toasts.at(-1)?.message).toBe('console.failedToSend')
+    if (result === 'reject') expect(useToastStore.getState().toasts.at(-1)?.message).toBe('chat.failedToSendMessage')
   })
 
   it('keeps a failed draft for its original recipient after navigating away', async () => {
@@ -117,6 +131,75 @@ describe('submitted draft ownership', () => {
     expect(field().value).toBe(BODY)
     expect(drafts.get('emma@fluux.chat')).toBe(BODY)
     expect(drafts.get('oliver@fluux.chat')).toBe('Good catch.')
+  })
+
+  it.each(['', 'Oups'])('restores a failed send into the remounted live box with newer input %s', async newer => {
+    const { Input, drafts } = fixture()
+    const send = deferred<boolean>()
+    const first = render(<Input onSend={() => send.promise} />)
+    await act(async () => { submit() })
+    first.unmount()
+    const second = render(<Input onSend={vi.fn()} />)
+    if (newer) fireEvent.change(field(), { target: { value: newer } })
+    await act(async () => { send.reject(new Error('Socket not available')) })
+    expect(field().value).toContain(BODY)
+    if (newer) expect(field().value).toContain(newer)
+    expect(drafts.get('emma@fluux.chat')).toBe(field().value)
+    const recovered = field().value
+    fireEvent.change(field(), { target: { value: `${recovered}!` } })
+    second.unmount()
+    render(<Input onSend={vi.fn()} />)
+    expect(field().value).toBe(`${recovered}!`)
+  })
+
+  it('keeps both failed submissions and current input when remounted sends fail out of order', async () => {
+    const { Input, drafts } = fixture()
+    const firstSend = deferred<boolean>()
+    const secondSend = deferred<boolean>()
+    const onSend = vi.fn().mockReturnValueOnce(firstSend.promise).mockReturnValueOnce(secondSend.promise)
+    const first = render(<Input onSend={onSend} />)
+    await act(async () => { submit() })
+    first.unmount()
+    render(<Input onSend={onSend} />)
+    fireEvent.change(field(), { target: { value: 'Oups' } })
+    await act(async () => { submit() })
+    fireEvent.change(field(), { target: { value: 'Good catch.' } })
+    await act(async () => { firstSend.reject(new Error('Socket not available')) })
+    await act(async () => { secondSend.reject(new Error('Socket not available')) })
+    expect(field().value).toContain(BODY)
+    expect(field().value).toContain('Oups')
+    expect(field().value).toContain('Good catch.')
+    expect(drafts.get('emma@fluux.chat')).toBe(field().value)
+    expect(onSend).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not recover a previous account draft into the current account', async () => {
+    const { Input, drafts } = fixture()
+    const send = deferred<boolean>()
+    render(<Input onSend={() => send.promise} />)
+    await act(async () => { submit() })
+    account.jid = 'oliver@fluux.chat'
+    fireEvent.change(field(), { target: { value: 'Good catch.' } })
+    await act(async () => { send.reject(new Error('Socket not available')) })
+    expect(field().value).toBe('Good catch.')
+    expect(drafts.get('emma@fluux.chat')).not.toBe(BODY)
+  })
+
+  it.each([
+    { action: 'send', key: 'chat.failedToSendMessage' },
+    { action: 'correction', key: 'chat.failedToEditMessage' },
+    { action: 'retraction', key: 'chat.failedToDeleteMessage' },
+  ])('uses chat-specific failure wording for $action', async ({ action, key }) => {
+    useToastStore.setState({ toasts: [] })
+    const reject = vi.fn().mockRejectedValue(new Error('Socket not available'))
+    render(<MessageComposer placeholder="Message" onSend={reject}
+      editingMessage={action === 'send' ? null : { id: 'original', body: BODY }}
+      onSendCorrection={reject} onRetractMessage={reject} />)
+    if (action === 'send') fireEvent.change(field(), { target: { value: BODY } })
+    if (action === 'retraction') fireEvent.change(field(), { target: { value: '' } })
+    await act(async () => { submit() })
+    expect(reject).toHaveBeenCalledOnce()
+    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({ type: 'error', message: key })
   })
 
   it('refuses another submission while command resolution is pending', async () => {
