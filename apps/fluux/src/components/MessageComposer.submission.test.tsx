@@ -173,6 +173,17 @@ describe('submitted draft ownership', () => {
     expect(onSend).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps failed text beside newer input without a persisted-draft hook', async () => {
+    const send = deferred<boolean>()
+    render(<MessageComposer placeholder="Message" onSend={() => send.promise} />)
+    fireEvent.change(field(), { target: { value: BODY } })
+    await act(async () => { submit() })
+    fireEvent.change(field(), { target: { value: 'Oups' } })
+    await act(async () => { send.reject(new Error('Socket not available')) })
+    expect(field().value).toContain('Oups')
+    expect(field().value).toContain(BODY)
+  })
+
   it('does not recover a previous account draft into the current account', async () => {
     const { Input, drafts } = fixture()
     const send = deferred<boolean>()
