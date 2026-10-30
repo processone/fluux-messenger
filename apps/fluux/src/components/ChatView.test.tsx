@@ -71,6 +71,8 @@ let mockEncryptionState: { kind: string; fingerprint?: string; trust?: string } 
 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', () => ({
+  // FLM-256: draft recovery keys by stable store identity, not per-render action wrappers.
+  chatStore: {},
   messageRowRef: (message: { id: string; stanzaId?: string; originId?: string }) => ({
     id: message.id,
     ...(message.stanzaId ? { stanzaId: message.stanzaId } : message.originId ? { originId: message.originId } : {}),
