@@ -44,7 +44,7 @@ function fixture() {
       setDraft: (id: string, value: string) => operations.setDraft(id, value),
       clearDraft: (id: string) => operations.clearDraft(id),
     }), [operations])
-    const [text, setText, consumeDraft] = useConversationDraft({ conversationId: id, draftOperations: wrapped, composerRef: ref, isEditing: !!editingMessage,
+    const [text, setText, consumeDraft] = useConversationDraft({ conversationId: id, draftOperations: wrapped, composerRef: ref,
       editingConversationId: editingMessage ? (editingMessage.conversationId ?? id) : undefined })
     return <MessageComposer ref={ref} placeholder="Message" value={text} onValueChange={setText}
       onConsumeDraft={consumeDraft} onSend={onSend} editingMessage={editingMessage}

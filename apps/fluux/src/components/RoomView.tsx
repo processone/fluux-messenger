@@ -2027,7 +2027,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     draftOperations: { owner: roomStore, getDraft, setDraft, clearDraft },
     composerRef,
     onDraftRestored: handleDraftRestored,
-    isEditing: !!editingMessage,
+    editingConversationId: editingMessage?.roomJid,
     getReferences: () => mentionRecovery.current.references,
     onDraftRecovered: (text, references) => mentionRecovery.current.restore(text, references),
   })
@@ -2124,7 +2124,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     : null
 
   // Convert RoomMessage to EditInfo for the composer
-  const editInfo: EditInfo | null = editingMessage
+  const editInfo: EditInfo | null = editingMessage?.roomJid === roomJid
     ? {
         id: editingMessage.id,
         body: editingMessage.body,

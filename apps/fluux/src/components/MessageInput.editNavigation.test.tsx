@@ -23,7 +23,8 @@ const source = 'emma@fluux.chat'
 const destination = 'oliver@fluux.chat'
 const destinationDraft = 'Another ordinary draft'
 const edited: Message = {
-  id: 'earlier-message', conversationId: source, from: 'you@fluux.chat',
+  id: 'earlier-message', stanzaId: undefined, originId: undefined,
+  conversationId: source, from: 'you@fluux.chat',
   body: 'Good catch.', timestamp: new Date('2024-01-15T10:00:00Z'),
   isOutgoing: true, type: 'chat',
 }
@@ -64,10 +65,12 @@ describe('destination draft while the parent still holds the old edit', () => {
     const next = 'design@conference.fluux.chat'
     const oldEdit = roomMessageFixture({
       roomJid: room, id: 'earlier-room-message', from: `${room}/You`,
+      type: 'groupchat', occupantId: undefined, stanzaId: undefined, originId: undefined,
+      timestamp: new Date('2024-01-15T10:00:00Z'),
       nick: 'You', body: 'Good catch.', isOutgoing: true,
     })
     const props: ComponentProps<typeof RoomMessageInput> = {
-      roomJid: room, roomName: 'Team Chat', sendMessage: vi.fn(),
+      roomJid: room, sendMessage: vi.fn(),
       sendCorrection: vi.fn(), retractMessage: vi.fn(), sendChatState: vi.fn(),
       sendWhisperChatState: vi.fn(), sendEasterEgg: vi.fn(), sendPoll: vi.fn(),
       replyingTo: null, onCancelReply: vi.fn(), editingMessage: null,

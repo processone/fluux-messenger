@@ -1229,7 +1229,7 @@ export const MessageInput = memo(function MessageInput({
     conversationId,
     draftOperations: { owner: chatStore, getDraft, setDraft, clearDraft },
     composerRef,
-    isEditing: !!editingMessage,
+    editingConversationId: editingMessage?.conversationId,
   })
 
   // Convert Message to ReplyInfo for the composer
@@ -1258,7 +1258,7 @@ export const MessageInput = memo(function MessageInput({
     isEncryptedSource(replyingTo)
 
   // Convert Message to EditInfo for the composer
-  const editInfo: EditInfo | null = editingMessage
+  const editInfo: EditInfo | null = editingMessage?.conversationId === conversationId
     ? {
         id: editingMessage.id,
         rowId: messageRowId(editingMessage),

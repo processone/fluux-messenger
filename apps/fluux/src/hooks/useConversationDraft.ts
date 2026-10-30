@@ -60,8 +60,8 @@ export interface UseConversationDraftOptions {
   draftOperations: DraftOperations
   composerRef: React.RefObject<MessageComposerHandle | null>
   onDraftRestored?: () => void
-  /** An edit buffer is not the next outgoing message's draft. */
-  isEditing?: boolean
+  /** The edit belongs to this ID, which can lag behind navigation by a render. */
+  editingConversationId?: string
   getReferences?: () => MentionReference[]
   onDraftRecovered?: (text: string, references: MentionReference[]) => void
 }
@@ -69,12 +69,13 @@ export interface UseConversationDraftOptions {
 /** Persist ordinary drafts; hold failed sends outside an active edit buffer. */
 export function useConversationDraft({
   conversationId, draftOperations, composerRef, onDraftRestored,
-  isEditing = false, getReferences, onDraftRecovered,
+  editingConversationId, getReferences, onDraftRecovered,
 }: UseConversationDraftOptions): [
   string, React.Dispatch<React.SetStateAction<string>>,
   (canRecover?: () => boolean) => () => boolean, () => void,
 ] {
   const { owner, getDraft, setDraft, clearDraft } = draftOperations
+  const isEditing = editingConversationId === conversationId
   const account = getStorageScopeJid()
   const ownerKey = JSON.stringify([account, conversationId])
   const [text, setText] = useState('')
@@ -236,7 +237,11 @@ export function useConversationDraft({
       const editor = draftOwners.get(owner)?.get(key)
       if (editor) return editor(submitted)
       if (submitted.text.trim()) {
-        const pending = deferredDrafts.get(owner)?.get(key) ?? { base: { text: getDraft(id), references: [] }, failures: [] }
+        const saved = getDraft(id)
+        const metadata = draftMentions.get(owner)?.get(key)
+        const pending = deferredDrafts.get(owner)?.get(key) ?? {
+          base: { text: saved, references: metadata?.text === saved ? metadata.references : [] }, failures: [],
+        }
         pending.failures.push(submitted)
         put(deferredDrafts, owner, key, pending)
         persist(id, deferredSnapshot(pending))
