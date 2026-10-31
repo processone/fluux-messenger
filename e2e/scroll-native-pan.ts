@@ -6,7 +6,7 @@ import type { chatStore, roomStore } from '@fluux/sdk/stores'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
 import { waitForTopVisibleSettled } from './harness/scrollHarness'
-import capturedMeasurements from '../apps/fluux/src/components/conversation/__fixtures__/nativePanMeasurements.json'
+import capturedMeasurements from '../apps/fluux/src/components/conversation/__fixtures__/nativePanMeasurements.json' with { type: 'json' }
 
 type Kind = 'chat' | 'room'
 type Demo = Window & {
