@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+import { setFlagsFromString } from 'node:v8'
+import { runInNewContext } from 'node:vm'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import * as sdk from '@fluux/sdk'
@@ -61,6 +63,19 @@ beforeAll(() => {
   cleanup()
   vi.clearAllTimers()
   vi.useRealTimers()
+})
+
+// Intent: FLM-265, the captain chose to reduce the memory pressure behind a late test timing out
+// under load. Loading this file's imports leaves garbage in the worker: measured, 275-325 MB in use
+// before the first test against about 100 MB still live. Under heavy load, the full collection that
+// eventually frees it paused the worker for 0.5-1.5 s and could land in one of the last tests. One
+// collection here, after the warm-up and within this hook's own `hookTimeout`, starts the tests from
+// the live heap. `--expose-gc` only reaches contexts created after it is set, so the collection
+// function comes from a new context and this file's globals stay unchanged.
+beforeAll(() => {
+  setFlagsFromString('--expose-gc')
+  const collectGarbage = runInNewContext('gc') as () => void
+  collectGarbage()
 })
 
 describe('live room reactor details', () => {
