@@ -161,6 +161,8 @@ interface WriteRecord {
   id: number
   owner: ScrollWriteOwner | undefined
   command: ScrollCommandLike | null
+  // The scroller the write was issued against; a different one by the time it lands is `detached`.
+  scroller: Element | null
   // The reader-takeover check scrollToOffset already ran before releasing a gesture.
   prechecked: boolean
   outcome: ScrollWriteOutcome | null
@@ -331,17 +333,21 @@ export function useTanstackMessageVirtualizer({
       // Suppressing an adjustment is done at `shouldAdjustScrollPositionOnItemSizeChange`, which
       // runs before anything is counted; refusing it here is not available to the observer.
       if (source !== 'measurement') {
-        if (refused || generationRef.current !== generation || instance.scrollElement !== scroller) {
+        if (refused || !scroller || generationRef.current !== generation || instance.scrollElement !== scroller) {
           if (record) {
             settleWrite(record, {
               status: 'refused',
-              reason: instance.scrollElement !== scroller ? 'detached' : 'reader',
+              reason: !scroller || instance.scrollElement !== scroller ? 'detached' : 'reader',
             })
           }
           return
         }
         elementScroll(offset, options, instance)
-        if (record) settleWrite(record, { status: 'applied', offset: scroller?.scrollTop ?? offset })
+        if (record) {
+          settleWrite(record, scroller
+            ? { status: 'applied', offset: scroller.scrollTop }
+            : { status: 'refused', reason: 'detached' })
+        }
         // The DOM result is authoritative: the browser can clamp, round or drop a write. Publish
         // its actual offset here, not a destination after a possibly still-queued command returns.
         // Smooth writes have not landed yet; native events and rAF publish their real progress.
@@ -432,21 +438,29 @@ export function useTanstackMessageVirtualizer({
   }, [indexById])
 
   const newWrite = useCallback((owner?: ScrollWriteOwner): WriteRecord =>
-    ({ id: ++writeIdRef.current, owner, command: null, prechecked: false, outcome: null }), [])
+    ({ id: ++writeIdRef.current, owner, command: null, scroller: null, prechecked: false, outcome: null }), [])
 
   // What a receipt reads. A write the library still holds is read from the library's own state,
   // so no watcher is needed: it is either still queued, written (scrollToFn settled it), or gone.
   const readOutcome = useCallback((record: WriteRecord): ScrollWriteOutcome => {
     if (record.outcome) return record.outcome
     if (record.command === null) return { status: 'refused', reason: 'dropped' }
+    const detached = virtualizer.scrollElement !== record.scroller
     const state = (virtualizer as unknown as { scrollState?: ScrollCommandLike | null }).scrollState
     if (state === record.command && state.phase === 'queued') {
+      if (detached) return settleWrite(record, { status: 'refused', reason: 'detached' })
       return record.owner && !record.owner.isCurrent()
         ? settleWrite(record, { status: 'refused', reason: 'superseded' })
         : { status: 'queued' }
     }
-    return settleWrite(record, { status: 'refused', reason: 'dropped' })
+    return settleWrite(record, { status: 'refused', reason: detached ? 'detached' : 'dropped' })
   }, [virtualizer])
+
+  // A held write ends for `reason` only if the library still holds it; one it already let go of
+  // keeps the reason its own state gives (dropped, detached), whatever order callers poll in.
+  const retireHeld = useCallback((record: WriteRecord, reason: 'superseded' | 'reader') => {
+    if (readOutcome(record).status === 'queued') settleWrite(record, { status: 'refused', reason })
+  }, [readOutcome])
 
   const receipt = useCallback((record: WriteRecord): ScrollWrite =>
     ({ id: record.id, outcome: () => readOutcome(record) }), [readOutcome])
@@ -454,9 +468,10 @@ export function useTanstackMessageVirtualizer({
   const navigate = useCallback((record: WriteRecord, write: () => void): ScrollWrite => {
     // A newer write replaces the command the library still holds for the previous one.
     const held = queuedWriteRef.current
-    if (held) settleWrite(held, { status: 'refused', reason: 'superseded' })
+    if (held) retireHeld(held, 'superseded')
     queuedWriteRef.current = null
     const generation = generationRef.current
+    record.scroller = virtualizer.scrollElement
     const outer = currentWriteRef.current
     currentWriteRef.current = record
     try { write() }
@@ -478,7 +493,7 @@ export function useTanstackMessageVirtualizer({
         : { status: 'refused', reason: 'detached' })
     }
     return receipt(record)
-  }, [receipt, virtualizer])
+  }, [receipt, retireHeld, virtualizer])
 
   const ensureMessageMounted = useCallback((id: string): Promise<void> => {
     const index = indexById.get(id)
@@ -491,7 +506,7 @@ export function useTanstackMessageVirtualizer({
     const scroller = scrollRef.current
     if (!scroller) return
     generationRef.current++
-    if (queuedWriteRef.current) settleWrite(queuedWriteRef.current, { status: 'refused', reason: 'reader' })
+    if (queuedWriteRef.current) retireHeld(queuedWriteRef.current, 'reader')
     queuedWriteRef.current = null
     const outer = currentWriteRef.current
     currentWriteRef.current = newWrite()
@@ -505,7 +520,7 @@ export function useTanstackMessageVirtualizer({
     // because the library also uses it to measure rows synchronously.
     cancelledTargetRef.current = true
     offsetCbRef.current?.(scroller.scrollTop, false)
-  }, [newWrite, scrollRef, virtualizer])
+  }, [newWrite, retireHeld, scrollRef, virtualizer])
 
   return {
     cancelPendingScroll,

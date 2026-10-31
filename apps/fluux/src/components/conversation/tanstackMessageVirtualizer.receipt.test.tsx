@@ -8,7 +8,7 @@ import {
   type LiveEdgeExecutor,
   type PositionExecutionLease,
 } from './positioningController'
-import type { ReachabilityFacts } from './scrollPositionModel'
+import { UnreadMarkerBrowserAdapter } from './unreadMarkerBrowserAdapter'
 
 // Intent: FLM-319 (captain-approved direction A). scrollToOffset and scrollToIndex return a receipt
 // that reads applied (with the offset the browser read back), queued (the library holds the write
@@ -49,7 +49,7 @@ function list(options: { flinging: boolean }) {
     scroller.scrollTop = 20
     scroller.dispatchEvent(new Event('scroll'))
   }
-  return { scroller, virtualizer: hook.result.current }
+  return { scroller, virtualizer: hook.result.current, unmount: hook.unmount }
 }
 
 function queuedFrames() {
@@ -175,47 +175,112 @@ it('N7: an applied receipt without an offset does not compile', () => {
   expect(outcome.status).toBe('applied')
 })
 
-// N6: the owner a real controller lease hands out follows the request, so a jump held for the fling
-// never lands once a newer jump (here one that is still waiting for its history) owns the list.
-it('N6: a held jump replaced by a newer jump never lands', () => {
+// R1 (review of FLM-325): a write with no scroller is detached, never applied at the requested offset.
+it('a write after unmount reads refused, detached, not applied', () => {
+  const { virtualizer, unmount } = list({ flinging: false })
+  unmount()
+  const write = virtualizer.scrollToOffset(3000)
+  expect(write.outcome()).toEqual({ status: 'refused', reason: 'detached' })
+})
+
+it('a held write interrupted by unmount reads refused, detached, not dropped', () => {
+  const paint = queuedFrames()
+  const { virtualizer, unmount } = list({ flinging: true })
+  let write!: ScrollWrite
+  act(() => { write = virtualizer.scrollToIndex(50, { align: 'center' }) })
+  expect(write.outcome()).toEqual({ status: 'queued' })
+  unmount()
+  paint()
+  expect(write.outcome()).toEqual({ status: 'refused', reason: 'detached' })
+})
+
+// R2: a command the library already let go of keeps its own reason, whatever happens next.
+it('a dropped held write stays dropped when a newer write follows', () => {
+  const paint = queuedFrames()
+  const { scroller, virtualizer } = list({ flinging: true })
+  let older!: ScrollWrite
+  act(() => { older = virtualizer.scrollToIndex(50, { align: 'center' }) })
+  act(() => { scroller.dispatchEvent(new Event('touchstart')) })
+  scroller.scrollTop = 25
+  act(() => { scroller.dispatchEvent(new Event('scroll')) })
+  paint()
+  act(() => { virtualizer.scrollToOffset(100) })
+  expect(older.outcome()).toEqual({ status: 'refused', reason: 'dropped' })
+})
+
+it('a dropped held write stays dropped when the reader takes over afterwards', () => {
+  const paint = queuedFrames()
+  const { scroller, virtualizer } = list({ flinging: true })
+  let older!: ScrollWrite
+  act(() => { older = virtualizer.scrollToIndex(50, { align: 'center' }) })
+  act(() => { scroller.dispatchEvent(new Event('touchstart')) })
+  scroller.scrollTop = 25
+  act(() => { scroller.dispatchEvent(new Event('scroll')) })
+  paint()
+  act(() => virtualizer.cancelPendingScroll?.())
+  expect(older.outcome()).toEqual({ status: 'refused', reason: 'dropped' })
+})
+
+it('a held write the reader takes over reads refused, reader', () => {
+  const { virtualizer } = list({ flinging: true })
+  let write!: ScrollWrite
+  act(() => { write = virtualizer.scrollToIndex(50, { align: 'center' }) })
+  act(() => virtualizer.cancelPendingScroll?.())
+  expect(write.outcome()).toEqual({ status: 'refused', reason: 'reader' })
+})
+
+// N6, through the production path: the real controller, the real unread-marker adapter and the real
+// virtualizer hook. A jump held for the fling never lands once a newer jump, still waiting for its
+// history, owns the list.
+it('N6: a held jump replaced by a jump awaiting history never lands', () => {
   const paint = queuedFrames()
   const { scroller, virtualizer } = list({ flinging: true })
   const writer = vi.spyOn(scroller, 'scrollTo')
   const conversationId = 'room@example.test'
-  const mounted: ReachabilityFacts = { kind: 'available', index: 4, mounted: true, placement: 'viable' }
   const leases: PositionExecutionLease[] = []
   const loop = { schedule: () => {}, recordFrame: () => {}, finish: () => {} }
-  const explicit = (): ExplicitTargetExecutor => ({
-    reachability: () => mounted,
-    beginLoop: lease => { leases.push(lease); return loop },
-    observeGeometry: () => 0,
-    positionFrame: () => ({ kind: 'positioned', scrollTop: 400, wrote: true }),
-    complete: vi.fn(),
-  })
-  const controller = new PositioningController()
+  const beginLoop = (lease: PositionExecutionLease) => { leases.push(lease); return loop }
   const liveEdge: LiveEdgeExecutor = {
     reachability: () => ({ kind: 'global-live-edge', state: { kind: 'resident-tail', index: 9, mounted: true } }),
-    beginLoop: () => loop,
+    beginLoop,
     positionFrame: () => ({ kind: 'positioned', scrollTop: 1000, atLiveEdge: true, wrote: true, reassert: true }),
     complete: vi.fn(),
   }
-  controller.beginLiveEdgeEntry({ conversationId, entryFacts: { syncedLiveEdge: false }, executor: liveEdge })
+  const marker = new UnreadMarkerBrowserAdapter({
+    getScroller: () => scroller,
+    getVirtualizer: () => virtualizer,
+    getWindowFacts: () => ({ hasRows: true, windowAtLiveEdge: true }),
+    getPassiveContext: () => ({ conversationId, virtualizer }),
+    beginLoop,
+    setMeasuredAtBottom: vi.fn(),
+    recordProgrammaticWrite: vi.fn(),
+  }).createExecutor(liveEdge)
+  const controller = new PositioningController()
+  const request = controller.beginUnreadMarkerEntry({
+    conversationId,
+    entryFacts: { syncedLiveEdge: false, firstUnreadMessageId: 'row-50', unreadMarkerAlign: 'start' },
+    executor: marker,
+  })
+  expect(request).not.toBeNull()
+  const lease = leases.at(-1)!
+  let frame!: ReturnType<typeof marker.positionFrame>
+  act(() => { frame = marker.positionFrame(request!, lease) })
+  expect(frame.kind).toBe('positioned')
+  expect(scroller.scrollTop).toBe(20)
 
-  const first = explicit()
-  expect(controller.beginExplicitTarget({ conversationId, messageId: 'first-jump', executor: first })).not.toBeNull()
-  const firstLease = leases.at(-1)!
-  let held!: ScrollWrite
-  act(() => { held = virtualizer.scrollToIndex(50, { align: 'center', owner: firstLease.owner }) })
-  expect(held.outcome()).toEqual({ status: 'queued' })
-
-  const waitingForHistory: ExplicitTargetExecutor = { ...explicit(), reachability: () => ({ kind: 'target-absent', loadAround: 'loading' }) }
+  const waitingForHistory: ExplicitTargetExecutor = {
+    reachability: () => ({ kind: 'target-absent', loadAround: 'loading' }),
+    beginLoop,
+    observeGeometry: () => 0,
+    positionFrame: () => ({ kind: 'waiting' }),
+    complete: vi.fn(),
+  }
   controller.beginExplicitTarget({ conversationId, messageId: 'jump-awaiting-history', executor: waitingForHistory })
-  expect(firstLease.owner.isCurrent()).toBe(false)
+  expect(lease.owner.isCurrent()).toBe(false)
 
   paint()
   paint()
   paint()
   expect(writer).not.toHaveBeenCalled()
   expect(scroller.scrollTop).toBe(20)
-  expect(held.outcome()).toEqual({ status: 'refused', reason: 'superseded' })
 })
