@@ -64,9 +64,17 @@ async function controlsNearHinge(page: Page, axis: 'x' | 'y') {
         const style = getComputedStyle(ancestor)
         const fixedBlock = style.transform !== 'none' || style.translate !== 'none'
           || style.rotate !== 'none' || style.scale !== 'none' || style.filter !== 'none'
-          || style.perspective !== 'none' || /\b(layout|paint|strict|content)\b/.test(style.contain)
-          || style.willChange.split(',').some(property =>
-            ['transform', 'translate', 'rotate', 'scale', 'filter', 'perspective'].includes(property.trim()))
+          || style.perspective !== 'none' || style.transformStyle === 'preserve-3d'
+          || /\b(layout|paint|strict|content)\b/.test(style.contain)
+          || ['backdrop-filter', '-webkit-backdrop-filter'].some(property => {
+            const value = style.getPropertyValue(property)
+            return value !== '' && value !== 'none'
+          })
+          || style.willChange.split(',').some(property => {
+            const name = property.trim()
+            return ['transform', 'translate', 'rotate', 'scale', 'filter', 'perspective', 'backdrop-filter', 'contain'].includes(name)
+              || (name === '-webkit-backdrop-filter' && CSS.supports('-webkit-backdrop-filter', 'blur(0px)'))
+          })
         if (position === 'fixed' && !fixedBlock) continue
         if (position === 'absolute' && style.position === 'static' && !fixedBlock) continue
         position = style.position
@@ -91,6 +99,10 @@ async function controlsNearHinge(page: Page, axis: 'x' | 'y') {
       return [`${el.tagName.toLowerCase()} "${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 40)}" ${start.toFixed(1)}-${end.toFixed(1)}`]
     })
   }, { axis, hinge: HINGE, margin: MARGIN })
+}
+
+async function probeIsNear(page: Page, axis: 'x' | 'y') {
+  return (await controlsNearHinge(page, axis)).some(control => control.includes('Hinge attachment probe'))
 }
 
 /** A stable copy of the real demo attachment and its clipping scroller, without virtualizer movement. */
@@ -130,9 +142,7 @@ test.describe('visible hinge control measurement (FLM-306)', () => {
     test(`counts only the unclipped portion of a control on ${axis}`, async ({ page }) => {
       // FLM-306: a real attachment's box crossed the hinge, but its scroller ended before it.
       await hingeControlFixture(page, axis)
-      const probeIsNear = async () => (await controlsNearHinge(page, axis))
-        .some(control => control.includes('Hinge attachment probe'))
-      expect(await probeIsNear()).toBe(false)
+      expect(await probeIsNear(page, axis)).toBe(false)
 
       // Expose only part of the control inside the band: clipping must not hide this crossing.
       const clip = page.locator('#hinge-control-clip')
@@ -140,7 +150,7 @@ test.describe('visible hinge control measurement (FLM-306)', () => {
         const bounds = el.getBoundingClientRect()
         el.style[axis === 'x' ? 'width' : 'height'] = `${hinge - (axis === 'x' ? bounds.left : bounds.top)}px`
       }, { axis, hinge: HINGE })
-      expect(await probeIsNear()).toBe(true)
+      expect(await probeIsNear(page, axis)).toBe(true)
 
       // A visible overflow axis must not be clipped just because the other axis clips.
       await clip.evaluate((el, axis) => {
@@ -148,7 +158,7 @@ test.describe('visible hinge control measurement (FLM-306)', () => {
         el.style.overflowY = axis === 'y' ? 'visible' : 'clip'
         el.style[axis === 'x' ? 'width' : 'height'] = '1px'
       }, axis)
-      expect(await probeIsNear()).toBe(true)
+      expect(await probeIsNear(page, axis)).toBe(true)
     })
 
     test(`reports fixed controls escaping a scroller on ${axis}`, async ({ page }) => {
@@ -156,34 +166,45 @@ test.describe('visible hinge control measurement (FLM-306)', () => {
       await hingeControlFixture(page, axis)
       const clip = page.locator('#hinge-control-clip')
       const probe = clip.getByRole('button', { name: 'Hinge attachment probe' })
-      const probeIsNear = async () => (await controlsNearHinge(page, axis))
-        .some(control => control.includes('Hinge attachment probe'))
       await probe.evaluate((el, { axis, start }) => {
         Object.assign(el.style, { position: 'fixed', left: '20px', top: '20px' })
         el.style[axis === 'x' ? 'left' : 'top'] = `${start}px`
       }, { axis, start: HINGE - 2 * MARGIN })
-      expect(await probeIsNear()).toBe(true)
+      expect(await probeIsNear(page, axis)).toBe(true)
 
       // These properties re-establish a fixed containing block, so its overflow clips again.
       for (const [property, value] of [
         ['transform', 'translate(0px)'], ['translate', '0px'], ['filter', 'blur(0px)'],
         ['perspective', '1000px'], ['contain', 'layout'], ['contain', 'paint'],
-        ['willChange', 'transform'],
+        ['will-change', 'transform'],
+        // FLM-308 N2: frosted modal panels and their scrims also contain fixed controls.
+        ['backdrop-filter', 'blur(0px)'], ['-webkit-backdrop-filter', 'blur(0px)'],
+        ['transform-style', 'preserve-3d'], ['will-change', 'backdrop-filter'],
+        ['will-change', '-webkit-backdrop-filter'], ['will-change', 'contain'],
       ] as const) {
-        await test.step(`${property} contains the fixed control`, async () => {
-          await clip.evaluate((el, { property, value }) => { el.style[property] = value }, { property, value })
+        await test.step(`${property}: ${value} contains the fixed control when supported`, async () => {
+          const supported = await page.evaluate(({ property, value }) =>
+            CSS.supports(property, value) && (property !== 'will-change' || value !== '-webkit-backdrop-filter'
+              || CSS.supports('-webkit-backdrop-filter', 'blur(0px)')), { property, value })
+          await clip.evaluate((el, { property, value }) => { el.style.setProperty(property, value) }, { property, value })
+          if (!supported) {
+            // Chromium accepts arbitrary will-change words, but ignores WebKit's blur alias.
+            expect(await probeIsNear(page, axis)).toBe(true)
+            await clip.evaluate((el, property) => { el.style.removeProperty(property) }, property)
+            return
+          }
           await probe.evaluate((el, { axis, start }) => {
             const clip = el.parentElement!.getBoundingClientRect()
             el.style[axis === 'x' ? 'left' : 'top'] = `${start - (axis === 'x' ? clip.left : clip.top)}px`
           }, { axis, start: HINGE - 2 * MARGIN })
           const bounds = (await probe.boundingBox())!
           expect(bounds[axis]).toBeCloseTo(HINGE - 2 * MARGIN, 0)
-          expect(await probeIsNear()).toBe(false)
-          await clip.evaluate((el, property) => { el.style[property] = '' }, property)
+          expect(await probeIsNear(page, axis)).toBe(false)
+          await clip.evaluate((el, property) => { el.style.removeProperty(property) }, property)
           await probe.evaluate((el, { axis, start }) => {
             el.style[axis === 'x' ? 'left' : 'top'] = `${start}px`
           }, { axis, start: HINGE - 2 * MARGIN })
-          expect(await probeIsNear()).toBe(true)
+          expect(await probeIsNear(page, axis)).toBe(true)
         })
       }
 
@@ -199,7 +220,7 @@ test.describe('visible hinge control measurement (FLM-306)', () => {
         menu.append(el)
         el.style.position = 'static'
       })
-      expect(await probeIsNear()).toBe(true)
+      expect(await probeIsNear(page, axis)).toBe(true)
     })
 
     test(`reports absolute controls escaping a static clip on ${axis}`, async ({ page }) => {
@@ -217,11 +238,9 @@ test.describe('visible hinge control measurement (FLM-306)', () => {
         block.append(el)
         Object.assign(el.style, { position: 'static', left: 'auto', top: 'auto' })
       })
-      const probeIsNear = async () => (await controlsNearHinge(page, axis))
-        .some(control => control.includes('Hinge attachment probe'))
-      expect(await probeIsNear()).toBe(true)
+      expect(await probeIsNear(page, axis)).toBe(true)
       await clip.evaluate(el => { el.style.position = 'relative' })
-      expect(await probeIsNear()).toBe(false)
+      expect(await probeIsNear(page, axis)).toBe(false)
     })
 
     test(`ignores a transparent ancestor, not a translucent one, on ${axis}`, async ({ page }) => {
@@ -229,11 +248,9 @@ test.describe('visible hinge control measurement (FLM-306)', () => {
       await hingeControlFixture(page, axis)
       const clip = page.locator('#hinge-control-clip')
       await clip.evaluate(el => { el.style.overflow = 'visible'; el.style.opacity = '0' })
-      const probeIsNear = async () => (await controlsNearHinge(page, axis))
-        .some(control => control.includes('Hinge attachment probe'))
-      expect(await probeIsNear()).toBe(false)
+      expect(await probeIsNear(page, axis)).toBe(false)
       await clip.evaluate(el => { el.style.opacity = '0.5' })
-      expect(await probeIsNear()).toBe(true)
+      expect(await probeIsNear(page, axis)).toBe(true)
     })
   }
 })
