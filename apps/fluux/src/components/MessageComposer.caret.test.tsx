@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { MessageComposer, type MessageComposerHandle } from './MessageComposer'
+import { settleDynamicImports } from '@/test-utils/dynamicImports'
 
 /** The composer reports each of its renders to the (mocked) render-loop detector. */
 function composerRenderCount(): number {
@@ -170,6 +171,7 @@ describe('MessageComposer caret reporting', () => {
     fireEvent.change(textarea, {
       target: { value: ':hea', selectionStart: 4, selectionEnd: 4 },
     })
+    await settleDynamicImports()
     await waitFor(() => {
       expect(screen.getByRole('listbox')).toBeInTheDocument()
     })

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MessageComposer } from './MessageComposer'
 import { setPlatformForTesting } from '@/platform'
+import { settleDynamicImports } from '@/test-utils/dynamicImports'
 
 vi.mock('@emoji-mart/data', () => ({
   default: {
@@ -91,11 +92,19 @@ function SwappableDraftComposer() {
   )
 }
 
-function typeEmojiToken() {
-  const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement
+/**
+ * Types with the caret at the end, then waits for the emoji data that a
+ * shortcode starts loading, so its suggestions are on screen before any check.
+ */
+async function typeInto(textarea: HTMLTextAreaElement, value: string) {
   fireEvent.change(textarea, {
-    target: { value: ':hea', selectionStart: 4, selectionEnd: 4 },
+    target: { value, selectionStart: value.length, selectionEnd: value.length },
   })
+  await settleDynamicImports()
+}
+
+async function typeEmojiToken() {
+  await typeInto(screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement, ':hea')
 }
 
 async function expectEscapeClosesBeforeCancel(
@@ -103,7 +112,7 @@ async function expectEscapeClosesBeforeCancel(
   onCancel: ReturnType<typeof vi.fn>
 ) {
   renderComposer(props)
-  typeEmojiToken()
+  await typeEmojiToken()
 
   const textarea = screen.getByRole('combobox', { name: 'Type a message' })
   await waitFor(() => {
@@ -121,7 +130,7 @@ async function expectEscapeClosesBeforeCancel(
 describe('MessageComposer emoji overlay coordination', () => {
   it('exposes listbox semantics and keeps textarea focus during keyboard navigation', async () => {
     renderComposer()
-    typeEmojiToken()
+    await typeEmojiToken()
 
     const textarea = screen.getByRole('combobox', { name: 'Type a message' })
     await waitFor(() => {
@@ -154,7 +163,7 @@ describe('MessageComposer emoji overlay coordination', () => {
 
   it('completes from the keyboard through the uncontrolled direct-chat input path', async () => {
     renderComposer()
-    typeEmojiToken()
+    await typeEmojiToken()
 
     const textarea = screen.getByRole('combobox', { name: 'Type a message' }) as HTMLTextAreaElement
     await waitFor(() => {
@@ -173,7 +182,7 @@ describe('MessageComposer emoji overlay coordination', () => {
 
   it('completes from a click and restores the cursor in controlled mode', async () => {
     render(<ControlledComposer />)
-    typeEmojiToken()
+    await typeEmojiToken()
 
     const textarea = screen.getByRole('combobox', { name: 'Type a message' }) as HTMLTextAreaElement
     const option = await screen.findByRole('option', { name: ':heart: Red Heart' })
@@ -192,9 +201,7 @@ describe('MessageComposer emoji overlay coordination', () => {
     render(<CustomRoomInputComposer />)
 
     const textarea = screen.getByTestId('custom-room-input') as HTMLTextAreaElement
-    fireEvent.change(textarea, {
-      target: { value: ':hea', selectionStart: 4, selectionEnd: 4 },
-    })
+    await typeInto(textarea, ':hea')
 
     const option = await screen.findByRole('option', { name: ':heart: Red Heart' })
     expect(textarea).toHaveAttribute('role', 'combobox')
@@ -213,7 +220,7 @@ describe('MessageComposer emoji overlay coordination', () => {
 
   it('preserves Shift+Enter as a newline while suggestions are open', async () => {
     renderComposer()
-    typeEmojiToken()
+    await typeEmojiToken()
 
     const textarea = screen.getByRole('combobox', { name: 'Type a message' }) as HTMLTextAreaElement
     await waitFor(() => {
@@ -234,7 +241,7 @@ describe('MessageComposer emoji overlay coordination', () => {
     try {
       const onSend = vi.fn().mockResolvedValue(true)
       renderComposer({ onSend })
-      typeEmojiToken()
+      await typeEmojiToken()
 
       const textarea = screen.getByRole('combobox', { name: 'Type a message' }) as HTMLTextAreaElement
       await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument())
@@ -253,7 +260,7 @@ describe('MessageComposer emoji overlay coordination', () => {
     const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement
 
     // Typing the open shortcode is what pulls the emoji data into memory.
-    typeEmojiToken()
+    await typeEmojiToken()
     await waitFor(() => {
       expect(screen.getByRole('listbox')).toBeInTheDocument()
     })
@@ -273,9 +280,7 @@ describe('MessageComposer emoji overlay coordination', () => {
     const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement
 
     // Draft A: caret sits at 15, right after ":hea".
-    fireEvent.change(textarea, {
-      target: { value: 'chat about :hea', selectionStart: 15, selectionEnd: 15 },
-    })
+    await typeInto(textarea, 'chat about :hea')
     await waitFor(() => {
       expect(screen.getByRole('listbox')).toBeInTheDocument()
     })
@@ -296,7 +301,7 @@ describe('MessageComposer emoji overlay coordination', () => {
       hasExternalOverlay: true,
     })
 
-    typeEmojiToken()
+    await typeEmojiToken()
     expect(screen.getByTestId('external-overlay')).toBeInTheDocument()
     expect(screen.queryByText(':heart:')).not.toBeInTheDocument()
 
@@ -319,7 +324,7 @@ describe('MessageComposer emoji overlay coordination', () => {
     fireEvent.click(screen.getByLabelText('upload.attachFile'))
     expect(screen.getByText('Create Poll')).toBeInTheDocument()
 
-    typeEmojiToken()
+    await typeEmojiToken()
     await waitFor(() => {
       expect(screen.getByText(':heart:')).toBeInTheDocument()
     })
@@ -338,7 +343,7 @@ describe('MessageComposer emoji overlay coordination', () => {
       expect(screen.getByTestId('full-emoji-picker')).toBeInTheDocument()
     })
 
-    typeEmojiToken()
+    await typeEmojiToken()
     await waitFor(() => {
       expect(screen.getByText(':heart:')).toBeInTheDocument()
     })
