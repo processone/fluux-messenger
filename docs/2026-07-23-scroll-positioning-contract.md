@@ -90,7 +90,10 @@ Native upward panning retains visible progress when a previously measured row en
 the viewport shrinks. The virtualizer compensates that shrink even during backward scrolling,
 using the existing measurement writer and live-offset rebasing. Other library fold/direction rules
 remain unchanged: backward growth and remeasurements spanning the viewport top are not compensated.
-Explicit adjustment suppression and held-anchor rules still take precedence. Ordinary-row metric
+Explicit adjustment suppression and held-anchor rules still take precedence. One stable predicate
+reads those current refs; a row's end uses its latest measured size even before the lazy layout
+cache rebuilds. This adapter explicitly mirrors the library's ordinary fold/direction policy apart
+from backward shrink, so dependency upgrades must review that override. Ordinary-row metric
 sampling excludes whisper cards, whose borders and padding otherwise alternate the sampled width
 and chrome as rows enter the window, re-estimating unrelated offscreen rows without a resize.
 `e2e/scroll-native-pan.ts` exercises actual Chromium middle-click autoscroll in direct chats and

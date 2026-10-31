@@ -44,11 +44,10 @@ export interface MessageVirtualizer {
    * Watch the virtualizer's own scroll writes. Returning `false` from a `before` phase refuses
    * that write — for a `navigation` or `reconcile` source only.
    *
-   * A `measurement` write cannot be refused: it carries the correction for a row that measured
-   * taller than its estimate above the reader, and the library counts that correction as applied
-   * the moment it asks for the write. Declining one strands the reader below the live edge for
-   * good. Suppress adjustments with `setAutomaticScrollAdjustmentEnabled` instead, which stops
-   * them before they are counted.
+   * A `measurement` write cannot be refused: it carries resize compensation above the reader,
+   * and the library counts that correction as applied the moment it asks for the write.
+   * Declining one leaves the library's layout offset out of sync with the DOM. Suppress
+   * adjustments with `setAutomaticScrollAdjustmentEnabled` instead, before they are counted.
    */
   setScrollWriteObserver?(observer: ((write: {
     phase: 'before-measure' | 'before' | 'after'
@@ -60,7 +59,8 @@ export interface MessageVirtualizer {
    * Keep the row of `messageId` still on screen while rows resize, instead of the viewport top:
    * every row before it that changes height is compensated, in view or not, and rows after it are
    * not. A history restore holds its anchor so rows measuring between the viewport top and the
-   * anchor cannot move what the reader is looking at. `null` returns to the library's rule.
+   * anchor cannot move what the reader is looking at. `null` returns to the adapter's ordinary
+   * fold/direction policy, including shrink compensation during backward scrolling.
    * Disabled automatic adjustment still wins.
    */
   holdAnchor?(messageId: string | null): void
