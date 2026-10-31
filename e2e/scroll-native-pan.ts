@@ -22,9 +22,9 @@ type NativePanCapture = {
   inputs: { type: string; trusted: boolean; button: number }[]
   resize: {
     id: string
-    before: { height: number; extent: number }
+    before: { height: number; extent: number; distanceAbove: number }
     pauseAt: number | null
-    trigger: { at: number; top: number; above: boolean; mounted: boolean; stationary: boolean } | null
+    trigger: { at: number; top: number; above: boolean; distanceAbove: number; mounted: boolean; stationary: boolean } | null
     readings: { at: number; height: number; extent: number }[]
   }
 }
@@ -91,9 +91,10 @@ for (const kind of ['chat', 'room'] as const) {
       const warm = await page.evaluate(delta => {
         const list = document.querySelector<HTMLElement>('[data-message-list]')!
         const view = list.getBoundingClientRect()
-        const row = [...list.querySelectorAll<HTMLElement>('[data-index]')].filter(node =>
+        // Leave the full overscan margin for native movement while the host returns the pointer.
+        const row = [...list.querySelectorAll<HTMLElement>('[data-index]')].find(node =>
           node.querySelector('.message-row') && node.getBoundingClientRect().bottom < view.top - delta - view.height / 4,
-        ).at(-1)
+        )
         if (!row) throw new Error('No overscan message row above the viewport for a real resize')
         const height = row.getBoundingClientRect().height
         const extent = list.scrollHeight
@@ -122,7 +123,10 @@ for (const kind of ['chat', 'room'] as const) {
         const startTop = list.scrollTop
         const resize: NativePanCapture['resize'] = {
           id: row.querySelector<HTMLElement>('.message-row')!.dataset.messageRowId!,
-          before: { height: row.getBoundingClientRect().height, extent: list.scrollHeight },
+          before: {
+            height: row.getBoundingClientRect().height, extent: list.scrollHeight,
+            distanceAbove: list.getBoundingClientRect().top - row.getBoundingClientRect().bottom,
+          },
           pauseAt: null,
           trigger: null,
           readings: [],
@@ -157,6 +161,7 @@ for (const kind of ['chat', 'room'] as const) {
             resize.trigger = {
               at: performance.now(), top: list.scrollTop,
               above: row.getBoundingClientRect().bottom <= view.top,
+              distanceAbove: view.top - row.getBoundingClientRect().bottom,
               mounted: row.isConnected, stationary,
             }
             row.style.minHeight = minHeight
