@@ -23,7 +23,8 @@ type NativePanCapture = {
   resize: {
     id: string
     before: { height: number; extent: number }
-    trigger: { at: number; top: number; above: boolean; mounted: boolean } | null
+    pauseAt: number | null
+    trigger: { at: number; top: number; above: boolean; mounted: boolean; stationary: boolean } | null
     readings: { at: number; height: number; extent: number }[]
   }
 }
@@ -113,7 +114,7 @@ for (const kind of ['chat', 'room'] as const) {
         if (mode === 'jitter-latched') await page.mouse.move(x + 1, y)
         await page.mouse.up({ button: 'middle' })
       }
-      const capture = await page.evaluate(({ minHeight, delta }) => {
+      const capture = await page.evaluate(({ minHeight, delta, origin }) => {
         const list = document.querySelector<HTMLElement>('[data-message-list]')!
         const row = list.querySelector<HTMLElement>('[data-native-pan-resize]')!
         if (!row) throw new Error('The cached resize target must remain mounted before native input')
@@ -122,6 +123,7 @@ for (const kind of ['chat', 'room'] as const) {
         const resize: NativePanCapture['resize'] = {
           id: row.querySelector<HTMLElement>('.message-row')!.dataset.messageRowId!,
           before: { height: row.getBoundingClientRect().height, extent: list.scrollHeight },
+          pauseAt: null,
           trigger: null,
           readings: [],
         }
@@ -130,7 +132,13 @@ for (const kind of ['chat', 'room'] as const) {
         }))
         observer.observe(row)
         const inputs: { type: string; trusted: boolean; button: number }[] = []
-        const onInput = (event: MouseEvent) => inputs.push({ type: event.type, trusted: event.isTrusted, button: event.button })
+        const onInput = (event: MouseEvent) => {
+          inputs.push({ type: event.type, trusted: event.isTrusted, button: event.button })
+          if (event.type === 'mousemove' && Math.abs(event.clientX - origin.x) <= 2 &&
+            Math.abs(event.clientY - origin.y) <= 2 && list.scrollTop < startTop - 2 * delta) {
+            resize.pauseAt = performance.now()
+          }
+        }
         document.addEventListener('mousemove', onInput, true)
         document.addEventListener('mouseup', onInput, true)
         document.addEventListener('mousedown', onInput, true)
@@ -142,18 +150,24 @@ for (const kind of ['chat', 'room'] as const) {
             return { id: row.dataset.messageRowId!, order: Number(row.closest<HTMLElement>('[data-index]')?.dataset.index), top: rect.top - view.top, bottom: rect.bottom - view.top }
           }).filter(row => row.top >= -1 && row.bottom <= view.height + 1).sort((a, b) => a.top - b.top)
           samples.push({ top: list.scrollTop, height: list.scrollHeight, at: performance.now(), anchor: anchors[0] ?? null })
-          // Move far enough from the live edge that browser clamping cannot absorb the shrink.
-          if (!resize.trigger && list.scrollTop < startTop - 2 * delta && inputs.some(input => input.type === 'mousemove')) {
+          // The still-armed native dead zone exposes a resize reversal that simultaneous
+          // movement or live-edge clamping could hide. Observe one unchanged offset first.
+          const stationary = samples.at(-2)?.top === list.scrollTop
+          if (!resize.trigger && resize.pauseAt !== null && stationary) {
             resize.trigger = {
               at: performance.now(), top: list.scrollTop,
               above: row.getBoundingClientRect().bottom <= view.top,
-              mounted: row.isConnected,
+              mounted: row.isConnected, stationary,
             }
             row.style.minHeight = minHeight
           }
           frame = requestAnimationFrame(tick)
         }
         tick()
+        ;(window as unknown as { nativePanResizeObserved: () => boolean }).nativePanResizeObserved = () =>
+          resize.trigger !== null && resize.readings.some(reading => reading.at >= resize.trigger!.at &&
+            Math.abs(reading.height - (resize.before.height - delta)) <= 1) &&
+          samples.some(sample => sample.at >= resize.trigger!.at && sample.height <= resize.before.extent - delta + 1)
         ;(window as unknown as { stopNativePanCapture: () => unknown }).stopNativePanCapture = () => {
           cancelAnimationFrame(frame)
           observer.disconnect()
@@ -163,7 +177,16 @@ for (const kind of ['chat', 'room'] as const) {
           return { samples, inputs, resize }
         }
         return { top: list.scrollTop }
-      }, { minHeight: warm.minHeight, delta: shrink })
+      }, { minHeight: warm.minHeight, delta: shrink, origin: { x, y } })
+      await page.mouse.move(x, y - 50, { steps: 5 })
+      // Genuine movement first; neither a scripted scroll nor library state drives the fixture.
+      await page.waitForFunction(({ top, delta }) =>
+        document.querySelector<HTMLElement>('[data-message-list]')!.scrollTop < top - 2 * delta,
+      { top: capture.top, delta: shrink }, { polling: 'raf' })
+      await page.mouse.move(x, y)
+      await page.waitForFunction(() => (window as unknown as {
+        nativePanResizeObserved: () => boolean
+      }).nativePanResizeObserved(), undefined, { polling: 'raf' })
       await page.mouse.move(x, y - 50, { steps: 5 })
       await page.evaluate(() => new Promise<void>(resolve => {
         let frames = 0
@@ -180,6 +203,8 @@ for (const kind of ['chat', 'room'] as const) {
       expect(await waitForTopVisibleSettled(page), 'native panning must stop before navigation').not.toBeNull()
       await test.info().attach('native-pan-frames', { body: JSON.stringify(result, null, 2), contentType: 'application/json' })
       expect(result.resize.trigger, 'an actual upward native pan must trigger the row shrink').not.toBeNull()
+      expect(result.resize.pauseAt, 'native input must return to its dead zone before resizing').not.toBeNull()
+      expect(result.resize.trigger!.stationary, 'the armed native pause must be observed').toBe(true)
       expect(result.resize.trigger!.mounted, 'the shrinking row must still be mounted').toBe(true)
       expect(result.resize.trigger!.above, 'only a row entirely above the reader may shrink').toBe(true)
       expect(result.resize.trigger!.top).toBeLessThan(capture.top - 2 * shrink)

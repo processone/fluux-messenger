@@ -98,9 +98,11 @@ sampling excludes whisper cards, whose borders and padding otherwise alternate t
 and chrome as rows enter the window, re-estimating unrelated offscreen rows without a resize.
 `e2e/scroll-native-pan.ts` exercises actual Chromium middle-click autoscroll in direct chats and
 rooms, with held, jitter-latched and middle-stopped journeys. Each case enlarges a measured
-overscan row by the captured defect's delta, then removes the constraint only after actual native
-upward movement begins. It requires a real ResizeObserver shrink and a corresponding extent change,
-and checks stable message identity, order and viewport-relative placement rather than treating raw
+overscan row by the captured defect's delta, then moves away from the live edge before briefly
+returning the still-armed pointer to its native dead zone. At the first observed stationary offset it
+removes the constraint, observes the real ResizeObserver shrink and corresponding extent change,
+then resumes the native pan. No scripted scroll or virtualizer state drives that resize. The test
+checks stable message identity, order and viewport-relative placement rather than treating raw
 scroll offsets as reading progress. The wrapper constraint leaves ordinary text/chrome sampling alone.
 WebKit has no equivalent middle-click mode. The compensation also applies to other inputs and
 engines, but dedicated WebKit upward-wheel/momentum proof with a measured row shrinking above the
