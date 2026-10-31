@@ -97,10 +97,16 @@ from backward shrink, so dependency upgrades must review that override. Ordinary
 sampling excludes whisper cards, whose borders and padding otherwise alternate the sampled width
 and chrome as rows enter the window, re-estimating unrelated offscreen rows without a resize.
 `e2e/scroll-native-pan.ts` exercises actual Chromium middle-click autoscroll in direct chats and
-rooms, with held, jitter-latched and middle-stopped journeys. It checks stable message identity,
-order and viewport-relative placement rather than treating raw scroll offsets as reading progress.
-WebKit has no equivalent middle-click mode; its shared measurement and reading paths retain their
-existing browser coverage.
+rooms, with held, jitter-latched and middle-stopped journeys. Each case enlarges a measured
+overscan row by the captured defect's delta, then removes the constraint only after actual native
+upward movement begins. It requires a real ResizeObserver shrink and a corresponding extent change,
+and checks stable message identity, order and viewport-relative placement rather than treating raw
+scroll offsets as reading progress. The wrapper constraint leaves ordinary text/chrome sampling alone.
+WebKit has no equivalent middle-click mode. The compensation also applies to other inputs and
+engines, but dedicated WebKit upward-wheel/momentum proof with a measured row shrinking above the
+reader is an explicitly accepted proof gap for this change. Existing shared WebKit measurement and
+reading regression coverage does not qualify that specific timing case. Broader estimate refresh
+from own-only width fallback or further chrome calibration remains separate from this correction.
 
 Automatic older/newer pagination requires that independently observed movement geometry reach
 the relevant boundary, subject to the directional coordinator's eligibility checks. Layout-only

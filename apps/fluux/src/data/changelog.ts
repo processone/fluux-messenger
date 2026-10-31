@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.18.2',
+    date: 'Unreleased',
+    sections: [{
+      type: 'fixed',
+      items: [
+        'Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter. Private messages in rooms no longer make surrounding messages jump as you scroll.',
+      ],
+    }],
+  },
+  {
     version: '0.18.1',
     date: '2026-10-28',
     sections: [{
@@ -35,7 +45,6 @@ export const changelog: ChangelogEntry[] = [
         'The message box no longer promises that messages will be sent on reconnection while sending is paused: it now says you can send once you are back online',
         'New-message dividers include all unread messages when new messages arrive after scrolling an unfocused room or chat',
         'Scrolling up while a message above you finishes loading no longer snaps the conversation or room back to where you were a moment earlier',
-        'Middle-button autoscroll no longer reverses while older messages are measured, and private room messages no longer change the estimated spacing of ordinary messages',
         'In long conversations and rooms, older messages that finish loading just after a delayed message arrives above you no longer push the messages you are reading out of view',
         'When older messages finish loading, the messages you are reading stay where you last saw them, even if you kept scrolling meanwhile. On iPhone this includes the bounce past the top of a conversation or room',
         'The room message box is now a single editor: the caret can no longer drift from the text (seen with inline predictive text on macOS), and @mentions stay coloured while you type',
