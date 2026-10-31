@@ -18,6 +18,7 @@ import {
   type ScrollExecutorPorts,
   type UseScrollExecutorsInput,
 } from './useScrollExecutors'
+import { appliedWrite, currentOwner } from './scrollWriteTestDoubles'
 
 function portsHarness(overrides: Partial<ScrollExecutorPorts> = {}) {
   const scroller = document.createElement('div')
@@ -209,8 +210,8 @@ describe('useScrollExecutors adapter ownership', () => {
       getIndexForMessageId: vi.fn(() => 0),
       ensureMessageMounted: vi.fn(async () => {}),
       measureElement: vi.fn(),
-      scrollToOffset: vi.fn(),
-      scrollToIndex: vi.fn(() => { scrollTop = 1_400 }),
+      scrollToOffset: vi.fn(() => appliedWrite()),
+      scrollToIndex: vi.fn(() => { scrollTop = 1_400; return appliedWrite(1_400) }),
       beginAnimatedScrollToOffset: vi.fn(),
     }
     const { ports } = portsHarness({
@@ -228,6 +229,7 @@ describe('useScrollExecutors adapter ownership', () => {
       frameBudget: 60,
       signal: new AbortController().signal,
       isCurrent: () => true,
+      owner: currentOwner('room-a'),
       markApplied: () => true,
       settle: () => true,
     }
@@ -331,6 +333,7 @@ describe('useScrollExecutors monitor wiring', () => {
       frameBudget: 30,
       signal: new AbortController().signal,
       isCurrent: () => true,
+      owner: currentOwner('room-a'),
       markApplied: () => true,
       settle: () => true,
     })

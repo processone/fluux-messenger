@@ -1,5 +1,5 @@
 import type { ScrollAnchor } from '@/utils/scrollStateManager'
-import type { MessageVirtualizer } from './messageVirtualizer'
+import type { MessageVirtualizer, ScrollWriteOwner } from './messageVirtualizer'
 import { findMessageRowElement } from './messageRowIdentity'
 
 export type BottomFractionAnchorFrameResult =
@@ -18,7 +18,7 @@ export interface BottomFractionAnchorBrowserAdapterOptions {
 export class BottomFractionAnchorBrowserAdapter {
   constructor(private readonly options: BottomFractionAnchorBrowserAdapterOptions) {}
 
-  position(anchor: ScrollAnchor): BottomFractionAnchorFrameResult {
+  position(anchor: ScrollAnchor, owner?: ScrollWriteOwner): BottomFractionAnchorFrameResult {
     const scroller = this.options.getScroller()
     if (!scroller) return { kind: 'unavailable' }
     const virtualizer = this.options.getVirtualizer()
@@ -45,9 +45,9 @@ export class BottomFractionAnchorBrowserAdapter {
           ? rect.top - scroller.getBoundingClientRect().top + scroller.scrollTop +
             anchor.fraction * rect.height - scroller.clientHeight
           : start + anchor.fraction * size - scroller.clientHeight
-        virtualizer.scrollToOffset(Math.max(0, target))
+        virtualizer.scrollToOffset(Math.max(0, target), { owner })
       } else {
-        virtualizer.scrollToIndex(index, { align: 'end' })
+        virtualizer.scrollToIndex(index, { align: 'end', owner })
       }
       return {
         kind: 'positioned',

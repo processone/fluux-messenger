@@ -85,11 +85,11 @@ export class SavedPositionBrowserAdapter {
       result = this.options.anchorAdapter.position({
         messageId: request.desired.messageId,
         fraction: request.desired.placement.fraction,
-      })
+      }, lease.owner)
     } else if (request.desired.kind === 'legacy-offset') {
       const virtualizer = this.options.getVirtualizer()
       if (virtualizer) {
-        virtualizer.scrollToOffset(request.desired.offsetPx)
+        virtualizer.scrollToOffset(request.desired.offsetPx, { owner: lease.owner })
         result = {
           kind: 'positioned',
           scrollTop: scroller.scrollTop,

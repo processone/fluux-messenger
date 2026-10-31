@@ -1,4 +1,5 @@
 import type { ViewportGeometry, ViewportInput } from './viewportSession'
+import type { ScrollWriteOwner } from './messageVirtualizer'
 import {
   acceptPositionRequest,
   advancePhaseIfCurrent,
@@ -62,6 +63,8 @@ export interface PositionExecutionLease {
   frameBudget: number
   signal: AbortSignal
   isCurrent: () => boolean
+  /** Owns the navigation writes this run makes: current while the request is, loop or not. */
+  owner: ScrollWriteOwner
   markApplied: () => boolean
   settle: () => boolean
 }
@@ -2275,6 +2278,11 @@ export class PositioningController {
       conversationId,
       generation,
       operation,
+      owner: {
+        conversationId,
+        generation,
+        isCurrent: () => isCurrentGeneration(this.model, conversationId, generation),
+      },
       frameBudget: execution.framesLeft,
       signal: abortController.signal,
       isCurrent,

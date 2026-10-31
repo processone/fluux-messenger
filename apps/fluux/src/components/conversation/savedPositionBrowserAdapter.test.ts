@@ -9,6 +9,7 @@ import type {
 } from './positioningController'
 import { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
 import { SavedPositionBrowserAdapter } from './savedPositionBrowserAdapter'
+import { anOwner, appliedWrite, currentOwner } from './scrollWriteTestDoubles'
 
 function scrollerHarness(input: {
   scrollTop?: number
@@ -85,9 +86,11 @@ function virtualizerHarness(
 ) {
   const scrollToOffset = vi.fn((offset: number) => {
     scroller.scrollTop = offset
+    return appliedWrite(offset)
   })
   const scrollToIndex = vi.fn(() => {
     scroller.scrollTop = 900
+    return appliedWrite(900)
   })
   const virtualizer: MessageVirtualizer = {
     getVirtualItems: () => input.items ?? [
@@ -140,6 +143,7 @@ function lease(isCurrent: () => boolean = () => true): SavedPositionExecutionLea
     frameBudget: 60,
     signal: controller.signal,
     isCurrent,
+    owner: currentOwner(),
     markApplied: () => true,
     settle: () => true,
   }
@@ -198,7 +202,7 @@ describe('BottomFractionAnchorBrowserAdapter', () => {
       scrollTop: 350,
       reassert: true,
     })
-    expect(scrollToOffset).toHaveBeenCalledWith(350)
+    expect(scrollToOffset).toHaveBeenCalledWith(350, { owner: undefined })
   })
 
   it('falls back to virtualizer measurements until the row is mounted', () => {
@@ -214,7 +218,7 @@ describe('BottomFractionAnchorBrowserAdapter', () => {
       scrollTop: 300,
       reassert: true,
     })
-    expect(scrollToOffset).toHaveBeenCalledWith(300)
+    expect(scrollToOffset).toHaveBeenCalledWith(300, { owner: undefined })
   })
 
   it('mounts a bottom-edge anchor before fractional refinement', () => {
@@ -299,7 +303,7 @@ describe('SavedPositionBrowserAdapter', () => {
       scrollTop: 550,
       reassert: false,
     })
-    expect(scrollToOffset).toHaveBeenCalledWith(550)
+    expect(scrollToOffset).toHaveBeenCalledWith(550, { owner: anOwner() })
 
     const dom = executorFor(adapterHarness({
       scroller: viewport.scroller,
@@ -330,7 +334,7 @@ describe('SavedPositionBrowserAdapter', () => {
       kind: 'positioned',
       scrollTop: 350,
     })
-    expect(position).toHaveBeenCalledWith(anchor())
+    expect(position).toHaveBeenCalledWith(anchor(), anOwner())
 
     position.mockClear()
     expect(executor.positionFrame(savedRequest(), lease(() => false))).toEqual({
@@ -349,6 +353,7 @@ describe('SavedPositionBrowserAdapter', () => {
     const { virtualizer } = virtualizerHarness(viewport.scroller)
     virtualizer.scrollToOffset = vi.fn(() => {
       current = false
+      return appliedWrite()
     })
     const executor = executorFor(adapterHarness({
       scroller: viewport.scroller,

@@ -4,6 +4,7 @@ import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import { DirectionalHistoryBrowserAdapter } from './directionalHistoryBrowserAdapter'
 import type { PositionExecutionLease } from './positioningController'
 import { pixelOffset, type DirectionalHistoryRequest } from './scrollPositionModel'
+import { currentOwner } from './scrollWriteTestDoubles'
 
 // Intent: the captain's report of jerky scrolling on mobile (FLM-174, FLM-180). On an iPhone
 // (iOS 27.0.1) the older-history restore ran while the list was still in a drag-and-bounce tail.
@@ -328,7 +329,7 @@ function historyWindow(scrollTop: number, options: { contentHeight?: 'fixed' | '
 
 const lease: PositionExecutionLease = {
   conversationId: 'room-a', generation: 1, operation: 1, frameBudget: 60,
-  signal: new AbortController().signal, isCurrent: () => true, markApplied: () => true, settle: () => true,
+  signal: new AbortController().signal, isCurrent: () => true, owner: currentOwner(), markApplied: () => true, settle: () => true,
 }
 const restoreRequest = (messageId: string, offsetPx: number): DirectionalHistoryRequest => ({
   generation: 1, conversationId: 'room-a',

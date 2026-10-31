@@ -11,6 +11,7 @@ import { ViewportSession } from './viewportSession'
 import { resetScrollShadowDiagnostics, getScrollShadowSnapshot } from './scrollPositionShadow'
 import { MEDIA_LOAD_DEBOUNCE_MS } from './useMediaGrowthPreservation'
 import { useMessageListScroll, type UseMessageListScrollResult } from './useMessageListScroll'
+import { appliedWrite } from './scrollWriteTestDoubles'
 
 vi.mock('@/hooks', () => ({
   useAttachmentUrl: (url: string) => ({ url, isLoading: false, error: null }),
@@ -111,11 +112,15 @@ function restoredHistory(virtualized: boolean, freshEntry = false, settleEntry =
     getOffsetForMessageId: id => rows.find(row => row.rowId === id)?.top ?? null,
     ensureMessageMounted: async () => {},
     measureElement: () => {},
-    scrollToOffset: top => write(top),
-    scrollToIndex: (index, options) => write(rows[index].top + (
-      options?.align === 'end' ? rows[index].height - geometry.client
-        : options?.align === 'center' ? (rows[index].height - geometry.client) / 2 : 0
-    )),
+    scrollToOffset: top => { write(top); return appliedWrite(top) },
+    scrollToIndex: (index, options) => {
+      const top = rows[index].top + (
+        options?.align === 'end' ? rows[index].height - geometry.client
+          : options?.align === 'center' ? (rows[index].height - geometry.client) / 2 : 0
+      )
+      write(top)
+      return appliedWrite(top)
+    },
     beginAnimatedScrollToOffset: top => write(top),
     setScrollWriteObserver: observer => { writeObserver = observer },
   } : undefined

@@ -10,6 +10,7 @@ import { act, render } from '@testing-library/react'
 import type { BaseMessage } from '@fluux/sdk'
 import { MessageList } from './MessageList'
 import type { MessageVirtualizer } from './messageVirtualizer'
+import { appliedWrite } from './scrollWriteTestDoubles'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
@@ -71,8 +72,8 @@ vi.mock('./tanstackMessageVirtualizer', async () => {
             args.sampleEstimateMetrics?.()
           })
         },
-        scrollToOffset: () => {},
-        scrollToIndex: () => {},
+        scrollToOffset: () => appliedWrite(),
+        scrollToIndex: () => appliedWrite(),
         beginAnimatedScrollToOffset: () => {},
       }
     },

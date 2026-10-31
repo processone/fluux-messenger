@@ -82,7 +82,7 @@ export class ResidentTopBrowserAdapter {
     if (!lease.isCurrent()) return null
     const top = animate(scroller.scrollTop, 0)
     const virtualizer = this.options.getVirtualizer()
-    if (virtualizer) virtualizer.scrollToOffset(top)
+    if (virtualizer) virtualizer.scrollToOffset(top, { owner: lease.owner })
     else scroller.scrollTop = top
     this.options.recordProgrammaticWrite()
     return scroller.scrollTop

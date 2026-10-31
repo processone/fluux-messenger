@@ -14,6 +14,7 @@ import type { BaseMessage, RoomMessage } from '@fluux/sdk'
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { findMessageRowElement, messageRowId } from './messageRowIdentity'
 import type { MessageVirtualizer } from './messageVirtualizer'
+import { appliedWrite } from './scrollWriteTestDoubles'
 
 const rangeSelectionState = vi.hoisted(() => ({
   selectedIds: new Set<string>(),
@@ -45,7 +46,7 @@ vi.mock('@tanstack/react-virtual', () => ({
     getTotalSize: () => opts.count * 40,
     getOffsetForIndex: (i: number) => [i * 40, 'start'] as const,
     measureElement: () => {},
-    scrollToIndex: () => {},
+    scrollToIndex: () => appliedWrite(),
   }),
 }))
 
@@ -73,8 +74,8 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
       getIndexForMessageId: () => null,
       ensureMessageMounted: async () => {},
       measureElement: () => {},
-      scrollToOffset: () => {},
-      scrollToIndex: () => {},
+      scrollToOffset: () => appliedWrite(),
+      scrollToIndex: () => appliedWrite(),
       beginAnimatedScrollToOffset: () => {},
     }
     return stub

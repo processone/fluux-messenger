@@ -201,12 +201,12 @@ export class ExplicitTargetBrowserAdapter {
           : 0
       const before = scroller.scrollTop
       if (correction !== 0) {
-        if (virtualizer) virtualizer.scrollToOffset(before + correction)
+        if (virtualizer) virtualizer.scrollToOffset(before + correction, { owner: lease.owner })
         else scroller.scrollTop = before + correction
       }
       wrote = scroller.scrollTop !== before
     } else if (index !== null && virtualizer) {
-      virtualizer.scrollToIndex(index, { align: 'center' })
+      virtualizer.scrollToIndex(index, { align: 'center', owner: lease.owner })
     } else {
       element?.scrollIntoView({ block: 'center' })
     }

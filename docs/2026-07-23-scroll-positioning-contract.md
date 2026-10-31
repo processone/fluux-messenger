@@ -646,6 +646,18 @@ Resident-top animation follows the leased frame contract above. On the virtualiz
 immediate frame writes use `scrollToOffset`, keeping TanStack's pending target aligned with each
 landed position.
 
+`scrollToOffset` and `scrollToIndex` return a receipt (`ScrollWrite`). Its `outcome()` reads
+`applied` with the offset the browser read back, `queued` while the library holds the write for an
+iOS fling, or `refused` with a reason: `reader` (the reader veto), `superseded` (a newer request
+or write owns the list), `dropped` (the library let go of a held write) or `detached` (the scroller
+changed). A `queued` receipt changes once, to `applied` or `refused`, and is read from the
+library's state on demand. The leased writes pass an `owner` taken from the lease; it is current
+while the request is the active one, whether or not its frame loop is running. A write whose owner
+is no longer current is refused and never written, including a write the library was holding.
+Measurement compensation has no receipt and still cannot be refused. The two emergency writes and
+the explicit-target completion re-anchor pass no owner. Regression coverage is
+`tanstackMessageVirtualizer.receipt.test.tsx`.
+
 ## Test standard
 
 Pure-model tests use paired controls that differ by one semantic fact. Every test must identify a

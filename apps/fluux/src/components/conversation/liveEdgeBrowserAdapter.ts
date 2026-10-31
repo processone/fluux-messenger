@@ -1,5 +1,5 @@
 import { createScrollAnimation } from './scrollAnimationStep'
-import type { MessageVirtualizer } from './messageVirtualizer'
+import type { MessageVirtualizer, ScrollWriteOwner } from './messageVirtualizer'
 import { messageRowElements } from './messageRowIdentity'
 import type {
   LiveEdgeExecutor,
@@ -185,13 +185,13 @@ export class LiveEdgeBrowserAdapter {
       forceRepaint()
     }
 
-    const writeVirtualizedPin = (): boolean => {
+    const writeVirtualizedPin = (owner: ScrollWriteOwner): boolean => {
       const scroller = options.getScroller()
       const virtualizer = options.getVirtualizer()
       if (!scroller || !virtualizer || virtualizer.itemCount === 0) return false
       const before = scroller.scrollTop
       const started = now()
-      virtualizer.scrollToIndex(virtualizer.itemCount - 1, { align: 'end' })
+      virtualizer.scrollToIndex(virtualizer.itemCount - 1, { align: 'end', owner })
       options.recordProgrammaticWrite(options.getActiveConversationId())
       run.addMs('scroll', now() - started)
       const moved = scroller.scrollTop !== before
@@ -265,7 +265,7 @@ export class LiveEdgeBrowserAdapter {
             burst.note(now())
           }
           flushTailLayout()
-          writeVirtualizedPin()
+          writeVirtualizedPin(lease.owner)
           lastHeight = scroller.scrollHeight
           ports.rememberBottomIntent()
           options.log?.('PIN start', {
@@ -295,7 +295,7 @@ export class LiveEdgeBrowserAdapter {
             heightChanged: height !== lastHeight,
           })
           lastHeight = height
-          writeVirtualizedPin()
+          writeVirtualizedPin(lease.owner)
         }
         run.frame(needsWrite)
         return {

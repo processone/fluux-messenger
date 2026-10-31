@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { defaultRangeExtractor, elementScroll, useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
-import type { MessageVirtualizer } from './messageVirtualizer'
+import type { MessageVirtualizer, ScrollWrite, ScrollWriteOutcome, ScrollWriteOwner } from './messageVirtualizer'
 
 // Frames the offset must hold steady before we declare scrolling settled and stop polling
 // (~100ms at 60fps — close to @tanstack's default 150ms isScrollingResetDelay).
@@ -115,6 +115,11 @@ function retargetLibraryWrite(instance: object, layoutOffset: number, delta: num
   if (typeof lib._clampedBy === 'function') lib._clampedAdjustment = lib._clampedBy(target)
 }
 
+function settleWrite(record: WriteRecord, outcome: ScrollWriteOutcome): ScrollWriteOutcome {
+  record.outcome ??= outcome
+  return record.outcome
+}
+
 interface Args {
   /** Only the stable `key` per row is needed — the adapter is agnostic to item kind
    *  (date/message/header/footer all window uniformly). The caller renders by kind. */
@@ -150,6 +155,18 @@ interface Args {
 type IosGestureLike = { end?: () => void; tail?: () => 'tap' | 'fling' | null }
 // Private command identity: virtual-core keeps this object when a queued command starts writing.
 type ScrollCommandLike = { phase?: string }
+// One navigation write, from the call that decided it to the outcome its receipt reads. `command`
+// is set while the library holds it for a fling; `outcome` once it has been written or refused.
+interface WriteRecord {
+  id: number
+  owner: ScrollWriteOwner | undefined
+  command: ScrollCommandLike | null
+  // The scroller the write was issued against; a different one by the time it lands is `detached`.
+  scroller: Element | null
+  // The reader-takeover check scrollToOffset already ran before releasing a gesture.
+  prechecked: boolean
+  outcome: ScrollWriteOutcome | null
+}
 
 export function useTanstackMessageVirtualizer({
   items, indexById, scrollRef, estimateSize = 64, sampleEstimateMetrics, initialMeasurements, onMeasured,
@@ -158,10 +175,10 @@ export function useTanstackMessageVirtualizer({
   const [retainedId, setRetainedId] = useState<string | null>(null)
   const retainedIdRef = useRef<string | null>(null)
   const writeObserverRef = useRef<Parameters<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>[0]>(undefined)
-  const navigationWriteRef = useRef(false)
-  const queuedNavigationRef = useRef<ScrollCommandLike | null>(null)
-  // The outcome of the reader-takeover check scrollToOffset already ran before releasing a gesture.
-  const precheckedRef = useRef<{ refused: boolean } | null>(null)
+  // The write in progress (null outside a navigation call) and the one the library holds.
+  const currentWriteRef = useRef<WriteRecord | null>(null)
+  const queuedWriteRef = useRef<WriteRecord | null>(null)
+  const writeIdRef = useRef(0)
   // Set by cancelPendingScroll until the next navigation write. See there.
   const cancelledTargetRef = useRef(false)
   // Bumped whenever the reader takes the pixels: any destination decided earlier is void.
@@ -280,13 +297,14 @@ export function useTanstackMessageVirtualizer({
     rangeExtractor,
     scrollToFn: (offset, options, instance) => {
       const command = (instance as unknown as { scrollState?: ScrollCommandLike | null }).scrollState
-      const queued = queuedNavigationRef.current
+      const queuedRecord = queuedWriteRef.current
+      const queued = queuedRecord?.command ?? null
       // _writeAwaitingCommand changes the same command's phase before its first write. A hold
       // flush that precedes it is still queued, and a row-size adjustment is not that command.
       const queuedWrite = queued !== null && command === queued
         && command.phase !== 'queued' && options.adjustments === undefined
-      if (queuedWrite || (queued !== null && command !== queued)) queuedNavigationRef.current = null
-      const source = navigationWriteRef.current || queuedWrite ? 'navigation'
+      if (queuedWrite || (queued !== null && command !== queued)) queuedWriteRef.current = null
+      const source = currentWriteRef.current !== null || queuedWrite ? 'navigation'
         : options.adjustments !== undefined ? 'measurement' : 'reconcile'
       if (source === 'navigation') cancelledTargetRef.current = false
       else if (source === 'reconcile' && cancelledTargetRef.current) return
@@ -299,9 +317,15 @@ export function useTanstackMessageVirtualizer({
       const scroller = instance.scrollElement
       const rows = itemKeyRef.current?.items
       const observer = writeObserverRef.current
-      const prechecked = precheckedRef.current
-      precheckedRef.current = null
-      const refused = prechecked ? prechecked.refused : observer?.({ phase: 'before', source, behavior: options.behavior }) === false
+      const record = source !== 'navigation' ? null : queuedWrite ? queuedRecord : currentWriteRef.current
+      // A write whose request is no longer the active one is never written, held or not. The
+      // library would otherwise reconcile onto the command's target, so the command ends too.
+      if (record?.owner && !record.owner.isCurrent()) {
+        settleWrite(record, { status: 'refused', reason: 'superseded' })
+        ;(instance as unknown as { cancelScroll?: () => void }).cancelScroll?.()
+        return
+      }
+      const refused = record?.prechecked ? false : observer?.({ phase: 'before', source, behavior: options.behavior }) === false
       // A measurement write carries a resize correction for content above the reader.
       // virtual-core folds that adjustment into its own scrollOffset and clears it as soon as
       // it has called this function, whether or not the element moved. Skipping the write leaves
@@ -309,8 +333,21 @@ export function useTanstackMessageVirtualizer({
       // Suppressing an adjustment is done at `shouldAdjustScrollPositionOnItemSizeChange`, which
       // runs before anything is counted; refusing it here is not available to the observer.
       if (source !== 'measurement') {
-        if (refused || generationRef.current !== generation || instance.scrollElement !== scroller) return
+        if (refused || !scroller || generationRef.current !== generation || instance.scrollElement !== scroller) {
+          if (record) {
+            settleWrite(record, {
+              status: 'refused',
+              reason: !scroller || instance.scrollElement !== scroller ? 'detached' : 'reader',
+            })
+          }
+          return
+        }
         elementScroll(offset, options, instance)
+        if (record) {
+          settleWrite(record, scroller
+            ? { status: 'applied', offset: scroller.scrollTop }
+            : { status: 'refused', reason: 'detached' })
+        }
         // The DOM result is authoritative: the browser can clamp, round or drop a write. Publish
         // its actual offset here, not a destination after a possibly still-queued command returns.
         // Smooth writes have not landed yet; native events and rAF publish their real progress.
@@ -400,39 +437,81 @@ export function useTanstackMessageVirtualizer({
     return indexById.get(id) ?? null
   }, [indexById])
 
-  const navigate = useCallback((write: () => void) => {
-    queuedNavigationRef.current = null
+  const newWrite = useCallback((owner?: ScrollWriteOwner): WriteRecord =>
+    ({ id: ++writeIdRef.current, owner, command: null, scroller: null, prechecked: false, outcome: null }), [])
+
+  // What a receipt reads. A write the library still holds is read from the library's own state,
+  // so no watcher is needed: it is either still queued, written (scrollToFn settled it), or gone.
+  const readOutcome = useCallback((record: WriteRecord): ScrollWriteOutcome => {
+    if (record.outcome) return record.outcome
+    if (record.command === null) return { status: 'refused', reason: 'dropped' }
+    const detached = virtualizer.scrollElement !== record.scroller
+    const state = (virtualizer as unknown as { scrollState?: ScrollCommandLike | null }).scrollState
+    if (state === record.command && state.phase === 'queued') {
+      if (detached) return settleWrite(record, { status: 'refused', reason: 'detached' })
+      return record.owner && !record.owner.isCurrent()
+        ? settleWrite(record, { status: 'refused', reason: 'superseded' })
+        : { status: 'queued' }
+    }
+    return settleWrite(record, { status: 'refused', reason: detached ? 'detached' : 'dropped' })
+  }, [virtualizer])
+
+  // A held write ends for `reason` only if the library still holds it; one it already let go of
+  // keeps the reason its own state gives (dropped, detached), whatever order callers poll in.
+  const retireHeld = useCallback((record: WriteRecord, reason: 'superseded' | 'reader') => {
+    if (readOutcome(record).status === 'queued') settleWrite(record, { status: 'refused', reason })
+  }, [readOutcome])
+
+  const receipt = useCallback((record: WriteRecord): ScrollWrite =>
+    ({ id: record.id, outcome: () => readOutcome(record) }), [readOutcome])
+
+  const navigate = useCallback((record: WriteRecord, write: () => void): ScrollWrite => {
+    // A newer write replaces the command the library still holds for the previous one.
+    const held = queuedWriteRef.current
+    if (held) retireHeld(held, 'superseded')
+    queuedWriteRef.current = null
     const generation = generationRef.current
-    const wasNavigation = navigationWriteRef.current
-    navigationWriteRef.current = true
+    record.scroller = virtualizer.scrollElement
+    const outer = currentWriteRef.current
+    currentWriteRef.current = record
     try { write() }
     finally {
-      navigationWriteRef.current = wasNavigation
+      currentWriteRef.current = outer
       // Only a command that survived the reader's takeover can own its later queued write.
       // Store its identity, not just a flag: replacement/cancellation must not lend it authority.
       if (generationRef.current === generation) {
         const command = (virtualizer as unknown as { scrollState?: ScrollCommandLike | null }).scrollState
-        queuedNavigationRef.current = command?.phase === 'queued' ? command : null
+        if (command?.phase === 'queued' && record.outcome === null) {
+          record.command = command
+          queuedWriteRef.current = record
+        }
       }
     }
-  }, [virtualizer])
+    if (record.outcome === null && record.command === null) {
+      settleWrite(record, generationRef.current !== generation ? { status: 'refused', reason: 'reader' }
+        : virtualizer.scrollElement ? { status: 'applied', offset: virtualizer.scrollElement.scrollTop }
+        : { status: 'refused', reason: 'detached' })
+    }
+    return receipt(record)
+  }, [receipt, retireHeld, virtualizer])
 
   const ensureMessageMounted = useCallback((id: string): Promise<void> => {
     const index = indexById.get(id)
     if (index == null) return Promise.resolve()
-    navigate(() => virtualizer.scrollToIndex(index, { align: 'center' }))
+    navigate(newWrite(), () => virtualizer.scrollToIndex(index, { align: 'center' }))
     return new Promise((resolve) => requestAnimationFrame(() => resolve()))
-  }, [indexById, navigate, virtualizer])
+  }, [indexById, navigate, newWrite, virtualizer])
 
   const cancelPendingScroll = useCallback(() => {
     const scroller = scrollRef.current
     if (!scroller) return
     generationRef.current++
-    queuedNavigationRef.current = null
-    const wasNavigation = navigationWriteRef.current
-    navigationWriteRef.current = true
+    if (queuedWriteRef.current) retireHeld(queuedWriteRef.current, 'reader')
+    queuedWriteRef.current = null
+    const outer = currentWriteRef.current
+    currentWriteRef.current = newWrite()
     try { virtualizer.scrollToOffset(scroller.scrollTop) }
-    finally { navigationWriteRef.current = wasNavigation }
+    finally { currentWriteRef.current = outer }
     // The write above retargets @tanstack/virtual-core's private pending scroll to the current
     // offset, and the library re-lands on that target until a settled frame. A user scroll that
     // starts first moves less than its 1px arrival tolerance on the first step, and that landing
@@ -441,7 +520,7 @@ export function useTanstackMessageVirtualizer({
     // because the library also uses it to measure rows synchronously.
     cancelledTargetRef.current = true
     offsetCbRef.current?.(scroller.scrollTop, false)
-  }, [scrollRef, virtualizer])
+  }, [newWrite, retireHeld, scrollRef, virtualizer])
 
   return {
     cancelPendingScroll,
@@ -481,6 +560,11 @@ export function useTanstackMessageVirtualizer({
     ensureMessageMounted,
     measureElement: virtualizer.measureElement,
     scrollToOffset: (offset, opts) => {
+      const record = newWrite(opts?.owner)
+      if (record.owner && !record.owner.isCurrent()) {
+        settleWrite(record, { status: 'refused', reason: 'superseded' })
+        return receipt(record)
+      }
       // @tanstack/virtual-core 3.19.5+ queues an absolute write while an iOS drag, fling or bounce
       // is open and lands it ~100 ms after the gesture ends. A caller that owns the pixels closes
       // that gesture first, as the library does itself for a write it does not defer. Only an
@@ -488,28 +572,34 @@ export function useTanstackMessageVirtualizer({
       // open, so a refusal (and the takeover write it makes) leaves the reader's protection intact.
       const gesture = opts?.releaseGesture
         ? (virtualizer as unknown as { _iosGesture?: IosGestureLike })._iosGesture : undefined
-      let write = true
       if (gesture) {
         cancelledTargetRef.current = false
         const generation = generationRef.current
         const scroller = virtualizer.scrollElement
         const refused = writeObserverRef.current?.({ phase: 'before', source: 'navigation', behavior: opts?.behavior }) === false
-        write = !refused && generationRef.current === generation && virtualizer.scrollElement === scroller
-        if (write) {
-          gesture.end?.()
-          precheckedRef.current = { refused: false }
+        if (refused || generationRef.current !== generation || virtualizer.scrollElement !== scroller) {
+          settleWrite(record, {
+            status: 'refused',
+            reason: virtualizer.scrollElement !== scroller ? 'detached' : 'reader',
+          })
+          return receipt(record)
         }
+        gesture.end?.()
+        record.prechecked = true
       }
-      if (write) {
-        try { navigate(() => virtualizer.scrollToOffset(offset, opts && { behavior: opts.behavior })) }
-        finally { precheckedRef.current = null }
-      }
+      return navigate(record, () => virtualizer.scrollToOffset(offset, opts && { behavior: opts.behavior }))
     },
     beginAnimatedScrollToOffset: (offset) => {
-      navigate(() => virtualizer.scrollToOffset(offset, { behavior: 'smooth' }))
+      navigate(newWrite(), () => virtualizer.scrollToOffset(offset, { behavior: 'smooth' }))
     },
     scrollToIndex: (index, opts) => {
-      navigate(() => virtualizer.scrollToIndex(index, opts))
+      const record = newWrite(opts?.owner)
+      if (record.owner && !record.owner.isCurrent()) {
+        settleWrite(record, { status: 'refused', reason: 'superseded' })
+        return receipt(record)
+      }
+      const libraryOpts = opts && { align: opts.align, behavior: opts.behavior }
+      return navigate(record, () => virtualizer.scrollToIndex(index, libraryOpts))
     },
   }
 }

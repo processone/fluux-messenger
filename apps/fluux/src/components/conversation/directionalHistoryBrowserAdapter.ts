@@ -314,7 +314,7 @@ export class DirectionalHistoryBrowserAdapter {
           this.anchorHolder = holder
         }
         if (shouldWrite) {
-          if (virtualizer) virtualizer.scrollToOffset(boundedTarget, { releaseGesture: true })
+          if (virtualizer) virtualizer.scrollToOffset(boundedTarget, { releaseGesture: true, owner: lease.owner })
           else scroller.scrollTop = boundedTarget
         }
         previousTarget = boundedTarget
