@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import * as sdk from '@fluux/sdk'
 import type { ContactIdentity, Room, RoomMessage, RoomOccupant } from '@fluux/sdk'
 import { RoomMessageList } from './RoomView'
@@ -45,6 +45,23 @@ const fixture = (own = false) => {
 }
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
+
+// Intent: FLM-265, the captain chose to make these journeys hold up under machine load.
+// A fresh jsdom worker pays one-time start-up on its first render: jsdom builds its default
+// stylesheet on the first computed-style read, and React DOM, the list and the accessibility
+// queries run for the first time. Measured, that was about three quarters of the first test's
+// CPU, so on an overloaded machine whichever test ran first could exceed its 5 s budget. The
+// start-up is paid once here, bounded by `hookTimeout`, so each test's budget covers its own
+// journey.
+beforeAll(() => {
+  vi.useFakeTimers()
+  const { room, messages } = fixture()
+  render(<RoomMessageList {...props} room={room} messages={messages} />)
+  screen.getByRole('button', { name: '🔥1' })
+  cleanup()
+  vi.clearAllTimers()
+  vi.useRealTimers()
+})
 
 describe('live room reactor details', () => {
   it('keeps an anonymous reactor nickname and fallback avatar after departure', () => {
