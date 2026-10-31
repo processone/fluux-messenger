@@ -97,15 +97,18 @@ from backward shrink, so dependency upgrades must review that override. Ordinary
 sampling excludes whisper cards, whose borders and padding otherwise alternate the sampled width
 and chrome as rows enter the window, re-estimating unrelated offscreen rows without a resize.
 `e2e/scroll-native-pan.ts` exercises actual Chromium middle-click autoscroll in direct chats and
-rooms, with held, jitter-latched and middle-stopped journeys. Each case enlarges a measured
-overscan wrapper by the captured defect's delta. Ordinary arrivals move it out of the mounted
-window while its larger measurement remains cached; its temporary DOM constraint disappears with
-the old node. Sustained native backward movement then remounts that same row at its natural smaller
-height. A forwarding measurement probe records the actual cached size, backward direction and
-resize-local visible geometry without changing library state or driving the scroll. The decisive
-comparison belongs to that row's layout update, not a later unrelated shrink. Continuous frame
-checks also retain stable message identity, order and viewport-relative placement rather than
-treating raw scroll offsets as reading progress. The wrapper constraint leaves ordinary text/chrome
+rooms, with held, jitter-latched and middle-stopped journeys. Each case enlarges six measured
+overscan wrappers by the captured defect's delta. Ordinary arrivals move them out of the mounted
+window while their larger measurements remain cached; temporary DOM constraints disappear with
+the old nodes. One sustained native backward journey then remounts those rows at their natural
+smaller heights. A forwarding measurement probe records actual cached sizes, measurement direction
+and resize-local visible geometry without changing library state or driving the scroll. Measurements
+whose direction was cleared by offset synchronization remain controls, not backward-shrink proof.
+Every case requires at least one programmed cached shrink with actual backward direction and checks
+every such shrink at its own layout update, within two observed frames and without intervening
+unrelated size changes. A later unrelated shrink cannot supply that result. Continuous frame checks
+also retain stable message identity, order and viewport-relative placement rather than treating
+raw scroll offsets as reading progress. The wrapper constraint leaves ordinary text/chrome
 sampling alone. A paused shrink is not a substitute: the library can already compensate it, so it
 does not by itself demonstrate the backward-measurement defect.
 WebKit has no equivalent middle-click mode. The compensation also applies to other inputs and

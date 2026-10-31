@@ -23,7 +23,8 @@ type Sample = {
 type ScrollReading = { at: number; from: number; top: number; trusted: boolean }
 type Measurement = {
   key: string; oldSize: number | null; size: number; cached: boolean; direction: string | null
-  above: boolean; before: Sample; after: Sample | null; layout: Sample | null
+  target: boolean; above: boolean; frame: number; layoutFrame: number | null
+  before: Sample; after: Sample | null; layout: Sample | null
   nativeScroll: ScrollReading | null
 }
 type Observation = {
@@ -32,7 +33,7 @@ type Observation = {
   scrolls: ScrollReading[]; measurements: Measurement[]; forced: Measurement | null
 }
 type Capture = {
-  read: () => { cachedSize: number | null; mounted: boolean; observed: boolean }
+  read: () => { cached: { index: number; size: number | null; mounted: boolean }[]; observed: number }
   begin: () => Sample
   stop: () => Observation
 }
@@ -40,7 +41,7 @@ type CaptureWindow = Window & { nativePanCapture: Capture }
 
 // Observe the actual library call, including its final direction after the adapter's live-offset
 // synchronization. Forward the original call exactly once; never derive caches or alter its state.
-function installCapture(index: number) {
+function installCapture(indices: number[]) {
   const list = document.querySelector<HTMLElement>('[data-message-list]')!
   type Core = {
     scrollElement: HTMLElement; scrollOffset: number | null; scrollDirection: string | null
@@ -63,8 +64,7 @@ function installCapture(index: number) {
   }
   if (!found) throw new Error('Actual virtualizer measurement instance not found; no inferred attribution')
   const core = found
-  const key = core.options.getItemKey(index)
-  const node = () => list.querySelector<HTMLElement>(`[data-index="${index}"]`)
+  const keys = new Set(indices.map(index => core.options.getItemKey(index)))
   const sample = (): Sample => {
     const view = list.getBoundingClientRect()
     const anchors = [...list.querySelectorAll<HTMLElement>('.message-row')].map(row => {
@@ -74,10 +74,15 @@ function installCapture(index: number) {
     return { at: performance.now(), top: list.scrollTop, height: list.scrollHeight, client: list.clientHeight, anchor: anchors[0] ?? null }
   }
   const data: Observation = { start: null, samples: [], inputs: [], scrolls: [], measurements: [], forced: null }
-  let active = false, frame = 0, lastTop = list.scrollTop
+  let active = false, frame = 0, frameNumber = 0, lastTop = list.scrollTop
   const layout = () => {
-    const forced = data.forced
-    if (forced && !forced.layout && list.scrollHeight <= forced.before.height - (forced.oldSize! - forced.size) + 1) forced.layout = sample()
+    for (const reading of data.measurements) {
+      if (reading.target && reading.oldSize !== null && reading.size < reading.oldSize && !reading.layout &&
+        list.scrollHeight <= reading.before.height - (reading.oldSize - reading.size) + 1) {
+        reading.layout = sample()
+        reading.layoutFrame = frameNumber
+      }
+    }
   }
   const mutations = new MutationObserver(layout)
   mutations.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] })
@@ -85,16 +90,17 @@ function installCapture(index: number) {
   core.resizeItem = (itemIndex, size) => {
     const itemKey = core.options.getItemKey(itemIndex)
     const oldSize = core.itemSizeCache.get(itemKey)
-    if (!active || oldSize === size) return original.call(core, itemIndex, size)
     const item = core.measurementsCache[itemIndex]
+    if (!active || (oldSize ?? item?.size) === size) return original.call(core, itemIndex, size)
     const reading: Measurement = {
-      key: String(itemKey), oldSize: oldSize ?? null, size, cached: core.itemSizeCache.has(itemKey),
+      key: String(itemKey), oldSize: oldSize ?? item?.size ?? null, size, cached: core.itemSizeCache.has(itemKey),
+      target: keys.has(itemKey), frame: frameNumber, layoutFrame: null,
       direction: core.scrollDirection,
       above: oldSize !== undefined && item !== undefined && item.start + oldSize <= (core.scrollOffset ?? list.scrollTop),
       before: sample(), after: null, layout: null, nativeScroll: data.scrolls.at(-1) ?? null,
     }
     data.measurements.push(reading)
-    if (itemKey === key && oldSize !== undefined && size < oldSize && !data.forced) data.forced = reading
+    if (reading.target && oldSize !== undefined && size < oldSize && reading.direction === 'backward' && !data.forced) data.forced = reading
     try { return original.call(core, itemIndex, size) }
     finally { reading.after = sample(); layout() }
   }
@@ -110,9 +116,13 @@ function installCapture(index: number) {
   // Capture before the virtualizer's ordinary scroll listener performs its synchronous render.
   list.addEventListener('scroll', onScroll, true)
   document.addEventListener('mousemove', onInput, true)
-  const tick = () => { if (active) { data.samples.push(sample()); layout(); frame = requestAnimationFrame(tick) } }
+  const tick = () => { if (active) { frameNumber++; data.samples.push(sample()); layout(); frame = requestAnimationFrame(tick) } }
   ;(window as unknown as CaptureWindow).nativePanCapture = {
-    read: () => ({ cachedSize: core.itemSizeCache.get(key) ?? null, mounted: node()?.isConnected === true, observed: data.forced?.layout != null }),
+    read: () => ({
+      cached: indices.map(index => ({ index, size: core.itemSizeCache.get(core.options.getItemKey(index)) ?? null,
+        mounted: list.querySelector(`[data-index="${index}"]`)?.isConnected === true })),
+      observed: data.measurements.filter(row => row.target && row.cached && row.oldSize !== null && row.size < row.oldSize && row.direction === 'backward' && row.layout !== null).length,
+    }),
     begin: () => { data.start = sample(); lastTop = list.scrollTop; active = true; tick(); return data.start },
     stop: () => {
       active = false; cancelAnimationFrame(frame); mutations.disconnect(); core.resizeItem = original
@@ -188,23 +198,23 @@ for (const kind of ['chat', 'room'] as const) {
       const warm = await page.evaluate(() => {
         const list = document.querySelector<HTMLElement>('[data-message-list]')!
         const view = list.getBoundingClientRect()
-        const row = [...list.querySelectorAll<HTMLElement>('[data-index]')].find(node =>
+        const rows = [...list.querySelectorAll<HTMLElement>('[data-index]')].filter(node =>
           node.querySelector('.message-row') && node.getBoundingClientRect().bottom < view.top - view.height / 4,
-        )
-        if (!row) throw new Error('No mounted overscan message to cache above the viewport')
-        return { index: Number(row.dataset.index), height: row.getBoundingClientRect().height }
+        ).slice(0, 6)
+        if (rows.length !== 6) throw new Error('Six mounted overscan messages are required for cached native windowing')
+        return rows.map(row => ({ index: Number(row.dataset.index), height: row.getBoundingClientRect().height }))
       })
-      await page.evaluate(installCapture, warm.index)
-      await page.evaluate(({ index, height }) => {
-        document.querySelector<HTMLElement>(`[data-message-list] [data-index="${index}"]`)!.style.minHeight = `${height}px`
-      }, { index: warm.index, height: warm.height + shrink })
-      await expect.poll(() => page.evaluate(() => (window as unknown as CaptureWindow).nativePanCapture.read().cachedSize))
-        .toBe(warm.height + shrink)
-      // Real arrivals move the row out of the mounted window while its measured size remains
-      // cached. Its temporary DOM constraint disappears with that node, not during a pause.
-      await arrive(page, kind, Array.from({ length: 6 }, (_, i) => `${mode}-window-${i}`))
-      await expect.poll(() => page.evaluate(() => (window as unknown as CaptureWindow).nativePanCapture.read()))
-        .toMatchObject({ cachedSize: warm.height + shrink, mounted: false })
+      await page.evaluate(installCapture, warm.map(row => row.index))
+      await page.evaluate(({ rows, delta }) => {
+        for (const row of rows) document.querySelector<HTMLElement>(`[data-message-list] [data-index="${row.index}"]`)!.style.minHeight = `${row.height + delta}px`
+      }, { rows: warm, delta: shrink })
+      await expect.poll(() => page.evaluate(() => (window as unknown as CaptureWindow).nativePanCapture.read().cached))
+        .toEqual(warm.map(row => ({ index: row.index, size: row.height + shrink, mounted: true })))
+      // One continuous journey crosses several known cached rows. Offset synchronization may
+      // clear a particular measurement's direction; keep it as a control, never backward proof.
+      await arrive(page, kind, Array.from({ length: 12 }, (_, i) => `${mode}-window-${i}`))
+      await expect.poll(() => page.evaluate(() => (window as unknown as CaptureWindow).nativePanCapture.read().cached))
+        .toEqual(warm.map(row => ({ index: row.index, size: row.height + shrink, mounted: false })))
       await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
       expect(await waitForTopVisibleSettled(page), 'the live edge must settle before native input').not.toBeNull()
       await page.mouse.move(x, y)
@@ -216,8 +226,8 @@ for (const kind of ['chat', 'room'] as const) {
       const start = await page.evaluate(() => (window as unknown as CaptureWindow).nativePanCapture.begin())
       // Keep moving backward. Native windowing remounts the same cached row at its natural
       // smaller height; the probe records the real measurement decision, not a paused surrogate.
-      await page.mouse.move(x, y - 30, { steps: 5 })
-      await page.waitForFunction(() => (window as unknown as CaptureWindow).nativePanCapture.read().observed, undefined, { polling: 'raf' })
+      await page.mouse.move(x, y - 20, { steps: 5 })
+      await page.waitForFunction(() => (window as unknown as CaptureWindow).nativePanCapture.read().observed >= 1, undefined, { polling: 'raf' })
       await page.evaluate(() => new Promise<void>(resolve => {
         let frames = 0
         const tick = () => ++frames >= 60 ? resolve() : requestAnimationFrame(tick)
@@ -225,23 +235,23 @@ for (const kind of ['chat', 'room'] as const) {
       }))
       const result = await page.evaluate(() => (window as unknown as CaptureWindow).nativePanCapture.stop())
       if (mode === 'held') await page.mouse.up({ button: 'middle' })
-      else await page.mouse.click(x, y - 30, { button: mode === 'middle-stopped' ? 'middle' : 'left' })
+      else await page.mouse.click(x, y - 20, { button: mode === 'middle-stopped' ? 'middle' : 'left' })
       expect(await waitForTopVisibleSettled(page), 'native panning must stop before navigation').not.toBeNull()
       await test.info().attach('native-pan-frames', { body: JSON.stringify({ ...result, warm, shrink }, null, 2), contentType: 'application/json' })
-      const forced = result.forced
-      expect(forced, 'the same cached row must remeasure smaller during native windowing').not.toBeNull()
-      expect(forced!.cached).toBe(true)
-      expect(forced!.oldSize).toBe(warm.height + shrink)
-      expect(forced!.size).toBe(warm.height)
-      expect(forced!.direction, 'the forced measurement must land while scrolling backward').toBe('backward')
-      expect(forced!.above, 'the cached row must be entirely above the reader').toBe(true)
-      expect(forced!.nativeScroll?.trusted, 'a trusted native scroll drives the remount').toBe(true)
-      expect(forced!.nativeScroll!.top).toBeLessThan(forced!.nativeScroll!.from)
-      expect(forced!.before.top, 'the shrink must not be absorbed by live-edge clamping').toBeLessThan(start.top - shrink)
-      expect(forced!.layout, 'the forced row must change the real scroll extent').not.toBeNull()
-      // The decisive guard is local to this exact measurement; a later unrelated shrink cannot
-      // supply its pre-fix failure. The continuous frame guard remains a separate control.
-      expectProgress(forced!.before, forced!.layout!, 'forced cached-row shrink')
+      const forced = result.measurements.filter(row => row.target && row.cached && row.oldSize !== null && row.size < row.oldSize && row.direction === 'backward')
+      expect(forced.length, 'a programmed cached shrink must land during actual backward movement').toBeGreaterThan(0)
+      for (const reading of forced) {
+        expect(reading.oldSize! - reading.size, 'the captured shrink delta must reach the real library').toBe(shrink)
+        expect(reading.above, 'the cached row must be entirely above the reader').toBe(true)
+        expect(reading.nativeScroll?.trusted, 'a trusted native scroll drives the remount').toBe(true)
+        expect(reading.nativeScroll!.top).toBeLessThan(reading.nativeScroll!.from)
+        expect(reading.before.top, 'the shrink must not be absorbed by live-edge clamping').toBeLessThan(start.top - shrink)
+        expect(reading.layout, 'the forced row must change the real scroll extent').not.toBeNull()
+        expect(reading.layoutFrame! - reading.frame, 'attribute the actual resize layout, not a later event').toBeLessThanOrEqual(2)
+        const intervening = result.measurements.filter(other => other.before.at >= reading.before.at && other.before.at <= reading.layout!.at && other.oldSize !== null && other.oldSize !== other.size)
+        expect(intervening.every(other => other.target), 'an unrelated resize cannot supply the forced result').toBe(true)
+        expectProgress(reading.before, reading.layout!, 'forced cached-row shrink')
+      }
       expect(result.inputs.length).toBeGreaterThan(0)
       expect(result.inputs.every(input => input.trusted)).toBe(true)
       expect(result.samples.at(-1)!.top).toBeLessThan(start.top - 10)
