@@ -109,7 +109,7 @@ export class AnchorPreservationBrowserAdapter {
       messageId: request.desired.messageId,
       fraction: request.desired.placement.fraction,
     }
-    const result = this.options.anchorAdapter.position(anchor)
+    const result = this.options.anchorAdapter.position(anchor, lease.owner)
     if (result.kind === 'positioned') this.options.recordProgrammaticWrite(request.conversationId)
     return result
   }

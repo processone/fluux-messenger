@@ -121,7 +121,7 @@ export class UnreadMarkerBrowserAdapter {
     if (!lease.isCurrent()) return { kind: 'unavailable' }
 
     if (virtualizer && markerIndex !== null) {
-      virtualizer.scrollToIndex(markerIndex, { align: 'start' })
+      virtualizer.scrollToIndex(markerIndex, { align: 'start', owner: lease.owner })
     } else {
       const top = request.desired.align === 'top-third'
         ? Math.max(0, offset - scroller.clientHeight / 3)

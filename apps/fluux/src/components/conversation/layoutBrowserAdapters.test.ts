@@ -12,6 +12,7 @@ import {
   type AnchorPreservationLoopLabel,
 } from './anchorPreservationBrowserAdapter'
 import { ResidentTopBrowserAdapter } from './residentTopBrowserAdapter'
+import { anOwner, currentOwner } from './scrollWriteTestDoubles'
 
 function scrollerHarness(input: {
   scrollTop?: number
@@ -69,6 +70,7 @@ function lease(isCurrent: () => boolean = () => true): PositionExecutionLease {
     frameBudget: 60,
     signal: new AbortController().signal,
     isCurrent,
+    owner: currentOwner(),
     markApplied: () => true,
     settle: () => true,
   }
@@ -195,7 +197,7 @@ describe('AnchorPreservationBrowserAdapter', () => {
     expect(scope.position).toHaveBeenCalledWith({
       messageId: 'message-5',
       fraction: 0.25,
-    })
+    }, anOwner())
   })
 
   it('writes for neither a stale lease nor a conversation that has been left', () => {
@@ -281,7 +283,7 @@ describe('ResidentTopBrowserAdapter', () => {
     expect(scope.executor.start(residentTopRequest(), lease())).toEqual({
       kind: 'started',
     })
-    expect(virtualizer.scrollToOffset).toHaveBeenCalledWith(expect.any(Number))
+    expect(virtualizer.scrollToOffset).toHaveBeenCalledWith(expect.any(Number), { owner: anOwner() })
     expect((virtualizer.scrollToOffset as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBeGreaterThan(0)
     expect((virtualizer.scrollToOffset as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBeLessThan(400)
     expect(beginAnimatedScrollToOffset).not.toHaveBeenCalled()

@@ -28,6 +28,33 @@ export interface VirtualWindowItem {
   key: string
 }
 
+/**
+ * Who a navigation write belongs to: the positioning request that decided it. `isCurrent` is true
+ * while that request is still the active one, whether or not its frame loop is running, so a write
+ * the library holds for an iOS fling is refused once a newer request owns the list.
+ */
+export interface ScrollWriteOwner {
+  readonly conversationId: string
+  readonly generation: number
+  isCurrent(): boolean
+}
+
+/** Why a write did not happen. `reader`: the reader owns the pixels. `superseded`: a newer request
+ *  or write owns the list. `dropped`: the library let go of a held write. `detached`: the list
+ *  unmounted or its scroller changed. */
+export type ScrollWriteRefusal = 'reader' | 'superseded' | 'dropped' | 'detached'
+
+export type ScrollWriteOutcome =
+  | { readonly status: 'applied'; readonly offset: number }
+  | { readonly status: 'queued' }
+  | { readonly status: 'refused'; readonly reason: ScrollWriteRefusal }
+
+/** What a navigation write returns. A `queued` outcome changes once, to `applied` or `refused`. */
+export interface ScrollWrite {
+  readonly id: number
+  outcome(): ScrollWriteOutcome
+}
+
 export interface MessageVirtualizer {
   cancelPendingScroll?(): void
   /** A released touch still has kinetic motion. False while a new finger owns the list. */
@@ -93,14 +120,17 @@ export interface MessageVirtualizer {
    * behavior: 'auto' (default) = instant; 'smooth' = CSS smooth scroll.
    * releaseGesture: the caller owns the pixels (a history restore after the batch landed), so
    * write now instead of waiting for an iOS drag, fling or bounce to finish.
+   * Returns a receipt: `applied` with the offset the browser read back, `queued` while the library
+   * holds the write for an iOS fling, or `refused` with the reason. `owner` withdraws a held write
+   * whose request is no longer the active one.
    */
-  scrollToOffset(offset: number, opts?: { behavior?: 'auto' | 'smooth'; releaseGesture?: boolean }): void
+  scrollToOffset(offset: number, opts?: { behavior?: 'auto' | 'smooth'; releaseGesture?: boolean; owner?: ScrollWriteOwner }): ScrollWrite
   /**
    * Scroll so that item at `index` is aligned as requested.
    * align: 'start' | 'center' | 'end' | 'auto' (default = 'auto')
    * behavior: 'auto' (instant) | 'smooth'
    */
-  scrollToIndex(index: number, opts?: { align?: 'start' | 'center' | 'end' | 'auto'; behavior?: 'auto' | 'smooth' }): void
+  scrollToIndex(index: number, opts?: { align?: 'start' | 'center' | 'end' | 'auto'; behavior?: 'auto' | 'smooth'; owner?: ScrollWriteOwner }): ScrollWrite
   /**
    * Start native smooth scrolling to `offset` through the virtualizer's pending-scroll state.
    * Controller-owned animation follows docs/2026-07-23-scroll-positioning-contract.md.

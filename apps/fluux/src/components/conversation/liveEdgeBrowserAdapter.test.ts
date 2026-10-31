@@ -18,6 +18,7 @@ import {
   setAnomalyObservationHandler,
   type AnomalyObservation,
 } from '../../utils/anomalyObservation'
+import { anOwner, appliedWrite, currentOwner } from './scrollWriteTestDoubles'
 
 function scrollerHarness(input: {
   scrollTop?: number
@@ -71,7 +72,7 @@ function virtualizerHarness(
     mountedIndexes?: number[]
   } = {},
 ) {
-  const scrollToIndex = vi.fn(() => land(input.landedTop ?? 1_400))
+  const scrollToIndex = vi.fn(() => { land(input.landedTop ?? 1_400); return appliedWrite() })
   const virtualizer: MessageVirtualizer = {
     getVirtualItems: () => (input.mountedIndexes ?? []).map((index) => ({
       index,
@@ -87,7 +88,7 @@ function virtualizerHarness(
     getIndexForMessageId: vi.fn(() => 5),
     ensureMessageMounted: vi.fn(async () => {}),
     measureElement: vi.fn(),
-    scrollToOffset: vi.fn(),
+    scrollToOffset: vi.fn(() => appliedWrite()),
     scrollToIndex,
     beginAnimatedScrollToOffset: vi.fn(),
   }
@@ -102,6 +103,7 @@ function lease(isCurrent: () => boolean = () => true): PositionExecutionLease {
     frameBudget: 60,
     signal: new AbortController().signal,
     isCurrent,
+    owner: currentOwner(),
     markApplied: () => true,
     settle: () => true,
   }
@@ -323,7 +325,7 @@ describe('LiveEdgeBrowserAdapter', () => {
       wrote: true,
       reassert: true,
     })
-    expect(scrollToIndex).toHaveBeenCalledWith(19, { align: 'end' })
+    expect(scrollToIndex).toHaveBeenCalledWith(19, { align: 'end', owner: anOwner() })
     expect(scope.rememberBottomIntent).toHaveBeenCalledOnce()
   })
 

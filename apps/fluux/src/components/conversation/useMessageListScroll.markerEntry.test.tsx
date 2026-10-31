@@ -8,6 +8,7 @@ import type { MessageVirtualizer } from './messageVirtualizer'
 import { resetScrollShadowDiagnostics } from './scrollPositionShadow'
 import { useMessageListScroll } from './useMessageListScroll'
 import { useMessageSelection } from '@/hooks/useMessageSelection'
+import { appliedWrite } from './scrollWriteTestDoubles'
 
 let frames: Map<number, FrameRequestCallback>
 let nextFrame: number
@@ -81,8 +82,8 @@ function markerEntry({ bottomFraction = 0, contentKind = 'system-notice', marker
     getOffsetForMessageId: id => rows.find(row => row.rowId === id)?.top ?? null,
     ensureMessageMounted: async () => {},
     measureElement: () => {},
-    scrollToOffset: top => write(top),
-    scrollToIndex: index => write(rows[index].top),
+    scrollToOffset: top => { write(top); return appliedWrite(top) },
+    scrollToIndex: index => { write(rows[index].top); return appliedWrite(rows[index].top) },
     beginAnimatedScrollToOffset: top => write(top),
     cancelPendingScroll: () => write(scroller.scrollTop),
     setScrollWriteObserver: observer => { writeObserver = observer },

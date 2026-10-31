@@ -11,6 +11,7 @@ import type {
 } from './scrollPositionModel'
 import { ExplicitTargetBrowserAdapter } from './explicitTargetBrowserAdapter'
 import { UnreadMarkerBrowserAdapter } from './unreadMarkerBrowserAdapter'
+import { anOwner, appliedWrite, currentOwner } from './scrollWriteTestDoubles'
 
 function scrollerHarness(input: {
   scrollTop?: number
@@ -84,6 +85,7 @@ function virtualizerHarness(
 ) {
   const scrollToIndex = vi.fn(() => {
     scroller.scrollTop = input.landedTop ?? 900
+    return appliedWrite(scroller.scrollTop)
   })
   const virtualizer: MessageVirtualizer = {
     getVirtualItems: () => [],
@@ -95,7 +97,7 @@ function virtualizerHarness(
       input.index === undefined ? 5 : input.index),
     ensureMessageMounted: vi.fn(async () => {}),
     measureElement: vi.fn(),
-    scrollToOffset: vi.fn((offset: number) => { scroller.scrollTop = offset }),
+    scrollToOffset: vi.fn((offset: number) => { scroller.scrollTop = offset; return appliedWrite(offset) }),
     scrollToIndex,
     beginAnimatedScrollToOffset: vi.fn(),
   }
@@ -111,6 +113,7 @@ function lease(isCurrent: () => boolean = () => true): PositionExecutionLease {
     frameBudget: 60,
     signal: controller.signal,
     isCurrent,
+    owner: currentOwner(),
     markApplied: () => true,
     settle: () => true,
   }
@@ -250,7 +253,7 @@ describe('UnreadMarkerBrowserAdapter', () => {
       scrollTop: 1_395,
       atLiveEdge: true,
     })
-    expect(mounted.scrollToIndex).toHaveBeenCalledWith(5, { align: 'start' })
+    expect(mounted.scrollToIndex).toHaveBeenCalledWith(5, { align: 'start', owner: anOwner() })
     expect(measured).toHaveBeenLastCalledWith(true)
   })
 
@@ -463,7 +466,7 @@ describe('ExplicitTargetBrowserAdapter', () => {
       scrollTop: 700,
       wrote: true,
     })
-    expect(scrollToIndex).toHaveBeenCalledWith(5, { align: 'center' })
+    expect(scrollToIndex).toHaveBeenCalledWith(5, { align: 'center', owner: anOwner() })
     expect(result.measured).toHaveBeenCalledWith(false)
     // The centring write must open the settle window; see the equivalent unread-marker test.
     expect(result.recordWrite).toHaveBeenCalledWith('room-a')

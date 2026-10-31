@@ -9,6 +9,7 @@ import { resetScrollShadowDiagnostics, getScrollShadowSnapshot } from './scrollP
 import { scrollStateManager } from '@/utils/scrollStateManager'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { useMessageListScroll, type UseMessageListScrollResult } from './useMessageListScroll'
+import { appliedWrite } from './scrollWriteTestDoubles'
 
 const conversationId = 'room-a'
 let frames: Map<number, FrameRequestCallback>
@@ -100,12 +101,13 @@ function harness(virtualized: boolean, contentHeight = 1000, targetInset = 0, hi
     getIndexForMessageId: (id) => id === 'selected' ? 19 : null,
     ensureMessageMounted: vi.fn(async () => {}),
     measureElement: vi.fn(),
-    scrollToOffset: (top) => { scroller.scrollTop = top },
+    scrollToOffset: (top) => { scroller.scrollTop = top; return appliedWrite(top) },
     scrollToIndex: (index, options) => {
       if (options?.align === 'end') scroller.scrollTop = (index === 19
         ? geometry.targetTop + geometry.targetHeight
         : geometry.height) - geometry.client
       else center()
+      return appliedWrite(scroller.scrollTop)
     },
     beginAnimatedScrollToOffset: (top) => { scroller.scrollTo({ top, behavior: 'smooth' }) },
   } : undefined

@@ -3,6 +3,7 @@ import type { MessageVirtualizer, VirtualWindowItem } from './messageVirtualizer
 import type { PositionExecutionLease, PositionFrameLoop } from './positioningController'
 import { pixelOffset, type DirectionalHistoryRequest } from './scrollPositionModel'
 import { DirectionalHistoryBrowserAdapter } from './directionalHistoryBrowserAdapter'
+import { anOwner, appliedWrite, currentOwner } from './scrollWriteTestDoubles'
 
 function scrollerHarness(input: {
   scrollTop?: number
@@ -61,6 +62,7 @@ function virtualizerHarness(
   const items = input.items ?? [{ index: 2, start: 900, size: 80, key: 'anchor' }]
   const scrollToOffset = vi.fn((offset: number) => {
     scroller.scrollTop = offset
+    return appliedWrite(offset)
   })
   const virtualizer: MessageVirtualizer = {
     getVirtualItems: () => items,
@@ -86,6 +88,7 @@ function lease(isCurrent: () => boolean = () => true): PositionExecutionLease {
     frameBudget: 60,
     signal: controller.signal,
     isCurrent,
+    owner: currentOwner(),
     markApplied: () => true,
     settle: () => true,
   }
@@ -124,7 +127,7 @@ function mountedList(input: {
     viewport.scroller.append(wrapper)
   }
   const rows = input.rows
-  const scrollToOffset = vi.fn((offset: number) => { viewport.scrollTop = offset })
+  const scrollToOffset = vi.fn((offset: number) => { viewport.scrollTop = offset; return appliedWrite(offset) })
   const holdAnchor = vi.fn()
   const virtualizer: MessageVirtualizer = {
     getVirtualItems: () => rows.map(row => ({ index: row.index, start: row.start, size: row.size, key: row.id })),
@@ -317,7 +320,7 @@ describe('DirectionalHistoryBrowserAdapter', () => {
       wrote: true,
       reassert: true,
     })
-    expect(scrollToOffset).toHaveBeenCalledWith(860, { releaseGesture: true })
+    expect(scrollToOffset).toHaveBeenCalledWith(860, { releaseGesture: true, owner: anOwner() })
     expect(viewport.reflowReads).toBe(2)
 
     offset = null
@@ -350,7 +353,7 @@ describe('DirectionalHistoryBrowserAdapter', () => {
       wrote: true,
       reassert: false,
     })
-    expect(scrollToOffset).toHaveBeenCalledWith(1_300, { releaseGesture: true })
+    expect(scrollToOffset).toHaveBeenCalledWith(1_300, { releaseGesture: true, owner: anOwner() })
   })
 
   it('uses the mounted element path and restores overflow ownership without a virtualizer', () => {
@@ -394,12 +397,12 @@ describe('DirectionalHistoryBrowserAdapter', () => {
 
     viewport.scrollTop = 856
     expect(executor.positionFrame(request(), currentLease)).toMatchObject({ wrote: true })
-    expect(scrollToOffset).toHaveBeenCalledWith(862, { releaseGesture: true })
+    expect(scrollToOffset).toHaveBeenCalledWith(862, { releaseGesture: true, owner: anOwner() })
     scrollToOffset.mockClear()
 
     offset = 905
     expect(executor.positionFrame(request(), currentLease)).toMatchObject({ wrote: true })
-    expect(scrollToOffset).toHaveBeenCalledWith(865, { releaseGesture: true })
+    expect(scrollToOffset).toHaveBeenCalledWith(865, { releaseGesture: true, owner: anOwner() })
   })
 
   it('rejects a stale lease or departed conversation before reading or writing geometry', () => {
