@@ -16,17 +16,117 @@ type Demo = Window & {
   __settingsStore: typeof useSettingsStore
 }
 const targetId = 'interaction-target'
-type NativePanSample = { top: number; height: number; at: number; anchor: { id: string; order: number; top: number } | null }
-type NativePanCapture = {
-  samples: NativePanSample[]
-  inputs: { type: string; trusted: boolean; button: number }[]
-  resize: {
-    id: string
-    before: { height: number; extent: number; distanceAbove: number }
-    pauseAt: number | null
-    trigger: { at: number; top: number; above: boolean; distanceAbove: number; mounted: boolean; stationary: boolean } | null
-    readings: { at: number; height: number; extent: number }[]
+type Sample = {
+  at: number; top: number; height: number; client: number
+  anchor: { id: string; order: number; top: number; bottom: number } | null
+}
+type ScrollReading = { at: number; from: number; top: number; trusted: boolean }
+type Measurement = {
+  key: string; oldSize: number | null; size: number; cached: boolean; direction: string | null
+  above: boolean; before: Sample; after: Sample | null; layout: Sample | null
+  nativeScroll: ScrollReading | null
+}
+type Observation = {
+  start: Sample | null; samples: Sample[]
+  inputs: { at: number; type: string; trusted: boolean; x: number; y: number; buttons: number }[]
+  scrolls: ScrollReading[]; measurements: Measurement[]; forced: Measurement | null
+}
+type Capture = {
+  read: () => { cachedSize: number | null; mounted: boolean; observed: boolean }
+  begin: () => Sample
+  stop: () => Observation
+}
+type CaptureWindow = Window & { nativePanCapture: Capture }
+
+// Observe the actual library call, including its final direction after the adapter's live-offset
+// synchronization. Forward the original call exactly once; never derive caches or alter its state.
+function installCapture(index: number) {
+  const list = document.querySelector<HTMLElement>('[data-message-list]')!
+  type Core = {
+    scrollElement: HTMLElement; scrollOffset: number | null; scrollDirection: string | null
+    resizeItem: (index: number, size: number) => void
+    itemSizeCache: Map<unknown, number>
+    measurementsCache: { start: number; size: number }[]
+    options: { getItemKey: (index: number) => unknown }
   }
+  type Hook = { memoizedState: unknown; next?: Hook }
+  type Fiber = { memoizedState?: Hook; return?: Fiber }
+  const fiberKey = Object.keys(list).find(key => key.startsWith('__reactFiber$'))
+  let fiber = fiberKey ? (list as unknown as Record<string, Fiber>)[fiberKey] : undefined
+  let found: Core | undefined
+  for (let depth = 0; fiber && depth < 100; depth++, fiber = fiber.return) {
+    let hook = fiber.memoizedState
+    for (let n = 0; hook && typeof hook === 'object' && 'memoizedState' in hook && n < 500; n++, hook = hook.next) {
+      const value = hook.memoizedState as Partial<Core> | null
+      if (value?.scrollElement === list && typeof value.resizeItem === 'function' && value.itemSizeCache instanceof Map) found = value as Core
+    }
+  }
+  if (!found) throw new Error('Actual virtualizer measurement instance not found; no inferred attribution')
+  const core = found
+  const key = core.options.getItemKey(index)
+  const node = () => list.querySelector<HTMLElement>(`[data-index="${index}"]`)
+  const sample = (): Sample => {
+    const view = list.getBoundingClientRect()
+    const anchors = [...list.querySelectorAll<HTMLElement>('.message-row')].map(row => {
+      const rect = row.getBoundingClientRect()
+      return { id: row.dataset.messageRowId!, order: Number(row.closest<HTMLElement>('[data-index]')?.dataset.index), top: rect.top - view.top, bottom: rect.bottom - view.top }
+    }).filter(row => row.top >= -1 && row.bottom <= view.height + 1).sort((a, b) => a.top - b.top)
+    return { at: performance.now(), top: list.scrollTop, height: list.scrollHeight, client: list.clientHeight, anchor: anchors[0] ?? null }
+  }
+  const data: Observation = { start: null, samples: [], inputs: [], scrolls: [], measurements: [], forced: null }
+  let active = false, frame = 0, lastTop = list.scrollTop
+  const layout = () => {
+    const forced = data.forced
+    if (forced && !forced.layout && list.scrollHeight <= forced.before.height - (forced.oldSize! - forced.size) + 1) forced.layout = sample()
+  }
+  const mutations = new MutationObserver(layout)
+  mutations.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] })
+  const original = core.resizeItem
+  core.resizeItem = (itemIndex, size) => {
+    const itemKey = core.options.getItemKey(itemIndex)
+    const oldSize = core.itemSizeCache.get(itemKey)
+    if (!active || oldSize === size) return original.call(core, itemIndex, size)
+    const item = core.measurementsCache[itemIndex]
+    const reading: Measurement = {
+      key: String(itemKey), oldSize: oldSize ?? null, size, cached: core.itemSizeCache.has(itemKey),
+      direction: core.scrollDirection,
+      above: oldSize !== undefined && item !== undefined && item.start + oldSize <= (core.scrollOffset ?? list.scrollTop),
+      before: sample(), after: null, layout: null, nativeScroll: data.scrolls.at(-1) ?? null,
+    }
+    data.measurements.push(reading)
+    if (itemKey === key && oldSize !== undefined && size < oldSize && !data.forced) data.forced = reading
+    try { return original.call(core, itemIndex, size) }
+    finally { reading.after = sample(); layout() }
+  }
+  const onScroll = (event: Event) => {
+    if (!active) return
+    const top = list.scrollTop
+    data.scrolls.push({ at: performance.now(), from: lastTop, top, trusted: event.isTrusted })
+    lastTop = top
+  }
+  const onInput = (event: MouseEvent) => {
+    if (active) data.inputs.push({ at: performance.now(), type: event.type, trusted: event.isTrusted, x: event.clientX, y: event.clientY, buttons: event.buttons })
+  }
+  // Capture before the virtualizer's ordinary scroll listener performs its synchronous render.
+  list.addEventListener('scroll', onScroll, true)
+  document.addEventListener('mousemove', onInput, true)
+  const tick = () => { if (active) { data.samples.push(sample()); layout(); frame = requestAnimationFrame(tick) } }
+  ;(window as unknown as CaptureWindow).nativePanCapture = {
+    read: () => ({ cachedSize: core.itemSizeCache.get(key) ?? null, mounted: node()?.isConnected === true, observed: data.forced?.layout != null }),
+    begin: () => { data.start = sample(); lastTop = list.scrollTop; active = true; tick(); return data.start },
+    stop: () => {
+      active = false; cancelAnimationFrame(frame); mutations.disconnect(); core.resizeItem = original
+      list.removeEventListener('scroll', onScroll, true); document.removeEventListener('mousemove', onInput, true)
+      return data
+    },
+  }
+}
+
+function expectProgress(before: Sample, after: Sample, context: string) {
+  expect(before.anchor, `${context}: an initial visible message anchors the comparison`).not.toBeNull()
+  expect(after.anchor, `${context}: a final visible message anchors the comparison`).not.toBeNull()
+  expect(after.anchor!.order, `${context}: cannot return to a newer message`).toBeLessThanOrEqual(before.anchor!.order)
+  if (after.anchor!.id === before.anchor!.id) expect(after.anchor!.top, `${context}: the same message cannot move against the pan`).toBeGreaterThanOrEqual(before.anchor!.top - 1)
 }
 
 async function arrive(page: Page, kind: Kind, ids: string[], own = false) {
@@ -78,158 +178,74 @@ for (const kind of ['chat', 'room'] as const) {
     test(`${kind}: ${mode} native upward pan keeps visible progress through remeasurement`, async ({ page }) => {
       const target = await setup(page, kind)
       await target.locator('[data-message-body]').hover()
-      // Keep the same screen origin as the original main/interaction-hold comparison.
       const box = (await target.locator('[data-message-body]').boundingBox())!
       const x = box.x + 180, y = box.y + 12
       await arrive(page, kind, Array.from({ length: 12 }, (_, i) => `${mode}-${i}`))
       await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
-      expect(await waitForTopVisibleSettled(page), 'arrivals must settle before preparing the cached row').not.toBeNull()
-      // Force the captured defect's shrink through real layout and ResizeObserver, not a
-      // virtualizer stub. The outer measured wrapper leaves text/chrome sampling unchanged.
+      expect(await waitForTopVisibleSettled(page), 'arrivals must settle before warming the cached row').not.toBeNull()
       const measurement = capturedMeasurements.find(fixture => fixture.kind === kind)!.measurement
       const shrink = measurement.oldSize - measurement.size
-      const warm = await page.evaluate(delta => {
+      const warm = await page.evaluate(() => {
         const list = document.querySelector<HTMLElement>('[data-message-list]')!
         const view = list.getBoundingClientRect()
-        // Leave the full overscan margin for native movement while the host returns the pointer.
         const row = [...list.querySelectorAll<HTMLElement>('[data-index]')].find(node =>
-          node.querySelector('.message-row') && node.getBoundingClientRect().bottom < view.top - delta - view.height / 4,
+          node.querySelector('.message-row') && node.getBoundingClientRect().bottom < view.top - view.height / 4,
         )
-        if (!row) throw new Error('No overscan message row above the viewport for a real resize')
-        const height = row.getBoundingClientRect().height
-        const extent = list.scrollHeight
-        const minHeight = row.style.minHeight
-        row.dataset.nativePanResize = 'true'
-        row.style.minHeight = `${height + delta}px`
-        return { height, extent, minHeight }
-      }, shrink)
-      // The increased scroll extent proves the actual virtualizer cached the enlarged row.
-      await expect.poll(() => page.locator('[data-message-list]').evaluate(el => el.scrollHeight))
-        .toBeGreaterThanOrEqual(warm.extent + shrink - 1)
-      expect(await waitForTopVisibleSettled(page), 'the enlarged cached row must settle').not.toBeNull()
+        if (!row) throw new Error('No mounted overscan message to cache above the viewport')
+        return { index: Number(row.dataset.index), height: row.getBoundingClientRect().height }
+      })
+      await page.evaluate(installCapture, warm.index)
+      await page.evaluate(({ index, height }) => {
+        document.querySelector<HTMLElement>(`[data-message-list] [data-index="${index}"]`)!.style.minHeight = `${height}px`
+      }, { index: warm.index, height: warm.height + shrink })
+      await expect.poll(() => page.evaluate(() => (window as unknown as CaptureWindow).nativePanCapture.read().cachedSize))
+        .toBe(warm.height + shrink)
+      // Real arrivals move the row out of the mounted window while its measured size remains
+      // cached. Its temporary DOM constraint disappears with that node, not during a pause.
+      await arrive(page, kind, Array.from({ length: 6 }, (_, i) => `${mode}-window-${i}`))
+      await expect.poll(() => page.evaluate(() => (window as unknown as CaptureWindow).nativePanCapture.read()))
+        .toMatchObject({ cachedSize: warm.height + shrink, mounted: false })
+      await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+      expect(await waitForTopVisibleSettled(page), 'the live edge must settle before native input').not.toBeNull()
       await page.mouse.move(x, y)
       await page.mouse.down({ button: 'middle' })
-      await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
-      expect(await waitForTopVisibleSettled(page), 'the released live edge must settle').not.toBeNull()
       if (mode !== 'held') {
         if (mode === 'jitter-latched') await page.mouse.move(x + 1, y)
         await page.mouse.up({ button: 'middle' })
       }
-      const capture = await page.evaluate(({ minHeight, delta, origin }) => {
-        const list = document.querySelector<HTMLElement>('[data-message-list]')!
-        const row = list.querySelector<HTMLElement>('[data-native-pan-resize]')!
-        if (!row) throw new Error('The cached resize target must remain mounted before native input')
-        const samples: NativePanSample[] = []
-        const startTop = list.scrollTop
-        const resize: NativePanCapture['resize'] = {
-          id: row.querySelector<HTMLElement>('.message-row')!.dataset.messageRowId!,
-          before: {
-            height: row.getBoundingClientRect().height, extent: list.scrollHeight,
-            distanceAbove: list.getBoundingClientRect().top - row.getBoundingClientRect().bottom,
-          },
-          pauseAt: null,
-          trigger: null,
-          readings: [],
-        }
-        const observer = new ResizeObserver(() => resize.readings.push({
-          at: performance.now(), height: row.getBoundingClientRect().height, extent: list.scrollHeight,
-        }))
-        observer.observe(row)
-        const inputs: { type: string; trusted: boolean; button: number }[] = []
-        const onInput = (event: MouseEvent) => {
-          inputs.push({ type: event.type, trusted: event.isTrusted, button: event.button })
-          if (event.type === 'mousemove' && Math.abs(event.clientX - origin.x) <= 2 &&
-            Math.abs(event.clientY - origin.y) <= 2 && list.scrollTop < startTop - 2 * delta) {
-            resize.pauseAt = performance.now()
-          }
-        }
-        document.addEventListener('mousemove', onInput, true)
-        document.addEventListener('mouseup', onInput, true)
-        document.addEventListener('mousedown', onInput, true)
-        let frame = 0
-        const tick = () => {
-          const view = list.getBoundingClientRect()
-          const anchors = [...list.querySelectorAll<HTMLElement>('.message-row')].map(row => {
-            const rect = row.getBoundingClientRect()
-            return { id: row.dataset.messageRowId!, order: Number(row.closest<HTMLElement>('[data-index]')?.dataset.index), top: rect.top - view.top, bottom: rect.bottom - view.top }
-          }).filter(row => row.top >= -1 && row.bottom <= view.height + 1).sort((a, b) => a.top - b.top)
-          samples.push({ top: list.scrollTop, height: list.scrollHeight, at: performance.now(), anchor: anchors[0] ?? null })
-          // The still-armed native dead zone exposes a resize reversal that simultaneous
-          // movement or live-edge clamping could hide. Observe one unchanged offset first.
-          const stationary = samples.at(-2)?.top === list.scrollTop
-          if (!resize.trigger && resize.pauseAt !== null && stationary) {
-            resize.trigger = {
-              at: performance.now(), top: list.scrollTop,
-              above: row.getBoundingClientRect().bottom <= view.top,
-              distanceAbove: view.top - row.getBoundingClientRect().bottom,
-              mounted: row.isConnected, stationary,
-            }
-            row.style.minHeight = minHeight
-          }
-          frame = requestAnimationFrame(tick)
-        }
-        tick()
-        ;(window as unknown as { nativePanResizeObserved: () => boolean }).nativePanResizeObserved = () =>
-          resize.trigger !== null && resize.readings.some(reading => reading.at >= resize.trigger!.at &&
-            Math.abs(reading.height - (resize.before.height - delta)) <= 1) &&
-          samples.some(sample => sample.at >= resize.trigger!.at && sample.height <= resize.before.extent - delta + 1)
-        ;(window as unknown as { stopNativePanCapture: () => unknown }).stopNativePanCapture = () => {
-          cancelAnimationFrame(frame)
-          observer.disconnect()
-          document.removeEventListener('mousemove', onInput, true)
-          document.removeEventListener('mouseup', onInput, true)
-          document.removeEventListener('mousedown', onInput, true)
-          return { samples, inputs, resize }
-        }
-        return { top: list.scrollTop }
-      }, { minHeight: warm.minHeight, delta: shrink, origin: { x, y } })
-      await page.mouse.move(x, y - 50, { steps: 5 })
-      // Genuine movement first; neither a scripted scroll nor library state drives the fixture.
-      await page.waitForFunction(({ top, delta }) =>
-        document.querySelector<HTMLElement>('[data-message-list]')!.scrollTop < top - 2 * delta,
-      { top: capture.top, delta: shrink }, { polling: 'raf' })
-      await page.mouse.move(x, y)
-      await page.waitForFunction(() => (window as unknown as {
-        nativePanResizeObserved: () => boolean
-      }).nativePanResizeObserved(), undefined, { polling: 'raf' })
-      await page.mouse.move(x, y - 50, { steps: 5 })
+      const start = await page.evaluate(() => (window as unknown as CaptureWindow).nativePanCapture.begin())
+      // Keep moving backward. Native windowing remounts the same cached row at its natural
+      // smaller height; the probe records the real measurement decision, not a paused surrogate.
+      await page.mouse.move(x, y - 30, { steps: 5 })
+      await page.waitForFunction(() => (window as unknown as CaptureWindow).nativePanCapture.read().observed, undefined, { polling: 'raf' })
       await page.evaluate(() => new Promise<void>(resolve => {
         let frames = 0
         const tick = () => ++frames >= 60 ? resolve() : requestAnimationFrame(tick)
         requestAnimationFrame(tick)
       }))
-      const result = await page.evaluate(() => (window as unknown as {
-        stopNativePanCapture: () => NativePanCapture
-      }).stopNativePanCapture())
+      const result = await page.evaluate(() => (window as unknown as CaptureWindow).nativePanCapture.stop())
       if (mode === 'held') await page.mouse.up({ button: 'middle' })
-      else await page.mouse.click(x, y - 50, { button: mode === 'middle-stopped' ? 'middle' : 'left' })
-      // Returning from the stop click does not drain the compositor's last native step.
-      // Observe the stopped geometry before testing the next deliberate navigation.
+      else await page.mouse.click(x, y - 30, { button: mode === 'middle-stopped' ? 'middle' : 'left' })
       expect(await waitForTopVisibleSettled(page), 'native panning must stop before navigation').not.toBeNull()
-      await test.info().attach('native-pan-frames', { body: JSON.stringify(result, null, 2), contentType: 'application/json' })
-      expect(result.resize.trigger, 'an actual upward native pan must trigger the row shrink').not.toBeNull()
-      expect(result.resize.pauseAt, 'native input must return to its dead zone before resizing').not.toBeNull()
-      expect(result.resize.trigger!.stationary, 'the armed native pause must be observed').toBe(true)
-      expect(result.resize.trigger!.mounted, 'the shrinking row must still be mounted').toBe(true)
-      expect(result.resize.trigger!.above, 'only a row entirely above the reader may shrink').toBe(true)
-      expect(result.resize.trigger!.top).toBeLessThan(capture.top - 2 * shrink)
-      expect(result.resize.readings.some(reading =>
-        reading.at >= result.resize.trigger!.at && Math.abs(reading.height - (result.resize.before.height - shrink)) <= 1,
-      ), 'a real ResizeObserver notification must report the captured shrink').toBe(true)
-      expect(result.samples.some(sample => sample.at >= result.resize.trigger!.at &&
-        sample.height <= result.resize.before.extent - shrink + 1),
-      'the real virtualizer must propagate the shrink to scroll extent during the pan').toBe(true)
+      await test.info().attach('native-pan-frames', { body: JSON.stringify({ ...result, warm, shrink }, null, 2), contentType: 'application/json' })
+      const forced = result.forced
+      expect(forced, 'the same cached row must remeasure smaller during native windowing').not.toBeNull()
+      expect(forced!.cached).toBe(true)
+      expect(forced!.oldSize).toBe(warm.height + shrink)
+      expect(forced!.size).toBe(warm.height)
+      expect(forced!.direction, 'the forced measurement must land while scrolling backward').toBe('backward')
+      expect(forced!.above, 'the cached row must be entirely above the reader').toBe(true)
+      expect(forced!.nativeScroll?.trusted, 'a trusted native scroll drives the remount').toBe(true)
+      expect(forced!.nativeScroll!.top).toBeLessThan(forced!.nativeScroll!.from)
+      expect(forced!.before.top, 'the shrink must not be absorbed by live-edge clamping').toBeLessThan(start.top - shrink)
+      expect(forced!.layout, 'the forced row must change the real scroll extent').not.toBeNull()
+      // The decisive guard is local to this exact measurement; a later unrelated shrink cannot
+      // supply its pre-fix failure. The continuous frame guard remains a separate control.
+      expectProgress(forced!.before, forced!.layout!, 'forced cached-row shrink')
       expect(result.inputs.length).toBeGreaterThan(0)
       expect(result.inputs.every(input => input.trusted)).toBe(true)
-      expect(result.samples.at(-1)!.top).toBeLessThan(capture.top - 10)
-      for (const [index, sample] of result.samples.entries()) {
-        expect(sample.anchor, 'a fully visible message anchors each frame').not.toBeNull()
-        const previous = result.samples[index - 1]?.anchor
-        if (!previous || !sample.anchor) continue
-        expect(sample.anchor.order, 'an upward pan cannot return to a newer message').toBeLessThanOrEqual(previous.order)
-        if (sample.anchor.id === previous.id) expect(sample.anchor.top, 'the same message cannot move against the pan').toBeGreaterThanOrEqual(previous.top - 1)
-      }
-      // Stop is not a stale positioning command: ordinary deliberate navigation still works.
+      expect(result.samples.at(-1)!.top).toBeLessThan(start.top - 10)
+      for (let i = 1; i < result.samples.length; i++) expectProgress(result.samples[i - 1], result.samples[i], 'continuous native pan')
       await page.keyboard.press('End')
       await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
     })
