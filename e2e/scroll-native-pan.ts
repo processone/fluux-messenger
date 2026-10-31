@@ -29,6 +29,7 @@ type Measurement = {
 }
 type Observation = {
   start: Sample | null; samples: Sample[]
+  targets: { index: number; key: string; cachedSize: number | null; mounted: boolean }[]
   inputs: { at: number; type: string; trusted: boolean; x: number; y: number; buttons: number }[]
   scrolls: ScrollReading[]; measurements: Measurement[]; forced: Measurement | null
 }
@@ -75,7 +76,7 @@ function installCapture(indices: number[]) {
     }).filter(row => row.top >= -1 && row.bottom <= view.height + 1).sort((a, b) => a.top - b.top)
     return { at: performance.now(), top: list.scrollTop, height: list.scrollHeight, client: list.clientHeight, anchor: anchors[0] ?? null }
   }
-  const data: Observation = { start: null, samples: [], inputs: [], scrolls: [], measurements: [], forced: null }
+  const data: Observation = { start: null, samples: [], targets: [], inputs: [], scrolls: [], measurements: [], forced: null }
   let active = false, frame = 0, frameNumber = 0, lastTop = list.scrollTop
   const layout = () => {
     for (const reading of data.measurements) {
@@ -126,7 +127,11 @@ function installCapture(indices: number[]) {
       observed: data.measurements.filter(row => row.target && row.cached && row.oldSize !== null && row.size < row.oldSize && row.direction === 'backward' && row.layout !== null).length,
       processed: new Set(data.measurements.filter(row => row.target && row.cached && row.oldSize !== null && row.size < row.oldSize).map(row => row.key)).size,
     }),
-    begin: () => { data.start = sample(); lastTop = list.scrollTop; active = true; tick(); return data.start },
+    begin: () => {
+      data.targets = targets.map(({ index, key }) => ({ index, key: String(key), cachedSize: core.itemSizeCache.get(key) ?? null,
+        mounted: core.elementsCache.get(key)?.isConnected === true }))
+      data.start = sample(); lastTop = list.scrollTop; active = true; tick(); return data.start
+    },
     stop: () => {
       active = false; cancelAnimationFrame(frame); mutations.disconnect(); core.resizeItem = original
       list.removeEventListener('scroll', onScroll, true); document.removeEventListener('mousemove', onInput, true)
