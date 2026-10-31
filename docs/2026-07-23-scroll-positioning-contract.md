@@ -101,8 +101,8 @@ rooms, with held, jitter-latched and middle-stopped journeys. Each case enlarges
 overscan wrappers by the captured defect's delta. Ordinary arrivals and deliberate live-edge
 navigation move them out of the mounted window while their larger measurements remain cached;
 temporary DOM constraints disappear with
-the old nodes. One sustained native backward journey then remounts those rows at their natural
-smaller heights. A forwarding measurement probe records actual cached sizes, measurement direction
+the old nodes. During one sustained native backward journey, cached rows re-enter the mounted
+window at their natural smaller heights. A forwarding measurement probe records actual cached sizes, measurement direction
 and resize-local visible geometry without changing library state or driving the scroll. Measurements
 whose direction was cleared by offset synchronization remain controls, not backward-shrink proof.
 Every case requires at least one programmed cached shrink with actual backward direction and checks
