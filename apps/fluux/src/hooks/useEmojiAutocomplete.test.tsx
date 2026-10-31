@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
+import { settleDynamicImports } from '@/test-utils/dynamicImports'
 import {
   emojiCandidatePool,
   loadEmojiAutocompleteData,
@@ -13,7 +14,11 @@ import {
   type EmojiCandidatePool,
 } from './useEmojiAutocomplete'
 
-// Mock the emoji database with a smaller subset of test emojis
+// Mock the emoji database with a smaller subset of test emojis.
+// Rendering a shortcode starts loading this data through a dynamic import that
+// gives the test nothing to await. Each test that renders one settles that import
+// before it checks the result, instead of racing waitFor's one-second deadline
+// (FLM-321).
 vi.mock('@emoji-mart/data', () => ({
   default: {
     emojis: {
@@ -94,6 +99,7 @@ describe('useEmojiAutocomplete', () => {
         ({ text, cursor }) => useEmojiAutocomplete(text, cursor),
         { initialProps: { text: ':he', cursor: 3 } }
       )
+      await settleDynamicImports()
 
       // Waiting for the active state proves the emoji data finished loading, so
       // the assertion below cannot pass merely because matching had not started.
@@ -107,6 +113,7 @@ describe('useEmojiAutocomplete', () => {
 
     it('should be active when colon and characters are typed at start of text after data loads', async () => {
       const { result } = renderHook(() => useEmojiAutocomplete(':+1', 3))
+      await settleDynamicImports()
 
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
@@ -117,6 +124,7 @@ describe('useEmojiAutocomplete', () => {
 
     it('should be active when colon is typed after whitespace after data loads', async () => {
       const { result } = renderHook(() => useEmojiAutocomplete('hello :hea', 10))
+      await settleDynamicImports()
       
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
@@ -276,6 +284,7 @@ describe('useEmojiAutocomplete', () => {
 
     it('should match and load mock emojis on active trigger', async () => {
       const { result } = renderHook(() => useEmojiAutocomplete(':hea', 4))
+      await settleDynamicImports()
       
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
@@ -291,6 +300,7 @@ describe('useEmojiAutocomplete', () => {
 
     it('should match multiple emojis by keyword', async () => {
       const { result } = renderHook(() => useEmojiAutocomplete(':lik', 4))
+      await settleDynamicImports()
       
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
@@ -399,6 +409,7 @@ describe('useEmojiAutocomplete', () => {
         ({ text, cursor }) => useEmojiAutocomplete(text, cursor),
         { initialProps: { text: ':he', cursor: 3 } }
       )
+      await settleDynamicImports()
       await waitFor(() => expect(result.current.state.isActive).toBe(true))
 
       for (const [text, cursor] of [[':hea', 4], [':hear', 5], [':heart', 6]] as const) {
@@ -417,6 +428,7 @@ describe('useEmojiAutocomplete', () => {
         ({ text: t, cursor: c }) => useEmojiAutocomplete(t, c),
         { initialProps: { text, cursor } }
       )
+      await settleDynamicImports()
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
       })
@@ -456,6 +468,7 @@ describe('useEmojiAutocomplete', () => {
   describe('selection and keyboard navigation', () => {
     it('should replace target string with selected emoji', async () => {
       const { result } = renderHook(() => useEmojiAutocomplete('check this :hea and continue', 15))
+      await settleDynamicImports()
       
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
@@ -468,6 +481,7 @@ describe('useEmojiAutocomplete', () => {
 
     it('leaves text and cursor unchanged for an invalid selection', async () => {
       const { result } = renderHook(() => useEmojiAutocomplete('say :hea later', 8))
+      await settleDynamicImports()
 
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
@@ -485,6 +499,7 @@ describe('useEmojiAutocomplete', () => {
 
     it('should allow cycle keyboard navigation', async () => {
       const { result } = renderHook(() => useEmojiAutocomplete(':lik', 4))
+      await settleDynamicImports()
       
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
@@ -513,6 +528,7 @@ describe('useEmojiAutocomplete', () => {
         ({ text, cursor }) => useEmojiAutocomplete(text, cursor),
         { initialProps: { text: ':hea', cursor: 4 } }
       )
+      await settleDynamicImports()
 
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
@@ -538,6 +554,7 @@ describe('useEmojiAutocomplete', () => {
         ({ text, cursor }) => useEmojiAutocomplete(text, cursor),
         { initialProps: { text: ':hea', cursor: 4 } }
       )
+      await settleDynamicImports()
 
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
@@ -558,6 +575,7 @@ describe('useEmojiAutocomplete', () => {
         ({ text, cursor }) => useEmojiAutocomplete(text, cursor),
         { initialProps: { text: ':hea', cursor: 4 } }
       )
+      await settleDynamicImports()
 
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
