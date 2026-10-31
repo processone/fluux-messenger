@@ -33,7 +33,7 @@ type Observation = {
   scrolls: ScrollReading[]; measurements: Measurement[]; forced: Measurement | null
 }
 type Capture = {
-  read: () => { cached: { index: number; size: number | null; mounted: boolean }[]; observed: number }
+  read: () => { cached: { index: number; size: number | null; mounted: boolean }[]; observed: number; processed: number }
   begin: () => Sample
   stop: () => Observation
 }
@@ -124,6 +124,7 @@ function installCapture(indices: number[]) {
       cached: targets.map(({ index, key }) => ({ index, size: core.itemSizeCache.get(key) ?? null,
         mounted: core.elementsCache.get(key)?.isConnected === true })),
       observed: data.measurements.filter(row => row.target && row.cached && row.oldSize !== null && row.size < row.oldSize && row.direction === 'backward' && row.layout !== null).length,
+      processed: new Set(data.measurements.filter(row => row.target && row.cached && row.oldSize !== null && row.size < row.oldSize).map(row => row.key)).size,
     }),
     begin: () => { data.start = sample(); lastTop = list.scrollTop; active = true; tick(); return data.start },
     stop: () => {
@@ -232,7 +233,10 @@ for (const kind of ['chat', 'room'] as const) {
       // Keep moving backward. Native windowing remounts the same cached row at its natural
       // smaller height; the probe records the real measurement decision, not a paused surrogate.
       await page.mouse.move(x, y - 20, { steps: 5 })
-      await page.waitForFunction(() => (window as unknown as CaptureWindow).nativePanCapture.read().observed >= 1, undefined, { polling: 'raf' })
+      await page.waitForFunction(count => {
+        const progress = (window as unknown as CaptureWindow).nativePanCapture.read()
+        return progress.observed >= 1 || progress.processed === count
+      }, warm.length, { polling: 'raf' })
       await page.evaluate(() => new Promise<void>(resolve => {
         let frames = 0
         const tick = () => ++frames >= 60 ? resolve() : requestAnimationFrame(tick)
