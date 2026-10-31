@@ -41,6 +41,10 @@ import SQLite3
         try require(sqlite3_open(root.appendingPathComponent("NotificationDiagnostic.sqlite").path, &blocker) == SQLITE_OK,
                     "open competing SQLite connection")
         defer { sqlite3_close(blocker) }
+        // FLM-313: in rollback-journal mode the competing COMMIT returns SQLITE_BUSY while any connection holds a
+        // shared lock, and the store's BEGIN IMMEDIATE retries take one briefly. Wait those out instead of
+        // failing. Lock-hold checks are taken before COMMIT, so this cannot hide a store that gives up early.
+        sqlite3_busy_timeout(blocker, 5_000)
         func sql(_ text: String) throws {
             try require(sqlite3_exec(blocker, text, nil, nil, nil) == SQLITE_OK, "competing transaction: \(text)")
         }
