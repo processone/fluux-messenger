@@ -5,7 +5,6 @@ import type { MessageVirtualizer } from './messageVirtualizer'
 // Frames the offset must hold steady before we declare scrolling settled and stop polling
 // (~100ms at 60fps — close to @tanstack's default 150ms isScrollingResetDelay).
 const OFFSET_POLL_IDLE_FRAMES = 6
-const suppressScrollAdjustment = () => false
 const ENTRY_OVERSCAN = 2
 const STEADY_OVERSCAN = 12
 
@@ -172,14 +171,30 @@ export function useTanstackMessageVirtualizer({
   const setScrollWriteObserver = useCallback<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>(
     observer => { writeObserverRef.current = observer }, [],
   )
-  // Which rows a resize compensates: the library's rule (rows above the viewport top), none while
-  // the caller owns the pixels, or the rows before a held anchor. See holdAnchor.
+  // Which rows a resize compensates: the library's fold rule, including shrink during backward
+  // motion, none while the caller owns the pixels, or rows before a held anchor. See holdAnchor.
   const adjustmentEnabledRef = useRef(true)
   const heldAnchorRef = useRef<string | null>(null)
   const indexByIdRef = useRef(indexById)
   indexByIdRef.current = indexById
-  const heldAnchorIndex = () =>
-    heldAnchorRef.current === null ? undefined : indexByIdRef.current.get(heldAnchorRef.current)
+  const heldAnchorIndex = useCallback(() =>
+    heldAnchorRef.current === null ? undefined : indexByIdRef.current.get(heldAnchorRef.current), [])
+  const shouldAdjustOnResize = useCallback<NonNullable<
+    Virtualizer<HTMLElement, Element>['shouldAdjustScrollPositionOnItemSizeChange']
+  >>((item, delta, instance) => {
+    if (!adjustmentEnabledRef.current) return false
+    // A held anchor compensates every preceding row, including rows in the viewport. An
+    // anchor absent from the current rows compensates nothing until the holder lets go.
+    const anchorIndex = heldAnchorIndex()
+    if (heldAnchorRef.current !== null) return anchorIndex !== undefined && item.index < anchorIndex
+    const offset = instance.scrollOffset ?? 0
+    // Mirror virtual-core's default fold/direction rule except for backward shrink; review this
+    // override when upgrading the library. The lazy layout can still carry an earlier size.
+    const end = item.start + (instance.itemSizeCache.get(item.key) ?? item.size)
+    return instance.itemSizeCache.has(item.key)
+      ? end <= offset && (delta < 0 || instance.scrollDirection !== 'backward')
+      : item.start < offset
+  }, [heldAnchorIndex])
   const retainedIndex = retainedId === null ? undefined : indexById.get(retainedId)
   const rangeExtractor = useCallback((range: Parameters<typeof defaultRangeExtractor>[0]) => {
     const indexes = defaultRangeExtractor(range)
@@ -287,11 +302,10 @@ export function useTanstackMessageVirtualizer({
       const prechecked = precheckedRef.current
       precheckedRef.current = null
       const refused = prechecked ? prechecked.refused : observer?.({ phase: 'before', source, behavior: options.behavior }) === false
-      // A measurement write carries the adjustment for a row that measured taller than its
-      // estimate above the reader. virtual-core folds that adjustment into its own scrollOffset
-      // and clears it as soon as it has called this function, whether or not the element moved,
-      // so skipping the write leaves its offset permanently ahead of the DOM and the reader
-      // stranded that many pixels above the live edge with nothing left to reconcile it (#1510).
+      // A measurement write carries a resize correction for content above the reader.
+      // virtual-core folds that adjustment into its own scrollOffset and clears it as soon as
+      // it has called this function, whether or not the element moved. Skipping the write leaves
+      // its layout offset out of sync with the DOM, with nothing left to reconcile it (#1510).
       // Suppressing an adjustment is done at `shouldAdjustScrollPositionOnItemSizeChange`, which
       // runs before anything is counted; refusing it here is not available to the observer.
       if (source !== 'measurement') {
@@ -359,18 +373,10 @@ export function useTanstackMessageVirtualizer({
     ...(initialMeasurementsCacheRef.current !== undefined ? { initialMeasurementsCache: initialMeasurementsCacheRef.current } : {}),
   })
 
-  // A held anchor stays still: a row before it that resizes moves the scroll position by the same
-  // amount, wherever it sits, so a row between the viewport top and the anchor (which the library
-  // leaves alone) cannot push the anchor down. An anchor that left the rows compensates nothing
-  // until the holder lets go.
-  const applyAdjustmentRule = () => {
-    virtualizer.shouldAdjustScrollPositionOnItemSizeChange = !adjustmentEnabledRef.current
-      ? suppressScrollAdjustment
-      : heldAnchorRef.current === null ? undefined
-      : (item) => {
-          const anchorIndex = heldAnchorIndex()
-          return anchorIndex !== undefined && item.index < anchorIndex
-        }
+  // Install the stable policy before initial row measurements. It reads live refs, so changing
+  // suppression or the held anchor needs no reassignment and no render to take effect.
+  if (virtualizer.shouldAdjustScrollPositionOnItemSizeChange !== shouldAdjustOnResize) {
+    virtualizer.shouldAdjustScrollPositionOnItemSizeChange = shouldAdjustOnResize
   }
 
   const getOffsetForMessageId = useCallback((id: string): number | null => {
@@ -461,11 +467,9 @@ export function useTanstackMessageVirtualizer({
     setScrollWriteObserver,
     setAutomaticScrollAdjustmentEnabled: (enabled) => {
       adjustmentEnabledRef.current = enabled
-      applyAdjustmentRule()
     },
     holdAnchor: (messageId) => {
       heldAnchorRef.current = messageId
-      applyAdjustmentRule()
     },
     getVirtualItems: () =>
       virtualizer.getVirtualItems().map((v) => ({ index: v.index, start: v.start, size: v.size, key: String(v.key) })),

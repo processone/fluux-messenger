@@ -227,7 +227,7 @@ it('keeps a held anchor still when a row between the viewport top and it resizes
   expect(onScreen('row-7')).toBe(300)
   expect(scroller.scrollTop).toBe(400)
 
-  // Disabled adjustment still wins over a hold, and a released hold is the library's rule again.
+  // Disabled adjustment still wins over a hold; releasing it restores the ordinary fold policy.
   act(() => {
     result.current.setAutomaticScrollAdjustmentEnabled!(false)
     between = 130

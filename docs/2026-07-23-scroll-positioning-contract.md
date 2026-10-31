@@ -86,6 +86,37 @@ event to consume once; a later layout or application destination cannot replace 
 A released keyboard input retains ownership of its matching later native scroll event until an
 independently observed layout change ends that causal chain.
 
+Native upward panning retains visible progress when a previously measured row entirely above
+the viewport shrinks. The virtualizer compensates that shrink even during backward scrolling,
+using the existing measurement writer and live-offset rebasing. Other library fold/direction rules
+remain unchanged: backward growth and remeasurements spanning the viewport top are not compensated.
+Explicit adjustment suppression and held-anchor rules still take precedence. One stable predicate
+reads those current refs; a row's end uses its latest measured size even before the lazy layout
+cache rebuilds. This adapter explicitly mirrors the library's ordinary fold/direction policy apart
+from backward shrink, so dependency upgrades must review that override. Ordinary-row metric
+sampling excludes whisper cards, whose borders and padding otherwise alternate the sampled width
+and chrome as rows enter the window, re-estimating unrelated offscreen rows without a resize.
+`e2e/scroll-native-pan.ts` exercises actual Chromium middle-click autoscroll in direct chats and
+rooms, with held, jitter-latched and middle-stopped journeys. Each case enlarges a measured
+overscan wrapper by the captured defect's delta and establishes the live edge before native input.
+The pointer then stays outside the dead zone and continues backward. A shallow, invisible fixture
+element uses real ResizeObserver delivery to schedule removal of the deeper row's constraint only
+when backward motion and a matching live offset are observed, away from the live-edge clamp region.
+The virtualizer's own real observer measures the resulting row shrink; neither its callback nor
+library state is fabricated. A forwarding probe separately verifies backward direction at the actual
+measurement call and records its cached key/size and resize-local visible geometry. The comparison
+must belong to that row's layout update, within two observed frames and without intervening
+unrelated size changes. A later unrelated shrink cannot supply that result. Continuous frame checks
+also retain stable message identity, order and viewport-relative placement rather than treating
+raw scroll offsets as reading progress. The wrapper constraint leaves ordinary text/chrome
+sampling alone. A paused shrink is not a substitute: the library can already compensate it, so it
+does not by itself demonstrate the backward-measurement defect.
+WebKit has no equivalent middle-click mode. The compensation also applies to other inputs and
+engines, but dedicated WebKit upward-wheel/momentum proof with a measured row shrinking above the
+reader is an explicitly accepted proof gap for this change. Existing shared WebKit measurement and
+reading regression coverage does not qualify that specific timing case. Broader estimate refresh
+from own-only width fallback or further chrome calibration remains separate from this correction.
+
 Automatic older/newer pagination requires that independently observed movement geometry reach
 the relevant boundary, subject to the directional coordinator's eligibility checks. Layout-only
 resize, typing, media growth, clamping, and delayed correction events supply no such evidence.

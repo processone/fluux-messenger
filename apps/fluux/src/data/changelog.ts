@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.18.2',
+    date: 'Unreleased',
+    sections: [{
+      type: 'fixed',
+      items: [
+        'Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter. Private messages in rooms no longer make surrounding messages jump as you scroll.',
+      ],
+    }],
+  },
+  {
     version: '0.18.1',
     date: '2026-10-28',
     sections: [{
