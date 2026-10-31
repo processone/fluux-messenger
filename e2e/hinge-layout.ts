@@ -13,6 +13,7 @@
  */
 import { test, expect, type Page } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
+import { waitForAnchorSettled } from './harness/scrollHarness'
 
 const DEMO_URL = '/demo.html?tutorial=false'
 const HINGE = 475.5
@@ -45,21 +46,243 @@ async function openConversation(page: Page, name: string, nav: 'messages' | 'roo
   await expect(page.locator('[data-conversation-column]')).toBeVisible()
 }
 
-/** Every visible control whose box comes within the hinge margin of the line along `axis`. */
+/** Every control whose rendered, unclipped box comes within the hinge margin along `axis`. */
 async function controlsNearHinge(page: Page, axis: 'x' | 'y') {
   return page.evaluate(({ axis, hinge, margin }) => {
     const selector = 'button, a[href], input, select, textarea, [contenteditable="true"], [role="button"], [role="separator"]'
     return [...document.querySelectorAll<HTMLElement>(selector)].flatMap((el) => {
       const r = el.getBoundingClientRect()
-      const style = getComputedStyle(el)
-      if (r.width === 0 || r.height === 0 || style.visibility === 'hidden' || el.closest('[inert]')) return []
-      if (r.right <= 0 || r.bottom <= 0 || r.left >= innerWidth || r.top >= innerHeight) return []
-      const [start, end] = axis === 'x' ? [r.left, r.right] : [r.top, r.bottom]
+      if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) || el.closest('[inert]')) return []
+      let left = Math.max(0, r.left)
+      let top = Math.max(0, r.top)
+      let right = Math.min(innerWidth, r.right)
+      let bottom = Math.min(innerHeight, r.bottom)
+      // Follow containing blocks, not just DOM parents: fixed menus can escape a scroller,
+      // and absolute children escape static clips before their positioned containing block.
+      let position = getComputedStyle(el).position
+      for (let ancestor = el.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        const style = getComputedStyle(ancestor)
+        const fixedBlock = style.transform !== 'none' || style.translate !== 'none'
+          || style.rotate !== 'none' || style.scale !== 'none' || style.filter !== 'none'
+          || style.perspective !== 'none' || style.transformStyle === 'preserve-3d'
+          || /\b(layout|paint|strict|content)\b/.test(style.contain)
+          || ['backdrop-filter', '-webkit-backdrop-filter'].some(property => {
+            const value = style.getPropertyValue(property)
+            return value !== '' && value !== 'none'
+          })
+          || style.willChange.split(',').some(property => {
+            const name = property.trim()
+            return ['transform', 'translate', 'rotate', 'scale', 'filter', 'perspective', 'backdrop-filter', 'contain'].includes(name)
+              || (name === '-webkit-backdrop-filter' && CSS.supports('-webkit-backdrop-filter', 'blur(0px)'))
+          })
+        if (position === 'fixed' && !fixedBlock) continue
+        if (position === 'absolute' && style.position === 'static' && !fixedBlock) continue
+        position = style.position
+        const clipX = ['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowX)
+        const clipY = ['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowY)
+        if (!clipX && !clipY) continue
+        const clip = ancestor.getBoundingClientRect()
+        const innerLeft = clip.left + ancestor.clientLeft
+        const innerTop = clip.top + ancestor.clientTop
+        if (clipX) {
+          left = Math.max(left, innerLeft)
+          right = Math.min(right, innerLeft + ancestor.clientWidth, clip.right - parseFloat(style.borderRightWidth))
+        }
+        if (clipY) {
+          top = Math.max(top, innerTop)
+          bottom = Math.min(bottom, innerTop + ancestor.clientHeight, clip.bottom - parseFloat(style.borderBottomWidth))
+        }
+      }
+      if (right <= left || bottom <= top) return []
+      const [start, end] = axis === 'x' ? [left, right] : [top, bottom]
       if (end <= hinge - margin || start >= hinge + margin) return []
       return [`${el.tagName.toLowerCase()} "${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 40)}" ${start.toFixed(1)}-${end.toFixed(1)}`]
     })
   }, { axis, hinge: HINGE, margin: MARGIN })
 }
+
+async function probeIsNear(page: Page, axis: 'x' | 'y') {
+  return (await controlsNearHinge(page, axis)).some(control => control.includes('Hinge attachment probe'))
+}
+
+/** A stable copy of the real demo attachment and its clipping scroller, without virtualizer movement. */
+async function hingeControlFixture(page: Page, axis: 'x' | 'y') {
+  await bootDemo(page, DEMO_URL)
+  await openConversation(page, 'Emma Wilson')
+  const attachment = page.locator('.message-row button').filter({ has: page.locator('img') }).first()
+  await expect(attachment).toBeVisible()
+  await attachment.evaluate((source, { axis, hinge, margin }) => {
+    const scroller = source.closest('.overflow-y-auto')!
+    const bounds = scroller.getBoundingClientRect()
+    const controlBounds = source.getBoundingClientRect()
+    const clip = scroller.cloneNode(false) as HTMLElement
+    clip.id = 'hinge-control-clip'
+    // Use real app markup and measured dimensions, but place its edge outside the band.
+    Object.assign(clip.style, {
+      position: 'fixed', left: `${bounds.left}px`, top: `${bounds.top}px`,
+      width: `${bounds.width}px`, height: `${bounds.height}px`, padding: '0', zIndex: '100',
+      [axis === 'x' ? 'width' : 'height']: `${hinge - margin - (axis === 'x' ? bounds.left : bounds.top)}px`,
+    })
+    const control = source.cloneNode(true) as HTMLElement
+    control.setAttribute('aria-label', 'Hinge attachment probe')
+    Object.assign(control.style, {
+      position: 'absolute', left: '0', top: '0', margin: '0',
+      width: `${controlBounds.width}px`, height: `${controlBounds.height}px`,
+      [axis === 'x' ? 'left' : 'top']: `${hinge - 2 * margin - (axis === 'x' ? bounds.left : bounds.top)}px`,
+    })
+    clip.append(control)
+    document.body.append(clip)
+  }, { axis, hinge: HINGE, margin: MARGIN })
+}
+
+test.describe('visible hinge control measurement (FLM-306)', () => {
+  test.use({ viewport: PORTRAIT })
+
+  for (const axis of ['x', 'y'] as const) {
+    test(`counts only the unclipped portion of a control on ${axis}`, async ({ page }) => {
+      // FLM-306: a real attachment's box crossed the hinge, but its scroller ended before it.
+      await hingeControlFixture(page, axis)
+      expect(await probeIsNear(page, axis)).toBe(false)
+
+      // Expose only part of the control inside the band: clipping must not hide this crossing.
+      const clip = page.locator('#hinge-control-clip')
+      await clip.evaluate((el, { axis, hinge }) => {
+        const bounds = el.getBoundingClientRect()
+        el.style[axis === 'x' ? 'width' : 'height'] = `${hinge - (axis === 'x' ? bounds.left : bounds.top)}px`
+      }, { axis, hinge: HINGE })
+      expect(await probeIsNear(page, axis)).toBe(true)
+
+      // A visible overflow axis must not be clipped just because the other axis clips.
+      await clip.evaluate((el, axis) => {
+        el.style.overflowX = axis === 'x' ? 'visible' : 'clip'
+        el.style.overflowY = axis === 'y' ? 'visible' : 'clip'
+        el.style[axis === 'x' ? 'width' : 'height'] = '1px'
+      }, axis)
+      expect(await probeIsNear(page, axis)).toBe(true)
+    })
+
+    test(`reports fixed controls escaping a scroller on ${axis}`, async ({ page }) => {
+      // FLM-308 F2: fixed menus can escape overflow ancestors that do not contain them.
+      await hingeControlFixture(page, axis)
+      const clip = page.locator('#hinge-control-clip')
+      const probe = clip.getByRole('button', { name: 'Hinge attachment probe' })
+      await probe.evaluate((el, { axis, start }) => {
+        Object.assign(el.style, { position: 'fixed', left: '20px', top: '20px' })
+        el.style[axis === 'x' ? 'left' : 'top'] = `${start}px`
+      }, { axis, start: HINGE - 2 * MARGIN })
+      expect(await probeIsNear(page, axis)).toBe(true)
+
+      // These properties re-establish a fixed containing block, so its overflow clips again.
+      for (const [property, value] of [
+        ['transform', 'translate(0px)'], ['translate', '0px'], ['filter', 'blur(0px)'],
+        ['perspective', '1000px'], ['contain', 'layout'], ['contain', 'paint'],
+        ['will-change', 'transform'],
+        // FLM-308 N2: frosted modal panels and their scrims also contain fixed controls.
+        ['backdrop-filter', 'blur(0px)'], ['-webkit-backdrop-filter', 'blur(0px)'],
+        ['transform-style', 'preserve-3d'], ['will-change', 'backdrop-filter'],
+        ['will-change', '-webkit-backdrop-filter'], ['will-change', 'contain'],
+      ] as const) {
+        await test.step(`${property}: ${value} contains the fixed control when supported`, async () => {
+          const supported = await page.evaluate(({ property, value }) =>
+            CSS.supports(property, value) && (property !== 'will-change' || value !== '-webkit-backdrop-filter'
+              || CSS.supports('-webkit-backdrop-filter', 'blur(0px)')), { property, value })
+          await clip.evaluate((el, { property, value }) => { el.style.setProperty(property, value) }, { property, value })
+          if (!supported) {
+            // Chromium accepts arbitrary will-change words, but ignores WebKit's blur alias.
+            expect(await probeIsNear(page, axis)).toBe(true)
+            await clip.evaluate((el, property) => { el.style.removeProperty(property) }, property)
+            return
+          }
+          await probe.evaluate((el, { axis, start }) => {
+            const clip = el.parentElement!.getBoundingClientRect()
+            el.style[axis === 'x' ? 'left' : 'top'] = `${start - (axis === 'x' ? clip.left : clip.top)}px`
+          }, { axis, start: HINGE - 2 * MARGIN })
+          const bounds = (await probe.boundingBox())!
+          expect(bounds[axis]).toBeCloseTo(HINGE - 2 * MARGIN, 0)
+          expect(await probeIsNear(page, axis)).toBe(false)
+          await clip.evaluate((el, property) => { el.style.removeProperty(property) }, property)
+          await probe.evaluate((el, { axis, start }) => {
+            el.style[axis === 'x' ? 'left' : 'top'] = `${start}px`
+          }, { axis, start: HINGE - 2 * MARGIN })
+          expect(await probeIsNear(page, axis)).toBe(true)
+        })
+      }
+
+      // A static button inside a fixed menu must escape the same clips as a fixed button.
+      await probe.evaluate(el => {
+        const bounds = el.getBoundingClientRect()
+        const menu = document.createElement('div')
+        Object.assign(menu.style, {
+          position: 'fixed', left: `${bounds.left}px`, top: `${bounds.top}px`,
+          width: `${bounds.width}px`, height: `${bounds.height}px`,
+        })
+        el.replaceWith(menu)
+        menu.append(el)
+        el.style.position = 'static'
+      })
+      expect(await probeIsNear(page, axis)).toBe(true)
+    })
+
+    test(`reports absolute controls escaping a static clip on ${axis}`, async ({ page }) => {
+      // FLM-308 F2: static overflow ancestors between an absolute child and its block do not clip it.
+      await hingeControlFixture(page, axis)
+      const clip = page.locator('#hinge-control-clip')
+      await clip.evaluate(el => {
+        const bounds = el.getBoundingClientRect()
+        const block = document.createElement('div')
+        Object.assign(block.style, {
+          position: 'fixed', left: `${bounds.left}px`, top: `${bounds.top}px`,
+          width: `${bounds.width}px`, height: `${bounds.height}px`, zIndex: '100',
+        })
+        el.replaceWith(block)
+        block.append(el)
+        Object.assign(el.style, { position: 'static', left: 'auto', top: 'auto' })
+      })
+      expect(await probeIsNear(page, axis)).toBe(true)
+      await clip.evaluate(el => { el.style.position = 'relative' })
+      expect(await probeIsNear(page, axis)).toBe(false)
+    })
+
+    test(`ignores a transparent ancestor, not a translucent one, on ${axis}`, async ({ page }) => {
+      // FLM-306's visible-controls contract also applies to hidden message-toolbar ancestors.
+      await hingeControlFixture(page, axis)
+      const clip = page.locator('#hinge-control-clip')
+      await clip.evaluate(el => { el.style.overflow = 'visible'; el.style.opacity = '0' })
+      expect(await probeIsNear(page, axis)).toBe(false)
+      await clip.evaluate(el => { el.style.opacity = '0.5' })
+      expect(await probeIsNear(page, axis)).toBe(true)
+    })
+  }
+})
+
+test.describe('fixed image menu measurement (FLM-308 F2)', () => {
+  test.use({ viewport: PORTRAIT })
+
+  test('reports the real image menu crossing outside the folded scroller', async ({ page }) => {
+    await bootDemo(page, DEMO_URL)
+    await openConversation(page, 'Emma Wilson')
+    await setHinge(page, 'folded', { y: HINGE })
+    await expect.poll(async () => {
+      const bounds = (await page.locator('[data-conversation-column] > .focus-zone').boundingBox())!
+      return bounds.y + bounds.height
+    }).toBeCloseTo(HINGE - MARGIN, 0)
+    const image = page.locator('.message-row button').filter({ has: page.locator('img') }).first()
+    // Folding repositions the anchor; opening before that settles correctly dismisses the menu.
+    const anchorId = await image.evaluate(el => el.closest('[data-message-id]')!.getAttribute('data-message-id')!)
+    expect(await waitForAnchorSettled(page, anchorId)).not.toBeNull()
+    // Open the real menu at controlled coordinates; this tests measurement, not pointer targeting.
+    await image.evaluate((el, y) => el.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: 100, clientY: y, button: 2,
+    })), HINGE - 2 * MARGIN)
+    const copy = page.getByRole('button', { name: 'Copy image URL', exact: true })
+    await expect(copy).toBeVisible()
+    const bounds = (await copy.boundingBox())!
+    expect(bounds.y).toBeLessThan(HINGE + MARGIN)
+    expect(bounds.y + bounds.height).toBeGreaterThan(HINGE - MARGIN)
+    expect((await controlsNearHinge(page, 'y')).some(control => control.includes('Copy image URL'))).toBe(true)
+    await page.screenshot({ path: test.info().outputPath('fixed-image-menu-crossing.png') })
+  })
+})
 
 test.describe('half open in landscape', () => {
   test.use({ viewport: LANDSCAPE })
