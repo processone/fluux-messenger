@@ -98,8 +98,9 @@ sampling excludes whisper cards, whose borders and padding otherwise alternate t
 and chrome as rows enter the window, re-estimating unrelated offscreen rows without a resize.
 `e2e/scroll-native-pan.ts` exercises actual Chromium middle-click autoscroll in direct chats and
 rooms, with held, jitter-latched and middle-stopped journeys. Each case enlarges six measured
-overscan wrappers by the captured defect's delta. Ordinary arrivals move them out of the mounted
-window while their larger measurements remain cached; temporary DOM constraints disappear with
+overscan wrappers by the captured defect's delta. Ordinary arrivals and deliberate live-edge
+navigation move them out of the mounted window while their larger measurements remain cached;
+temporary DOM constraints disappear with
 the old nodes. One sustained native backward journey then remounts those rows at their natural
 smaller heights. A forwarding measurement probe records actual cached sizes, measurement direction
 and resize-local visible geometry without changing library state or driving the scroll. Measurements

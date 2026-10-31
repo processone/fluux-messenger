@@ -47,6 +47,7 @@ function installCapture(indices: number[]) {
     scrollElement: HTMLElement; scrollOffset: number | null; scrollDirection: string | null
     resizeItem: (index: number, size: number) => void
     itemSizeCache: Map<unknown, number>
+    elementsCache: Map<unknown, HTMLElement>
     measurementsCache: { start: number; size: number }[]
     options: { getItemKey: (index: number) => unknown }
   }
@@ -64,7 +65,8 @@ function installCapture(indices: number[]) {
   }
   if (!found) throw new Error('Actual virtualizer measurement instance not found; no inferred attribution')
   const core = found
-  const keys = new Set(indices.map(index => core.options.getItemKey(index)))
+  const targets = indices.map(index => ({ index, key: core.options.getItemKey(index) }))
+  const keys = new Set(targets.map(target => target.key))
   const sample = (): Sample => {
     const view = list.getBoundingClientRect()
     const anchors = [...list.querySelectorAll<HTMLElement>('.message-row')].map(row => {
@@ -119,8 +121,8 @@ function installCapture(indices: number[]) {
   const tick = () => { if (active) { frameNumber++; data.samples.push(sample()); layout(); frame = requestAnimationFrame(tick) } }
   ;(window as unknown as CaptureWindow).nativePanCapture = {
     read: () => ({
-      cached: indices.map(index => ({ index, size: core.itemSizeCache.get(core.options.getItemKey(index)) ?? null,
-        mounted: list.querySelector(`[data-index="${index}"]`)?.isConnected === true })),
+      cached: targets.map(({ index, key }) => ({ index, size: core.itemSizeCache.get(key) ?? null,
+        mounted: core.elementsCache.get(key)?.isConnected === true })),
       observed: data.measurements.filter(row => row.target && row.cached && row.oldSize !== null && row.size < row.oldSize && row.direction === 'backward' && row.layout !== null).length,
     }),
     begin: () => { data.start = sample(); lastTop = list.scrollTop; active = true; tick(); return data.start },
@@ -213,6 +215,9 @@ for (const kind of ['chat', 'room'] as const) {
       // One continuous journey crosses several known cached rows. Offset synchronization may
       // clear a particular measurement's direction; keep it as a control, never backward proof.
       await arrive(page, kind, Array.from({ length: 12 }, (_, i) => `${mode}-window-${i}`))
+      // Warming several rows can leave the reader away from the live edge. Use the app's
+      // deliberate navigation before arming, rather than assuming arrivals follow automatically.
+      await page.keyboard.press('End')
       await expect.poll(() => page.evaluate(() => (window as unknown as CaptureWindow).nativePanCapture.read().cached))
         .toEqual(warm.map(row => ({ index: row.index, size: row.height + shrink, mounted: false })))
       await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
