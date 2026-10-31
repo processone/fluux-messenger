@@ -97,16 +97,15 @@ from backward shrink, so dependency upgrades must review that override. Ordinary
 sampling excludes whisper cards, whose borders and padding otherwise alternate the sampled width
 and chrome as rows enter the window, re-estimating unrelated offscreen rows without a resize.
 `e2e/scroll-native-pan.ts` exercises actual Chromium middle-click autoscroll in direct chats and
-rooms, with held, jitter-latched and middle-stopped journeys. Each case enlarges six measured
-overscan wrappers by the captured defect's delta. Ordinary arrivals and deliberate live-edge
-navigation move them out of the mounted window while their larger measurements remain cached;
-temporary DOM constraints disappear with
-the old nodes. During one sustained native backward journey, cached rows re-enter the mounted
-window at their natural smaller heights. A forwarding measurement probe records actual cached sizes, measurement direction
-and resize-local visible geometry without changing library state or driving the scroll. Measurements
-whose direction was cleared by offset synchronization remain controls, not backward-shrink proof.
-Every case requires at least one programmed cached shrink with actual backward direction and checks
-every such shrink at its own layout update, within two observed frames and without intervening
+rooms, with held, jitter-latched and middle-stopped journeys. Each case enlarges a measured
+overscan wrapper by the captured defect's delta and establishes the live edge before native input.
+The pointer then stays outside the dead zone and continues backward. A shallow, invisible fixture
+element uses real ResizeObserver delivery to schedule removal of the deeper row's constraint only
+when backward motion and a matching live offset are observed, away from the live-edge clamp region.
+The virtualizer's own real observer measures the resulting row shrink; neither its callback nor
+library state is fabricated. A forwarding probe separately verifies backward direction at the actual
+measurement call and records its cached key/size and resize-local visible geometry. The comparison
+must belong to that row's layout update, within two observed frames and without intervening
 unrelated size changes. A later unrelated shrink cannot supply that result. Continuous frame checks
 also retain stable message identity, order and viewport-relative placement rather than treating
 raw scroll offsets as reading progress. The wrapper constraint leaves ordinary text/chrome
