@@ -206,9 +206,13 @@ async function setup(page: Page, kind: Kind) {
   await page.locator('[data-message-list]').waitFor()
   await arrive(page, kind, Array.from({ length: 45 }, (_, i) => `interaction-seed-${i}`))
   await arrive(page, kind, [targetId], true)
-  await page.keyboard.press('End')
   const target = page.locator(`.message-row[data-message-id="${targetId}"]`)
   await expect(target).toBeInViewport()
+  // FLM-230: warmup arrivals require ordinary following, not the deliberate hover hold.
+  // Place the pointer before explicit latest; keep the native pan and resize journey unchanged.
+  await target.locator('[data-message-body]').hover()
+  await page.keyboard.press('End')
+  await expect(page.locator('[data-message-list]')).not.toHaveAttribute('data-message-interaction')
   await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
   expect(await waitForTopVisibleSettled(page), 'the initial view must settle').not.toBeNull()
   return target
@@ -218,7 +222,6 @@ for (const kind of ['chat', 'room'] as const) {
   for (const mode of ['held', 'jitter-latched', 'middle-stopped'] as const) {
     test(`${kind}: ${mode} native upward pan keeps visible progress through remeasurement`, async ({ page }) => {
       const target = await setup(page, kind)
-      await target.locator('[data-message-body]').hover()
       const box = (await target.locator('[data-message-body]').boundingBox())!
       const x = box.x + 180, y = box.y + 12
       await arrive(page, kind, Array.from({ length: 12 }, (_, i) => `${mode}-${i}`))
