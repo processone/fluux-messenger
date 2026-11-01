@@ -30,6 +30,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::Write as _;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::State;
 use tokio::sync::{Mutex as AsyncMutex, OnceCell as AsyncOnceCell, OwnedMutexGuard};
@@ -176,9 +177,10 @@ mod notification_subkeys;
 /// Every account has an [`AsyncOnceCell<UnlockOutcome>`]: the first
 /// `ensure_key` or `prewarm` caller for a given JID runs the unlock; any
 /// concurrent caller waits its turn and reuses that cell's outcome instead
-/// of running a second KDF. On error the cell is evicted so a subsequent
-/// attempt starts fresh (e.g. after the user fixes a vanished `.pass`
-/// fallback file).
+/// of running a second KDF. A failure reaches the callers already waiting
+/// too, unless a forget, import or rotation took a turn after they asked.
+/// On error the cell is evicted so a subsequent attempt starts fresh (e.g.
+/// after the user fixes a vanished `.pass` fallback file).
 ///
 /// # Per-account lifecycle order
 ///
@@ -199,8 +201,8 @@ pub struct OpenpgpState {
     /// should join; absent = no attempt started yet. Cells carrying `Err`
     /// are evicted after observation so the next caller retries.
     entries: Mutex<HashMap<String, Arc<AsyncOnceCell<UnlockOutcome>>>>,
-    /// Per-JID lifecycle lock; see the type's lifecycle order section.
-    lifecycle: AsyncMutex<HashMap<String, Arc<AsyncMutex<()>>>>,
+    /// Per-JID lifecycle turn; see the type's lifecycle order section.
+    lifecycle: AsyncMutex<HashMap<String, Arc<AccountTurn>>>,
     storage: Arc<KeyStorage>,
     /// Test-only instrumentation: how many times the blocking KDF path
     /// actually ran. Concurrent `ensure_key` calls must coalesce to one
@@ -212,6 +214,16 @@ pub struct OpenpgpState {
 /// Shared result type stored in each [`AsyncOnceCell`]. `Clone` so
 /// multiple awaiters can each take a copy without another KDF round.
 type UnlockOutcome = Result<KeyBundle, String>;
+
+/// One account's place in line for lifecycle work.
+#[derive(Default)]
+struct AccountTurn {
+    /// Granted in request order; waiting for it yields.
+    lock: Arc<AsyncMutex<()>>,
+    /// Turns taken by forget, import and rotation, which replace the key or
+    /// its cached cell. A waiting unlock compares it before sharing a failure.
+    changes: AtomicU64,
+}
 
 impl OpenpgpState {
     /// Production constructor — persists keys under
@@ -262,10 +274,21 @@ impl OpenpgpState {
         account_jid: String,
         user_id: String,
     ) -> Result<KeyBundle, String> {
+        let account = self.account_turn(&account_jid).await;
+        // The attempt this call joins, and the changes made before it asked.
+        let changes = account.changes.load(Ordering::SeqCst);
+        let joined = self.cell_for(&account_jid);
         // Held through the cell, the unlock and an error eviction. The blocking
         // worker keeps its own share, so a caller that stops waiting cannot
         // release the turn while the unlock still loads or saves.
-        let turn = Arc::new(self.lifecycle(&account_jid).await);
+        let turn = Arc::new(Arc::clone(&account.lock).lock_owned().await);
+        // A caller that waited on a failed unlock shares its error instead of
+        // repeating the KDF, unless a forget, import or rotation ran since.
+        if account.changes.load(Ordering::SeqCst) == changes {
+            if let Some(Err(error)) = joined.get() {
+                return Err(error.clone());
+            }
+        }
         let cell = self.cell_for(&account_jid);
 
         let storage = Arc::clone(&self.storage);
@@ -411,7 +434,7 @@ impl OpenpgpState {
     /// lock yields; the state lock, file I/O and authorization run on the
     /// blocking pool, never on the command's event-loop thread.
     pub async fn forget_account(self: &Arc<Self>, account_jid: &str) -> Result<(), String> {
-        let lifecycle = self.lifecycle(account_jid).await;
+        let lifecycle = self.change_turn(account_jid).await;
         let state = Arc::clone(self);
         let account_jid = account_jid.to_owned();
         tauri::async_runtime::spawn_blocking(move || {
@@ -464,7 +487,7 @@ impl OpenpgpState {
         passphrase: String,
         without_migration: bool,
     ) -> Result<KeyBundle, String> {
-        let lifecycle = self.lifecycle(&account_jid).await;
+        let lifecycle = self.change_turn(&account_jid).await;
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
             let _lifecycle = lifecycle;
@@ -545,7 +568,7 @@ impl OpenpgpState {
         selected_fingerprint: String,
         without_migration: bool,
     ) -> Result<KeyBundle, String> {
-        let lifecycle = self.lifecycle(&account_jid).await;
+        let lifecycle = self.change_turn(&account_jid).await;
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
             let _lifecycle = lifecycle;
@@ -606,7 +629,7 @@ impl OpenpgpState {
         self: &Arc<Self>,
         account_jid: String,
     ) -> Result<KeyBundle, String> {
-        let lifecycle = self.lifecycle(&account_jid).await;
+        let lifecycle = self.change_turn(&account_jid).await;
         let bundle = self.read_cached_bundle(&account_jid, "account")?;
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
@@ -646,16 +669,24 @@ impl OpenpgpState {
 
     // ---- internals ----------------------------------------------------
 
-    /// Wait, in request order, for this account's earlier lifecycle work.
-    async fn lifecycle(&self, account_jid: &str) -> OwnedMutexGuard<()> {
-        let lock = Arc::clone(
+    /// This account's place in line, created on first use.
+    async fn account_turn(&self, account_jid: &str) -> Arc<AccountTurn> {
+        Arc::clone(
             self.lifecycle
                 .lock()
                 .await
                 .entry(account_jid.to_owned())
                 .or_default(),
-        );
-        lock.lock_owned().await
+        )
+    }
+
+    /// Wait, in request order, for this account's earlier lifecycle work, and
+    /// record a turn that replaces the key or its cached cell.
+    async fn change_turn(&self, account_jid: &str) -> OwnedMutexGuard<()> {
+        let account = self.account_turn(account_jid).await;
+        let turn = Arc::clone(&account.lock).lock_owned().await;
+        account.changes.fetch_add(1, Ordering::SeqCst);
+        turn
     }
 
     /// Get-or-insert the per-JID cell. The returned `Arc` is cheap to
@@ -743,7 +774,7 @@ impl OpenpgpState {
         let accounts = self.lifecycle.try_lock().expect("the turn map is free");
         accounts
             .get(account_jid)
-            .is_some_and(|turn| turn.try_lock().is_err())
+            .is_some_and(|account| account.lock.try_lock().is_err())
     }
 
     /// Test helper — synchronous wrapper around the async `ensure_key`.
