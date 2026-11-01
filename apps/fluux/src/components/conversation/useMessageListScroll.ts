@@ -1202,7 +1202,9 @@ export function useMessageListScroll({
     if (virtualizerRef.current || adjustment === 0) return false
     return positioningControllerRef.current?.preserveReadingLayout(id, () => {
       scroller.scrollTop += adjustment
-      session.recordProgrammaticWrite(id, Date.now(), readViewportGeometry(scroller, session.observedRowIdFor(id)))
+      const geometry = readViewportGeometry(scroller, session.observedRowIdFor(id))
+      session.recordProgrammaticWrite(id, Date.now(), geometry)
+      return geometry.height - geometry.top - geometry.client < 1
     }) ?? false
   }
   const virtualizerWriteObserverRef = useRef<Parameters<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>[0]>(undefined)
@@ -1219,7 +1221,9 @@ export function useMessageListScroll({
       if (active && positioningControllerRef.current?.snapshot().active !== active) return false
       if (write.source === 'reconcile' && movement?.userDelta) return false
     } else {
-      session.recordProgrammaticWrite(id, Date.now(), readViewportGeometry(scroller, session.observedRowIdFor(id)))
+      const geometry = readViewportGeometry(scroller, session.observedRowIdFor(id))
+      session.recordProgrammaticWrite(id, Date.now(), geometry)
+      positioningControllerRef.current?.observeInteractionLayout(id, geometry.height - geometry.top - geometry.client < 1)
     }
   }
   useLayoutEffect(() => {

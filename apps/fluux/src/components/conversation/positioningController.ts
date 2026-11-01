@@ -661,6 +661,8 @@ export interface UserScrollInput extends ViewportInput {
 export class PositioningController {
   private currentModel: PositioningModel = initialPositioningModel()
   private interactionWasFollowing = false
+  // Input can end before its layout compensation; keep eligibility with this position generation.
+  private interactionCanSettleBottom = false
 
   constructor(
     private readonly onMessageTargetOwnership?: (owned: boolean) => void,
@@ -677,6 +679,10 @@ export class PositioningController {
     const wasOwned = this.ownsPositionTarget()
     const wasHeld = this.hasInteractionHold()
     const previousTarget = this.currentModel.active?.request.desired
+    if (model.currentConversationId !== this.currentModel.currentConversationId ||
+      model.active?.request.generation !== this.currentModel.active?.request.generation) {
+      this.interactionCanSettleBottom = false
+    }
     this.currentModel = model
     if (wasHeld && !this.hasInteractionHold()) this.onInteractionEnd?.()
     const owned = this.ownsPositionTarget()
@@ -790,14 +796,24 @@ export class PositioningController {
     })
   }
 
-  preserveReadingLayout(conversationId: string, apply: () => void): boolean {
+  preserveReadingLayout(conversationId: string, apply: () => boolean): boolean {
     const active = this.model.active
     if (
       this.model.currentConversationId !== conversationId || this.ownsPositionTarget() ||
       (active && (active.phase.kind !== 'settled' || active.request.desired.kind === 'live-edge'))
     ) return false
-    apply()
+    const atLiveEdge = apply()
+    this.observeInteractionLayout(conversationId, atLiveEdge)
     return true
+  }
+
+  /** An applied correction can finish an eligible input after the gesture itself ended. */
+  observeInteractionLayout(conversationId: string, atLiveEdge: boolean): void {
+    if (!this.interactionCanSettleBottom || !atLiveEdge || this.isInputHeld(conversationId)) return
+    const active = this.model.active
+    if (active?.request.conversationId !== conversationId ||
+      active.request.source.kind !== 'interaction' || active.request.source.reason !== 'released') return
+    this.observeSettledUserGeometry({ conversationId, generation: active.request.generation, atLiveEdge: true })
   }
   private targetTakeover: {
     conversationId: string
@@ -825,8 +841,6 @@ export class PositioningController {
      */
     deferred: { rearmEligibleFromGeometry: boolean } | null
     lastInputAt: number
-    /** Upward motion can begin after keyup; its old bottom is not a return to latest. */
-    canSettleBottom: boolean
   } | null = null
   /** A re-pin refused under held input, owed once that input ends. */
   private deferredLiveEdge: { conversationId: string; rearmEligibleFromGeometry: boolean } | null = null
@@ -1708,7 +1722,7 @@ export class PositioningController {
         if (this.heldInput?.conversationId === conversationId) {
           this.heldInput.lastInputAt = Date.now()
           if (input && input.deltaY !== 0) {
-            this.heldInput.canSettleBottom = input.deltaY > 0 || input.geometry.top <= 0
+            this.interactionCanSettleBottom = input.deltaY > 0 || input.geometry.top <= 0
           }
         }
         const active = this.model.active
@@ -1823,6 +1837,8 @@ export class PositioningController {
   }
 
   observeUserScroll(conversationId: string, delta: number, atLiveEdge = false): void {
+    // A newer upward pixel invalidates earlier downward intent, even after input-end.
+    if (delta < 0 && this.model.currentConversationId === conversationId) this.interactionCanSettleBottom = false
     if (delta !== 0 && this.heldInput?.conversationId === conversationId && this.heldInput.deferred) {
       this.heldInput.deferred.rearmEligibleFromGeometry = false
     }
@@ -1863,7 +1879,8 @@ export class PositioningController {
     if (this.heldInput?.conversationId === conversationId) {
       this.heldInput.lastInputAt = Date.now()
     } else {
-      this.heldInput = { conversationId, deferred: null, lastInputAt: Date.now(), canSettleBottom: false }
+      this.heldInput = { conversationId, deferred: null, lastInputAt: Date.now() }
+      if (this.model.currentConversationId === conversationId) this.interactionCanSettleBottom = false
     }
   }
 
@@ -1873,14 +1890,7 @@ export class PositioningController {
       if (held.deferred) this.deferredLiveEdge = { conversationId, ...held.deferred }
       this.heldInput = null
     }
-    const released = this.model.active
-    if (held?.conversationId === conversationId && held.canSettleBottom && atLiveEdge &&
-      released?.request.conversationId === conversationId &&
-      released.request.source.kind === 'interaction' && released.request.source.reason === 'released') {
-      // A boundary wheel/key can end the hold without moving or emitting scroll. Resolve that
-      // unchanged true-bottom geometry through the same path as an actual return to latest.
-      this.observeSettledUserGeometry({ conversationId, generation: released.request.generation, atLiveEdge: true })
-    }
+    if (held?.conversationId === conversationId) this.observeInteractionLayout(conversationId, atLiveEdge)
     if (atLiveEdge && this.hasUnreadMarkerHold(conversationId)) {
       this.unreadMarkerHold = null
       this.observeSettledUserGeometry({

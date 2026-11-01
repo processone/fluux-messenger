@@ -351,8 +351,11 @@ a settled fixed position; a deliberate scroll, own send or explicit jump takes p
 panels before moving. A manual takeover cannot rearm from the usual near-bottom band alone: actual
 bottom geometry or explicit latest navigation is required. Directed input that ends at the unchanged
 true bottom settles the released hold there even when no scroll event fires, so later arrivals still
-follow. Upward input does not rearm at its pre-motion bottom; its first upward pixel remains reading
-intent. Scrolling away while held, including within the ordinary 150px band, keeps the reading position.
+follow. Eligible input retains that settlement intent when its applied layout compensation lands later:
+non-virtualized compensation and virtualizer after-write observations re-check the true bottom after
+input ends. Upward movement or a new position generation invalidates the pending intent; layout alone
+and an ongoing gesture cannot arm following. Upward input does not rearm at its pre-motion bottom;
+its first upward pixel remains reading intent. Scrolling away while held, including within the ordinary 150px band, keeps the reading position.
 Blur and target removal use the same saved following policy after closing panels. Conversation departure, disabling and teardown clear ownership
 without resuming the departed interaction. Touch action sheets and static previews do not acquire this hold.
 
