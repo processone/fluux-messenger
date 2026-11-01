@@ -1213,8 +1213,10 @@ test.describe('Typing indicator never covers message text', () => {
     })
   }
 
-  for (const { width, virtualized } of [900, 1280].flatMap(width => [false, true].map(virtualized => ({ width, virtualized })))) {
-    test(`typing after jumping to the last message keeps that message visible (${width}px, virtualized: ${virtualized})`, async ({ page }, testInfo) => {
+  for (const { width, virtualized, interaction } of [900, 1280].flatMap(width =>
+    [false, true].flatMap(virtualized => ['ordinary', 'held'].map(interaction => ({ width, virtualized, interaction }))),
+  )) {
+    test(`typing after jumping to the last message keeps that message visible (${width}px, virtualized: ${virtualized}, interaction: ${interaction})`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 700 })
       await loadDemo(page)
       await page.evaluate((enabled) => {
@@ -1274,9 +1276,8 @@ test.describe('Typing indicator never covers message text', () => {
       expect(appended.dist, 'layout correction must not start following later messages').toBeGreaterThan(20)
       expect(appended.belowFold, 'the selected message must retain its reading position').toBe(after.belowFold)
 
-      // "Hold during interaction": place the pointer before explicit navigation so this
-      // ordinary target-growth control cannot acquire a message hold after navigation.
-      // The separate held-reader case owns preservation inside the near-bottom band.
+      // Both ordinary and held readers recover following when downward input plus delayed
+      // compensation reaches the true bottom. Upward reading inside the band is a separate case.
       const list = page.locator('[data-message-list]').first()
       await list.hover()
       await page.evaluate(() => {
@@ -1289,14 +1290,19 @@ test.describe('Typing indicator never covers message text', () => {
       await page.waitForTimeout(SETTLE_MS)
       const retargeted = await measureGlued(page, 'after-target-resize')
       expect(retargeted.dist).toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
+      if (interaction === 'held') {
+        await list.locator('[data-message-id="after-target-resize"]').hover({ position: { x: 100, y: 12 } })
+        await expect(list).toHaveAttribute('data-message-interaction')
+      }
       const interactionBeforeWheel = await list.getAttribute('data-message-interaction')
-      expect(interactionBeforeWheel, 'ordinary follow recovery must not start from a message hold').toBeNull()
+      if (interaction === 'held') expect(interactionBeforeWheel).not.toBeNull()
+      else expect(interactionBeforeWheel).toBeNull()
       await wheelUntil(
         page,
         -50,
         async () => (await measureGlued(page, 'after-target-resize')).top,
         top => top < retargeted.top,
-        { message: 'upward wheel input did not move the selected message' },
+        { message: 'upward wheel input did not move the selected message', positionPointer: false },
       )
       const upward = await measureGlued(page, 'after-target-resize')
       expect(upward.top).toBeLessThan(retargeted.top)

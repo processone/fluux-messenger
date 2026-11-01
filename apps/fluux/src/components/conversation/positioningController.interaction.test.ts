@@ -170,6 +170,77 @@ describe('interaction position ownership', () => {
     expect(controller.reconcileLiveEdge({ conversationId, executor: live(), rearmEligibleFromGeometry: true })).toBe(false)
   })
 
+  // "Hold during interaction": downward input can finish before its delayed growth compensation.
+  // Captured Chromium geometry: input lands at 9172/9694/472; compensation lands at 9222/9694/472.
+  const growthInput = { top: 9122, height: 9644, client: 472 }
+  const growthInputEnd = { top: 9172, height: 9694, client: 472 }
+  const growthCompensated = { ...growthInputEnd, top: 9222 }
+  const downwardDelta = growthInputEnd.top - growthInput.top
+  function downwardAfterHold(controller: PositioningController, end = true) {
+    controller.beginInteractionHold({ conversationId, desired, executor: anchor() })
+    controller.holdInput(conversationId)
+    controller.observeUserInput(conversationId, { deltaY: downwardDelta, geometry: growthInput })
+    controller.observeUserScroll(conversationId, downwardDelta, false)
+    if (end) controller.observeUserInputEnd(conversationId, false)
+  }
+  const compensationReachesBottom = () =>
+    growthCompensated.height - growthCompensated.top - growthCompensated.client === 0
+
+  it('settles downward intent when delayed reading compensation reaches the true bottom', () => {
+    const { controller } = setup()
+    downwardAfterHold(controller)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: live(), rearmEligibleFromGeometry: true })).toBe(false)
+    expect(controller.preserveReadingLayout(conversationId, compensationReachesBottom)).toBe(true)
+    const position = vi.fn()
+    expect(controller.reconcileLiveEdge({ conversationId, executor: live(position), rearmEligibleFromGeometry: false })).toBe(true)
+    expect(position).toHaveBeenCalledOnce()
+  })
+
+  it('does not settle the compensation while the downward gesture is still held', () => {
+    const { controller } = setup()
+    downwardAfterHold(controller, false)
+    controller.preserveReadingLayout(conversationId, compensationReachesBottom)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: live(), rearmEligibleFromGeometry: false })).toBe(false)
+    controller.observeUserInputEnd(conversationId, true)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: live(), rearmEligibleFromGeometry: false })).toBe(true)
+  })
+
+  it('keeps upward reading when compensation alone reaches the bottom', () => {
+    const { controller } = setup()
+    controller.beginInteractionHold({ conversationId, desired, executor: anchor() })
+    controller.holdInput(conversationId)
+    controller.observeUserInput(conversationId, { deltaY: -downwardDelta, geometry: growthInputEnd })
+    controller.observeUserScroll(conversationId, -downwardDelta, false)
+    controller.observeUserInputEnd(conversationId, false)
+    controller.preserveReadingLayout(conversationId, compensationReachesBottom)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: live(), rearmEligibleFromGeometry: true })).toBe(false)
+  })
+
+  it('invalidates delayed downward settlement when newer upward movement wins', () => {
+    const { controller } = setup()
+    downwardAfterHold(controller)
+    controller.observeUserScroll(conversationId, -1, false)
+    controller.preserveReadingLayout(conversationId, compensationReachesBottom)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: live(), rearmEligibleFromGeometry: true })).toBe(false)
+  })
+
+  it('does not let layout alone settle a released interaction with no directed input', () => {
+    const { controller } = setup()
+    controller.beginInteractionHold({ conversationId, desired, executor: anchor() })
+    controller.releaseInteractionHold({ conversationId, resume: false, liveEdge: live() })
+    controller.preserveReadingLayout(conversationId, compensationReachesBottom)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: live(), rearmEligibleFromGeometry: true })).toBe(false)
+  })
+
+  it('does not carry delayed downward eligibility into a new interaction generation', () => {
+    const { controller } = setup()
+    downwardAfterHold(controller)
+    controller.beginInteractionHold({ conversationId, desired, executor: anchor() })
+    controller.releaseInteractionHold({ conversationId, resume: false, liveEdge: live() })
+    controller.preserveReadingLayout(conversationId, compensationReachesBottom)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: live(), rearmEligibleFromGeometry: true })).toBe(false)
+  })
+
   it('ignores a stale release after leaving the conversation', () => {
     const { controller } = setup()
     controller.beginInteractionHold({ conversationId, desired, executor: anchor() })

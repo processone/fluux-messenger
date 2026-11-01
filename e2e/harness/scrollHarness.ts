@@ -49,10 +49,11 @@ export async function wheelUntil(
   deltaY: number,
   read: () => Promise<number>,
   reached: (value: number) => boolean,
-  { timeoutMs = 20_000, intervalMs = 100, message = 'wheel movement did not reach the required position' } = {},
+  { timeoutMs = 20_000, intervalMs = 100, message = 'wheel movement did not reach the required position', positionPointer = true } = {},
 ): Promise<number> {
   const scroller = page.locator('[data-message-list]').first()
-  await scroller.hover()
+  // A caller exercising a deliberate row hover must keep that pointer target through the wheel.
+  if (positionPointer) await scroller.hover()
   const deadline = Date.now() + timeoutMs
   let value = await read()
   while (!reached(value)) {
