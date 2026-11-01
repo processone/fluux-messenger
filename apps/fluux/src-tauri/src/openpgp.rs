@@ -185,10 +185,12 @@ mod notification_subkeys;
 /// Unlock ([`Self::ensure_key`]), backup import, subkey rotation and forget
 /// each hold the account's lifecycle lock while they load, save or delete its
 /// key file, passphrase and cached cell. The lock is granted in request order
-/// and waiting for it yields the command thread. A forget still waiting on a
-/// keychain prompt after its frontend deadline therefore finishes before a
-/// later `ensure_key` reads the passphrase: the replacement key never saves
-/// under the passphrase forget is deleting.
+/// and waiting for it yields the command thread. Each operation's blocking
+/// work holds it too, so a caller that stops waiting does not release it
+/// early. A forget still waiting on a keychain prompt after its frontend
+/// deadline therefore finishes before a later `ensure_key` reads the
+/// passphrase: the replacement key never saves under the passphrase forget
+/// is deleting.
 ///
 /// [`AsyncOnceCell`]: tokio::sync::OnceCell
 pub struct OpenpgpState {
@@ -260,13 +262,16 @@ impl OpenpgpState {
         account_jid: String,
         user_id: String,
     ) -> Result<KeyBundle, String> {
-        // Held through the cell, the unlock and an error eviction.
-        let _lifecycle = self.lifecycle(&account_jid).await;
+        // Held through the cell, the unlock and an error eviction. The blocking
+        // worker keeps its own share, so a caller that stops waiting cannot
+        // release the turn while the unlock still loads or saves.
+        let turn = Arc::new(self.lifecycle(&account_jid).await);
         let cell = self.cell_for(&account_jid);
 
         let storage = Arc::clone(&self.storage);
         let jid_for_task = account_jid.clone();
         let user_id_for_task = user_id;
+        let worker_turn = Arc::clone(&turn);
         #[cfg(test)]
         let counter = &self.blocking_runs;
 
@@ -275,6 +280,7 @@ impl OpenpgpState {
                 #[cfg(test)]
                 counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 tauri::async_runtime::spawn_blocking(move || {
+                    let _turn = worker_turn;
                     Self::run_blocking(&storage, &jid_for_task, &user_id_for_task)
                 })
                 .await
@@ -293,6 +299,7 @@ impl OpenpgpState {
             // stable for the identity's lifetime).
             self.entries.lock().unwrap().remove(&account_jid);
         }
+        drop(turn);
 
         outcome
     }
