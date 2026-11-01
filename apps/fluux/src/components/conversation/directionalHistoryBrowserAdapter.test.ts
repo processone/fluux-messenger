@@ -298,6 +298,49 @@ describe('DirectionalHistoryBrowserAdapter', () => {
     expect(list.holdAnchor.mock.calls).toEqual([['anchor'], ['anchor'], [null]])
   })
 
+  // Intent: FLM-210, review FLM-338 finding R1. A load captured row 110, the reader scrolled up to
+  // rows 90-97 while it waited, and a delayed message landed at row 100, below the view: the restore
+  // it started held off-screen row 110, so the rows the reader was reading jumped by its height.
+  it('holds the row the reader now sees when they scrolled on before an arrival below it', () => {
+    const rows = Array.from({ length: 30 }, (_, i) => ({
+      index: 85 + i,
+      id: `message-${85 + i}`,
+      start: (85 + i) * 100,
+      size: 100,
+    }))
+    const list = mountedList({ scrollTop: 11_000, rows })
+    const { adapter } = adapterHarness({ scroller: list.viewport.scroller, virtualizer: list.virtualizer })
+    expect(adapter.capture('message-1', 200)?.anchor).toEqual({ id: 'message-110', offsetFromTop: 0 })
+
+    list.viewport.scrollTop = 9_060
+    adapter.observeScroll()
+    // A 424 px delayed message lands at row 100: every row from there on moves down by its height.
+    for (const row of rows) {
+      if (row.index < 100) continue
+      row.index += 1
+      row.start += 424
+      const wrapper = list.viewport.scroller
+        .querySelector(`[data-message-id="${row.id}"]`)?.parentElement
+      if (wrapper) wrapper.dataset.index = String(row.index)
+    }
+    rows.push({ index: 100, id: 'delayed-arrival', start: 10_000, size: 424 })
+    adapter.observeScroll()
+
+    const onPlaced = vi.fn()
+    const executor = adapter.createExecutor(vi.fn(), onPlaced)
+    executor.positionFrame(request({
+      desired: {
+        kind: 'anchor',
+        messageId: 'message-110',
+        placement: { kind: 'top-offset', offsetPx: pixelOffset(0) },
+      },
+    }), lease())
+
+    expect(list.viewport.scrollTop).toBe(9_060)
+    expect(onPlaced).toHaveBeenCalledWith({ messageId: 'message-91', offsetFromTop: 40 })
+    expect(list.holdAnchor).toHaveBeenCalledWith('message-91')
+  })
+
   it('positions through the virtualizer and waits through a temporary missing anchor', () => {
     const viewport = scrollerHarness()
     let offset: number | null = 900

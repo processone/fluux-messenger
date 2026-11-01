@@ -19,7 +19,7 @@ export const changelog: ChangelogEntry[] = [
     sections: [{
       type: 'fixed',
       items: [
-        'When a delayed message arrives above you while older messages are still loading, the messages you are reading no longer move down until the older ones arrive',
+        'When a delayed message arrives while older messages are still loading, the messages you are reading no longer move, whether it lands above them or, after you scrolled up during the load, below them',
       ],
     }],
   },

@@ -186,6 +186,28 @@ describe('useDirectionalHistoryLoads', () => {
     expect(h.invokeLoad).toHaveBeenCalledOnce()
   })
 
+  // Intent: FLM-210, review FLM-338 finding R1. The reader scrolled on while the load waited, so its
+  // first restore held the row they then saw, not the capture row; the batch's restart must hold
+  // that same row, or the rows on screen jump by whatever landed between the two.
+  it('restarts on the row and place the load\'s first restore held', () => {
+    const h = harness()
+    h.result.current.restartRestore(snapshot({
+      restored: true,
+      placementAnchorId: 'm-2',
+      placementOffsetFromTop: 40,
+    }))
+
+    expect(h.beginDirectionalHistory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        desired: {
+          kind: 'anchor',
+          messageId: 'm-2',
+          placement: { kind: 'top-offset', offsetPx: 40 },
+        },
+      }),
+    )
+  })
+
   it('still runs the load when the controller declines to create a request', () => {
     // The batch must not be stranded just because positioning is unavailable.
     const h = harness({ requestGeneration: null })

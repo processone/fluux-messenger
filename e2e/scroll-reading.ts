@@ -2540,6 +2540,8 @@ test.describe('Insertion drift while scrolled up', () => {
       scrollTop: Math.round(s.scrollTop),
       distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
       visible: rows.filter((r) => r.top >= 5 && r.bottom <= sr.height - 5),
+      /** The last row with any part in view: everything after it is below the viewport. */
+      lastShownId: rows.filter((r) => r.top < sr.height).at(-1)?.id ?? null,
       ids: msgs.map((m) => m.id as string),
       stamps: msgs.map((m) => new Date(m.timestamp).getTime()),
     }
@@ -2951,11 +2953,19 @@ test.describe('Insertion drift while scrolled up', () => {
    * Hold the demo's older-history MAM answer open, so an arrival can be injected while a
    * load-older is genuinely IN FLIGHT, then let the batch land and report how far the tracked
    * reading row moved across the whole sequence.
+   *
+   * By default the arrival lands above the view. With `wheelBeforeArrivalPx` the reader first
+   * scrolls up by that much while the load waits, and the arrival lands below the rows they now
+   * read but above the rows the load started from; those rows are then the ones tracked.
    */
   async function insertDuringInFlightLoadOlder(
     page: Page,
     body: string,
-    options: { slowArchive?: boolean; wheelDuringWaitPx?: number } = {},
+    options: {
+      slowArchive?: boolean
+      wheelDuringWaitPx?: number
+      wheelBeforeArrivalPx?: number
+    } = {},
   ) {
     // Gate the synthetic MAM batch. The cache path in front of it returns nothing in demo mode
     // (all seeded messages are already resident), so this is the whole delivery of a load-older.
@@ -2989,10 +2999,13 @@ test.describe('Insertion drift while scrolled up', () => {
       'precondition: several fully-visible rows to track',
     ).toBeGreaterThan(3)
 
-    const track = before!.visible[before!.visible.length - 2]
+    let track = before!.visible[before!.visible.length - 2]
     const topIdx = before!.ids.indexOf(before!.visible[0].id)
     expect(topIdx, 'precondition: the top-visible row is in the resident array').toBeGreaterThan(12)
-    const insertTs = before!.stamps[topIdx - 10]
+    // The load captures the first row at least half in view: the top fully visible row or the one
+    // above it. A below-view arrival sorts in just above both.
+    const loadStartIds = [before!.ids[topIdx - 1], before!.ids[topIdx]]
+    const insertTs = before!.stamps[options.wheelBeforeArrivalPx ? topIdx - 2 : topIdx - 10]
 
     // Arm the directional snapshot WITHOUT moving the reader: handleLoadEarlier, not a
     // scroll-to-top, so the reader stays mid-history with content above and below.
@@ -3008,6 +3021,25 @@ test.describe('Insertion drift while scrolled up', () => {
       return Boolean((window as any).__roomStore.getState().getRoomMAMQueryState(jid)?.isLoading)
     }, STRESS_ROOM_JID)
     expect(inFlight, 'precondition: the load-older must still be in flight').toBe(true)
+
+    // The reader scrolls up while the load waits, before any arrival: the rows the load started
+    // from go below the view, and the rows the reader now sees are the ones to hold (FLM-210,
+    // review FLM-338 R1).
+    let reading = before!
+    if (options.wheelBeforeArrivalPx) {
+      await page.locator('[data-message-list]').first().hover()
+      await page.mouse.wheel(0, -options.wheelBeforeArrivalPx)
+      await page.waitForTimeout(400)
+      await syncEngineGeometry(page)
+      const moved = await readView(page)
+      expect(moved, 'the message list must be readable').not.toBeNull()
+      expect(
+        moved!.visible.length,
+        'precondition: several fully-visible rows to track after the wheel',
+      ).toBeGreaterThan(3)
+      reading = moved!
+      track = reading.visible[reading.visible.length - 2]
+    }
 
     // The delayed arrival lands while that load is still waiting for its batch.
     await page.evaluate(([jid, ts, text]) => {
@@ -3074,6 +3106,12 @@ test.describe('Insertion drift while scrolled up', () => {
     const midwayTopIndex = midway!.visible.length > 0
       ? midway!.ids.indexOf(midway!.visible[0].id)
       : -1
+    // "Below the viewport" is read from the view just before the arrival: a restore that moves the
+    // reader afterwards can bring the arrival into view.
+    const lastShownIndex = reading.lastShownId === null
+      ? -1
+      : midway!.ids.indexOf(reading.lastShownId)
+    const loadStartIndex = Math.min(...loadStartIds.map((id) => midway!.ids.indexOf(id)))
     return {
       trackedId: track.id,
       beforeTop: Math.round(track.top),
@@ -3087,6 +3125,9 @@ test.describe('Insertion drift while scrolled up', () => {
       drift: trackedTop === null ? Number.POSITIVE_INFINITY : Math.abs(trackedTop - track.top),
       insertedAboveViewport:
         insertedIndex >= 0 && midwayTopIndex >= 0 && insertedIndex < midwayTopIndex,
+      insertedBelowViewport: insertedIndex >= 0 && lastShownIndex >= 0 && insertedIndex > lastShownIndex,
+      insertedAboveLoadStart: insertedIndex >= 0 && insertedIndex < loadStartIndex,
+      loadStartBelowViewport: lastShownIndex >= 0 && loadStartIndex > lastShownIndex,
       firstIdBefore: before!.ids[0],
       firstIdMidway: midway!.ids[0],
       firstIdAfter: after!.ids[0],
@@ -3184,6 +3225,82 @@ test.describe('Insertion drift while scrolled up', () => {
     expect(
       r.movedDrift,
       `the batch moved the rows the reader scrolled to by ${r.movedDrift}px — ${JSON.stringify(r)}`,
+    ).toBeLessThanOrEqual(HELD_ROW_PX)
+  })
+
+  // FLM-210, review FLM-338 R1: the reader scrolls up while a load-older waits, so the row the load
+  // started from goes below the view, and a delayed message lands between the two. The restore the
+  // arrival started held that off-screen row, which the arrival had moved, so the rows the reader
+  // was reading jumped by the arrival's height though nothing landed above them.
+  test('invariant-14p: a reader who scrolls up while a load-older waits keeps their rows when a delayed message lands below them', async ({ page }) => {
+    await openScrolledUp(page)
+    const r = await insertDuringInFlightLoadOlder(
+      page,
+      'delayed arrival below a reader who scrolled up\n'.repeat(18),
+      { wheelBeforeArrivalPx: 1200 },
+    )
+    console.log('── INSERTION-DRIFT below-moved-reader ──', JSON.stringify(r))
+    expect(
+      r.loadStartBelowViewport,
+      `precondition: the wheel must take the rows the load started from below the view — ${JSON.stringify(r)}`,
+    ).toBe(true)
+    expect(r.insertedBelowViewport, `the arrival must land BELOW the viewport — ${JSON.stringify(r)}`).toBe(true)
+    expect(
+      r.insertedAboveLoadStart,
+      `the arrival must land above the rows the load started from — ${JSON.stringify(r)}`,
+    ).toBe(true)
+    expect(
+      r.firstIdMidway,
+      'precondition: under the resident cap the arrival must not move the first id',
+    ).toBe(r.firstIdBefore)
+    expect(
+      r.firstIdAfter,
+      `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+    ).not.toBe(r.firstIdBefore)
+    expect(
+      r.midwayDrift,
+      `an arrival below the reader moved their rows by ${r.midwayDrift}px while the load waited — ${JSON.stringify(r)}`,
+    ).toBeLessThanOrEqual(HELD_ROW_PX)
+    expect(
+      r.drift,
+      `an arrival below the reader moved their rows by ${r.drift}px once the batch landed — ${JSON.stringify(r)}`,
+    ).toBeLessThanOrEqual(HELD_ROW_PX)
+  })
+
+  // FLM-210, review FLM-338 R1, at the resident bound: there the arrival also evicts the oldest
+  // row, a window shift the pending load restores for at once, so it held the same off-screen row.
+  test('invariant-14q: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when a delayed message lands below them', async ({ page }) => {
+    await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
+    const r = await insertDuringInFlightLoadOlder(
+      page,
+      'bound delayed arrival below a reader who scrolled up\n'.repeat(18),
+      { wheelBeforeArrivalPx: 1200 },
+    )
+    console.log('── INSERTION-DRIFT bound-below-moved-reader ──', JSON.stringify(r))
+    expect(
+      r.loadStartBelowViewport,
+      `precondition: the wheel must take the rows the load started from below the view — ${JSON.stringify(r)}`,
+    ).toBe(true)
+    expect(r.insertedBelowViewport, `the arrival must land BELOW the viewport — ${JSON.stringify(r)}`).toBe(true)
+    expect(
+      r.insertedAboveLoadStart,
+      `the arrival must land above the rows the load started from — ${JSON.stringify(r)}`,
+    ).toBe(true)
+    expect(
+      r.firstIdMidway,
+      `precondition: at the resident bound the arrival must evict the oldest row — ${JSON.stringify(r)}`,
+    ).not.toBe(r.firstIdBefore)
+    expect(
+      r.firstIdAfter,
+      `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+    ).not.toBe(r.firstIdMidway)
+    expect(
+      r.midwayDrift,
+      `an arrival below the reader moved their rows by ${r.midwayDrift}px while the load waited — ${JSON.stringify(r)}`,
+    ).toBeLessThanOrEqual(HELD_ROW_PX)
+    expect(
+      r.drift,
+      `an arrival below the reader moved their rows by ${r.drift}px once the batch landed — ${JSON.stringify(r)}`,
     ).toBeLessThanOrEqual(HELD_ROW_PX)
   })
 

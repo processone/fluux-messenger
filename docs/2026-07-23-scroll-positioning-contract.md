@@ -149,11 +149,17 @@ departed conversation's snapshot, and delayed settlement or window observation f
 cannot mutate the active conversation. A dedicated `DirectionalHistoryBrowserAdapter` owns visual
 anchor capture, the one-frame settlement scheduler, reachability probes, WebKit kinetic-scroll
 cancellation, and anchor/fallback pixel writes under the controller lease. Between capture and the
-batch landing it follows the captured anchor on every scroll event, so the restore's first frame
-places the anchor where the reader last saw it rather than at its capture-time `offsetPx` (an iOS
-bounce past the top keeps moving the rows after capture, and the landing commit clamps `scrollTop`
-to 0). The load's snapshot records that placement, and a restart of the same load requests it
-instead of the capture offset, so the rows stay where the first restore put them. From its first
+batch landing it follows the reader on every scroll event, so the restore's first frame places the
+anchor where the reader last saw it rather than at its capture-time `offsetPx` (an iOS bounce past
+the top keeps moving the rows after capture, and the landing commit clamps `scrollTop` to 0).
+While rendered rows cover the top of the view, the followed anchor becomes the row the reader now
+sees there, chosen as at capture: a reader who scrolled on while the load waited no longer reads
+the capture row, which an arrival between it and the view would move without moving theirs. Past
+the top, or with a stale window, the anchor stays and only its offset follows. The followed anchor
+stops changing once rows land before it, since only the restore may place it from then on. The
+load's snapshot records the row the restore held and its placement, and a restart of the same load
+requests them instead of the capture row and offset, so the rows stay where the first restore put
+them. From its first
 write until its execution ends, the restore holds that anchor in the virtualizer: every row before
 the anchor that resizes is compensated, including rows between the viewport top and the anchor,
 which the library alone leaves to move it.

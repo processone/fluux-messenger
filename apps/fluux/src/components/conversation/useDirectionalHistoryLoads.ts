@@ -100,9 +100,10 @@ function beginRestoreRequest(
       conversationId: saved.conversationId,
       desired: {
         kind: 'anchor',
-        messageId: saved.anchorMessageId,
-        // A restart keeps the place the load's first restore gave the anchor, which follows the
-        // reader's scroll after capture; the capture offset is only where the reader started.
+        // A restart keeps the row the load's first restore held and its place, which follow the
+        // reader's scroll after capture; the capture row and offset are only where the reader
+        // started.
+        messageId: saved.placementAnchorId ?? saved.anchorMessageId,
         placement: {
           kind: 'top-offset',
           offsetPx: pixelOffset(

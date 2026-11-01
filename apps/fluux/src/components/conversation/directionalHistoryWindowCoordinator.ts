@@ -49,10 +49,12 @@ export interface DirectionalHistorySnapshot {
    */
   restoredInteriorPlacementVersion?: number
   /**
-   * Where this load's restore placed its anchor: where the reader last saw it, which differs from
-   * the capture when the reader scrolled on while the load was pending. A restart of the same load
-   * places it there again, since the reader has not moved since that restore.
+   * The row this load's restore held: the row the reader last saw at the top of the view, which is
+   * another row than the capture's when the reader scrolled on while the load was pending. A
+   * restart of the same load holds it again, since the reader has not moved since that restore.
    */
+  placementAnchorId?: string
+  /** Where this load's restore placed `placementAnchorId`: where the reader last saw it. */
   placementOffsetFromTop?: number
 }
 
@@ -415,10 +417,14 @@ export class DirectionalHistoryWindowCoordinator {
     }
   }
 
-  /** Remember where a restore of this load placed its anchor, for a restart of the same load. */
-  recordPlacement(requestId: number, offsetFromTop: number): void {
+  /** Remember which row a restore of this load held and where, for a restart of the same load. */
+  recordPlacement(
+    requestId: number,
+    placement: { messageId: string; offsetFromTop: number },
+  ): void {
     if (this.active?.requestId === requestId) {
-      this.active.placementOffsetFromTop = offsetFromTop
+      this.active.placementAnchorId = placement.messageId
+      this.active.placementOffsetFromTop = placement.offsetFromTop
     }
   }
 

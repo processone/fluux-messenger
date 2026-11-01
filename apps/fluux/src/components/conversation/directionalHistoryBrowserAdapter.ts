@@ -33,13 +33,27 @@ export interface DirectionalHistoryBrowserAdapterOptions {
 }
 
 /**
- * The captured anchor as the reader last saw it. On an iPhone a load is captured early in the
- * bounce past the top, and the bounce goes on deepening (by up to 102 px in device traces) until
- * the batch lands; the commit then clamps scrollTop to 0, so the restore can no longer read it.
+ * The anchor as the reader last saw it. On an iPhone a load is captured early in the bounce past
+ * the top, and the bounce goes on deepening (by up to 102 px in device traces) until the batch
+ * lands; the commit then clamps scrollTop to 0, so the restore can no longer read it.
+ *
+ * A reader who scrolls while the load waits moves on to other rows: the anchor becomes the row
+ * then at the top of the view, so the load's capture row may be off screen. A delayed arrival
+ * between the view and that row moves it but none of the rows the reader is reading (FLM-210).
  */
 interface FollowedAnchor {
+  /** The load's captured anchor: the restore request this follow belongs to names it. */
+  capturedId: string
+  /** The window's first row, which no anchor takes; see `capture`. */
+  windowFirstId: string
   id: string
   index: number | null
+  offsetFromTop: number
+}
+
+/** The row a restore holds, and where it places it. */
+export interface DirectionalHistoryPlacement {
+  messageId: string
   offsetFromTop: number
 }
 
@@ -87,24 +101,7 @@ export class DirectionalHistoryBrowserAdapter {
         offsetFromTop: rowStart(virtualizer, firstMessageId) ?? 0,
       }
     } else if (virtualizer) {
-      // The window's first row is the one prepended history changes: it stops heading its group
-      // and loses its sender line (~43 px) when older messages of the same sender land above it.
-      // Anchoring on it would keep its top still while the text under the reader jumps, so the
-      // anchor is the first visible row after it; it falls back to the first row alone.
-      for (const item of items) {
-        const viewportOffset = item.start - scrollTop
-        if (viewportOffset < -item.size / 2) continue
-        const wrapper = scroller.querySelector(
-          `[data-index="${item.index}"]`,
-        )
-        const message = wrapper?.querySelector(
-          '[data-message-row-id], [data-message-id]',
-        ) as HTMLElement | null
-        const messageId = message ? readMessageRowId(message) : undefined
-        if (!messageId || messageId === firstMessageId) continue
-        anchor = { id: messageId, offsetFromTop: viewportOffset }
-        break
-      }
+      anchor = firstVisibleRow(scroller, items, firstMessageId)
       if (!anchor && firstMessageId) {
         anchor = {
           id: firstMessageId,
@@ -142,6 +139,8 @@ export class DirectionalHistoryBrowserAdapter {
 
     this.followed = virtualizer && anchor
       ? {
+          capturedId: anchor.id,
+          windowFirstId: firstMessageId,
           id: anchor.id,
           index: virtualizer.getIndexForMessageId(anchor.id),
           offsetFromTop: anchor.offsetFromTop,
@@ -164,10 +163,16 @@ export class DirectionalHistoryBrowserAdapter {
   }
 
   /**
-   * Follow the captured anchor with the reader's scroll until the batch lands. Called on every
-   * scroll event; it stops once rows land before the anchor (its index changes): they move it, and
-   * only the restore, which runs in that same commit, may place it from then on. Rows added after
-   * it, such as a live message, do not move it.
+   * Follow the reader's view with the anchor until the batch lands. Called on every scroll event;
+   * it stops once rows land before the anchor (its index changes): they move it, and only the
+   * restore, which runs in that same commit, may place it from then on. Rows added after it, such
+   * as a live message, do not move it.
+   *
+   * While rendered rows cover the top of the view, the anchor is the row the reader now sees there,
+   * chosen as `capture` chooses it: an arrival below it then moves none of the rows the reader is
+   * reading, and the restore it starts leaves them where they are (FLM-210). Past the top in a
+   * bounce, or with a stale window, no rendered row can name the view, so the anchor stays and only
+   * its offset follows.
    */
   observeScroll(): void {
     const followed = this.followed
@@ -176,6 +181,18 @@ export class DirectionalHistoryBrowserAdapter {
     const virtualizer = this.options.getVirtualizer()
     if (!scroller || !virtualizer) return
     if (virtualizer.getIndexForMessageId(followed.id) !== followed.index) return
+    const items = virtualizer.getVirtualItems()
+    const scrollTop = scroller.scrollTop
+    if (items.some(item => item.start <= scrollTop && item.start + item.size > scrollTop)) {
+      const current = firstVisibleRow(scroller, items, followed.windowFirstId)
+      const index = current ? virtualizer.getIndexForMessageId(current.id) : null
+      if (current && index !== null) {
+        followed.id = current.id
+        followed.index = index
+        followed.offsetFromTop = current.offsetFromTop
+        return
+      }
+    }
     // Rendered rows include the library's hold during a gesture; the layout start is the fallback
     // for an anchor the reader scrolled out of the rendered window.
     const start =
@@ -186,14 +203,14 @@ export class DirectionalHistoryBrowserAdapter {
   }
 
   /**
-   * The followed offset of `messageId`, once. A restart of the same load uses the placement this
-   * restore recorded; a new load captures its own.
+   * The followed anchor of the load that captured `capturedId`, once. A restart of the same load
+   * uses the placement this restore recorded; a new load captures its own.
    */
-  private takeFollowedOffset(messageId: string | undefined): number | null {
+  private takeFollowed(capturedId: string | undefined): DirectionalHistoryPlacement | null {
     const followed = this.followed
-    if (!followed || followed.id !== messageId) return null
+    if (!followed || followed.capturedId !== capturedId) return null
     this.followed = null
-    return followed.offsetFromTop
+    return { messageId: followed.id, offsetFromTop: followed.offsetFromTop }
   }
 
   private releaseAnchor(holder: object): void {
@@ -203,17 +220,19 @@ export class DirectionalHistoryBrowserAdapter {
   }
 
   /**
-   * `onPlaced` hears where the restore places its anchor, once, on its first frame, so a restart
-   * of the same load can place it there again: the followed offset is taken only once.
+   * `onPlaced` hears which row the restore holds and where, once, on its first frame, so a restart
+   * of the same load can place it there again: the followed anchor is taken only once.
    */
   createExecutor(
     complete: DirectionalHistoryExecutor['complete'],
-    onPlaced?: (offsetFromTop: number) => void,
+    onPlaced?: (placement: DirectionalHistoryPlacement) => void,
   ): DirectionalHistoryExecutor {
     let initialized = false
     let previousTarget = 0
     let usedFallback = false
-    // Where the anchor goes, fixed on the first frame: where the reader last saw it.
+    // The row the restore holds and where it goes, fixed on the first frame: the row the reader
+    // last saw at the top of the view, where they saw it.
+    let anchorId: string | undefined
     let placementOffset: number | null = null
     const holder = {}
 
@@ -254,22 +273,22 @@ export class DirectionalHistoryBrowserAdapter {
         }
 
         if (placementOffset === null) {
-          placementOffset =
-            this.takeFollowedOffset(request.desired.messageId) ??
-            request.desired.placement.offsetPx
-          onPlaced?.(placementOffset)
+          const followed = this.takeFollowed(request.desired.messageId)
+          anchorId = followed?.messageId ?? request.desired.messageId
+          placementOffset = followed?.offsetFromTop ?? request.desired.placement.offsetPx
+          if (anchorId) onPlaced?.({ messageId: anchorId, offsetFromTop: placementOffset })
         }
         let target: number | null = null
         let usedMethod = 'none'
-        if (request.desired.messageId) {
+        if (anchorId) {
           const virtualOffset = virtualizer
-            ? rowStart(virtualizer, request.desired.messageId)
+            ? rowStart(virtualizer, anchorId)
             : null
           if (virtualOffset !== null) {
             target = virtualOffset - placementOffset
             usedMethod = 'virtualizer-offset'
           } else {
-            const anchor = findMessageRowElement(scroller, request.desired.messageId)
+            const anchor = findMessageRowElement(scroller, anchorId)
             if (anchor) {
               target = anchor.offsetTop - placementOffset
               usedMethod = 'element-based'
@@ -305,12 +324,12 @@ export class DirectionalHistoryBrowserAdapter {
           initialized && Math.abs(scroller.scrollTop - boundedTarget) > 5
         const shouldWrite = !initialized || targetMoved || geometryDrift
         if (
-          virtualizer?.holdAnchor && request.desired.messageId &&
+          virtualizer?.holdAnchor && anchorId &&
           usedMethod === 'virtualizer-offset' && this.anchorHolder !== holder
         ) {
           // Rows that measure after the write, between the viewport top and the anchor, would
           // otherwise move it until the next frame's correction, which the reader's touch cancels.
-          virtualizer.holdAnchor(request.desired.messageId)
+          virtualizer.holdAnchor(anchorId)
           this.anchorHolder = holder
         }
         if (shouldWrite) {
@@ -322,6 +341,7 @@ export class DirectionalHistoryBrowserAdapter {
 
         this.options.log?.('DIRECTIONAL HISTORY POSITION', {
           generation: request.generation,
+          anchorId,
           usedMethod,
           placementOffset,
           target: boundedTarget,
@@ -365,6 +385,32 @@ export class DirectionalHistoryBrowserAdapter {
     }
     this.settlementFrames.clear()
   }
+}
+
+/**
+ * The first row at least half in view, skipping the window's first row: prepended history changes
+ * that row, which stops heading its group and loses its sender line (~43 px) when older messages of
+ * the same sender land above it. Anchoring on it would keep its top still while the text under the
+ * reader jumps.
+ */
+function firstVisibleRow(
+  scroller: HTMLElement,
+  items: readonly { index: number; start: number; size: number }[],
+  windowFirstId: string,
+): { id: string; offsetFromTop: number } | null {
+  const scrollTop = scroller.scrollTop
+  for (const item of items) {
+    const viewportOffset = item.start - scrollTop
+    if (viewportOffset < -item.size / 2) continue
+    const wrapper = scroller.querySelector(`[data-index="${item.index}"]`)
+    const message = wrapper?.querySelector(
+      '[data-message-row-id], [data-message-id]',
+    ) as HTMLElement | null
+    const messageId = message ? readMessageRowId(message) : undefined
+    if (!messageId || messageId === windowFirstId) continue
+    return { id: messageId, offsetFromTop: viewportOffset }
+  }
+  return null
 }
 
 /**
