@@ -5178,6 +5178,27 @@ describe('XMPPClient Connection', () => {
         expect(dayClient.getStreamManagementState()).toMatchObject({ id: 'sm-day', windowMs: 86_400_000 })
       })
 
+      it('does not hydrate a snapshot whose window ran out before the transport attempt (R6)', async () => {
+        const connectPromise = xmppClient.connect({
+          jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+        })
+        mockXmppClientInstance._emit('online')
+        await connectPromise
+
+        const connection = (xmppClient as unknown as { connection: { hydrateStreamManagement(s?: unknown): void } }).connection
+        const now = Date.now()
+        const snapshot = { id: 'sm-late', inbound: 3, outbound: 2, timestamp: now - 900, windowMs: 1000, interruptedAt: now - 900 }
+        const sm = mockXmppClientInstance.streamManagement as { id?: string }
+
+        connection.hydrateStreamManagement(snapshot)
+        expect(sm.id).toBe('sm-late')
+
+        sm.id = 'untouched'
+        await vi.advanceTimersByTimeAsync(200) // discovery or a failed attempt ate the rest of the window
+        connection.hydrateStreamManagement(snapshot)
+        expect(sm.id).toBe('untouched')
+      })
+
       it('records the window of an inline Bind 2 enable from the live stream', async () => {
         const sendSpy = vi.spyOn(getActor(), 'send')
 

@@ -2185,12 +2185,20 @@ export class Connection extends BaseModule {
     }
   }
 
-  private hydrateStreamManagement(smState?: { id: string; inbound: number; outbound: number }): void {
+  private hydrateStreamManagement(requested?: SmResumptionState): void {
     // Reset resume tracking - we're starting a new resume attempt
     // This ensures 'fail' events during resume are properly logged as resume failures
     this.smResumeCompleted = false
 
-    if (!smState || !this.xmpp?.streamManagement) return
+    if (!requested || !this.xmpp?.streamManagement) return
+    // Discovery, proxy fallback and earlier failed attempts can outlast the window
+    // after the snapshot was taken: check it again for every transport attempt.
+    const smState = this.smPersistence.restore(requested)
+    if (!smState) {
+      this.stores.console.addEvent('SM window ran out before this attempt, starting a fresh session', 'sm')
+      this.smPersistence.clearCache()
+      return
+    }
     const sm = this.xmpp.streamManagement
     sm.id = smState.id
     sm.inbound = smState.inbound
