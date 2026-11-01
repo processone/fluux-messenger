@@ -311,7 +311,7 @@ export function useTanstackMessageVirtualizer({
       // The write's authority: the destination generation, scroller and row set it was decided under.
       // The observer below can hand the pixels to the reader (cancelPendingScroll) before we write.
       const generation = generationRef.current
-      // Taken before the observer: its takeover writes (and so re-enters this function) too.
+      // Taken before the observer: its takeover can invalidate this write.
       const measuring = source === 'measurement' ? measuringRef.current : null
       if (source === 'measurement') measuringRef.current = null
       const scroller = instance.scrollElement
@@ -508,19 +508,13 @@ export function useTanstackMessageVirtualizer({
     generationRef.current++
     if (queuedWriteRef.current) retireHeld(queuedWriteRef.current, 'reader')
     queuedWriteRef.current = null
-    const outer = currentWriteRef.current
-    currentWriteRef.current = newWrite()
-    try { virtualizer.scrollToOffset(scroller.scrollTop) }
-    finally { currentWriteRef.current = outer }
-    // The write above retargets @tanstack/virtual-core's private pending scroll to the current
-    // offset, and the library re-lands on that target until a settled frame. A user scroll that
-    // starts first moves less than its 1px arrival tolerance on the first step, and that landing
-    // would write the old offset back and end the scroll (#1465). A cancelled target is never
-    // worth re-landing on, so its reconcile writes are skipped; the pending state itself stays,
-    // because the library also uses it to measure rows synchronously.
+    // Drop the library target instead of replacing it with the current offset. A replacement
+    // writes immediately during an iOS end pull, clamping the native rubber band (FLM-219),
+    // and can re-land on the cancelled position after the reader starts moving (#1465).
+    virtualizer.cancelScroll()
     cancelledTargetRef.current = true
     offsetCbRef.current?.(scroller.scrollTop, false)
-  }, [newWrite, retireHeld, scrollRef, virtualizer])
+  }, [retireHeld, scrollRef, virtualizer])
 
   return {
     cancelPendingScroll,
@@ -569,7 +563,7 @@ export function useTanstackMessageVirtualizer({
       // is open and lands it ~100 ms after the gesture ends. A caller that owns the pixels closes
       // that gesture first, as the library does itself for a write it does not defer. Only an
       // unrefused write owns them: the reader-takeover check runs here, with the gesture still
-      // open, so a refusal (and the takeover write it makes) leaves the reader's protection intact.
+      // open, so a refusal and its cancellation leave the reader's protection intact.
       const gesture = opts?.releaseGesture
         ? (virtualizer as unknown as { _iosGesture?: IosGestureLike })._iosGesture : undefined
       if (gesture) {

@@ -45,6 +45,26 @@ function bouncingList() {
   return { scroller, virtualizer: hook.result.current }
 }
 
+// Intent: FLM-219 / FLM-220 measured cancellation clamping iOS end overscroll on every
+// touchmove. Use the observed 46px stretch; cancellation must drop work, not issue a new target.
+it('leaves a held end pull untouched when the reader takes over', () => {
+  const { scroller, virtualizer } = bouncingList()
+  const paint = queuedFrames()
+  scroller.dispatchEvent(new Event('touchstart'))
+  const stretched = scroller.scrollHeight - scroller.clientHeight + 46
+  scroller.scrollTop = stretched
+  scroller.dispatchEvent(new Event('scroll'))
+  const writer = vi.spyOn(scroller, 'scrollTo')
+  act(() => {
+    virtualizer.cancelPendingScroll?.()
+    virtualizer.cancelPendingScroll?.()
+  })
+  paint()
+  paint()
+  expect(writer).not.toHaveBeenCalled()
+  expect(scroller.scrollTop).toBe(stretched)
+})
+
 function queuedFrames() {
   const frames: FrameRequestCallback[] = []
   const queue = (callback: FrameRequestCallback) => frames.push(callback)
@@ -244,10 +264,9 @@ it('lands the restore on the requested offset, not a bounced one', () => {
   expect(scroller.scrollTop).toBe(2000)
 })
 
-// Review FLM-182 F1 (second round): the production veto is a takeover that writes through
-// cancelPendingScroll before it refuses. While the reader's gesture is open the library holds that
-// write; if the restore had released the gesture first, the takeover write would land.
-it('runs the takeover write of a refused restore with the gesture still open', () => {
+// Review FLM-182 F1 and FLM-219: a production veto cancels the target without writing or
+// releasing the reader's gesture. The next ordinary navigation must still wait for the tail.
+it('cancels a refused restore without writing or releasing the reader gesture', () => {
   const { scroller, virtualizer } = bouncingList()
   const landed: number[] = []
   scroller.scrollTo = options => {
