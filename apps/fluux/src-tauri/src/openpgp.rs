@@ -21,7 +21,8 @@
 //! keychain is unreachable). The in-memory map here is a cache — the
 //! first [`OpenpgpState::ensure_key`] call per account after a restart
 //! loads from disk. [`openpgp_forget_account`] removes both the cached
-//! entry and the on-disk material.
+//! entry and the on-disk material. Each account's unlock, import, rotation
+//! and forget run one at a time, in the order they were requested.
 
 use anyhow::{anyhow, Context, Result};
 use sequoia_openpgp as openpgp;
@@ -31,7 +32,7 @@ use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::State;
-use tokio::sync::OnceCell as AsyncOnceCell;
+use tokio::sync::{Mutex as AsyncMutex, OnceCell as AsyncOnceCell, OwnedMutexGuard};
 
 use crate::openpgp_storage::{KeyStorage, PassphraseBacking};
 
@@ -174,9 +175,20 @@ mod notification_subkeys;
 ///
 /// Every account has an [`AsyncOnceCell<UnlockOutcome>`]: the first
 /// `ensure_key` or `prewarm` caller for a given JID runs the unlock; any
-/// concurrent caller awaits the same cell instead of racing to a second
-/// KDF run. On error the cell is evicted so a subsequent attempt starts
-/// fresh (e.g. after the user fixes a vanished `.pass` fallback file).
+/// concurrent caller waits its turn and reuses that cell's outcome instead
+/// of running a second KDF. On error the cell is evicted so a subsequent
+/// attempt starts fresh (e.g. after the user fixes a vanished `.pass`
+/// fallback file).
+///
+/// # Per-account lifecycle order
+///
+/// Unlock ([`Self::ensure_key`]), backup import, subkey rotation and forget
+/// each hold the account's lifecycle lock while they load, save or delete its
+/// key file, passphrase and cached cell. The lock is granted in request order
+/// and waiting for it yields the command thread. A forget still waiting on a
+/// keychain prompt after its frontend deadline therefore finishes before a
+/// later `ensure_key` reads the passphrase: the replacement key never saves
+/// under the passphrase forget is deleting.
 ///
 /// [`AsyncOnceCell`]: tokio::sync::OnceCell
 pub struct OpenpgpState {
@@ -185,6 +197,8 @@ pub struct OpenpgpState {
     /// should join; absent = no attempt started yet. Cells carrying `Err`
     /// are evicted after observation so the next caller retries.
     entries: Mutex<HashMap<String, Arc<AsyncOnceCell<UnlockOutcome>>>>,
+    /// Per-JID lifecycle lock; see the type's lifecycle order section.
+    lifecycle: AsyncMutex<HashMap<String, Arc<AsyncMutex<()>>>>,
     storage: Arc<KeyStorage>,
     /// Test-only instrumentation: how many times the blocking KDF path
     /// actually ran. Concurrent `ensure_key` calls must coalesce to one
@@ -204,6 +218,7 @@ impl OpenpgpState {
     pub fn new(base_dir: PathBuf) -> Self {
         Self {
             entries: Mutex::new(HashMap::new()),
+            lifecycle: AsyncMutex::default(),
             storage: Arc::new(KeyStorage::new(base_dir)),
             #[cfg(test)]
             blocking_runs: std::sync::atomic::AtomicUsize::new(0),
@@ -217,6 +232,7 @@ impl OpenpgpState {
     pub fn for_testing(base_dir: PathBuf) -> Self {
         Self {
             entries: Mutex::new(HashMap::new()),
+            lifecycle: AsyncMutex::default(),
             storage: Arc::new(KeyStorage::for_testing(base_dir)),
             blocking_runs: std::sync::atomic::AtomicUsize::new(0),
         }
@@ -226,6 +242,7 @@ impl OpenpgpState {
     pub fn for_testing_with_storage(storage: KeyStorage) -> Self {
         Self {
             entries: Mutex::new(HashMap::new()),
+            lifecycle: AsyncMutex::default(),
             storage: Arc::new(storage),
             blocking_runs: std::sync::atomic::AtomicUsize::new(0),
         }
@@ -243,6 +260,8 @@ impl OpenpgpState {
         account_jid: String,
         user_id: String,
     ) -> Result<KeyBundle, String> {
+        // Held through the cell, the unlock and an error eviction.
+        let _lifecycle = self.lifecycle(&account_jid).await;
         let cell = self.cell_for(&account_jid);
 
         let storage = Arc::clone(&self.storage);
@@ -381,12 +400,15 @@ impl OpenpgpState {
 
     /// Forget the account: drop the cell AND remove every on-disk trace
     /// (encrypted TSK, fallback passphrase file, keychain entry). Safe
-    /// to call for an unknown account. All locks, file I/O and authorization
-    /// run on the blocking pool, never on the command's event-loop thread.
+    /// to call for an unknown account. Waiting for the account's lifecycle
+    /// lock yields; the state lock, file I/O and authorization run on the
+    /// blocking pool, never on the command's event-loop thread.
     pub async fn forget_account(self: &Arc<Self>, account_jid: &str) -> Result<(), String> {
+        let lifecycle = self.lifecycle(account_jid).await;
         let state = Arc::clone(self);
         let account_jid = account_jid.to_owned();
         tauri::async_runtime::spawn_blocking(move || {
+            let _lifecycle = lifecycle;
             state.entries.lock().unwrap().remove(&account_jid);
             state.storage.forget(&account_jid).map_err(anyhow_to_string)
         })
@@ -435,8 +457,10 @@ impl OpenpgpState {
         passphrase: String,
         without_migration: bool,
     ) -> Result<KeyBundle, String> {
+        let lifecycle = self.lifecycle(&account_jid).await;
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
+            let _lifecycle = lifecycle;
             let tsk_armored =
                 crate::openpgp_backup::decrypt_tsk_with_passphrase(&backup_message, &passphrase)
                     .map_err(anyhow_to_string)?;
@@ -452,9 +476,8 @@ impl OpenpgpState {
             let bundle = bundle_from_cert(&cert, backing).map_err(anyhow_to_string)?;
 
             // Replace any existing cell so the next ensure_key observes
-            // the imported bundle. This method is user-initiated and runs
-            // exclusively after an explicit "restore from backup" choice,
-            // so we don't need to coordinate with concurrent unlockers.
+            // the imported bundle. The lifecycle lock keeps unlocks and
+            // forget for this account out until the cell is replaced.
             let mut entries = this.entries.lock().unwrap();
             let cell = Arc::new(AsyncOnceCell::new());
             let _ = cell.set(Ok(bundle.clone()));
@@ -515,8 +538,10 @@ impl OpenpgpState {
         selected_fingerprint: String,
         without_migration: bool,
     ) -> Result<KeyBundle, String> {
+        let lifecycle = self.lifecycle(&account_jid).await;
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
+            let _lifecycle = lifecycle;
             let tsks = crate::openpgp_backup::decrypt_all_tsks_with_passphrase(
                 &backup_message,
                 &passphrase,
@@ -574,9 +599,11 @@ impl OpenpgpState {
         self: &Arc<Self>,
         account_jid: String,
     ) -> Result<KeyBundle, String> {
+        let lifecycle = self.lifecycle(&account_jid).await;
         let bundle = self.read_cached_bundle(&account_jid, "account")?;
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
+            let _lifecycle = lifecycle;
             let current = Cert::from_bytes(bundle.secret_armored.as_bytes())
                 .map_err(|e| format!("parse current cert for rotation: {e}"))?;
             let rotated = rotate_encryption_subkey(current).map_err(anyhow_to_string)?;
@@ -588,9 +615,8 @@ impl OpenpgpState {
 
             // Replace the cached cell so subsequent encrypt / decrypt
             // / backup calls observe the rotated material immediately.
-            // Rotation is a user-initiated action, so it runs exclusively
-            // with respect to other key lifecycle ops on this account —
-            // no coordination with concurrent unlockers needed.
+            // The lifecycle lock keeps unlocks and forget for this
+            // account out until the cell is replaced.
             let mut entries = this.entries.lock().unwrap();
             let cell = Arc::new(AsyncOnceCell::new());
             let _ = cell.set(Ok(new_bundle.clone()));
@@ -612,6 +638,18 @@ impl OpenpgpState {
     }
 
     // ---- internals ----------------------------------------------------
+
+    /// Wait, in request order, for this account's earlier lifecycle work.
+    async fn lifecycle(&self, account_jid: &str) -> OwnedMutexGuard<()> {
+        let lock = Arc::clone(
+            self.lifecycle
+                .lock()
+                .await
+                .entry(account_jid.to_owned())
+                .or_default(),
+        );
+        lock.lock_owned().await
+    }
 
     /// Get-or-insert the per-JID cell. The returned `Arc` is cheap to
     /// hold across an await because the inner `AsyncOnceCell` does its

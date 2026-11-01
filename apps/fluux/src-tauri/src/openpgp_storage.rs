@@ -53,9 +53,10 @@
 //!
 //! ## Concurrency
 //!
-//! Callers are expected to hold their own lock (`OpenpgpState` takes a
-//! Mutex per-account map). The storage layer itself does only file I/O
-//! and keychain round-trips. macOS shares a process-wide secrets cache.
+//! Callers are expected to hold their own lock: `OpenpgpState` runs each
+//! account's load, save and forget under that account's lifecycle lock, in
+//! request order. The storage layer itself does only file I/O and keychain
+//! round-trips. macOS shares a process-wide secrets cache.
 
 use anyhow::{anyhow, Context, Result};
 #[cfg(not(any(target_os = "ios", target_os = "macos")))]
