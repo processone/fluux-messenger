@@ -1,7 +1,8 @@
 import { chatNotificationFixture, roomNotificationFixture, resetNotificationFixtures } from './notification.testHelpers'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useArrivalJumpStore } from '@/stores/arrivalJumpStore'
-import { renderHook, waitFor } from '@testing-library/react'
+import { render, screen, renderHook, waitFor } from '@testing-library/react'
+import { ToastContainer } from '@/components/ToastContainer'
 import { useToastStore } from '@/stores/toastStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { setPlatformForTesting } from '@/platform'
@@ -185,6 +186,24 @@ describe('useDesktopNotifications posting + guard', () => {
       await arrive('alice@example.com', 'Alice')
       expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(['Alice: body text'])
       expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
+    })
+
+    // FLM-201: room banners show the room picture, sender first, then the room and message.
+    it('shows the room picture with the sender first, then the room and message', async () => {
+      restorePlatform()
+      restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+      isMobileTauri.mockResolvedValue(true)
+      const avatar = 'data:image/png;base64,iVBORw0KGgo='
+      renderHook(() => useDesktopNotifications())
+      await handlers.onRoomMessage?.(
+        { jid: 'xsf@muc.xmpp.org', name: 'XSF', nickname: 'Receiver', avatar, avatarHash: 'hash', notifyAll: true },
+        { id: 'avatar-diagnostic', nick: 'Sender', body: 'Avatar diagnostic', from: 'xsf@muc.xmpp.org/Sender' },
+      )
+      render(<ToastContainer />)
+      const toast = screen.getByRole('button', { name: /Sender/ })
+      expect(toast.querySelector('img')?.getAttribute('src')).toBe(avatar)
+      expect(toast.textContent).toBe('SenderXSF: body text')
+      expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
     })
 
     it('opens the conversation at the message when tapped', async () => {

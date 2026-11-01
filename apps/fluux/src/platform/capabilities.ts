@@ -250,7 +250,8 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     savesThroughShareSheet: ios,
     nativeClipboardImages: desktop,
     nativeFileDrop: desktop,
-    notificationsNeedFileUrls: desktop,
+    // The native iOS attachment loader rejects the blob: and data: addresses the WebView holds.
+    notificationsNeedFileUrls: desktop || ios,
     opensLinksInSystemBrowser: native,
     interceptsInAppNavigation: native,
     nativeHttpFetch: desktop || ios,

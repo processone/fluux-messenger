@@ -136,6 +136,7 @@
         "nativeUploads",
         "nativeXmppProxy",
         "notificationsManagedByOS",
+        "notificationsNeedFileUrls",
         "opensLinksInSystemBrowser",
         "reducesLargePhotos",
         "savesThroughShareSheet",

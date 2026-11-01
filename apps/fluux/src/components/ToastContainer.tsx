@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { X, CheckCircle2, AlertCircle, Info } from 'lucide-react'
 import { platform } from '@/platform'
+import { RoomAvatar } from '@/components/RoomAvatar'
 import { useToastStore, type ToastType } from '@/stores/toastStore'
 
 const iconMap: Record<ToastType, typeof CheckCircle2> = {
@@ -48,8 +49,21 @@ export function ToastContainer() {
                         max-w-sm min-w-[280px]
                         ${hasAction ? 'cursor-pointer' : ''}`}
           >
-            <Icon className={`size-5 shrink-0 ${colors.icon}`} />
-            <span className="text-sm text-fluux-text flex-1 line-clamp-3 break-words">{toast.message}</span>
+            {toast.roomBanner ? (
+              <>
+                <RoomAvatar identifier={toast.roomBanner.roomJid} name={toast.roomBanner.roomName}
+                  avatarUrl={toast.roomBanner.avatarUrl} size="md" className="shrink-0" />
+                <div className="text-sm text-fluux-text flex-1 min-w-0 break-words">
+                  <div className="font-semibold truncate">{toast.roomBanner.sender}</div>
+                  <div className="line-clamp-2"><span className="text-fluux-muted">{toast.roomBanner.roomName}: </span>{toast.roomBanner.body}</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <Icon className={`size-5 shrink-0 ${colors.icon}`} />
+                <span className="text-sm text-fluux-text flex-1 line-clamp-3 break-words">{toast.message}</span>
+              </>
+            )}
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); removeToast(toast.id) }}
