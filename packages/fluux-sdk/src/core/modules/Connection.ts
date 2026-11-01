@@ -2349,12 +2349,17 @@ export class Connection extends BaseModule {
     // Therefore, whenever 'online' fires, it's a new session.
     this.xmpp.on('online', () => {
       logInfo(`Connection handshake complete: online (resolved=${resolved})`)
-      // SM enabled inline (SASL2 Bind 2) produces no top-level <enabled/>; xmpp.js
-      // still recorded its id and max on the live object.
-      const smInline = this.xmpp?.streamManagement
-      if (smInline?.enabled && smInline.id && smInline.id !== this.smBegunId) {
-        this.recordSmEnabled(smInline.id, (smInline as { max?: unknown }).max)
-      }
+      // SM enabled inline (SASL2 Bind 2) produces no top-level <enabled/>. xmpp.js emits
+      // 'online' before it hands the <bound/> children to the SM module, so the id and max
+      // reach the live object only after this handler returns: read them one microtask later,
+      // before anything awaiting the connection can run.
+      const xmppForInline = this.xmpp
+      queueMicrotask(() => {
+        const smInline = xmppForInline?.streamManagement
+        if (this.xmpp === xmppForInline && smInline?.enabled && smInline.id && smInline.id !== this.smBegunId) {
+          this.recordSmEnabled(smInline.id, (smInline as { max?: unknown }).max)
+        }
+      })
       handleResult(false)
     })
 

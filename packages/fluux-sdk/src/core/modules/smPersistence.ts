@@ -23,6 +23,8 @@ export interface SmStateSource {
     inbound?: number
     outbound?: number
     outbound_q?: unknown[]
+    /** `max` of the `<enabled/>` that started this session, as xmpp.js recorded it. */
+    max?: unknown
   } | null
 }
 
@@ -190,7 +192,7 @@ export class SmPersistence {
         outbound: (sm.outbound || 0) + pendingOutbound,
         // A frozen live object read after the interruption is not a fresh capture.
         timestamp: previous?.interruptedAt != null ? previous.timestamp : Date.now(),
-        windowMs: previous?.windowMs ?? resolveSmWindowMs(this.requestSeconds, undefined),
+        windowMs: previous?.windowMs ?? resolveSmWindowMs(this.requestSeconds, sm.max),
         interruptedAt: previous?.interruptedAt,
       }
     }

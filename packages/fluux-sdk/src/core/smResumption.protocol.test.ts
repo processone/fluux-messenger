@@ -11,6 +11,11 @@ import type { AddressInfo } from 'node:net'
 import { XMPPClient, bindStoresForTesting } from './XMPPClient'
 import { createMockStores } from './test-utils'
 import type { SessionState, StorageAdapter } from './types'
+import { roomStore } from '../stores/roomStore'
+import { chatStore } from '../stores/chatStore'
+import { localStorageMock } from './sideEffects.testHelpers'
+
+Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
 
 const FRAMING = 'urn:ietf:params:xml:ns:xmpp-framing'
 const SM = 'urn:xmpp:sm:3'
@@ -23,69 +28,142 @@ async function until(cond: () => boolean, ms = 15000) {
   }
 }
 
-interface Seen { name: string; attrs: Record<string, unknown> }
+interface Seen { name: string; attrs: Record<string, unknown>; ns?: string }
 
 class ControlledServer {
-  wss: WebSocketServer
+  wss!: WebSocketServer
   sockets = new Set<WebSocket>()
   seen: Seen[] = []
   /** `max` granted in `<enabled/>`; undefined omits it. */
   grant: string | undefined = undefined
   accepting = true
   resumable = true
+  /** Advertise SASL 2 with inline Bind 2 and Stream Management instead of the traditional negotiation. */
+  inline = false
+  /** Archive the server answers MAM queries from; it survives a restart, like a real message archive. */
+  archive: Array<{ id: string; body: string }> = []
+  /** Occupants the server has admitted, per room, for the current process. */
+  rooms = new Set<string>()
   private nextId = 1
   private lastSm = ''
   private inbound = 0
+  private fixedPort = 0
 
-  constructor() {
-    this.wss = new WebSocketServer({ port: 0, host: '::', handleProtocols: () => 'xmpp' })
-    this.wss.on('connection', (ws) => {
-      if (!this.accepting) { ws.close(1013); return }
-      this.sockets.add(ws)
-      ws.on('close', () => this.sockets.delete(ws))
-      let authed = false
-      ws.on('message', (data) => {
-        const el = parse(data.toString())
-        this.seen.push({ name: el.name, attrs: { ...el.attrs } })
-        if (['iq', 'message', 'presence'].includes(el.name)) this.inbound++
-        const send = (xml: string) => ws.send(xml)
-        if (el.name === 'open') {
-          send(`<open xmlns="${FRAMING}" from="example.com" id="s${this.nextId++}" version="1.0" xml:lang="en"/>`)
-          send(authed
-            ? `<stream:features xmlns:stream="http://etherx.jabber.org/streams"><bind xmlns="urn:ietf:params:xml:ns:xmpp-bind"/><sm xmlns="${SM}"/></stream:features>`
-            : '<stream:features xmlns:stream="http://etherx.jabber.org/streams"><mechanisms xmlns="urn:ietf:params:xml:ns:xmpp-sasl"><mechanism>PLAIN</mechanism></mechanisms></stream:features>')
-        } else if (el.name === 'auth') {
-          authed = true
-          send('<success xmlns="urn:ietf:params:xml:ns:xmpp-sasl"/>')
-        } else if (el.name === 'enable') {
+  start() {
+    this.wss = new WebSocketServer({ port: this.fixedPort, host: '::', handleProtocols: () => 'xmpp' })
+    this.wss.on('connection', (ws) => this.onConnection(ws))
+    return new Promise<void>(r => this.wss.on('listening', () => { this.fixedPort = this.port; r() }))
+  }
+
+  private onConnection(ws: WebSocket) {
+    if (!this.accepting) { ws.close(1013); return }
+    this.sockets.add(ws)
+    ws.on('close', () => this.sockets.delete(ws))
+    let authed = false
+    const send = (xml: string) => ws.send(xml)
+    const SASL2 = 'urn:xmpp:sasl:2'
+    const BIND2 = 'urn:xmpp:bind:0'
+    const ready = (smAttrs: string) => `<enabled xmlns="${SM}" ${smAttrs}${this.grant ? ` max="${this.grant}"` : ''}/>`
+    ws.on('message', (data) => {
+      const el = parse(data.toString())
+      this.seen.push({ name: el.name, attrs: { ...el.attrs }, ns: (el.children.find(c => typeof c !== 'string') as unknown as { getNS(): string } | undefined)?.getNS() })
+      if (['iq', 'message', 'presence'].includes(el.name)) this.inbound++
+      if (el.name === 'open') {
+        send(`<open xmlns="${FRAMING}" from="example.com" id="s${this.nextId++}" version="1.0" xml:lang="en"/>`)
+        const mechs = this.inline
+          ? `<authentication xmlns="${SASL2}"><mechanism>PLAIN</mechanism><inline><bind xmlns="${BIND2}"><inline><feature var="${SM}"/></inline></bind><sm xmlns="${SM}"/></inline></authentication>`
+          : '<mechanisms xmlns="urn:ietf:params:xml:ns:xmpp-sasl"><mechanism>PLAIN</mechanism></mechanisms>'
+        send(authed
+          ? `<stream:features xmlns:stream="http://etherx.jabber.org/streams"><bind xmlns="urn:ietf:params:xml:ns:xmpp-bind"/><sm xmlns="${SM}"/></stream:features>`
+          : `<stream:features xmlns:stream="http://etherx.jabber.org/streams">${mechs}</stream:features>`)
+      } else if (el.name === 'auth') {
+        authed = true
+        send('<success xmlns="urn:ietf:params:xml:ns:xmpp-sasl"/>')
+      } else if (el.name === 'authenticate') {
+        // XEP-0388 with inline Bind 2 (XEP-0386) enable, or inline XEP-0198 resume.
+        authed = true
+        const resume = el.getChild('resume', SM)
+        const enable = el.getChild('bind', BIND2)?.getChild('enable', SM)
+        const who = '<authorization-identifier>alice@example.com/web</authorization-identifier>'
+        if (resume) {
+          if (this.resumable && resume.attrs.previd === this.lastSm) {
+            send(`<success xmlns="${SASL2}">${who}<resumed xmlns="${SM}" previd="${this.lastSm}" h="${this.inbound}"/></success>`)
+          } else {
+            send(`<success xmlns="${SASL2}">${who}<failed xmlns="${SM}"/></success>`)
+          }
+        } else if (enable) {
           this.lastSm = `sm-${this.nextId++}`
           this.inbound = 0
-          send(`<enabled xmlns="${SM}" id="${this.lastSm}" resume="true"${this.grant ? ` max="${this.grant}"` : ''}/>`)
-        } else if (el.name === 'resume') {
-          if (this.resumable && el.attrs.previd === this.lastSm) {
-            send(`<resumed xmlns="${SM}" previd="${this.lastSm}" h="${this.inbound}"/>`)
-          } else {
-            send(`<failed xmlns="${SM}"/>`)
-          }
-        } else if (el.name === 'r') {
-          send(`<a xmlns="${SM}" h="${this.inbound}"/>`)
-        } else if (el.name === 'iq') {
-          if (el.getChild('bind')) {
-            send(`<iq xmlns="jabber:client" type="result" id="${el.attrs.id}"><bind xmlns="urn:ietf:params:xml:ns:xmpp-bind"><jid>alice@example.com/web</jid></bind></iq>`)
-          } else if (el.attrs.type === 'get' || el.attrs.type === 'set') {
-            send(`<iq xmlns="jabber:client" type="result" id="${el.attrs.id}"/>`)
-          }
+          send(`<success xmlns="${SASL2}">${who}<bound xmlns="${BIND2}">${ready(`id="${this.lastSm}" resume="true"`)}</bound></success>`)
+        } else {
+          send(`<success xmlns="${SASL2}">${who}<bound xmlns="${BIND2}"/></success>`)
         }
-      })
+      } else if (el.name === 'enable') {
+        this.lastSm = `sm-${this.nextId++}`
+        this.inbound = 0
+        send(ready(`id="${this.lastSm}" resume="true"`))
+      } else if (el.name === 'resume') {
+        if (this.resumable && el.attrs.previd === this.lastSm) {
+          send(`<resumed xmlns="${SM}" previd="${this.lastSm}" h="${this.inbound}"/>`)
+        } else {
+          send(`<failed xmlns="${SM}"/>`)
+        }
+      } else if (el.name === 'r') {
+        send(`<a xmlns="${SM}" h="${this.inbound}"/>`)
+      } else if (el.name === 'presence' && el.getChild('x', 'http://jabber.org/protocol/muc')) {
+        const to = String(el.attrs.to)
+        this.rooms.add(to.split('/')[0])
+        send(`<presence xmlns="jabber:client" from="${to}" to="alice@example.com/web"><x xmlns="http://jabber.org/protocol/muc#user"><item affiliation="member" role="participant"/><status code="110"/></x></presence>`)
+      } else if (el.name === 'iq') {
+        const mam = el.getChild('query', 'urn:xmpp:mam:2')
+        if (el.getChild('bind', 'urn:ietf:params:xml:ns:xmpp-bind')) {
+          send(`<iq xmlns="jabber:client" type="result" id="${el.attrs.id}"><bind xmlns="urn:ietf:params:xml:ns:xmpp-bind"><jid>alice@example.com/web</jid></bind></iq>`)
+        } else if (mam) {
+          const roomJid = String(el.attrs.to ?? '')
+          for (const m of this.archive) {
+            const inner = roomJid.includes('conference')
+              ? `<message xmlns="jabber:client" from="${roomJid}/bob" to="alice@example.com" type="groupchat" id="${m.id}"><body>${m.body}</body></message>`
+              : `<message xmlns="jabber:client" from="bob@example.com/phone" to="alice@example.com" type="chat" id="${m.id}"><body>${m.body}</body></message>`
+            send(`<message xmlns="jabber:client"${roomJid ? ` from="${roomJid}"` : ''} to="alice@example.com/web"><result xmlns="urn:xmpp:mam:2" queryid="${mam.attrs.queryid}" id="${m.id}"><forwarded xmlns="urn:xmpp:forward:0"><delay xmlns="urn:xmpp:delay" stamp="2026-01-01T00:00:0${m.id.slice(1)}Z"/>${inner}</forwarded></result></message>`)
+          }
+          send(`<iq xmlns="jabber:client" type="result" id="${el.attrs.id}"><fin xmlns="urn:xmpp:mam:2" complete="true"><set xmlns="http://jabber.org/protocol/rsm"/></fin></iq>`)
+        } else if (el.getChild('query', 'http://jabber.org/protocol/disco#info')) {
+          const muc = String(el.attrs.to).includes('conference')
+          send(`<iq xmlns="jabber:client" type="result" id="${el.attrs.id}" from="${el.attrs.to ?? 'example.com'}"><query xmlns="http://jabber.org/protocol/disco#info"><identity category="${muc ? 'conference' : 'server'}" type="${muc ? 'text' : 'im'}" name="Test"/><feature var="urn:xmpp:mam:2"/>${muc ? '<feature var="http://jabber.org/protocol/muc"/>' : '<feature var="urn:xmpp:carbons:2"/>'}</query></iq>`)
+        } else if (el.attrs.type === 'get' || el.attrs.type === 'set') {
+          send(`<iq xmlns="jabber:client" type="result" id="${el.attrs.id}"/>`)
+        }
+      }
     })
   }
-  listening() { return new Promise<void>(r => this.wss.on('listening', () => r())) }
   get port() { return (this.wss.address() as AddressInfo).port }
   drop() { for (const s of this.sockets) s.close(1001) }
+  /** A real restart: the process goes away, every session and room membership with it; the archive stays. */
+  async restart() {
+    this.drop()
+    await new Promise(r => this.wss.close(r))
+    this.lastSm = ''
+    this.rooms.clear()
+    await this.start()
+  }
   count(name: string) { return this.seen.filter(s => s.name === name).length }
   last(name: string) { return [...this.seen].reverse().find(s => s.name === name) }
   async close() { this.drop(); await new Promise(r => this.wss.close(r)) }
 }
+
+/** In-memory stand-in for the app's session storage: it outlives one XMPPClient, like a page reload. */
+function memoryStorage() {
+  const sessions = new Map<string, SessionState>()
+  return {
+    getSessionState: async (jid: string) => sessions.get(jid) ?? null,
+    setSessionState: async (jid: string, state: SessionState) => { sessions.set(jid, state) },
+    clearSessionState: async (jid: string) => { sessions.delete(jid) },
+    getCredentials: async () => null,
+    setCredentials: async () => {},
+    clearCredentials: async () => {},
+  } satisfies StorageAdapter
+}
+
 
 describe('stream management resumption against a controlled XMPP server', { timeout: 30_000 }, () => {
   let server: ControlledServer
@@ -101,7 +179,7 @@ describe('stream management resumption against a controlled XMPP server', { time
     await until(() => server.count('enable') === 1 && client.getStreamManagementState() !== null)
   }
 
-  beforeEach(async () => { server = new ControlledServer(); await server.listening() })
+  beforeEach(async () => { server = new ControlledServer(); await server.start() })
   afterEach(async () => {
     client?.cancelReconnect()
     await client?.disconnect().catch(() => {})
@@ -153,18 +231,57 @@ describe('stream management resumption against a controlled XMPP server', { time
     expect(server.count('resume')).toBe(1)
   })
 
-  /** In-memory stand-in for the app's session storage: it outlives one XMPPClient, like a page reload. */
-  function memoryStorage() {
-    const sessions = new Map<string, SessionState>()
-    return {
-      getSessionState: async (jid: string) => sessions.get(jid) ?? null,
-      setSessionState: async (jid: string, state: SessionState) => { sessions.set(jid, state) },
-      clearSessionState: async (jid: string) => { sessions.delete(jid) },
-      getCredentials: async () => null,
-      setCredentials: async () => {},
-      clearCredentials: async () => {},
-    } satisfies StorageAdapter
-  }
+  it('negotiates the window inline in SASL 2 / Bind 2 and resumes inline with <resume previd>', async () => {
+    server.inline = true
+    server.grant = '86400'
+    client = new XMPPClient({ debug: false, streamManagementMaxSeconds: 86_400 })
+    bindStoresForTesting(client, createMockStores())
+    await client.connect({
+      jid: 'alice@example.com', password: 'secret', server: `ws://localhost:${server.port}`,
+      skipDiscovery: true, resource: 'web',
+    })
+    await until(() => server.count('authenticate') === 1 && client.getStreamManagementState() !== null)
+    expect(server.count('auth')).toBe(0) // SASL 2, not the traditional exchange
+    expect(server.count('enable')).toBe(0) // enabled inside <bind/>, not as a stream element
+    expect(client.getStreamManagementState()).toMatchObject({ windowMs: 86_400_000 })
+
+    server.drop()
+    await until(() => server.count('authenticate') === 2)
+    expect(server.count('enable')).toBe(0)
+    expect(server.count('bind')).toBe(0) // resumed: no second <bind/> was sent
+  })
+
+  it('after a real server restart starts a new session, catches up from the archive and rejoins the room once', async () => {
+    const room = 'team@conference.example.com'
+    roomStore.getState().reset()
+    chatStore.getState().reset()
+    server.grant = '600'
+    server.archive = [{ id: 'm1', body: 'hello' }, { id: 'm2', body: 'again' }]
+    client = new XMPPClient({ debug: false, streamManagementMaxSeconds: 600, storageAdapter: memoryStorage() })
+    await client.connect({
+      jid: 'alice@example.com', password: 'secret', server: `ws://localhost:${server.port}`,
+      skipDiscovery: true, resource: 'web',
+    })
+    await until(() => server.count('enable') === 1 && client.getStreamManagementState() !== null)
+    await client.rooms.joinRoom(room, 'alice')
+    await until(() => server.rooms.has(room))
+    const joins = () => server.seen.filter(x => x.name === 'presence' && String(x.attrs.to).startsWith(room)).length
+    const mamQueries = () => server.seen.filter(x => x.name === 'iq' && x.ns === 'urn:xmpp:mam:2').length
+    const mamBefore = mamQueries()
+    expect(joins()).toBe(1)
+
+    await server.restart()
+    await until(() => server.count('enable') === 2)
+    await until(() => server.rooms.has(room) && mamQueries() > mamBefore)
+    await sleep(1500) // a duplicate join or a repeated catch-up would show up by now
+
+    expect(server.count('resume')).toBe(1) // the client tried its old session; the restarted server no longer knows it
+    expect(joins()).toBe(2) // one join per server process: the room was rejoined exactly once
+    expect(roomStore.getState().rooms.get(room)?.lastMessage?.id).toBe('m2') // caught up from the archive
+    const settled = mamQueries()
+    await sleep(1500)
+    expect(mamQueries()).toBe(settled) // and nothing queried the archive again
+  })
 
   it('a reloaded client resumes a 24-hour session from storage, and starts fresh once the grant is spent', async () => {
     const storage = memoryStorage()
