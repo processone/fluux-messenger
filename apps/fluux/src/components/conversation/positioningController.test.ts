@@ -430,6 +430,28 @@ describe('positioning controller resident-top ownership', () => {
     expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
   })
 
+  // FLM-252: Home owns a released fling's leftover movement until it settles or the reader takes over.
+  it('reports pending navigation while Home is current', () => {
+    const harness = residentTopHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
+    controller.beginResidentTopNavigation({ conversationId, executor: harness.executor })
+    expect(controller.hasPendingNavigation(conversationId)).toBe(true)
+    expect(controller.hasPendingNavigation('another-room')).toBe(false)
+    for (const scrollTop of [640, 100, 1, 0]) {
+      harness.setScrollTop(scrollTop)
+      harness.runFrame()
+    }
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
+
+    controller.beginResidentTopNavigation({ conversationId, executor: harness.executor })
+    expect(controller.hasPendingNavigation(conversationId)).toBe(true)
+    controller.observeUserInput(conversationId)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
+  })
+
   it('does not treat follow-live rearming from measured movement as an explicit command', () => {
     const accepted = vi.fn()
     const controller = new PositioningController(undefined, accepted)
@@ -751,6 +773,59 @@ describe('positioning controller live-edge ownership', () => {
     staleFrame()
     expect(first.positionFrame).toHaveBeenCalledTimes(1)
     expect(second.positionFrame).toHaveBeenCalledTimes(1)
+  })
+
+  // FLM-252: return-to-latest owns a released fling's leftover movement until it first settles.
+  // Entry, follow-live re-pins and other live-edge requests are maintenance and never do.
+  it('reports pending navigation only for return-to-latest before its first settle', () => {
+    const harness = liveEdgeHarness()
+    const controller = new PositioningController()
+    controller.beginLiveEdgeEntry({ conversationId, entryFacts: liveEntryFacts(), executor: harness.executor })
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
+
+    const navigationFacts = { unreadMarkerNeedsVisit: false, unreadMarkerAlign: 'start' } as const
+    controller.beginLiveEdgeNavigation({ conversationId, navigationFacts, executor: harness.executor })
+    expect(controller.hasPendingNavigation(conversationId)).toBe(true)
+    expect(controller.hasPendingNavigation('another-room')).toBe(false)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: harness.executor, rearmEligibleFromGeometry: true }))
+      .toBe(true)
+    expect(controller.hasPendingNavigation(conversationId), 'a restart before landing is still the navigation').toBe(true)
+
+    while (harness.callbacks.length) harness.runFrame()
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: harness.executor, rearmEligibleFromGeometry: true }))
+      .toBe(true)
+    expect(harness.callbacks.length, 'the follow-live re-pin owns the pixels').toBeGreaterThan(0)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
+
+    controller.beginLiveEdgeRequest({
+      conversationId, source: { kind: 'live-update', reason: 'outgoing-message' }, executor: harness.executor,
+    })
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
+
+    controller.beginLiveEdgeNavigation({ conversationId, navigationFacts, executor: harness.executor })
+    expect(controller.hasPendingNavigation(conversationId)).toBe(true)
+    controller.observeUserInput(conversationId)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
+  })
+
+  it('does not report follow re-armed by reader movement as pending navigation', () => {
+    const harness = liveEdgeHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const navigation = controller.beginLiveEdgeNavigation({
+      conversationId,
+      navigationFacts: { unreadMarkerNeedsVisit: false, unreadMarkerAlign: 'start' },
+      executor: harness.executor,
+    })!
+    controller.observeUserScroll(conversationId, -10, true)
+    expect(controller.snapshot().active?.request.source, 'the re-armed follow shares the navigation source')
+      .toEqual(navigation.source)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: harness.executor, rearmEligibleFromGeometry: true }))
+      .toBe(true)
+    expect(harness.callbacks.length).toBeGreaterThan(0)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
   })
 
   it('cancels immediately for user input and cannot be revived by a queued frame', () => {
@@ -2690,22 +2765,22 @@ describe('positioning controller explicit-target ownership', () => {
   }
 
   // FLM-186's old-fling attribution must never exempt settled-target visibility maintenance.
-  it('reports pending message navigation only for the initial current execution', () => {
+  it('reports pending navigation only for the initial current message-jump execution', () => {
     const harness = targetHarness()
     const controller = new PositioningController()
     observeLiveEntry(controller)
-    expect(controller.hasPendingMessageNavigation(conversationId)).toBe(false)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
     harness.setFrameResult({ kind: 'positioned', scrollTop: 400, wrote: true })
     controller.beginExplicitTarget({ conversationId, messageId: 'target-a', executor: harness.executor })
-    expect(controller.hasPendingMessageNavigation(conversationId)).toBe(true)
-    expect(controller.hasPendingMessageNavigation('another-room')).toBe(false)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(true)
+    expect(controller.hasPendingNavigation('another-room')).toBe(false)
 
     while (harness.callbacks.length) harness.runFrame()
-    expect(controller.hasPendingMessageNavigation(conversationId)).toBe(false)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
     expect(controller.reconcileMessageTargetAfterResize({ conversationId, executor: harness.executor })).toBe(true)
-    expect(controller.hasPendingMessageNavigation(conversationId)).toBe(false)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
     controller.observeUserInput(conversationId)
-    expect(controller.hasPendingMessageNavigation(conversationId)).toBe(false)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
   })
 
   it('reconciles a settled message target after resize without acquiring follow-live', () => {
