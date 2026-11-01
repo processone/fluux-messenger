@@ -457,7 +457,16 @@ for (const kind of ['chat', 'room'] as const) {
     const openPanel = async (id = TARGET, panel: 'more' | 'reactions' = 'more') => {
       const label = panel === 'more' ? 'More options' : 'More reactions'
       const target = page.locator(`.message-row[data-message-id="${id}"]`)
-      await target.locator('[data-message-body]').hover()
+      const point = await target.locator('[data-message-body]').evaluate(element => {
+        const box = element.getBoundingClientRect()
+        const viewport = element.closest('[data-message-list]')!.getBoundingClientRect()
+        const top = Math.max(box.top, viewport.top), bottom = Math.min(box.bottom, viewport.bottom)
+        const x = box.left + Math.min(80, box.width / 4), y = (top + bottom) / 2
+        return { x, y, visible: bottom > top, hitsBody: element.contains(document.elementFromPoint(x, y)) }
+      })
+      expect(point.visible && point.hitsBody, 'native pointer interest must hit the visible body, not an overlapping toolbar').toBe(true)
+      // Locator hover may auto-scroll around an overlapping control; do not change reading intent in setup.
+      await page.mouse.move(point.x, point.y)
       await waitForActions(page, id)
       await keepJson(`open-panel-${++openIndex}`, await target.evaluate((element, label) => {
         const toolbar = element.querySelector('[data-message-toolbar]')!
