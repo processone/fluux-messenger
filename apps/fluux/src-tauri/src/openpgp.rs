@@ -2256,6 +2256,84 @@ mod tests {
         );
     }
 
+    // FLM-93 N1: replacing an identity calls ensure_key once forget's frontend
+    // deadline passes, even while forget still waits on a keychain prompt. The
+    // new key must not be saved under the passphrase forget is deleting.
+    #[tokio::test(flavor = "current_thread")]
+    async fn forget_holds_off_a_following_ensure_key_until_it_ends() {
+        use std::sync::mpsc;
+        /// A secret store whose delete waits, as a pending authorization prompt does.
+        struct PromptedDelete {
+            items: Mutex<HashMap<String, String>>,
+            entered: Mutex<mpsc::Sender<()>>,
+            answered: Mutex<mpsc::Receiver<()>>,
+        }
+        impl crate::credentials::SecretStore for PromptedDelete {
+            fn get(&self, account: &str) -> Result<Option<String>, String> {
+                Ok(self.items.lock().unwrap().get(account).cloned())
+            }
+            fn set(&self, account: &str, secret: &str) -> Result<(), String> {
+                self.items
+                    .lock()
+                    .unwrap()
+                    .insert(account.into(), secret.into());
+                Ok(())
+            }
+            fn delete(&self, account: &str) -> Result<(), String> {
+                let _ = self.entered.lock().unwrap().send(());
+                // A bounded failure guard, not a sleep or a retry.
+                let _ = self
+                    .answered
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(std::time::Duration::from_secs(10));
+                self.items.lock().unwrap().remove(account);
+                Ok(())
+            }
+        }
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (answer_tx, answer_rx) = mpsc::channel();
+        let store = Arc::new(PromptedDelete {
+            items: Mutex::default(),
+            entered: Mutex::new(entered_tx),
+            answered: Mutex::new(answer_rx),
+        });
+        let dir = fresh_tmp_dir();
+        let open = || {
+            Arc::new(OpenpgpState::for_testing_with_storage(
+                KeyStorage::for_testing_with_store(dir.clone(), store.clone()),
+            ))
+        };
+        let jid = "alice@example.com";
+        let state = open();
+        let retired = state.ensure_key(jid.into(), "Alice".into()).await.unwrap();
+
+        let mut forget = Box::pin(state.forget_account(jid));
+        assert!(futures_util::poll!(forget.as_mut()).is_pending());
+        entered_rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("forget reaches the keychain delete");
+        let mut replacement = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
+        assert!(futures_util::poll!(replacement.as_mut()).is_pending());
+        assert_eq!(
+            state.blocking_run_count(),
+            1,
+            "ensure_key must not load or save while forget is still deleting"
+        );
+
+        answer_tx.send(()).unwrap();
+        forget.await.unwrap();
+        let replacement = replacement.await.unwrap();
+        assert_ne!(replacement.fingerprint, retired.fingerprint);
+        // Restart: the replacement key still unlocks from disk and the store.
+        let reloaded = open()
+            .ensure_key(jid.into(), "Alice".into())
+            .await
+            .expect("the replacement key stays unlockable");
+        assert_eq!(reloaded.fingerprint, replacement.fingerprint);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn fingerprint_of_handles_non_pgp_input() {
         let err = fingerprint_of("not an OpenPGP block").expect_err("must reject");
