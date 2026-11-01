@@ -193,7 +193,7 @@ describe('useDesktopNotifications posting + guard', () => {
       restorePlatform()
       restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
       isMobileTauri.mockResolvedValue(true)
-      const avatar = 'data:image/png;base64,iVBORw0KGgo='
+      const avatar = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
       renderHook(() => useDesktopNotifications())
       await handlers.onRoomMessage?.(
         { jid: 'xsf@muc.xmpp.org', name: 'XSF', nickname: 'Receiver', avatar, avatarHash: 'hash', notifyAll: true },
