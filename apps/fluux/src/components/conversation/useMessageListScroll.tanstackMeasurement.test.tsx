@@ -130,6 +130,7 @@ function fixture() {
   return {
     rows, writes, scrollEvents, loadOlder, loadNewer, scroller, totalHeight,
     get virtualizer() { return virtualizer },
+    get api() { return api },
     move: (value: number, deliver = false) => {
       top = value
       if (deliver) fireEvent.scroll(scroller)
@@ -165,6 +166,23 @@ function fixture() {
     unmount: view.unmount,
   }
 }
+
+// Native navigation wins even when compositor pixels precede the application's scroll event.
+it('observes native movement before resuming a disengaged message hold', () => {
+  const scope = fixture()
+  const bottom = scope.scroller.scrollTop
+  act(() => { expect(scope.api.beginInteractionHold(scope.rows[48].rowId)).toBe(true) })
+  settle()
+  scope.move(bottom - 100)
+  scope.writes.length = 0
+  act(() => scope.api.releaseInteractionHold(true))
+  settle()
+  expect(scope.scroller.scrollTop).toBe(bottom - 100)
+  expect(scope.writes.every(top => top <= bottom - 100)).toBe(true)
+  scope.resizeViewport(260)
+  settle()
+  expect(scope.scroller.scrollTop).toBe(bottom - 100)
+})
 
 describe.each(['ref', 'resize'] as const)('installed TanStack measurement through %s', path => {
   it.each([

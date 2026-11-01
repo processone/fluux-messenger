@@ -84,6 +84,64 @@ export async function wheelAwayFromBottom(
   )
 }
 
+export interface TargetHighlightReading {
+  messageId: string
+  at: number
+  visible: boolean
+  top: number
+  bottom: number
+}
+
+/** Capture a newly applied target flash even when a loaded consumer resumes after it expires. */
+export async function captureTargetHighlight(
+  page: Page,
+  messageId: string,
+  navigate: () => Promise<void>,
+): Promise<TargetHighlightReading> {
+  await page.evaluate(id => {
+    const scope = window as unknown as {
+      __targetHighlightCapture?: { observer: MutationObserver; reading: TargetHighlightReading | null }
+    }
+    const capture: NonNullable<typeof scope.__targetHighlightCapture> = {
+      reading: null,
+      observer: new MutationObserver(records => {
+        for (const record of records) {
+          const row = record.target
+          if (!(row instanceof HTMLElement) || !row.matches('.message-row') ||
+            row.dataset.messageId !== id || !row.classList.contains('message-highlight') ||
+            record.oldValue?.split(/\s+/).includes('message-highlight')) continue
+          const bounds = row.getBoundingClientRect()
+          const list = row.closest('[data-message-list]')?.getBoundingClientRect()
+          capture.reading = { messageId: id, at: performance.now(),
+            visible: bounds.width > 0 && bounds.height > 0 && !!list && bounds.bottom > list.top && bounds.top < list.bottom,
+            top: bounds.top, bottom: bounds.bottom }
+        }
+      }),
+    }
+    scope.__targetHighlightCapture?.observer.disconnect()
+    scope.__targetHighlightCapture = capture
+    capture.observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true })
+  }, messageId)
+  try {
+    await navigate()
+    await page.waitForFunction(() => (window as unknown as {
+      __targetHighlightCapture?: { reading: TargetHighlightReading | null }
+    }).__targetHighlightCapture?.reading != null, undefined, { timeout: 5_000 })
+    const reading = await page.evaluate(() => (window as unknown as {
+      __targetHighlightCapture: { reading: TargetHighlightReading }
+    }).__targetHighlightCapture.reading)
+    expect(reading.messageId).toBe(messageId)
+    expect(reading.visible, 'the requested message must be visible when its completion highlight is applied').toBe(true)
+    return reading
+  } finally {
+    await page.evaluate(() => {
+      const scope = window as unknown as { __targetHighlightCapture?: { observer: MutationObserver } }
+      scope.__targetHighlightCapture?.observer.disconnect()
+      delete scope.__targetHighlightCapture
+    })
+  }
+}
+
 // ── Shared setup ─────────────────────────────────────────────────────────────
 
 /** Load demo, wait for demo to be fully ready (sidebar + stores populated). */

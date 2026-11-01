@@ -1,6 +1,6 @@
 // Intent: FLM-229's accepted interaction anchor must outlive every ambient positioning stimulus.
 import { describe, expect, it, vi } from 'vitest'
-import { PositioningController, type AnchorPreservationExecutor, type LiveEdgeExecutor } from './positioningController'
+import { PositioningController, type AnchorPreservationExecutor, type LiveEdgeExecutor, type ExplicitTargetExecutor } from './positioningController'
 import { messageFraction, pixelOffset } from './scrollPositionModel'
 import { AnchorPreservationBrowserAdapter } from './anchorPreservationBrowserAdapter'
 import { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
@@ -239,6 +239,27 @@ describe('interaction position ownership', () => {
     controller.releaseInteractionHold({ conversationId, resume: false, liveEdge: live() })
     controller.preserveReadingLayout(conversationId, compensationReachesBottom)
     expect(controller.reconcileLiveEdge({ conversationId, executor: live(), rearmEligibleFromGeometry: true })).toBe(false)
+  })
+
+  // Explicit destinations retain priority until their completion, then normal interaction resumes.
+  it('keeps an in-flight explicit target ahead of a hold and completes it once', () => {
+    const { controller } = setup()
+    const frames: (() => void)[] = []
+    const complete = vi.fn()
+    const executor: ExplicitTargetExecutor = {
+      reachability: () => ({ kind: 'available', index: 80, mounted: true, placement: 'viable' }),
+      observeGeometry: () => {},
+      beginLoop: () => ({ schedule: callback => frames.push(callback), recordFrame: () => {}, finish: () => {} }),
+      positionFrame: () => ({ kind: 'positioned', scrollTop: 9172, wrote: true }),
+      complete,
+    }
+    controller.beginExplicitTarget({ conversationId, messageId: 'after-target-resize', executor })
+    expect(controller.hasPendingMessageNavigation(conversationId)).toBe(true)
+    expect(controller.beginInteractionHold({ conversationId, desired, executor: anchor() })).toBeNull()
+    while (frames.length) frames.shift()!()
+    expect(complete).toHaveBeenCalledOnce()
+    expect(complete).toHaveBeenCalledWith(expect.anything(), 'settled', true)
+    expect(controller.beginInteractionHold({ conversationId, desired, executor: anchor() })).not.toBeNull()
   })
 
   it('ignores a stale release after leaving the conversation', () => {
