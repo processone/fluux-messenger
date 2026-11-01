@@ -179,8 +179,6 @@ export function useTanstackMessageVirtualizer({
   const currentWriteRef = useRef<WriteRecord | null>(null)
   const queuedWriteRef = useRef<WriteRecord | null>(null)
   const writeIdRef = useRef(0)
-  // Set by cancelPendingScroll until the next navigation write. See there.
-  const cancelledTargetRef = useRef(false)
   // Bumped whenever the reader takes the pixels: any destination decided earlier is void.
   const generationRef = useRef(0)
   // The row virtual-core is about to resize, as seen by the measurement that precedes its write.
@@ -306,8 +304,6 @@ export function useTanstackMessageVirtualizer({
       if (queuedWrite || (queued !== null && command !== queued)) queuedWriteRef.current = null
       const source = currentWriteRef.current !== null || queuedWrite ? 'navigation'
         : options.adjustments !== undefined ? 'measurement' : 'reconcile'
-      if (source === 'navigation') cancelledTargetRef.current = false
-      else if (source === 'reconcile' && cancelledTargetRef.current) return
       // The write's authority: the destination generation, scroller and row set it was decided under.
       // The observer below can hand the pixels to the reader (cancelPendingScroll) before we write.
       const generation = generationRef.current
@@ -512,7 +508,6 @@ export function useTanstackMessageVirtualizer({
     // writes immediately during an iOS end pull, clamping the native rubber band (FLM-219),
     // and can re-land on the cancelled position after the reader starts moving (#1465).
     virtualizer.cancelScroll()
-    cancelledTargetRef.current = true
     offsetCbRef.current?.(scroller.scrollTop, false)
   }, [retireHeld, scrollRef, virtualizer])
 
@@ -567,7 +562,6 @@ export function useTanstackMessageVirtualizer({
       const gesture = opts?.releaseGesture
         ? (virtualizer as unknown as { _iosGesture?: IosGestureLike })._iosGesture : undefined
       if (gesture) {
-        cancelledTargetRef.current = false
         const generation = generationRef.current
         const scroller = virtualizer.scrollElement
         const refused = writeObserverRef.current?.({ phase: 'before', source: 'navigation', behavior: opts?.behavior }) === false
