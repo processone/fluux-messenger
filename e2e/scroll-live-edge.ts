@@ -1274,6 +1274,11 @@ test.describe('Typing indicator never covers message text', () => {
       expect(appended.dist, 'layout correction must not start following later messages').toBeGreaterThan(20)
       expect(appended.belowFold, 'the selected message must retain its reading position').toBe(after.belowFold)
 
+      // "Hold during interaction": place the pointer before explicit navigation so this
+      // ordinary target-growth control cannot acquire a message hold after navigation.
+      // The separate held-reader case owns preservation inside the near-bottom band.
+      const list = page.locator('[data-message-list]').first()
+      await list.hover()
       await page.evaluate(() => {
         const store = (window as unknown as {
           __roomStore: { getState: () => { setTargetMessageId: (id: string) => void } }
@@ -1284,8 +1289,8 @@ test.describe('Typing indicator never covers message text', () => {
       await page.waitForTimeout(SETTLE_MS)
       const retargeted = await measureGlued(page, 'after-target-resize')
       expect(retargeted.dist).toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
-      const list = page.locator('[data-message-list]').first()
-      await list.hover()
+      const interactionBeforeWheel = await list.getAttribute('data-message-interaction')
+      expect(interactionBeforeWheel, 'ordinary follow recovery must not start from a message hold').toBeNull()
       await wheelUntil(
         page,
         -50,
@@ -1332,7 +1337,7 @@ test.describe('Typing indicator never covers message text', () => {
       await page.waitForTimeout(SETTLE_MS)
       const recovered = await measureGlued(page, 'after-growth-takeover')
       await testInfo.attach('target-growth-geometry', {
-        body: JSON.stringify({ before, after, grown, appended, retargeted, upward, movement, recovered }),
+        body: JSON.stringify({ before, after, grown, appended, retargeted, interactionBeforeWheel, upward, movement, recovered }),
         contentType: 'application/json',
       })
       expect(recovered.dist, 'downward movement coincident with row growth must recover follow').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
