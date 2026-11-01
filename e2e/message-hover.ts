@@ -748,8 +748,10 @@ for (const kind of ['chat', 'room'] as const) for (const input of ['wheel', 'key
     expect(Math.abs(ended.top - held.top), 'boundary input must not move the reader').toBeLessThanOrEqual(1)
     const latest = `boundary-${input}-arrival`
     await arrive(page, kind, [latest])
+    const arrival = page.locator(`.message-row[data-message-id="${latest}"]`)
+    await expect(arrival).toBeAttached()
     await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
-    await expect(page.locator(`.message-row[data-message-id="${latest}"]`)).toBeInViewport()
+    await expect(arrival).toBeInViewport()
     await keepJson(`${kind}-${input}-boundary-following`, { held, ended, after: await readInteractionView(page), read: await readInteractionReadState(page, kind) })
   })
 }

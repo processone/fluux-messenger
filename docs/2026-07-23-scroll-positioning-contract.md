@@ -349,8 +349,10 @@ Hosts without `auxclick` clear it on mouseup.
 Only a reader who was following latest before the hold resumes automatically. History reading keeps
 a settled fixed position; a deliberate scroll, own send or explicit jump takes priority and closes
 panels before moving. A manual takeover cannot rearm from the usual near-bottom band alone: actual
-bottom geometry or explicit latest navigation is required. Blur and target removal use the same saved
-following policy after closing panels. Conversation departure, disabling and teardown clear ownership
+bottom geometry or explicit latest navigation is required. Directed input that ends at the unchanged
+true bottom settles the released hold there even when no scroll event fires, so later arrivals still
+follow. Scrolling away while held, including within the ordinary 150px band, keeps the reading position.
+Blur and target removal use the same saved following policy after closing panels. Conversation departure, disabling and teardown clear ownership
 without resuming the departed interaction. Touch action sheets and static previews do not acquire this hold.
 
 Beginning a hold revokes previously reported follow-edge evidence before a future offscreen arrival

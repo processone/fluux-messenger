@@ -1864,6 +1864,13 @@ export class PositioningController {
       if (held.deferred) this.deferredLiveEdge = { conversationId, ...held.deferred }
       this.heldInput = null
     }
+    const released = this.model.active
+    if (atLiveEdge && released?.request.conversationId === conversationId &&
+      released.request.source.kind === 'interaction' && released.request.source.reason === 'released') {
+      // A boundary wheel/key can end the hold without moving or emitting scroll. Resolve that
+      // unchanged true-bottom geometry through the same path as an actual return to latest.
+      this.observeSettledUserGeometry({ conversationId, generation: released.request.generation, atLiveEdge: true })
+    }
     if (atLiveEdge && this.hasUnreadMarkerHold(conversationId)) {
       this.unreadMarkerHold = null
       this.observeSettledUserGeometry({

@@ -123,9 +123,13 @@ export class AnchorPreservationBrowserAdapter {
       scroller.style.paddingBottom = `${Math.max(0, target + scroller.clientHeight - naturalHeight)}px`
       if (Math.abs(scroller.scrollTop - target) > 0.5) {
         const virtualizer = this.options.getVirtualizer()
-        if (virtualizer) virtualizer.scrollToOffset(target)
-        else scroller.scrollTop = target
-        this.options.recordProgrammaticWrite(request.conversationId)
+        if (virtualizer) {
+          const write = virtualizer.scrollToOffset(target, { owner: lease.owner })
+          if (write.outcome().status === 'applied') this.options.recordProgrammaticWrite(request.conversationId)
+        } else {
+          scroller.scrollTop = target
+          this.options.recordProgrammaticWrite(request.conversationId)
+        }
       }
       return { kind: 'positioned', scrollTop: scroller.scrollTop, reassert: true }
     }
