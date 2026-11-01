@@ -728,3 +728,28 @@ for (const kind of ['chat', 'room'] as const) {
     await keepJson(`${kind}-review-native-scroll`, observations)
   })
 }
+
+// FLM-245 J1: boundary input ends a hold without a scroll event; later delivery must still follow.
+for (const kind of ['chat', 'room'] as const) for (const input of ['wheel', 'keyboard'] as const) {
+  test(`${kind}: interaction hold resumes after ${input} input ends at the unchanged bottom`, async ({ page }) => {
+    const { row, list } = await setupInteraction(page, kind)
+    await row.hover()
+    await expect(list).toHaveAttribute('data-message-interaction', /.+/)
+    const held = await readInteractionView(page)
+    if (input === 'wheel') await page.mouse.wheel(0, 120)
+    else {
+      await row.locator('[data-message-toolbar] button:not([disabled])').first().focus()
+      await page.keyboard.press('PageDown')
+    }
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await waitForTopVisibleSettled(page)
+    const ended = await readInteractionView(page)
+    expect(ended.distance).toBeLessThanOrEqual(1)
+    expect(Math.abs(ended.top - held.top), 'boundary input must not move the reader').toBeLessThanOrEqual(1)
+    const latest = `boundary-${input}-arrival`
+    await arrive(page, kind, [latest])
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await expect(page.locator(`.message-row[data-message-id="${latest}"]`)).toBeInViewport()
+    await keepJson(`${kind}-${input}-boundary-following`, { held, ended, after: await readInteractionView(page), read: await readInteractionReadState(page, kind) })
+  })
+}

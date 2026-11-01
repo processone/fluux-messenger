@@ -741,9 +741,9 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     await hoverList(page)
     await expect(list).toHaveAttribute('data-message-interaction', /.+/)
     const held = await list.getAttribute('data-message-interaction')
-    await page.mouse.wheel(0, 120)
-    await expect(list).not.toHaveAttribute('data-message-interaction')
+    // Scroll while the hold is active, not after a no-movement boundary release.
     await page.mouse.wheel(0, -100)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
     await expect.poll(async () => (await readGeometry(page)).distFromBottom).toBeGreaterThan(PIN_TOLERANCE_PX)
     await settle(page)
     const before = await readGeometry(page)

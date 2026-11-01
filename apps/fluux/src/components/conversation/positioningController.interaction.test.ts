@@ -113,11 +113,10 @@ describe('interaction position ownership', () => {
     expect(controller.beginInteractionHold({ conversationId, desired, executor: anchor() })).not.toBeNull()
   })
 
-  // FLM-229: resume only when the reader did not scroll. FLM-245 I1's real held-room
-  // capture supplies the boundary wheel geometry; a later near-bottom typing band must not resume.
+  // FLM-229/J4: actual movement while a hold is active preserves reading, even inside the band.
   it.each([
     { name: 'unobserved', input: undefined },
-    { name: 'wheel', input: { deltaY: 120, geometry: { top: 3434, height: 4046, client: 612 } } },
+    { name: 'wheel', input: { deltaY: -100, geometry: { top: 3434, height: 4046, client: 612 } } },
   ])('manual $name input ends the interaction without automatic release-resume or geometry rearm', ({ input }) => {
     const { controller, close } = setup()
     controller.beginInteractionHold({ conversationId, desired, executor: anchor() })
@@ -126,9 +125,27 @@ describe('interaction position ownership', () => {
     const position = vi.fn()
     controller.releaseInteractionHold({ conversationId, resume: true, liveEdge: live(position) })
     controller.observeUserScroll(conversationId, -100, false)
+    controller.observeUserInputEnd(conversationId, false)
     expect(controller.reconcileLiveEdge({ conversationId, executor: live(position), rearmEligibleFromGeometry: true })).toBe(false)
     expect(position).not.toHaveBeenCalled()
   })
+  // FLM-245 J1: captured room boundary (3434 + 612 = 4046). No scroll event
+  // follows downward input there, so input-end must restore follow before a later arrival.
+  it.each([
+    { name: 'wheel', deltaY: 120, source: undefined },
+    { name: 'scroll key', deltaY: 1, source: 'keyboard' as const },
+  ])('settles a released hold at the unchanged bottom after $name input', ({ deltaY, source }) => {
+    const { controller, close } = setup()
+    controller.beginInteractionHold({ conversationId, desired, executor: anchor() })
+    controller.holdInput(conversationId)
+    controller.observeUserInput(conversationId, { deltaY, source, geometry: { top: 3434, height: 4046, client: 612 } })
+    expect(close).toHaveBeenCalledOnce()
+    controller.observeUserInputEnd(conversationId, true)
+    const position = vi.fn()
+    expect(controller.reconcileLiveEdge({ conversationId, executor: live(position), rearmEligibleFromGeometry: false })).toBe(true)
+    expect(position).toHaveBeenCalledOnce()
+  })
+
   it('ignores a stale release after leaving the conversation', () => {
     const { controller } = setup()
     controller.beginInteractionHold({ conversationId, desired, executor: anchor() })
