@@ -1291,7 +1291,7 @@ test.describe('Typing indicator never covers message text', () => {
       const retargeted = await measureGlued(page, 'after-target-resize')
       expect(retargeted.dist).toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
       if (interaction === 'held') {
-        await list.locator('[data-message-id="after-target-resize"]').hover({ position: { x: 100, y: 12 } })
+        await list.locator('.message-row[data-message-id="after-target-resize"]').hover({ position: { x: 100, y: 12 } })
         await expect(list).toHaveAttribute('data-message-interaction')
       }
       const interactionBeforeWheel = await list.getAttribute('data-message-interaction')
