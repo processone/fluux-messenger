@@ -333,6 +333,46 @@ for (const kind of ['chat', 'room'] as const) {
 }
 
 for (const kind of ['chat', 'room'] as const) {
+  // FLM-245 K1: editable keys inside the real shadow-root search must not become list navigation.
+  test(`${kind}: interaction hold keeps reaction search open during editing keys`, async ({ page }) => {
+    const { row, body, list } = await setupInteraction(page, kind)
+    const observations: unknown[] = []
+    await body.hover()
+    await waitForActions(page)
+    await row.getByRole('button', { name: 'More reactions', exact: true }).click()
+    const picker = row.locator('em-emoji-picker')
+    const search = picker.getByRole('searchbox')
+    await expect(search).toBeVisible()
+    await search.fill('smile')
+    await page.evaluate(() => {
+      const scope = window as any
+      scope.__pickerSearchKeys = []
+      window.addEventListener('keydown', event => {
+        const leaf = event.composedPath()[0]
+        scope.__pickerSearchKeys.push({ key: event.key, trusted: event.isTrusted,
+          target: (event.target as Element)?.tagName, leaf: (leaf as Element)?.tagName })
+      }, true)
+    })
+    try {
+      await page.screenshot({ path: test.info().outputPath(`${kind}-search-before-keys.png`) })
+      for (const key of ['Home', 'ArrowUp', 'PageUp', 'Shift+Space']) {
+        await search.press(key)
+        observations.push({ key, view: await readInteractionView(page) })
+        await expect(picker).toBeVisible()
+        await expect(search).toBeFocused()
+        await expect(list).toHaveAttribute('data-message-interaction', TARGET)
+      }
+      await arrive(page, kind, ['search-held-arrival'])
+      await expect(picker).toBeVisible()
+      await expect(search).toBeFocused()
+      await expect(list).toHaveAttribute('data-message-interaction', TARGET)
+    } finally {
+      await keepJson(`${kind}-shadow-search-keys`, { observations, final: await readInteractionView(page),
+        events: await page.evaluate(() => (window as any).__pickerSearchKeys) })
+      await page.screenshot({ path: test.info().outputPath(`${kind}-search-after-keys.png`) })
+    }
+  })
+
   test(`${kind}: interaction hold keeps picker geometry through typing, preview and media growth, then restores keyboard focus`, async ({ page }) => {
     const { row, body, list } = await setupInteraction(page, kind)
     await body.hover()
