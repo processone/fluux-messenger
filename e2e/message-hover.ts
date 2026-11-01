@@ -333,7 +333,7 @@ for (const kind of ['chat', 'room'] as const) {
 }
 
 for (const kind of ['chat', 'room'] as const) {
-  // FLM-245 K1: editable keys inside the real shadow-root search must not become list navigation.
+  // FLM-245 K1/L1: editable keys inside the real shadow-root search must not become list navigation.
   test(`${kind}: interaction hold keeps reaction search open during editing keys`, async ({ page }) => {
     const { row, body, list } = await setupInteraction(page, kind)
     const observations: unknown[] = []
@@ -364,6 +364,32 @@ for (const kind of ['chat', 'room'] as const) {
         if (key === 'Home') expect(await search.evaluate(input => (input as HTMLInputElement).selectionStart)).toBe(0)
       }
       await arrive(page, kind, ['search-held-arrival'])
+      await expect(picker).toBeVisible()
+      await expect(search).toBeFocused()
+      await expect(list).toHaveAttribute('data-message-interaction', TARGET)
+      // L1 needs real posts below the hold: otherwise downward defaults cannot move the list.
+      await expect.poll(() => distance(page)).toBeGreaterThan(1)
+      await page.screenshot({ path: test.info().outputPath(`${kind}-search-before-downward.png`) })
+      for (const key of ['End', 'PageDown']) {
+        await search.press(key)
+        await stableFrames(page, TARGET)
+        observations.push({ key, view: await readInteractionView(page) })
+        await expect(picker).toBeVisible()
+        await expect(search).toBeFocused()
+        await expect(list).toHaveAttribute('data-message-interaction', TARGET)
+        if (key === 'End') expect(await search.evaluate(input => (input as HTMLInputElement).selectionStart)).toBe(await search.inputValue().then(value => value.length))
+      }
+      await search.press('Home')
+      await search.press('Shift+End')
+      const selection = await search.evaluate(input => ({ start: (input as HTMLInputElement).selectionStart, end: (input as HTMLInputElement).selectionEnd, length: (input as HTMLInputElement).value.length }))
+      expect(selection.start).toBe(0)
+      expect(selection.end).toBe(selection.length)
+      observations.push({ key: 'Shift+End', selection, view: await readInteractionView(page) })
+      await search.fill('retrospective')
+      await expect(picker.getByText(/That emoji couldn.t be found/i)).toBeVisible()
+      await search.press('ArrowDown')
+      await stableFrames(page, TARGET)
+      observations.push({ key: 'ArrowDown with no results', view: await readInteractionView(page) })
       await expect(picker).toBeVisible()
       await expect(search).toBeFocused()
       await expect(list).toHaveAttribute('data-message-interaction', TARGET)
