@@ -376,6 +376,39 @@ describe('useDesktopNotifications posting + guard', () => {
       invoke.mockResolvedValue(null)
     }
   })
+  // FLM-201: an iOS room notification gets the room picture and participants through the push plugin.
+  describe('iOS room notification while Fluux is not in front', () => {
+    const arrive = () => handlers.onRoomMessage?.(
+      { jid: 'xsf@muc.xmpp.org', name: 'XSF', nickname: 'Receiver', notifyAll: true },
+      { id: 'room-picture', nick: 'Sender', body: 'Avatar diagnostic', from: 'xsf@muc.xmpp.org/Sender' })
+
+    beforeEach(() => {
+      restorePlatform()
+      restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+      isMobileTauri.mockResolvedValue(true)
+    })
+
+    it('posts through the push plugin with the room and sender, not the notification plugin', async () => {
+      renderHook(() => useDesktopNotifications())
+      await arrive()
+      expect(invoke).toHaveBeenCalledWith('plugin:push|post_local_notification', { message: {
+        title: 'Sender @ XSF', body: 'body text', from: 'xsf@muc.xmpp.org/Sender',
+        extra: expect.objectContaining({ navType: 'room', navTarget: 'xsf@muc.xmpp.org', messageId: 'room-picture' }),
+      } })
+      expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
+    })
+
+    it('still posts the notification when the push plugin refuses it', async () => {
+      invoke.mockImplementation(async (command) => {
+        if (command === 'plugin:push|post_local_notification') throw new Error('refused')
+        return null
+      })
+      renderHook(() => useDesktopNotifications())
+      await arrive()
+      expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', { options: expect.objectContaining({ title: 'Sender @ XSF' }) })
+    })
+  })
+
   // Captain's F5 choice: refresh only display names; other metadata/eligibility changes still cancel.
   it.each(['contact', 'room', 'other-metadata'] as const)('finalizes preparation after a %s change with current presentation only', async change => {
     let prepared!: (token: string) => void

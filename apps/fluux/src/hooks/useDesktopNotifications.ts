@@ -23,7 +23,7 @@ import { pushTapTarget } from '@/utils/pushTapTarget'
 import { useArrivalJumpStore } from '@/stores/arrivalJumpStore'
 import { announcedByPush } from './useNativePush'
 import { dismissNotification } from '@/utils/dismissNotification'
-import { postPluginNotification } from '@/utils/postPluginNotification'
+import { postIOSRoomNotification, postPluginNotification } from '@/utils/postPluginNotification'
 import { currentAccountId, postNativeDesktopNotification } from '@/utils/nativeNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
 import { requestAttention } from '@/utils/attention'
@@ -370,9 +370,14 @@ export function useDesktopNotifications(): void {
           return true
         }, frontNow)
       } else {
-        await postPluginNotification({ title, body,
+        const options = { title, body,
           attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
-          extra: { navType, navTarget, messageId, accountId } }, messageRowRef(target.message), frontNow)
+          extra: { navType, navTarget, messageId, accountId } }
+        if (target.kind === 'room' && platform().os === 'ios') {
+          await postIOSRoomNotification(options, `${navTarget}/${target.message.nick}`, frontNow)
+        } else {
+          await postPluginNotification(options, messageRowRef(target.message), frontNow)
+        }
       }
     } else {
       await showWebNotification(title, { body, icon: avatarUrl || './icon-512.png', tag: webTag(navType, navTarget),

@@ -7,6 +7,7 @@ fn main() {
         "remove_conversation_donations",
         "set_notification_sound",
         "set_notification_avatar",
+        "post_local_notification",
         "set_notification_preview",
         "export_notification_diagnostic",
         "set_badge",

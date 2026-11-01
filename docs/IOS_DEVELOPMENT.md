@@ -279,7 +279,9 @@ What runs natively:
 - **OpenPGP.** The same Sequoia engine as the desktop. The key is unlocked from
   the keychain at login, so no passphrase is asked per session, and key
   rotation is available.
-- **Notifications.** Local notifications go through the OS. Remote push uses
+- **Notifications.** Local notifications go through the OS. While the app runs, room
+  notifications on iOS are posted by the push plugin so they carry the room picture
+  like a pushed one. Remote push uses
   APNs and XEP-0357 (see [Remote push notifications](#remote-push-notifications)).
   Tapping a notification attributed to the signed-in account opens its conversation.
   See [badge snapshot semantics](../README.md#siri-and-shortcuts-on-ios) for what
