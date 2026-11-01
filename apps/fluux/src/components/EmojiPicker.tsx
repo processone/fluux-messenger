@@ -100,7 +100,14 @@ export function EmojiPicker({ onSelect, onClose, dynamicWidth = false, maxHeight
         event.preventDefault()
         const anchor = input.selectionDirection === 'backward' ? input.selectionEnd : input.selectionStart
         input.setSelectionRange(0, event.shiftKey ? anchor : 0, event.shiftKey ? 'backward' : 'none')
-      } else if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+      } else if (event.key === 'End') {
+        event.preventDefault()
+        const anchor = input.selectionDirection === 'backward' ? input.selectionEnd : input.selectionStart
+        input.setSelectionRange(event.shiftKey ? anchor : input.value.length, input.value.length, event.shiftKey ? 'forward' : 'none')
+      } else if (
+        event.key === 'ArrowUp' || event.key === 'ArrowDown' ||
+        event.key === 'PageUp' || event.key === 'PageDown'
+      ) {
         event.preventDefault()
       }
     }} />
