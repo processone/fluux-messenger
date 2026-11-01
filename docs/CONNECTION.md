@@ -105,6 +105,24 @@ When the connection drops, the SDK's reconnection logic:
 
 The original server string is preserved separately from the resolved credentials to ensure reconnection always goes through the full resolution path.
 
+### Stream Management resumption window
+
+The client asks the server to keep a dropped session resumable for
+`streamManagementMaxSeconds` (default 600; `XMPPClientConfig` / `XMPPProvider`
+prop, positive integer, invalid values are rejected at construction). The app
+sets it per platform: 86,400 s (provisional) in the native iOS/iPadOS app, 600 s
+everywhere else, including iOS browsers.
+
+The window in force is the smaller of that request and the server's `max`. A
+missing or malformed `max` means 600 s (capped at the request), and every new
+session resets the previous grant. The window starts when the connection is
+interrupted (socket loss, sleep, reload), is not extended by later reads, saves
+or failed reconnects, and a session is resumable only while `elapsed < window`.
+A verified-live connection or a successful resumption clears the interruption.
+Persisted records carry the window and interruption time; records without them
+keep their original ten minutes. Storage stays best-effort, and the real
+duration still depends on the server's retention.
+
 ## Connection Resolution
 
 For a domain target, all platforms first try XEP-0156 WebSocket discovery via

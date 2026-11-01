@@ -46,6 +46,8 @@ export interface ModuleDependencies {
    * Used by Connection module for SM state persistence.
    */
   storageAdapter?: StorageAdapter
+  /** Stream Management resumption duration to request, in seconds (default 600). */
+  streamManagementMaxSeconds?: number
   /** Platform-specific persistence for XEP-0484 FAST authentication tokens. */
   fastTokenStorage?: FastTokenStorageAdapter
   /** Stable XEP-0388 identity used when authenticating and binding FAST tokens. */

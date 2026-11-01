@@ -8,9 +8,7 @@
 
 import type { StorageAdapter, JoinedRoomInfo } from '../types'
 import type { ResolutionLogger } from './serverResolution'
-
-/** SM timeout — state older than this is considered stale (10 minutes). */
-const SM_TIMEOUT_MS = 10 * 60 * 1000
+import { DEFAULT_SM_MAX_SECONDS, isWithinSmWindow, resolveSmWindowMs } from './smResumptionPolicy'
 
 /**
  * The slice of the live xmpp.js client that SM capture reads.
@@ -40,8 +38,15 @@ export interface SmStateCache {
    * and Connection.hydrateStreamManagement for the full resume flow.
    */
   outbound: number
-  /** When this cache entry was last updated (ms since epoch). Used for staleness detection. */
+  /** When this entry last captured live state (ms since epoch). Not renewed by reads while interrupted. */
   timestamp: number
+  /** Resumption window (ms) negotiated for this session. */
+  windowMs: number
+  /**
+   * When the session was interrupted (socket loss, sleep, reload), ms since epoch.
+   * The window runs from here; without it, from the last live capture (`timestamp`).
+   */
+  interruptedAt?: number
 }
 
 /** Dependencies injected by Connection. */
@@ -49,6 +54,8 @@ export interface SmPersistenceDeps {
   storageAdapter?: StorageAdapter
   getJoinedRooms: () => JoinedRoomInfo[]
   console: ResolutionLogger
+  /** Resumption duration this client requests (seconds); caps any window kept locally. */
+  requestSeconds?: number
 }
 
 /** Result of loading SM state from storage. */
@@ -74,9 +81,63 @@ export class SmPersistence {
 
   // ── Cache operations ──────────────────────────────────────────────────────
 
-  /** Update cache when SM is enabled or resumed. */
+  private get requestSeconds(): number {
+    return this.deps.requestSeconds ?? DEFAULT_SM_MAX_SECONDS
+  }
+
+  /** Whether `entry` may still be resumed now: the window runs from the interruption, else the last capture. */
+  private eligible(entry: SmStateCache): boolean {
+    const windowMs = Math.min(entry.windowMs, this.requestSeconds * 1000)
+    return isWithinSmWindow(entry.interruptedAt ?? entry.timestamp, Date.now(), windowMs)
+  }
+
+  /**
+   * A new session was enabled. Resets any prior grant, even when the server
+   * omits `max`, so a window never leaks from one session to the next.
+   * @returns the window (ms) now in force
+   */
+  beginSession(id: string, inbound: number, advertisedMax: unknown): number {
+    const windowMs = resolveSmWindowMs(this.requestSeconds, advertisedMax)
+    this.cache = { id, inbound, outbound: 0, timestamp: Date.now(), windowMs }
+    return windowMs
+  }
+
+  /** Seed the cache from a record loaded from storage so a later resumption keeps its window. */
+  adopt(state: SmStateCache): void {
+    this.cache = { ...state }
+  }
+
+  /** Update cache when SM is resumed. Keeps the negotiated window and clears the interruption. */
   updateCache(id: string, inbound: number, outbound: number): void {
-    this.cache = { id, inbound, outbound, timestamp: Date.now() }
+    const windowMs = this.cache?.id === id
+      ? this.cache.windowMs
+      : resolveSmWindowMs(this.requestSeconds, undefined)
+    this.cache = { id, inbound, outbound, timestamp: Date.now(), windowMs }
+  }
+
+  /** The window (ms) of the current session, if any. */
+  getWindowMs(): number | null {
+    return this.cache ? Math.min(this.cache.windowMs, this.requestSeconds * 1000) : null
+  }
+
+  /**
+   * Start the resumption window at `at` (default now). Only the first
+   * interruption counts: repeated losses and failed reconnects cannot slide it.
+   */
+  markInterrupted(at: number = Date.now()): void {
+    if (this.cache && this.cache.interruptedAt == null) {
+      this.cache.interruptedAt = Math.min(at, Date.now())
+    }
+  }
+
+  /** The connection was verified live: the prior interruption is over. */
+  clearInterruption(): void {
+    if (this.cache) delete this.cache.interruptedAt
+  }
+
+  /** Get cached SM state (null if there is none or its window has run out). */
+  getCache(): SmStateCache | null {
+    return this.cache && this.eligible(this.cache) ? this.cache : null
   }
 
   /** Clear cache (manual disconnect → fresh session next time). */
@@ -84,42 +145,33 @@ export class SmPersistence {
     this.cache = null
   }
 
-  /** Get cached SM state (may be null if no SM session or if stale). */
-  getCache(): SmStateCache | null {
-    if (this.cache && Date.now() - this.cache.timestamp > SM_TIMEOUT_MS) {
-      return null
-    }
-    return this.cache
-  }
-
   /**
    * Get SM state: prefer live state from the xmpp client, fall back to cache.
    * The cache survives socket death, so it's available even when the client is gone.
+   * Returns null once the resumption window has run out.
    *
    * @param xmpp - The xmpp.js client instance (may be null after socket death)
    */
   getState(xmpp: SmStateSource | null): SmStateCache | null {
-    // Try to get live state from the xmpp client
-    if (xmpp?.streamManagement) {
-      const sm = xmpp.streamManagement
-      if (sm.id) {
-        // Capture total outbound: already-acked (sm.outbound) + still-pending (outbound_q).
-        // Server's <resumed h=N/> counts *every* stanza it received, acked or not — so
-        // persisting just sm.outbound would leave us short when the queue was non-empty
-        // at disconnect and the crash path would re-open.
-        const pendingOutbound = Array.isArray(sm.outbound_q) ? sm.outbound_q.length : 0
-        const outbound = (sm.outbound || 0) + pendingOutbound
-        this.cache = { id: sm.id, inbound: sm.inbound || 0, outbound, timestamp: Date.now() }
-        return this.cache
+    const sm = xmpp?.streamManagement
+    if (sm?.id) {
+      // Capture total outbound: already-acked (sm.outbound) + still-pending (outbound_q).
+      // Server's <resumed h=N/> counts *every* stanza it received, acked or not — so
+      // persisting just sm.outbound would leave us short when the queue was non-empty
+      // at disconnect and the crash path would re-open.
+      const pendingOutbound = Array.isArray(sm.outbound_q) ? sm.outbound_q.length : 0
+      const previous = this.cache?.id === sm.id ? this.cache : null
+      this.cache = {
+        id: sm.id,
+        inbound: sm.inbound || 0,
+        outbound: (sm.outbound || 0) + pendingOutbound,
+        // A frozen live object read after the interruption is not a fresh capture.
+        timestamp: previous?.interruptedAt != null ? previous.timestamp : Date.now(),
+        windowMs: previous?.windowMs ?? resolveSmWindowMs(this.requestSeconds, undefined),
+        interruptedAt: previous?.interruptedAt,
       }
     }
-    // Fall back to cached state (survives socket death), but reject stale entries.
-    // After a long sleep (> SM timeout), the server has expired the session.
-    // Returning null forces a fresh session instead of a doomed SM resume attempt.
-    if (this.cache && Date.now() - this.cache.timestamp > SM_TIMEOUT_MS) {
-      return null
-    }
-    return this.cache
+    return this.cache && this.eligible(this.cache) ? this.cache : null
   }
 
   // ── Storage operations ────────────────────────────────────────────────────
@@ -150,8 +202,10 @@ export class SmPersistence {
         smId: this.cache.id,
         smInbound: this.cache.inbound,
         smOutbound: this.cache.outbound,
+        smWindowMs: this.cache.windowMs,
+        smInterruptedAt: this.cache.interruptedAt,
         resource: resource || '',
-        timestamp: Date.now(),
+        timestamp: this.cache.timestamp,
         joinedRooms: roomsToSave,
       })
     } catch {
@@ -179,8 +233,10 @@ export class SmPersistence {
       smId: this.cache.id,
       smInbound: this.cache.inbound,
       smOutbound: this.cache.outbound,
+      smWindowMs: this.cache.windowMs,
+      smInterruptedAt: this.cache.interruptedAt,
       resource: resource || '',
-      timestamp: Date.now(),
+      timestamp: this.cache.timestamp,
       joinedRooms: rooms,
     }
     try {
@@ -207,26 +263,27 @@ export class SmPersistence {
     try {
       const state = await this.deps.storageAdapter.getSessionState(jid)
       if (state) {
-        // Check if state is stale (> 10 minutes old — typical SM timeout)
-        if (Date.now() - state.timestamp > SM_TIMEOUT_MS) {
-          // SM state is stale, but joined rooms are still useful for rejoin
-          return { smState: null, joinedRooms: state.joinedRooms ?? [] }
+        const joinedRooms = state.joinedRooms ?? []
+        // Records saved before the window was stored keep their original ten minutes.
+        const windowMs = typeof state.smWindowMs === 'number' && state.smWindowMs > 0
+          ? state.smWindowMs
+          : DEFAULT_SM_MAX_SECONDS * 1000
+        const loaded: SmStateCache = {
+          id: state.smId,
+          inbound: state.smInbound,
+          outbound: state.smOutbound,
+          timestamp: state.timestamp,
+          windowMs,
+          interruptedAt: typeof state.smInterruptedAt === 'number' ? state.smInterruptedAt : undefined,
         }
-        // Sessions persisted before smOutbound was introduced can't safely resume
-        // — without it, ackQueue would crash when the server's h exceeds our count.
-        // Drop SM state (keep rooms for rejoin).
-        if (typeof state.smOutbound !== 'number') {
-          return { smState: null, joinedRooms: state.joinedRooms ?? [] }
+        // Expired or unsafe timestamps, or records saved before smOutbound existed
+        // (ackQueue would crash when the server's h exceeds our count), cannot resume.
+        // Keep the rooms for rejoin.
+        if (typeof state.smId !== 'string' || !state.smId
+          || typeof state.smOutbound !== 'number' || !this.eligible(loaded)) {
+          return { smState: null, joinedRooms }
         }
-        return {
-          smState: {
-            id: state.smId,
-            inbound: state.smInbound,
-            outbound: state.smOutbound,
-            timestamp: state.timestamp,
-          },
-          joinedRooms: state.joinedRooms ?? [],
-        }
+        return { smState: loaded, joinedRooms }
       }
     } catch {
       // Storage errors are non-fatal
