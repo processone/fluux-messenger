@@ -18,7 +18,9 @@ const snapshot = (overrides: Record<string, unknown> = {}) => ({
   distanceFromBottom: 900,
   oldFirstId: 'm-0',
   oldMessageCount: 200,
+  oldInteriorPlacementVersion: 0,
   restored: false,
+  loadSettled: false,
   ...overrides,
 })
 
