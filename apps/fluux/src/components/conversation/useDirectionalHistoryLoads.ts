@@ -56,6 +56,8 @@ export interface UseDirectionalHistoryLoadsInput {
   conversationId: string
   firstMessageId: string | undefined
   messageCount: number
+  /** The store's interior placement version for this window; see `DirectionalHistoryWindow`. */
+  interiorPlacementVersion: number
   windowAtLiveEdge: boolean | undefined
   isLoadingOlder: boolean | undefined
   isLoadingNewer: boolean | undefined
@@ -122,6 +124,7 @@ export function useDirectionalHistoryLoads({
   conversationId,
   firstMessageId,
   messageCount,
+  interiorPlacementVersion,
   windowAtLiveEdge,
   isLoadingOlder,
   isLoadingNewer,
@@ -193,6 +196,7 @@ export function useDirectionalHistoryLoads({
       historyComplete: Boolean(isHistoryComplete),
       windowAtLiveEdge: windowAtLiveEdge !== false,
       travelledAway: ports.hasTravelledAway(conversationId, edge),
+      interiorPlacementVersion,
       capture: () => {
         capture = browser.capture(firstMessageId ?? '', messageCount)
         return capture?.facts ?? {

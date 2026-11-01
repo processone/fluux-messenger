@@ -96,6 +96,7 @@ function harness(input: {
     conversationId: 'room-a',
     firstMessageId: 'm-0',
     messageCount: 200,
+    interiorPlacementVersion: 0,
     windowAtLiveEdge: false,
     isLoadingOlder: false,
     isLoadingNewer: false,

@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.18.3',
+    date: 'Unreleased',
+    sections: [{
+      type: 'fixed',
+      items: [
+        'When a delayed message arrives above you while older messages are still loading, the messages you are reading no longer move down until the older ones arrive',
+      ],
+    }],
+  },
+  {
     version: '0.18.2',
     date: '2026-11-05',
     sections: [

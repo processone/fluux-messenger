@@ -2913,13 +2913,20 @@ test.describe('Insertion drift while scrolled up', () => {
   //
   // 14l is the one that discriminates, and it is RED-verified: with the snapshot cancelled on every
   // interior-placement advance, the tracked row is not merely drifted but WINDOWED OUT ENTIRELY
-  // (afterTop null), and it is the only failure in the whole suite — insertion preservation quietly
-  // absorbs the under-cap case (14k), so nothing else here notices the loss.
+  // (afterTop null). Under the cap (14k) insertion preservation does NOT absorb the arrival, as was
+  // once believed here: the pending load is an unsettled position, so the controller refuses the
+  // ambient hold, and the reader's rows sat 424 px low for the whole wait. 14k only passed because
+  // it read the end state, which the batch's restore put right (FLM-210). It now reads midway too.
 
   /** Total drift budget for a sequence that both preserves an insertion AND restores a prepend.
    *  Two settles compound, so this is wider than either alone — but a dropped restore is ~3000px
    *  (a 50-row batch) and a dropped preservation ~450px, so both regressions stay unmissable. */
   const IN_FLIGHT_DRIFT_PX = 60
+
+  /** "Within a few px" (FLM-210): the directional restore rewrites only once the reader's geometry
+   *  drifts more than 5 px from its target, so that is the tightest hold it promises. Holds the
+   *  under-bound reader both while the load waits and after its batch lands. */
+  const HELD_ROW_PX = 5
 
   /** Frames a slow archive answer is held after the arrival: twice the 60-frame re-assert budget a
    *  directional restore runs for (DIRECTIONAL_HISTORY_REASSERT_FRAMES in positioningController),
@@ -2948,7 +2955,7 @@ test.describe('Insertion drift while scrolled up', () => {
   async function insertDuringInFlightLoadOlder(
     page: Page,
     body: string,
-    options: { slowArchive?: boolean } = {},
+    options: { slowArchive?: boolean; wheelDuringWaitPx?: number } = {},
   ) {
     // Gate the synthetic MAM batch. The cache path in front of it returns nothing in demo mode
     // (all seeded messages are already resident), so this is the whole delivery of a load-older.
@@ -3033,6 +3040,17 @@ test.describe('Insertion drift while scrolled up', () => {
     const midway = await readView(page)
     const midwayTop = await readTrackedTop()
 
+    // The reader scrolls on while the load still waits, after the arrival: from here, the rows they
+    // scrolled to are the ones to hold.
+    let movedTop: number | null = null
+    if (options.wheelDuringWaitPx) {
+      await page.locator('[data-message-list]').first().hover()
+      await page.mouse.wheel(0, -options.wheelDuringWaitPx)
+      await page.waitForTimeout(400)
+      await syncEngineGeometry(page)
+      movedTop = await readTrackedTop()
+    }
+
     if (options.slowArchive) {
       // A slow archive answer: the batch lands only after everything the arrival started has run
       // its course, so no correction still in flight can hold the reader by luck.
@@ -3061,6 +3079,10 @@ test.describe('Insertion drift while scrolled up', () => {
       beforeTop: Math.round(track.top),
       midwayTop: midwayTop === null ? null : Math.round(midwayTop),
       midwayDrift: midwayTop === null ? Number.POSITIVE_INFINITY : Math.abs(midwayTop - track.top),
+      movedTop: movedTop === null ? null : Math.round(movedTop),
+      movedDrift: movedTop === null || trackedTop === null
+        ? Number.POSITIVE_INFINITY
+        : Math.abs(trackedTop - movedTop),
       afterTop: trackedTop === null ? null : Math.round(trackedTop),
       drift: trackedTop === null ? Number.POSITIVE_INFINITY : Math.abs(trackedTop - track.top),
       insertedAboveViewport:
@@ -3076,7 +3098,10 @@ test.describe('Insertion drift while scrolled up', () => {
     }
   }
 
-  test('invariant-14k: an interior arrival during an in-flight load-older does not cost the batch its restore', async ({ page }) => {
+  // FLM-210: under the cap the arrival keeps the first id, so the pending load saw no shift, and its
+  // pending request made the controller refuse the ambient insertion hold. The final landing was
+  // right, but read midway the reader's rows sat 424 px lower for the whole wait.
+  test('invariant-14k: an interior arrival during an in-flight load-older holds the reader\'s rows until and after the batch lands', async ({ page }) => {
     await openScrolledUp(page)
     const r = await insertDuringInFlightLoadOlder(
       page,
@@ -3093,9 +3118,73 @@ test.describe('Insertion drift while scrolled up', () => {
       `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
     ).not.toBe(r.firstIdBefore)
     expect(
+      r.midwayDrift,
+      `reading position drifted ${r.midwayDrift}px while the load waited after an interior arrival — ${JSON.stringify(r)}`,
+    ).toBeLessThanOrEqual(HELD_ROW_PX)
+    expect(
       r.drift,
-      `reading position drifted ${r.drift}px when a batch landed after an interior arrival`,
-    ).toBeLessThan(IN_FLIGHT_DRIFT_PX)
+      `reading position drifted ${r.drift}px when a batch landed after an interior arrival — ${JSON.stringify(r)}`,
+    ).toBeLessThanOrEqual(HELD_ROW_PX)
+  })
+
+  // FLM-210, slow archive: the batch lands after the restore the arrival started has ended, so only
+  // the load restoring again for its batch can hold the reader then (the FLM-204 restart, which
+  // under the cap only an interior placement can start).
+  test('invariant-14n: a slow older-history batch after an interior arrival under the resident bound keeps the reader\'s rows in place', async ({ page }) => {
+    await openScrolledUp(page)
+    const r = await insertDuringInFlightLoadOlder(
+      page,
+      'delayed arrival before a slow older-history answer\n'.repeat(18),
+      { slowArchive: true },
+    )
+    console.log('── INSERTION-DRIFT slow-load-older ──', JSON.stringify(r))
+    expect(r.insertedAboveViewport, 'the arrival must land ABOVE the viewport').toBe(true)
+    expect(
+      r.firstIdMidway,
+      'precondition: under the resident cap the arrival must not move the first id',
+    ).toBe(r.firstIdBefore)
+    expect(
+      r.firstIdAfter,
+      `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+    ).not.toBe(r.firstIdBefore)
+    expect(
+      r.midwayDrift,
+      `reading position drifted ${r.midwayDrift}px while a slow load waited after an interior arrival — ${JSON.stringify(r)}`,
+    ).toBeLessThanOrEqual(HELD_ROW_PX)
+    expect(
+      r.drift,
+      `reading position drifted ${r.drift}px when a slow batch landed after an interior arrival — ${JSON.stringify(r)}`,
+    ).toBeLessThanOrEqual(HELD_ROW_PX)
+  })
+
+  // FLM-210 adverse case: once the reader scrolls on after the arrival's restore, the batch must hold
+  // the rows they scrolled to, neither pulling them back to where the load started nor moving them
+  // by the batch's height.
+  test('invariant-14o: a reader who scrolls on while a load-older waits after an interior arrival keeps the rows they scrolled to', async ({ page }) => {
+    await openScrolledUp(page)
+    const r = await insertDuringInFlightLoadOlder(
+      page,
+      'delayed arrival before the reader scrolls on\n'.repeat(18),
+      { wheelDuringWaitPx: 200 },
+    )
+    console.log('── INSERTION-DRIFT moved-during-load-older ──', JSON.stringify(r))
+    expect(r.insertedAboveViewport, 'the arrival must land ABOVE the viewport').toBe(true)
+    expect(
+      r.firstIdMidway,
+      'precondition: under the resident cap the arrival must not move the first id',
+    ).toBe(r.firstIdBefore)
+    expect(
+      r.firstIdAfter,
+      `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+    ).not.toBe(r.firstIdBefore)
+    expect(
+      r.movedTop !== null && r.midwayTop !== null && r.movedTop - r.midwayTop > 100,
+      `precondition: the wheel must have moved the reader down the history — ${JSON.stringify(r)}`,
+    ).toBe(true)
+    expect(
+      r.movedDrift,
+      `the batch moved the rows the reader scrolled to by ${r.movedDrift}px — ${JSON.stringify(r)}`,
+    ).toBeLessThanOrEqual(HELD_ROW_PX)
   })
 
   test('invariant-14l: an interior arrival at the resident bound holds the reading position across an in-flight load-older', async ({ page }) => {

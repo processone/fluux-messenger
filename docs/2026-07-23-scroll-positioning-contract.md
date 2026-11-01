@@ -57,6 +57,13 @@ does so only while the reader still reads where the last restore put them: the c
 that from whether their own input, or any accepted request other than layout, media or history
 preservation, has come since that restore's generation. Once the reader moved on, the shift is
 left to ambient handling.
+Under the resident bound an interior arrival keeps the first resident ID, yet it moves every row
+below it, and the pending directional request makes the controller refuse the ambient layout
+request that would otherwise hold them. The directional window therefore also carries the store's
+interior placement version: while the load is pending, a new interior placement counts as a window
+shift, so the load restores its own anchor at the arrival exactly as it does after an eviction at
+the bound, and restores again when its batch lands under the same reader-held rule. Ambient
+insertion handling stands aside for any shift the load restores.
 All authoritative slices share the same controller-owned
 `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
 measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
@@ -614,7 +621,7 @@ deep growth and media-settle runs.
 | Media at live edge | Current or geometry-rearmed live edge | Debounced measurement stimulus; recovery uses the pre-growth eligibility captured by the caller |
 | Media while reading history | Selected target or fixed bottom-relative fractional anchor | See explicit-target maintenance and pending-batch cancellation above |
 | Unread divider moves while reading history | Selected target or fixed bottom-relative fractional anchor | Preserve the current position under the explicit-target and ambient precedence rules above |
-| Load older/newer | Fixed top-relative offset anchor | Subject to ambient request precedence above; wait for the directional window change and release if the load settles without one; restore again on each later window change until the load settles while the reader has not moved on; if the anchor disappears after a shift, preserve captured distance from bottom and clamp |
+| Load older/newer | Fixed top-relative offset anchor | Subject to ambient request precedence above; wait for the directional window change (a new first resident ID, or a new interior placement under the resident bound) and release if the load settles without one; restore again on each later window change until the load settles while the reader has not moved on; if the anchor disappears after a shift, preserve captured distance from bottom and clamp |
 | Home / resident-top command | Resident top | Does not itself trigger load-older; later genuine user travel can re-arm ordinary boundary loading |
 | Reaction, typing, resize, MAM completion | Reconcile current position | See selected-target maintenance and stimulus-specific live-edge eligibility above |
 
