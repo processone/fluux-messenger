@@ -76,6 +76,7 @@ function fixture() {
   const scrollEvents: number[] = []
   const loadOlder = vi.fn()
   const loadNewer = vi.fn()
+  const liveEdgeMeasurements = vi.fn()
 
   function Harness() {
     const scrollRef = React.useRef<HTMLDivElement | null>(null)
@@ -84,7 +85,7 @@ function fixture() {
       conversationId: 'room', messageCount: rows.length,
       firstMessageId: rows[0].rowId, lastMessageId: rows.at(-1)!.rowId,
       rowGrowthSignature: '', windowAtLiveEdge: true, virtualizer: currentVirtualizer,
-      onScrollToTop: loadOlder, onLoadNewer: loadNewer,
+      onScrollToTop: loadOlder, onLoadNewer: loadNewer, onLiveEdgeMeasured: liveEdgeMeasurements,
     })
     const setContainer = currentApi.setScrollContainerRef
     const setScroller = React.useCallback((node: HTMLDivElement | null) => {
@@ -129,7 +130,7 @@ function fixture() {
   settle()
   expect(scroller.scrollTop).toBe(4700)
   return {
-    rows, writes, scrollEvents, loadOlder, loadNewer, scroller, totalHeight,
+    rows, writes, scrollEvents, loadOlder, loadNewer, liveEdgeMeasurements, scroller, totalHeight,
     get virtualizer() { return virtualizer },
     get api() { return api },
     move: (value: number, deliver = false) => {
@@ -215,7 +216,9 @@ it('settles input from current native geometry instead of an older bottom sample
   })
   scope.move(geometry.top - 100)
   scope.writes.length = 0
+  scope.liveEdgeMeasurements.mockClear()
   act(() => ports!.observeUserInputEnd('room', geometry, true))
+  expect(scope.liveEdgeMeasurements).toHaveBeenLastCalledWith(false)
   settle()
   expect(scope.scroller.scrollTop).toBe(geometry.top - 100)
   expect(scope.writes.every(top => top <= geometry.top - 100)).toBe(true)
