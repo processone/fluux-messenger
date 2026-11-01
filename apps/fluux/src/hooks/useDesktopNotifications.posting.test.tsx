@@ -398,6 +398,18 @@ describe('useDesktopNotifications posting + guard', () => {
       expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
     })
 
+    it('does not fetch or write a room picture the push plugin takes from its own mirror', async () => {
+      renderHook(() => useDesktopNotifications())
+      await arrive()
+      expect(getNotificationAvatarUrl).not.toHaveBeenCalled()
+    })
+
+    it('still prepares the avatar attachment for a direct chat', async () => {
+      renderHook(() => useDesktopNotifications())
+      await handlers.onConversationMessage?.({ id: 'alice@example.com', name: 'Alice' }, { id: 'chat-picture', from: 'alice@example.com' })
+      expect(getNotificationAvatarUrl).toHaveBeenCalled()
+    })
+
     it('still posts the notification when the push plugin refuses it', async () => {
       invoke.mockImplementation(async (command) => {
         if (command === 'plugin:push|post_local_notification') throw new Error('refused')

@@ -317,7 +317,9 @@ export function useDesktopNotifications(): void {
     const avatar = target.kind === 'chat'
       ? rosterStore.getState().getContact(target.entity.id)
       : target.entity
-    const avatarUrl = await getNotificationAvatarUrl(avatar?.avatar, avatar?.avatarHash)
+    // iOS rooms are posted with the room picture from the shared mirror, so no attachment is prepared.
+    const iosRoom = target.kind === 'room' && platform().os === 'ios'
+    const avatarUrl = iosRoom ? undefined : await getNotificationAvatarUrl(avatar?.avatar, avatar?.avatarHash)
     const mobile = desktop && await isMobileTauri()
     // Avatar/platform work may outlive a decrypt repair, edit, read or account change.
     target = await resolveTarget(original)
@@ -373,7 +375,7 @@ export function useDesktopNotifications(): void {
         const options = { title, body,
           attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
           extra: { navType, navTarget, messageId, accountId } }
-        if (target.kind === 'room' && platform().os === 'ios') {
+        if (iosRoom && target.kind === 'room') {
           await postIOSRoomNotification(options, `${navTarget}/${target.message.nick}`, frontNow)
         } else {
           await postPluginNotification(options, messageRowRef(target.message), frontNow)
