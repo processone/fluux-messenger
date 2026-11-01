@@ -825,6 +825,8 @@ export class PositioningController {
      */
     deferred: { rearmEligibleFromGeometry: boolean } | null
     lastInputAt: number
+    /** Upward motion can begin after keyup; its old bottom is not a return to latest. */
+    canSettleBottom: boolean
   } | null = null
   /** A re-pin refused under held input, owed once that input ends. */
   private deferredLiveEdge: { conversationId: string; rearmEligibleFromGeometry: boolean } | null = null
@@ -1703,7 +1705,12 @@ export class PositioningController {
       conversationId,
       fallback: null,
       observe: () => {
-        if (this.heldInput?.conversationId === conversationId) this.heldInput.lastInputAt = Date.now()
+        if (this.heldInput?.conversationId === conversationId) {
+          this.heldInput.lastInputAt = Date.now()
+          if (input && input.deltaY !== 0) {
+            this.heldInput.canSettleBottom = input.deltaY > 0 || input.geometry.top <= 0
+          }
+        }
         const active = this.model.active
         if (
           input && active?.request.conversationId === conversationId &&
@@ -1822,8 +1829,10 @@ export class PositioningController {
     const active = this.model.active
     if (delta !== 0 && !this.hasCurrentTargetTakeover(conversationId) &&
       !(active?.request.source.kind === 'user-navigation' && active.request.source.reason === 'message-target')) {
+      const leavingInteraction = delta < 0 && active?.request.source.kind === 'interaction'
       const generation = this.observeUserInput(conversationId)
-      this.observeSettledUserGeometry({ conversationId, generation, atLiveEdge })
+      // Even the first upward pixel wins over the interaction's one-pixel bottom tolerance.
+      this.observeSettledUserGeometry({ conversationId, generation, atLiveEdge: atLiveEdge && !leavingInteraction })
       return
     }
     if (!this.hasCurrentTargetTakeover(conversationId)) {
@@ -1854,7 +1863,7 @@ export class PositioningController {
     if (this.heldInput?.conversationId === conversationId) {
       this.heldInput.lastInputAt = Date.now()
     } else {
-      this.heldInput = { conversationId, deferred: null, lastInputAt: Date.now() }
+      this.heldInput = { conversationId, deferred: null, lastInputAt: Date.now(), canSettleBottom: false }
     }
   }
 
@@ -1865,7 +1874,8 @@ export class PositioningController {
       this.heldInput = null
     }
     const released = this.model.active
-    if (atLiveEdge && released?.request.conversationId === conversationId &&
+    if (held?.conversationId === conversationId && held.canSettleBottom && atLiveEdge &&
+      released?.request.conversationId === conversationId &&
       released.request.source.kind === 'interaction' && released.request.source.reason === 'released') {
       // A boundary wheel/key can end the hold without moving or emitting scroll. Resolve that
       // unchanged true-bottom geometry through the same path as an actual return to latest.
