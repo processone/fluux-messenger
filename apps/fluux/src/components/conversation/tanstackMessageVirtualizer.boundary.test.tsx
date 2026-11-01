@@ -298,10 +298,13 @@ it('retires an entry on user takeover and allows a later explicit index navigati
   expect(scope.scroller.scrollTop).toBe(4700)
 })
 
-it.each(['offset', 'index', 'mount'] as const)('publishes the landed viewport after a cancelled %s write', command => {
+// FLM-219: cancellation leaves the reader's viewport intact without issuing or publishing
+// another navigation write. FLM-231's boundary still publishes only writes that actually land.
+it.each(['offset', 'index', 'mount'] as const)('keeps the viewport without publishing a cancelled %s write', command => {
   const scope = fixture()
   act(() => scope.result.current.scrollToOffset(800))
   const before = scope.result.current.getVirtualItems().map(row => row.key)
+  const writer = vi.spyOn(scope.scroller, 'scrollTo')
   let cancelled = false
   const after = vi.fn()
   act(() => {
@@ -319,7 +322,8 @@ it.each(['offset', 'index', 'mount'] as const)('publishes the landed viewport af
   expect(cancelled).toBe(true)
   expect(scope.scroller.scrollTop).toBe(800)
   expect(scope.result.current.getVirtualItems().map(row => row.key)).toEqual(before)
-  expect(after).toHaveBeenCalledOnce()
+  expect(writer).not.toHaveBeenCalled()
+  expect(after).not.toHaveBeenCalled()
   scope.measure(0, 100)
   act(() => {
     for (const [id, callback] of [...frames]) if (frames.delete(id)) callback(0)
