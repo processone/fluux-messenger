@@ -1,6 +1,6 @@
 import type { DiscoveryDiagnostics } from '../../utils/websocketDiscovery'
 import { installOrderTolerantErrors } from '../../utils/xmppError'
-import type { DiscoveryFailure } from '../types/connection'
+import type { DiscoveryFailure, SmResumptionState } from '../types/connection'
 import { client, Client, Element, xml } from '@xmpp/client'
 import { getMechanism } from '@xmpp/client/lib/createOnAuthenticate.js'
 import { createActor } from 'xstate'
@@ -736,8 +736,6 @@ export class Connection extends BaseModule {
       throwIfCancelled()
       if (!effectiveSmState && storedState.smState) {
         effectiveSmState = storedState.smState
-        this.smPersistence.adopt(storedState.smState)
-        this.syncSmWindow()
         this.stores.console.addEvent('Loaded SM state from storage for session resumption', 'sm')
       }
       // Load joined rooms from storage if not explicitly provided
@@ -749,6 +747,16 @@ export class Connection extends BaseModule {
           'connection'
         )
       }
+    }
+
+    // Validate against the window (explicit state included) and seed the cache so
+    // a resumption keeps the negotiated window; an expired record starts fresh.
+    const restoredSmState = effectiveSmState ? this.smPersistence.restore(effectiveSmState) : null
+    if (restoredSmState) {
+      this.smPersistence.adopt(restoredSmState)
+      this.syncSmWindow()
+    } else if (effectiveSmState) {
+      this.stores.console.addEvent('Provided SM state has expired, starting a fresh session', 'sm')
     }
 
     const discoveryContext: { failure: DiscoveryFailure | null } = { failure: null }
@@ -810,7 +818,7 @@ export class Connection extends BaseModule {
       this.credentials = { jid, password, server: resolvedServer, resource, lang, disableSmKeepalive, rememberSession }
       this.installXmppClient({ jid, password, server: resolvedServer, resource, lang, rememberSession })
       attemptAuthentication = this.xmpp ? this.authentications.get(this.xmpp) : undefined
-      this.hydrateStreamManagement(effectiveSmState)
+      this.hydrateStreamManagement(restoredSmState ?? undefined)
       this.setupHandlers()
 
       await this.runTimedConnectionAttempt(
@@ -1194,7 +1202,7 @@ export class Connection extends BaseModule {
    * (e.g., after socket death during sleep). The cache is updated
    * whenever SM is enabled or resumed.
    */
-  getStreamManagementState(): { id: string; inbound: number; outbound: number } | null {
+  getStreamManagementState(): SmResumptionState | null {
     return this.smPersistence.getState(this.xmpp)
   }
 
@@ -2160,11 +2168,9 @@ export class Connection extends BaseModule {
    * server granted, capped at our request, and give it to the state machine.
    * A missing or malformed `max` still resets the previous grant.
    */
-  private recordSmEnabled(advertisedMax: unknown): void {
-    const sm = this.xmpp?.streamManagement
-    if (!sm?.id) return
-    this.smBegunId = sm.id
-    this.smPersistence.beginSession(sm.id, sm.inbound || 0, advertisedMax)
+  private recordSmEnabled(id: string, advertisedMax: unknown): void {
+    this.smBegunId = id
+    this.smPersistence.beginSession(id, 0, advertisedMax)
     this.syncSmWindow()
     if (this.credentials?.jid) {
       void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
@@ -2290,7 +2296,8 @@ export class Connection extends BaseModule {
         this.smResumeCompleted = true
         // Cache SM state for reconnection (survives socket death).
         // Read from the live SM object since xmpp.js has already processed the attrs.
-        this.recordSmEnabled(nonza.attrs.max)
+        // xmpp.js may not have applied the id to the live object yet; use the element.
+        if (nonza.attrs.id) this.recordSmEnabled(String(nonza.attrs.id), nonza.attrs.max)
       } else if (nonza.is('resumed', 'urn:xmpp:sm:3')) {
         // SM session successfully resumed
         const previd = nonza.attrs.previd as string
@@ -2338,7 +2345,7 @@ export class Connection extends BaseModule {
       // still recorded its id and max on the live object.
       const smInline = this.xmpp?.streamManagement
       if (smInline?.enabled && smInline.id && smInline.id !== this.smBegunId) {
-        this.recordSmEnabled((smInline as { max?: unknown }).max)
+        this.recordSmEnabled(smInline.id, (smInline as { max?: unknown }).max)
       }
       handleResult(false)
     })

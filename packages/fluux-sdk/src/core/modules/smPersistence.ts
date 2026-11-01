@@ -6,7 +6,7 @@
  * Connection.ts for independent testing and clearer boundaries.
  */
 
-import type { StorageAdapter, JoinedRoomInfo } from '../types'
+import type { StorageAdapter, JoinedRoomInfo, SmResumptionState } from '../types'
 import type { ResolutionLogger } from './serverResolution'
 import { DEFAULT_SM_MAX_SECONDS, isWithinSmWindow, resolveSmWindowMs } from './smResumptionPolicy'
 
@@ -102,7 +102,29 @@ export class SmPersistence {
     return windowMs
   }
 
-  /** Seed the cache from a record loaded from storage so a later resumption keeps its window. */
+  /**
+   * Turn stored or caller-supplied state into a validated cache entry, or null
+   * when it can no longer be resumed. Missing metadata means the original ten
+   * minutes; without an interruption time the window runs from the capture, so
+   * reading or saving the entry before a resumption cannot renew it.
+   */
+  restore(state: SmResumptionState): SmStateCache | null {
+    if (typeof state.id !== 'string' || !state.id || typeof state.outbound !== 'number') return null
+    const timestamp = typeof state.timestamp === 'number' ? state.timestamp : Date.now()
+    const entry: SmStateCache = {
+      id: state.id,
+      inbound: state.inbound,
+      outbound: state.outbound,
+      timestamp,
+      windowMs: typeof state.windowMs === 'number' && state.windowMs > 0
+        ? state.windowMs
+        : DEFAULT_SM_MAX_SECONDS * 1000,
+      interruptedAt: typeof state.interruptedAt === 'number' ? state.interruptedAt : timestamp,
+    }
+    return this.eligible(entry) ? entry : null
+  }
+
+  /** Seed the cache from restored state so a later resumption keeps its window. */
   adopt(state: SmStateCache): void {
     this.cache = { ...state }
   }
@@ -121,13 +143,14 @@ export class SmPersistence {
   }
 
   /**
-   * Start the resumption window at `at` (default now). Only the first
-   * interruption counts: repeated losses and failed reconnects cannot slide it.
+   * Start the resumption window at `at` (default now). The earliest anchor
+   * wins: a later loss or failed reconnect cannot advance it, while an earlier
+   * suspension time supplied afterwards (wake after socket loss) can pull it back.
    */
   markInterrupted(at: number = Date.now()): void {
-    if (this.cache && this.cache.interruptedAt == null) {
-      this.cache.interruptedAt = Math.min(at, Date.now())
-    }
+    if (!this.cache || !Number.isFinite(at)) return
+    const anchor = Math.min(at, Date.now())
+    this.cache.interruptedAt = Math.min(this.cache.interruptedAt ?? anchor, anchor)
   }
 
   /** The connection was verified live: the prior interruption is over. */
@@ -265,24 +288,17 @@ export class SmPersistence {
       if (state) {
         const joinedRooms = state.joinedRooms ?? []
         // Records saved before the window was stored keep their original ten minutes.
-        const windowMs = typeof state.smWindowMs === 'number' && state.smWindowMs > 0
-          ? state.smWindowMs
-          : DEFAULT_SM_MAX_SECONDS * 1000
-        const loaded: SmStateCache = {
+        // Expired or unsafe records, or records saved before smOutbound existed
+        // (ackQueue would crash when the server's h exceeds our count), cannot
+        // resume. Keep the rooms for rejoin.
+        const loaded = this.restore({
           id: state.smId,
           inbound: state.smInbound,
           outbound: state.smOutbound,
           timestamp: state.timestamp,
-          windowMs,
-          interruptedAt: typeof state.smInterruptedAt === 'number' ? state.smInterruptedAt : undefined,
-        }
-        // Expired or unsafe timestamps, or records saved before smOutbound existed
-        // (ackQueue would crash when the server's h exceeds our count), cannot resume.
-        // Keep the rooms for rejoin.
-        if (typeof state.smId !== 'string' || !state.smId
-          || typeof state.smOutbound !== 'number' || !this.eligible(loaded)) {
-          return { smState: null, joinedRooms }
-        }
+          windowMs: state.smWindowMs,
+          interruptedAt: state.smInterruptedAt,
+        })
         return { smState: loaded, joinedRooms }
       }
     } catch {

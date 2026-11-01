@@ -30,7 +30,7 @@ describe('resolveSmWindowMs', () => {
     expect(resolveSmWindowMs(DAY, undefined)).toBe(600_000)
     expect(resolveSmWindowMs(DAY, null)).toBe(600_000)
   })
-  it.each(['abc', '', '0', '-5', 'Infinity', '0.4', NaN])('treats %s as malformed: ten minutes capped by the request', (bad) => {
+  it.each(['abc', '', '0', '-5', 'Infinity', '0.4', '86400.5', '9e4', '+300', ' 300', '9007199254740993', 86400.5, NaN])('treats %s as malformed: ten minutes capped by the request', (bad) => {
     expect(resolveSmWindowMs(DAY, bad)).toBe(600_000)
     expect(resolveSmWindowMs(120, bad)).toBe(120_000)
   })
@@ -205,5 +205,47 @@ describe('SmPersistence window', () => {
       expect(result.smState).toBeNull()
       expect(result.joinedRooms).toEqual(rooms)
     }
+  })
+
+  it('pulls the anchor back to an earlier suspension time supplied after the socket-loss anchor, but never forward', () => {
+    const sm = make()
+    sm.beginSession('sm-1', 0, '600')
+    vi.setSystemTime(T0 + 300_000)
+    sm.markInterrupted() // socket loss noticed on wake
+    sm.markInterrupted(T0 + 10_000) // sleep started earlier
+    sm.markInterrupted(T0 + 200_000) // later loss cannot advance it
+    vi.setSystemTime(T0 + 610_000)
+    expect(sm.getState(null)).toBeNull()
+  })
+
+  it('anchors a restored record without smInterruptedAt at its capture time, so reads and saves cannot renew it', async () => {
+    st.store.set('u@example.com', {
+      smId: 'sm-1', smInbound: 1, smOutbound: 1, smWindowMs: 600_000, resource: 'r', timestamp: T0, joinedRooms: [],
+    })
+    vi.setSystemTime(T0 + 400_000)
+    const sm = make()
+    sm.adopt((await sm.load('u@example.com')).smState!)
+    expect(sm.getState(live())).not.toBeNull() // hydrated client object read
+    await sm.persist('u@example.com', 'r')
+    vi.setSystemTime(T0 + 600_000)
+    expect(sm.getState(live())).toBeNull()
+  })
+
+  it('restores explicit state (the getter path) with its 24-hour window and refuses it once expired', () => {
+    const sm = make()
+    sm.beginSession('sm-1', 0, '86400')
+    sm.markInterrupted()
+    const saved = JSON.parse(JSON.stringify(sm.getState(null)))
+    vi.setSystemTime(T0 + 5 * 3600_000)
+    const next = make()
+    const restored = next.restore(saved)!
+    expect(restored.windowMs).toBe(DAY * 1000)
+    next.adopt(restored)
+    next.updateCache('sm-1', 9, 9) // resumption keeps the window
+    expect(next.getWindowMs()).toBe(DAY * 1000)
+    vi.setSystemTime(T0 + DAY * 1000)
+    expect(make().restore(saved)).toBeNull()
+    // metadata-less legacy callers keep ten minutes
+    expect(make().restore({ id: 'x', inbound: 0, outbound: 0 })!.windowMs).toBe(600_000)
   })
 })

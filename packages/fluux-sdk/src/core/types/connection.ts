@@ -71,6 +71,30 @@ export type SystemState = 'awake' | 'sleeping' | 'visible' | 'hidden' | 'foregro
 export type ClientState = 'active' | 'inactive'
 
 /**
+ * XEP-0198 session state for resumption, as returned by `getStreamManagementState()`.
+ * Pass it back unchanged: the optional metadata keeps the negotiated window and
+ * interruption time, so an explicitly restored session expires like a stored one.
+ */
+export interface SmResumptionState {
+  /** Stream Management session ID */
+  id: string
+  /** Number of stanzas received (for acknowledgment) */
+  inbound: number
+  /**
+   * Total outbound stanzas the server is expected to know about
+   * (= sm.outbound + outbound_q.length at persist time). Required so
+   * xmpp.js's ackQueue doesn't shift an empty queue on resume.
+   */
+  outbound: number
+  /** When live state was last captured (ms since epoch). */
+  timestamp?: number
+  /** Resumption window negotiated for the session (ms). Absent means ten minutes. */
+  windowMs?: number
+  /** When the session was interrupted (ms since epoch). */
+  interruptedAt?: number
+}
+
+/**
  * Options for connecting to an XMPP server.
  *
  * @example
@@ -99,18 +123,7 @@ export interface ConnectOptions {
    * XEP-0198 Stream Management state for session resumption.
    * Used internally to restore sessions after page reload.
    */
-  smState?: {
-    /** Stream Management session ID */
-    id: string
-    /** Number of stanzas received (for acknowledgment) */
-    inbound: number
-    /**
-     * Total outbound stanzas the server is expected to know about
-     * (= sm.outbound + outbound_q.length at persist time). Required so
-     * xmpp.js's ackQueue doesn't shift an empty queue on resume.
-     */
-    outbound: number
-  }
+  smState?: SmResumptionState
   /** Language for the XMPP stream (xml:lang attribute, e.g., 'en', 'fr') */
   lang?: string
   /**

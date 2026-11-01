@@ -113,6 +113,7 @@ import { Admin } from './modules/Admin'
 import { Profile } from './modules/Profile'
 import { Discovery } from './modules/Discovery'
 import { Connection } from './modules/Connection'
+import type { SmResumptionState } from './types/connection'
 import { resolveSmRequestSeconds } from './modules/smResumptionPolicy'
 import { PubSub } from './modules/PubSub'
 import { Blocking } from './modules/Blocking'
@@ -1685,7 +1686,7 @@ export class XMPPClient {
    * await client.connect({ ...options, smState: stored ? JSON.parse(stored) : undefined })
    * ```
    */
-  getStreamManagementState(): { id: string; inbound: number; outbound: number } | null {
+  getStreamManagementState(): SmResumptionState | null {
     return this.connection.getStreamManagementState()
   }
 

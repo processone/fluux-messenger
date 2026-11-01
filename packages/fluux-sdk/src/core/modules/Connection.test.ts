@@ -5160,6 +5160,24 @@ describe('XMPPClient Connection', () => {
         expect(() => new XMPPClient({ debug: false, streamManagementMaxSeconds: 0 })).toThrow(/streamManagementMaxSeconds/)
       })
 
+      it('keeps an explicitly restored 24-hour grant through resumption', async () => {
+        const dayClient = new XMPPClient({ debug: false, streamManagementMaxSeconds: 86_400 })
+        bindStoresForTesting(dayClient, mockStores)
+        const sendSpy = vi.spyOn((dayClient.connection as any).getConnectionActor(), 'send')
+        const now = Date.now()
+        const p = dayClient.connect({
+          jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+          smState: { id: 'sm-day', inbound: 3, outbound: 2, timestamp: now - 3600_000, windowMs: 86_400_000, interruptedAt: now - 3600_000 },
+        })
+        await vi.advanceTimersByTimeAsync(10)
+        ;(mockXmppClientInstance as any).streamManagement = { id: 'sm-day', inbound: 3, outbound: 2, enabled: true, on: vi.fn() }
+        mockXmppClientInstance._emit('nonza', createMockElement('resumed', { xmlns: 'urn:xmpp:sm:3', previd: 'sm-day', h: '2' }))
+        await p
+        expect(sendSpy).toHaveBeenCalledWith({ type: 'SM_ENABLED', maxMs: 86_400_000 })
+        expect(sendSpy).not.toHaveBeenCalledWith({ type: 'SM_ENABLED', maxMs: 600_000 })
+        expect(dayClient.getStreamManagementState()).toMatchObject({ id: 'sm-day', windowMs: 86_400_000 })
+      })
+
       it('records the window of an inline Bind 2 enable from the live stream', async () => {
         const sendSpy = vi.spyOn(getActor(), 'send')
 

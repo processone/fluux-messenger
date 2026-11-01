@@ -30,9 +30,10 @@ export function resolveSmRequestSeconds(configured: number | undefined): number 
  * malformed `max` falls back to ten minutes, also capped at the request.
  */
 export function resolveSmWindowMs(requestSeconds: number, advertised: unknown): number {
-  const parsed = typeof advertised === 'string' && advertised.trim() !== '' ? Number(advertised) : advertised
-  const valid = typeof parsed === 'number' && Number.isFinite(parsed) && parsed >= 1
-  const seconds = valid ? Math.min(requestSeconds, Math.floor(parsed)) : Math.min(requestSeconds, DEFAULT_SM_MAX_SECONDS)
+  // Only plain positive integers count; anything else ('86400.5', '9e4', unsafe sizes) is malformed.
+  const parsed = typeof advertised === 'string' && /^[0-9]+$/.test(advertised) ? Number(advertised) : advertised
+  const valid = typeof parsed === 'number' && Number.isSafeInteger(parsed) && parsed >= 1
+  const seconds = valid ? Math.min(requestSeconds, parsed) : Math.min(requestSeconds, DEFAULT_SM_MAX_SECONDS)
   return seconds * 1000
 }
 
