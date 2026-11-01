@@ -8,7 +8,6 @@ import type { MessageVirtualizer } from './messageVirtualizer'
 import { PositioningController } from './positioningController'
 import { getScrollShadowSnapshot, resetScrollShadowDiagnostics } from './scrollPositionShadow'
 import { useMessageListScroll, type UseMessageListScrollResult } from './useMessageListScroll'
-import { PositioningController } from './positioningController'
 import * as scrollBinding from './useScrollContainerBinding'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import { MEDIA_LOAD_DEBOUNCE_MS } from './useMediaGrowthPreservation'
@@ -56,7 +55,6 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.useRealTimers()
-  vi.restoreAllMocks()
 })
 
 function fixture() {
