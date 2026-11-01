@@ -298,11 +298,16 @@ describe('DirectionalHistoryBrowserAdapter', () => {
     expect(list.holdAnchor.mock.calls).toEqual([['anchor'], ['anchor'], [null]])
   })
 
-  // Intent: FLM-210, review FLM-338 finding R1. A load captured row 110, the reader scrolled up to
-  // rows 90-97 while it waited, and a delayed message landed at row 100, below the view: the restore
-  // it started held off-screen row 110, so the rows the reader was reading jumped by its height.
-  it('holds the row the reader now sees when they scrolled on before an arrival below it', () => {
-    const rows = Array.from({ length: 30 }, (_, i) => ({
+  // Intent: FLM-210, review FLM-338 finding R1. A load captured row 110 and the reader scrolled
+  // while it waited; a 424 px delayed message then landed between the rows they read and row 110.
+  // The restore it started held row 110: scrolled up to rows 90-97 with the arrival at row 100,
+  // below the view, the rows on screen jumped by its height; scrolled down to rows 123-130 with
+  // the arrival at row 115, above the view, they stayed pushed down by it.
+  it.each([
+    { order: 'scrolled up, arrival below the view', scrollTop: 9_060, arrivalIndex: 100, held: 'message-91', target: 9_060 },
+    { order: 'scrolled down, arrival above the view', scrollTop: 12_260, arrivalIndex: 115, held: 'message-123', target: 12_684 },
+  ])('holds the row the reader now sees when they $order', ({ scrollTop, arrivalIndex, held, target }) => {
+    const rows = Array.from({ length: 50 }, (_, i) => ({
       index: 85 + i,
       id: `message-${85 + i}`,
       start: (85 + i) * 100,
@@ -312,18 +317,18 @@ describe('DirectionalHistoryBrowserAdapter', () => {
     const { adapter } = adapterHarness({ scroller: list.viewport.scroller, virtualizer: list.virtualizer })
     expect(adapter.capture('message-1', 200)?.anchor).toEqual({ id: 'message-110', offsetFromTop: 0 })
 
-    list.viewport.scrollTop = 9_060
+    list.viewport.scrollTop = scrollTop
     adapter.observeScroll()
-    // A 424 px delayed message lands at row 100: every row from there on moves down by its height.
+    // The arrival takes `arrivalIndex`: every row from there on moves down by its height.
     for (const row of rows) {
-      if (row.index < 100) continue
+      if (row.index < arrivalIndex) continue
       row.index += 1
       row.start += 424
       const wrapper = list.viewport.scroller
         .querySelector(`[data-message-id="${row.id}"]`)?.parentElement
       if (wrapper) wrapper.dataset.index = String(row.index)
     }
-    rows.push({ index: 100, id: 'delayed-arrival', start: 10_000, size: 424 })
+    rows.push({ index: arrivalIndex, id: 'delayed-arrival', start: arrivalIndex * 100, size: 424 })
     adapter.observeScroll()
 
     const onPlaced = vi.fn()
@@ -336,9 +341,10 @@ describe('DirectionalHistoryBrowserAdapter', () => {
       },
     }), lease())
 
-    expect(list.viewport.scrollTop).toBe(9_060)
-    expect(onPlaced).toHaveBeenCalledWith({ messageId: 'message-91', offsetFromTop: 40 })
-    expect(list.holdAnchor).toHaveBeenCalledWith('message-91')
+    // The held row stays where the reader last saw it, 40 px below the top of the view.
+    expect(list.viewport.scrollTop).toBe(target)
+    expect(onPlaced).toHaveBeenCalledWith({ messageId: held, offsetFromTop: 40 })
+    expect(list.holdAnchor).toHaveBeenCalledWith(held)
   })
 
   it('positions through the virtualizer and waits through a temporary missing anchor', () => {
