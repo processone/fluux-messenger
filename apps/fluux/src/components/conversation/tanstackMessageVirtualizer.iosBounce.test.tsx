@@ -21,7 +21,7 @@ beforeEach(() => {
   })
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
 })
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.replaceChildren() })
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.replaceChildren() })
 
 function bouncingList() {
   const scroller = document.body.appendChild(document.createElement('div'))
@@ -65,6 +65,33 @@ it('leaves a held end pull untouched when the reader takes over', () => {
   expect(scroller.scrollTop).toBe(stretched)
 })
 
+// Intent: FLM-331. Since FLM-329 a takeover drops the library's target outright. A row that grows
+// above the reader while a finger is down is held, then written when the finger lifts; after a
+// takeover that write must still land, or the rows the reader sees jump by the growth.
+it('keeps the rows the reader sees still when the finger lifts after a takeover', () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  const { scroller, virtualizer } = bouncingList()
+  act(() => {
+    scroller.dispatchEvent(new Event('touchstart'))
+    scroller.scrollTop = 3000
+    scroller.dispatchEvent(new Event('scroll'))
+    virtualizer.cancelPendingScroll?.()
+  })
+  const onScreen = () => virtualizer.getVirtualItems().find(row => row.key === 'row-55')!.start - scroller.scrollTop
+  const seen = onScreen()
+  const above = scroller.appendChild(document.createElement('div'))
+  above.dataset.index = '10'
+  above.getBoundingClientRect = () => new DOMRect(0, 0, 800, 100)
+  act(() => virtualizer.measureElement(above))
+  expect(scroller.scrollTop, 'precondition: the library holds the growth while the finger is down').toBe(3000)
+  act(() => {
+    scroller.dispatchEvent(new Event('touchend'))
+    vi.advanceTimersByTime(150) // the gesture tail closes
+  })
+  expect(scroller.scrollTop, 'the held 40px growth is written').toBe(3040)
+  expect(onScreen()).toBe(seen)
+})
+
 function queuedFrames() {
   const frames: FrameRequestCallback[] = []
   const queue = (callback: FrameRequestCallback) => frames.push(callback)
@@ -84,8 +111,8 @@ it('reports a pending fling only for motion after the finger has lifted', () => 
 })
 
 // Captain-approved FLM-231 F1: all callers share these command shapes. The app refuses
-// reconcile writes with user movement, and a prior takeover also leaves the reconcile skip set.
-// The first delayed write is still navigation; later layout reconciliation is not.
+// reconcile writes with user movement. The first delayed write is still navigation; later
+// layout reconciliation is not.
 const queuedCommands = [
   { callers: 'live-edge / bottom-fraction end', kind: 'end', target: 999, offset: 59400 },
   { callers: 'explicit-target center', kind: 'center', target: 50, offset: 2730 },

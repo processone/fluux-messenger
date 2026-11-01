@@ -182,9 +182,11 @@ it('#1601 R1: drops a +300 approved for a row that the reader has since moved ab
   expect(scroller.scrollTop).toBe(100)
 })
 
-it('#1601 R2: a rebased write that the spacer clamps is recovered once the spacer grows', () => {
+// FLM-331: since FLM-329 a takeover cancels its target outright; it must not also skip this retry.
+it.each([false, true])('#1601 R2: a rebased write that the spacer clamps is recovered once the spacer grows (after a takeover: %s)', takeover => {
   const { scroller, dims, hook, measure } = harness({ scrollHeight: 1600 }) // max scrollTop 1000
   act(() => hook.result.current.scrollToOffset(500))
+  if (takeover) act(() => hook.result.current.cancelPendingScroll?.())
   act(() => hook.result.current.setScrollWriteObserver?.(write => {
     if (write.phase === 'before' && write.source === 'measurement') scroller.scrollTop = 850
   }))
