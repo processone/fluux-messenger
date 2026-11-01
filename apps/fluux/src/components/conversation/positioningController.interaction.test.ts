@@ -146,6 +146,30 @@ describe('interaction position ownership', () => {
     expect(position).toHaveBeenCalledOnce()
   })
 
+  // FLM-245 F3/J1: the kept WebKit trace ends PageUp at 2424 before native motion
+  // starts 20ms later. Keyup at the old bottom must not turn following back on.
+  it.each([
+    { name: 'wheel', deltaY: -120, source: undefined },
+    { name: 'PageUp', deltaY: -1, source: 'keyboard' as const },
+  ])('does not rearm at the old bottom before delayed $name movement', ({ deltaY, source }) => {
+    const { controller } = setup()
+    controller.beginInteractionHold({ conversationId, desired, executor: anchor() })
+    controller.holdInput(conversationId)
+    controller.observeUserInput(conversationId, { deltaY, source, geometry: { top: 2424, height: 2956, client: 532 } })
+    controller.observeUserInputEnd(conversationId, true)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: live(), rearmEligibleFromGeometry: false })).toBe(false)
+    controller.observeUserScroll(conversationId, -1, true)
+    expect(controller.reconcileLiveEdge({ conversationId, executor: live(), rearmEligibleFromGeometry: true })).toBe(false)
+  })
+
+  it('keeps native upward takeover even when its first pixel is inside the bottom tolerance', () => {
+    const { controller, close } = setup()
+    controller.beginInteractionHold({ conversationId, desired, executor: anchor() })
+    controller.observeUserScroll(conversationId, -1, true)
+    expect(close).toHaveBeenCalledOnce()
+    expect(controller.reconcileLiveEdge({ conversationId, executor: live(), rearmEligibleFromGeometry: true })).toBe(false)
+  })
+
   it('ignores a stale release after leaving the conversation', () => {
     const { controller } = setup()
     controller.beginInteractionHold({ conversationId, desired, executor: anchor() })
