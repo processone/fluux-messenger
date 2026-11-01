@@ -90,5 +90,18 @@ export function EmojiPicker({ onSelect, onClose, dynamicWidth = false, maxHeight
   // the picker closes first and the picker stays (see useCloseOnEscape).
   useCloseOnEscape(onClose, closeOnEscape)
 
-  return <div ref={containerRef} className={dynamicWidth ? 'w-full min-w-0' : undefined} />
+  return <div ref={containerRef} className={dynamicWidth ? 'w-full min-w-0' : undefined}
+    onKeyDownCapture={(event) => {
+      if (maxHeight === undefined || event.altKey || event.ctrlKey || event.metaKey) return
+      const input = event.nativeEvent.composedPath()[0]
+      if (!(input instanceof HTMLInputElement) || input.type !== 'search') return
+      // The widget owns arrow navigation, but its unhandled defaults can scroll the conversation.
+      if (event.key === 'Home') {
+        event.preventDefault()
+        const anchor = input.selectionDirection === 'backward' ? input.selectionEnd : input.selectionStart
+        input.setSelectionRange(0, event.shiftKey ? anchor : 0, event.shiftKey ? 'backward' : 'none')
+      } else if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+        event.preventDefault()
+      }
+    }} />
 }

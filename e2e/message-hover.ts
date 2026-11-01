@@ -361,6 +361,7 @@ for (const kind of ['chat', 'room'] as const) {
         await expect(picker).toBeVisible()
         await expect(search).toBeFocused()
         await expect(list).toHaveAttribute('data-message-interaction', TARGET)
+        if (key === 'Home') expect(await search.evaluate(input => (input as HTMLInputElement).selectionStart)).toBe(0)
       }
       await arrive(page, kind, ['search-held-arrival'])
       await expect(picker).toBeVisible()
