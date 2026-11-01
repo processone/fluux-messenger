@@ -730,6 +730,15 @@ impl OpenpgpState {
             .load(std::sync::atomic::Ordering::Relaxed)
     }
 
+    /// Test helper — whether lifecycle work holds `account_jid`'s turn.
+    #[cfg(test)]
+    fn turn_is_taken(&self, account_jid: &str) -> bool {
+        let accounts = self.lifecycle.try_lock().expect("the turn map is free");
+        accounts
+            .get(account_jid)
+            .is_some_and(|turn| turn.try_lock().is_err())
+    }
+
     /// Test helper — synchronous wrapper around the async `ensure_key`.
     /// Spins up a one-shot current-thread runtime so test code can keep
     /// its pre-async shape without every test needing `#[tokio::test]`.
@@ -2294,61 +2303,107 @@ mod tests {
         );
     }
 
+    /// Stand-in for the macOS keychain. Its first `pause` call ("get", "set"
+    /// or "delete") waits for the test's answer, as a pending authorization
+    /// prompt does; with `fail` that call then fails as an unreadable keychain.
+    struct PausingStore {
+        items: Mutex<HashMap<String, String>>,
+        pause: &'static str,
+        fail: bool,
+        prompt: Mutex<Option<(std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>,
+    }
+
+    impl PausingStore {
+        /// The store, the signal that its paused call started, and its answer.
+        fn new(
+            pause: &'static str,
+            fail: bool,
+        ) -> (
+            Arc<Self>,
+            std::sync::mpsc::Receiver<()>,
+            std::sync::mpsc::Sender<()>,
+        ) {
+            let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+            let (answer_tx, answer_rx) = std::sync::mpsc::channel();
+            let store = Arc::new(Self {
+                items: Mutex::default(),
+                pause,
+                fail,
+                prompt: Mutex::new(Some((entered_tx, answer_rx))),
+            });
+            (store, entered_rx, answer_tx)
+        }
+
+        /// Wait for the answer if this is the paused call; true when it was.
+        fn paused(&self, operation: &str) -> bool {
+            if operation != self.pause {
+                return false;
+            }
+            let Some((entered, answered)) = self.prompt.lock().unwrap().take() else {
+                return false;
+            };
+            let _ = entered.send(());
+            // A bounded failure guard, not a sleep or a retry.
+            let _ = answered.recv_timeout(std::time::Duration::from_secs(10));
+            true
+        }
+
+        fn is_empty(&self) -> bool {
+            self.items.lock().unwrap().is_empty()
+        }
+    }
+
+    impl crate::credentials::SecretStore for PausingStore {
+        fn get(&self, account: &str) -> Result<Option<String>, String> {
+            if self.paused("get") && self.fail {
+                return Err("keychain unavailable".into());
+            }
+            Ok(self.items.lock().unwrap().get(account).cloned())
+        }
+        fn set(&self, account: &str, secret: &str) -> Result<(), String> {
+            self.paused("set");
+            self.items
+                .lock()
+                .unwrap()
+                .insert(account.into(), secret.into());
+            Ok(())
+        }
+        fn delete(&self, account: &str) -> Result<(), String> {
+            self.paused("delete");
+            self.items.lock().unwrap().remove(account);
+            Ok(())
+        }
+    }
+
+    /// A state over `dir` whose passphrases live in `store`.
+    fn state_with_store(dir: &std::path::Path, store: &Arc<PausingStore>) -> Arc<OpenpgpState> {
+        Arc::new(OpenpgpState::for_testing_with_storage(
+            KeyStorage::for_testing_with_store(dir.to_path_buf(), store.clone()),
+        ))
+    }
+
+    /// Save a key for `jid` under `dir`; only a fallback file holds its passphrase.
+    async fn seed_key(dir: &std::path::Path, jid: &str) -> KeyBundle {
+        Arc::new(OpenpgpState::for_testing(dir.to_path_buf()))
+            .ensure_key(jid.into(), "Alice".into())
+            .await
+            .unwrap()
+    }
+
     // FLM-93 N1: replacing an identity calls ensure_key once forget's frontend
     // deadline passes, even while forget still waits on a keychain prompt. The
     // new key must not be saved under the passphrase forget is deleting.
     #[tokio::test(flavor = "current_thread")]
     async fn forget_holds_off_a_following_ensure_key_until_it_ends() {
-        use std::sync::mpsc;
-        /// A secret store whose delete waits, as a pending authorization prompt does.
-        struct PromptedDelete {
-            items: Mutex<HashMap<String, String>>,
-            entered: Mutex<mpsc::Sender<()>>,
-            answered: Mutex<mpsc::Receiver<()>>,
-        }
-        impl crate::credentials::SecretStore for PromptedDelete {
-            fn get(&self, account: &str) -> Result<Option<String>, String> {
-                Ok(self.items.lock().unwrap().get(account).cloned())
-            }
-            fn set(&self, account: &str, secret: &str) -> Result<(), String> {
-                self.items
-                    .lock()
-                    .unwrap()
-                    .insert(account.into(), secret.into());
-                Ok(())
-            }
-            fn delete(&self, account: &str) -> Result<(), String> {
-                let _ = self.entered.lock().unwrap().send(());
-                // A bounded failure guard, not a sleep or a retry.
-                let _ = self
-                    .answered
-                    .lock()
-                    .unwrap()
-                    .recv_timeout(std::time::Duration::from_secs(10));
-                self.items.lock().unwrap().remove(account);
-                Ok(())
-            }
-        }
-        let (entered_tx, entered_rx) = mpsc::channel();
-        let (answer_tx, answer_rx) = mpsc::channel();
-        let store = Arc::new(PromptedDelete {
-            items: Mutex::default(),
-            entered: Mutex::new(entered_tx),
-            answered: Mutex::new(answer_rx),
-        });
+        let (store, entered, answer) = PausingStore::new("delete", false);
         let dir = fresh_tmp_dir();
-        let open = || {
-            Arc::new(OpenpgpState::for_testing_with_storage(
-                KeyStorage::for_testing_with_store(dir.clone(), store.clone()),
-            ))
-        };
         let jid = "alice@example.com";
-        let state = open();
+        let state = state_with_store(&dir, &store);
         let retired = state.ensure_key(jid.into(), "Alice".into()).await.unwrap();
 
         let mut forget = Box::pin(state.forget_account(jid));
         assert!(futures_util::poll!(forget.as_mut()).is_pending());
-        entered_rx
+        entered
             .recv_timeout(std::time::Duration::from_secs(10))
             .expect("forget reaches the keychain delete");
         let mut replacement = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
@@ -2359,16 +2414,106 @@ mod tests {
             "ensure_key must not load or save while forget is still deleting"
         );
 
-        answer_tx.send(()).unwrap();
+        answer.send(()).unwrap();
         forget.await.unwrap();
         let replacement = replacement.await.unwrap();
         assert_ne!(replacement.fingerprint, retired.fingerprint);
         // Restart: the replacement key still unlocks from disk and the store.
-        let reloaded = open()
+        let reloaded = state_with_store(&dir, &store)
             .ensure_key(jid.into(), "Alice".into())
             .await
             .expect("the replacement key stays unlockable");
         assert_eq!(reloaded.fingerprint, replacement.fingerprint);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // FLM-339 F1: an unlock whose caller stops waiting keeps the account's turn
+    // until its blocking save ends, so a following forget cannot run under it
+    // and leave the abandoned save's key and passphrase behind.
+    #[tokio::test(flavor = "current_thread")]
+    async fn an_abandoned_unlock_keeps_forget_out_until_its_save_ends() {
+        let (store, entered, answer) = PausingStore::new("set", false);
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        let state = state_with_store(&dir, &store);
+
+        let mut unlock = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
+        assert!(futures_util::poll!(unlock.as_mut()).is_pending());
+        entered
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the unlock reaches the passphrase save");
+        drop(unlock);
+        assert!(
+            state.turn_is_taken(jid),
+            "the abandoned unlock's save must still hold the account's turn"
+        );
+
+        let forget = state.forget_account(jid);
+        answer.send(()).unwrap();
+        forget.await.unwrap();
+        // Forget ran after the save, so nothing of that key is left behind.
+        assert!(!state.storage.has_persisted_key(jid));
+        assert!(store.is_empty(), "forget must remove the saved passphrase");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // FLM-339 F2: callers already waiting on an unlock share its failure
+    // instead of each repeating the KDF and recovery once it fails.
+    #[tokio::test(flavor = "current_thread")]
+    async fn callers_waiting_on_a_failed_unlock_share_its_error() {
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        seed_key(&dir, jid).await;
+        let (store, entered, answer) = PausingStore::new("get", true);
+        let state = state_with_store(&dir, &store);
+
+        let mut first = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
+        assert!(futures_util::poll!(first.as_mut()).is_pending());
+        entered
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the unlock reaches the keychain read");
+        let mut waiting = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
+        assert!(futures_util::poll!(waiting.as_mut()).is_pending());
+
+        answer.send(()).unwrap();
+        let first = first.await.expect_err("the keychain read fails");
+        let waiting = waiting.await.expect_err("the waiting caller fails too");
+        assert_eq!(waiting, first);
+        assert_eq!(
+            state.blocking_run_count(),
+            1,
+            "a caller waiting on the failed unlock must not repeat it"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // FLM-339 F2 with FLM-93 N1: a caller queued behind a forget does not share
+    // a failure from before that forget; it gets a new key.
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_caller_queued_behind_forget_does_not_share_an_earlier_failure() {
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        let retired = seed_key(&dir, jid).await;
+        let (store, entered, answer) = PausingStore::new("get", true);
+        let state = state_with_store(&dir, &store);
+
+        let mut first = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
+        assert!(futures_util::poll!(first.as_mut()).is_pending());
+        entered
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the unlock reaches the keychain read");
+        let mut forget = Box::pin(state.forget_account(jid));
+        assert!(futures_util::poll!(forget.as_mut()).is_pending());
+        let mut replacement = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
+        assert!(futures_util::poll!(replacement.as_mut()).is_pending());
+
+        answer.send(()).unwrap();
+        first.await.expect_err("the keychain read fails");
+        forget.await.unwrap();
+        let replacement = replacement
+            .await
+            .expect("the caller queued behind forget gets a new key");
+        assert_ne!(replacement.fingerprint, retired.fingerprint);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
