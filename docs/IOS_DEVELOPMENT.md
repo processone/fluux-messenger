@@ -636,8 +636,13 @@ content updates; simulator compilation covers those APIs. Real-device acceptance
 requires remote pushes with fixture identities: direct and room avatars,
 missing-avatar fallback, avatar replacement/removal, logout, and delivery while
 locked after first unlock. Simulator builds and fixtures do not prove APNs
-extension execution or the rendered Notification Center appearance. Local
-notifications posted while the app runs are a separate follow-up.
+extension execution or the rendered Notification Center appearance. While the app
+runs, local room notifications use the same communication presentation through the
+push plugin, retaining the local tap destination. They read the shared avatar mirror
+rather than preparing an unused attachment. Direct-chat local notifications still
+use the notification plugin and convert browser image addresses to temporary files.
+In-app room toasts use the room picture (or the shared # fallback), with the sender
+first and the room name and message below; generic status toasts are unchanged.
 
 On a signed iPhone build, check the room-avatar correction manually:
 

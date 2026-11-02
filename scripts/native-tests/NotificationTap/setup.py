@@ -23,7 +23,13 @@ source = (repo / 'apps/fluux/src-tauri/plugins/push/ios/Sources/PushPlugin.swift
 # beside the test bridge, without launching the production app or any account.
 start = source.index('private class RemoteNotificationDelegate:')
 end = source.index('\nprivate struct DismissTarget:', start)
-(lab / 'App/App.swift').write_text((fixture / 'App.swift').read_text() + '\n' + source[start:end])
+# This stock-plugin fixture needs only the presentation marker, not the avatar
+# engine. Derive it from its production owner instead of maintaining a second value.
+# This fixture covers stock-plugin taps, not the push plugin's room producer.
+presentation = (repo / 'apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationAvatars/NotificationPresentation.swift').read_text()
+marker = next(line.strip() for line in presentation.splitlines() if line.strip().startswith('static let localMarker ='))
+(lab / 'App/App.swift').write_text((fixture / 'App.swift').read_text() + '\n' + source[start:end]
+                                  + '\nprivate enum NotificationPresentation { ' + marker + ' }\n')
 shutil.copyfile(fixture / 'UITests.swift', lab / 'UITests/UITests.swift')
 shutil.copyfile(fixture / 'Tauri.swift', lab / 'Tauri/Tauri.swift')
 shutil.copyfile(fixture / 'payloads.json', lab / 'App/payloads.json')

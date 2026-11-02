@@ -188,12 +188,12 @@ describe('useDesktopNotifications posting + guard', () => {
       expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
     })
 
-    // FLM-201: room banners show the room picture, sender first, then the room and message.
-    it('shows the room picture with the sender first, then the room and message', async () => {
+    // FLM-201's sender-first choice and FLM-337 R2: a missing room picture keeps the shared fallback.
+    it.each([true, false])('shows the sender first, then room and message (picture available: %s)', async (hasPicture) => {
       restorePlatform()
       restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
       isMobileTauri.mockResolvedValue(true)
-      const avatar = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+      const avatar = hasPicture ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' : undefined
       renderHook(() => useDesktopNotifications())
       await handlers.onRoomMessage?.(
         { jid: 'xsf@muc.xmpp.org', name: 'XSF', nickname: 'Receiver', avatar, avatarHash: 'hash', notifyAll: true },
@@ -201,7 +201,12 @@ describe('useDesktopNotifications posting + guard', () => {
       )
       render(<ToastContainer />)
       const toast = screen.getByRole('button', { name: /Sender/ })
-      expect(toast.querySelector('img')?.getAttribute('src')).toBe(avatar)
+      if (hasPicture) {
+        expect(toast.querySelector('img')?.getAttribute('src')).toBe(avatar)
+      } else {
+        expect(toast.querySelector('img')).toBeNull()
+        expect(toast.querySelector('.lucide-hash')).not.toBeNull()
+      }
       expect(toast.textContent).toBe('SenderXSF: body text')
       expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
     })
