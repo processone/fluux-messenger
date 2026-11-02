@@ -274,6 +274,7 @@
         "cachedHistoryWarning": "Historia w pamięci podręcznej do {{date}}. Dołącz, aby pobrać najnowsze wiadomości.",
         "notJoinedNoHistory": "Nie jesteś w tym pokoju",
         "joinToLoadHistory": "Dołącz, aby załadować wiadomości",
+        "noHistoryYet": "Historia nie jest jeszcze dostępna",
         "notificationSettings": "Ustawienia powiadomień",
         "roomActions": "Akcje pokoju",
         "showRoomInfo": "Pokaż informacje o pokoju",

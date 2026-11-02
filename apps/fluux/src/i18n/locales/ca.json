@@ -274,6 +274,7 @@
         "cachedHistoryWarning": "Historial en memòria cau fins a {{date}}. Uneix-te per obtenir els missatges més recents.",
         "notJoinedNoHistory": "No ets a aquesta sala",
         "joinToLoadHistory": "Uneix-te per carregar els missatges",
+        "noHistoryYet": "Encara no hi ha historial disponible",
         "notificationSettings": "Configuració de notificacions",
         "roomActions": "Accions de la sala",
         "showRoomInfo": "Mostra la informació de la sala",

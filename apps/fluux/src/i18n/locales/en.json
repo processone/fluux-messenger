@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "Cached history up to {{date}}. Join to get latest messages.",
         "notJoinedNoHistory": "You are not in this room",
         "joinToLoadHistory": "Join to load messages",
+        "noHistoryYet": "No history available yet",
         "notificationSettings": "Notification settings",
         "roomActions": "Room actions",
         "showRoomInfo": "Show room info",

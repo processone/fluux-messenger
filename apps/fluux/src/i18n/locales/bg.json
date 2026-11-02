@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "Кеширана история до {{date}}. Присъединете се за последните съобщения.",
         "notJoinedNoHistory": "Не сте в тази стая",
         "joinToLoadHistory": "Присъединете се за зареждане на съобщения",
+        "noHistoryYet": "Все още няма налична история",
         "notificationSettings": "Настройки за известия",
         "roomActions": "Действия в стаята",
         "showRoomInfo": "Показване на информация за стаята",

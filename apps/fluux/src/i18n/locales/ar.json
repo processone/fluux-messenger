@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "سجل مخبأ حتى {{date}}. انضم للحصول على أحدث الرسائل.",
         "notJoinedNoHistory": "أنت لست في هذه الغرفة",
         "joinToLoadHistory": "انضم لتحميل الرسائل",
+        "noHistoryYet": "لا يتوفر سجل رسائل بعد",
         "notificationSettings": "إعدادات الإشعارات",
         "roomActions": "إجراءات الغرفة",
         "showRoomInfo": "إظهار معلومات الغرفة",

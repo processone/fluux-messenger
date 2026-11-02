@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "Gyorsítótárazott előzmények {{date}} időpontig. Csatlakozzon a legújabb üzenetekért.",
         "notJoinedNoHistory": "Ön nem tagja ennek a szobának",
         "joinToLoadHistory": "Csatlakozzon az üzenetek betöltéséhez",
+        "noHistoryYet": "Még nem érhető el előzmény",
         "notificationSettings": "Értesítési beállítások",
         "roomActions": "Szoba műveletek",
         "showRoomInfo": "Szobainformációk megjelenítése",

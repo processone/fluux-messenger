@@ -274,6 +274,7 @@
         "cachedHistoryWarning": "Vahemällu salvestatud ajalugu kuni {{date}}. Liitu, et saada uusimad sõnumid.",
         "notJoinedNoHistory": "Sa pole selles toas",
         "joinToLoadHistory": "Liitu sõnumite laadimiseks",
+        "noHistoryYet": "Ajalugu pole veel saadaval",
         "notificationSettings": "Teavituste seaded",
         "roomActions": "Ruumi toimingud",
         "showRoomInfo": "Näita toa teavet",

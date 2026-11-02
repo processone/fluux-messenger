@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "Gecachte geschiedenis tot {{date}}. Join om nieuwste berichten te krijgen.",
         "notJoinedNoHistory": "Je zit niet in deze groep",
         "joinToLoadHistory": "Join om berichten te laden",
+        "noHistoryYet": "Nog geen geschiedenis beschikbaar",
         "notificationSettings": "Meldingsinstellingen",
         "roomActions": "Kameraacties",
         "showRoomInfo": "Groepsinfo tonen",

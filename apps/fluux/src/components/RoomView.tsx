@@ -705,7 +705,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             <ReactionMentions conversationId={activeRoom.jid} onSee={(id) => roomStore.getState().setTargetMessageId(id)} />
             <EasterEggMentions conversationId={activeRoom.jid} onReplay={(animation, senderName) => roomStore.getState().triggerAnimation(activeRoom.jid, animation, senderName)} />
 
-            {/* Input - show composer if joined, join prompt only when no join is in flight */}
+            {/* Membership owns the footer; joining never replaces the reading area. */}
             {activeRoom.joined ? (
               <RoomVoiceControls room={activeRoom} isConnected={isConnected} allowWhisper={!!whisperTarget}>
                 <RoomMessageInput
@@ -742,7 +742,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                   isDarkMode={resolvedMode === 'dark'}
                 />
               </RoomVoiceControls>
-            ) : !activeRoom.isJoining ? (
+            ) : activeRoom.isJoining ? (
+              <RoomJoiningPanel />
+            ) : (
               <RoomJoinPrompt
                 onJoin={async () => {
                   // Issue #37: warn before joining a room that would expose the user's real JID.
@@ -756,7 +758,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                   }
                 }}
               />
-            ) : null}
+            )}
           </ConversationTail>
         </ConversationColumn>
         {warningDialog}
@@ -1142,29 +1144,24 @@ export const RoomMessageList = memo(function RoomMessageList({
     [room.occupants, room.nickname],
   )
 
-  // Loading state covers two phases: joining (waiting for self-presence) and the
-  // first MAM catch-up after join when nothing is cached yet. Without the second
-  // phase the spinner vanished on join and the view showed "No messages" while
-  // history was still loading (see selectRoomInitialLoading).
+  // Only an uncached first history fetch replaces the reading area.
   const isInitialLoading = selectRoomInitialLoading({
-    isJoining: room.isJoining ?? false,
     joined: room.joined ?? false,
     isCatchingUp: isCatchingUp ?? false,
     messageCount: loadedMessageCount,
   })
-  // Label matches the phase: still joining vs. joined and loading history.
   const isJoiningPhase = (room.isJoining ?? false) && !(room.joined ?? false)
   const loadingState = isInitialLoading ? (
     <div className="flex-1 flex flex-col items-center justify-center gap-3 text-fluux-muted">
       <Loader2 className="size-8 animate-spin text-fluux-brand" />
-      <p>{isJoiningPhase ? t('rooms.joining') : t('chat.loadingMessages')}</p>
+      <p>{t('chat.loadingMessages')}</p>
     </div>
   ) : null
 
   // Empty state: different for joined vs not joined
   const emptyState = (
     <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted gap-3">
-      {!isJoined && (
+      {!isJoined && !isJoiningPhase && (
         <div className="flex items-center gap-2 text-fluux-yellow mb-1">
           <AlertCircle className="size-4" />
           <span className="text-sm">{t('rooms.notJoinedNoHistory')}</span>
@@ -1173,7 +1170,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       <div className="size-16 rounded-full bg-fluux-brand/10 border border-fluux-brand/25 flex items-center justify-center">
         <Hash className="size-7 text-fluux-brand" />
       </div>
-      <p className="text-sm">{isJoined ? t('chat.noMessages') : t('rooms.joinToLoadHistory')}</p>
+      <p className="text-sm">{isJoined ? t('chat.noMessages') : isJoiningPhase ? t('rooms.noHistoryYet') : t('rooms.joinToLoadHistory')}</p>
       {isJoined && !isHistoryComplete && onScrollToTop && (
         <button
           type="button"
@@ -1188,7 +1185,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   )
 
   // Extra content: cached history warning banner when not joined
-  const extraContent = !isJoined && messages.length > 0 ? (
+  const extraContent = !isJoined && !isJoiningPhase && messages.length > 0 ? (
     <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-700 dark:text-amber-400">
       <AlertCircle className="size-4 flex-shrink-0" />
       <span className="text-sm">
@@ -2539,6 +2536,19 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     </div>
   )
 })
+
+/** Noninteractive replacement for the composer until membership is confirmed. */
+function RoomJoiningPanel() {
+  const { t } = useTranslation()
+  return (
+    <div className="p-4 pb-safe border-t border-fluux-hover">
+      <div role="status" aria-live="polite" aria-atomic="true" className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-fluux-bg/50 border border-fluux-hover text-fluux-muted text-sm">
+        <Loader2 aria-hidden="true" className="size-4 text-fluux-brand animate-spin motion-reduce:animate-none" />
+        <span>{t('rooms.joining')}</span>
+      </div>
+    </div>
+  )
+}
 
 /**
  * Join prompt shown when viewing a bookmarked room that is not joined.

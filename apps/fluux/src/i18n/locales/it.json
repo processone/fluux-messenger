@@ -274,6 +274,7 @@
         "cachedHistoryWarning": "Cronologia in cache fino al {{date}}. Entra per ottenere i messaggi piu recenti.",
         "notJoinedNoHistory": "Non sei in questa stanza",
         "joinToLoadHistory": "Entra per caricare i messaggi",
+        "noHistoryYet": "Cronologia non ancora disponibile",
         "notificationSettings": "Impostazioni notifiche",
         "roomActions": "Azioni stanza",
         "showRoomInfo": "Mostra informazioni stanza",

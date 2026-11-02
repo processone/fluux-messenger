@@ -1,5 +1,5 @@
 /**
- * FLM-269: reopening an already-joining room must not offer a second join.
+ * FLM-361: joining replaces only the composer; cached history stays readable.
  * Exercise the actual app and MUC.joinRoom; only the demo service response is held.
  * Restored selection is a fixture, not proof of native iOS background/resume.
  */
@@ -7,6 +7,7 @@ import { test, expect, type Page, type TestInfo } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
+import { getScrollTop, setScrollTop, waitForAnchorSettled, waitForTopVisibleSettled, wheelUntil } from './harness/scrollHarness'
 import { ROOM_JID as TEAM, BOARD_ROOM_JID as BOARD, ENGINEERING_ROOM_JID as EMPTY, DESIGN_ROOM_JID as DESIGN } from '../apps/fluux/src/demo/constants'
 type DemoWindow = Window & {
   __demoClient: DemoClient
@@ -20,8 +21,9 @@ type DemoWindow = Window & {
   __releaseNewQueue?: () => void
 }
 
-async function openJoiningRoom(page: Page, jid: string) {
+async function openJoiningRoom(page: Page, jid: string, beforeJoin?: () => Promise<void>) {
   await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(jid)}`)
+  await beforeJoin?.()
   await page.evaluate(async ({ jid, team }) => {
     const w = window as unknown as DemoWindow
     const client = w.__demoClient
@@ -79,6 +81,30 @@ async function observe(page: Page, jid: string) {
   }, jid)
 }
 
+// Assert the actual reading surface, not just the absence of a second join button.
+async function expectPendingHistory(page: Page, jid: string) {
+  const main = page.getByRole('main')
+  const status = main.locator('[data-conversation-tail]').getByRole('status')
+  await expect(status).toHaveText('Joining...')
+  await expect(status).toHaveAttribute('aria-live', 'polite')
+  await expect(status.locator('button, input, textarea, [tabindex]')).toHaveCount(0)
+  const bounds = await status.boundingBox()
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height)
+  await expect(main.getByText(/Cached history up to/)).toHaveCount(0)
+  await expect(main.getByText('Join to load messages', { exact: true })).toHaveCount(0)
+  const observed = await observe(page, jid)
+  if (observed.cachedMessages) {
+    await expect.poll(() => main.locator('[data-message-id]').evaluateAll(rows => rows.filter(row => {
+      const r = row.getBoundingClientRect()
+      const v = row.closest('[data-message-list]')!.getBoundingClientRect()
+      return r.height > 0 && r.bottom > v.top && r.top < v.bottom
+    }).length)).toBeGreaterThan(0)
+  } else {
+    await expect(main.getByText('No history available yet', { exact: true })).toBeVisible()
+    await expect(main.getByText('No messages yet. Say hello!', { exact: true })).toHaveCount(0)
+  }
+}
+
 for (const [label, viewport] of [
   ['desktop', { width: 1280, height: 800 }],
   ['phone', { width: 390, height: 844 }],
@@ -96,6 +122,7 @@ for (const [label, viewport] of [
         await expect(main.getByText(/Cached history up to/)).toHaveCount(0)
         await expect(main.getByText('You are not in this room')).toHaveCount(0)
         await expect(main.getByRole('combobox')).toHaveCount(0)
+        await expectPendingHistory(page, jid)
         const joining = await observe(page, jid)
         expect(joining.isJoining).toBe(true)
         expect(joining.joined).toBe(false)
@@ -112,6 +139,62 @@ for (const [label, viewport] of [
       })
     }
 
+    test('FLM-361 keeps the reading anchor and saved draft without stealing focus', async ({ page }, info) => {
+      await page.emulateMedia({ reducedMotion: 'reduce' })
+      const main = page.getByRole('main')
+      const headerControl = main.getByRole('button', { name: /^Show room info: Team Chat/ })
+      let anchor: Awaited<ReturnType<typeof waitForTopVisibleSettled>> = null
+      await openJoiningRoom(page, TEAM, async () => {
+        const composer = main.getByRole('combobox')
+        await composer.fill('The regression tests are passing.')
+        await expect.poll(() => page.evaluate(jid => (window as unknown as DemoWindow).__roomStore.getState().getDraft(jid), TEAM)).toBe('The regression tests are passing.')
+        await setScrollTop(page, 0)
+        const start = await getScrollTop(page)
+        await wheelUntil(page, 120, () => getScrollTop(page), value => value > start + 20)
+        anchor = await waitForTopVisibleSettled(page)
+        expect(anchor).not.toBeNull()
+        await headerControl.focus()
+      })
+      await expectPendingHistory(page, TEAM)
+      const status = main.locator('[data-conversation-tail]').getByRole('status')
+      await expect(status.locator('svg')).toHaveCSS('animation-name', 'none')
+      await expect(headerControl).toBeFocused()
+      const pendingOffset = await waitForAnchorSettled(page, anchor!.id)
+      expect(pendingOffset).not.toBeNull()
+      expect(Math.abs(pendingOffset! - anchor!.offsetFromTop)).toBeLessThanOrEqual(20)
+      const statusNode = await status.elementHandle()
+      await page.evaluate(jid => (window as unknown as DemoWindow).__roomStore.getState().updateRoom(jid, { name: 'Team Chat (joining)' }), TEAM)
+      expect(await statusNode!.evaluate(node => node.isConnected)).toBe(true)
+      await expect(headerControl).toBeFocused()
+      await shot(page, info, 'reading-pending.png')
+      await page.evaluate(() => (window as unknown as DemoWindow).__releaseJoin!())
+      const composer = main.getByRole('combobox')
+      await expect(composer).toBeVisible()
+      await expect(composer).toHaveText('The regression tests are passing.')
+      await expect(headerControl).toBeFocused()
+      const after = await waitForAnchorSettled(page, anchor!.id)
+      expect(after).not.toBeNull()
+      expect(Math.abs(after! - anchor!.offsetFromTop)).toBeLessThanOrEqual(20)
+      await shot(page, info, 'reading-joined.png')
+      await info.attach('reading-observations', { body: JSON.stringify({ anchor, pendingOffset, after, focus: await headerControl.evaluate(node => node === document.activeElement) }, null, 2), contentType: 'application/json' })
+    })
+
+    test('FLM-361 distinguishes pending empty cache, first history fetch and settled empty', async ({ page }, info) => {
+      await openJoiningRoom(page, EMPTY)
+      await expectPendingHistory(page, EMPTY)
+      await page.evaluate(() => (window as unknown as DemoWindow).__releaseJoin!())
+      const main = page.getByRole('main')
+      await expect(main.getByRole('combobox')).toBeVisible()
+      // Drive the existing SDK history state at its service boundary, not a second UI state.
+      await page.evaluate(jid => (window as unknown as DemoWindow).__roomStore.getState().setRoomMAMLoading(jid, true), EMPTY)
+      await expect(main.getByText('Loading messages...', { exact: true })).toBeVisible()
+      await expect(main.getByText('Joining...', { exact: true })).toHaveCount(0)
+      await shot(page, info, 'first-history.png')
+      await page.evaluate(jid => (window as unknown as DemoWindow).__roomStore.getState().setRoomMAMLoading(jid, false), EMPTY)
+      await expect(main.getByText('No messages yet. Say hello!', { exact: true })).toBeVisible()
+      await shot(page, info, 'settled-empty.png')
+    })
+
     test('G1 releases an abandoned queue without clearing its newer owner', async ({ page }, info) => {
       await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(TEAM)}`)
       await page.evaluate(async jid => {
@@ -124,6 +207,7 @@ for (const [label, viewport] of [
       }, TEAM)
       const main = page.getByRole('main')
       await expect(main.getByText('Joining...', { exact: true })).toBeVisible()
+      await expectPendingHistory(page, TEAM)
       await page.evaluate(() => (window as unknown as DemoWindow).__releaseOldQueue!())
       const newer = await observe(page, TEAM)
       expect(newer.isJoining).toBe(true)
@@ -167,6 +251,7 @@ for (const [label, viewport] of [
       await expect(main.getByText('Joining...', { exact: true })).toBeVisible()
       await expect(main.getByText(/Cached history up to/)).toHaveCount(0)
       await expect(main.getByRole('button', { name: 'Join room to participate' })).toHaveCount(0)
+      await expectPendingHistory(page, TEAM)
       const waiting = await observe(page, TEAM)
       await shot(page, info, 'discovery-pending.png')
       await page.evaluate(async () => {

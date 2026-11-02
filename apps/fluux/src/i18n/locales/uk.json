@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "Кешована історія до {{date}}. Приєднайтеся, щоб отримати останні повідомлення.",
         "notJoinedNoHistory": "Ви не в цій кімнаті",
         "joinToLoadHistory": "Приєднайтеся, щоб завантажити повідомлення",
+        "noHistoryYet": "Історія поки недоступна",
         "notificationSettings": "Налаштування сповіщень",
         "roomActions": "Дії кімнати",
         "showRoomInfo": "Показати відомості про кімнату",

@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "缓存历史记录截至 {{date}}。加入即可获取最新消息。",
         "notJoinedNoHistory": "您不在此房间中",
         "joinToLoadHistory": "加入即可加载消息",
+        "noHistoryYet": "暂无可用历史记录",
         "notificationSettings": "通知设置",
         "roomActions": "房间操作",
         "showRoomInfo": "显示房间信息",

@@ -273,6 +273,7 @@
         "cachedHistoryWarning": "Αποθηκευμένο ιστορικό μέχρι {{date}}. Μπείτε για τα τελευταία μηνύματα.",
         "notJoinedNoHistory": "Δεν είστε σε αυτό το δωμάτιο",
         "joinToLoadHistory": "Μπείτε για φόρτωση μηνυμάτων",
+        "noHistoryYet": "Δεν υπάρχει ακόμη διαθέσιμο ιστορικό",
         "notificationSettings": "Ρυθμίσεις ειδοποιήσεων",
         "roomActions": "Ενέργειες δωματίου",
         "showRoomInfo": "Εμφάνιση πληροφοριών δωματίου",

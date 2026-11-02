@@ -274,6 +274,7 @@
         "cachedHistoryWarning": "Istoric salvat în cache până la {{date}}. Intră pentru cele mai recente mesaje.",
         "notJoinedNoHistory": "Nu ești în această cameră",
         "joinToLoadHistory": "Intră pentru a încărca mesajele",
+        "noHistoryYet": "Istoricul nu este încă disponibil",
         "notificationSettings": "Setări de notificare",
         "roomActions": "Acțiuni cameră",
         "showRoomInfo": "Arată informațiile camerei",

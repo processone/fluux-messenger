@@ -273,6 +273,7 @@
         "cachedHistoryWarning": "Historique en cache jusqu'au {{date}}. Rejoignez pour les derniers messages.",
         "notJoinedNoHistory": "Vous n'êtes pas dans ce salon",
         "joinToLoadHistory": "Rejoindre pour charger les messages",
+        "noHistoryYet": "Aucun historique disponible pour le moment",
         "notificationSettings": "Paramètres de notification",
         "roomActions": "Actions du salon",
         "showRoomInfo": "Afficher les informations du salon",

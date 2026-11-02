@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "Välimuistissa oleva historia {{date}} asti. Liity saadaksesi uusimmat viestit.",
         "notJoinedNoHistory": "Et ole tässä huoneessa",
         "joinToLoadHistory": "Liity ladataksesi viestit",
+        "noHistoryYet": "Historiaa ei ole vielä saatavilla",
         "notificationSettings": "Ilmoitusasetukset",
         "roomActions": "Huoneen toiminnot",
         "showRoomInfo": "Näytä huoneen tiedot",

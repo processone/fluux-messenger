@@ -274,6 +274,7 @@
         "cachedHistoryWarning": "Uložená historie do {{date}}. Vstupte pro načtení nejnovějších zpráv.",
         "notJoinedNoHistory": "Nejste v této místnosti",
         "joinToLoadHistory": "Vstupte pro načtení zpráv",
+        "noHistoryYet": "Historie zatím není k dispozici",
         "notificationSettings": "Nastavení oznámení",
         "roomActions": "Akce místnosti",
         "showRoomInfo": "Zobrazit informace o místnosti",

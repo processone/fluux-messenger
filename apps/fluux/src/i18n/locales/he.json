@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "היסטוריה מהמטמון עד {{date}}. הצטרף לקבלת ההודעות האחרונות.",
         "notJoinedNoHistory": "אינך בחדר זה",
         "joinToLoadHistory": "הצטרף לטעינת הודעות",
+        "noHistoryYet": "אין היסטוריה זמינה עדיין",
         "notificationSettings": "הגדרות התראות",
         "roomActions": "פעולות חדר",
         "showRoomInfo": "הצגת פרטי החדר",
