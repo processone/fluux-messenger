@@ -22,6 +22,7 @@ cp "$LAB/bin/security" "$LAB/bin/codesign"
 chmod +x "$LAB/bin/security" "$LAB/bin/codesign"
 export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 export HOME="$LAB/home" CFFIXED_USER_HOME="$LAB/home" FM3000_LOCAL_CODESIGN_DIR="$LAB/home/signing"
+export FLUUX_RECOVERY_BUILD="$(git -C "$ROOT" rev-parse --short HEAD)"
 export FLUUX_RECOVERY_LAB="$LAB" FLUUX_RECOVERY_SOURCE="$SOURCE" PATH="$LAB/bin:$PATH"
 unset APPLE_SIGNING_IDENTITY APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_TEAM_ID
 cd "$ROOT"

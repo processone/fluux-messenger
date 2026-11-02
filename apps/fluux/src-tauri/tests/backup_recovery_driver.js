@@ -18,6 +18,9 @@
     const meta = window.__FLUUX_RECOVERY_META__
     const fp = meta.aliceFingerprint
     await wait(() => document.querySelector('[data-nav="messages"]'), 'app shell')
+    if (!window.__recoveryFixture?.native || window.__recoveryFixture.build !== window.__FLUUX_RECOVERY_EXPECTED_BUILD__) {
+      throw new Error('Native recovery proof requires this working copy’s current bundled app and actual Rust commands')
+    }
     if (!window.__FLUUX_RECOVERY_RESTART__) {
       ;(await wait(() => button(window.__FLUUX_RECOVERY_SOURCE__ === 'file' ? 'Import from a file' : 'Restore from server backup'), 'backup source chooser')).click()
       const input = await wait(() => document.querySelector('input[type="password"]'), 'backup code field')

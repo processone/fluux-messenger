@@ -188,6 +188,9 @@ for (const phase of ['server-fetch', 'file-picker', 'confirmed-save']) {
     await page.evaluate(async () => {
       const w = window as any
       w.__demoClient.e2ee = null
+      // The real macOS logout normally destroys this realm to repair WRY input.
+      // Keep the scripted browser realm alive so the late reply is observable.
+      sessionStorage.removeItem('__wry_was_online')
       w.__connectionStore.getState().setStatus('disconnected')
       await w.__oldRecoveryPlugin.shutdown()
       await w.__releaseRecovery()
