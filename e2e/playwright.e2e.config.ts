@@ -51,6 +51,7 @@ const SUITES = [
   { name: 'composer-send', testMatch: 'composer-send.ts' },
   { name: 'popover', testMatch: 'popover-geometry.ts' },
   { name: 'history-loading', testMatch: 'history-loading.ts' },
+  { name: 'room-joining', testMatch: 'room-joining.ts' },
   { name: 'presence-burst', testMatch: 'presence-burst.ts' },
   { name: 'connection-step', testMatch: 'connection-step.ts' },
   { name: 'hinge-layout', testMatch: 'hinge-layout.ts' },
