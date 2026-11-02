@@ -20,6 +20,31 @@ describe('movement beyond viewport clamping', () => {
 })
 
 describe('ViewportSession', () => {
+  // Captain FLM-245 F3: selection/autoscroll/find movement wins without wheel/key attribution.
+  // H3: neither complete input observation nor a navigation-owned fling may mask a held reader.
+  it.each([false, true].flatMap(nativeScroll => [false, true].flatMap(inputAlwaysObserved =>
+    [false, true].map(navigationOwnsFling => ({ nativeScroll, inputAlwaysObserved, navigationOwnsFling })),
+  )))('FLM-245 admits held movement (native: $nativeScroll, observed: $inputAlwaysObserved, fling: $navigationOwnsFling)', ({ nativeScroll, inputAlwaysObserved, navigationOwnsFling }) => {
+    const session = new ViewportSession('room', inputAlwaysObserved)
+    const before = geometry(393, 1000, 557)
+    session.recordProgrammaticWrite('room', 1000, before)
+    expect(session.observeGeometry('room', { ...before, top: 413 }, {
+      now: 1020, controllerOwnsPixels: true, interactionHeld: true, nativeScroll, navigationOwnsFling,
+    })?.userDelta).toBe(20)
+    expect(session.hasGenuineInput('room')).toBe(true)
+  })
+  it('FLM-245 keeps a recorded held write and layout anchoring out of navigation', () => {
+    const session = new ViewportSession('room', true)
+    const before = { ...geometry(393, 1000, 557), anchor: { rowId: 'selected', top: 920 } }
+    session.recordProgrammaticWrite('room', 1000, before)
+    expect(session.observeGeometry('room', before, {
+      now: 1020, controllerOwnsPixels: true, interactionHeld: true, nativeScroll: true,
+    })?.userDelta).toBe(0)
+    expect(session.observeGeometry('room', { ...before, top: 413, height: 1020, anchor: { rowId: 'selected', top: 940 } }, {
+      now: 1040, controllerOwnsPixels: true, interactionHeld: true, nativeScroll: true,
+    })?.userDelta).toBe(0)
+    expect(session.hasGenuineInput('room')).toBe(false)
+  })
   it('subtracts completed clamping from the remaining layout adjustment', () => {
     const session = new ViewportSession('room')
     session.recordProgrammaticWrite('room', 1000, {

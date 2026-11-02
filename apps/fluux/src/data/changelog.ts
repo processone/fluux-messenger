@@ -19,6 +19,7 @@ export const changelog: ChangelogEntry[] = [
     sections: [{
       type: 'fixed',
       items: [
+        'On desktop, new messages no longer move the message, action controls or menu you are using. Typing resumes following new messages if you were following before, unless a menu is open. The jump-to-latest button stays hidden while a message menu is open',
         'Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter. Private messages in rooms no longer make surrounding messages jump as you scroll.',
       ],
     }],

@@ -193,6 +193,8 @@ export class ViewportSession {
     controllerOwnsPixels: boolean
     /** The current new navigation has superseded the released touch's still-pending fling. */
     navigationOwnsFling?: boolean
+    /** Unobserved movement still takes over a hold; recorded writes/layout anchoring stay excluded. */
+    interactionHeld?: boolean
     input?: ViewportInput
     resetInput?: boolean
     nativeScroll?: boolean
@@ -243,7 +245,7 @@ export class ViewportSession {
     // state, not an inferred destination or a timer. Matching fresh input still wins.
     const engineMovement =
       (this.inputAlwaysObserved || context.navigationOwnsFling === true) &&
-      context.controllerOwnsPixels && !trustedInputMatchesMovement
+      context.controllerOwnsPixels && !context.interactionHeld && !trustedInputMatchesMovement
     const userDelta = controllerGrowthJitter || engineMovement || layoutAnchored ? 0 : delta
     if (sameAnchor && previous) {
       this.pendingLayoutAdjustment += layoutDelta - (
@@ -282,6 +284,7 @@ export class ViewportSession {
     bottomAnchor: ScrollAnchor | null
     controllerOwnsPixels: boolean
     navigationOwnsFling?: boolean
+    interactionHeld?: boolean
     now: number
   }): ViewportScrollObservation | null {
     if (!this.isCurrent(facts.conversationId)) return null

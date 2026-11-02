@@ -37,7 +37,7 @@ import {
   type ScrollGeometrySample,
 } from './ambientAnchorDecisions'
 import { runScrollShadowSafely } from './scrollPositionShadow'
-import { messageFraction, type AnchorPreservationRequest } from './scrollPositionModel'
+import { messageFraction, type LayoutPreservationRequest } from './scrollPositionModel'
 import type { AnchorPreservationExecutor } from './positioningController'
 
 type AmbientReason = 'divider-mutation' | 'message-insertion'
@@ -52,7 +52,7 @@ export interface AmbientAnchorPorts {
   isDirectionalLoadLanding: (conversationId: string, firstMessageId: string) => boolean
   beginLayoutPreservation: (input: {
     conversationId: string
-    desired: AnchorPreservationRequest['desired']
+    desired: LayoutPreservationRequest['desired']
     reason: AmbientReason
     executor: AnchorPreservationExecutor
   }) => void
@@ -170,7 +170,7 @@ export function useAmbientAnchorPreservation({
         conversationId: activeConversationId,
         fallback: undefined,
         observe: () => {
-          const desired: AnchorPreservationRequest['desired'] = {
+          const desired: LayoutPreservationRequest['desired'] = {
             kind: 'anchor',
             messageId: anchor.messageId,
             placement: {

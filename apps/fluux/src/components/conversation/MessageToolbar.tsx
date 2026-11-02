@@ -1,5 +1,6 @@
-import { useCallback, useRef, memo, Suspense, lazy, useState } from 'react'
+import { useCallback, useRef, memo, Suspense, lazy, useState, useEffect } from 'react'
 import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import { useTranslation } from 'react-i18next'
 import { SmilePlus, Pencil, Forward, MoreHorizontal, Reply, Trash2 } from 'lucide-react'
 import { useClickOutside } from '@/hooks'
@@ -15,6 +16,8 @@ const emojiPickerImport = () => import('../EmojiPicker').then(m => ({ default: m
 const EmojiPicker = lazy(emojiPickerImport)
 
 export interface MessageToolbarProps {
+  /** Keep displayed action slots fixed during a deliberate interaction. */
+  interactionHeld?: boolean
   /** Handler for reaction button clicks. When undefined, reaction UI is hidden. */
   onReaction?: (emoji: string) => void
   /** Handler for reply button click */
@@ -77,12 +80,38 @@ export const MessageToolbar = memo(function MessageToolbar({
   setShowMoreMenu,
   isHovered,
   onToolbarMouseEnter,
+  interactionHeld = false,
 }: MessageToolbarProps) {
   const { t } = useTranslation()
+  const [actionFocused, setActionFocused] = useState(false)
+  const [pointerPressed, setPointerPressed] = useState(false)
+  // A keyboard-visible control must remain interactive until its native click is dispatched.
+  useEffect(() => {
+    if (!pointerPressed) return
+    let releaseTimer: ReturnType<typeof setTimeout> | undefined
+    const clear = () => setPointerPressed(false)
+    const afterMouseUp = () => { releaseTimer = setTimeout(clear, 0) }
+    document.addEventListener('mouseup', afterMouseUp, true)
+    window.addEventListener('blur', clear)
+    return () => {
+      clearTimeout(releaseTimer)
+      document.removeEventListener('mouseup', afterMouseUp, true)
+      window.removeEventListener('blur', clear)
+    }
+  }, [pointerPressed])
+  const keyboardFocus = useRef(true)
+  const updateActionFocus = (target: EventTarget | null) => {
+    setActionFocused(keyboardFocus.current && target instanceof Element && target.matches(':focus-visible'))
+  }
+  const slotsRef = useRef({ reactions: !!onReaction, reply: canReply, edit: canEdit })
+  if (!interactionHeld) slotsRef.current = { reactions: !!onReaction, reply: canReply, edit: canEdit }
+  const slots = slotsRef.current
   const toolbarRef = useRef<HTMLDivElement>(null)
   const moreMenuRef = useRef<HTMLDivElement>(null)
   const reactionButtonRef = useRef<HTMLButtonElement>(null)
   const pickerDropUpRef = useRef(false)
+  const heldPickerBoundsRef = useRef<{ dropUp: boolean; maxHeight: number } | null>(null)
+  const heldPickerBounds = interactionHeld ? heldPickerBoundsRef.current : null
   const moreMenuDropUpRef = useRef(false)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
   const morePanelRef = useRef<HTMLDivElement>(null)
@@ -95,19 +124,28 @@ export const MessageToolbar = memo(function MessageToolbar({
   // Close more menu
   const closeMoreMenu = () => setShowMoreMenu(false)
   useClickOutside(moreMenuRef, closeMoreMenu, showMoreMenu)
+  useCloseOnEscape(() => {
+    keyboardFocus.current = true
+    setShowMoreMenu(false)
+    moreButtonRef.current?.focus({ preventScroll: true })
+    updateActionFocus(moreButtonRef.current)
+  }, showMoreMenu)
 
   // Reaction burst state
   const [burst, setBurst] = useState<{ x: number; y: number } | null>(null)
   const clearBurst = useCallback(() => setBurst(null), [])
 
   // Handle reaction click - close picker and notify parent
-  const handleReaction = onReaction ? (emoji: string) => {
+  const handleReaction = (emoji: string) => {
+    if (!onReaction) return
     onReaction(emoji)
     setShowReactionPicker(false)
-  } : undefined
+    if (showReactionPicker) reactionButtonRef.current?.focus({ preventScroll: true })
+  }
 
   // Handle delete click - close menu and notify parent
   const handleDelete = () => {
+    if (!canDelete) return
     onDelete()
     setShowMoreMenu(false)
   }
@@ -118,7 +156,7 @@ export const MessageToolbar = memo(function MessageToolbar({
   const useControlledHover = isHovered !== undefined
   const visibility: 'visible' | 'hidden' | 'css' = isHidden
     ? 'hidden'
-    : showReactionPicker || showMoreMenu || (isSelected && showToolbarForSelection)
+    : pointerPressed || actionFocused || showReactionPicker || showMoreMenu || (isSelected && showToolbarForSelection)
       ? 'visible'
       : hasKeyboardSelection
         ? 'hidden'
@@ -147,6 +185,18 @@ export const MessageToolbar = memo(function MessageToolbar({
     // the surrounding padding stays inert so underlying text remains selectable.
     <div
       data-message-toolbar
+      onMouseDownCapture={event => {
+        setPointerPressed(event.button === 0 && actionFocused)
+        keyboardFocus.current = false
+        setActionFocused(false)
+      }}
+      onClickCapture={() => setPointerPressed(false)}
+      onKeyDownCapture={event => { keyboardFocus.current = true; updateActionFocus(event.target) }}
+      onKeyUpCapture={() => updateActionFocus(document.activeElement)}
+      onFocusCapture={event => updateActionFocus(event.target)}
+      onBlurCapture={event => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setActionFocused(false)
+      }}
       className={`hidden can-hover:block absolute -top-12 end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out ${visibilityClass}`}
     >
       {/* Visible toolbar. The p-0.5 inset keeps each control's square hover/active
@@ -160,12 +210,13 @@ export const MessageToolbar = memo(function MessageToolbar({
         onMouseEnter={onToolbarMouseEnter}
       >
       {/* Quick reaction emojis (hidden when reactions are disabled) */}
-      {handleReaction && TOOLBAR_REACTIONS.map(emoji => (
+      {slots.reactions && TOOLBAR_REACTIONS.map(emoji => (
         <button
           type="button"
           key={emoji}
+          disabled={!onReaction}
           onClick={(e: React.MouseEvent) => {
-            if (!myReactions.includes(emoji)) {
+            if (onReaction && !myReactions.includes(emoji)) {
               const rect = e.currentTarget.getBoundingClientRect()
               setBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
             }
@@ -184,20 +235,29 @@ export const MessageToolbar = memo(function MessageToolbar({
       ))}
 
       {/* Divider (hidden when reactions are disabled) */}
-      {handleReaction && <div className="w-px h-5 bg-fluux-hover" />}
+      {slots.reactions && <div className="w-px h-5 bg-fluux-hover" />}
 
       {/* More reactions button (hidden when reactions are disabled) */}
-      {handleReaction && (
+      {slots.reactions && (
       <div className="relative">
         <button
           type="button"
           ref={reactionButtonRef}
+          disabled={!onReaction}
           onClick={() => {
             if (!showReactionPicker && reactionButtonRef.current) {
               // Compute direction synchronously before opening to avoid position jump
               const rect = reactionButtonRef.current.getBoundingClientRect()
               const spaceBelow = window.innerHeight - rect.bottom
               pickerDropUpRef.current = spaceBelow < 450
+              const list = reactionButtonRef.current.closest('[data-message-list]')?.getBoundingClientRect()
+              if (list) {
+                const above = Math.max(0, rect.top - Math.max(0, list.top) - 12)
+                const below = Math.max(0, Math.min(window.innerHeight, list.bottom) - rect.bottom - 12)
+                const dropUp = below < 450 && above > below
+                // Capture once: arrivals/typing cannot resize the menu under the pointer.
+                heldPickerBoundsRef.current = { dropUp, maxHeight: dropUp ? above : below }
+              }
             }
             setShowReactionPicker(!showReactionPicker)
           }}
@@ -210,11 +270,17 @@ export const MessageToolbar = memo(function MessageToolbar({
 
         {/* Full emoji picker for reactions */}
         {showReactionPicker && (
-          <div className={`absolute end-0 z-30 ${pickerDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+          <div data-message-panel="reactions" className={`absolute end-0 z-30 ${(heldPickerBounds?.dropUp ?? pickerDropUpRef.current) ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
             <Suspense fallback={null}>
               <EmojiPicker
+                maxHeight={heldPickerBounds?.maxHeight}
                 onSelect={(emoji) => handleReaction(emoji)}
-                onClose={() => setShowReactionPicker(false)}
+                onClose={() => {
+                  keyboardFocus.current = true
+                  setShowReactionPicker(false)
+                  reactionButtonRef.current?.focus({ preventScroll: true })
+                  updateActionFocus(reactionButtonRef.current)
+                }}
               />
             </Suspense>
           </div>
@@ -223,11 +289,12 @@ export const MessageToolbar = memo(function MessageToolbar({
       )}
 
       {/* Reply button - hidden for last message */}
-      {canReply && (
+      {slots.reply && (
         <Tooltip content={t('chat.reply')} position="top" disabled={showReactionPicker || showMoreMenu}>
           <button
             type="button"
-            onClick={onReply}
+            disabled={!canReply}
+            onClick={() => { if (canReply) onReply() }}
             className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
             aria-label={t('chat.reply')}
           >
@@ -237,11 +304,12 @@ export const MessageToolbar = memo(function MessageToolbar({
       )}
 
       {/* Edit button - only for last outgoing message */}
-      {canEdit && (
+      {slots.edit && (
         <Tooltip content={t('chat.editMessage')} position="top" disabled={showReactionPicker || showMoreMenu}>
           <button
             type="button"
-            onClick={onEdit}
+            disabled={!canEdit}
+            onClick={() => { if (canEdit) onEdit() }}
             className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
             aria-label={t('chat.editMessage')}
           >
@@ -285,11 +353,12 @@ export const MessageToolbar = memo(function MessageToolbar({
         </Tooltip>
 
         {/* More options dropdown menu */}
-        {showMoreMenu && canDelete && (
-          <div ref={morePanelRef} className={`absolute end-0 min-w-[160px] fluux-popover rounded-lg z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+        {showMoreMenu && (canDelete || interactionHeld) && (
+          <div ref={morePanelRef} data-message-panel="more" className={`absolute end-0 min-w-[160px] fluux-popover rounded-lg z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
             <button
               type="button"
               onClick={handleDelete}
+              disabled={!canDelete}
               className="w-full px-3 py-2 text-sm text-start text-red-500 hover:bg-fluux-hover transition-colors flex items-center gap-2"
             >
               <Trash2 className="size-4" />

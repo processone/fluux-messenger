@@ -5,7 +5,7 @@ import type {
   PositionFrameLoop,
 } from './positioningController'
 import type { AnchorPreservationRequest } from './scrollPositionModel'
-import { messageFraction } from './scrollPositionModel'
+import { messageFraction, pixelOffset } from './scrollPositionModel'
 import type { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
 import {
   AnchorPreservationBrowserAdapter,
@@ -217,6 +217,41 @@ describe('AnchorPreservationBrowserAdapter', () => {
     activeConversation = 'room-a'
     executor.positionFrame(anchorRequest(), lease())
     expect(scope.position).toHaveBeenCalledOnce()
+  })
+
+  // FLM-245 J2: a leased interaction write must carry its owner and must not publish
+  // queued/refused motion. Row coordinates come from the kept WebKit picker-layout capture.
+  it.each(['applied', 'queued', 'refused'] as const)('honors the interaction write owner and %s receipt', status => {
+    const viewport = scrollerHarness()
+    vi.spyOn(viewport.scroller, 'getBoundingClientRect').mockReturnValue({ top: 95 } as DOMRect)
+    const row = document.createElement('div')
+    row.dataset.messageId = 'message-5'
+    const body = document.createElement('div')
+    body.setAttribute('data-message-body', '')
+    vi.spyOn(body, 'getBoundingClientRect').mockReturnValue({ top: 552.96875 } as DOMRect)
+    row.append(body)
+    viewport.scroller.append(row)
+    const virtual = virtualizerHarness()
+    virtual.scrollToOffset.mockImplementation((offset: number) => {
+      if (status === 'applied') viewport.setScrollTop(offset)
+      return {
+        id: 1,
+        outcome: () => status === 'applied'
+          ? { status, offset }
+          : status === 'refused' ? { status, reason: 'reader' as const } : { status },
+      }
+    })
+    const scope = harness({ scroller: viewport.scroller, virtualizer: virtual.virtualizer })
+    const request: AnchorPreservationRequest = {
+      ...anchorRequest(),
+      source: { kind: 'interaction', reason: 'hold' },
+      desired: { kind: 'anchor', messageId: 'message-5', placement: { kind: 'top-offset', offsetPx: pixelOffset(551.984375 - 95) } },
+    }
+    const owned = { ...lease(), owner: currentOwner('room-a', 7) }
+    scope.adapter.createExecutor('interaction-anchor').positionFrame(request, owned)
+    expect(virtual.scrollToOffset).toHaveBeenCalledWith(400 + 552.96875 - 551.984375, { owner: owned.owner })
+    expect(scope.recordProgrammaticWrite).toHaveBeenCalledTimes(status === 'applied' ? 1 : 0)
+    expect(viewport.scrollTop).toBe(status === 'applied' ? 400 + 552.96875 - 551.984375 : 400)
   })
 
   it('records the landed reading point only for the conversation still displayed', () => {

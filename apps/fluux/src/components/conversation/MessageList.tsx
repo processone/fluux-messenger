@@ -1,3 +1,4 @@
+import { latestJumpVisible } from './fabVisibility'
 /**
  * MessageList - Renders a scrollable list of messages with date separators.
  *
@@ -29,6 +30,7 @@ import { gapMarkerPositions } from './gapMarkerPositions'
 import { TypingIndicator } from './TypingIndicator'
 import { groupMessagesByDate, shouldShowAvatar } from './messageGrouping'
 import { useMessageListScroll } from './useMessageListScroll'
+import { MessageInteractionContext, useMessageInteractionHold } from './useMessageInteractionHold'
 import { formatUnreadCount } from '@/utils/formatUnreadCount'
 import { MessageWidthProvider } from './messageWidthContext'
 import { OwnGroupWidthProvider } from './messageGroupWidth'
@@ -133,9 +135,9 @@ export interface MessageListProps<T extends BaseMessage> {
   /** Ref to track if scroll is at bottom (shared with keyboard navigation) */
   isAtBottomRef?: React.MutableRefObject<boolean>
   /**
-   * Reports whether the viewport is genuinely at the
-   * live edge, from REAL measured geometry only (never a stale/assumed
-   * default) — see `useMessageListScroll`'s `onLiveEdgeMeasured` doc. The
+   * Reports live-edge evidence from real measured geometry, or revokes previous
+   * follow-edge evidence when a deliberate interaction holds the view. A true
+   * report is never an assumed default — see the scroll hook's callback contract. The
    * caller (ChatView/RoomView) forwards this straight to
    * `reportViewport(key, generation, ...)`, closing over the activation
    * generation captured for that render.
@@ -599,7 +601,12 @@ export function MessageList<T extends BaseMessage>({
     [groupedMessages, gaps, onCatchUpHistory],
   )
 
+  const cancelInteractionRef = useRef<() => void>(() => {})
   const {
+    beginInteractionHold,
+    releaseInteractionHold,
+    setInteractionMenuOpen,
+    interactionMenuOpen,
     setScrollContainerRef: setScrollContainerRefFromHook,
     contentWrapperRef,
     commitVirtualizerLayout,
@@ -642,7 +649,17 @@ export function MessageList<T extends BaseMessage>({
     lastMessageId,
     staticMode,
     virtualizer: activeVirtualizer,
+    onInteractionEnd: () => cancelInteractionRef.current(),
   })
+  const interaction = useMessageInteractionHold({
+    scrollRef: scrollContainerRef,
+    conversationId,
+    enabled: !staticMode,
+    begin: beginInteractionHold,
+    release: releaseInteractionHold,
+    menuChanged: setInteractionMenuOpen,
+  })
+  cancelInteractionRef.current = interaction.cancel
   handleVirtualRowMeasuredGrowthRef.current = handleVirtualRowMeasuredGrowth
 
   // Combined ref setter for scroll container
@@ -836,7 +853,7 @@ export function MessageList<T extends BaseMessage>({
   // latest" — recenter the resident window to the newest slice, then scroll to the bottom. Shown
   // whenever the window is slid up (newer content exists off-screen), not only past the FAB threshold.
   const windowSlidUp = windowAtLiveEdge === false
-  const fabVisible = showScrollToBottom || windowSlidUp
+  const fabVisible = latestJumpVisible(showScrollToBottom, windowSlidUp, interactionMenuOpen)
   // The FAB badge is the ONE canonical count (never a resident-array or
   // below-viewport recount) — scrolling is navigation, not read state. Visibility (fabVisible,
   // above) is purely viewport-driven and independent of this; a fully-read conversation the reader
@@ -855,6 +872,7 @@ export function MessageList<T extends BaseMessage>({
   const hasFabBeenVisibleRef = useRef(false)
   if (fabVisible) hasFabBeenVisibleRef.current = true
   const handleJumpToBottom = () => {
+    releaseInteractionHold(false)
     if (windowSlidUp && onJumpToLatest) {
       // Recenter the resident window to the newest slice, then scroll to the bottom. If the
       // recenter rejects, still scroll to the current resident bottom rather than doing nothing.
@@ -867,6 +885,7 @@ export function MessageList<T extends BaseMessage>({
   }
 
   return (
+    <MessageInteractionContext.Provider value={interaction.context}>
     <MessageTargetProvider value={requestMessageTarget}>
     <MessageWidthProvider containerRef={scrollContainerRef}>
     <OwnGroupWidthProvider>
@@ -879,6 +898,7 @@ export function MessageList<T extends BaseMessage>({
         className="flex-1 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-0 overscroll-contain"
         style={{ overflowAnchor: 'auto' }}
         data-message-list
+        data-message-interaction={interaction.heldMessageId ?? undefined}
       >
         {/* Loading state */}
         {showLoading && loadingState}
@@ -1049,6 +1069,8 @@ export function MessageList<T extends BaseMessage>({
 
       {/* Scroll to bottom FAB with spring animation */}
       <div
+        data-fab-container="scroll-to-bottom"
+        hidden={interactionMenuOpen}
         className={`absolute bottom-4 end-4 z-40 ${fabAnimationClass(fabVisible, hasFabBeenVisibleRef.current)}`}
         inert={!fabVisible}
       >
@@ -1075,5 +1097,6 @@ export function MessageList<T extends BaseMessage>({
     </OwnGroupWidthProvider>
     </MessageWidthProvider>
     </MessageTargetProvider>
+    </MessageInteractionContext.Provider>
   )
 }

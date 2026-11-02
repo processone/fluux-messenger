@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shouldShowScrollToBottomFab } from './fabVisibility'
+import { shouldShowScrollToBottomFab, latestJumpVisible } from './fabVisibility'
 import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
 
 describe('shouldShowScrollToBottomFab', () => {
@@ -24,4 +24,14 @@ describe('shouldShowScrollToBottomFab', () => {
       expect(shouldShowScrollToBottomFab(distance, AT_BOTTOM_THRESHOLD, true)).toBe(false)
     }
   })
+})
+
+// Captain FLM-245 F6: a message menu owns this space, including the bottom row.
+it('FLM-245 hides the existing jump during a menu and restores its held small-arrival rule afterward', () => {
+  const smallArrival = AT_BOTTOM_THRESHOLD / 2
+  const viewportOffersJump = shouldShowScrollToBottomFab(smallArrival, AT_BOTTOM_THRESHOLD, false, true)
+  expect(latestJumpVisible(viewportOffersJump, false, true)).toBe(false)
+  expect(latestJumpVisible(viewportOffersJump, false, false)).toBe(true)
+  expect(latestJumpVisible(false, true, true)).toBe(false)
+  expect(latestJumpVisible(false, true, false)).toBe(true)
 })

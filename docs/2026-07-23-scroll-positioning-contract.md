@@ -57,7 +57,7 @@ does so only while the reader still reads where the last restore put them: the c
 that from whether their own input, or any accepted request other than layout, media or history
 preservation, has come since that restore's generation. Once the reader moved on, the shift is
 left to ambient handling.
-All seven authoritative slices share the same controller-owned
+All authoritative slices share the same controller-owned
 `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
 measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
 convergence state, and lifecycle ownership moved out of the hook-local loop. Unlike unread-marker
@@ -282,7 +282,7 @@ WebKit paint correctness.
     for divider movement or delayed insertion. The fraction is validated in
     `[0, 1]`, where `0` is the row top and `1` its bottom. The exact equation is
     `rowTop + fraction * rowHeight = scrollTop + viewportHeight`;
-  - `top-offset`: directional history preservation. The equation is
+  - `top-offset`: directional history preservation and deliberate message interaction. The equation is
     `rowTop - scrollTop = offsetPx`; negative offsets are valid when the top-visible row begins
     above the viewport. The directional executor replaces the captured `offsetPx` with the
     anchor's offset at the reader's last scroll before the batch landed.
@@ -300,6 +300,73 @@ A saved content anchor remains authoritative. Its raw pixel value is a source-sp
 when that anchor is unavailable. An old saved state containing only the raw value selects the
 transitional legacy-offset position and still outranks unread/live-edge entry, preserving current
 behavior.
+
+## Message interaction holds
+
+Desktop direct conversations and rooms hold a message only after deliberate mouse movement,
+a click, keyboard action focus, or an open More/reaction panel. Row entry alone is not intent:
+content scrolling under a resting pointer must continue following latest. Toolbar visibility
+retains its existing hover delay and text-selection suppression. Only keyboard focus matching
+`:focus-visible` forces the toolbar visible; mouse-created focus follows the ordinary hover lifetime.
+A keyboard-visible control remains interactive through a physical mouse activation, even before the
+hover-intent delay finishes; clearing keyboard-only visibility must not discard the pending click.
+Row-local subscriptions expose held membership without broadcasting each target change to every bubble.
+
+An `interaction` request holds the original row handle and the message body's top offset through
+the existing anchor executor and bounded controller frame loop. The virtualizer retains that row
+and suspends independent measurement compensation. Recorded positioning writes and layout anchoring
+remain excluded from navigation attribution. Other scroll movement cancels the hold even without a
+wheel/key signal: selection-edge scrolling, native drag autoscroll, middle-click autoscroll and
+find-in-page must not be corrected back to the held target.
+An ongoing deliberate scroll gesture blocks acquisition; beginning an admitted hold clears stale
+input attribution from earlier gestures. Later layout stimuli reopen the same generation;
+arrivals, typing, media, divider changes and geometry-based rearming cannot replace an active hold,
+even after its current reconciliation settles. A growing viewport can remove the required scroll
+range, so the executor reserves only the missing bottom space; ending the hold restores it.
+
+Displayed toolbar slots remain fixed during the hold, but current capabilities still disable and
+gate execution. More and reaction panels keep the hold beyond the original row bounds. A held
+reaction picker captures its available list space on opening, keeping its controls reachable without
+scrolling the message or resizing under arriving posts; touch/static picker sizing stays unchanged. Escape closes
+the panel and restores its trigger without invoking broader conversation navigation. A disappearing
+or retracted target closes safely rather than transferring actions to another row. Physical row
+ownership survives archive-id backfill; current action callbacks follow the qualified identity.
+A conflicting known identity, disconnected row or handle resolving elsewhere ends the hold instead.
+
+Pointer departure (with panels closed), or keyboard action-focus departure (with panels closed),
+releases the hold. Mouse-created focus does not keep an otherwise disengaged mouse interaction alive.
+Native `dragend` and `drop` clear dragging even when the browser delivers no `mouseup`. Typing in the
+composer disengages any hold, including one started by a Reply click or keyboard action, using the
+saved-following policy. Only an open More/reaction menu retains its hold during composer input.
+A middle-button press also releases using the saved-following policy. An ordinary middle-click's
+`auxclick` completion clears hover suppression. A held middle drag clears it on physical release,
+even when the browser consumes `auxclick`. Sub-dead-zone pointer jitter does not count as a held drag:
+Blink changes its middle-pan mode only outside its 15-CSS-pixel dead zone on either axis. Such jitter
+must keep every row blocked when release latches the pan. A clicked, latched pan keeps the block until its stopping
+click/release, key or blur; a middle release with no matching observed press ends the block when the
+browser consumes the stopping press. Actual native movement still takes priority through viewport attribution.
+Hosts without `auxclick` clear it on mouseup.
+Only a reader who was following latest before the hold resumes automatically. Disengagement consumes
+current native geometry before applying that saved policy, including pixels whose scroll callback has
+not arrived. Input-end live-edge reporting and deferred interaction rearm use current geometry, not an
+older bottom sample. History reading keeps
+a settled fixed position; a deliberate scroll, own send or explicit jump takes priority and closes
+panels before moving. A manual takeover cannot rearm from the usual near-bottom band alone: actual
+bottom geometry or explicit latest navigation is required. Directed input that ends at the unchanged
+true bottom settles the released hold there even when no scroll event fires, so later arrivals still
+follow. Eligible input retains that settlement intent when its applied layout compensation lands later:
+non-virtualized compensation and virtualizer after-write observations re-check the true bottom after
+input ends. Upward movement or a new position generation invalidates the pending intent; layout alone
+and an ongoing gesture cannot arm following. Upward input does not rearm at its pre-motion bottom;
+its first upward pixel remains reading intent. Scrolling away while held, including within the ordinary 150px band, keeps the reading position.
+Blur and target removal use the same saved following policy after closing panels. Conversation departure, disabling and teardown clear ownership
+without resuming the departed interaction. Touch action sheets and static previews do not acquire this hold.
+
+Beginning a hold revokes previously reported follow-edge evidence before a future offscreen arrival
+can consume it. Intersection-based message-seen reporting and canonical unread counts remain unchanged.
+While holding, the existing latest-message control also appears for arrivals below the viewport inside
+the ordinary near-bottom band; reserved layout space alone does not expose it. A message's open More
+or reaction menu hides that control until the menus close, so the jump never covers the menu.
 
 ## Request provenance
 

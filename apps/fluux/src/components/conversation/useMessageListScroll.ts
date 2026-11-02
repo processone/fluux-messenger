@@ -58,6 +58,7 @@ import {
 } from './scrollPositionFacts'
 import {
   messageFraction,
+  pixelOffset,
   type DesiredPosition,
   type ExplicitTargetRequest,
   type ReachabilityFacts,
@@ -208,20 +209,27 @@ export interface UseMessageListScrollOptions {
    *  DOM-based behavior. */
   virtualizer?: MessageVirtualizer
   /**
-   * Reports admitted live-edge measurements, invoked from
-   * `setMeasuredAtBottom` and nowhere else: a `scrollHeight - scrollTop - clientHeight`
+   * Reports admitted live-edge measurements from `setMeasuredAtBottom`, and revokes old
+   * follow-edge evidence with false when an interaction starts. Measurements use a
+   * `scrollHeight - scrollTop - clientHeight`
    * comparison against `AT_BOTTOM_THRESHOLD`, taken after the scroll write it describes has
    * landed.
    *
    * The decided transitions — `assumeAtBottom`, `assumeAwayFromBottom`, `assumeEntryPosition` —
-   * report nothing. A deliberate scroll-to-bottom and the entry arbitration's branch both move
+   * report nothing. The interaction revocation is deliberately conservative, not a geometry claim.
+   * A deliberate scroll-to-bottom and the entry arbitration's branch both move
    * the window before any geometry has been read, and feeding those to the SDK would claim the
    * reader saw something. Evidence stays unknown until it has been measured.
    */
   onLiveEdgeMeasured?: (atEdge: boolean) => void
+  onInteractionEnd?: () => void
 }
 
 export interface UseMessageListScrollResult {
+  beginInteractionHold: (rowId: string) => boolean
+  releaseInteractionHold: (resume: boolean) => void
+  setInteractionMenuOpen: (open: boolean) => void
+  interactionMenuOpen: boolean
   observeKeyboardNavigation: (conversationId: string) => void
   reassertUnreadMarker: () => void
   setScrollContainerRef: (element: HTMLDivElement | null) => void
@@ -284,6 +292,7 @@ export function useMessageListScroll({
   staticMode = false,
   virtualizer,
   onLiveEdgeMeasured,
+  onInteractionEnd,
 }: UseMessageListScrollOptions): UseMessageListScrollResult {
   const targetMessageId = targetMessageReference == null ? targetMessageReference : messageTargetRowId(targetMessageReference)
 
@@ -353,6 +362,23 @@ export function useMessageListScroll({
   // fresh inline function each render still reaches the CURRENT one).
   const onLiveEdgeMeasuredRef = useRef(onLiveEdgeMeasured)
   onLiveEdgeMeasuredRef.current = onLiveEdgeMeasured
+  const onInteractionEndRef = useRef(onInteractionEnd)
+  onInteractionEndRef.current = onInteractionEnd
+  const interactionSpaceRef = useRef<{ conversationId: string; scroller: HTMLElement; padding: string } | null>(null)
+  const restoreInteractionSpace = useCallback(() => {
+    const saved = interactionSpaceRef.current
+    if (saved) {
+      const top = saved.scroller.scrollTop
+      saved.scroller.style.paddingBottom = saved.padding
+      // Removing reserved range can clamp scrollTop; that is our layout write, not user input.
+      if (saved.scroller.isConnected && saved.scroller.scrollTop !== top) {
+        const session = viewportSessionRef.current
+        session?.recordProgrammaticWrite(saved.conversationId, Date.now(),
+          readViewportGeometry(saved.scroller, session.observedRowIdFor(saved.conversationId)))
+      }
+    }
+    interactionSpaceRef.current = null
+  }, [])
 
   // Where the window sits relative to the live edge is written two ways, and they must not be
   // confused. `setMeasuredAtBottom` carries a REAL geometry read — the caller has just compared
@@ -365,6 +391,7 @@ export function useMessageListScroll({
   // deliberate scroll-to-bottom, a jump aiming elsewhere. They move the same state and report
   // nothing.
   const setMeasuredAtBottom = useCallback((atEdge: boolean) => {
+    if (atEdge && positioningControllerRef.current?.hasInteractionHold()) atEdge = false
     if (atEdge && positioningControllerRef.current?.hasUnreadMarkerHold(activeConversationIdRef.current)) {
       isAtBottomRef.current = false
       return
@@ -458,7 +485,7 @@ export function useMessageListScroll({
     if (scroller && !latestRef.current.staticMode) scroller.style.overflowAnchor = 'none'
     virtualizerRef.current?.setAutomaticScrollAdjustmentEnabled?.(!owned)
     const desired = positioningControllerRef.current?.snapshot().active?.request.desired
-    const targetId = owned && desired?.kind === 'message' ? desired.messageId : null
+    const targetId = owned && (desired?.kind === 'message' || desired?.kind === 'anchor') ? desired.messageId : null
     const target = scroller && targetId ? findMessageTargetElement(scroller, targetId) : null
     virtualizerRef.current?.retainMessage?.((target ? readMessageRowId(target) : targetId) ?? null)
   }
@@ -473,6 +500,10 @@ export function useMessageListScroll({
         id => { cancelMediaBatch(); observeViewportGeometry(id, undefined, true) },
         id => {
           if (activeConversationIdRef.current === id) virtualizerRef.current?.cancelPendingScroll?.()
+        },
+        () => {
+          onInteractionEndRef.current?.()
+          restoreInteractionSpace()
         },
       ),
     })
@@ -515,6 +546,7 @@ export function useMessageListScroll({
     const movement = session.observeGeometry(id, geometry, {
       now: Date.now(),
       controllerOwnsPixels: reassertLoopRef.current !== null,
+      interactionHeld: positioningControllerRef.current?.hasInteractionHold(),
       input,
       resetInput,
       navigationOwnsFling: ownsFling,
@@ -584,6 +616,7 @@ export function useMessageListScroll({
   // ==========================================================================
 
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  const [interactionMenuOpen, setInteractionMenuOpen] = useState(false)
   // Whether the first-new-message divider currently sits ABOVE the viewport (scrolled past it, or
   // it hasn't scrolled into view yet). Drives the jump-to-last-read pill. Recomputed in the same
   // scroll-handler cadence as showScrollToBottom — no separate listener.
@@ -602,12 +635,16 @@ export function useMessageListScroll({
   const getDistanceFromBottom = (el: HTMLElement) =>
     el.scrollHeight - el.scrollTop - el.clientHeight
 
+  const distanceBelowMessages = (scroller: HTMLElement) => getDistanceFromBottom(scroller) -
+    (interactionSpaceRef.current ? parseFloat(scroller.style.paddingBottom) || 0 : 0)
+
   const refreshScrollToBottomFab = useStableCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
-    const show = shouldShowScrollToBottomFab(getDistanceFromBottom(scroller), AT_BOTTOM_THRESHOLD, pinBottomClaim().isHeld())
+    const show = shouldShowScrollToBottomFab(distanceBelowMessages(scroller), AT_BOTTOM_THRESHOLD, pinBottomClaim().isHeld(), positioningControllerRef.current?.hasInteractionHold())
     setShowScrollToBottom(prev => prev !== show ? show : prev)
   })
+
 
   const rememberCurrentScrollSnapshot = useCallback(() => {
     const scroller = scrollerRef.current
@@ -731,23 +768,26 @@ export function useMessageListScroll({
   ): boolean => {
     const controller = positioningControllerRef.current
     if (!controller) return false
+    if (controller.reconcileInteractionHold({ conversationId, executor: createAnchorPreservationExecutor('interaction-anchor') })) return true
     return controller.reconcileLiveEdge({
       conversationId,
       executor: createLiveEdgeExecutor(trigger),
       rearmEligibleFromGeometry,
     })
-  }, [conversationId, createLiveEdgeExecutor])
+  }, [conversationId, createLiveEdgeExecutor, createAnchorPreservationExecutor])
   reconcileLiveEdgeRef.current = reconcileLiveEdge
 
   const reconcileMessageTargetAfterResize = useCallback(() => {
     const controller = positioningControllerRef.current
+    if (controller?.reconcileInteractionHold({ conversationId, executor: createAnchorPreservationExecutor('interaction-anchor') })) return true
     const desired = controller?.snapshot().active?.request.desired
     if (!controller || desired?.kind !== 'message') return false
     return controller.reconcileMessageTargetAfterResize({
       conversationId,
       executor: buildExplicitTargetExecutor(desired.messageId, false),
     })
-  }, [conversationId, buildExplicitTargetExecutor])
+  }, [conversationId, buildExplicitTargetExecutor, createAnchorPreservationExecutor])
+
 
   measuredRowGrowthFlushRef.current = (measuredConversationId, measuredGrowth) => {
     const liveScroller = scrollerRef.current
@@ -1068,9 +1108,53 @@ export function useMessageListScroll({
     createAnchorPreservationExecutor,
   })
 
+  const beginInteractionHold = (rowId: string): boolean => {
+    const scroller = scrollerRef.current
+    const row = scroller && findMessageRowElement(scroller, rowId)
+    const bubble = row?.querySelector<HTMLElement>('[data-message-body]') ?? row
+    const controller = positioningControllerRef.current
+    if (staticMode || !scroller || !bubble || !controller) return false
+    const current = controller.snapshot().active?.request.desired
+    if (controller.hasInteractionHold() && current?.kind === 'anchor' && current.messageId === rowId) {
+      return controller.reconcileInteractionHold({ conversationId, executor: createAnchorPreservationExecutor('interaction-anchor') })
+    }
+    observeViewportGeometry(conversationId, undefined, true)
+    if (!interactionSpaceRef.current) interactionSpaceRef.current = { conversationId, scroller, padding: scroller.style.paddingBottom }
+    const request = controller.beginInteractionHold({
+      conversationId,
+      desired: {
+        kind: 'anchor', messageId: rowId,
+        placement: { kind: 'top-offset', offsetPx: pixelOffset(bubble.getBoundingClientRect().top - scroller.getBoundingClientRect().top) },
+      },
+      executor: createAnchorPreservationExecutor('interaction-anchor'),
+    })
+    if (!request) {
+      if (!controller.hasInteractionHold()) restoreInteractionSpace()
+      return false
+    }
+    cancelMediaBatch()
+    pendingSyncedLiveEdgeRef.current = null
+    assumeAwayFromBottom()
+    // Revoke the old follow-edge evidence before another arrival can use it. Visibility-based
+    // read reporting continues normally; a held viewport cannot pre-read posts below it.
+    onLiveEdgeMeasuredRef.current?.(false)
+    return true
+  }
+
+  const releaseInteractionHold = useStableCallback((resume: boolean) => {
+    // Compositor movement may precede its scroll callback and pointer departure. Consume it before
+    // saved following can replace the interaction's stricter native-reading policy.
+    if (positioningControllerRef.current?.hasInteractionHold()) observeNativeGeometry(conversationId)
+    positioningControllerRef.current?.releaseInteractionHold({
+      conversationId, resume, liveEdge: createLiveEdgeExecutor('interaction-release'),
+    })
+    refreshScrollToBottomFab()
+  })
+
+
   const observeUserMovement = (id: string, delta: number, scroller: HTMLElement) => {
     if (delta === 0) return
-    const atLiveEdge = deriveAtLiveEdge(readScrollGeometry(scroller))
+    const atLiveEdge = deriveAtLiveEdge(readScrollGeometry(scroller), positioningControllerRef.current?.hasInteractionPosition() ? 1 : AT_BOTTOM_THRESHOLD)
     positioningControllerRef.current?.observeUserScroll(id, delta, atLiveEdge)
     setMeasuredAtBottom(atLiveEdge)
   }
@@ -1086,6 +1170,7 @@ export function useMessageListScroll({
     observeViewportGeometry(id)
     commit()
     observeViewportGeometry(id)
+    if (positioningControllerRef.current?.hasInteractionHold()) reconcileMessageTargetAfterResize()
   })
 
   const reconcileReadingWidth = () => {
@@ -1120,7 +1205,9 @@ export function useMessageListScroll({
     if (virtualizerRef.current || adjustment === 0) return false
     return positioningControllerRef.current?.preserveReadingLayout(id, () => {
       scroller.scrollTop += adjustment
-      session.recordProgrammaticWrite(id, Date.now(), readViewportGeometry(scroller, session.observedRowIdFor(id)))
+      const geometry = readViewportGeometry(scroller, session.observedRowIdFor(id))
+      session.recordProgrammaticWrite(id, Date.now(), geometry)
+      return geometry.height - geometry.top - geometry.client < 1
     }) ?? false
   }
   const virtualizerWriteObserverRef = useRef<Parameters<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>[0]>(undefined)
@@ -1137,7 +1224,9 @@ export function useMessageListScroll({
       if (active && positioningControllerRef.current?.snapshot().active !== active) return false
       if (write.source === 'reconcile' && movement?.userDelta) return false
     } else {
-      session.recordProgrammaticWrite(id, Date.now(), readViewportGeometry(scroller, session.observedRowIdFor(id)))
+      const geometry = readViewportGeometry(scroller, session.observedRowIdFor(id))
+      session.recordProgrammaticWrite(id, Date.now(), geometry)
+      positioningControllerRef.current?.observeInteractionLayout(id, geometry.height - geometry.top - geometry.client < 1)
     }
   }
   useLayoutEffect(() => {
@@ -1175,14 +1264,21 @@ export function useMessageListScroll({
   const observeUserInputEnd = (id: string, geometry: ViewportGeometry, directionalInput: boolean) => {
     observeNativeGeometry(id)
     viewportSessionRef.current?.endUserInput(id)
-    const atLiveEdge = geometry.height - geometry.top - geometry.client < AT_BOTTOM_THRESHOLD
+    // Native observation can consume newer pixels than the binding's input-end sample.
+    const scroller = scrollerRef.current
+    const current = scroller ? readViewportGeometry(scroller) : geometry
+    const interactionPosition = positioningControllerRef.current?.hasInteractionPosition() ?? false
+    const atLiveEdge = current.height - current.top - current.client <
+      (interactionPosition ? 1 : AT_BOTTOM_THRESHOLD)
     if (positioningControllerRef.current?.observeUserInputEnd(id, directionalInput && atLiveEdge)) {
       reconcileMessageTargetAfterResize()
     }
     setMeasuredAtBottom(atLiveEdge)
     const deferred = positioningControllerRef.current?.takeDeferredLiveEdge(id)
     if (deferred) {
-      reconcileLiveEdgeRef.current('input-release', deferred.rearmEligibleFromGeometry || atLiveEdge)
+      reconcileLiveEdgeRef.current('input-release', interactionPosition
+        ? atLiveEdge
+        : deferred.rearmEligibleFromGeometry || atLiveEdge)
     }
   }
 
@@ -1210,7 +1306,7 @@ export function useMessageListScroll({
         if (!originalOverflowAnchorsRef.current.has(el)) {
           originalOverflowAnchorsRef.current.set(el, el.style.overflowAnchor)
         }
-        setMessageTargetOwnership(positioningControllerRef.current?.ownsMessageTarget() ?? false)
+        setMessageTargetOwnership(positioningControllerRef.current?.ownsPositionTarget() ?? false)
       }
       if (previous && previous !== el) {
         queueMicrotask(() => {
@@ -1257,6 +1353,7 @@ export function useMessageListScroll({
         return reconcileLiveEdgeRef.current(trigger, rearmEligibleFromGeometry)
       },
       reconcileMessageTargetAfterResize,
+      reconcileInteractionHold: () => positioningControllerRef.current?.hasInteractionHold() ? reconcileMessageTargetAfterResize() : false,
       reconcileContentLayout: reconcileReadingWidth,
     },
     conversationId,
@@ -1268,7 +1365,13 @@ export function useMessageListScroll({
   // changed onMediaLoad prop bypasses their memo bailout and re-renders the whole mounted window.
   // Publish a stable shell that always invokes the latest implementation, matching the
   // requestMessageTarget/scrollToBottom contract.
-  const handleMediaLoad = useStableCallback(handleMediaLoadImpl)
+  const handleMediaLoad = useStableCallback(() => {
+    if (positioningControllerRef.current?.hasInteractionHold()) {
+      reconcileMessageTargetAfterResize()
+      return
+    }
+    handleMediaLoadImpl()
+  })
 
   // ==========================================================================
   // SCROLL EVENT HANDLER
@@ -1307,6 +1410,7 @@ export function useMessageListScroll({
       bottomAnchor,
       controllerOwnsPixels: programmaticScroll,
       navigationOwnsFling: ownsFling,
+      interactionHeld: positioningControllerRef.current?.hasInteractionHold(),
       now,
     })
     if (DEBUG) debugLog('SCROLL observation', {
@@ -1341,7 +1445,7 @@ export function useMessageListScroll({
     // scrollTop: on WebKit a tall bottom row's post-paint growth fires 'scroll' events reporting a
     // transiently large distFromBottom before the loop re-pins, which would otherwise flash the FAB
     // on open-at-bottom (intermittent race). The loop settles AT the bottom, so the FAB stays hidden.
-    const shouldShowFab = shouldShowScrollToBottomFab(distFromBottom, AT_BOTTOM_THRESHOLD, pinBottomClaim().isHeld())
+    const shouldShowFab = shouldShowScrollToBottomFab(distanceBelowMessages(el), AT_BOTTOM_THRESHOLD, pinBottomClaim().isHeld(), positioningControllerRef.current?.hasInteractionHold())
     setShowScrollToBottom(prev => prev !== shouldShowFab ? shouldShowFab : prev)
 
     if (firstNewMessageId) {
@@ -1760,7 +1864,8 @@ export function useMessageListScroll({
       sameConversation: prev.conv === conversationId,
       previousDivider: prev.divider,
       currentDivider: firstNewMessageId,
-      hasGenuineInput: viewportSessionRef.current?.hasGenuineInput(conversationId) ?? false,
+      hasGenuineInput: positioningControllerRef.current?.hasInteractionPosition() ||
+        (viewportSessionRef.current?.hasGenuineInput(conversationId) ?? false),
     })
     if (decision === 'skip') return
     debugLog('MDS SETTLE: divider cleared before reader input → settle to bottom', {
@@ -2371,11 +2476,23 @@ export function useMessageListScroll({
     [conversationId],
   )
 
+  // Reconcile each committed layout, including arrivals that intentionally skip live-follow.
+  useLayoutEffect(() => {
+    if (!staticMode && positioningControllerRef.current?.hasInteractionHold()) {
+      reconcileMessageTargetAfterResize()
+      refreshScrollToBottomFab()
+    }
+  })
+
   // ==========================================================================
   // RETURN
   // ==========================================================================
 
   return {
+    beginInteractionHold,
+    releaseInteractionHold,
+    setInteractionMenuOpen,
+    interactionMenuOpen,
     observeKeyboardNavigation,
     reassertUnreadMarker,
     setScrollContainerRef,

@@ -2,6 +2,8 @@ import { test, expect, type Page, type Locator } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
+import { AT_BOTTOM_OK_PX, waitForTopVisibleSettled, wheelAwayFromBottom } from './harness/scrollHarness'
+import { arrive, distance, keepJson, measureDuring, mountedMessageIndexes, readInteractionReadState, readInteractionView, scrollToBottomContainer, interactionScrollFrames, findAndRevealInteractionText, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
 
 async function seedRow(page: Page, content: 'long' | 'file', mode: 'light' | 'dark' = 'dark') {
   await bootDemo(page, '/demo.html?tutorial=false')
@@ -253,4 +255,583 @@ for (const kind of ['chat', 'room'] as const) {
       expect(await measure()).toEqual(baseline)
     })
   }
+}
+
+// Intent: FLM-229 requires deliberate input; moving content is not pointer intent.
+for (const kind of ['chat', 'room'] as const) {
+  test(`${kind}: interaction hold ignores rows sliding under a resting pointer`, async ({ page }) => {
+    const { list } = await setupInteraction(page, kind, true)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    for (let i = 0; i < 4; i++) {
+      await arrive(page, kind, [`resting-${i}`])
+      await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+      await expect(list).not.toHaveAttribute('data-message-interaction')
+    }
+    await keepJson(`${kind}-resting-pointer`, { heldMessage: await list.getAttribute('data-message-interaction'), distance: await distance(page) })
+    await page.screenshot({ path: test.info().outputPath(`${kind}-resting-pointer.png`) })
+  })
+
+  test(`${kind}: interaction hold starts before toolbar delay and fixes row, controls and More during arrivals`, async ({ page }) => {
+    const { row, body, list } = await setupInteraction(page, kind)
+    await expect.poll(async () => (await readInteractionReadState(page, kind)).readId).not.toBeNull()
+    const initialReadState = await readInteractionReadState(page, kind)
+    const box = await body.boundingBox()
+    await page.mouse.move(box!.x + 150, box!.y + 15, { steps: 3 })
+    await expect(list).toHaveAttribute('data-message-interaction', await row.getAttribute('data-message-row-id') as string)
+    // An arrival before the visibility delay must already be held.
+    const top = (await body.boundingBox())!.y
+    await arrive(page, kind, ['before-toolbar'])
+    await expect.poll(async () => (await body.boundingBox())!.y).toBeCloseTo(top, 0)
+    await expect(row.locator('[data-message-toolbar]')).toHaveClass(/opacity-100/)
+    await stableFrames(page, TARGET)
+    await row.getByRole('button', { name: 'More options', exact: true }).click()
+    await row.getByRole('button', { name: 'Delete message', exact: true }).waitFor()
+    await stableFrames(page, TARGET)
+    const samples = await measureDuring(page, TARGET, async () => {
+      for (let i = 0; i < 12; i++) {
+        await arrive(page, kind, [`held-arrival-${i}`])
+        await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())))
+      }
+    })
+    await keepJson(`${kind}-held-geometry`, samples)
+    // Captain FLM-245 F6: the jump must not cover a message's open menu.
+    await expect(page.locator('[data-fab="scroll-to-bottom"]')).toHaveAttribute('tabindex', '-1')
+    await expect(scrollToBottomContainer(page)).toBeHidden()
+    const readState = await readInteractionReadState(page, kind)
+    expect(readState.readId, 'the fixture establishes a real canonical pointer').not.toBeNull()
+    expect(readState.unread, 'offscreen arrivals remain unread while delivery continues').toBeGreaterThan(0)
+    expect(readState.readId).not.toBe(readState.lastId)
+    await expect(page.locator('[data-fab="scroll-to-bottom"] span')).toHaveText(String(readState.unread))
+    await keepJson(`${kind}-held-read-state`, { ...readState, initialReadId: initialReadState.readId })
+    await page.keyboard.press('Escape')
+    await expect(row.locator('[data-message-panel]')).toHaveCount(0)
+    await expect(page.locator('[data-fab="scroll-to-bottom"]')).toHaveAttribute('tabindex', '0')
+    await row.getByRole('button', { name: 'More options', exact: true }).click()
+    await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
+    await expect(page.locator('[data-fab="scroll-to-bottom"]')).toHaveAttribute('tabindex', '-1')
+    if (kind === 'room') {
+      const capabilitySamples = await measureDuring(page, TARGET, () => page.evaluate(() => {
+        const scope = window as any
+        scope.__roomStore.getState().updateRoom('team@conference.fluux.chat', { isIrcGateway: true })
+      }))
+      await expect(row.getByRole('button', { name: 'Delete message', exact: true })).toBeDisabled()
+      await keepJson('room-revoked-capability', { deletionDisabled: true, frames: capabilitySamples })
+      await page.evaluate(() => (window as any).__roomStore.getState().updateRoom('team@conference.fluux.chat', { isIrcGateway: false }))
+      await expect(row.getByRole('button', { name: 'Delete message', exact: true })).toBeEnabled()
+    }
+    // Pointer departure into the panel does not release; selecting Delete opens the original action.
+    await row.getByRole('button', { name: 'Delete message', exact: true }).hover()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    await row.getByRole('button', { name: 'Delete message', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Delete message', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await page.mouse.move(0, 0)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await page.screenshot({ path: test.info().outputPath(`${kind}-released.png`) })
+  })
+}
+
+for (const kind of ['chat', 'room'] as const) {
+  // FLM-245 K1/L1: editable keys inside the real shadow-root search must not become list navigation.
+  test(`${kind}: interaction hold keeps reaction search open during editing keys`, async ({ page }) => {
+    const { row, body, list } = await setupInteraction(page, kind)
+    const observations: unknown[] = []
+    await body.hover()
+    await waitForActions(page)
+    await row.getByRole('button', { name: 'More reactions', exact: true }).click()
+    const picker = row.locator('em-emoji-picker')
+    const search = picker.getByRole('searchbox')
+    await expect(search).toBeVisible()
+    await search.fill('smile')
+    await page.evaluate(() => {
+      const scope = window as any
+      scope.__pickerSearchKeys = []
+      window.addEventListener('keydown', event => {
+        const leaf = event.composedPath()[0]
+        scope.__pickerSearchKeys.push({ key: event.key, trusted: event.isTrusted,
+          target: (event.target as Element)?.tagName, leaf: (leaf as Element)?.tagName })
+      }, true)
+    })
+    try {
+      await page.screenshot({ path: test.info().outputPath(`${kind}-search-before-keys.png`) })
+      for (const key of ['Home', 'ArrowUp', 'PageUp', 'Shift+Space']) {
+        await search.press(key)
+        observations.push({ key, view: await readInteractionView(page) })
+        await expect(picker).toBeVisible()
+        await expect(search).toBeFocused()
+        await expect(list).toHaveAttribute('data-message-interaction', TARGET)
+        if (key === 'Home') expect(await search.evaluate(input => (input as HTMLInputElement).selectionStart)).toBe(0)
+      }
+      await arrive(page, kind, ['search-held-arrival'])
+      await expect(picker).toBeVisible()
+      await expect(search).toBeFocused()
+      await expect(list).toHaveAttribute('data-message-interaction', TARGET)
+      // L1 needs real posts below the hold: otherwise downward defaults cannot move the list.
+      await expect.poll(() => distance(page)).toBeGreaterThan(1)
+      await page.screenshot({ path: test.info().outputPath(`${kind}-search-before-downward.png`) })
+      for (const key of ['End', 'PageDown']) {
+        await search.press(key)
+        await stableFrames(page, TARGET)
+        observations.push({ key, view: await readInteractionView(page) })
+        await expect(picker).toBeVisible()
+        await expect(search).toBeFocused()
+        await expect(list).toHaveAttribute('data-message-interaction', TARGET)
+        if (key === 'End') expect(await search.evaluate(input => (input as HTMLInputElement).selectionStart)).toBe(await search.inputValue().then(value => value.length))
+      }
+      await search.press('Home')
+      await search.press('Shift+End')
+      const selection = await search.evaluate(input => ({ start: (input as HTMLInputElement).selectionStart, end: (input as HTMLInputElement).selectionEnd, length: (input as HTMLInputElement).value.length }))
+      expect(selection.start).toBe(0)
+      expect(selection.end).toBe(selection.length)
+      observations.push({ key: 'Shift+End', selection, view: await readInteractionView(page) })
+      const results = picker.locator('button[aria-posinset]:visible')
+      await expect(results).not.toHaveCount(0)
+      await search.fill('retrospective')
+      // This picker hides the preview panel, so empty results have no explanatory message.
+      await expect(picker.getByText('Search Results', { exact: true })).toBeVisible()
+      await expect(results).toHaveCount(0)
+      await search.press('ArrowDown')
+      await stableFrames(page, TARGET)
+      observations.push({ key: 'ArrowDown with no results', query: await search.inputValue(), results: await results.count(), view: await readInteractionView(page) })
+      await expect(picker).toBeVisible()
+      await expect(search).toBeFocused()
+      await expect(list).toHaveAttribute('data-message-interaction', TARGET)
+    } finally {
+      await keepJson(`${kind}-shadow-search-keys`, { observations, final: await readInteractionView(page),
+        events: await page.evaluate(() => (window as any).__pickerSearchKeys) })
+      await page.screenshot({ path: test.info().outputPath(`${kind}-search-after-keys.png`) })
+    }
+  })
+
+  test(`${kind}: interaction hold keeps picker geometry through typing, preview and media growth, then restores keyboard focus`, async ({ page }) => {
+    const { row, body, list } = await setupInteraction(page, kind)
+    await body.hover()
+    await waitForActions(page)
+    await row.getByRole('button', { name: 'More reactions', exact: true }).click()
+    await row.locator('em-emoji-picker').waitFor()
+    await stableFrames(page, TARGET)
+    // FLM-229: keeping the row fixed must not hide the picker's category/search controls.
+    const pickerBox = (await row.locator('em-emoji-picker').boundingBox())!
+    const listBox = (await list.boundingBox())!
+    expect(pickerBox.y).toBeGreaterThanOrEqual(listBox.y)
+    expect(pickerBox.y + pickerBox.height).toBeLessThanOrEqual(listBox.y + listBox.height)
+    await keepJson(`${kind}-picker-viewport-bounds`, { picker: pickerBox, list: listBox })
+    let releaseMedia!: () => void
+    const mediaReady = new Promise<void>(resolve => { releaseMedia = resolve })
+    const mediaRequested = page.waitForRequest(request => request.url().includes('screenshot-chat-dark.png?interaction-media'))
+    const mountedBefore = await mountedMessageIndexes(page)
+    await page.route('**/demo/screenshot-chat-dark.png?interaction-media', async route => { await mediaReady; await route.continue() })
+    const samples = await measureDuring(page, TARGET, async () => {
+      await page.evaluate(async kind => {
+        const scope = window as any
+        const jid = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
+        scope.__demoClient.emitSDK(kind === 'chat' ? 'chat:typing' : 'room:typing', kind === 'chat'
+          ? { conversationId: jid, jid, isTyping: true } : { roomJid: jid, nick: 'Adrien', isTyping: true })
+        const state = kind === 'chat' ? scope.__chatStore.getState() : scope.__roomStore.getState()
+        await state.updateMessage(jid, 'interaction-seed-44', {
+          linkPreview: { url: 'https://example.invalid/meeting', title: 'Notes from the team conversation', siteName: 'Team notes' },
+          reactions: { '👍': [kind === 'chat' ? jid : 'Adrien'] },
+          attachment: { url: './demo/screenshot-chat-dark.png?interaction-media', name: 'conversation.png', mediaType: 'image/png', size: 50000 },
+        })
+      }, kind)
+      await expect(page.locator('[data-typing-pill]')).toBeVisible()
+      await mediaRequested
+      await stableFrames(page, TARGET)
+      releaseMedia()
+      await expect.poll(() => page.getByAltText('conversation.png', { exact: true }).evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+      await page.evaluate(kind => {
+        const scope = window as any
+        const jid = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
+        scope.__demoClient.emitSDK(kind === 'chat' ? 'chat:typing' : 'room:typing', kind === 'chat'
+          ? { conversationId: jid, jid, isTyping: false } : { roomJid: jid, nick: 'Adrien', isTyping: false })
+      }, kind)
+      await expect(page.locator('[data-typing-pill]')).toHaveCount(0)
+      await arrive(page, kind, Array.from({ length: 40 }, (_, i) => `virtual-shift-${i}`))
+    })
+    const mountedAfter = await mountedMessageIndexes(page)
+    await keepJson(`${kind}-picker-layout-geometry`, { samples, mountedBefore, mountedAfter })
+    await page.screenshot({ path: test.info().outputPath(`${kind}-picker-held.png`) })
+    const picker = row.locator('em-emoji-picker')
+    await picker.getByRole('button', { name: /skin tone/i }).click()
+    await expect(picker.getByRole('radiogroup')).not.toHaveClass(/hidden/)
+    await page.keyboard.press('Escape')
+    await expect(picker.getByRole('radiogroup')).toHaveCount(0)
+    await expect(picker).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(row.locator('em-emoji-picker')).toHaveCount(0)
+    await expect(row.getByRole('button', { name: 'More reactions', exact: true })).toBeFocused()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    await row.getByRole('button', { name: 'React with 👍', exact: true }).click()
+    await expect.poll(() => page.evaluate(kind => {
+      const scope = window as any
+      const jid = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
+      const state = kind === 'chat' ? scope.__chatStore.getState() : scope.__roomStore.getState()
+      return state.messages.get(jid)?.find((message: any) => message.id === 'interaction-target')?.reactions?.['👍']?.length ?? 0
+    }, kind)).toBeGreaterThan(0)
+    await page.mouse.move(0, 0)
+    await page.locator('textarea.message-input, .message-input[contenteditable="true"]').last().focus()
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+  })
+
+  test(`${kind}: interaction hold yields to manual navigation, sending and jumping; blur and removal close panels`, async ({ page }) => {
+    const { row, list } = await setupInteraction(page, kind)
+    const observations: unknown[] = []
+    const record = async (stage: string) => {
+      const observation = { stage, distance: await distance(page), held: await list.getAttribute('data-message-interaction'), panels: await list.locator('[data-message-panel]').count() }
+      observations.push(observation)
+      await keepJson(`${kind}-navigation-stage-${observations.length}`, observation)
+    }
+    let openIndex = 0
+    const openPanel = async (id = TARGET, panel: 'more' | 'reactions' = 'more') => {
+      const label = panel === 'more' ? 'More options' : 'More reactions'
+      const target = page.locator(`.message-row[data-message-id="${id}"]`)
+      const point = await target.locator('[data-message-body]').evaluate(element => {
+        const box = element.getBoundingClientRect()
+        const viewport = element.closest('[data-message-list]')!.getBoundingClientRect()
+        const top = Math.max(box.top, viewport.top), bottom = Math.min(box.bottom, viewport.bottom)
+        const x = box.left + Math.min(80, box.width / 4), y = (top + bottom) / 2
+        return { x, y, visible: bottom > top, hitsBody: element.contains(document.elementFromPoint(x, y)) }
+      })
+      expect(point.visible && point.hitsBody, 'native pointer interest must hit the visible body, not an overlapping toolbar').toBe(true)
+      // Locator hover may auto-scroll around an overlapping control; do not change reading intent in setup.
+      await page.mouse.move(point.x, point.y)
+      await waitForActions(page, id)
+      await keepJson(`open-panel-${++openIndex}`, await target.evaluate((element, label) => {
+        const toolbar = element.querySelector('[data-message-toolbar]')!
+        const control = toolbar.querySelector(`[aria-label="${label}"]`)!
+        const box = control.getBoundingClientRect()
+        const style = getComputedStyle(toolbar)
+        return { held: element.closest('[data-message-list]')?.getAttribute('data-message-interaction'),
+          opacity: style.opacity, pointerEvents: getComputedStyle(control).pointerEvents,
+          hit: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.outerHTML,
+          composing: !!element.closest('.composer-active'),
+          shadow: (window as any).__fluuxScrollShadow?.() }
+      }, label))
+      await target.getByRole('button', { name: label, exact: true }).click()
+      await expect(target.locator(`[data-message-panel="${panel}"]`)).toBeVisible()
+      if (panel === 'reactions') await expect(target.locator('em-emoji-picker')).toBeVisible()
+      return target
+    }
+    await openPanel()
+    await arrive(page, kind, ['navigation-arrival'])
+    await wheelAwayFromBottom(page, 200, -450)
+    await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect.poll(() => distance(page)).toBeGreaterThan(200)
+    // A later arrival must not silently reacquire a hold or resume following.
+    await arrive(page, kind, ['after-manual-navigation'])
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect.poll(() => distance(page)).toBeGreaterThan(200)
+    await record('manual scroll remains away after another arrival')
+    const historyId = await list.evaluate(element => {
+      const viewport = element.getBoundingClientRect()
+      return [...element.querySelectorAll<HTMLElement>('.message-row')].find(row => {
+        const box = row.getBoundingClientRect()
+        return box.top > viewport.top + 40 && box.bottom < viewport.bottom - 40
+      })!.dataset.messageId!
+    })
+    const historyBody = page.locator(`.message-row[data-message-id="${historyId}"] [data-message-body]`)
+    await historyBody.hover()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    const historyTop = (await historyBody.boundingBox())!.y
+    await arrive(page, kind, ['history-hold-arrival'])
+    await stableFrames(page, historyId)
+    await page.mouse.move(0, 0)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    const historyAfter = (await historyBody.boundingBox())!.y
+    expect(Math.abs(historyAfter - historyTop)).toBeLessThanOrEqual(1)
+    observations.push({ stage: 'history release', id: historyId, before: historyTop, after: historyAfter })
+    const sendingRow = await openPanel(historyId, 'reactions')
+    const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
+    await input.fill('My own send takes navigation priority.')
+    await expect(sendingRow.locator('[data-message-panel="reactions"]')).toHaveCount(1)
+    await input.press('Enter')
+    await expect(page.getByText('My own send takes navigation priority.', { exact: true }).last()).toBeVisible()
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await expect(list.locator('[data-message-panel]')).toHaveCount(0)
+    await record('own send closes the menu and reaches latest')
+    await openPanel()
+    // Safari mouse clicks do not focus buttons; give keyboard navigation an action target.
+    await row.getByRole('button', { name: 'More options', exact: true }).focus()
+    await page.keyboard.press('PageUp')
+    await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect.poll(() => distance(page)).toBeGreaterThan(1)
+    expect(await waitForTopVisibleSettled(page)).not.toBeNull()
+    await record('keyboard scroll closes the menu')
+    await page.keyboard.press('End')
+    expect(await waitForTopVisibleSettled(page)).not.toBeNull()
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    const latestOwnId = await page.getByText('My own send takes navigation priority.', { exact: true }).last()
+      .locator('xpath=ancestor::*[@data-message-row-id][1]').getAttribute('data-message-id')
+    await openPanel(latestOwnId!)
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await record('hold begins at latest before one small arrival')
+    await arrive(page, kind, ['small-arrival'])
+    await expect(page.locator('[data-fab="scroll-to-bottom"]')).toHaveAttribute('tabindex', '-1')
+    await page.keyboard.press('Escape')
+    await expect(list.locator('[data-message-panel]')).toHaveCount(0)
+    await expect(page.locator('[data-fab="scroll-to-bottom"]')).toHaveAttribute('tabindex', '0')
+    expect(await distance(page)).toBeLessThan(AT_BOTTOM_OK_PX)
+    await record('small arrival exposes the existing jump control')
+    await page.locator('[data-fab="scroll-to-bottom"]').click()
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await record('jump closes the menu and reaches latest')
+    await openPanel()
+    // Playwright forces every page focused. This checks the actual handler; native-engine
+    // focus loss is verified separately with that automation override disabled.
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+    await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await keepJson(`${kind}-blur`, { trigger: 'scripted window blur event', held: await list.getAttribute('data-message-interaction') })
+    await openPanel()
+    await page.evaluate(async kind => {
+      const scope = window as any
+      const jid = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
+      const state = kind === 'chat' ? scope.__chatStore.getState() : scope.__roomStore.getState()
+      await state.updateMessage(jid, 'interaction-target', { isRetracted: true, body: '' })
+    }, kind)
+    await expect(row.locator('[data-message-toolbar]')).toHaveCount(0)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await record('target retraction closes actions')
+    await page.evaluate(() => { location.hash = '#/messages/ava%40fluux.chat' })
+    await expect(page.getByRole('heading', { name: 'Ava Martinez', exact: true })).toBeVisible()
+    await expect(row).toHaveCount(0)
+    await expect(page.locator('[data-message-list]')).not.toHaveAttribute('data-message-interaction')
+    await record('conversation switch drops the original target')
+    await keepJson(`${kind}-navigation-and-lifecycle`, observations)
+  })
+}
+
+for (const kind of ['chat', 'room'] as const) {
+  test(`${kind}: interaction hold follows keyboard action focus and preserves native text selection`, async ({ page }) => {
+    const { row, body, list } = await setupInteraction(page, kind)
+    const more = row.getByRole('button', { name: 'More options', exact: true })
+    await more.focus()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    await page.keyboard.press('Enter')
+    await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
+    await stableFrames(page, TARGET)
+    const samples = await measureDuring(page, TARGET, () => arrive(page, kind, ['keyboard-arrival']))
+    await keepJson(`${kind}-keyboard-geometry`, samples)
+    await page.keyboard.press('Escape')
+    await expect(more).toBeFocused()
+    await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
+    const text = row.locator('[data-msg-text]').first()
+    const box = (await text.boundingBox())!
+    const top = (await body.boundingBox())!.y
+    await page.mouse.move(box.x + 3, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + Math.min(box.width - 3, 210), box.y + box.height / 2, { steps: 8 })
+    const selectedText = await page.evaluate(() => document.getSelection()?.toString() ?? '')
+    expect(selectedText.length).toBeGreaterThan(0)
+    await keepJson(`${kind}-native-selection`, { selectedText, heldMessage: await list.getAttribute('data-message-interaction') })
+    await arrive(page, kind, ['selection-arrival'])
+    await page.mouse.up()
+    await stableFrames(page, TARGET)
+    expect(Math.abs((await body.boundingBox())!.y - top)).toBeLessThanOrEqual(1)
+    await expect(row.locator('[data-message-toolbar]')).toHaveClass(/opacity-0/)
+    await page.mouse.move(0, 0)
+    await page.locator('textarea.message-input, .message-input[contenteditable="true"]').last().focus()
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+  })
+}
+
+// Captain FLM-245 F1/F2/F7 and G2: composing yields every hold unless a menu is open; native drags must finish.
+for (const kind of ['chat', 'room'] as const) {
+  test(`${kind}: interaction hold releases composing, mouse focus and completed native drags`, async ({ page }) => {
+    const { row, body, list } = await setupInteraction(page, kind)
+    const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
+    const observations: unknown[] = []
+    await input.focus()
+    await body.hover()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    await input.pressSequentially('A reply in progress')
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await arrive(page, kind, ['composer-after-nudge'])
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    observations.push({ stage: 'typing releases pointer-only intent', ...await readInteractionView(page) })
+    await body.hover()
+    await waitForActions(page)
+    await row.getByRole('button', { name: 'Reply', exact: true }).click()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    await input.pressSequentially(' after choosing Reply')
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await arrive(page, kind, ['composer-after-reply-click'])
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    observations.push({ stage: 'typing after Reply click releases and resumes prior following', ...await readInteractionView(page) })
+    await body.hover()
+    await waitForActions(page)
+    const more = row.getByRole('button', { name: 'More options', exact: true })
+    await more.click()
+    await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
+    // Typing does not dismiss an explicit open action panel.
+    await input.pressSequentially(' with a menu open')
+    await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    await more.click()
+    await page.mouse.move(0, 0)
+    await expect(row.locator('[data-message-toolbar]')).toHaveCSS('opacity', '0')
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    observations.push({ stage: 'mouse focus does not retain toolbar visibility', ...await readInteractionView(page) })
+    // Captain G3: an ordinary middle click resumes saved following and ends its hover block.
+    await body.hover()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    await arrive(page, kind, ['middle-held-arrival'])
+    await page.evaluate(() => {
+      const scope = window as any
+      scope.__middleEvents = []
+      for (const type of ['mousedown', 'mouseup', 'auxclick']) {
+        document.addEventListener(type, event => {
+          const mouse = event as MouseEvent
+          scope.__middleEvents.push({ type, button: mouse.button, buttons: mouse.buttons, trusted: event.isTrusted })
+        }, true)
+      }
+    })
+    const middleBox = (await body.boundingBox())!
+    await page.mouse.click(middleBox.x + 180, middleBox.y + 12, { button: 'middle' })
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await arrive(page, kind, ['middle-after-release'])
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    observations.push({ stage: 'ordinary middle click resumes prior following', events: await page.evaluate(() => (window as any).__middleEvents), ...await readInteractionView(page) })
+    await page.mouse.move(0, 0)
+    await body.hover()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    observations.push({ stage: 'ordinary middle completion permits new deliberate pointer interest', ...await readInteractionView(page) })
+    await page.mouse.move(0, 0)
+    await input.focus()
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await page.route('https://example.invalid/**', route => route.abort())
+    await page.evaluate(async kind => {
+      const scope = window as any
+      const jid = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
+      const store = kind === 'chat' ? scope.__chatStore : scope.__roomStore
+      await store.getState().updateMessage(jid, 'interaction-target', { body: 'Drag this link: https://example.invalid/review' })
+      scope.__reviewDragEvents = []
+      for (const type of ['mousedown', 'mouseup', 'dragstart', 'dragend', 'drop']) {
+        document.addEventListener(type, event => scope.__reviewDragEvents.push({ type, trusted: event.isTrusted }), true)
+      }
+      const drop = document.createElement('div')
+      drop.dataset.reviewDrop = 'true'
+      drop.textContent = 'Local drop target'
+      drop.style.cssText = 'position:fixed;left:330px;bottom:12px;width:230px;height:34px;z-index:200'
+      drop.addEventListener('dragover', event => event.preventDefault())
+      drop.addEventListener('drop', event => event.preventDefault())
+      document.body.append(drop)
+    }, kind)
+    await row.locator('a[href="https://example.invalid/review"]').dragTo(page.locator('[data-review-drop]'))
+    await page.mouse.move(0, 0)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    const events = await page.evaluate(() => (window as any).__reviewDragEvents as { type: string; trusted: boolean }[])
+    expect(events.some(event => event.type === 'dragstart' && event.trusted)).toBe(true)
+    expect(events.some(event => event.type === 'dragend' && event.trusted)).toBe(true)
+    expect(events.some(event => event.type === 'drop' && event.trusted)).toBe(true)
+    observations.push({ stage: 'native drag terminates without a stuck hold', events, ...await readInteractionView(page) })
+    const nextId = await list.evaluate(element => {
+      const view = element.getBoundingClientRect()
+      return [...element.querySelectorAll<HTMLElement>('.message-row')].find(row => {
+        const box = row.getBoundingClientRect()
+        return row.dataset.messageId !== 'interaction-target' && box.top > view.top + 40 && box.bottom < view.bottom - 40
+      })!.dataset.messageId!
+    })
+    await page.locator(`.message-row[data-message-id="${nextId}"] [data-message-body]`).hover()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    observations.push({ stage: 'another row can acquire after the drag', id: nextId, ...await readInteractionView(page, nextId) })
+    await keepJson(`${kind}-review-pointer-cleanup`, observations)
+  })
+
+  // Captain FLM-245 F3: real unobserved browser scrolling must win before another reconcile.
+  test(`${kind}: interaction hold yields to native selection-edge autoscroll and browser find`, async ({ page }) => {
+    const { row, body, list } = await setupInteraction(page, kind)
+    const observations: unknown[] = []
+    await body.hover()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    await arrive(page, kind, Array.from({ length: 12 }, (_, i) => `edge-selection-${i}`))
+    const before = await readInteractionView(page)
+    const text = row.locator('[data-msg-text]').first()
+    const box = (await text.boundingBox())!, view = (await list.boundingBox())!
+    await page.mouse.move(box.x + 3, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + Math.min(180, box.width - 3), box.y + box.height / 2, { steps: 5 })
+    await page.mouse.move(box.x + 80, view.y + view.height + 15, { steps: 12 })
+    const selectionFrames = await interactionScrollFrames(page)
+    await keepJson(`${kind}-native-selection-scroll-frames`, { before, samples: selectionFrames, after: await readInteractionView(page) })
+    await expect.poll(async () => (await readInteractionView(page)).top).toBeGreaterThan(before.top + 1)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    expect((await readInteractionView(page)).selectedText.length).toBeGreaterThan(0)
+    await page.mouse.up()
+    observations.push({ stage: 'native selection autoscroll takes over', before, after: await readInteractionView(page) })
+    await page.evaluate(() => document.getSelection()?.removeAllRanges())
+    await body.hover()
+    await waitForActions(page)
+    await row.getByRole('button', { name: 'More options', exact: true }).click()
+    await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
+    // F3/G1: native find can reveal an offscreen DOM match, not a virtualized-away row.
+    // Hovering the original can re-window the list, so choose its nearest mounted match last.
+    const findId = await list.evaluate(element => {
+      const view = element.getBoundingClientRect()
+      const candidates = [...element.querySelectorAll<HTMLElement>('.message-row')]
+        .map(row => ({ id: row.dataset.messageId!, bottom: row.getBoundingClientRect().bottom }))
+        .filter(row => row.bottom < view.top - 5)
+        .sort((a, b) => b.bottom - a.bottom)
+      if (!candidates.length) throw new Error('No mounted offscreen message for native find')
+      return candidates[0].id
+    })
+    const query = 'An earlier conversation message to find'
+    await page.evaluate(async ({ kind, id, query }) => {
+      const scope = window as any
+      const jid = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
+      const store = kind === 'chat' ? scope.__chatStore : scope.__roomStore
+      await store.getState().updateMessage(jid, id, { body: query })
+    }, { kind, id: findId, query })
+    const findTarget = page.locator(`.message-row[data-message-id="${findId}"]`)
+    await expect(findTarget).toContainText(query)
+    await expect(findTarget).toBeAttached()
+    await expect(findTarget).not.toBeInViewport()
+    const findBefore = await readInteractionView(page)
+    const findTargetBefore = await findTarget.boundingBox()
+    const findResult = await findAndRevealInteractionText(page, query)
+    const found = findResult.found
+    expect(found).toBe(true)
+    const findFrames = await interactionScrollFrames(page)
+    await keepJson(`${kind}-native-find-scroll-frames`, { findResult, id: findId, targetBefore: findTargetBefore, before: findBefore, samples: findFrames, after: await readInteractionView(page), targetAfter: await page.locator(`.message-row[data-message-id="${findId}"]`).boundingBox() })
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect(row.locator('[data-message-panel]')).toHaveCount(0)
+    await expect(page.locator(`.message-row[data-message-id="${findId}"]`)).toBeInViewport()
+    expect(await waitForTopVisibleSettled(page)).not.toBeNull()
+    observations.push({ stage: 'native find scroll takes over without snapback', found, id: findId, before: findBefore, after: await readInteractionView(page) })
+    await keepJson(`${kind}-review-native-scroll`, observations)
+  })
+}
+
+// FLM-245 J1: boundary input ends a hold without a scroll event; later delivery must still follow.
+for (const kind of ['chat', 'room'] as const) for (const input of ['wheel', 'keyboard'] as const) {
+  test(`${kind}: interaction hold resumes after ${input} input ends at the unchanged bottom`, async ({ page }) => {
+    const { row, list } = await setupInteraction(page, kind)
+    await row.hover()
+    await expect(list).toHaveAttribute('data-message-interaction', /.+/)
+    const held = await readInteractionView(page)
+    if (input === 'wheel') await page.mouse.wheel(0, 120)
+    else {
+      await row.locator('[data-message-toolbar] button:not([disabled])').first().focus()
+      await page.keyboard.press('PageDown')
+    }
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await waitForTopVisibleSettled(page)
+    const ended = await readInteractionView(page)
+    expect(ended.distance).toBeLessThanOrEqual(1)
+    expect(Math.abs(ended.top - held.top), 'boundary input must not move the reader').toBeLessThanOrEqual(1)
+    const latest = `boundary-${input}-arrival`
+    await arrive(page, kind, [latest])
+    const arrival = page.locator(`.message-row[data-message-id="${latest}"]`)
+    await expect(arrival).toBeAttached()
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await expect(arrival).toBeInViewport()
+    await keepJson(`${kind}-${input}-boundary-following`, { held, ended, after: await readInteractionView(page), read: await readInteractionReadState(page, kind) })
+  })
 }

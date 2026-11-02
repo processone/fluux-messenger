@@ -5,7 +5,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
  * Uses composition to handle view-specific rendering while sharing
  * the common bubble structure.
  */
-import { useState, useMemo, useRef, useEffect, memo, type CSSProperties, type ReactNode } from 'react'
+import { useState, useMemo, useRef, useEffect, useContext, memo, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
@@ -39,6 +39,7 @@ import { PollClosedCard } from './PollClosedCard'
 import { Tooltip } from '../Tooltip'
 import { MessageActionSheet } from './MessageActionSheet'
 import { computeMessageActions } from './messageActionCapabilities'
+import { MessageInteractionContext, useMessageInteractionHeld } from './useMessageInteractionHold'
 import { downloadAttachment } from '@/utils/download'
 
 type ReplyQuoteCardStyle = CSSProperties & {
@@ -195,6 +196,7 @@ export interface MessageBubbleProps {
 function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): boolean {
   // Message identity and content
   if (prev.message.id !== next.message.id) return false
+  if (messageRowId(prev.message) !== messageRowId(next.message)) return false
   if (prev.message.body !== next.message.body) return false
   if (prev.whisperWith !== next.whisperWith) return false
   if (prev.whisperThread !== next.whisperThread) return false
@@ -254,6 +256,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   if (prev.isLastMessage !== next.isLastMessage) return false
   if (prev.isGroupEnd !== next.isGroupEnd) return false
   if (prev.isHovered !== next.isHovered) return false
+  if ((prev.onReaction === undefined) !== (next.onReaction === undefined)) return false
 
   // Sender info
   if (prev.senderName !== next.senderName) return false
@@ -375,7 +378,12 @@ export const MessageBubble = memo(function MessageBubble({
   // positions that preview instead of no-opping or scrolling the live conversation.
   const requestMessageTarget = useRequestMessageTarget()
   const [showReactionPicker, setShowReactionPickerState] = useState(false)
-  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showMoreMenu, setShowMoreMenuState] = useState(false)
+  const interaction = useContext(MessageInteractionContext)
+  const bubbleRef = useRef<HTMLDivElement>(null)
+  const rowId = messageRowId(message)
+  const interactionHeld = useMessageInteractionHeld(bubbleRef)
+  const openMenusRef = useRef({ more: false, reaction: false })
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false)
   const [showErrorDetails, setShowErrorDetails] = useState(false)
 
@@ -433,8 +441,26 @@ export const MessageBubble = memo(function MessageBubble({
     reactionsEnabled,
   })
 
-  // Wrap setShowReactionPicker to notify parent
+  const closeInteractionMenus = () => {
+    openMenusRef.current = { more: false, reaction: false }
+    setShowMoreMenuState(false)
+    setShowReactionPickerState(false)
+    onReactionPickerChange?.(false)
+  }
+  const reportMenus = () => {
+    if (rowId) interaction?.setMenuOpen(rowId,
+      openMenusRef.current.more || openMenusRef.current.reaction, closeInteractionMenus,
+      bubbleRef.current?.closest<HTMLElement>('[data-message-row-id]') ?? undefined)
+  }
+  const setShowMoreMenu = (isOpen: boolean) => {
+    openMenusRef.current.more = isOpen
+    reportMenus()
+    setShowMoreMenuState(isOpen)
+  }
+  // The picker remains a list interaction even when its pointer/focus leaves the row's box.
   const setShowReactionPicker = (isOpen: boolean) => {
+    openMenusRef.current.reaction = isOpen
+    reportMenus()
     setShowReactionPickerState(isOpen)
     onReactionPickerChange?.(isOpen)
   }
@@ -557,6 +583,7 @@ export const MessageBubble = memo(function MessageBubble({
   const showSenderHeader = showAvatar && !isActionMessage(message.body)
   return (
     <div
+      ref={bubbleRef}
       data-message-id={message.id}
       data-message-from={senderName}
       data-message-time={formatTime(message.timestamp)}
@@ -614,6 +641,7 @@ export const MessageBubble = memo(function MessageBubble({
           canReply={canReply}
           canEdit={canEdit}
           canDelete={canDelete}
+          interactionHeld={interactionHeld}
           isHidden={hideToolbar || false}
           isSelected={isSelected || false}
           hasKeyboardSelection={hasKeyboardSelection || false}

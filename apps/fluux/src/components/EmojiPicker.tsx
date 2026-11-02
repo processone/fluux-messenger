@@ -12,6 +12,8 @@ interface EmojiPickerProps {
   onClose: () => void
   /** Fit a constrained touch menu, adapting the number of emoji columns. */
   dynamicWidth?: boolean
+  /** Fit a held message's available space without scrolling its conversation. */
+  maxHeight?: number
   /** The enclosing menu can own Escape to return to its parent view. */
   closeOnEscape?: boolean
 }
@@ -23,7 +25,7 @@ function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
   return mode
 }
 
-export function EmojiPicker({ onSelect, onClose, dynamicWidth = false, closeOnEscape = true }: EmojiPickerProps) {
+export function EmojiPicker({ onSelect, onClose, dynamicWidth = false, maxHeight, closeOnEscape = true }: EmojiPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const pickerRef = useRef<InstanceType<typeof Picker> | null>(null)
   useFloatingLayerBounds(containerRef, !dynamicWidth)
@@ -67,7 +69,12 @@ export function EmojiPicker({ onSelect, onClose, dynamicWidth = false, closeOnEs
 
     pickerRef.current = picker
     const container = containerRef.current
-    if (dynamicWidth) (picker as unknown as HTMLElement).style.width = '100%'
+    const element = picker as unknown as HTMLElement
+    if (dynamicWidth) element.style.width = '100%'
+    if (maxHeight !== undefined) {
+      element.style.minHeight = '0'
+      element.style.maxHeight = `${maxHeight}px`
+    }
     container.appendChild(picker as unknown as Node)
 
     return () => {
@@ -75,13 +82,33 @@ export function EmojiPicker({ onSelect, onClose, dynamicWidth = false, closeOnEs
       // Clean up: remove the picker element
       container.replaceChildren()
     }
-    // Re-create picker only when theme, locale, or hover capability changes —
+    // Re-create picker only when theme, locale, hover capability or explicit size changes —
     // never on callback identity (see the ref indirection above).
-  }, [theme, i18n.language, hasHover, dynamicWidth])
+  }, [theme, i18n.language, hasHover, dynamicWidth, maxHeight])
 
   // Escape closes the picker when it is the overlay on top. Shortcut help opened over
   // the picker closes first and the picker stays (see useCloseOnEscape).
   useCloseOnEscape(onClose, closeOnEscape)
 
-  return <div ref={containerRef} className={dynamicWidth ? 'w-full min-w-0' : undefined} />
+  return <div ref={containerRef} className={dynamicWidth ? 'w-full min-w-0' : undefined}
+    onKeyDownCapture={(event) => {
+      if (maxHeight === undefined || event.altKey || event.ctrlKey || event.metaKey) return
+      const input = event.nativeEvent.composedPath()[0]
+      if (!(input instanceof HTMLInputElement) || input.type !== 'search') return
+      // The widget owns arrow navigation, but its unhandled defaults can scroll the conversation.
+      if (event.key === 'Home') {
+        event.preventDefault()
+        const anchor = input.selectionDirection === 'backward' ? input.selectionEnd : input.selectionStart
+        input.setSelectionRange(0, event.shiftKey ? anchor : 0, event.shiftKey ? 'backward' : 'none')
+      } else if (event.key === 'End') {
+        event.preventDefault()
+        const anchor = input.selectionDirection === 'backward' ? input.selectionEnd : input.selectionStart
+        input.setSelectionRange(event.shiftKey ? anchor : input.value.length, input.value.length, event.shiftKey ? 'forward' : 'none')
+      } else if (
+        event.key === 'ArrowUp' || event.key === 'ArrowDown' ||
+        event.key === 'PageUp' || event.key === 'PageDown'
+      ) {
+        event.preventDefault()
+      }
+    }} />
 }

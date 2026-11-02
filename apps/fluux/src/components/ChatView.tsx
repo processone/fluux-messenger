@@ -312,7 +312,8 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // alone (which wrongly treated a scrolled-up-but-focused conversation as
   // "seen"). The SDK's `setActiveConversation` is the SOLE caller of
   // `beginViewportGeneration` — this view only ever READS the current
-  // generation and reports measured geometry against it.
+  // generation and reports measured geometry, or conservatively revokes follow-edge
+  // evidence while an interaction owns the view.
   //
   // The generation is an ACTIVATION value, so it is read on EVERY render (not
   // memoized on conversationId alone): a same-entity reactivation bumps the
