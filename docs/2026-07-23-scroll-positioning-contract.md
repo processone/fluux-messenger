@@ -346,7 +346,10 @@ must keep every row blocked when release latches the pan. A clicked, latched pan
 click/release, key or blur; a middle release with no matching observed press ends the block when the
 browser consumes the stopping press. Actual native movement still takes priority through viewport attribution.
 Hosts without `auxclick` clear it on mouseup.
-Only a reader who was following latest before the hold resumes automatically. History reading keeps
+Only a reader who was following latest before the hold resumes automatically. Disengagement consumes
+current native geometry before applying that saved policy, including pixels whose scroll callback has
+not arrived. Input-end live-edge reporting and deferred interaction rearm use current geometry, not an
+older bottom sample. History reading keeps
 a settled fixed position; a deliberate scroll, own send or explicit jump takes priority and closes
 panels before moving. A manual takeover cannot rearm from the usual near-bottom band alone: actual
 bottom geometry or explicit latest navigation is required. Directed input that ends at the unchanged

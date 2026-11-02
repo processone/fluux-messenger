@@ -1141,12 +1141,15 @@ export function useMessageListScroll({
     return true
   }
 
-  const releaseInteractionHold = useCallback((resume: boolean) => {
+  const releaseInteractionHold = useStableCallback((resume: boolean) => {
+    // Compositor movement may precede its scroll callback and pointer departure. Consume it before
+    // saved following can replace the interaction's stricter native-reading policy.
+    observeNativeGeometry(conversationId)
     positioningControllerRef.current?.releaseInteractionHold({
       conversationId, resume, liveEdge: createLiveEdgeExecutor('interaction-release'),
     })
     refreshScrollToBottomFab()
-  }, [conversationId, createLiveEdgeExecutor, refreshScrollToBottomFab])
+  })
 
 
   const observeUserMovement = (id: string, delta: number, scroller: HTMLElement) => {
@@ -1261,15 +1264,21 @@ export function useMessageListScroll({
   const observeUserInputEnd = (id: string, geometry: ViewportGeometry, directionalInput: boolean) => {
     observeNativeGeometry(id)
     viewportSessionRef.current?.endUserInput(id)
-    const atLiveEdge = geometry.height - geometry.top - geometry.client <
-      (positioningControllerRef.current?.hasInteractionPosition() ? 1 : AT_BOTTOM_THRESHOLD)
+    // Native observation can consume newer pixels than the binding's input-end sample.
+    const scroller = scrollerRef.current
+    const current = scroller ? readViewportGeometry(scroller) : geometry
+    const interactionPosition = positioningControllerRef.current?.hasInteractionPosition() ?? false
+    const atLiveEdge = current.height - current.top - current.client <
+      (interactionPosition ? 1 : AT_BOTTOM_THRESHOLD)
     if (positioningControllerRef.current?.observeUserInputEnd(id, directionalInput && atLiveEdge)) {
       reconcileMessageTargetAfterResize()
     }
     setMeasuredAtBottom(atLiveEdge)
     const deferred = positioningControllerRef.current?.takeDeferredLiveEdge(id)
     if (deferred) {
-      reconcileLiveEdgeRef.current('input-release', deferred.rearmEligibleFromGeometry || atLiveEdge)
+      reconcileLiveEdgeRef.current('input-release', interactionPosition
+        ? atLiveEdge
+        : deferred.rearmEligibleFromGeometry || atLiveEdge)
     }
   }
 

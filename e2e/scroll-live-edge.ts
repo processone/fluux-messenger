@@ -1376,6 +1376,9 @@ test.describe('Typing indicator never covers message text', () => {
     expect(renewals).toBeGreaterThanOrEqual(2)
     await emitRoomTyping(page, STRESS_ROOM_JID, ['AwayBot'], false)
     await expect(page.locator('[data-typing-pill]')).toHaveCount(0)
+    expect(await page.evaluate(jid => (window as unknown as {
+      __roomTypingFixtures?: Map<string, unknown>
+    }).__roomTypingFixtures?.has(JSON.stringify([jid, 'AwayBot'])) ?? false, STRESS_ROOM_JID)).toBe(false)
   })
 
   test('growing the composer to two lines and shrinking it back holds the bottom and never parks text under the pill', async ({ page }) => {
@@ -1520,12 +1523,31 @@ test.describe('Typing indicator never covers message text', () => {
 
   /** Emit `composing`/`paused` for a set of MUC nicks. `room:typing` carries one nick at a time. */
   async function emitRoomTyping(page: Page, roomJid: string, nicks: string[], isTyping: boolean): Promise<void> {
-    await page.evaluate(({ jid, names, on }) => {
+    await page.evaluate(({ jid, names, on, renewalMs }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (window as any).__demoClient
       if (!c) throw new Error('no __demoClient')
-      for (const nick of names) c.emitSDK('room:typing', { roomJid: jid, nick, isTyping: on })
-    }, { jid: roomJid, names: nicks, on: isTyping })
+      const scope = window as unknown as {
+        __roomTypingFixtures?: Map<string, { timer: number; renewals: number }>
+      }
+      const fixtures = scope.__roomTypingFixtures ??= new Map()
+      for (const nick of names) {
+        const key = JSON.stringify([jid, nick])
+        const previous = fixtures.get(key)
+        if (previous) window.clearInterval(previous.timer)
+        fixtures.delete(key)
+        c.emitSDK('room:typing', { roomJid: jid, nick, isTyping: on })
+        if (!on) continue
+        const fixture = { timer: 0, renewals: 0 }
+        fixtures.set(key, fixture)
+        fixture.timer = window.setInterval(() => {
+          if (fixtures.get(key) !== fixture) return
+          c.emitSDK('room:typing', { roomJid: jid, nick, isTyping: true })
+          fixture.renewals += 1
+        }, renewalMs)
+      }
+      // Page/context teardown stops the fixture timers; paused explicitly stops each participant.
+    }, { jid: roomJid, names: nicks, on: isTyping, renewalMs: TYPING_TIMEOUT_MS / 3 })
   }
 
   /**
