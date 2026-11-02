@@ -16,15 +16,37 @@ export const changelog: ChangelogEntry[] = [
   {
     version: '0.18.2',
     date: 'Unreleased',
-    sections: [{
-      type: 'fixed',
-      items: [
-        'Reopening a room no longer shows the cached-history warning or asks you to join while its rejoin is pending. Failed joins restore the join button',
-        'On desktop, new messages no longer move the message, action controls or menu you are using. Typing resumes following new messages if you were following before, unless a menu is open. The jump-to-latest button stays hidden while a message menu is open',
-        'Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter. Private messages in rooms no longer make surrounding messages jump as you scroll.',
-        'Native iOS asks servers to keep a disconnected session resumable for up to 24 hours, helping the app reconnect after a long time in the background',
-      ],
-    }],
+    sections: [
+      {
+        type: 'added',
+        items: [
+          'iOS: room push notifications now name the sender from muc_nick',
+          'iOS: drag down on a conversation to lower the keyboard',
+          'iOS: Fluux lays out around the iPhone Duo hinge',
+        ],
+      },
+      {
+        type: 'changed',
+        items: [
+          'iOS: Fluux asks servers to keep a disconnected session resumable for up to 24 hours, helping it reconnect after a long time in the background',
+        ],
+      },
+      {
+        type: 'fixed',
+        items: [
+          'Reopening a room no longer shows the cached-history warning or asks you to join while its rejoin is pending. Failed joins restore the join button',
+          'On desktop, new messages no longer move the message, action controls or menu you are using. Typing resumes following new messages if you were following before, unless a menu is open. The jump-to-latest button stays hidden while a message menu is open',
+          'Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter or when private messages load. Scrolling on iOS also keeps your reading position during overscroll and touch release',
+          'A hidden window no longer marks messages as read or suppresses their notifications',
+          'Encrypted messages that arrive before the sender\'s key is cached now show their text after decryption',
+          'Older history now loads past archive pages with no messages, and late edits still appear',
+          'Typing just after picking a mention no longer moves the caret back',
+          'iOS notifications keep readable text when a preview lookup misses, and generic wording follows the app language',
+          'The composer no longer sends duplicate messages and keeps failed drafts. Send, edit and delete errors now have separate messages in every language',
+          'You can restore an OpenPGP backup into fresh storage after a keychain migration is refused, and retrying a refused macOS keychain operation clears its cached refusal',
+        ],
+      },
+    ],
   },
   {
     version: '0.18.1',
