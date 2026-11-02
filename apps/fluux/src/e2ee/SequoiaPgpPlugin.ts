@@ -18,6 +18,7 @@ import { E2EEPluginError } from '@fluux/sdk'
 import { platform } from '@/platform'
 import {
   OpenPGPPluginBase,
+  type BackupRecoveryMode,
   type CertValidation,
   type DecryptOutput,
   type KeyBundle,
@@ -93,6 +94,22 @@ function boundedInvoke(invoke: InvokeFn, timeouts: NativeCallTimeouts): InvokeFn
       timer = setTimeout(() => reject(new NativeCallTimeoutError(cmd, ms)), ms)
     })
     return Promise.race([invoke<T>(cmd, args), expiry]).finally(() => clearTimeout(timer))
+  }
+}
+
+// A lost IPC result may still be writing. Keep the guard across plugin replacement
+// and WebView reload until a new application window can load the durable outcome.
+const uncertainImports = new Set<string>()
+const PENDING_IMPORT_PREFIX = '__wry_pending_native_restore:'
+
+/** @internal Test isolation only; never clears a running app's restore guard. */
+export function resetUncertainImportsForTesting(): void {
+  uncertainImports.clear()
+  if (typeof window === 'undefined') return
+  const session = window.sessionStorage
+  for (let i = session.length - 1; i >= 0; i--) {
+    const key = session.key(i)
+    if (key?.startsWith(PENDING_IMPORT_PREFIX)) session.removeItem(key)
   }
 }
 
@@ -219,13 +236,58 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     backupMessage: string,
     passphrase: string,
     selectedFingerprint: string,
+    recovery?: BackupRecoveryMode,
   ): Promise<KeyBundle> {
-    return this.invoke<KeyBundle>('openpgp_backup_import_selected', {
-      accountJid,
-      backupMessage,
-      passphrase,
-      selectedFingerprint,
-    })
+    // Session storage survives a WebView reload, but not a new application
+    // window. This marker contains no key material and must be retained before
+    // dispatch: an unavailable browser store must fail before a native write.
+    const session = platform().shell === 'desktop' && platform().os === 'macos'
+      && typeof window !== 'undefined' ? window.sessionStorage : null
+    const marker = `${PENDING_IMPORT_PREFIX}${accountJid}`
+    if (uncertainImports.has(accountJid) || session?.getItem(marker)) {
+      throw new E2EEPluginError('permanent', 'restore-outcome-uncertain', '')
+    }
+    session?.setItem(marker, '1')
+    uncertainImports.add(accountJid)
+    const clearGuard = () => {
+      try {
+        session?.removeItem(marker)
+        uncertainImports.delete(accountJid)
+      } catch {
+        // Keep the guard if cleanup fails; do not hide the known native result.
+      }
+    }
+    try {
+      const result = await this.invoke<KeyBundle>('openpgp_backup_import_selected', {
+        accountJid,
+        backupMessage,
+        passphrase,
+        selectedFingerprint,
+        ...(recovery && platform().shell === 'desktop' && platform().os === 'macos'
+          ? { withoutMigration: true } : {}),
+      })
+      clearGuard()
+      return result
+    } catch (error) {
+      const uncertain = error instanceof NativeCallTimeoutError
+        || String(error).includes('openpgp-restore-outcome-uncertain:')
+      if (!uncertain) clearGuard()
+      if (uncertain) throw new E2EEPluginError('permanent', 'restore-outcome-uncertain', error instanceof Error ? error.message : String(error))
+      throw error
+    }
+  }
+
+  override isBackupRestoreUncertain(): boolean {
+    const accountJid = this.ctx?.account.jid
+    if (!accountJid) return false
+    if (uncertainImports.has(accountJid)) return true
+    if (platform().shell !== 'desktop' || platform().os !== 'macos' || typeof window === 'undefined') return false
+    try {
+      return window.sessionStorage.getItem(`${PENDING_IMPORT_PREFIX}${accountJid}`) !== null
+    } catch {
+      // An unreadable guard cannot establish that dispatch is safe.
+      return true
+    }
   }
 
   protected async forgetAccount(accountJid: string): Promise<void> {
@@ -282,16 +344,11 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   /** @internal Used by the settings UI to check if a key already exists on disk. */
   async hasPersistedKey(): Promise<boolean> {
     const ctx = this.requireCtx()
-    try {
-      return await this.invoke<boolean>('openpgp_has_persisted_key', {
-        accountJid: ctx.account.jid,
-      })
-    } catch (err) {
-      // A lost call says nothing about the key file. Reporting "absent" would
-      // route a device that holds its key to the identity-choice flow.
-      if (err instanceof NativeCallTimeoutError) throw err
-      return false
-    }
+    // Neither a failed nor a lost call establishes absence. In particular it
+    // must not grant the silent-generation path access to an unknown identity.
+    return this.invoke<boolean>('openpgp_has_persisted_key', {
+      accountJid: ctx.account.jid,
+    })
   }
 
   // ---------------------------------------------------------------------------

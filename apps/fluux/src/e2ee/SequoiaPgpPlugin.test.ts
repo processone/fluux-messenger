@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setPlatformForTesting } from '@/platform'
 import type { InvokeFn } from './SequoiaPgpPlugin'
-import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
+import { resetUncertainImportsForTesting, SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 import { deleteOwnKey } from './deleteOwnKey'
 import { OPENPGP_DESCRIPTOR } from './OpenPGPPluginBase'
 import { legacyNormalizeBackupPassphrase } from './backupPassphrase'
@@ -36,6 +36,9 @@ import { xml } from '@fluux/sdk/xmpp'
 // `npm test`. Timing is not what they assert, and the 5s default left too
 // little headroom on a loaded runner. See WebOpenPGPPlugin.test.ts.
 vi.setConfig({ testTimeout: 30_000 })
+
+beforeEach(resetUncertainImportsForTesting)
+afterEach(resetUncertainImportsForTesting)
 
 /**
  * Wrap a body string in the `<payload xmlns='jabber:client'><body>…</body></payload>`
@@ -5336,7 +5339,10 @@ describe('SequoiaPgpPlugin', () => {
       // keeps the plugin registered and flags recovery so the host routes to
       // the IdentityChoiceDialog, rather than failing registration outright.
       const { ctx } = makeContext('me@example.com')
-      const fakeInvoke: InvokeFn = async (cmd) => {
+      const fakeInvoke: InvokeFn = async <T>(cmd: string) => {
+        // FLM-343: a present-key recovery fixture must answer the existence
+        // probe; an unknown probe no longer grants the generation path.
+        if (cmd === 'openpgp_has_persisted_key') return true as T
         if (cmd === 'openpgp_ensure_key') {
           throw new Error(
             "passphrase for account 'me@example.com' is not in the keychain or on disk — key material cannot be decrypted",

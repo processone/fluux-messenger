@@ -10,6 +10,7 @@
  *   immediately (specific text for `pep-unsupported`, generic for other
  *   codes) instead of spinning on "Generating your key..." for 60s.
  */
+import { StrictMode } from 'react'
 import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
@@ -26,7 +27,7 @@ let mockStatus = 'online'
 let mockPlugin: Record<string, unknown> | null = null
 const mockClient = {
   server: { checkPepSupport: mockCheckPepSupport },
-  e2ee: { getPlugin: (name: string) => (name === 'openpgp' ? mockPlugin : null) },
+  e2ee: { getDiagnosticLogger: () => ({ info: vi.fn() }), getAccountJid: () => 'me@example.com', getPlugin: (name: string) => (name === 'openpgp' ? mockPlugin : null) },
 }
 
 vi.mock('@fluux/sdk', async (importOriginal) => {
@@ -821,4 +822,60 @@ describe('EncryptionSettings PEP support', () => {
       expect(hardcoded).toEqual([])
     })
   })
+})
+
+// FLM-343 guided selection: dismissal at startup must leave a persistent
+// recovery entry outside the ready-key gate, without another automatic offer.
+describe('macOS guided recovery entry', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    mockStatus = 'online'
+    usePlatform('desktop', 'macos')
+    mockCheckPepSupport.mockResolvedValue(true)
+    mockPlugin = { getOwnFingerprint: () => null, isKeyRecoveryNeeded: () => true, isKeyStorageUnavailable: () => true }
+    useEncryptionSettingsStore.setState({ openpgpEnabled: true, pluginRegisteredAt: 0, registrationError: null })
+  })
+  it('routes an unlock failure discovered while enabling encryption through guided recovery too', async () => {
+    useEncryptionSettingsStore.setState({ openpgpEnabled: false })
+    render(<EncryptionSettings />)
+    fireEvent.click(toggleButton())
+    expect(await screen.findByText('settings.encryption.recoveryFailedBody')).toBeInTheDocument()
+    expect(screen.queryByText('settings.encryption.identityChoice.replaceTitle')).not.toBeInTheDocument()
+  })
+  it('shows recovery status and an explicit usable entry before the key is ready, without opening another dialog', async () => {
+    render(<EncryptionSettings />)
+    expect(await screen.findByText('settings.encryption.statusRecoveryNeeded')).toBeInTheDocument()
+    expect(screen.queryByText('settings.encryption.recoveryFailedBody')).not.toBeInTheDocument()
+    const entry = screen.getByRole('button', { name: 'settings.encryption.recoveryTitle' })
+    expect(entry).toBeEnabled()
+    fireEvent.click(entry)
+    expect(await screen.findByText('settings.encryption.recoveryFailedBody')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }))
+    expect(screen.queryByText('settings.encryption.recoveryFailedBody')).not.toBeInTheDocument()
+    expect(entry).toBeEnabled()
+  })
+  it('FLM-365 F1 keeps the desync Settings prompt and Replace identity under StrictMode effect replay', async () => {
+    mockPlugin!.isKeyStorageUnavailable = () => false
+    render(<StrictMode><EncryptionSettings /></StrictMode>)
+    expect(await screen.findByRole('button', { name: /settings.encryption.identityChoice.replaceTitle/ })).toBeEnabled()
+    expect(screen.queryByText('settings.encryption.recoveryFailedBody')).not.toBeInTheDocument()
+  })
+  it('FLM-365 F1 keeps the desync toggle decision on macOS', async () => {
+    mockPlugin!.isKeyStorageUnavailable = () => false
+    useEncryptionSettingsStore.setState({ openpgpEnabled: false })
+    render(<EncryptionSettings />)
+    fireEvent.click(toggleButton())
+    expect(await screen.findByRole('button', { name: /settings.encryption.identityChoice.replaceTitle/ })).toBeEnabled()
+    expect(screen.queryByText('settings.encryption.recoveryFailedBody')).not.toBeInTheDocument()
+  })
+  it('FLM-365 F3 does not route a macOS browser through the desktop-only toggle branch', async () => {
+    usePlatform('web', 'macos')
+    useEncryptionSettingsStore.setState({ openpgpEnabled: false })
+    render(<EncryptionSettings />)
+    fireEvent.click(toggleButton())
+    expect(await screen.findByRole('button', { name: /settings.encryption.identityChoice.replaceTitle/ })).toBeEnabled()
+    expect(screen.queryByText('settings.encryption.recoveryFailedBody')).not.toBeInTheDocument()
+  })
+
 })

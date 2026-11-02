@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Loader2, Server, FileUp, RotateCcw } from 'lucide-react'
+import { backupRecoveryError } from './backupRecoveryError'
+import { BackupRecoveryFailure } from './BackupRecoveryFailure'
 import { ModalOverlay } from './ModalOverlay'
 import type { BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
 
@@ -82,7 +84,7 @@ export function IdentityChoiceDialog({
 
   const [phase, setPhase] = useState<Phase>('choose')
   const [passphrase, setPassphrase] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
   // Fetching and unlocking the backup takes seconds (Argon2id); a second
   // restore must not start while one is running.
   const [isRestoring, setIsRestoring] = useState(false)
@@ -126,7 +128,7 @@ export function IdentityChoiceDialog({
       await onRestoreFromServer(passphrase)
       // Parent unmounts the dialog on success — no need to reset state.
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(err)
       // Stay in `restoring` so the user can retry with a different passphrase.
       setIsRestoring(false)
     }
@@ -137,8 +139,10 @@ export function IdentityChoiceDialog({
     setError(null)
     try {
       await onImportFromFile()
+      // A cancelled platform picker leaves the dialog mounted and usable.
+      setPhase('choose')
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(err)
       setPhase('choose')
     }
   }, [onImportFromFile])
@@ -154,12 +158,12 @@ export function IdentityChoiceDialog({
     try {
       await onReplaceIdentity()
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(err)
       setPhase('confirm-replace')
     }
   }, [onReplaceIdentity])
 
-  const isBusy = phase === 'importing' || phase === 'replacing'
+  const isBusy = isRestoring || phase === 'importing' || phase === 'replacing'
 
   return (
     <ModalOverlay
@@ -258,11 +262,7 @@ export function IdentityChoiceDialog({
             </div>
           )}
 
-          {error && (
-            <p className="text-xs text-fluux-error mb-3 break-words">
-              {error}
-            </p>
-          )}
+          <BackupRecoveryFailure failure={error ? backupRecoveryError(error, t) : null} />
         </div>
 
         {phase === 'choose' && (

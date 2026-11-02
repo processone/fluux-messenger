@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
+import { BackupRecoveryFailure } from './BackupRecoveryFailure'
+import { backupRecoveryError } from './backupRecoveryError'
 import { ModalOverlay } from './ModalOverlay'
 
 const BACKUP_CODE_ALPHABET = '123456789ABCDEFGHIJKLMNPQRSTUVWXYZ'
@@ -97,7 +99,7 @@ export function RestorePassphraseDialog({
 
   const [passphrase, setPassphrase] = useState('')
   const [isRestoring, setIsRestoring] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
   const [showPassphrase, setShowPassphrase] = useState(false)
 
   useEffect(() => {
@@ -154,7 +156,7 @@ export function RestorePassphraseDialog({
     try {
       // Import passphrases are often pasted/transcribed codes — trim stray
       // whitespace so the verbatim raw-key path doesn't fail on it.
-      await onConfirm(isImport ? passphrase.trim() : passphrase)
+      await onConfirm(mode === 'import' ? passphrase.trim() : passphrase)
       // Parent is expected to close the dialog on success; we stay
       // mounted and spinner-disabled so a successful-but-slow path
       // doesn't let the user mash the button.
@@ -163,10 +165,10 @@ export function RestorePassphraseDialog({
       // wrong passphrase; we don't try to parse that specifically —
       // whatever the message, the UX is the same: show it, let the
       // user edit the field and retry.
-      setError(err instanceof Error ? err.message : String(err))
+      setError(err)
       setIsRestoring(false)
     }
-  }, [onConfirm, passphrase, isImport])
+  }, [onConfirm, passphrase, mode])
 
   return (
     <ModalOverlay
@@ -261,11 +263,7 @@ export function RestorePassphraseDialog({
             </div>
           )}
 
-          {error && (
-            <p className="text-xs text-fluux-error mb-3 break-words">
-              {error}
-            </p>
-          )}
+          <BackupRecoveryFailure failure={error ? backupRecoveryError(error, t) : null} />
         </div>
 
         <div className="px-5 pb-5 pt-3 flex gap-2 justify-end">

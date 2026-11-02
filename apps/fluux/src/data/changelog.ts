@@ -20,6 +20,7 @@ export const changelog: ChangelogEntry[] = [
       {
         type: 'added',
         items: [
+          'On macOS, restore an encryption backup after the local key cannot be unlocked, or from Encryption settings. Preview and confirm the account and key before saving to fresh protected storage without retrying old items',
           'iOS: room push notifications now name the sender from muc_nick',
           'iOS: drag down on a conversation to lower the keyboard',
           'iOS: Fluux lays out around the iPhone Duo hinge',

@@ -8,6 +8,6 @@ import { E2EEPluginError } from '@fluux/sdk'
 export function isSecretKeyUnavailableError(err: unknown): boolean {
   return (
     err instanceof E2EEPluginError &&
-    (err.code === 'key-unrecoverable' || err.code === 'key-locked')
+    (err.code === 'key-unrecoverable' || err.code === 'key-storage-unavailable' || err.code === 'key-locked')
   )
 }
