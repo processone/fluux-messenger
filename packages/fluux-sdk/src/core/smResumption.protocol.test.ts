@@ -44,6 +44,8 @@ class ControlledServer {
   archive: Array<{ id: string; body: string }> = []
   /** Occupants the server has admitted, per room, for the current process. */
   rooms = new Set<string>()
+  /** What each SASL 2 <authenticate/> carried and how the server answered it. */
+  inlineAuths: Array<{ resumePrevid?: string; bindEnable: boolean; answered: 'resumed' | 'failed' | 'enabled' | 'bound'; session?: string }> = []
   private nextId = 1
   private lastSm = ''
   private inbound = 0
@@ -86,7 +88,9 @@ class ControlledServer {
         const enable = el.getChild('bind', BIND2)?.getChild('enable', SM)
         const who = '<authorization-identifier>alice@example.com/web</authorization-identifier>'
         if (resume) {
-          if (this.resumable && resume.attrs.previd === this.lastSm) {
+          const ok = this.resumable && resume.attrs.previd === this.lastSm
+          this.inlineAuths.push({ resumePrevid: String(resume.attrs.previd), bindEnable: false, answered: ok ? 'resumed' : 'failed', session: this.lastSm })
+          if (ok) {
             send(`<success xmlns="${SASL2}">${who}<resumed xmlns="${SM}" previd="${this.lastSm}" h="${this.inbound}"/></success>`)
           } else {
             send(`<success xmlns="${SASL2}">${who}<failed xmlns="${SM}"/></success>`)
@@ -94,8 +98,10 @@ class ControlledServer {
         } else if (enable) {
           this.lastSm = `sm-${this.nextId++}`
           this.inbound = 0
+          this.inlineAuths.push({ bindEnable: true, answered: 'enabled', session: this.lastSm })
           send(`<success xmlns="${SASL2}">${who}<bound xmlns="${BIND2}">${ready(`id="${this.lastSm}" resume="true"`)}</bound></success>`)
         } else {
+          this.inlineAuths.push({ bindEnable: false, answered: 'bound' })
           send(`<success xmlns="${SASL2}">${who}<bound xmlns="${BIND2}"/></success>`)
         }
       } else if (el.name === 'enable') {
@@ -204,6 +210,17 @@ describe('stream management resumption against a controlled XMPP server', { time
     expect(client.getStreamManagementState()).toMatchObject({ windowMs: 600_000 })
   })
 
+  it('keeps a 300-second grant below the request, for the 10-minute and the 24-hour request', async () => {
+    server.grant = '300'
+    await login(600)
+    expect(client.getStreamManagementState()).toMatchObject({ windowMs: 300_000 })
+    await client.disconnect()
+    server.seen.length = 0
+    await login(86_400)
+    expect(server.last('enable')!.attrs.max).toBe('86400')
+    expect(client.getStreamManagementState()).toMatchObject({ windowMs: 300_000 })
+  })
+
   it('falls back to ten minutes when the server omits max, even for a 24-hour request', async () => {
     server.grant = undefined
     await login(86_400)
@@ -245,8 +262,17 @@ describe('stream management resumption against a controlled XMPP server', { time
     expect(server.count('enable')).toBe(0) // enabled inside <bind/>, not as a stream element
     expect(client.getStreamManagementState()).toMatchObject({ windowMs: 86_400_000 })
 
+    const first = server.inlineAuths[0]
+    expect(first).toMatchObject({ bindEnable: true, answered: 'enabled' })
+
     server.drop()
     await until(() => server.count('authenticate') === 2)
+    await until(() => client.getStreamManagementState() !== null)
+    // The second authenticate resumed the first session inline: it named that session, the server
+    // answered <resumed/>, no new session was enabled, and the client still holds the same id.
+    expect(server.inlineAuths).toHaveLength(2)
+    expect(server.inlineAuths[1]).toEqual({ resumePrevid: first.session, bindEnable: false, answered: 'resumed', session: first.session })
+    expect(client.getStreamManagementState()).toMatchObject({ id: first.session, windowMs: 86_400_000 })
     expect(server.count('enable')).toBe(0)
     expect(server.count('bind')).toBe(0) // resumed: no second <bind/> was sent
   })
@@ -258,6 +284,17 @@ describe('stream management resumption against a controlled XMPP server', { time
     server.grant = '600'
     server.archive = [{ id: 'm1', body: 'hello' }, { id: 'm2', body: 'again' }]
     client = new XMPPClient({ debug: false, streamManagementMaxSeconds: 600, storageAdapter: memoryStorage() })
+    // Every archived message the client hands to the room store, by identity: the catch-up
+    // reaches the store through the preview path and through history pages.
+    const delivered: string[] = []
+    const store = roomStore.getState()
+    const previewUpdate = store.updateLastMessagePreview
+    roomStore.setState({
+      updateLastMessagePreview: (jid, message) => { if (jid === room) delivered.push(message.stanzaId ?? message.id); return previewUpdate(jid, message) },
+    })
+    client.subscribe('room:history-messages', ({ roomJid, messages }) => {
+      if (roomJid === room) delivered.push(...messages.map(m => m.stanzaId ?? m.id))
+    })
     await client.connect({
       jid: 'alice@example.com', password: 'secret', server: `ws://localhost:${server.port}`,
       skipDiscovery: true, resource: 'web',
@@ -269,6 +306,8 @@ describe('stream management resumption against a controlled XMPP server', { time
     const mamQueries = () => server.seen.filter(x => x.name === 'iq' && x.ns === 'urn:xmpp:mam:2').length
     const mamBefore = mamQueries()
     expect(joins()).toBe(1)
+    await sleep(500)
+    delivered.length = 0 // count only what the new session delivers
 
     await server.restart()
     await until(() => server.count('enable') === 2)
@@ -278,6 +317,10 @@ describe('stream management resumption against a controlled XMPP server', { time
     expect(server.count('resume')).toBe(1) // the client tried its old session; the restarted server no longer knows it
     expect(joins()).toBe(2) // one join per server process: the room was rejoined exactly once
     expect(roomStore.getState().rooms.get(room)?.lastMessage?.id).toBe('m2') // caught up from the archive
+    expect(delivered.length).toBeGreaterThan(0)
+    expect(new Set(delivered).size).toBe(delivered.length) // no archived message reached the store twice
+    expect(delivered.every(id => id === 'm1' || id === 'm2')).toBe(true) // only archived identities, none undefined
+    roomStore.setState({ updateLastMessagePreview: previewUpdate })
     const settled = mamQueries()
     await sleep(1500)
     expect(mamQueries()).toBe(settled) // and nothing queried the archive again
