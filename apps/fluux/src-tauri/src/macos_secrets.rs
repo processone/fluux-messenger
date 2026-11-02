@@ -425,12 +425,13 @@ impl<S: Backend> SecretStore for Secrets<S> {
         Ok(())
     }
     fn retry_denied_access(&self) -> Result<(), String> {
-        let mut cache = self
-            .cache
-            .lock()
-            .map_err(|_| "macOS secrets lock poisoned".to_string())?;
-        if matches!(cache.as_ref(), Some(Err(error)) if error.user_denial()) {
-            *cache = None;
+        for cache in [&self.cache, &self.fresh_cache] {
+            let mut cache = cache
+                .lock()
+                .map_err(|_| "macOS secrets lock poisoned".to_string())?;
+            if matches!(cache.as_ref(), Some(Err(error)) if error.user_denial()) {
+                *cache = None;
+            }
         }
         Ok(())
     }
@@ -1296,6 +1297,7 @@ mod tests {
         snapshots: Mutex<Vec<BTreeMap<String, String>>>,
         deletes: Mutex<Vec<String>>,
         read_error: Mutex<Option<(StoreError, usize)>>,
+        fresh_read_error: Mutex<Option<(StoreError, usize)>>,
         fail_write: Mutex<bool>,
         fail_delete: Mutex<bool>,
         corrupt_write: Mutex<bool>,
@@ -1372,8 +1374,13 @@ mod tests {
             if account != FRESH_ACCOUNT {
                 self.reads.lock().unwrap().push(account.into());
             }
-            if account == ACCOUNT {
-                if let Some((error, remaining)) = self.read_error.lock().unwrap().as_mut() {
+            if is_bundle(account) {
+                let failures = if account == FRESH_ACCOUNT {
+                    &self.fresh_read_error
+                } else {
+                    &self.read_error
+                };
+                if let Some((error, remaining)) = failures.lock().unwrap().as_mut() {
                     if *remaining > 0 {
                         *remaining -= 1;
                         return Err(error.clone());
@@ -2227,5 +2234,54 @@ mod tests {
                 Some("recovered-passphrase")
             );
         }
+    }
+
+    #[test]
+    fn explicit_erase_retries_a_refused_fresh_item() {
+        let account = "openpgp_passphrase:alice@example.com";
+        let raw = legacy();
+        raw.fresh.lock().unwrap().push(account.into());
+        let mut bundle = Bundle::default();
+        bundle
+            .items
+            .insert(account.into(), "protection-secret".into());
+        raw.set(FRESH_ACCOUNT, &serde_json::to_string(&bundle).unwrap())
+            .unwrap();
+        *raw.fresh_read_error.lock().unwrap() = Some((StoreError::denied(), 1));
+        let store = Secrets::new(raw);
+        assert!(store.get(account).is_err());
+        store.retry_denied_access().unwrap();
+        store.delete(account).unwrap();
+        let restarted = Secrets::new(store.store);
+        assert!(restarted.get(account).unwrap().is_none());
+    }
+
+    #[test]
+    fn explicit_retry_preserves_an_invalid_fresh_item() {
+        let account = "openpgp_passphrase:alice@example.com";
+        let raw = FakeStore::default();
+        raw.fresh.lock().unwrap().push(account.into());
+        raw.set(FRESH_ACCOUNT, "invalid bundle").unwrap();
+        let store = Secrets::new(raw);
+        let failure = store.get(account).unwrap_err();
+        let repaired = serde_json::to_string(&Bundle::default()).unwrap();
+        store
+            .store
+            .items
+            .lock()
+            .unwrap()
+            .insert(FRESH_ACCOUNT.into(), repaired.clone());
+        store.retry_denied_access().unwrap();
+        assert_eq!(store.get(account).unwrap_err(), failure);
+        assert_eq!(
+            store
+                .store
+                .items
+                .lock()
+                .unwrap()
+                .get(FRESH_ACCOUNT)
+                .unwrap(),
+            &repaired
+        );
     }
 }

@@ -300,8 +300,9 @@ typed backend error, is cached as a failure for the launch. Deterministic combin
 (invalid UTF-8, malformed JSON/schema or an unsupported version) are also cached, without overwriting
 the item or repeating its access approval. Transient errors retry on the next call. Normal reads,
 saves and keep-data logout require a restart after denial. Explicit full wipe (`force: true`, including
-`--clear-storage`) and OpenPGP forget clear only the cached startup denial and retry once, allowing a
-new authorization. A second denial remains cached and is returned rather than retried in a loop.
+`--clear-storage`) and OpenPGP forget clear cached denials in both the migrated `secrets-v1`
+and restored-account `secrets-fresh-v1` caches, allowing one new authorization per item.
+A second denial remains cached and is returned rather than retried in a loop.
 This explicit retry does not clear a deterministic decode/version failure; restart after repairing
 the item or opening it with a compatible version.
 
@@ -348,6 +349,16 @@ full wipes, `--clear-storage`, and other platforms retain their previous 2.5-sec
 The session is cleared before waiting, so the UI can leave ChatLayout. Only macOS OpenPGP forget uses
 the two-minute key-material deadline; forget on other platforms retains its routine deadline.
 Actual authorization dialogs have not been exercised.
+
+On native startup, either the encrypted key file or its `.pre-restore` sibling counts as a
+persisted identity. If a restore stopped after replacing the key file but before promoting its
+staged secret, loading can put back that sibling. Recovery requires the current file to be missing,
+unparseable or unable to unlock, and the sibling's encrypted secret material to decrypt with the
+currently stored passphrase. A loadable current key always wins; permission and other I/O errors
+on the current file stop loading without replacing it. Failed recovery retains the files; successful
+recovery atomically writes the previous key back and attempts to remove the sibling. The focused
+`restore_recovery_*` and `interrupted_second_restore_recovers_on_restart` storage tests cover this
+contract.
 
 When a key file exists but the combined passphrase is missing or fails real decryption, OpenPGP
 requests the same-named old item on demand. A completed read or denial is cached per account for the
