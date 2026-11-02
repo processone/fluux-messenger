@@ -1144,7 +1144,7 @@ export function useMessageListScroll({
   const releaseInteractionHold = useStableCallback((resume: boolean) => {
     // Compositor movement may precede its scroll callback and pointer departure. Consume it before
     // saved following can replace the interaction's stricter native-reading policy.
-    observeNativeGeometry(conversationId)
+    if (positioningControllerRef.current?.hasInteractionHold()) observeNativeGeometry(conversationId)
     positioningControllerRef.current?.releaseInteractionHold({
       conversationId, resume, liveEdge: createLiveEdgeExecutor('interaction-release'),
     })
