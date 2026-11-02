@@ -274,11 +274,15 @@ certificates, denied sessions/services, duplicate/missing/network-only devices
 and oversized metadata lengths. It exercises startup/no-data/write deadlines,
 idle lifetime expiry, an unresponsive worker, budget exhaustion/concurrent charges,
 fixed errors, silent success/failure and hostile inherited logging variables.
-Reader-through-opener journeys additionally exercise a frozen sample/removal, a
-late sample reply arriving during cleanup, disconnect, private inspector error
-and an in-exchange SIGINT. Frozen and late-reply journeys preserve `time-limit`
-and send both removal and page-close commands. Disconnect retains the unchanged
-`protocol-boundary` category (W3); interrupted partial exchanges retain selected
+The positive Reader-through-opener journey stops at a complete persisted sample,
+not an arbitrary deadline that could legitimately cut an inbound sample frame.
+Adverse journeys separately exercise a frozen sample/removal, a late sample reply
+arriving during cleanup, a partial sample frame at the deadline, disconnect,
+private inspector error and an in-exchange SIGINT. Deadline journeys preserve
+`time-limit` and send both removal and page-close commands. A cut inbound sample
+keeps cleanup unconfirmed; a complete late sample permits removal acknowledgment.
+Disconnect retains the unchanged `protocol-boundary` category (W3); interrupted
+partial exchanges retain selected
 fail-closed/unconfirmed behavior (W2), not a removal guarantee. A separately owned
 caller group receives SIGINT while its isolated worker survives and exchanges
 bytes. TLS and plaintext backpressure peers prove complete byte-identical writes

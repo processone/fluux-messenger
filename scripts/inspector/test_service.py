@@ -68,9 +68,26 @@ def read_plist(sock):
     return plistlib.loads(exact(sock, n))
 
 
-def send_plist(sock, value):
+def plist_packet(value):
     body = plistlib.dumps(value, fmt=plistlib.FMT_BINARY)
-    sock.sendall(struct.pack('>I', len(body)) + body)
+    return struct.pack('>I', len(body)) + body
+
+
+def send_plist(sock, value):
+    sock.sendall(plist_packet(value))
+
+
+class StopAfterSample:
+    """End a positive journey only after an actual sanitized record is persisted."""
+    def __init__(self, file, stop):
+        self.file, self.stop = file, stop
+
+    def flush(self):
+        self.file.flush()
+        self.stop.set()
+
+    def __getattr__(self, name):
+        return getattr(self.file, name)
 
 
 class FragmentedTLS:
@@ -341,6 +358,12 @@ class DevicePeer:
                         return
                     if self.mode in ('inspector-frozen', 'inspector-interrupt'):
                         continue
+                    if self.mode == 'inspector-partial-sample':
+                        packet = plist_packet({'__selector': '_rpc_applicationSentData:', '__argument': {
+                            'WIRApplicationIdentifierKey': 'PID:321', 'WIRDestinationKey': sender,
+                            'WIRMessageDataKey': json.dumps(message)}})
+                        conn.sendall(packet[:6])  # Prefix and a partial body, then silence.
+                        continue
                     if self.mode == 'inspector-delayed':
                         def late_response(response=response):
                             try:
@@ -360,7 +383,7 @@ class DevicePeer:
                             'WIRDestinationKey': sender, 'WIRMessageDataKey': json.dumps(message)})
                         continue
                 if exp == REMOVE:
-                    if self.mode in ('inspector-frozen', 'inspector-interrupt'):
+                    if self.mode in ('inspector-frozen', 'inspector-interrupt', 'inspector-partial-sample'):
                         continue
                     if self.mode == 'inspector-delayed':
                         assert self.sample_reply.wait(1)
@@ -453,24 +476,32 @@ class ServiceProof(unittest.TestCase):
             budget = Budget()
             stream = self.open(peer, budget)
             reader = Reader(stream, budget)
-            result = reader.run(output, duration=.6)
-            self.assertEqual(result['reason'], 'time-limit')
-            self.assertEqual(result['cleanup'], 'confirmed')
-            self.assertGreater(result['samples'], 0)
+            # FLM-369 W4: a deadline may cut an in-flight sample frame, where
+            # unconfirmed cleanup is correct. The positive confirmation journey
+            # instead stops after a complete persisted sample; deadline cuts have
+            # their own adverse cases below, not a longer timing guess here.
+            stop = threading.Event()
+            result = reader.run(StopAfterSample(output, stop), stop=stop, duration=2)
             output.seek(0)
             saved = output.read()
             self.assertNotIn(PRIVATE.encode(), saved)
-            self.assertEqual(json.loads(saved.splitlines()[0])['mountedRows'], SAMPLES[0]['mountedRows'])
+            records = [json.loads(line) for line in saved.splitlines()]
+            PROOF.append({'scenario': 'reader-stream', 'reader': result, 'persistedRecords': records,
+                          'readDesynchronized': reader.read_desynchronized,
+                          'expressions': peer.expressions, 'selectors': peer.requests,
+                          'workerReaped': stream._process.poll() is not None})
+            self.assertEqual(result['reason'], 'stopped')
+            self.assertEqual(result['cleanup'], 'confirmed')
+            self.assertEqual(result['samples'], 1)
+            self.assertEqual(records[0]['mountedRows'], SAMPLES[0]['mountedRows'])
             self.assertIsNotNone(stream._process.poll())
             peer.wait_closed()
             self.assertIn('_rpc_forwardDidClose:', peer.requests)
-            PROOF.append({'scenario': 'reader-stream', 'result': 'pass', 'reader': result,
-                          'sampleMatchesDisposableWebKit': True, 'workerReaped': True})
 
     def test_reader_deadline_cleanup(self):
         # FLM-369 E1/W4: exercise the final shrinking timeout through the real
         # opener, not only the healthy peer or the reader's socket-only fixture.
-        for mode in ('inspector-frozen', 'inspector-delayed'):
+        for mode in ('inspector-frozen', 'inspector-delayed', 'inspector-partial-sample'):
             with self.subTest(mode=mode), DevicePeer(mode) as peer, tempfile.TemporaryFile('w+b', dir=WORKER.parent) as output:
                 budget = Budget()
                 stream = self.open(peer, budget)
@@ -481,9 +512,11 @@ class ServiceProof(unittest.TestCase):
                 PROOF.append({'scenario': 'native-edge-journeys', 'case': mode, 'reader': result,
                               'expressions': peer.expressions, 'selectors': peer.requests,
                               'lateSampleDelivered': peer.late_reply_sent,
+                              'readDesynchronized': reader.read_desynchronized,
                               'workerReaped': stream._process.poll() is not None})
                 self.assertEqual(result['reason'], 'time-limit')
-                self.assertEqual(result['cleanup'], 'unconfirmed' if mode == 'inspector-frozen' else 'confirmed')
+                self.assertEqual(result['cleanup'], 'confirmed' if mode == 'inspector-delayed' else 'unconfirmed')
+                self.assertEqual(reader.read_desynchronized, mode == 'inspector-partial-sample')
                 peer.wait_closed()
                 self.assertIn('remove', peer.expressions)
                 self.assertIn('_rpc_forwardDidClose:', peer.requests)
