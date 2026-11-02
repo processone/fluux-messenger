@@ -21,7 +21,8 @@
 //! keychain is unreachable). The in-memory map here is a cache — the
 //! first [`OpenpgpState::ensure_key`] call per account after a restart
 //! loads from disk. [`openpgp_forget_account`] removes both the cached
-//! entry and the on-disk material.
+//! entry and the on-disk material. Each account's unlock, import, rotation
+//! and forget run one at a time, in the order they were requested.
 
 use anyhow::{anyhow, Context, Result};
 use sequoia_openpgp as openpgp;
@@ -29,9 +30,10 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::Write as _;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::State;
-use tokio::sync::OnceCell as AsyncOnceCell;
+use tokio::sync::{Mutex as AsyncMutex, OnceCell as AsyncOnceCell, OwnedMutexGuard};
 
 use crate::openpgp_storage::{KeyStorage, PassphraseBacking};
 
@@ -174,9 +176,23 @@ mod notification_subkeys;
 ///
 /// Every account has an [`AsyncOnceCell<UnlockOutcome>`]: the first
 /// `ensure_key` or `prewarm` caller for a given JID runs the unlock; any
-/// concurrent caller awaits the same cell instead of racing to a second
-/// KDF run. On error the cell is evicted so a subsequent attempt starts
-/// fresh (e.g. after the user fixes a vanished `.pass` fallback file).
+/// concurrent caller waits its turn and reuses that cell's outcome instead
+/// of running a second KDF. A failure reaches the callers already waiting
+/// too, unless a forget, import or rotation took a turn after they asked.
+/// On error the cell is evicted so a subsequent attempt starts fresh (e.g.
+/// after the user fixes a vanished `.pass` fallback file).
+///
+/// # Per-account lifecycle order
+///
+/// Unlock ([`Self::ensure_key`]), backup import, subkey rotation and forget
+/// each hold the account's lifecycle lock while they load, save or delete its
+/// key file, passphrase and cached cell. The lock is granted in request order
+/// and waiting for it yields the command thread. Each operation's blocking
+/// work holds it too, so a caller that stops waiting does not release it
+/// early. A forget still waiting on a keychain prompt after its frontend
+/// deadline therefore finishes before a later `ensure_key` reads the
+/// passphrase: the replacement key never saves under the passphrase forget
+/// is deleting.
 ///
 /// [`AsyncOnceCell`]: tokio::sync::OnceCell
 pub struct OpenpgpState {
@@ -185,6 +201,8 @@ pub struct OpenpgpState {
     /// should join; absent = no attempt started yet. Cells carrying `Err`
     /// are evicted after observation so the next caller retries.
     entries: Mutex<HashMap<String, Arc<AsyncOnceCell<UnlockOutcome>>>>,
+    /// Per-JID lifecycle turn; see the type's lifecycle order section.
+    lifecycle: AsyncMutex<HashMap<String, Arc<AccountTurn>>>,
     storage: Arc<KeyStorage>,
     /// Test-only instrumentation: how many times the blocking KDF path
     /// actually ran. Concurrent `ensure_key` calls must coalesce to one
@@ -197,6 +215,16 @@ pub struct OpenpgpState {
 /// multiple awaiters can each take a copy without another KDF round.
 type UnlockOutcome = Result<KeyBundle, String>;
 
+/// One account's place in line for lifecycle work.
+#[derive(Default)]
+struct AccountTurn {
+    /// Granted in request order; waiting for it yields.
+    lock: Arc<AsyncMutex<()>>,
+    /// Turns taken by forget, import and rotation, which replace the key or
+    /// its cached cell. A waiting unlock compares it before sharing a failure.
+    changes: AtomicU64,
+}
+
 impl OpenpgpState {
     /// Production constructor — persists keys under
     /// `<base_dir>/openpgp/` and prefers the OS keychain for the
@@ -204,6 +232,7 @@ impl OpenpgpState {
     pub fn new(base_dir: PathBuf) -> Self {
         Self {
             entries: Mutex::new(HashMap::new()),
+            lifecycle: AsyncMutex::default(),
             storage: Arc::new(KeyStorage::new(base_dir)),
             #[cfg(test)]
             blocking_runs: std::sync::atomic::AtomicUsize::new(0),
@@ -217,6 +246,7 @@ impl OpenpgpState {
     pub fn for_testing(base_dir: PathBuf) -> Self {
         Self {
             entries: Mutex::new(HashMap::new()),
+            lifecycle: AsyncMutex::default(),
             storage: Arc::new(KeyStorage::for_testing(base_dir)),
             blocking_runs: std::sync::atomic::AtomicUsize::new(0),
         }
@@ -226,6 +256,7 @@ impl OpenpgpState {
     pub fn for_testing_with_storage(storage: KeyStorage) -> Self {
         Self {
             entries: Mutex::new(HashMap::new()),
+            lifecycle: AsyncMutex::default(),
             storage: Arc::new(storage),
             blocking_runs: std::sync::atomic::AtomicUsize::new(0),
         }
@@ -243,11 +274,27 @@ impl OpenpgpState {
         account_jid: String,
         user_id: String,
     ) -> Result<KeyBundle, String> {
+        let account = self.account_turn(&account_jid).await;
+        // The attempt this call joins, and the changes made before it asked.
+        let changes = account.changes.load(Ordering::SeqCst);
+        let joined = self.cell_for(&account_jid);
+        // Held through the cell, the unlock and an error eviction. The blocking
+        // worker keeps its own share, so a caller that stops waiting cannot
+        // release the turn while the unlock still loads or saves.
+        let turn = Arc::new(Arc::clone(&account.lock).lock_owned().await);
+        // A caller that waited on a failed unlock shares its error instead of
+        // repeating the KDF, unless a forget, import or rotation ran since.
+        if account.changes.load(Ordering::SeqCst) == changes {
+            if let Some(Err(error)) = joined.get() {
+                return Err(error.clone());
+            }
+        }
         let cell = self.cell_for(&account_jid);
 
         let storage = Arc::clone(&self.storage);
         let jid_for_task = account_jid.clone();
         let user_id_for_task = user_id;
+        let worker_turn = Arc::clone(&turn);
         #[cfg(test)]
         let counter = &self.blocking_runs;
 
@@ -256,6 +303,7 @@ impl OpenpgpState {
                 #[cfg(test)]
                 counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 tauri::async_runtime::spawn_blocking(move || {
+                    let _turn = worker_turn;
                     Self::run_blocking(&storage, &jid_for_task, &user_id_for_task)
                 })
                 .await
@@ -274,6 +322,7 @@ impl OpenpgpState {
             // stable for the identity's lifetime).
             self.entries.lock().unwrap().remove(&account_jid);
         }
+        drop(turn);
 
         outcome
     }
@@ -381,12 +430,15 @@ impl OpenpgpState {
 
     /// Forget the account: drop the cell AND remove every on-disk trace
     /// (encrypted TSK, fallback passphrase file, keychain entry). Safe
-    /// to call for an unknown account. All locks, file I/O and authorization
-    /// run on the blocking pool, never on the command's event-loop thread.
+    /// to call for an unknown account. Waiting for the account's lifecycle
+    /// lock yields; the state lock, file I/O and authorization run on the
+    /// blocking pool, never on the command's event-loop thread.
     pub async fn forget_account(self: &Arc<Self>, account_jid: &str) -> Result<(), String> {
+        let lifecycle = self.change_turn(account_jid).await;
         let state = Arc::clone(self);
         let account_jid = account_jid.to_owned();
         tauri::async_runtime::spawn_blocking(move || {
+            let _lifecycle = lifecycle;
             state.entries.lock().unwrap().remove(&account_jid);
             state.storage.forget(&account_jid).map_err(anyhow_to_string)
         })
@@ -435,8 +487,10 @@ impl OpenpgpState {
         passphrase: String,
         without_migration: bool,
     ) -> Result<KeyBundle, String> {
+        let lifecycle = self.change_turn(&account_jid).await;
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
+            let _lifecycle = lifecycle;
             let tsk_armored =
                 crate::openpgp_backup::decrypt_tsk_with_passphrase(&backup_message, &passphrase)
                     .map_err(anyhow_to_string)?;
@@ -452,9 +506,8 @@ impl OpenpgpState {
             let bundle = bundle_from_cert(&cert, backing).map_err(anyhow_to_string)?;
 
             // Replace any existing cell so the next ensure_key observes
-            // the imported bundle. This method is user-initiated and runs
-            // exclusively after an explicit "restore from backup" choice,
-            // so we don't need to coordinate with concurrent unlockers.
+            // the imported bundle. The lifecycle lock keeps unlocks and
+            // forget for this account out until the cell is replaced.
             let mut entries = this.entries.lock().unwrap();
             let cell = Arc::new(AsyncOnceCell::new());
             let _ = cell.set(Ok(bundle.clone()));
@@ -515,8 +568,10 @@ impl OpenpgpState {
         selected_fingerprint: String,
         without_migration: bool,
     ) -> Result<KeyBundle, String> {
+        let lifecycle = self.change_turn(&account_jid).await;
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
+            let _lifecycle = lifecycle;
             let tsks = crate::openpgp_backup::decrypt_all_tsks_with_passphrase(
                 &backup_message,
                 &passphrase,
@@ -574,9 +629,11 @@ impl OpenpgpState {
         self: &Arc<Self>,
         account_jid: String,
     ) -> Result<KeyBundle, String> {
+        let lifecycle = self.change_turn(&account_jid).await;
         let bundle = self.read_cached_bundle(&account_jid, "account")?;
         let this = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
+            let _lifecycle = lifecycle;
             let current = Cert::from_bytes(bundle.secret_armored.as_bytes())
                 .map_err(|e| format!("parse current cert for rotation: {e}"))?;
             let rotated = rotate_encryption_subkey(current).map_err(anyhow_to_string)?;
@@ -588,9 +645,8 @@ impl OpenpgpState {
 
             // Replace the cached cell so subsequent encrypt / decrypt
             // / backup calls observe the rotated material immediately.
-            // Rotation is a user-initiated action, so it runs exclusively
-            // with respect to other key lifecycle ops on this account —
-            // no coordination with concurrent unlockers needed.
+            // The lifecycle lock keeps unlocks and forget for this
+            // account out until the cell is replaced.
             let mut entries = this.entries.lock().unwrap();
             let cell = Arc::new(AsyncOnceCell::new());
             let _ = cell.set(Ok(new_bundle.clone()));
@@ -612,6 +668,26 @@ impl OpenpgpState {
     }
 
     // ---- internals ----------------------------------------------------
+
+    /// This account's place in line, created on first use.
+    async fn account_turn(&self, account_jid: &str) -> Arc<AccountTurn> {
+        Arc::clone(
+            self.lifecycle
+                .lock()
+                .await
+                .entry(account_jid.to_owned())
+                .or_default(),
+        )
+    }
+
+    /// Wait, in request order, for this account's earlier lifecycle work, and
+    /// record a turn that replaces the key or its cached cell.
+    async fn change_turn(&self, account_jid: &str) -> OwnedMutexGuard<()> {
+        let account = self.account_turn(account_jid).await;
+        let turn = Arc::clone(&account.lock).lock_owned().await;
+        account.changes.fetch_add(1, Ordering::SeqCst);
+        turn
+    }
 
     /// Get-or-insert the per-JID cell. The returned `Arc` is cheap to
     /// hold across an await because the inner `AsyncOnceCell` does its
@@ -690,6 +766,15 @@ impl OpenpgpState {
     pub fn blocking_run_count(&self) -> usize {
         self.blocking_runs
             .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Test helper — whether lifecycle work holds `account_jid`'s turn.
+    #[cfg(test)]
+    fn turn_is_taken(&self, account_jid: &str) -> bool {
+        let accounts = self.lifecycle.try_lock().expect("the turn map is free");
+        accounts
+            .get(account_jid)
+            .is_some_and(|account| account.lock.try_lock().is_err())
     }
 
     /// Test helper — synchronous wrapper around the async `ensure_key`.
@@ -2254,6 +2339,220 @@ mod tests {
             regenerated.fingerprint, alice.fingerprint,
             "forget must wipe the on-disk file so the next ensure_key generates fresh"
         );
+    }
+
+    /// Stand-in for the macOS keychain. Its first `pause` call ("get", "set"
+    /// or "delete") waits for the test's answer, as a pending authorization
+    /// prompt does; with `fail` that call then fails as an unreadable keychain.
+    struct PausingStore {
+        items: Mutex<HashMap<String, String>>,
+        pause: &'static str,
+        fail: bool,
+        prompt: Mutex<Option<(std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>,
+    }
+
+    impl PausingStore {
+        /// The store, the signal that its paused call started, and its answer.
+        fn new(
+            pause: &'static str,
+            fail: bool,
+        ) -> (
+            Arc<Self>,
+            std::sync::mpsc::Receiver<()>,
+            std::sync::mpsc::Sender<()>,
+        ) {
+            let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+            let (answer_tx, answer_rx) = std::sync::mpsc::channel();
+            let store = Arc::new(Self {
+                items: Mutex::default(),
+                pause,
+                fail,
+                prompt: Mutex::new(Some((entered_tx, answer_rx))),
+            });
+            (store, entered_rx, answer_tx)
+        }
+
+        /// Wait for the answer if this is the paused call; true when it was.
+        fn paused(&self, operation: &str) -> bool {
+            if operation != self.pause {
+                return false;
+            }
+            let Some((entered, answered)) = self.prompt.lock().unwrap().take() else {
+                return false;
+            };
+            let _ = entered.send(());
+            // A bounded failure guard, not a sleep or a retry.
+            let _ = answered.recv_timeout(std::time::Duration::from_secs(10));
+            true
+        }
+
+        fn is_empty(&self) -> bool {
+            self.items.lock().unwrap().is_empty()
+        }
+    }
+
+    impl crate::credentials::SecretStore for PausingStore {
+        fn get(&self, account: &str) -> Result<Option<String>, String> {
+            if self.paused("get") && self.fail {
+                return Err("keychain unavailable".into());
+            }
+            Ok(self.items.lock().unwrap().get(account).cloned())
+        }
+        fn set(&self, account: &str, secret: &str) -> Result<(), String> {
+            self.paused("set");
+            self.items
+                .lock()
+                .unwrap()
+                .insert(account.into(), secret.into());
+            Ok(())
+        }
+        fn delete(&self, account: &str) -> Result<(), String> {
+            self.paused("delete");
+            self.items.lock().unwrap().remove(account);
+            Ok(())
+        }
+    }
+
+    /// A state over `dir` whose passphrases live in `store`.
+    fn state_with_store(dir: &std::path::Path, store: &Arc<PausingStore>) -> Arc<OpenpgpState> {
+        Arc::new(OpenpgpState::for_testing_with_storage(
+            KeyStorage::for_testing_with_store(dir.to_path_buf(), store.clone()),
+        ))
+    }
+
+    /// Save a key for `jid` under `dir`; only a fallback file holds its passphrase.
+    async fn seed_key(dir: &std::path::Path, jid: &str) -> KeyBundle {
+        Arc::new(OpenpgpState::for_testing(dir.to_path_buf()))
+            .ensure_key(jid.into(), "Alice".into())
+            .await
+            .unwrap()
+    }
+
+    // FLM-93 N1: replacing an identity calls ensure_key once forget's frontend
+    // deadline passes, even while forget still waits on a keychain prompt. The
+    // new key must not be saved under the passphrase forget is deleting.
+    #[tokio::test(flavor = "current_thread")]
+    async fn forget_holds_off_a_following_ensure_key_until_it_ends() {
+        let (store, entered, answer) = PausingStore::new("delete", false);
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        let state = state_with_store(&dir, &store);
+        let retired = state.ensure_key(jid.into(), "Alice".into()).await.unwrap();
+
+        let mut forget = Box::pin(state.forget_account(jid));
+        assert!(futures_util::poll!(forget.as_mut()).is_pending());
+        entered
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("forget reaches the keychain delete");
+        let mut replacement = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
+        assert!(futures_util::poll!(replacement.as_mut()).is_pending());
+        assert_eq!(
+            state.blocking_run_count(),
+            1,
+            "ensure_key must not load or save while forget is still deleting"
+        );
+
+        answer.send(()).unwrap();
+        forget.await.unwrap();
+        let replacement = replacement.await.unwrap();
+        assert_ne!(replacement.fingerprint, retired.fingerprint);
+        // Restart: the replacement key still unlocks from disk and the store.
+        let reloaded = state_with_store(&dir, &store)
+            .ensure_key(jid.into(), "Alice".into())
+            .await
+            .expect("the replacement key stays unlockable");
+        assert_eq!(reloaded.fingerprint, replacement.fingerprint);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // FLM-339 F1: an unlock whose caller stops waiting keeps the account's turn
+    // until its blocking save ends, so a following forget cannot run under it
+    // and leave the abandoned save's key and passphrase behind.
+    #[tokio::test(flavor = "current_thread")]
+    async fn an_abandoned_unlock_keeps_forget_out_until_its_save_ends() {
+        let (store, entered, answer) = PausingStore::new("set", false);
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        let state = state_with_store(&dir, &store);
+
+        let mut unlock = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
+        assert!(futures_util::poll!(unlock.as_mut()).is_pending());
+        entered
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the unlock reaches the passphrase save");
+        drop(unlock);
+        assert!(
+            state.turn_is_taken(jid),
+            "the abandoned unlock's save must still hold the account's turn"
+        );
+
+        let forget = state.forget_account(jid);
+        answer.send(()).unwrap();
+        forget.await.unwrap();
+        // Forget ran after the save, so nothing of that key is left behind.
+        assert!(!state.storage.has_persisted_key(jid));
+        assert!(store.is_empty(), "forget must remove the saved passphrase");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // FLM-339 F2: callers already waiting on an unlock share its failure
+    // instead of each repeating the KDF and recovery once it fails.
+    #[tokio::test(flavor = "current_thread")]
+    async fn callers_waiting_on_a_failed_unlock_share_its_error() {
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        seed_key(&dir, jid).await;
+        let (store, entered, answer) = PausingStore::new("get", true);
+        let state = state_with_store(&dir, &store);
+
+        let mut first = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
+        assert!(futures_util::poll!(first.as_mut()).is_pending());
+        entered
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the unlock reaches the keychain read");
+        let mut waiting = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
+        assert!(futures_util::poll!(waiting.as_mut()).is_pending());
+
+        answer.send(()).unwrap();
+        let first = first.await.expect_err("the keychain read fails");
+        let waiting = waiting.await.expect_err("the waiting caller fails too");
+        assert_eq!(waiting, first);
+        assert_eq!(
+            state.blocking_run_count(),
+            1,
+            "a caller waiting on the failed unlock must not repeat it"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // FLM-339 F2 with FLM-93 N1: a caller queued behind a forget does not share
+    // a failure from before that forget; it gets a new key.
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_caller_queued_behind_forget_does_not_share_an_earlier_failure() {
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        let retired = seed_key(&dir, jid).await;
+        let (store, entered, answer) = PausingStore::new("get", true);
+        let state = state_with_store(&dir, &store);
+
+        let mut first = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
+        assert!(futures_util::poll!(first.as_mut()).is_pending());
+        entered
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the unlock reaches the keychain read");
+        let mut forget = Box::pin(state.forget_account(jid));
+        assert!(futures_util::poll!(forget.as_mut()).is_pending());
+        let mut replacement = Box::pin(state.ensure_key(jid.into(), "Alice".into()));
+        assert!(futures_util::poll!(replacement.as_mut()).is_pending());
+
+        answer.send(()).unwrap();
+        first.await.expect_err("the keychain read fails");
+        forget.await.unwrap();
+        let replacement = replacement
+            .await
+            .expect("the caller queued behind forget gets a new key");
+        assert_ne!(replacement.fingerprint, retired.fingerprint);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

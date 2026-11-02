@@ -53,9 +53,10 @@
 //!
 //! ## Concurrency
 //!
-//! Callers are expected to hold their own lock (`OpenpgpState` takes a
-//! Mutex per-account map). The storage layer itself does only file I/O
-//! and keychain round-trips. macOS shares a process-wide secrets cache.
+//! Callers are expected to hold their own lock: `OpenpgpState` runs each
+//! account's load, save and forget under that account's lifecycle lock, in
+//! request order. The storage layer itself does only file I/O and keychain
+//! round-trips. macOS shares a process-wide secrets cache.
 
 use anyhow::{anyhow, Context, Result};
 #[cfg(not(any(target_os = "ios", target_os = "macos")))]
@@ -522,6 +523,7 @@ impl KeyStorage {
             if let Some(store) = self.secret_store() {
                 return remove_keychain_passphrase(store, jid);
             }
+            #[cfg(not(target_os = "macos"))]
             delete_keychain_entry(jid)?;
         }
         Ok(())
@@ -561,7 +563,15 @@ impl KeyStorage {
         if let Some(store) = self.secret_store() {
             return read_keychain_passphrase_from(store, jid);
         }
-        read_keychain_passphrase(jid)
+        // macOS reaches its keychain only through the shared store above.
+        #[cfg(not(target_os = "macos"))]
+        {
+            read_keychain_passphrase(jid)
+        }
+        #[cfg(target_os = "macos")]
+        {
+            Err(anyhow!("the macOS keychain store is not in use"))
+        }
     }
 
     /// Read the per-account passphrase. Tries the keychain first; falls
@@ -622,10 +632,14 @@ impl KeyStorage {
     fn write_passphrase(&self, jid: &str, passphrase: &[u8]) -> Result<PassphraseBacking> {
         if self.use_keychain {
             #[cfg(any(target_os = "macos", test))]
-            let written = self.secret_store().map_or_else(
-                || write_keychain_passphrase(jid, passphrase),
-                |store| store_keychain_passphrase(store, jid, passphrase),
-            );
+            let written = match self.secret_store() {
+                Some(store) => store_keychain_passphrase(store, jid, passphrase),
+                #[cfg(not(target_os = "macos"))]
+                None => write_keychain_passphrase(jid, passphrase),
+                // macOS reaches its keychain only through the shared store.
+                #[cfg(target_os = "macos")]
+                None => Err(anyhow!("the macOS keychain store is not in use")),
+            };
             #[cfg(not(any(target_os = "macos", test)))]
             let written = write_keychain_passphrase(jid, passphrase);
             match written {
@@ -851,22 +865,6 @@ fn read_legacy_passphrase_from(
                 .context("legacy keychain passphrase is not valid base64")
         })
         .transpose()
-}
-
-// macOS shares the same cached item as remembered credentials and MCP.
-#[cfg(target_os = "macos")]
-fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
-    read_keychain_passphrase_from(crate::macos_secrets::secrets(), jid)
-}
-
-#[cfg(target_os = "macos")]
-fn write_keychain_passphrase(jid: &str, passphrase: &[u8]) -> Result<()> {
-    store_keychain_passphrase(crate::macos_secrets::secrets(), jid, passphrase)
-}
-
-#[cfg(target_os = "macos")]
-fn delete_keychain_entry(jid: &str) -> Result<()> {
-    remove_keychain_passphrase(crate::macos_secrets::secrets(), jid)
 }
 
 // iOS has no `keyring` backend with the accessibility a background

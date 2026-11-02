@@ -327,8 +327,10 @@ path below is an explicit exception. New-version saves and token resets update t
 Explicit logout removes the
 matching JID and `last_user` from the combined item, the old layout, and their migration backups;
 OpenPGP forget does the same for its passphrase. Forget runs its locks, disk work and keychain
-authorization on the blocking pool, so the command does not freeze the window. Unrelated accounts
-remain intact. Current bundled secrets are erased before attempting old-item cleanup, so an old-item authorization failure cannot
+authorization on the blocking pool, so the command does not freeze the window. Each account's unlock,
+backup import, subkey rotation and forget take turns, in request order: an unlock requested after a
+forget's deadline passes waits until forget ends, so a replacement key is never saved under the
+passphrase forget is deleting. Unrelated accounts remain intact. Current bundled secrets are erased before attempting old-item cleanup, so an old-item authorization failure cannot
 leave the current password/passphrase in the bundle. Cleanup errors reach the caller and Rust log,
 and the matching old item plus its backups are all attempted. macOS continues to clear `last_user`
 when credential erasure succeeded but old-copy cleanup failed, then reports the cleanup error; iOS
