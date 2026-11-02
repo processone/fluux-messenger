@@ -46,8 +46,9 @@ def read_exact(sock, count):
 
 
 class Peer:
-    def __init__(self, sock, mode, stop):
+    def __init__(self, sock, mode, stop, *, app_list_delay=0):
         self.sock, self.mode, self.stop = sock, mode, stop
+        self.app_list_delay = app_list_delay
         self.requests, self.expressions, self.times = [], [], []
         self.errors = []
         self.closed = False
@@ -61,6 +62,10 @@ class Peer:
         self.write_failed = False
 
     def send(self, selector, arg):
+        if selector == "_rpc_reportConnectedApplicationList:" and self.app_list_delay:
+            # FLM-366/368: an adverse input condition, not a stabilization wait.
+            # Cleanup assertions must not assume this reply arrives within 150ms.
+            self.stop.wait(self.app_list_delay)
         data = frame(selector, arg)
         if self.mode == "xml":
             body = plistlib.dumps({"__selector": selector, "__argument": arg})
@@ -236,13 +241,14 @@ class Peer:
 class ReaderTests(unittest.TestCase):
     # Positive lifecycle checks use the actual API budget, not a shorter fixture
     # deadline that can legitimately leave responsive XML cleanup unconfirmed.
-    def exercise(self, mode, *, duration=.65, budget=None,
+    def exercise(self, mode, *, duration=.65, budget=None, app_list_delay=0,
+                 expire_on_sample=False,
                  cleanup=signature(Reader.run).parameters["cleanup_timeout"].default):
         client, server = socket.socketpair()
         if mode == "blocked-send":
             client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024)
         stop = threading.Event()
-        peer = Peer(server, mode, stop)
+        peer = Peer(server, mode, stop, app_list_delay=app_list_delay)
         thread = threading.Thread(target=peer.run)
         thread.start()
         class ControlledSocket:
@@ -258,6 +264,9 @@ class ReaderTests(unittest.TestCase):
                 self.request_times = []
                 self.outbound = bytearray()
                 self.sent_selectors = []
+                self.expired_after_install = False
+                self.cleanup_started = None
+                self.closed_at = None
 
             def write(self, data):
                 sent = client.send(data)
@@ -299,8 +308,11 @@ class ReaderTests(unittest.TestCase):
                     expression = None
                 if expression == SAMPLE:
                     self.request_times.append(time.monotonic())
-                if expression == REMOVE and getattr(reader, "read_desynchronized", False):
-                    self.inbound_budget_at_cleanup = reader.budget.input
+                if expression == REMOVE:
+                    if self.cleanup_started is None:
+                        self.cleanup_started = time.monotonic()
+                    if getattr(reader, "read_desynchronized", False):
+                        self.inbound_budget_at_cleanup = reader.budget.input
                 if mode == "send-cutoff" and expression == SAMPLER:
                     sent = self.write(data[:8])
                     self.cut = True
@@ -310,7 +322,14 @@ class ReaderTests(unittest.TestCase):
                         and ((mode == "interrupt-sample" and expression == SAMPLE)
                              or (mode in ("interrupt-cleanup", "interrupt-target-cleanup") and expression == REMOVE))):
                     self.interrupt_pending = True
-                return self.write(data)
+                sent = self.write(data)
+                if expire_on_sample and expression == SAMPLE:
+                    # The first sample is requested only after installation's true
+                    # acknowledgment. Expire collection here, not during discovery.
+                    # duration is still an outer guard if setup never progresses.
+                    self.expired_after_install = True
+                    reader.deadline = time.monotonic()
+                return sent
 
             def shutdown(self, how):
                 if mode == "interrupt-shutdown":
@@ -318,6 +337,7 @@ class ReaderTests(unittest.TestCase):
                 return client.shutdown(how)
 
             def close(self):
+                self.closed_at = time.monotonic()
                 client.close()
                 if mode == "interrupt-close":
                     signal.raise_signal(signal.SIGINT)
@@ -369,7 +389,11 @@ class ReaderTests(unittest.TestCase):
                       "readsAfterInboundCut": controlled.reads_after_inbound_cut,
                       "inputReservedAtInboundCleanup": controlled.inbound_budget_at_cleanup,
                       "writesAfterCutoff": controlled.writes_after_cut,
-                      "interruptPropagatedAfterClose": interrupt_propagated})
+                      "interruptPropagatedAfterClose": interrupt_propagated,
+                      "applicationListDelaySeconds": app_list_delay,
+                      "collectionExpiredAfterInstall": controlled.expired_after_install,
+                      "cleanupElapsedSeconds": (round(controlled.closed_at - controlled.cleanup_started, 4)
+                                                if controlled.cleanup_started is not None else None)})
         return result, peer, persisted
 
     def test_normal_filtered_sampling_and_detach(self):
@@ -415,14 +439,26 @@ class ReaderTests(unittest.TestCase):
                 self.assertEqual(persisted, b"")
 
     def test_real_time_hung_partial_and_frozen_cleanup(self):
-        for mode in ("silent", "partial", "no-fluux", "frozen"):
+        for mode in ("silent", "partial", "no-fluux"):
             with self.subTest(mode=mode):
-                result, peer, _ = self.exercise(mode, duration=.15, cleanup=.15)
+                result, peer, _ = self.exercise(mode, duration=.15, cleanup=.15,
+                                               expire_on_sample=True)
                 self.assertEqual(result["reason"], "time-limit")
-                self.assertEqual(result["cleanup"], "unconfirmed" if mode == "frozen" else "not-installed")
-                if mode == "frozen":
-                    # F1/S4: unanswered removal must leave time to write close.
-                    self.assertIn("_rpc_forwardDidClose:", PROOF[-1]["outboundSelectors"])
+                self.assertEqual(result["cleanup"], "not-installed")
+                self.assertFalse(PROOF[-1]["collectionExpiredAfterInstall"])
+        # FLM-366/368: frozen cleanup needs an installed sampler, not a fast
+        # discovery reply. The same post-install deadline fires in both cases.
+        for delay in (0, .2):
+            with self.subTest(mode="frozen", app_list_delay=delay):
+                result, peer, _ = self.exercise("frozen", duration=2, cleanup=.15,
+                                               app_list_delay=delay, expire_on_sample=True)
+                self.assertEqual(result["reason"], "time-limit")
+                self.assertEqual(result["cleanup"], "unconfirmed")
+                self.assertTrue(PROOF[-1]["collectionExpiredAfterInstall"])
+                self.assertIn("install", peer.expressions)
+                self.assertIn("remove", peer.expressions)
+                # F1/S4: unanswered removal must leave time to write close.
+                self.assertIn("_rpc_forwardDidClose:", PROOF[-1]["outboundSelectors"])
 
     def test_preexisting_sampler_is_not_removed(self):
         result, peer, persisted = self.exercise("preexisting")
@@ -432,11 +468,20 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(persisted, b"")
 
     def test_cleanup_deadline_is_capped(self):
-        result, peer, _ = self.exercise("frozen", duration=.15, cleanup=5)
-        self.assertEqual(result["reason"], "time-limit")
-        self.assertEqual(result["cleanup"], "unconfirmed")
-        self.assertIn("_rpc_forwardDidClose:", PROOF[-1]["outboundSelectors"])
-        self.assertLess(result["elapsedSeconds"], 1.1)
+        # FLM-366/368: measure removal-to-close, excluding variable startup time.
+        cap = signature(Reader.run).parameters["cleanup_timeout"].default
+        for delay in (0, .2):
+            with self.subTest(app_list_delay=delay):
+                result, peer, _ = self.exercise("frozen", duration=2, cleanup=5,
+                                               app_list_delay=delay, expire_on_sample=True)
+                self.assertEqual(result["reason"], "time-limit")
+                self.assertEqual(result["cleanup"], "unconfirmed")
+                proof = PROOF[-1]
+                self.assertTrue(proof["collectionExpiredAfterInstall"])
+                self.assertIn("install", peer.expressions)
+                self.assertIn("remove", peer.expressions)
+                self.assertIn("_rpc_forwardDidClose:", proof["outboundSelectors"])
+                self.assertLess(proof["cleanupElapsedSeconds"], cap + .35)
 
     def test_unsafe_output_rejected_before_discovery(self):
         for mode in ("public-file", "nonempty-file"):
@@ -488,14 +533,20 @@ class ReaderTests(unittest.TestCase):
 
     def test_keyboard_interrupt_propagates_after_cleanup(self):
         # F5 plus captain-approved R2: cleanup SIGINT preserves the first reason.
-        for mode in ("interrupt-sample", "interrupt-cleanup", "interrupt-shutdown", "interrupt-close", "interrupt-target-cleanup"):
-            with self.subTest(mode=mode):
-                result, peer, _ = self.exercise(mode, duration=.15)
-                expected = "stopped" if mode == "interrupt-sample" else "target-destroyed" if mode == "interrupt-target-cleanup" else "time-limit"
-                self.assertEqual(result["reason"], expected)
-                self.assertEqual(result["cleanup"], "unconfirmed" if mode in ("interrupt-cleanup", "interrupt-target-cleanup") else "confirmed")
-                self.assertTrue(PROOF[-1]["interruptPropagatedAfterClose"])
-                self.assertIn("_rpc_forwardDidClose:", PROOF[-1]["outboundSelectors"])
+        # FLM-366/368: these sibling cases also require installation before SIGINT.
+        for delay in (0, .2):
+            for mode in ("interrupt-sample", "interrupt-cleanup", "interrupt-shutdown", "interrupt-close", "interrupt-target-cleanup"):
+                with self.subTest(mode=mode, app_list_delay=delay):
+                    expire = mode in ("interrupt-cleanup", "interrupt-shutdown", "interrupt-close")
+                    result, peer, _ = self.exercise(mode, duration=2, app_list_delay=delay,
+                                                   expire_on_sample=expire)
+                    expected = "stopped" if mode == "interrupt-sample" else "target-destroyed" if mode == "interrupt-target-cleanup" else "time-limit"
+                    self.assertEqual(result["reason"], expected)
+                    self.assertEqual(result["cleanup"], "unconfirmed" if mode in ("interrupt-cleanup", "interrupt-target-cleanup") else "confirmed")
+                    self.assertIn("install", peer.expressions)
+                    self.assertEqual(PROOF[-1]["collectionExpiredAfterInstall"], expire)
+                    self.assertTrue(PROOF[-1]["interruptPropagatedAfterClose"])
+                    self.assertIn("_rpc_forwardDidClose:", PROOF[-1]["outboundSelectors"])
 
     def test_close_write_evidence_survives_peer_response_failure(self):
         # S4: a queued complete write is not the same fact as peer observation.

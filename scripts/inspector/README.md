@@ -51,9 +51,16 @@ host reader's framing, requests, filtering, accounting and bounded socket closur
 not Apple's real transport, an installed app's inspectability, frozen iPhone
 cleanup, native rendering or a recurrence of the blank page. The separate browser
 check proves sampler removal on disposable WebKit, not on a frozen phone.
-Positive peer checks use the reader API's production cleanup budget; explicit
-frozen/time-limit checks also exercise shortened budgets. Proof records complete
-outbound frames accepted by the socket separately from peer-received selectors.
+Positive peer checks use the reader API's production cleanup budget. Pre-install
+silent/partial/no-Fluux cases exercise short real collection deadlines. Frozen
+cleanup and cleanup-interrupt fixtures instead expire collection at the first
+sample request, which proves installation was acknowledged; a separate outer
+setup guard still fails missing progress. Immediate and 200 ms application-list
+replies exercise the same post-install cleanup path. The cap assertion measures
+removal-to-close separately from startup and keeps the existing cleanup cap.
+This phase control is a fixture stand-in, not a change to the reader's production
+startup deadline. Proof records complete outbound frames accepted by the socket
+separately from peer-received selectors.
 A failed peer response writer can miss a queued close frame; a sent frame alone
 is not evidence that the peer processed it.
 
