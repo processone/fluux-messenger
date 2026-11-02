@@ -492,7 +492,7 @@ class ServiceProof(unittest.TestCase):
                 self.assertIsNotNone(stream._process.poll())
 
     def test_reader_disconnect_and_private_error(self):
-        # FLM-369 W4. W3's disconnect category is explicitly still pending.
+        # FLM-369 W4. W3's disconnect category is intentionally unchanged.
         for mode in ('inspector-disconnect', 'inspector-error'):
             with self.subTest(mode=mode), DevicePeer(mode) as peer, tempfile.TemporaryFile('w+b', dir=WORKER.parent) as output:
                 budget = Budget()
@@ -509,7 +509,7 @@ class ServiceProof(unittest.TestCase):
                     self.assertIn('_rpc_forwardDidClose:', peer.requests)
                 PROOF.append({'scenario': 'native-edge-journeys', 'case': mode, 'reader': result,
                               'expressions': peer.expressions, 'selectors': peer.requests,
-                              'pendingPolicy': 'W3' if mode == 'inspector-disconnect' else None, 'workerReaped': True})
+                              'unchangedPolicy': 'W3' if mode == 'inspector-disconnect' else None, 'workerReaped': True})
 
     def test_reader_in_exchange_interrupt(self):
         # FLM-369 W4 and captain-selected W2: a half-finished exchange still

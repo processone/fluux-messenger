@@ -16,6 +16,9 @@ import time
 START_CREDIT = 256 * 1024
 CREDIT = 64 * 1024
 BLOCK = 64 * 1024
+# E1: leave bounded local IPC margin after the native service wait. In particular,
+# a Reader's final 1ms no-data read must not destroy the stream before cleanup.
+CONTROL_GRACE = .025
 HEADER = struct.Struct('>cII')
 REQUEST = struct.Struct('>cIII')
 
@@ -49,9 +52,9 @@ class ServiceStream:
     def _read_exact(self, n):
         data = bytearray()
         while len(data) < n:
-            remaining = min(self._timeout, self._deadline - time.monotonic())
-            # _operation_end bounds the whole exchange, not each partial read.
-            remaining = min(remaining, self._operation_end - time.monotonic())
+            # One absolute control deadline includes the fixed IPC grace;
+            # partial reads never reset it or spend another caller timeout.
+            remaining = self._operation_end - time.monotonic()
             if remaining <= 0:
                 raise ServiceError('service-deadline')
             self._control.settimeout(remaining)
@@ -83,16 +86,17 @@ class ServiceStream:
         try:
             if self.closed:
                 raise ServiceError('service-closed')
-            self._operation_end = min(self._deadline, time.monotonic() + self._timeout)
+            service_end = min(self._deadline, time.monotonic() + self._timeout)
+            self._operation_end = service_end + CONTROL_GRACE
             credit = max(0, CREDIT - (self._paid - self._used))
             # Native bytes and decoded Reader bytes are conservatively both charged.
             self._budget.charge(credit)
             self._paid += credit
-            remaining = self._operation_end - time.monotonic()
+            remaining = service_end - time.monotonic()
             if remaining <= 0:
                 raise ServiceError('service-deadline')
-            self._control.settimeout(remaining)
-            self._control.sendall(REQUEST.pack(kind, n, max(1, int(self._timeout * 1000)), credit) + data)
+            self._control.settimeout(self._operation_end - time.monotonic())
+            self._control.sendall(REQUEST.pack(kind, n, max(1, int(remaining * 1000)), credit) + data)
             return self._response(reading=kind == b'R', maximum=n)
         except BaseException as error:
             self.close()
@@ -190,13 +194,14 @@ def open_service(worker, device_id, budget, *, startup_timeout=5, lifetime=120.5
     stream = None
     try:
         process = subprocess.Popen([worker, str(child.fileno())], pass_fds=(child.fileno(),),
+                                   start_new_session=True,
                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL, cwd=Path(worker).parent,
                                    env={'OPENSSL_CONF': '/dev/null'})
         child.close()
         stream = ServiceStream(parent, process, budget, deadline)
         stream._timeout = min(startup_timeout, lifetime)
-        stream._operation_end = time.monotonic() + stream._timeout
+        stream._operation_end = min(deadline, time.monotonic() + stream._timeout)
         parent.settimeout(stream._timeout)
         identity = device_id.encode()
         remaining = max(1, math.ceil((deadline - time.monotonic()) * 1000))

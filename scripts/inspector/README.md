@@ -242,17 +242,27 @@ file-based certificate/private-key loading required by Python's default TLS API.
   cannot spend the opener's reserved credit. Native received bytes never exceed
   the paid amount, and total native input/output each have a separate five-MiB cap.
   Outbound commands are bounded but are not retained collected evidence.
-- One control request/returned chunk is at most 64 KiB. Operations use the caller's
-  positive timeout, at most one second; the deadline bounds the whole exchange,
-  not each fragment. A completed no-data read raises `socket.timeout`; nonblocking
-  OpenSSL retains partial TLS records safely. An incomplete local exchange aborts
-  the worker with a fixed error rather than retrying possibly consumed/sent bytes.
+- One control request/returned chunk is at most 64 KiB. Native service waits use
+  the caller's positive timeout, at most one second. The local control exchange
+  adds one fixed 25 ms reply margin, so the reader's final 1 ms poll can return
+  no-data without destroying its cleanup channel. The whole exchange has one
+  absolute deadline; fragments do not reset it. Native no-data polling has no
+  1 ms minimum wait. A completed no-data read raises `socket.timeout` and keeps
+  partial TLS records safely inside OpenSSL. Native writes wait for readiness
+  within their service deadline and retry the same pending bytes, including
+  OpenSSL's WANT_WRITE/WANT_READ, rather than closing at transient backpressure.
+  An incomplete or interrupted local exchange still aborts the worker with a
+  fixed error instead of replaying possibly consumed/sent bytes.
 - The worker's independent wall timer ends idle or orphaned work, even if the
   Python caller stops reading. Lifetime is at most 121 seconds (default 120.5),
   including startup/cleanup; FLM-350 supplies its original remaining deadline.
   `close` closes the private channel, gives graceful teardown 100 ms, then kills
-  and reaps a stalled worker. Host kernel/process scheduling is not a real-time
-  guarantee; an unresponsive kernel is outside this boundary.
+  and reaps a stalled worker. The worker starts in a separate session/process
+  group, so Ctrl-C sent to the caller's group does not kill it independently.
+  As selected for W2, an interrupted half-finished exchange still fails closed;
+  that path cannot promise sampler removal and reports unconfirmed cleanup.
+  Host kernel/process scheduling is not a real-time guarantee; an unresponsive
+  kernel is outside this boundary.
 
 ### What disposable proof does and does not establish
 
@@ -264,6 +274,15 @@ certificates, denied sessions/services, duplicate/missing/network-only devices
 and oversized metadata lengths. It exercises startup/no-data/write deadlines,
 idle lifetime expiry, an unresponsive worker, budget exhaustion/concurrent charges,
 fixed errors, silent success/failure and hostile inherited logging variables.
+Reader-through-opener journeys additionally exercise a frozen sample/removal, a
+late sample reply arriving during cleanup, disconnect, private inspector error
+and an in-exchange SIGINT. Frozen and late-reply journeys preserve `time-limit`
+and send both removal and page-close commands. Disconnect retains the unchanged
+`protocol-boundary` category (W3); interrupted partial exchanges retain selected
+fail-closed/unconfirmed behavior (W2), not a removal guarantee. A separately owned
+caller group receives SIGINT while its isolated worker survives and exchanges
+bytes. TLS and plaintext backpressure peers prove complete byte-identical writes
+that span a controlled peer read pause, as well as bounded permanent-stall closure.
 All workers, peer threads, sockets, fixture files and browsers are closed/removed.
 
 These are live **host** executions against a disposable usbmuxd/lockdown/inspector

@@ -19,6 +19,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 
 #define CAP (5U * 1024U * 1024U)
@@ -90,6 +91,38 @@ static int transfer(struct channel *c, void *data, uint32_t n, int writing) {
                        : (writing ? raw_write(c, p, (int)n) : raw_read(c, p, (int)n));
         if (k <= 0) return 0;
         p += k; n -= (uint32_t)k;
+    }
+    return 1;
+}
+static int64_t monotonic_ns(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC,&now)!=0) return -1;
+    return (int64_t)now.tv_sec*1000000000LL+now.tv_nsec;
+}
+static int write_service(struct channel *c, char *data, uint32_t n, uint32_t ms) {
+    int64_t now=monotonic_ns();
+    if (now<0) return 0;
+    int64_t deadline=now+(int64_t)ms*1000000;
+    while (n) {
+        now=monotonic_ns();
+        if (now<0 || now>=deadline) return 0;
+        int k=c->tls ? SSL_write(c->tls,data,(int)n) : raw_write(c,data,(int)n);
+        if (k>0) { data+=k; n-=(uint32_t)k; continue; }
+        short ready_for=POLLOUT;
+        if (c->tls) {
+            int error=SSL_get_error(c->tls,k);
+            if (error==SSL_ERROR_WANT_READ) ready_for=POLLIN;
+            else if (error!=SSL_ERROR_WANT_WRITE) return 0;
+        } else if (k>=0 || (errno!=EAGAIN && errno!=EWOULDBLOCK)) return 0;
+        now=monotonic_ns();
+        if (now<0 || now>=deadline) return 0;
+        struct pollfd ready={c->fd,ready_for,0};
+        int wait_ms=(int)((deadline-now+999999)/1000000);
+        int available=poll(&ready,1,wait_ms);
+        if (available<0 && errno==EINTR) continue;
+        if (available<=0 || !(ready.revents & ready_for)) return 0;
+        /* WANT_WRITE/WANT_READ must retry the same SSL_write buffer/length.
+         * Advance only on a positive result; plain partial sends work likewise. */
     }
     return 1;
 }
@@ -302,7 +335,7 @@ int main(int argc, char **argv) {
         if (!n || n>BLOCK || !ms || ms>1000 || credit>CAP-a.input-a.credit) break;
         a.credit+=credit;
         if (h[0]=='W') {
-            if (!exact(control,data,n,0) || !transfer(&service,data,n,1)) break;
+            if (!exact(control,data,n,0) || !write_service(&service,data,n,ms)) break;
             if (!reply('O',n,&a,NULL)) break;
         } else if (h[0]=='R') {
             /* Nonblocking TLS keeps partial records inside SSL across no-data
@@ -312,7 +345,8 @@ int main(int argc, char **argv) {
                                  : (k<0 && (errno==EAGAIN || errno==EWOULDBLOCK));
             if (retry) {
                 struct pollfd ready={service.fd,POLLIN,0};
-                int available=poll(&ready,1,(int)(ms>1 ? ms/2 : 1));
+                /* E1: no 1ms wait floor competing with a 1ms caller budget. */
+                int available=poll(&ready,1,(int)(ms/2));
                 if (available<0) break;
                 if (!reply('T',0,&a,NULL)) break;
                 continue;
