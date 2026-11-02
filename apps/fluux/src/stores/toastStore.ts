@@ -2,14 +2,13 @@ import { create } from 'zustand'
 
 export type ToastType = 'success' | 'error' | 'info'
 
-/** A room message banner: the room picture, then the sender, then the room and message. */
-export interface RoomBanner {
+/** Room summaries name the room; individual message banners name their sender. */
+export type RoomBanner = {
   roomJid: string
   roomName: string
   avatarUrl?: string
-  sender: string
   body: string
-}
+} & ({ kind: 'message'; sender: string } | { kind: 'summary' })
 
 export interface Toast {
   id: string

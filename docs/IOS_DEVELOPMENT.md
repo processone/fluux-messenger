@@ -650,7 +650,10 @@ concurrent notification must not reuse that path. The
 `notificationAttachmentsConsumed` capability expresses this ownership rule;
 desktop file caching is unchanged.
 In-app room toasts use the room picture (or the shared # fallback), with the sender
-first and the room name and message below; generic status toasts are unchanged.
+first and the room name and message below. Browser combined-count summaries name
+the room above the count instead of attributing several messages to the latest
+sender; they keep the picture, separate dismiss control and navigation.
+Generic status toasts are unchanged.
 Local room content adds no OS sound: `useSoundNotification` remains the owner of
 local message audio and its enabled/disabled preference.
 

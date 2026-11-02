@@ -211,6 +211,36 @@ describe('useDesktopNotifications posting + guard', () => {
       expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
     })
 
+    // Captain's FLM-370 F2 choice: combined browser counts belong to the room,
+    // while an individual preview still names its sender, including on native iOS.
+    it.each([
+      { shell: 'web' as const, os: 'macos' as const, count: 3, summary: true },
+      { shell: 'web' as const, os: 'ios' as const, count: 3, summary: true },
+      { shell: 'web' as const, os: 'macos' as const, count: 1, summary: false },
+      { shell: 'web' as const, os: 'ios' as const, count: 1, summary: false },
+      { shell: 'mobile' as const, os: 'ios' as const, count: 3, summary: false },
+    ])('attributes $shell/$os count=$count to the room only for a summary', async ({ shell, os, count, summary }) => {
+      restorePlatform()
+      restorePlatform = setPlatformForTesting({ shell, os })
+      if (shell === 'web') delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+      isMobileTauri.mockResolvedValue(shell === 'mobile')
+      renderHook(() => useDesktopNotifications())
+      await handlers.onRoomMessage?.(
+        { jid: 'team@conf.example.com', name: 'Team', nickname: 'Receiver', unreadCount: count, notifyAll: true },
+        { id: 'summary-room-message', nick: 'Emma', body: 'Room message', from: 'team@conf.example.com/Emma' },
+      )
+      render(<ToastContainer />)
+      const toast = screen.getByRole('button', { name: summary ? /3 new messages/ : /Emma/ })
+      expect(toast.querySelector('.font-semibold')?.textContent).toBe(summary ? 'Team' : 'Emma')
+      expect(toast.textContent).toBe(summary ? 'Team3 new messages' : 'EmmaTeam: body text')
+      expect(toast.querySelector('.lucide-hash')).not.toBeNull()
+      expect(useToastStore.getState().toasts[0].message).toBe(summary ? 'Team: 3 new messages' : 'Emma @ Team: body text')
+      useToastStore.getState().toasts[0].onClick?.()
+      expect(navigateToRoom).toHaveBeenCalledWith('team@conf.example.com', 'summary-room-message')
+      expect(showWebNotification).not.toHaveBeenCalled()
+      expect(invoke).not.toHaveBeenCalledWith('plugin:push|post_local_notification', expect.anything())
+    })
+
     it('opens the conversation at the message when tapped', async () => {
       renderHook(() => useDesktopNotifications())
       await arrive('alice@example.com', 'Alice')

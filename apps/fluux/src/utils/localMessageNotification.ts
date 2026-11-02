@@ -18,15 +18,17 @@ export function buildLocalMessageNotification(target: LocalMessageNotification, 
   const preview = formatLocalizedPreview(target.message, t)
   if (!preview.trim()) return undefined
   const coalesced = count > 1
+  const isSummary = web && coalesced
   const baseTitle = target.kind === 'chat'
     ? target.entity.name || getLocalPart(target.message.from)
     : target.entity.name
   const title = target.kind === 'chat'
     ? !web && coalesced ? `${baseTitle} (${formatUnreadCount(count)})` : baseTitle
-    : web && coalesced ? baseTitle : `${target.message.nick} @ ${baseTitle}`
+    : isSummary ? baseTitle : `${target.message.nick} @ ${baseTitle}`
   return {
     title,
-    body: web && coalesced ? newMessagesText(language, count) : preview,
+    body: isSummary ? newMessagesText(language, count) : preview,
+    isSummary,
     navType: target.kind === 'chat' ? 'conversation' as const : 'room' as const,
     navTarget: target.kind === 'chat' ? target.entity.id : target.entity.jid,
     messageId: target.message.id,

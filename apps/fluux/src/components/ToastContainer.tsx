@@ -54,8 +54,11 @@ export function ToastContainer() {
                 <RoomAvatar identifier={toast.roomBanner.roomJid} name={toast.roomBanner.roomName}
                   avatarUrl={toast.roomBanner.avatarUrl} size="md" className="shrink-0" />
                 <div className="text-sm text-fluux-text flex-1 min-w-0 break-words">
-                  <div className="font-semibold truncate">{toast.roomBanner.sender}</div>
-                  <div className="line-clamp-2"><span className="text-fluux-muted">{toast.roomBanner.roomName}: </span>{toast.roomBanner.body}</div>
+                  <div className="font-semibold truncate">{toast.roomBanner.kind === 'message' ? toast.roomBanner.sender : toast.roomBanner.roomName}</div>
+                  <div className="line-clamp-2">
+                    {toast.roomBanner.kind === 'message' && <span className="text-fluux-muted">{toast.roomBanner.roomName}: </span>}
+                    {toast.roomBanner.body}
+                  </div>
                 </div>
               </>
             ) : (

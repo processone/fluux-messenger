@@ -28,7 +28,7 @@ import { postIOSRoomNotification } from '@/platform/ios/postRoomNotification'
 import { currentAccountId, postNativeDesktopNotification } from '@/utils/nativeNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
 import { requestAttention } from '@/utils/attention'
-import { useToastStore } from '@/stores/toastStore'
+import { useToastStore, type RoomBanner } from '@/stores/toastStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { iosHaptic } from '@/platform/ios/haptics'
 import { platform } from '@/platform'
@@ -273,7 +273,7 @@ export function useDesktopNotifications(): void {
   // With Fluux in front, its own banner replaces the system one. It is in-app, so it needs
   // neither notification permission nor an avatar file, and an older arrival never replaces a newer one.
   const showInAppBanner = (
-    { title, body, navType, navTarget, messageId }: NonNullable<ReturnType<typeof buildLocalMessageNotification>>,
+    { title, body, navType, navTarget, messageId, isSummary }: NonNullable<ReturnType<typeof buildLocalMessageNotification>>,
     arrival: number,
     accountId: string | null,
     target: LocalMessageNotification,
@@ -282,9 +282,9 @@ export function useDesktopNotifications(): void {
     bannerSeqRef.current = arrival
     hideBanner()
     // The WebView draws its own blob or data picture, so the banner needs no prepared file.
-    const roomBanner = target.kind === 'room'
-      ? { roomJid: target.entity.jid, roomName: target.entity.name, avatarUrl: target.entity.avatar,
-        sender: target.message.nick, body }
+    const roomBanner: RoomBanner | undefined = target.kind === 'room'
+      ? { roomJid: target.entity.jid, roomName: target.entity.name, avatarUrl: target.entity.avatar, body,
+        ...(isSummary ? { kind: 'summary' } : { kind: 'message', sender: target.message.nick }) }
       : undefined
     const toastId = useToastStore.getState().addToast('info', `${title}: ${body}`, IN_APP_BANNER_MS, () => {
       if (currentAccountId() !== accountId) return
