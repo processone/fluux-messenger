@@ -507,17 +507,32 @@ export async function scrollToBottom(page: Page): Promise<void> {
   await settle(page)
 }
 
-/** Activate a 1:1 conversation through the real store + route (no room auto-select race). */
+/**
+ * Open a 1:1 conversation the way the conversation list's click does: start the store activation
+ * and change the route in the same task, then wait until the store and the route both name it.
+ *
+ * Activating first and setting the route only once the store confirms is not safe at startup.
+ * ChatLayout's URL-to-store sync activates whatever conversation a new route names, and the app's
+ * own first-conversation auto-select may still be on its way through that sync when the demo
+ * reports ready. Its activation then lands after ours with a newer token, ours bails, and a wait
+ * on the store alone never ends (FLM-211). Changing the route in the same task makes ours the
+ * newest route, so the sync converges on the requested conversation whatever is still in flight.
+ *
+ * The waits take the test's own budget: on a loaded machine an activation that is converging can
+ * take longer than any fixed setup deadline.
+ */
 export async function activateChat(page: Page, jid: string): Promise<void> {
   await page.evaluate((j) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (window as any).__chatStore?.getState?.()?.activateConversation(j)
+    void (window as any).__chatStore.getState().activateConversation(j)
+    window.location.hash = '#/messages/' + encodeURIComponent(j)
   }, jid)
   await page.waitForFunction((j) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (window as any).__chatStore?.getState?.()?.activeConversationId === j
-  }, jid, { timeout: 10_000 })
-  await page.evaluate((j) => { window.location.hash = '#/messages/' + encodeURIComponent(j) }, jid)
-  await page.waitForSelector('[data-message-list]', { timeout: 10_000 })
+    const state = (window as any).__chatStore.getState()
+    return state.activeConversationId === j && !state.activationPending &&
+      window.location.hash === '#/messages/' + encodeURIComponent(j)
+  }, jid, { timeout: 0 })
+  await page.waitForSelector('[data-message-list]', { timeout: 0 })
   await settle(page)
 }
