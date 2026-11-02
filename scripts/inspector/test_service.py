@@ -4,11 +4,13 @@ Exercises the actual C implementation, OpenSSL, Unix sockets and unchanged Reade
 Pair records/certificates below are generated for this run, not personal fixtures.
 """
 import contextlib
+import hashlib
 import io
 import json
 import os
 from pathlib import Path
 import plistlib
+import signal
 import socket
 import ssl
 import struct
@@ -120,6 +122,7 @@ class FragmentedTLS:
 class DevicePeer:
     def __init__(self, mode='echo', *, fragmented=False):
         self.mode, self.fragmented = mode, fragmented
+        self.plain = mode in ('plain', 'plain-backpressure')
         self.path = '/tmp/flm366-' + uuid.uuid4().hex + '.sock'
         self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.server.bind(self.path)
@@ -134,6 +137,15 @@ class DevicePeer:
         self.release = threading.Event()
         self.errors = []
         self.service_bytes = 0
+        self.service_digest = hashlib.sha256()
+        self.expected_bytes = 0
+        self.drained = threading.Event()
+        self.expressions = []
+        self.sample_requested = threading.Event()
+        self.sample_reply = threading.Event()
+        self.on_sample = None
+        self.late_reply_sent = False
+        self.timers = []
         self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.context.load_cert_chain(FILES/'device.pem', FILES/'device.key')
         self.context.load_verify_locations(FILES/'root.pem')
@@ -232,7 +244,7 @@ class DevicePeer:
                         send_plist(conn, {'Request': 'StartService', 'Error': PRIVATE})
                         return
                     send_plist(conn, {'Request': 'StartService', 'Port': 27753,
-                                      'EnableServiceSSL': self.mode != 'plain'})
+                                      'EnableServiceSSL': not self.plain})
                     p = read_plist(conn)
                     self.requests.append(p['Request'])
                     assert p['Request'] == 'StopSession'
@@ -240,16 +252,25 @@ class DevicePeer:
                 else:
                     if self.mode == 'tls-partial':
                         conn = FragmentedTLS(conn, self.context, self.fragment_cut, self.release)
-                    elif self.mode != 'plain':
+                    elif not self.plain:
                         conn = self.context.wrap_socket(conn, server_side=True)
                     self.service_ready.set()
-                    if self.mode == 'inspector':
+                    if self.mode.startswith('inspector'):
                         self.inspector(conn)
                     elif self.mode == 'flood':
                         while True:
                             conn.sendall(b'x' * 65536)
                     elif self.mode == 'blocked-write':
                         self.release.wait(3)
+                    elif self.mode in ('backpressure', 'plain-backpressure'):
+                        assert self.release.wait(2)
+                        while self.service_bytes < self.expected_bytes:
+                            data = conn.recv(65536)
+                            if not data:
+                                break
+                            self.service_bytes += len(data)
+                            self.service_digest.update(data)
+                        self.drained.set()
                     else:
                         while True:
                             data = conn.recv(65536)
@@ -304,10 +325,46 @@ class DevicePeer:
                 command = json.loads(wrapped['params']['message'])
                 exp = command['params']['expression']
                 assert exp in (PRESENT, SAMPLER, SAMPLE, REMOVE)
+                self.expressions.append('present' if exp == PRESENT else 'install' if exp == SAMPLER
+                                        else 'sample' if exp == SAMPLE else 'remove')
+                if exp == SAMPLE and not self.sample_requested.is_set():
+                    if self.on_sample:
+                        self.on_sample()
+                    self.sample_requested.set()
                 value = False if exp == PRESENT else SAMPLES[0] if exp == SAMPLE else True
-                event('_rpc_applicationSentData:', {'WIRApplicationIdentifierKey': 'PID:321',
-                    'WIRDestinationKey': sender, 'WIRMessageDataKey': json.dumps({'id': command['id'],
-                        'result': {'result': {'value': value}}})})
+                message = {'id': command['id'], 'result': {'result': {'value': value}}}
+                def response(message=message):
+                    event('_rpc_applicationSentData:', {'WIRApplicationIdentifierKey': 'PID:321',
+                        'WIRDestinationKey': sender, 'WIRMessageDataKey': json.dumps(message)})
+                if exp == SAMPLE:
+                    if self.mode == 'inspector-disconnect':
+                        return
+                    if self.mode in ('inspector-frozen', 'inspector-interrupt'):
+                        continue
+                    if self.mode == 'inspector-delayed':
+                        def late_response(response=response):
+                            try:
+                                response()
+                                self.late_reply_sent = True
+                            except OSError:
+                                pass
+                            finally:
+                                self.sample_reply.set()
+                        timer = threading.Timer(.08, late_response)
+                        self.timers.append(timer)
+                        timer.start()
+                        continue
+                    if self.mode == 'inspector-error':
+                        message = {'id': command['id'], 'error': {'message': PRIVATE}}
+                        event('_rpc_applicationSentData:', {'WIRApplicationIdentifierKey': 'PID:321',
+                            'WIRDestinationKey': sender, 'WIRMessageDataKey': json.dumps(message)})
+                        continue
+                if exp == REMOVE:
+                    if self.mode in ('inspector-frozen', 'inspector-interrupt'):
+                        continue
+                    if self.mode == 'inspector-delayed':
+                        assert self.sample_reply.wait(1)
+                response()
             elif name == '_rpc_forwardDidClose:':
                 return
 
@@ -328,6 +385,10 @@ class DevicePeer:
         for t in self.threads:
             t.join(4)
             assert not t.is_alive(), 'peer-thread-not-closed'
+        for timer in self.timers:
+            timer.cancel()
+            timer.join(2)
+            assert not timer.is_alive(), 'peer-timer-not-closed'
         assert not self.thread.is_alive()
         os.unlink(self.path)
 
@@ -405,6 +466,171 @@ class ServiceProof(unittest.TestCase):
             self.assertIn('_rpc_forwardDidClose:', peer.requests)
             PROOF.append({'scenario': 'reader-stream', 'result': 'pass', 'reader': result,
                           'sampleMatchesDisposableWebKit': True, 'workerReaped': True})
+
+    def test_reader_deadline_cleanup(self):
+        # FLM-369 E1/W4: exercise the final shrinking timeout through the real
+        # opener, not only the healthy peer or the reader's socket-only fixture.
+        for mode in ('inspector-frozen', 'inspector-delayed'):
+            with self.subTest(mode=mode), DevicePeer(mode) as peer, tempfile.TemporaryFile('w+b', dir=WORKER.parent) as output:
+                budget = Budget()
+                stream = self.open(peer, budget)
+                reader = Reader(stream, budget)
+                # Start a short real deadline only after acknowledged installation.
+                peer.on_sample = lambda: setattr(reader, 'deadline', time.monotonic() + .04)
+                result = reader.run(output, duration=2)
+                PROOF.append({'scenario': 'native-edge-journeys', 'case': mode, 'reader': result,
+                              'expressions': peer.expressions, 'selectors': peer.requests,
+                              'lateSampleDelivered': peer.late_reply_sent,
+                              'workerReaped': stream._process.poll() is not None})
+                self.assertEqual(result['reason'], 'time-limit')
+                self.assertEqual(result['cleanup'], 'unconfirmed' if mode == 'inspector-frozen' else 'confirmed')
+                peer.wait_closed()
+                self.assertIn('remove', peer.expressions)
+                self.assertIn('_rpc_forwardDidClose:', peer.requests)
+                if mode == 'inspector-delayed':
+                    self.assertTrue(peer.late_reply_sent)
+                self.assertIsNotNone(stream._process.poll())
+
+    def test_reader_disconnect_and_private_error(self):
+        # FLM-369 W4. W3's disconnect category is explicitly still pending.
+        for mode in ('inspector-disconnect', 'inspector-error'):
+            with self.subTest(mode=mode), DevicePeer(mode) as peer, tempfile.TemporaryFile('w+b', dir=WORKER.parent) as output:
+                budget = Budget()
+                stream = self.open(peer, budget)
+                result = Reader(stream, budget).run(output, duration=2)
+                self.assertEqual(result['reason'], 'protocol-boundary' if mode == 'inspector-disconnect' else 'evaluation-failed')
+                self.assertEqual(result['cleanup'], 'unconfirmed' if mode == 'inspector-disconnect' else 'confirmed')
+                output.seek(0)
+                self.assertNotIn(PRIVATE.encode(), output.read())
+                peer.wait_closed()
+                self.assertIsNotNone(stream._process.poll())
+                if mode == 'inspector-error':
+                    self.assertIn('remove', peer.expressions)
+                    self.assertIn('_rpc_forwardDidClose:', peer.requests)
+                PROOF.append({'scenario': 'native-edge-journeys', 'case': mode, 'reader': result,
+                              'expressions': peer.expressions, 'selectors': peer.requests,
+                              'pendingPolicy': 'W3' if mode == 'inspector-disconnect' else None, 'workerReaped': True})
+
+    def test_reader_in_exchange_interrupt(self):
+        # FLM-369 W4 and captain-selected W2: a half-finished exchange still
+        # fails closed. Group isolation is proved separately, without weakening
+        # that boundary. Raise a real SIGINT inside a control transaction.
+        with DevicePeer('inspector-interrupt') as peer, tempfile.TemporaryFile('w+b', dir=WORKER.parent) as output:
+            budget = Budget()
+            stream = self.open(peer, budget)
+            reader = Reader(stream, budget)
+            read = stream._read_exact
+            interrupted = False
+            def interrupt_response(n):
+                nonlocal interrupted
+                if peer.sample_requested.is_set() and not interrupted:
+                    interrupted = True
+                    signal.raise_signal(signal.SIGINT)
+                return read(n)
+            stream._read_exact = interrupt_response
+            with self.assertRaises(KeyboardInterrupt):
+                reader.run(output, duration=2)
+            self.assertTrue(interrupted)
+            self.assertEqual(reader.result['reason'], 'stopped')
+            self.assertEqual(reader.result['cleanup'], 'unconfirmed')
+            self.assertTrue(stream.closed)
+            self.assertIsNotNone(stream._process.poll())
+            peer.wait_closed()
+            PROOF.append({'scenario': 'native-edge-journeys', 'case': 'inspector-interrupt',
+                          'reader': reader.result, 'expressions': peer.expressions, 'selectors': peer.requests,
+                          'selectedPolicy': 'W2: mid-exchange signal still fails closed', 'workerReaped': True})
+
+    def test_worker_survives_caller_group_sigint(self):
+        # Captain-selected W2 group-only: signal only this disposable helper's
+        # new group, never the test runner, another task or a real application.
+        code = '''
+import os, signal, socket, sys, threading, time
+sys.path.insert(0, sys.argv[1])
+from reader import Budget
+from service import open_service
+bridge = socket.socket(fileno=int(sys.argv[5]))
+seen = threading.Event()
+signal.signal(signal.SIGINT, lambda *_: seen.set())
+with open_service(sys.argv[2], sys.argv[3], Budget(), mux_socket=sys.argv[4], lifetime=2) as stream:
+    bridge.sendall(b'R')
+    assert seen.wait(1)
+    assert stream._process.poll() is None
+    payload = b'after-group-sigint'
+    assert stream.send(payload) == len(payload)
+    received = b''
+    deadline = time.monotonic()+1
+    while len(received) < len(payload):
+        assert time.monotonic() < deadline
+        try:
+            received += stream.recv(len(payload)-len(received))
+        except socket.timeout:
+            pass
+    assert received == payload
+bridge.sendall(b'O')
+bridge.close()
+'''
+        with DevicePeer() as peer:
+            parent, child = socket.socketpair()
+            parent.settimeout(3)
+            process = subprocess.Popen([sys.executable, '-B', '-c', code, str(Path(__file__).parent),
+                                        str(WORKER), UDID, peer.path, str(child.fileno())],
+                                       pass_fds=(child.fileno(),), start_new_session=True,
+                                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            child.close()
+            try:
+                self.assertEqual(parent.recv(1), b'R')
+                os.killpg(process.pid, signal.SIGINT)
+                self.assertEqual(parent.recv(1), b'O')
+                stdout, stderr = process.communicate(timeout=3)
+                self.assertEqual(process.returncode, 0, 'group-signal-child-failed')
+                self.assertEqual((stdout, stderr), (b'', b''))
+            finally:
+                parent.close()
+                if process.poll() is None:
+                    process.kill()
+                process.communicate(timeout=3)
+            peer.wait_closed()
+        PROOF.append({'scenario': 'native-edge-journeys', 'case': 'caller-group-sigint',
+                      'workerSurvivedSignal': True, 'byteExchangeAfterSignal': True,
+                      'helperAndWorkerReaped': True})
+
+    def test_transient_backpressure(self):
+        # FLM-369 W1: bytes must survive both native send EAGAIN and SSL WANT_WRITE.
+        chunk = bytes(range(256)) * 256
+        for mode in ('backpressure', 'plain-backpressure'):
+            with self.subTest(mode=mode), DevicePeer(mode) as peer:
+                peer.expected_bytes = len(chunk) * 16
+                stream = self.open(peer)
+                released_at = []
+                def release_reads():
+                    released_at.append(time.monotonic())
+                    peer.release.set()
+                # Controlled peer input pause, not a test retry/stabilization wait.
+                timer = threading.Timer(.03, release_reads)
+                spans = []
+                timer.start()
+                try:
+                    for _ in range(16):
+                        start = time.monotonic()
+                        self.assertEqual(stream.send(chunk), len(chunk))
+                        spans.append((start, time.monotonic()))
+                    self.assertTrue(peer.drained.wait(2))
+                finally:
+                    peer.release.set()
+                    timer.cancel()
+                    timer.join(2)
+                    stream.close()
+                peer.wait_closed()
+                self.assertTrue(released_at)
+                self.assertTrue(any(start <= released_at[0] <= end for start, end in spans))
+                expected = hashlib.sha256(chunk * 16).hexdigest()
+                self.assertEqual(peer.service_bytes, peer.expected_bytes)
+                self.assertEqual(peer.service_digest.hexdigest(), expected)
+                PROOF.append({'scenario': 'native-edge-journeys', 'case': mode,
+                              'receivedBytes': peer.service_bytes, 'receivedSha256': peer.service_digest.hexdigest(),
+                              'expectedSha256': expected, 'writeSpannedPeerRelease': True,
+                              'longestWriteSeconds': round(max(end-start for start, end in spans), 4),
+                              'workerReaped': stream._process.poll() is not None})
 
     def test_deadlines_and_idle_timeout(self):
         with DevicePeer('stalled-startup') as peer:
