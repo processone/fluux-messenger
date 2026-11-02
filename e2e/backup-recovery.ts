@@ -3,6 +3,7 @@
  * the separate native host runs the same App against actual Rust commands. */
 import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { bootDemo } from './harness/demoBoot'
 
 const meta = JSON.parse(readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/sequoia_meta.json', import.meta.url), 'utf8')) as {
@@ -11,6 +12,7 @@ const meta = JSON.parse(readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/se
 
 test.use({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' })
 
+const expectedBuild = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim()
 const fingerprint = meta.aliceFingerprint
 const code = meta.backupPassphrase
 const audit = (page: import('@playwright/test').Page) => page.evaluate(() => (window as any).__recoveryFixture)
@@ -18,6 +20,7 @@ const audit = (page: import('@playwright/test').Page) => page.evaluate(() => (wi
 for (const source of ['server', 'file']) {
   test(`guided ${source} restore previews, confirms and refreshes Settings without replacing its backup`, async ({ page }) => {
     await bootDemo(page, '/demo.html?tutorial=false&e2ee=recovery')
+    expect(await audit(page), 'The recovery fixture must come from this working copy’s current build').toMatchObject({ build: expectedBuild })
     await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeVisible()
     if (source === 'server') {
       await page.screenshot({ animations: 'disabled', path: test.info().outputPath('after-startup-recovery.png') })

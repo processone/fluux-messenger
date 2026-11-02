@@ -17,11 +17,11 @@ export function createBackupRecoveryFixture() {
   const native = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
   if (!native) {
     mockWindows('main')
-    mockIPC(() => null, { shouldMockEvents: true })
+    mockIPC(cmd => cmd === 'plugin:share-inbox|list' ? [] : null, { shouldMockEvents: true })
   }
   setPlatformForTesting({ shell: 'desktop', os: 'macos' })
   setPlatformForTesting({ ...platform(), hasInAppUpdates: false })
-  const audit = { native, commands: [] as string[], publications: [] as string[] }
+  const audit = { native, build: __GIT_COMMIT__, commands: [] as string[], publications: [] as string[] }
   ;(window as any).__recoveryFixture = audit
   let installed: KeyBundle | null = JSON.parse(localStorage.getItem('__test_recovery_bundle') ?? 'null')
   const privateKey = async () => {

@@ -418,7 +418,7 @@ on restart and checks that the other fixture account and credential stay unchang
 npm run build:e2e
 npm run preview -w @xmpp/fluux -- --host 127.0.0.1 --port 5197 --strictPort
 # In another terminal, use new absolute disposable directories, not existing data:
-npm run test:e2e -- --project=backup-recovery-chromium --project=backup-recovery-webkit
+FLUUX_E2E_PORT=5197 npm run test:e2e -- --project=backup-recovery-chromium --project=backup-recovery-webkit
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-server server
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-file file
 ```
