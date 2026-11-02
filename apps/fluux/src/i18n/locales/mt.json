@@ -274,6 +274,7 @@
         "cachedHistoryWarning": "Storja cached sa {{date}}. Idħol biex tikseb l-aħħar messaġġi.",
         "notJoinedNoHistory": "M'intix f'din il-kamra",
         "joinToLoadHistory": "Idħol biex tgħabbi l-messaġġi",
+        "noHistoryYet": "Għad m’hemmx storja disponibbli",
         "notificationSettings": "Settings tan-notifiki",
         "roomActions": "Azzjonijiet tal-kamra",
         "showRoomInfo": "Uri informazzjoni tal-kamra",

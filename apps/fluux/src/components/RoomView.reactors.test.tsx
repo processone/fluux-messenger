@@ -25,7 +25,7 @@ const props = {
   sendReaction: vi.fn(), votePoll: vi.fn(), closePoll: vi.fn(), onReply: vi.fn(), onEdit: vi.fn(),
   lastOutgoingMessageId: null, lastMessageId: null, typingUsers: [], activeReactionPickerMessageId: null,
   onReactionPickerChange: vi.fn(), retractMessage: vi.fn(), moderateMessage: vi.fn(), selectedMessageId: null,
-  hasKeyboardSelection: false, showToolbarForSelection: false, clearFirstNewMessageId: vi.fn(), setAffiliation: vi.fn(), isJoined: true,
+  hasKeyboardSelection: false, showToolbarForSelection: false, clearFirstNewMessageId: vi.fn(), setAffiliation: vi.fn(), membershipPhase: 'joined' as const,
 }
 
 const occupant = (nick: string): RoomOccupant => ({ nick, role: 'participant', affiliation: 'none' })

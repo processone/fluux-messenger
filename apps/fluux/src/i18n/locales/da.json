@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "Cached historik frem til {{date}}. Deltag for at få de seneste beskeder.",
         "notJoinedNoHistory": "Du er ikke i dette rum",
         "joinToLoadHistory": "Deltag for at indlæse beskeder",
+        "noHistoryYet": "Ingen historik tilgængelig endnu",
         "notificationSettings": "Notifikationsindstillinger",
         "roomActions": "Rumshandlinger",
         "showRoomInfo": "Vis rumoplysninger",

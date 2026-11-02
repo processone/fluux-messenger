@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "Išsaugota istorija iki {{date}}. Prisijunkite gauti naujausias žinutes.",
         "notJoinedNoHistory": "Jūs nesate šiame kambaryje",
         "joinToLoadHistory": "Prisijunkite įkelti žinutes",
+        "noHistoryYet": "Istorija dar nepasiekiama",
         "notificationSettings": "Pranešimų nustatymai",
         "roomActions": "Kambario veiksmai",
         "showRoomInfo": "Rodyti kambario informaciją",

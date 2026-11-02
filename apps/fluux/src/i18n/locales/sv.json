@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "Cachad historik fram till {{date}}. Gå med för att få senaste meddelanden.",
         "notJoinedNoHistory": "Du är inte i detta rum",
         "joinToLoadHistory": "Gå med för att ladda meddelanden",
+        "noHistoryYet": "Ingen historik tillgänglig ännu",
         "notificationSettings": "Aviseringsinställningar",
         "roomActions": "Rumsåtgärder",
         "showRoomInfo": "Visa rumsinformation",

@@ -274,6 +274,7 @@
         "cachedHistoryWarning": "Histórico em cache até {{date}}. Entre para obter as mensagens mais recentes.",
         "notJoinedNoHistory": "Não está nesta sala",
         "joinToLoadHistory": "Entre para carregar mensagens",
+        "noHistoryYet": "Histórico ainda não disponível",
         "notificationSettings": "Definições de notificações",
         "roomActions": "Ações da sala",
         "showRoomInfo": "Mostrar informações da sala",

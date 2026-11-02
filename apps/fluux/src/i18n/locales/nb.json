@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "Bufret historikk frem til {{date}}. Bli med for å få de nyeste meldingene.",
         "notJoinedNoHistory": "Du er ikke i dette rommet",
         "joinToLoadHistory": "Bli med for å laste meldinger",
+        "noHistoryYet": "Ingen historikk tilgjengelig ennå",
         "notificationSettings": "Varslingsinnstillinger",
         "roomActions": "Romhandlinger",
         "showRoomInfo": "Vis rominformasjon",

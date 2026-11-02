@@ -274,6 +274,7 @@
         "cachedHistoryWarning": "Shranjena zgodovina do {{date}}. Pridružite se za najnovejša sporočila.",
         "notJoinedNoHistory": "Niste v tej sobi",
         "joinToLoadHistory": "Pridružite se za nalaganje sporočil",
+        "noHistoryYet": "Zgodovina še ni na voljo",
         "notificationSettings": "Nastavitve obvestil",
         "roomActions": "Dejanja sobe",
         "showRoomInfo": "Prikaži informacije o sobi",

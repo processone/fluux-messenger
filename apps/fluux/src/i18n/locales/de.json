@@ -274,6 +274,7 @@
         "cachedHistoryWarning": "Zwischengespeicherter Verlauf bis {{date}}. Beitreten für aktuelle Nachrichten.",
         "notJoinedNoHistory": "Sie sind nicht in diesem Raum",
         "joinToLoadHistory": "Beitreten um Nachrichten zu laden",
+        "noHistoryYet": "Noch kein Verlauf verfügbar",
         "notificationSettings": "Benachrichtigungseinstellungen",
         "roomActions": "Raumaktionen",
         "showRoomInfo": "Rauminformationen anzeigen",

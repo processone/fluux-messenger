@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "Spremljena povijest do {{date}}. Pridružite se za najnovije poruke.",
         "notJoinedNoHistory": "Niste u ovoj sobi",
         "joinToLoadHistory": "Pridružite se za učitavanje poruka",
+        "noHistoryYet": "Povijest još nije dostupna",
         "notificationSettings": "Postavke obavijesti",
         "roomActions": "Radnje sobe",
         "showRoomInfo": "Prikaži informacije o sobi",

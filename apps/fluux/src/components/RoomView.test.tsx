@@ -759,7 +759,7 @@ describe('RoomView', () => {
       expect(screen.getByText(/rooms.joinToParticipate/)).toBeInTheDocument()
     })
 
-    // FLM-269: reopening an already-joining room must not ask the user to join again.
+    // FLM-361: joining keeps cached history and replaces only the composer.
     // Keep the same occupants reference: joining may end without an occupant update.
     it.each([false, true])('hides join instructions while joining, then restores retry (cached: %s)', (cached) => {
       mockActiveRoom = createRoom({ joined: false, isJoining: false })
@@ -770,7 +770,12 @@ describe('RoomView', () => {
 
       mockActiveRoom = { ...mockActiveRoom, isJoining: true }
       rerender(<RoomView />)
-      expect(screen.getByText('rooms.joining')).toBeInTheDocument()
+      const joiningStatus = screen.getByText('rooms.joining').closest('[role="status"]')!
+      expect(joiningStatus).toHaveAttribute('aria-live', 'polite')
+      expect(joiningStatus.closest('[data-conversation-tail]')).not.toBeNull()
+      if (cached) expect(screen.getByText(mockActiveMessages[0].body)).toBeInTheDocument()
+      else expect(screen.getByText('rooms.noHistoryYet')).toBeInTheDocument()
+      expect(screen.queryByText('rooms.joinToLoadHistory')).not.toBeInTheDocument()
       expect(screen.queryByText('rooms.joinToParticipate')).not.toBeInTheDocument()
       expect(screen.queryByText('rooms.cachedHistoryWarning')).not.toBeInTheDocument()
       expect(screen.queryByText('rooms.notJoinedNoHistory')).not.toBeInTheDocument()
@@ -791,6 +796,19 @@ describe('RoomView', () => {
       expect(screen.queryByText('rooms.joinToParticipate')).not.toBeInTheDocument()
       expect(screen.queryByText('rooms.joining')).not.toBeInTheDocument()
       expect(screen.getByTestId('message-input')).toBeInTheDocument()
+    })
+
+    it('FLM-361: confirmed membership takes precedence over a stale joining flag', () => {
+      // A defensive presentation case, not an SDK success transition: setRoomJoined
+      // atomically clears isJoining. The retry journey above covers that real transition.
+      mockActiveRoom = createRoom({ joined: true, isJoining: true })
+      mockActiveMessages = [createRoomMessage()]
+      render(<RoomView />)
+      expect(screen.getByTestId('message-input')).toBeInTheDocument()
+      expect(screen.getByText(mockActiveMessages[0].body)).toBeInTheDocument()
+      expect(screen.queryByText('rooms.joining')).not.toBeInTheDocument()
+      expect(screen.queryByText('rooms.joinToParticipate')).not.toBeInTheDocument()
+      expect(screen.queryByText('rooms.cachedHistoryWarning')).not.toBeInTheDocument()
     })
 
     it('toasts a localized message when the join fails', async () => {
@@ -1422,7 +1440,7 @@ describe('RoomView', () => {
   })
 
   describe('Loading state', () => {
-    it('should show loading indicator when room is joining', () => {
+    it('FLM-361: shows a neutral empty history and joining footer before membership', () => {
       mockActiveRoom = createRoom({
         isJoining: true,
         joined: false,
@@ -1433,7 +1451,9 @@ describe('RoomView', () => {
 
       // Should show joining message
       expect(screen.getByText('rooms.joining')).toBeInTheDocument()
-      // Should show loader icon
+      expect(screen.getByText('rooms.noHistoryYet')).toBeInTheDocument()
+      expect(screen.queryByText('chat.noMessages')).not.toBeInTheDocument()
+      // The footer spinner is decorative; the status owns the announcement.
       expect(screen.getByTestId('icon-loader')).toBeInTheDocument()
     })
 

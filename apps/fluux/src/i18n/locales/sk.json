@@ -273,6 +273,7 @@
         "cachedHistoryWarning": "Uložená história do {{date}}. Pripojte sa pre najnovšie správy.",
         "notJoinedNoHistory": "Nie ste v tejto miestnosti",
         "joinToLoadHistory": "Pripojte sa pre načítanie správ",
+        "noHistoryYet": "História zatiaľ nie je k dispozícii",
         "notificationSettings": "Nastavenia oznámení",
         "roomActions": "Akcie miestnosti",
         "showRoomInfo": "Zobraziť informácie o miestnosti",

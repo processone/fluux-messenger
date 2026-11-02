@@ -272,6 +272,7 @@
         "cachedHistoryWarning": "{{date}}까지의 캐시된 기록입니다. 최신 메시지를 가져오려면 참여하세요.",
         "notJoinedNoHistory": "이 대화방에 참여하지 않았습니다",
         "joinToLoadHistory": "메시지를 불러오려면 참여하세요",
+        "noHistoryYet": "아직 기록을 사용할 수 없습니다",
         "notificationSettings": "알림 설정",
         "roomActions": "대화방 작업",
         "showRoomInfo": "대화방 정보 표시",
