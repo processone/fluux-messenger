@@ -349,6 +349,10 @@ jobs:
           sudo --preserve-env=CI_RETRY_CLEANUP env "PATH=$PATH" scripts/ci-retry.sh 3 300 \
             npx playwright install-deps ${{ matrix.browser }}
 
+      - name: Prove restricted inspector on disposable WebKit and sockets
+        if: matrix.browser == 'webkit' && matrix.shard == 1
+        run: node scripts/inspector/prove.mjs
+
       # Each engine runs against its own bundled demo. Separate reading and
       # live-edge files let both workers share the scroll workload while tests
       # within each suite retain their declaration order.

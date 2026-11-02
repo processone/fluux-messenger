@@ -11,6 +11,10 @@ run `npm run test:platform` and follow [Platform regression coverage](PLATFORM_R
 Keep the capability inventory and application scenarios current when adding a
 platform branch; browser mocks and native compilation have different proof limits.
 
+For disposable iPhone-inspector preparation, see the restricted reader's
+[proof and integration contract](../scripts/inspector/README.md). Its local proof
+uses WebKit and socket peers, not an iPhone or an existing account.
+
 ## Quick Start
 
 ```bash
