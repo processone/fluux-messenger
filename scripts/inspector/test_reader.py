@@ -10,6 +10,7 @@ import io
 import json
 import os
 import plistlib
+import signal
 import socket
 import struct
 import sys
@@ -54,6 +55,7 @@ class Peer:
         self.target = "page-1"
         self.total_sent = 0
         self.sample_index = 0
+        self.partial_started = False
 
     def send(self, selector, arg):
         data = frame(selector, arg)
@@ -122,7 +124,21 @@ class Peer:
                     assert exp in (PRESENT, SAMPLER, SAMPLE, REMOVE)
                     self.expressions.append("sample" if exp == SAMPLE else "remove" if exp == REMOVE
                                             else "present" if exp == PRESENT else "install")
-                    if exp == REMOVE and self.mode == "frozen":
+                    if self.partial_started:
+                        continue
+                    if exp == REMOVE and self.mode in ("frozen", "interrupt-cleanup"):
+                        # Interrupt unanswered removal without racing a response writer's
+                        # broken pipe against its observation of the close message.
+                        continue
+                    if ((exp == SAMPLE and self.mode in ("partial-prefix", "header-only", "partial-body"))
+                            or (exp == REMOVE and self.mode == "partial-cleanup")):
+                        response = frame("_rpc_applicationSentData:", {
+                            "WIRApplicationIdentifierKey": "PID:321", "WIRDestinationKey": self.sender,
+                            "WIRMessageDataKey": json.dumps({"id": inner["id"], "result": {
+                                "result": {"value": True if exp == REMOVE else SAMPLES[0]}}})})
+                        count = 2 if self.mode == "partial-prefix" else 4 if self.mode == "header-only" else 8
+                        self.sock.sendall(response[:count])
+                        self.partial_started = True
                         continue
                     if exp == SAMPLE:
                         self.times.append(time.monotonic())
@@ -198,19 +214,69 @@ class ReaderTests(unittest.TestCase):
         peer = Peer(server, mode, stop)
         thread = threading.Thread(target=peer.run)
         thread.start()
-        class FragmentedSocket:
-            # Bound each actual socket read, including the length prefix.
+        class ControlledSocket:
+            cut = False
+            writes_after_cut = 0
+            interrupt_pending = False
+            interrupt_delivered = False
+
             def recv(self, count):
-                return client.recv(min(count, 7))
+                if self.interrupt_pending:
+                    self.interrupt_pending = False
+                    self.interrupt_delivered = True
+                    # Real SIGINT on the main thread, before consuming any bytes.
+                    signal.raise_signal(signal.SIGINT)
+                return client.recv(min(count, 7) if mode == "fragmented" else count)
+
+            def send(self, data):
+                if self.cut:
+                    sent = client.send(data)
+                    self.writes_after_cut += sent
+                    return sent
+                try:
+                    rpc = plistlib.loads(data[4:])
+                    command = json.loads(rpc["__argument"]["WIRSocketDataKey"])
+                    expression = json.loads(command["params"]["message"])["params"]["expression"]
+                except (KeyError, ValueError, plistlib.InvalidFileException):
+                    expression = None
+                if mode == "send-cutoff" and expression == SAMPLER:
+                    sent = client.send(data[:8])
+                    self.cut = True
+                    stop.set()
+                    return sent
+                if (not self.interrupt_delivered
+                        and ((mode == "interrupt-sample" and expression == SAMPLE)
+                             or (mode == "interrupt-cleanup" and expression == REMOVE))):
+                    self.interrupt_pending = True
+                return client.send(data)
+
+            def shutdown(self, how):
+                if mode == "interrupt-shutdown":
+                    signal.raise_signal(signal.SIGINT)
+                return client.shutdown(how)
+
+            def close(self):
+                client.close()
+                if mode == "interrupt-close":
+                    signal.raise_signal(signal.SIGINT)
 
             def __getattr__(self, name):
                 return getattr(client, name)
 
-        reader = Reader(FragmentedSocket() if mode == "fragmented" else client, budget or Budget())
+        controlled = ControlledSocket()
+        reader = Reader(controlled, budget or Budget())
+        interrupt_propagated = False
         stdout, stderr = io.StringIO(), io.StringIO()
         try:
             with tempfile.TemporaryFile() as output, contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-                result = reader.run(output, duration=duration, stop=stop, cleanup_timeout=cleanup)
+                if mode.startswith("interrupt-"):
+                    with self.assertRaises(KeyboardInterrupt):
+                        reader.run(output, duration=duration, stop=stop, cleanup_timeout=cleanup)
+                    interrupt_propagated = True
+                    result = reader.result
+                    self.assertEqual(client.fileno(), -1)
+                else:
+                    result = reader.run(output, duration=duration, stop=stop, cleanup_timeout=cleanup)
                 output.seek(0)
                 persisted = output.read()
         finally:
@@ -232,7 +298,10 @@ class ReaderTests(unittest.TestCase):
         PROOF.append({"case": mode, "result": result, "retained": [json.loads(line) for line in persisted.splitlines()],
                       "selectors": [r["selector"] for r in peer.requests], "commands": peer.expressions,
                       "sampleIntervals": [round(b - a, 4) for a, b in zip(peer.times, peer.times[1:])],
-                      "peerClosed": peer.closed})
+                      "peerClosed": peer.closed,
+                      "desynchronized": getattr(reader, "desynchronized", False),
+                      "writesAfterCutoff": controlled.writes_after_cut,
+                      "interruptPropagatedAfterClose": interrupt_propagated})
         return result, peer, persisted
 
     def test_normal_filtered_sampling_and_detach(self):
@@ -276,9 +345,12 @@ class ReaderTests(unittest.TestCase):
     def test_real_time_hung_partial_and_frozen_cleanup(self):
         for mode in ("silent", "partial", "no-fluux", "frozen"):
             with self.subTest(mode=mode):
-                result, _, _ = self.exercise(mode, duration=.15)
+                result, peer, _ = self.exercise(mode, duration=.15)
                 self.assertEqual(result["reason"], "time-limit")
                 self.assertEqual(result["cleanup"], "unconfirmed" if mode == "frozen" else "not-installed")
+                if mode == "frozen":
+                    # FLM-352 F1: unanswered removal must leave time for close.
+                    self.assertIn("_rpc_forwardDidClose:", [r["selector"] for r in peer.requests])
 
     def test_preexisting_sampler_is_not_removed(self):
         result, peer, persisted = self.exercise("preexisting")
@@ -288,9 +360,10 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(persisted, b"")
 
     def test_cleanup_deadline_is_capped(self):
-        result, _, _ = self.exercise("frozen", duration=.15, cleanup=5)
+        result, peer, _ = self.exercise("frozen", duration=.15, cleanup=5)
         self.assertEqual(result["reason"], "time-limit")
         self.assertEqual(result["cleanup"], "unconfirmed")
+        self.assertIn("_rpc_forwardDidClose:", [r["selector"] for r in peer.requests])
         self.assertLess(result["elapsedSeconds"], 1.1)
 
     def test_unsafe_output_rejected_before_discovery(self):
@@ -317,6 +390,30 @@ class ReaderTests(unittest.TestCase):
         self.assertLess(result["elapsedSeconds"], .6)
         self.assertEqual(result["cleanup"], "unconfirmed")
         self.assertEqual(persisted, b"")
+
+    def test_partial_frames_skip_all_framed_cleanup(self):
+        # FLM-352 F3: cover both framing directions and each receive boundary.
+        for mode in ("partial-prefix", "header-only", "partial-body", "partial-cleanup", "send-cutoff"):
+            with self.subTest(mode=mode):
+                result, peer, _ = self.exercise(mode, duration=.15)
+                self.assertEqual(result["reason"], "stopped" if mode == "send-cutoff" else "time-limit")
+                self.assertEqual(result["cleanup"], "unconfirmed")
+                proof = PROOF[-1]
+                self.assertTrue(proof["desynchronized"])
+                self.assertEqual(proof["writesAfterCutoff"], 0)
+                self.assertNotIn("_rpc_forwardDidClose:", proof["selectors"])
+                if mode != "partial-cleanup":
+                    self.assertNotIn("remove", peer.expressions)
+
+    def test_keyboard_interrupt_propagates_after_cleanup(self):
+        # FLM-352 F5: a genuine SIGINT must reach the caller only after closure.
+        for mode in ("interrupt-sample", "interrupt-cleanup", "interrupt-shutdown", "interrupt-close"):
+            with self.subTest(mode=mode):
+                result, peer, _ = self.exercise(mode, duration=.15)
+                self.assertEqual(result["reason"], "stopped")
+                self.assertEqual(result["cleanup"], "unconfirmed" if mode == "interrupt-cleanup" else "confirmed")
+                self.assertTrue(PROOF[-1]["interruptPropagatedAfterClose"])
+                self.assertIn("_rpc_forwardDidClose:", [r["selector"] for r in peer.requests])
 
     def test_oversized_header_never_reads_body(self):
         result, _, persisted = self.exercise("oversize")

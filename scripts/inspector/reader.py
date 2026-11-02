@@ -146,6 +146,8 @@ class Reader:
         self.received = 0
         self.discarded = 0
         self.samples = 0
+        self.desynchronized = False
+        self.result = None
 
     def _check(self):
         if time.monotonic() >= self.deadline:
@@ -156,25 +158,35 @@ class Reader:
     def _read(self, size):
         self.budget.charge(size)
         data = bytearray()
-        while len(data) < size:
-            self._check()
-            self.sock.settimeout(min(.025, max(.001, self.deadline - time.monotonic())))
-            try:
-                chunk = self.sock.recv(min(size - len(data), 65536))
-            except socket.timeout:
-                continue
-            if not chunk:
-                raise Boundary("disconnected")
-            self.received += len(chunk)
-            data.extend(chunk)
-        return data
+        try:
+            while len(data) < size:
+                self._check()
+                self.sock.settimeout(min(.025, max(.001, self.deadline - time.monotonic())))
+                try:
+                    chunk = self.sock.recv(min(size - len(data), 65536))
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    raise Boundary("disconnected")
+                self.received += len(chunk)
+                data.extend(chunk)
+            return data
+        finally:
+            if 0 < len(data) < size:
+                self.desynchronized = True
 
     def _recv(self):
         size = struct.unpack(">I", self._read(4))[0]
         if not size:
             raise Boundary("protocol-boundary")
+        # A consumed prefix commits us to its body, even if no body byte arrives.
         # _read reserves size before allocating, including unknown/other-app data.
-        value = plistlib.loads(self._read(size))
+        try:
+            payload = self._read(size)
+        except BaseException:
+            self.desynchronized = True
+            raise
+        value = plistlib.loads(payload)
         if type(value) is not dict or type(value.get("__argument")) is not dict:
             raise Boundary("protocol-boundary")
         return value["__selector"], value["__argument"]
@@ -183,17 +195,22 @@ class Reader:
         self._check()
         args = dict(args or {}, WIRConnectionIdentifierKey=self.connection)
         body = plistlib.dumps({"__selector": selector, "__argument": args})
-        pending = memoryview(struct.pack(">I", len(body)) + body)
-        while pending:
-            self._check()
-            self.sock.settimeout(min(.025, max(.001, self.deadline - time.monotonic())))
-            try:
-                sent = self.sock.send(pending)
-            except socket.timeout:
-                continue
-            if not sent:
-                raise Boundary("disconnected")
-            pending = pending[sent:]
+        packet = memoryview(struct.pack(">I", len(body)) + body)
+        pending = packet
+        try:
+            while pending:
+                self._check()
+                self.sock.settimeout(min(.025, max(.001, self.deadline - time.monotonic())))
+                try:
+                    sent = self.sock.send(pending)
+                except socket.timeout:
+                    continue
+                if not sent:
+                    raise Boundary("disconnected")
+                pending = pending[sent:]
+        finally:
+            if 0 < len(pending) < len(packet):
+                self.desynchronized = True
 
     def _page_args(self):
         return {"WIRApplicationIdentifierKey": self.app, "WIRPageIdentifierKey": self.page,
@@ -308,6 +325,7 @@ class Reader:
         self.deadline = time.monotonic() + min(120, max(0, duration))
         reason = "protocol-boundary"
         cleanup = "not-installed"
+        interrupted = None
         started = time.monotonic()
         try:
             mode = os.fstat(output.fileno())
@@ -347,33 +365,58 @@ class Reader:
                 self.samples += 1
         except Boundary as error:
             reason = error.args[0]
-        except (Exception, KeyboardInterrupt):
+        except KeyboardInterrupt as error:
+            reason, interrupted = "stopped", error
+        except Exception:
             # No exception repr, logger, traceback, protocol payload or free text.
             reason = "protocol-boundary"
         finally:
             # Signal other collector readers immediately, before bounded cleanup.
             self.stop.set()
             self.cleaning = True
-            self.deadline = time.monotonic() + min(.5, max(0, cleanup_timeout))
-            if self.install_attempted:
-                cleanup = "unconfirmed"
-                try:
-                    if self._evaluate(REMOVE) is True:
-                        cleanup = "confirmed"
-                except Exception:
-                    pass
-            if self.attached:
-                try:
-                    self._send("_rpc_forwardDidClose:", self._page_args())
-                except Exception:
-                    pass
+            cleanup_start = time.monotonic()
+            cleanup_budget = min(.5, max(0, cleanup_timeout))
+            cleanup_end = cleanup_start + cleanup_budget
             try:
-                self.sock.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-            self.sock.close()
-            self.app = self.page = self.target = None
-        return {"reason": reason, "cleanup": cleanup, "samples": self.samples,
-                "discarded": self.discarded, "receivedBytes": self.received,
-                "reservedInputBytes": self.budget.input, "outputBytes": self.budget.output,
-                "elapsedSeconds": round(time.monotonic() - started, 4)}
+                if self.install_attempted:
+                    cleanup = "unconfirmed"
+                    if not self.desynchronized:
+                        # A frozen removal cannot consume the close message's slice.
+                        self.deadline = cleanup_start + cleanup_budget / 2
+                        try:
+                            if self._evaluate(REMOVE) is True:
+                                cleanup = "confirmed"
+                        except KeyboardInterrupt as error:
+                            reason, interrupted = "stopped", error
+                        except Exception:
+                            pass
+                # Removal itself may have ended mid-frame: recheck alignment.
+                if self.attached and not self.desynchronized:
+                    self.deadline = cleanup_end
+                    try:
+                        self._send("_rpc_forwardDidClose:", self._page_args())
+                    except KeyboardInterrupt as error:
+                        reason, interrupted = "stopped", error
+                    except Exception:
+                        pass
+            finally:
+                try:
+                    self.sock.shutdown(socket.SHUT_RDWR)
+                except KeyboardInterrupt as error:
+                    reason, interrupted = "stopped", error
+                except OSError:
+                    pass
+                finally:
+                    try:
+                        self.sock.close()
+                    except KeyboardInterrupt as error:
+                        reason, interrupted = "stopped", error
+                    finally:
+                        self.app = self.page = self.target = None
+        self.result = {"reason": reason, "cleanup": cleanup, "samples": self.samples,
+                       "discarded": self.discarded, "receivedBytes": self.received,
+                       "reservedInputBytes": self.budget.input, "outputBytes": self.budget.output,
+                       "elapsedSeconds": round(time.monotonic() - started, 4)}
+        if interrupted is not None:
+            raise interrupted
+        return self.result

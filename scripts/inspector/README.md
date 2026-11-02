@@ -59,6 +59,8 @@ check proves sampler removal on disposable WebKit, not on a frozen phone.
    tee raw service data. The file receives only reconstructed numeric/boolean/
    enum sample records, not remote mappings. `run()` returns local statistics;
    retain those separately only within the same budget. Close the output file.
+   Keyboard interruption records `reason: stopped`, closes the transport, then
+   re-raises `KeyboardInterrupt`; the same safe statistics remain in `reader.result`.
 5. A host supervisor owns the attempt's original monotonic deadline (120 seconds
    maximum), twenty-second post-blank stop and all-reader stop event. It must set
    the shared event on user stop, disconnect or any reader's boundary failure.
@@ -68,13 +70,18 @@ check proves sampler removal on disposable WebKit, not on a frozen phone.
    stalled local filesystem; normal deadline enforcement bounds socket I/O, not
    an unresponsive OS filesystem or untrusted caller code.
 6. Inspect `reason` and `cleanup`. Cleanup uses a separate deadline of at most
-   500ms, attempts the fixed sampler removal, sends the page-socket close message,
-   then shuts down and closes the transport. It ignores the already-set stop
-   event only for that bounded cleanup. Input still spends the original budget;
-   exhaustion can prevent reading a cleanup acknowledgment. `confirmed` requires
-   the matching removal response to return true; `unconfirmed` is not success.
-   Report it without restarting the app. `not-installed` means installation was
-   never attempted, not that a remote page was inspected and found clean.
+   500ms. On an aligned stream it gives fixed sampler removal at most half of
+   that time, reserving the rest for the page-socket close message even when the
+   page never answers removal. It then shuts down and closes the transport.
+   An interrupted partial prefix, body or outbound frame marks the stream
+   desynchronized: no further framed cleanup is safe, so it goes straight to
+   transport shutdown/close and leaves attempted page cleanup unconfirmed.
+   It ignores the already-set stop event only for bounded cleanup. Input still
+   spends the original budget; exhaustion can prevent a cleanup acknowledgment.
+   `confirmed` requires the matching removal response to return true;
+   `unconfirmed` is not success. Report it without restarting the app.
+   `not-installed` means installation was never attempted, not that a remote page
+   was inspected and found clean.
 
 The reader selects only the exact `net.processone.fluux` bundle from unavoidable
 service-level application metadata. Other app metadata is transient and never
