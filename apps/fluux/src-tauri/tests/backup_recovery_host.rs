@@ -8,6 +8,8 @@ compile_error!("the recovery host requires test-only storage constructors");
 mod credentials;
 #[path = "../src/macos_secrets.rs"]
 mod macos_secrets;
+// Its iOS-only test imports are unused in this macOS-only GUI harness.
+#[allow(unused_imports)]
 #[path = "../src/openpgp.rs"]
 mod openpgp;
 #[path = "../src/openpgp_backup.rs"]
@@ -262,7 +264,8 @@ mod host {
             .setup(move |app| {
                 tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::External("http://127.0.0.1:5197/demo.html?tutorial=false&e2ee=recovery".parse().unwrap()))
                     .initialization_script(format!("window.__FLUUX_RECOVERY_RESTART__ = {}; window.__FLUUX_RECOVERY_META__ = {}; window.__FLUUX_RECOVERY_SOURCE__ = {};", restart, metadata(), serde_json::to_string(&std::env::var("FLUUX_RECOVERY_SOURCE").unwrap_or_else(|_| "server".into())).unwrap()))
-                    .initialization_script(include_str!("backup_recovery_driver.js"))
+                    .initialization_script(format!("window.__FLUUX_RECOVERY_EXPECTED_BUILD__ = {};", serde_json::to_string(&std::env::var("FLUUX_RECOVERY_BUILD").expect("run the recovery launcher to identify its app build")).unwrap()))
+                     .initialization_script(include_str!("backup_recovery_driver.js"))
                     .title("Fluux isolated recovery fixture").inner_size(1280.0, 800.0)
                     .data_store_identifier(*b"fluux-recovery01")
                     .build()?;
