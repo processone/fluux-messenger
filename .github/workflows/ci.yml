@@ -139,7 +139,12 @@ jobs:
             npx playwright install-deps webkit
 
       - name: Install service-opener build dependencies
-        run: sudo apt-get install -y libplist-dev libssl-dev pkg-config
+        env:
+          CI_RETRY_CLEANUP: scripts/ci-apt-cleanup.sh
+        run: |
+          scripts/ci-apt-prepare.sh
+          sudo --preserve-env=CI_RETRY_CLEANUP scripts/ci-retry.sh 3 300 \
+            apt-get install -y libplist-dev libssl-dev pkg-config
 
       - name: Prove the restricted reader and service opener on disposable content
         run: node scripts/inspector/prove.mjs

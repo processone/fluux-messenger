@@ -89,26 +89,24 @@ class ServiceStream:
             service_end = min(self._deadline, time.monotonic() + self._timeout)
             self._operation_end = service_end + CONTROL_GRACE
             credit = max(0, CREDIT - (self._paid - self._used))
-            # Native bytes and decoded Reader bytes are conservatively both charged.
+            # The budget owns its exception type. Close on failure, but keep it
+            # outside the transport wrapper so every caller receives it unchanged.
             self._budget.charge(credit)
             self._paid += credit
-            remaining = service_end - time.monotonic()
-            if remaining <= 0:
-                raise ServiceError('service-deadline')
-            self._control.settimeout(self._operation_end - time.monotonic())
-            self._control.sendall(REQUEST.pack(kind, n, max(1, int(remaining * 1000)), credit) + data)
-            return self._response(reading=kind == b'R', maximum=n)
-        except BaseException as error:
+            try:
+                remaining = service_end - time.monotonic()
+                if remaining <= 0:
+                    raise ServiceError('service-deadline')
+                self._control.settimeout(self._operation_end - time.monotonic())
+                self._control.sendall(REQUEST.pack(kind, n, max(1, int(remaining * 1000)), credit) + data)
+                return self._response(reading=kind == b'R', maximum=n)
+            except BaseException as error:
+                if isinstance(error, (KeyboardInterrupt, SystemExit, ServiceError)):
+                    raise
+                raise ServiceError('service-io') from None
+        except BaseException:
             self.close()
-            if isinstance(error, (KeyboardInterrupt, SystemExit)):
-                raise
-            # Budget Boundary remains a safe fixed category for Reader/coordinator.
-            from reader import Boundary
-            if isinstance(error, Boundary):
-                raise
-            if isinstance(error, ServiceError):
-                raise
-            raise ServiceError('service-io') from None
+            raise
         finally:
             self._lock.release()
 

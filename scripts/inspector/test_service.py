@@ -5,6 +5,7 @@ Pair records/certificates below are generated for this run, not personal fixture
 """
 import contextlib
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -759,6 +760,34 @@ wakeup.close(); writer.close(); bridge.close()
             peer.wait_closed()
             PROOF.append({'scenario': 'shared-budget', 'result': 'pass', 'chargedBytes': budget.input,
                           'limitBytes': budget.limit, 'returnedBytes': total, 'closedBeforeOvershoot': True})
+
+    def test_qualified_budget_failure_is_preserved(self):
+        # FLM-369 I1: the producer must not depend on its consumer's top-level
+        # module name. Exercise the actual Budget source under a qualified name.
+        spec = importlib.util.spec_from_file_location('qualified_inspector.reader',
+                                                      Path(__file__).with_name('reader.py'))
+        qualified = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(qualified)
+        with DevicePeer('flood') as peer:
+            budget = qualified.Budget(START_CREDIT + 65536)
+            stream = self.open(peer, budget)
+            budget.charge(budget.limit - budget.input - budget.output)
+            with self.assertRaises(qualified.Boundary) as caught:
+                while True:
+                    try:
+                        stream.recv(65536)
+                    except socket.timeout:
+                        continue
+            self.assertIs(type(caught.exception), qualified.Boundary)
+            self.assertEqual(caught.exception.args, ('byte-limit',))
+            self.assertTrue(stream.closed)
+            self.assertFalse(stream._lock.locked())
+            self.assertIsNotNone(stream._process.poll())
+            peer.wait_closed()
+            PROOF.append({'scenario': 'shared-budget', 'case': 'qualified-budget-exception',
+                          'originalExceptionTypePreserved': True, 'category': caught.exception.args[0],
+                          'chargedBytes': budget.input + budget.output, 'limitBytes': budget.limit,
+                          'adapterLockReleased': True, 'workerReaped': True})
 
     def test_blocked_write_and_close(self):
         with DevicePeer('blocked-write') as peer:
