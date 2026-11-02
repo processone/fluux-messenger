@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { deriveCapabilities, type PlatformCapabilities } from './capabilities'
 import { platform, setPlatformForTesting, resetPlatformDetection } from './index'
+import platformMatrix from '../../../../tests/platform/matrix.json'
 
 describe('deriveCapabilities', () => {
   /**
@@ -176,22 +177,9 @@ describe('experimental mobile shell', () => {
       .map(([key]) => key)
       .sort()
 
-    expect(granted).toEqual([
-      ...(os === 'ios' ? ['finishesWorkInBackground', 'followsSystemTextSize', 'hasDeepLinkEvents'] : []),
-      'hasStableInstallIdentity',
-      'interceptsInAppNavigation',
-      ...(os === 'ios' ? ['keychainSessionSecrets'] : ['keyNeedsSessionPassphrase']),
-      ...(os === 'ios' ? ['nativeHaptics', 'nativeHttpFetch', 'nativeKeychain', 'nativeLocalStorage', 'nativeMediaCache', 'nativeOpenpgp', 'nativeUploads'] : []),
-      'nativeXmppProxy',
-      'notificationsManagedByOS',
-      ...(os === 'ios' ? ['notificationsNeedFileUrls'] : []),
-      'opensLinksInSystemBrowser',
-      ...(os === 'ios' ? ['reducesLargePhotos', 'savesThroughShareSheet'] : []),
-      'scrollInputAlwaysObserved',
-      ...(os === 'ios' ? ['supportsKeyRotation'] : []),
-      'suspendedInBackground',
-      ...(os === 'ios' ? ['syncsNativeAppearance', 'usesNativePush'] : []),
-    ])
+    // FLM-370 F4: the reviewed platform inventory owns the grant list, including
+    // consumable notification attachments; do not maintain a second literal pin.
+    expect(granted).toEqual(platformMatrix.environments.find(environment => environment.id === os)!.capabilities)
   })
 })
 
