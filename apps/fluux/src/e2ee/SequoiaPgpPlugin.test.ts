@@ -5336,7 +5336,10 @@ describe('SequoiaPgpPlugin', () => {
       // keeps the plugin registered and flags recovery so the host routes to
       // the IdentityChoiceDialog, rather than failing registration outright.
       const { ctx } = makeContext('me@example.com')
-      const fakeInvoke: InvokeFn = async (cmd) => {
+      const fakeInvoke: InvokeFn = async <T>(cmd: string) => {
+        // FLM-343: a present-key recovery fixture must answer the existence
+        // probe; an unknown probe no longer grants the generation path.
+        if (cmd === 'openpgp_has_persisted_key') return true as T
         if (cmd === 'openpgp_ensure_key') {
           throw new Error(
             "passphrase for account 'me@example.com' is not in the keychain or on disk — key material cannot be decrypted",
