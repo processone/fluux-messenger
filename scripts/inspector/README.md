@@ -11,7 +11,13 @@ With normal project dependencies and Playwright WebKit installed:
 
 ```sh
 node scripts/inspector/prove.mjs
+node --test scripts/inspector/ci-scope.test.mjs
 ```
+
+CI runs the WebKit/socket proof in its own workflow, only for pull requests or
+main-branch pushes that change `scripts/inspector/**`. It is not a browser-invariant
+shard step. The fast scope contract exercises the actual workflow filters against
+current project filenames; it does not execute GitHub's event engine.
 
 The command closes a real disposable WebKit browser after measuring visible,
 hidden and missing message-list states, rejecting immediate duplicate pulls,
@@ -59,8 +65,10 @@ check proves sampler removal on disposable WebKit, not on a frozen phone.
    tee raw service data. The file receives only reconstructed numeric/boolean/
    enum sample records, not remote mappings. `run()` returns local statistics;
    retain those separately only within the same budget. Close the output file.
-   Keyboard interruption records `reason: stopped`, closes the transport, then
-   re-raises `KeyboardInterrupt`; the same safe statistics remain in `reader.result`.
+   Keyboard interruption during collection records `reason: stopped`. An
+   interruption during cleanup preserves the first reason collection ended.
+   Both close the transport before re-raising `KeyboardInterrupt`; the same safe
+   statistics remain in `reader.result`.
 5. A host supervisor owns the attempt's original monotonic deadline (120 seconds
    maximum), twenty-second post-blank stop and all-reader stop event. It must set
    the shared event on user stop, disconnect or any reader's boundary failure.
@@ -73,9 +81,11 @@ check proves sampler removal on disposable WebKit, not on a frozen phone.
    500ms. On an aligned stream it gives fixed sampler removal at most half of
    that time, reserving the rest for the page-socket close message even when the
    page never answers removal. It then shuts down and closes the transport.
-   An interrupted partial prefix, body or outbound frame marks the stream
-   desynchronized: no further framed cleanup is safe, so it goes straight to
-   transport shutdown/close and leaves attempted page cleanup unconfirmed.
+   Inbound and outbound alignment are tracked separately. A partial inbound
+   prefix/body forbids further reads, but aligned outbound removal and page-close
+   messages are still sent. Without an acknowledgment, removal stays unconfirmed.
+   A partial outbound frame forbids further framed writes, so cleanup goes
+   straight to transport shutdown/close. An inbound cut never disables writes.
    It ignores the already-set stop event only for bounded cleanup. Input still
    spends the original budget; exhaustion can prevent a cleanup acknowledgment.
    `confirmed` requires the matching removal response to return true;
@@ -91,8 +101,11 @@ and cross-session messages stop closed. Page titles/URLs are not selection input
 The current protocol requires one `page` Target and uses Target-wrapped fixed
 `Runtime.evaluate` commands. It checks for a pre-existing sampler before installation
 and stops without removing it. No other inspector may mutate this page concurrently.
-Unsupported protocol variants fail closed; do not
-add a fallback that guesses a page or enables raw logging.
+Destruction of the selected page target records only the fixed `target-destroyed`
+reason. Provisional or unrelated target changes keep `target-boundary`; no private
+event payload is retained. A destroyed target alone does not establish a crash or
+explain the blank page. Unsupported protocol variants fail closed; do not add a
+fallback that guesses a page or enables raw logging.
 
 The inherited sampler reads geometry/visibility/counts through production hooks,
 not row-attribute values or text. Both host and page limit sampling to four pulls

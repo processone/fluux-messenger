@@ -90,6 +90,9 @@ jobs:
       - name: Comments describe the code they are attached to
         run: npm run check:comments
 
+      - name: Test the reader-only CI event filters
+        run: node --test scripts/inspector/ci-scope.test.mjs
+
       - name: Install dependencies
         run: npm ci
 
@@ -348,10 +351,6 @@ jobs:
           scripts/ci-apt-prepare.sh
           sudo --preserve-env=CI_RETRY_CLEANUP env "PATH=$PATH" scripts/ci-retry.sh 3 300 \
             npx playwright install-deps ${{ matrix.browser }}
-
-      - name: Prove restricted inspector on disposable WebKit and sockets
-        if: matrix.browser == 'webkit' && matrix.shard == 1
-        run: node scripts/inspector/prove.mjs
 
       # Each engine runs against its own bundled demo. Separate reading and
       # live-edge files let both workers share the scroll workload while tests

@@ -1,0 +1,43 @@
+name: Restricted inspector proof
+
+# JSON is valid YAML; the scope test exercises these event filters as data.
+on: {"pull_request":{"branches":["main","devel"],"paths":["scripts/inspector/**"]},"push":{"branches":["main"],"paths":["scripts/inspector/**"]}}
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    name: Restricted inspector (disposable WebKit and sockets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: npm
+
+      - name: Check the reader-only event filters
+        run: node --test scripts/inspector/ci-scope.test.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install WebKit
+        run: npx playwright install webkit
+
+      - name: Install WebKit OS dependencies
+        env:
+          CI_RETRY_CLEANUP: scripts/ci-apt-cleanup.sh
+        run: |
+          scripts/ci-apt-prepare.sh
+          sudo --preserve-env=CI_RETRY_CLEANUP env "PATH=$PATH" scripts/ci-retry.sh 3 300 \
+            npx playwright install-deps webkit
+
+      - name: Prove the restricted reader on disposable content
+        run: node scripts/inspector/prove.mjs

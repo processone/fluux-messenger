@@ -23,6 +23,8 @@ SAMPLER = Path(__file__).with_name("sampler.js").read_text()
 PRESENT = "Object.hasOwn(window, '__flm350_measurements')"
 SAMPLE = "window.__flm350_measurements.sample()"
 REMOVE = "window.__flm350_measurements.stop()"
+# FLM-349 allows no more than four pulls per second.
+SAMPLE_INTERVAL = 1 / 4
 
 
 class Boundary(Exception):
@@ -146,7 +148,8 @@ class Reader:
         self.received = 0
         self.discarded = 0
         self.samples = 0
-        self.desynchronized = False
+        self.read_desynchronized = False
+        self.write_desynchronized = False
         self.result = None
 
     def _check(self):
@@ -173,9 +176,11 @@ class Reader:
             return data
         finally:
             if 0 < len(data) < size:
-                self.desynchronized = True
+                self.read_desynchronized = True
 
     def _recv(self):
+        if self.read_desynchronized:
+            raise Boundary("protocol-boundary")
         size = struct.unpack(">I", self._read(4))[0]
         if not size:
             raise Boundary("protocol-boundary")
@@ -184,7 +189,7 @@ class Reader:
         try:
             payload = self._read(size)
         except BaseException:
-            self.desynchronized = True
+            self.read_desynchronized = True
             raise
         value = plistlib.loads(payload)
         if type(value) is not dict or type(value.get("__argument")) is not dict:
@@ -192,6 +197,8 @@ class Reader:
         return value["__selector"], value["__argument"]
 
     def _send(self, selector, args=None):
+        if self.write_desynchronized:
+            raise Boundary("protocol-boundary")
         self._check()
         args = dict(args or {}, WIRConnectionIdentifierKey=self.connection)
         body = plistlib.dumps({"__selector": selector, "__argument": args})
@@ -210,7 +217,7 @@ class Reader:
                 pending = pending[sent:]
         finally:
             if 0 < len(pending) < len(packet):
-                self.desynchronized = True
+                self.write_desynchronized = True
 
     def _page_args(self):
         return {"WIRApplicationIdentifierKey": self.app, "WIRPageIdentifierKey": self.page,
@@ -287,7 +294,11 @@ class Reader:
                 raise Boundary("target-boundary")
             self.target = target
             return None
-        if method in ("Target.targetDestroyed", "Target.didCommitProvisionalTarget"):
+        if method == "Target.targetDestroyed":
+            if message["params"].get("targetId") != self.target:
+                raise Boundary("target-boundary")
+            raise Boundary("target-destroyed")
+        if method == "Target.didCommitProvisionalTarget":
             raise Boundary("target-boundary")
         if method == "Target.dispatchMessageFromTarget":
             if self.target is None or message["params"]["targetId"] != self.target:
@@ -350,9 +361,10 @@ class Reader:
                 if now < next_sample:
                     self.stop.wait(min(.025, next_sample - now))
                     continue
-                # Rate limit requests at the host as well as inside the sampler.
-                next_sample = now + .25
                 value = self._evaluate(SAMPLE)
+                # Start the next interval after the response, not before a send
+                # that scheduler/transport delays could move to the interval's end.
+                next_sample = time.monotonic() + SAMPLE_INTERVAL
                 if value is None:
                     continue
                 self._check()
@@ -380,37 +392,38 @@ class Reader:
             try:
                 if self.install_attempted:
                     cleanup = "unconfirmed"
-                    if not self.desynchronized:
+                    if not self.write_desynchronized:
                         # A frozen removal cannot consume the close message's slice.
                         self.deadline = cleanup_start + cleanup_budget / 2
                         try:
                             if self._evaluate(REMOVE) is True:
                                 cleanup = "confirmed"
                         except KeyboardInterrupt as error:
-                            reason, interrupted = "stopped", error
+                            interrupted = error
                         except Exception:
                             pass
-                # Removal itself may have ended mid-frame: recheck alignment.
-                if self.attached and not self.desynchronized:
+                # An inbound cut prevents acknowledgments, not aligned writes.
+                # Removal itself may have cut the outbound frame: recheck it.
+                if self.attached and not self.write_desynchronized:
                     self.deadline = cleanup_end
                     try:
                         self._send("_rpc_forwardDidClose:", self._page_args())
                     except KeyboardInterrupt as error:
-                        reason, interrupted = "stopped", error
+                        interrupted = error
                     except Exception:
                         pass
             finally:
                 try:
                     self.sock.shutdown(socket.SHUT_RDWR)
                 except KeyboardInterrupt as error:
-                    reason, interrupted = "stopped", error
+                    interrupted = error
                 except OSError:
                     pass
                 finally:
                     try:
                         self.sock.close()
                     except KeyboardInterrupt as error:
-                        reason, interrupted = "stopped", error
+                        interrupted = error
                     finally:
                         self.app = self.page = self.target = None
         self.result = {"reason": reason, "cleanup": cleanup, "samples": self.samples,

@@ -19,7 +19,7 @@ import threading
 import time
 import unittest
 
-from reader import BUNDLE, CAP, Budget, Boundary, Reader, PRESENT, SAMPLER, SAMPLE, REMOVE, sanitize_sample
+from reader import BUNDLE, CAP, Budget, Boundary, Reader, PRESENT, SAMPLER, SAMPLE, REMOVE, SAMPLE_INTERVAL, sanitize_sample
 
 SAMPLES = json.load(sys.stdin)
 PROOF = []
@@ -56,6 +56,7 @@ class Peer:
         self.total_sent = 0
         self.sample_index = 0
         self.partial_started = False
+        self.partial_cut_bytes = 0
 
     def send(self, selector, arg):
         data = frame(selector, arg)
@@ -126,7 +127,7 @@ class Peer:
                                             else "present" if exp == PRESENT else "install")
                     if self.partial_started:
                         continue
-                    if exp == REMOVE and self.mode in ("frozen", "interrupt-cleanup"):
+                    if exp == REMOVE and self.mode in ("frozen", "interrupt-cleanup", "interrupt-target-cleanup"):
                         # Interrupt unanswered removal without racing a response writer's
                         # broken pipe against its observation of the close message.
                         continue
@@ -137,12 +138,14 @@ class Peer:
                             "WIRMessageDataKey": json.dumps({"id": inner["id"], "result": {
                                 "result": {"value": True if exp == REMOVE else SAMPLES[0]}}})})
                         count = 2 if self.mode == "partial-prefix" else 4 if self.mode == "header-only" else 8
-                        self.sock.sendall(response[:count])
+                        self.partial_cut_bytes = count
                         self.partial_started = True
+                        self.sock.sendall(response[:count])
                         continue
                     if exp == SAMPLE:
                         self.times.append(time.monotonic())
-                        if self.sample_index == 3 and self.mode in ("normal", "xml", "fragmented"):
+                        if ((self.sample_index == 3 and self.mode in ("normal", "xml", "fragmented"))
+                                or (self.sample_index == 1 and self.mode in ("one-sample", "partial-cleanup"))):
                             self.stop.set()
                             continue
                         if self.mode == "disconnect":
@@ -159,8 +162,14 @@ class Peer:
                         if self.mode == "page-changed":
                             self.listing(pages=2)
                             continue
-                        if self.mode == "target-changed":
-                            self.data({"method": "Target.targetDestroyed", "params": {"targetId": self.target}})
+                        if self.mode in ("target-destroyed", "other-target-destroyed", "interrupt-target-cleanup"):
+                            target = PRIVATE if self.mode == "other-target-destroyed" else self.target
+                            self.data({"method": "Target.targetDestroyed", "params": {
+                                "targetId": target, "private": PRIVATE}})
+                            continue
+                        if self.mode == "target-replaced":
+                            self.data({"method": "Target.didCommitProvisionalTarget", "params": {
+                                "oldTargetId": self.target, "newTargetId": PRIVATE}})
                             continue
                         if self.mode == "malformed":
                             self.send("_rpc_applicationSentData:", {"WIRApplicationIdentifierKey": "PID:321",
@@ -219,14 +228,27 @@ class ReaderTests(unittest.TestCase):
             writes_after_cut = 0
             interrupt_pending = False
             interrupt_delivered = False
+            reads_after_inbound_cut = 0
+            inbound_budget_at_cleanup = None
+            partial_received = 0
+
+            def __init__(self):
+                self.request_times = []
 
             def recv(self, count):
+                if getattr(reader, "read_desynchronized", False):
+                    self.reads_after_inbound_cut += 1
                 if self.interrupt_pending:
                     self.interrupt_pending = False
                     self.interrupt_delivered = True
                     # Real SIGINT on the main thread, before consuming any bytes.
                     signal.raise_signal(signal.SIGINT)
-                return client.recv(min(count, 7) if mode == "fragmented" else count)
+                chunk = client.recv(min(count, 7) if mode == "fragmented" else count)
+                if peer.partial_started and mode in ("partial-prefix", "header-only", "partial-body"):
+                    self.partial_received += len(chunk)
+                    if self.partial_received >= peer.partial_cut_bytes:
+                        stop.set()
+                return chunk
 
             def send(self, data):
                 if self.cut:
@@ -239,6 +261,10 @@ class ReaderTests(unittest.TestCase):
                     expression = json.loads(command["params"]["message"])["params"]["expression"]
                 except (KeyError, ValueError, plistlib.InvalidFileException):
                     expression = None
+                if expression == SAMPLE:
+                    self.request_times.append(time.monotonic())
+                if expression == REMOVE and getattr(reader, "read_desynchronized", False):
+                    self.inbound_budget_at_cleanup = reader.budget.input
                 if mode == "send-cutoff" and expression == SAMPLER:
                     sent = client.send(data[:8])
                     self.cut = True
@@ -246,7 +272,7 @@ class ReaderTests(unittest.TestCase):
                     return sent
                 if (not self.interrupt_delivered
                         and ((mode == "interrupt-sample" and expression == SAMPLE)
-                             or (mode == "interrupt-cleanup" and expression == REMOVE))):
+                             or (mode in ("interrupt-cleanup", "interrupt-target-cleanup") and expression == REMOVE))):
                     self.interrupt_pending = True
                 return client.send(data)
 
@@ -297,9 +323,13 @@ class ReaderTests(unittest.TestCase):
                 self.assertEqual(request["app"], "PID:321")
         PROOF.append({"case": mode, "result": result, "retained": [json.loads(line) for line in persisted.splitlines()],
                       "selectors": [r["selector"] for r in peer.requests], "commands": peer.expressions,
-                      "sampleIntervals": [round(b - a, 4) for a, b in zip(peer.times, peer.times[1:])],
+                      "sampleIntervals": [round(b - a, 4) for a, b in zip(controlled.request_times, controlled.request_times[1:])],
+                      "peerArrivalIntervals": [round(b - a, 4) for a, b in zip(peer.times, peer.times[1:])],
                       "peerClosed": peer.closed,
-                      "desynchronized": getattr(reader, "desynchronized", False),
+                      "readDesynchronized": getattr(reader, "read_desynchronized", False),
+                      "writeDesynchronized": getattr(reader, "write_desynchronized", False),
+                      "readsAfterInboundCut": controlled.reads_after_inbound_cut,
+                      "inputReservedAtInboundCleanup": controlled.inbound_budget_at_cleanup,
                       "writesAfterCutoff": controlled.writes_after_cut,
                       "interruptPropagatedAfterClose": interrupt_propagated})
         return result, peer, persisted
@@ -310,7 +340,7 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(result["cleanup"], "confirmed")
         self.assertEqual(result["samples"], 3)
         self.assertEqual(len(persisted.splitlines()), 3)
-        self.assertTrue(all(b - a >= .24 for a, b in zip(peer.times, peer.times[1:])))
+        self.assertTrue(all(value >= SAMPLE_INTERVAL for value in PROOF[-1]["sampleIntervals"]))
         self.assertEqual(peer.expressions[-1], "remove")
         self.assertIn("_rpc_forwardDidClose:", [r["selector"] for r in peer.requests])
         with self.assertRaises(ValueError):
@@ -325,10 +355,13 @@ class ReaderTests(unittest.TestCase):
                 self.assertEqual(len(persisted.splitlines()), 3)
 
     def test_identity_and_routing_boundaries(self):
+        # Captain-approved F4: only the selected target's destruction gets its signal.
         for mode, reason in [("duplicate-app", "identity-boundary"), ("multiple-pages", "page-boundary"),
                              ("wrong-session", "session-boundary"), ("wrong-app", "session-boundary"),
                              ("identity-changed", "identity-boundary"), ("page-changed", "page-boundary"),
-                             ("target-changed", "target-boundary")]:
+                             ("target-destroyed", "target-destroyed"),
+                             ("other-target-destroyed", "target-boundary"),
+                             ("target-replaced", "target-boundary")]:
             with self.subTest(mode=mode):
                 result, _, persisted = self.exercise(mode)
                 self.assertEqual(result["reason"], reason)
@@ -391,27 +424,37 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(result["cleanup"], "unconfirmed")
         self.assertEqual(persisted, b"")
 
-    def test_partial_frames_skip_all_framed_cleanup(self):
-        # FLM-352 F3: cover both framing directions and each receive boundary.
+    def test_partial_frames_preserve_opposite_direction_cleanup(self):
+        # Captain-approved R1: inbound damage must not suppress aligned writes.
         for mode in ("partial-prefix", "header-only", "partial-body", "partial-cleanup", "send-cutoff"):
             with self.subTest(mode=mode):
-                result, peer, _ = self.exercise(mode, duration=.15)
-                self.assertEqual(result["reason"], "stopped" if mode == "send-cutoff" else "time-limit")
+                result, peer, _ = self.exercise(mode, duration=2)
+                self.assertEqual(result["reason"], "stopped")
                 self.assertEqual(result["cleanup"], "unconfirmed")
                 proof = PROOF[-1]
-                self.assertTrue(proof["desynchronized"])
                 self.assertEqual(proof["writesAfterCutoff"], 0)
-                self.assertNotIn("_rpc_forwardDidClose:", proof["selectors"])
-                if mode != "partial-cleanup":
+                self.assertEqual(proof["readsAfterInboundCut"], 0)
+                if mode == "send-cutoff":
+                    self.assertTrue(proof["writeDesynchronized"])
+                    self.assertFalse(proof["readDesynchronized"])
                     self.assertNotIn("remove", peer.expressions)
+                    self.assertNotIn("_rpc_forwardDidClose:", proof["selectors"])
+                else:
+                    self.assertIn("remove", peer.expressions)
+                    self.assertIn("_rpc_forwardDidClose:", proof["selectors"])
+                    self.assertTrue(proof["readDesynchronized"])
+                    self.assertFalse(proof["writeDesynchronized"])
+                    if proof["inputReservedAtInboundCleanup"] is not None:
+                        self.assertEqual(result["reservedInputBytes"], proof["inputReservedAtInboundCleanup"])
 
     def test_keyboard_interrupt_propagates_after_cleanup(self):
-        # FLM-352 F5: a genuine SIGINT must reach the caller only after closure.
-        for mode in ("interrupt-sample", "interrupt-cleanup", "interrupt-shutdown", "interrupt-close"):
+        # F5 plus captain-approved R2: cleanup SIGINT preserves the first reason.
+        for mode in ("interrupt-sample", "interrupt-cleanup", "interrupt-shutdown", "interrupt-close", "interrupt-target-cleanup"):
             with self.subTest(mode=mode):
                 result, peer, _ = self.exercise(mode, duration=.15)
-                self.assertEqual(result["reason"], "stopped")
-                self.assertEqual(result["cleanup"], "unconfirmed" if mode == "interrupt-cleanup" else "confirmed")
+                expected = "stopped" if mode == "interrupt-sample" else "target-destroyed" if mode == "interrupt-target-cleanup" else "time-limit"
+                self.assertEqual(result["reason"], expected)
+                self.assertEqual(result["cleanup"], "unconfirmed" if mode in ("interrupt-cleanup", "interrupt-target-cleanup") else "confirmed")
                 self.assertTrue(PROOF[-1]["interruptPropagatedAfterClose"])
                 self.assertIn("_rpc_forwardDidClose:", [r["selector"] for r in peer.requests])
 
@@ -445,11 +488,11 @@ class ReaderTests(unittest.TestCase):
                 super().charge(size, output=output)
 
         observed = ObservedBudget()
-        _, _, persisted = self.exercise("normal", duration=.15, budget=observed)
+        _, _, persisted = self.exercise("one-sample", duration=2, budget=observed)
         self.assertGreater(len(persisted), 0)
         boundary = observed.first_output_boundary
         insufficient = ObservedBudget(boundary - 1)
-        limited, peer, retained = self.exercise("normal", duration=.15, budget=insufficient)
+        limited, peer, retained = self.exercise("normal", duration=2, budget=insufficient)
         self.assertEqual(limited["reason"], "byte-limit")
         # Cleanup can spend remaining input bytes after the output rejection.
         # The observed first output charge proves it was the write that failed.
@@ -457,7 +500,7 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(limited["outputBytes"], 0)
         self.assertEqual(peer.sample_index, 1)
         self.assertEqual(retained, b"")
-        exact, _, retained = self.exercise("normal", duration=.15, budget=Budget(boundary))
+        exact, _, retained = self.exercise("normal", duration=2, budget=Budget(boundary))
         self.assertEqual(exact["reason"], "byte-limit")
         self.assertEqual(retained, persisted)
         self.assertEqual(exact["reservedInputBytes"] + exact["outputBytes"], boundary)
