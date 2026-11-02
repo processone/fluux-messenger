@@ -165,7 +165,11 @@ enum NotificationPresentation {
         content.body = body
         // useSoundNotification owns local message audio; do not add a second OS sound.
         content.userInfo = ["__EXTRA__": extra, localMarker: true]
-        if let bare = bareJid(from) { content.threadIdentifier = bare }
+        guard let bare = bareJid(from) else { return content }
+        content.threadIdentifier = bare
+        // The room mirror may not be ready yet. Keep the app's sender/room title
+        // rather than applying a contact intent to an unknown room.
+        guard names.rooms[bare] != nil else { return content }
         return communication(content, from: from, names: names)
     }
 

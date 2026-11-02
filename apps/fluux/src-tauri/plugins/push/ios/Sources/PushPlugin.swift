@@ -219,7 +219,7 @@ class PushPlugin: Plugin {
             let message = try invoke.parseArgs(LocalNotification.self)
             mirrorQueue.async {
                 let content = NotificationPresentation.localContent(title: message.title, body: message.body, from: message.from, extra: message.extra)
-                let request = UNNotificationRequest(identifier: message.id.map(String.init) ?? UUID().uuidString, content: content, trigger: nil)
+                let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
                 UNUserNotificationCenter.current().add(request) { error in
                     if let error { invoke.reject(error.localizedDescription) } else { invoke.resolve() }
                 }
@@ -505,7 +505,6 @@ private class RemoteNotificationDelegate: NSObject, UNUserNotificationCenterDele
 }
 
 private struct LocalNotification: Decodable {
-    let id: Int?
     let title: String
     let body: String
     let from: String

@@ -639,10 +639,16 @@ locked after first unlock. Simulator builds and fixtures do not prove APNs
 extension execution or the rendered Notification Center appearance. While the app
 runs, local room notifications use the same communication presentation through the
 push plugin, retaining the local tap destination. They read the shared avatar mirror
-rather than preparing an unused attachment. Direct-chat local notifications still
-use the notification plugin and convert browser image addresses to temporary files.
+rather than preparing an unused attachment. If the room has not reached the mirror,
+they keep the app's plain sender/room title instead of applying a contact intent.
+The platform capability `usesNativePush` selects this room producer in
+`platform/ios/postRoomNotification.ts`; browsers on iOS keep their web icon path.
+Direct-chat local notifications still use the notification plugin and convert
+browser image addresses to temporary files.
 Each iOS attachment gets its own file because the system consumes it; a later or
-concurrent notification must not reuse that path. Desktop file caching is unchanged.
+concurrent notification must not reuse that path. The
+`notificationAttachmentsConsumed` capability expresses this ownership rule;
+desktop file caching is unchanged.
 In-app room toasts use the room picture (or the shared # fallback), with the sender
 first and the room name and message below; generic status toasts are unchanged.
 Local room content adds no OS sound: `useSoundNotification` remains the owner of

@@ -117,7 +117,6 @@ mod platform {
 
     #[derive(serde::Serialize, serde::Deserialize)]
     pub struct LocalNotification {
-        id: Option<i32>,
         title: String,
         body: String,
         from: String,

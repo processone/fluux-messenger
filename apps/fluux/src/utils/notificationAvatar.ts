@@ -32,7 +32,7 @@ export async function getNotificationAvatarUrl(
 
   // iOS moves an attachment into its own storage. A cached or shared path can
   // lose a later notification, so each iOS preparation must own a fresh file.
-  const reusableHash = capabilities.os === 'ios' ? undefined : hash
+  const reusableHash = capabilities.notificationAttachmentsConsumed ? undefined : hash
   if (reusableHash && avatarFileCache.has(reusableHash)) {
     return avatarFileCache.get(reusableHash)
   }

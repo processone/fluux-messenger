@@ -23,7 +23,8 @@ import { pushTapTarget } from '@/utils/pushTapTarget'
 import { useArrivalJumpStore } from '@/stores/arrivalJumpStore'
 import { announcedByPush } from './useNativePush'
 import { dismissNotification } from '@/utils/dismissNotification'
-import { postIOSRoomNotification, postPluginNotification } from '@/utils/postPluginNotification'
+import { postPluginNotification } from '@/utils/postPluginNotification'
+import { postIOSRoomNotification } from '@/platform/ios/postRoomNotification'
 import { currentAccountId, postNativeDesktopNotification } from '@/utils/nativeNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
 import { requestAttention } from '@/utils/attention'
@@ -318,7 +319,7 @@ export function useDesktopNotifications(): void {
       ? rosterStore.getState().getContact(target.entity.id)
       : target.entity
     // Native iOS rooms use the shared mirror; web notifications still need their icon.
-    const iosRoom = target.kind === 'room' && platform().shell === 'mobile' && platform().os === 'ios'
+    const iosRoom = target.kind === 'room' && platform().usesNativePush
     const avatarUrl = iosRoom ? undefined : await getNotificationAvatarUrl(avatar?.avatar, avatar?.avatarHash)
     const mobile = desktop && await isMobileTauri()
     // Avatar/platform work may outlive a decrypt repair, edit, read or account change.
