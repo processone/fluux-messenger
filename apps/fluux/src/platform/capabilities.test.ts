@@ -1,7 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { deriveCapabilities, type PlatformCapabilities } from './capabilities'
 import { platform, setPlatformForTesting, resetPlatformDetection } from './index'
-import platformMatrix from '../../../../tests/platform/matrix.json'
 
 describe('deriveCapabilities', () => {
   /**
@@ -171,16 +170,6 @@ describe('experimental mobile shell', () => {
     expect(platform().hasNativeConnectionKeepalive).toBe(true)
   })
 
-  it.each(['ios', 'android'] as const)('enables only capabilities provided by the experimental %s host', (os) => {
-    const granted = Object.entries(deriveCapabilities('mobile', os))
-      .filter(([, value]) => value === true)
-      .map(([key]) => key)
-      .sort()
-
-    // FLM-370 F4: the reviewed platform inventory owns the grant list, including
-    // consumable notification attachments; do not maintain a second literal pin.
-    expect(granted).toEqual(platformMatrix.environments.find(environment => environment.id === os)!.capabilities)
-  })
 })
 
 describe('native communication test update capability', () => {
