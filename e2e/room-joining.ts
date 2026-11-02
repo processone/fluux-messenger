@@ -23,7 +23,14 @@ type DemoWindow = Window & {
 
 async function openJoiningRoom(page: Page, jid: string, beforeJoin?: () => Promise<void>) {
   await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(jid)}`)
-  await beforeJoin?.()
+  if (beforeJoin) {
+    await page.evaluate(async jid => {
+      const w = window as unknown as DemoWindow
+      w.__demoClient.stopAnimation()
+      await w.__roomStore.getState().activateRoom(jid)
+    }, jid)
+    await beforeJoin()
+  }
   await page.evaluate(async ({ jid, team }) => {
     const w = window as unknown as DemoWindow
     const client = w.__demoClient
