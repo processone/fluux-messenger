@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import type { roomStore } from '@fluux/sdk/stores'
+import { TYPING_TIMEOUT_MS } from '../packages/fluux-sdk/src/stores/typingTimeout'
 import { armPinBurst, finishPinBurst } from './harness/pinBurst'
 import { withPinWindow, type PinGrowthStep } from './harness/pinWindow'
 import { syncEngineGeometry } from './harness/compositorSync'
@@ -15,6 +16,7 @@ import {
   assertScrollShadow,
   navigateToStressRoom,
   enableScrollTrace,
+  captureTargetHighlight,
   getScrollTop,
   getMountedRowCount,
   setScrollTop,
@@ -613,13 +615,15 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     if (awaitRow) await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
   }
 
-  /** Enter the stress room and take the live edge the way a reader does, then hover the list. */
+  /** Place the pointer in the stress room, then explicitly take latest without an active hold. */
   async function enterAtBottom(page: Page): Promise<void> {
     await loadDemo(page)
     await navigateToStressRoom(page)
+    // This suite tests ordinary ambient following, not an interaction-owned reading position.
+    // Place the pointer first; explicit latest then ends any hold before the boundary wheel.
+    await hoverList(page)
     await page.keyboard.press('End')
     await settle(page)
-    await hoverList(page)
     expect(
       (await readGeometry(page)).distFromBottom,
       'precondition: the reader starts glued to the live edge',
@@ -702,18 +706,16 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     const NEAR_OFFSET_PX = 100
 
     await enterAtBottom(page)
+    await expect(page.locator('[data-message-list]').first()).not.toHaveAttribute('data-message-interaction')
 
     // The dead state first: a wheel down that cannot move anything, then a small deliberate move up
     // that leaves the reader inside the band.
     await page.mouse.wheel(0, 120)
     await page.waitForTimeout(300)
-    await wheelUntil(
-      page,
-      -NEAR_OFFSET_PX,
-      async () => (await readGeometry(page)).distFromBottom,
-      distance => distance > PIN_TOLERANCE_PX && distance < AT_BOTTOM_OK_PX,
-      { message: 'wheel input did not stop inside the at-bottom band' },
-    )
+    // One bounded step, not repeated input: a command may return before its native event arrives.
+    // Repeating after a stale zero read queues a second -100 and skips the entire 150px band.
+    await page.mouse.wheel(0, -NEAR_OFFSET_PX)
+    await expect.poll(async () => (await readGeometry(page)).distFromBottom).toBeGreaterThan(PIN_TOLERANCE_PX)
     await settle(page)
     const before = await readGeometry(page)
     expect(
@@ -730,6 +732,33 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
       (await readGeometry(page)).distFromBottom,
       'a reader inside the band must be re-pinned, exactly as an armed follow already is',
     ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
+  })
+
+  // FLM-229's approved "did not scroll" condition and FLM-245 I1: a real hover hold
+  // changes the initial policy. Native takeover keeps that reading position, even inside the band.
+  test('a held message yields to near-bottom native scrolling without re-pinning', async ({ page }, testInfo) => {
+    await enterAtBottom(page)
+    const list = page.locator('[data-message-list]').first()
+    await page.mouse.move(0, 0)
+    await hoverList(page)
+    await expect(list).toHaveAttribute('data-message-interaction', /.+/)
+    const held = await list.getAttribute('data-message-interaction')
+    // Scroll while the hold is active, not after a no-movement boundary release.
+    await page.mouse.wheel(0, -100)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect.poll(async () => (await readGeometry(page)).distFromBottom).toBeGreaterThan(PIN_TOLERANCE_PX)
+    await settle(page)
+    const before = await readGeometry(page)
+    expect(before.distFromBottom).toBeLessThan(AT_BOTTOM_OK_PX)
+    await setTyping(page, true)
+    await page.waitForSelector('[data-typing-pill]', { timeout: 5_000 })
+    await settle(page)
+    const after = await readGeometry(page)
+    const reading = { held, released: await list.getAttribute('data-message-interaction'), before, after }
+    await testInfo.attach('held-native-near-bottom', { body: JSON.stringify(reading), contentType: 'application/json' })
+    expect(Math.abs(after.scrollTop - before.scrollTop), 'typing must not resume after manual takeover').toBeLessThanOrEqual(1)
+    expect(after.distFromBottom).toBeGreaterThan(PIN_TOLERANCE_PX)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
   })
 
   test('a finger on the list holds the view until it lifts, then the band re-pins', async ({ page }) => {
@@ -1136,10 +1165,11 @@ test.describe('Typing indicator never covers message text', () => {
       const id = await page.evaluate(jid => {
         const store = (window as unknown as { __roomStore: { getState: () => { messages: Map<string, { id: string }[]>; setTargetMessageId: (id: string) => void } } }).__roomStore.getState()
         const id = store.messages.get(jid)!.at(-1)!.id
-        store.setTargetMessageId(id)
         return id as string
       }, STRESS_ROOM_JID)
-      await expect(page.locator('.message-highlight')).toBeVisible()
+      await captureTargetHighlight(page, id, () => page.evaluate(id => {
+        (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState().setTargetMessageId(id)
+      }, id))
       await page.waitForTimeout(SETTLE_MS)
       await setRoomTypers(page, STRESS_ROOM_JID, ['AwayBot'])
       const before = await measureGlued(page, id)
@@ -1186,8 +1216,10 @@ test.describe('Typing indicator never covers message text', () => {
     })
   }
 
-  for (const { width, virtualized } of [900, 1280].flatMap(width => [false, true].map(virtualized => ({ width, virtualized })))) {
-    test(`typing after jumping to the last message keeps that message visible (${width}px, virtualized: ${virtualized})`, async ({ page }, testInfo) => {
+  for (const { width, virtualized, interaction } of [900, 1280].flatMap(width =>
+    [false, true].flatMap(virtualized => ['ordinary', 'held'].map(interaction => ({ width, virtualized, interaction }))),
+  )) {
+    test(`typing after jumping to the last message keeps that message visible (${width}px, virtualized: ${virtualized}, interaction: ${interaction})`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 700 })
       await loadDemo(page)
       await page.evaluate((enabled) => {
@@ -1200,10 +1232,11 @@ test.describe('Typing indicator never covers message text', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const store = (window as any).__roomStore.getState()
         const last = store.messages.get(jid).at(-1)
-        store.setTargetMessageId(last.id)
         return last.id as string
       }, STRESS_ROOM_JID)
-      await expect(page.locator('.message-highlight')).toBeVisible()
+      const initialHighlight = await captureTargetHighlight(page, tailId, () => page.evaluate(id => {
+        (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState().setTargetMessageId(id)
+      }, tailId))
       await page.waitForTimeout(SETTLE_MS)
       const before = await measureGlued(page, tailId)
       expect(before.dist, 'target navigation must settle at the bottom').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
@@ -1245,26 +1278,36 @@ test.describe('Typing indicator never covers message text', () => {
       await page.waitForTimeout(SETTLE_MS)
       const appended = await measureGlued(page, tailId)
       expect(appended.dist, 'layout correction must not start following later messages').toBeGreaterThan(20)
+      expect(appended.typingHeight, 'the typing fixture must keep the same band through the geometry comparison').toBe(after.typingHeight)
+      expect(appended.client).toBe(after.client)
       expect(appended.belowFold, 'the selected message must retain its reading position').toBe(after.belowFold)
 
-      await page.evaluate(() => {
+      // Both ordinary and held readers recover following when downward input plus delayed
+      // compensation reaches the true bottom. Upward reading inside the band is a separate case.
+      const list = page.locator('[data-message-list]').first()
+      await list.hover()
+      const retargetHighlight = await captureTargetHighlight(page, 'after-target-resize', () => page.evaluate(() => {
         const store = (window as unknown as {
           __roomStore: { getState: () => { setTargetMessageId: (id: string) => void } }
         }).__roomStore.getState()
         store.setTargetMessageId('after-target-resize')
-      })
-      await expect(page.locator('.message-highlight')).toBeVisible()
+      }))
       await page.waitForTimeout(SETTLE_MS)
       const retargeted = await measureGlued(page, 'after-target-resize')
       expect(retargeted.dist).toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
-      const list = page.locator('[data-message-list]').first()
-      await list.hover()
+      if (interaction === 'held') {
+        await list.locator('.message-row[data-message-id="after-target-resize"]').hover({ position: { x: 100, y: 12 } })
+        await expect(list).toHaveAttribute('data-message-interaction')
+      }
+      const interactionBeforeWheel = await list.getAttribute('data-message-interaction')
+      if (interaction === 'held') expect(interactionBeforeWheel).not.toBeNull()
+      else expect(interactionBeforeWheel).toBeNull()
       await wheelUntil(
         page,
         -50,
         async () => (await measureGlued(page, 'after-target-resize')).top,
         top => top < retargeted.top,
-        { message: 'upward wheel input did not move the selected message' },
+        { message: 'upward wheel input did not move the selected message', positionPointer: false },
       )
       const upward = await measureGlued(page, 'after-target-resize')
       expect(upward.top).toBeLessThan(retargeted.top)
@@ -1305,13 +1348,38 @@ test.describe('Typing indicator never covers message text', () => {
       await page.waitForTimeout(SETTLE_MS)
       const recovered = await measureGlued(page, 'after-growth-takeover')
       await testInfo.attach('target-growth-geometry', {
-        body: JSON.stringify({ before, after, grown, appended, retargeted, upward, movement, recovered }),
+        body: JSON.stringify({ before, after, grown, appended, retargeted, initialHighlight, retargetHighlight, interactionBeforeWheel, upward, movement, recovered }),
         contentType: 'application/json',
       })
       expect(recovered.dist, 'downward movement coincident with row growth must recover follow').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
       await page.screenshot({ path: testInfo.outputPath('typing-follow-recovered.png') })
     })
   }
+
+  // Layout comparisons require continuous composing, not a participant that silently timed out.
+  test('continuous room typing keeps the band beyond the missed-paused timeout', async ({ page }, testInfo) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+    await scrollToBottom(page)
+    await setRoomTypers(page, STRESS_ROOM_JID, ['AwayBot'])
+    const before = await pillHeight(page)
+    const started = await page.evaluate(() => performance.now())
+    await page.waitForFunction(({ started, timeout }) => performance.now() - started > timeout,
+      { started, timeout: TYPING_TIMEOUT_MS }, { timeout: TYPING_TIMEOUT_MS * 2 })
+    const after = await pillHeight(page)
+    const renewals = await page.evaluate(jid => (window as unknown as {
+      __roomTypingFixtures?: Map<string, { renewals: number }>
+    }).__roomTypingFixtures?.get(JSON.stringify([jid, 'AwayBot']))?.renewals ?? 0, STRESS_ROOM_JID)
+    await testInfo.attach('continuous-room-typing', { body: JSON.stringify({ before, after, renewals, timeout: TYPING_TIMEOUT_MS }), contentType: 'application/json' })
+    expect(before).toBeGreaterThan(0)
+    expect(after).toBe(before)
+    expect(renewals).toBeGreaterThanOrEqual(2)
+    await emitRoomTyping(page, STRESS_ROOM_JID, ['AwayBot'], false)
+    await expect(page.locator('[data-typing-pill]')).toHaveCount(0)
+    expect(await page.evaluate(jid => (window as unknown as {
+      __roomTypingFixtures?: Map<string, unknown>
+    }).__roomTypingFixtures?.has(JSON.stringify([jid, 'AwayBot'])) ?? false, STRESS_ROOM_JID)).toBe(false)
+  })
 
   test('growing the composer to two lines and shrinking it back holds the bottom and never parks text under the pill', async ({ page }) => {
     await loadDemo(page)
@@ -1455,12 +1523,31 @@ test.describe('Typing indicator never covers message text', () => {
 
   /** Emit `composing`/`paused` for a set of MUC nicks. `room:typing` carries one nick at a time. */
   async function emitRoomTyping(page: Page, roomJid: string, nicks: string[], isTyping: boolean): Promise<void> {
-    await page.evaluate(({ jid, names, on }) => {
+    await page.evaluate(({ jid, names, on, renewalMs }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (window as any).__demoClient
       if (!c) throw new Error('no __demoClient')
-      for (const nick of names) c.emitSDK('room:typing', { roomJid: jid, nick, isTyping: on })
-    }, { jid: roomJid, names: nicks, on: isTyping })
+      const scope = window as unknown as {
+        __roomTypingFixtures?: Map<string, { timer: number; renewals: number }>
+      }
+      const fixtures = scope.__roomTypingFixtures ??= new Map()
+      for (const nick of names) {
+        const key = JSON.stringify([jid, nick])
+        const previous = fixtures.get(key)
+        if (previous) window.clearInterval(previous.timer)
+        fixtures.delete(key)
+        c.emitSDK('room:typing', { roomJid: jid, nick, isTyping: on })
+        if (!on) continue
+        const fixture = { timer: 0, renewals: 0 }
+        fixtures.set(key, fixture)
+        fixture.timer = window.setInterval(() => {
+          if (fixtures.get(key) !== fixture) return
+          c.emitSDK('room:typing', { roomJid: jid, nick, isTyping: true })
+          fixture.renewals += 1
+        }, renewalMs)
+      }
+      // Page/context teardown stops the fixture timers; paused explicitly stops each participant.
+    }, { jid: roomJid, names: nicks, on: isTyping, renewalMs: TYPING_TIMEOUT_MS / 3 })
   }
 
   /**
@@ -1726,14 +1813,15 @@ test.describe('Typing indicator never covers message text', () => {
   }
 
   /** How far off the bottom we are, and how far the reacted row hangs below the fold. */
-  async function measureGlued(page: Page, id: string): Promise<{ dist: number; belowFold: number; top: number; client: number }> {
+  async function measureGlued(page: Page, id: string): Promise<{ dist: number; belowFold: number; top: number; client: number; typingHeight: number }> {
     return page.evaluate((msgId) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
       const el = s?.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
-      if (!s || !el) return { dist: -1, belowFold: 9999, top: 0, client: 0 }
+      if (!s || !el) return { dist: -1, belowFold: 9999, top: 0, client: 0, typingHeight: 0 }
       return {
         top: s.scrollTop,
         client: s.clientHeight,
+        typingHeight: s.parentElement?.querySelector('[data-typing-pill]')?.getBoundingClientRect().height ?? 0,
         dist: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
         // How far the reacted row's bottom (chip included) sits BELOW the scrollport's bottom edge.
         belowFold: Math.round(el.getBoundingClientRect().bottom - s.getBoundingClientRect().bottom),

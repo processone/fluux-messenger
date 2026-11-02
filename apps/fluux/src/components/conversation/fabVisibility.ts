@@ -14,7 +14,13 @@ export function shouldShowScrollToBottomFab(
   distFromBottom: number,
   threshold: number,
   pinningToBottom: boolean,
+  interactionHeld = false,
 ): boolean {
   if (pinningToBottom) return false
-  return distFromBottom >= threshold
+  return interactionHeld ? distFromBottom > 1 : distFromBottom >= threshold
+}
+
+/** A message menu owns the corner, even when a detached resident window offers a jump. */
+export function latestJumpVisible(viewportOffersJump: boolean, windowSlidUp: boolean, messageMenuOpen: boolean): boolean {
+  return !messageMenuOpen && (viewportOffersJump || windowSlidUp)
 }

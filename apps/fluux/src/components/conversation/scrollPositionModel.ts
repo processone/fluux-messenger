@@ -155,7 +155,12 @@ export type PositionRequest =
   | UserNavigationRequest
   | Request<{ kind: 'live-update'; reason: 'outgoing-message' }, LiveEdgePosition>
   | Request<
-      { kind: 'ambient-live-edge'; reason: 'geometry-rearm' },
+      { kind: 'interaction'; reason: 'hold' | 'released' },
+      TopOffsetAnchorPosition,
+      Extract<UnavailablePolicy, { kind: 'warn-and-stop' }>
+    >
+  | Request<
+      { kind: 'ambient-live-edge'; reason: 'geometry-rearm' | 'interaction-release' },
       LiveEdgePosition
     >
   | Request<
@@ -263,9 +268,15 @@ export type LayoutPreservationRequest = Extract<
   { source: { kind: 'layout-preservation'; reason: LayoutPreservationReason } }
 >
 
+export type InteractionPositionRequest = Extract<
+  PositionRequest,
+  { source: { kind: 'interaction' } }
+>
+
 export type AnchorPreservationRequest =
   | MediaPreservationRequest
   | LayoutPreservationRequest
+  | InteractionPositionRequest
 
 export type DirectionalHistoryRequest = Extract<
   PositionRequest,
@@ -444,6 +455,7 @@ type RequestPrecedence =
 const REQUEST_PRECEDENCE: Record<PositionRequestSource['kind'], RequestPrecedence> = {
   entry: 'supersedes',
   'user-navigation': 'supersedes',
+  interaction: 'yields-to-navigation',
   fallback: 'supersedes',
   'late-mds-supersession': 'supersedes',
   /**
@@ -526,6 +538,10 @@ export function acceptPositionRequest(
   }
 
   const active = model.active
+  // FLM-229: a deliberate interaction owns its fixed target even after convergence.
+  // Ambient arrivals/layout/MDS cannot replace it; navigation and sends still can.
+  if (active?.request.source.kind === 'interaction' && active.request.source.reason === 'hold' &&
+    !['entry', 'user-navigation', 'live-update', 'interaction'].includes(request.source.kind)) return model
   switch (requestPrecedence(request.source.kind)) {
     case 'yields-to-any-unsettled-position':
       // Ambient preservation is not navigation. It may preserve a settled reading point, but it must
@@ -555,7 +571,8 @@ export function acceptPositionRequest(
   const closesMdsWindow =
     isLateMds ||
     request.source.kind === 'user-navigation' ||
-    request.source.kind === 'live-update'
+    request.source.kind === 'live-update' ||
+    request.source.kind === 'interaction'
 
   return {
     watermark: request.generation,
@@ -606,7 +623,12 @@ export function cancelReconciliationForUserInput(
   return {
     ...model,
     active:
-      model.active?.request.desired.kind === 'live-edge'
+      model.active?.request.source.kind === 'interaction'
+        ? {
+            request: { ...model.active.request, source: { kind: 'interaction', reason: 'released' } } as InteractionPositionRequest,
+            phase: { kind: 'settled' },
+          }
+        : model.active?.request.desired.kind === 'live-edge'
         ? {
             ...model.active,
             phase: { kind: 'paused-user-input' },

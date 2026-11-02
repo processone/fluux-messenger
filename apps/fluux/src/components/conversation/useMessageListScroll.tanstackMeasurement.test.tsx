@@ -8,6 +8,7 @@ import type { MessageVirtualizer } from './messageVirtualizer'
 import { PositioningController } from './positioningController'
 import { getScrollShadowSnapshot, resetScrollShadowDiagnostics } from './scrollPositionShadow'
 import { useMessageListScroll, type UseMessageListScrollResult } from './useMessageListScroll'
+import * as scrollBinding from './useScrollContainerBinding'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import { MEDIA_LOAD_DEBOUNCE_MS } from './useMediaGrowthPreservation'
 
@@ -75,6 +76,7 @@ function fixture() {
   const scrollEvents: number[] = []
   const loadOlder = vi.fn()
   const loadNewer = vi.fn()
+  const liveEdgeMeasurements = vi.fn()
 
   function Harness() {
     const scrollRef = React.useRef<HTMLDivElement | null>(null)
@@ -83,7 +85,7 @@ function fixture() {
       conversationId: 'room', messageCount: rows.length,
       firstMessageId: rows[0].rowId, lastMessageId: rows.at(-1)!.rowId,
       rowGrowthSignature: '', windowAtLiveEdge: true, virtualizer: currentVirtualizer,
-      onScrollToTop: loadOlder, onLoadNewer: loadNewer,
+      onScrollToTop: loadOlder, onLoadNewer: loadNewer, onLiveEdgeMeasured: liveEdgeMeasurements,
     })
     const setContainer = currentApi.setScrollContainerRef
     const setScroller = React.useCallback((node: HTMLDivElement | null) => {
@@ -128,8 +130,9 @@ function fixture() {
   settle()
   expect(scroller.scrollTop).toBe(4700)
   return {
-    rows, writes, scrollEvents, loadOlder, loadNewer, scroller, totalHeight,
+    rows, writes, scrollEvents, loadOlder, loadNewer, liveEdgeMeasurements, scroller, totalHeight,
     get virtualizer() { return virtualizer },
+    get api() { return api },
     move: (value: number, deliver = false) => {
       top = value
       if (deliver) fireEvent.scroll(scroller)
@@ -165,6 +168,61 @@ function fixture() {
     unmount: view.unmount,
   }
 }
+
+// Native navigation wins even when compositor pixels precede the application's scroll event.
+it('observes native movement before resuming a disengaged message hold', () => {
+  const release = PositioningController.prototype.releaseInteractionHold
+  let retainedInteractionReading = false
+  vi.spyOn(PositioningController.prototype, 'releaseInteractionHold').mockImplementation(function (this: PositioningController, input) {
+    release.call(this, input)
+    retainedInteractionReading = this.hasInteractionPosition()
+  })
+  const scope = fixture()
+  scope.toBottom()
+  settle()
+  const bottom = scope.scroller.scrollTop
+  act(() => { expect(scope.api.beginInteractionHold(scope.rows[48].rowId)).toBe(true) })
+  settle()
+  scope.move(bottom - 100)
+  scope.writes.length = 0
+  act(() => scope.api.releaseInteractionHold(true))
+  settle()
+  // The hook uses this classification to keep the strict bottom rule during later layout changes.
+  expect(retainedInteractionReading).toBe(true)
+  expect(scope.scroller.scrollTop).toBe(bottom - 100)
+  expect(scope.writes.every(top => top <= bottom - 100)).toBe(true)
+  scope.resizeViewport(260)
+  settle()
+  expect(scope.scroller.scrollTop).toBe(bottom - 100)
+})
+
+// A deferred input-end sample may describe bottom before native upward pixels arrive.
+it('settles input from current native geometry instead of an older bottom sample', () => {
+  const bind = scrollBinding.useScrollContainerBinding
+  let ports: scrollBinding.ScrollContainerBindingPorts | undefined
+  vi.spyOn(scrollBinding, 'useScrollContainerBinding').mockImplementation(input => {
+    ports = input
+    return bind(input)
+  })
+  const scope = fixture()
+  scope.toBottom()
+  settle()
+  const geometry = { top: scope.scroller.scrollTop, height: scope.scroller.scrollHeight, client: scope.scroller.clientHeight }
+  act(() => { expect(scope.api.beginInteractionHold(scope.rows[48].rowId)).toBe(true) })
+  settle()
+  act(() => {
+    ports!.observeUserInput('room', { geometry, deltaY: -100 })
+    ports!.reconcileLiveEdge('viewport-resize', true)
+  })
+  scope.move(geometry.top - 100)
+  scope.writes.length = 0
+  scope.liveEdgeMeasurements.mockClear()
+  act(() => ports!.observeUserInputEnd('room', geometry, true))
+  expect(scope.liveEdgeMeasurements).toHaveBeenLastCalledWith(false)
+  settle()
+  expect(scope.scroller.scrollTop).toBe(geometry.top - 100)
+  expect(scope.writes.every(top => top <= geometry.top - 100)).toBe(true)
+})
 
 describe.each(['ref', 'resize'] as const)('installed TanStack measurement through %s', path => {
   it.each([

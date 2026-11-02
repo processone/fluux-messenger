@@ -503,6 +503,7 @@ vi.mock('@/hooks/useRoomJoinWarning', () => ({
 
 vi.mock('@/hooks/useHasHover', () => ({
   useHasHover: () => true,
+  hasHover: () => true,
 }))
 
 // Mock utils

@@ -47,6 +47,7 @@ export type ReassertLoopLabel =
   | 'divider-anchor'
   | 'insertion-anchor'
   | 'width-anchor'
+  | 'interaction-anchor'
   | 'prepend'
   | 'restore-anchor'
   | 'marker'

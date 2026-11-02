@@ -8,6 +8,7 @@ import type { AnchorPreservationRequest } from './scrollPositionModel'
 import type { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
 import { deriveReachabilityForDesired } from './scrollPositionFacts'
 import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
+import { findMessageRowElement } from './messageRowIdentity'
 
 /** Distinguishes fixed-anchor stimuli in frame-loop diagnostics. */
 export type AnchorPreservationLoopLabel =
@@ -15,6 +16,7 @@ export type AnchorPreservationLoopLabel =
   | 'divider-anchor'
   | 'insertion-anchor'
   | 'width-anchor'
+  | 'interaction-anchor'
 
 export interface AnchorPreservationWindowFacts {
   hasRows: boolean
@@ -77,14 +79,16 @@ export class AnchorPreservationBrowserAdapter {
           return
         }
         const scroller = this.options.getScroller()
-        if (scroller) {
+        if (scroller && request.source.kind !== 'interaction') {
           this.options.setAtBottom(
             scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <
               AT_BOTTOM_THRESHOLD,
           )
           this.options.rememberScrollSnapshot()
         }
-        this.options.recordProgrammaticWrite(request.conversationId)
+        // Ending an interaction loop is not a write. Recording here would bless a native
+        // scroll before the replacement loop observes it, and snap selection/find back.
+        if (request.source.kind !== 'interaction') this.options.recordProgrammaticWrite(request.conversationId)
         this.options.log?.('ANCHOR: controller completed preservation', {
           conversationId: request.conversationId,
           generation: request.generation,
@@ -104,6 +108,30 @@ export class AnchorPreservationBrowserAdapter {
       this.options.getActiveConversationId() !== request.conversationId
     ) {
       return { kind: 'unavailable' }
+    }
+    if (request.desired.placement.kind === 'top-offset') {
+      const scroller = this.options.getScroller()
+      const row = scroller && findMessageRowElement(scroller, request.desired.messageId)
+      const bubble = row?.querySelector<HTMLElement>('[data-message-body]') ?? row
+      if (!scroller || !bubble) return { kind: 'unavailable' }
+      const target = Math.max(0, scroller.scrollTop + bubble.getBoundingClientRect().top -
+        scroller.getBoundingClientRect().top - request.desired.placement.offsetPx)
+      // A growing viewport can clamp away the held offset (for example when typing stops).
+      // Reserve only the missing scroll range, under this same positioning lease.
+      const padding = parseFloat(getComputedStyle(scroller).paddingBottom) || 0
+      const naturalHeight = scroller.scrollHeight - padding
+      scroller.style.paddingBottom = `${Math.max(0, target + scroller.clientHeight - naturalHeight)}px`
+      if (Math.abs(scroller.scrollTop - target) > 0.5) {
+        const virtualizer = this.options.getVirtualizer()
+        if (virtualizer) {
+          const write = virtualizer.scrollToOffset(target, { owner: lease.owner })
+          if (write.outcome().status === 'applied') this.options.recordProgrammaticWrite(request.conversationId)
+        } else {
+          scroller.scrollTop = target
+          this.options.recordProgrammaticWrite(request.conversationId)
+        }
+      }
+      return { kind: 'positioned', scrollTop: scroller.scrollTop, reassert: true }
     }
     const anchor: ScrollAnchor = {
       messageId: request.desired.messageId,

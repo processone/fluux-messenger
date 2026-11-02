@@ -11,6 +11,9 @@ import type { BaseMessage } from '@fluux/sdk'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { setPeerVerified, clearPeerVerified } from '@/stores/verifiedPeerKeysStore'
 import type { DensityMode } from '@/stores/settingsStore'
+import { useRef, type ReactNode } from 'react'
+import { MessageToolbar, type MessageToolbarProps } from './MessageToolbar'
+import { MessageInteractionContext, useMessageInteractionHold } from './useMessageInteractionHold'
 
 const haptic = vi.hoisted(() => vi.fn())
 vi.mock('@/platform/ios/haptics', () => ({ iosHaptic: haptic }))
@@ -92,6 +95,16 @@ function createDefaultProps(overrides: Partial<MessageBubbleProps> = {}): Messag
 }
 
 describe('MessageBubble', () => {
+  it('FLM-229 refreshes action identity when a message receives its archive id', () => {
+    const original = createTestMessage()
+    const targets: BaseMessage[] = []
+    const props = createDefaultProps({ message: original, onReaction: () => { targets.push(original) } })
+    const view = render(<MessageBubble {...props} />)
+    const stamped = { ...original, stanzaId: 's1' }
+    view.rerender(<MessageBubble {...props} message={stamped} onReaction={() => { targets.push(stamped) }} />)
+    fireEvent.click(screen.getAllByLabelText('chat.reactWith')[0])
+    expect(targets).toEqual([stamped])
+  })
   it('expands only the selected chat twin', () => {
     const height = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(700)
     useExpandedMessagesStore.getState().clear()
@@ -1395,4 +1408,45 @@ describe('Density avatar size', () => {
     const col = container.querySelector('.flex-shrink-0') as HTMLElement
     expect(col.className).toContain('w-12')
   })
+})
+
+// FLM-245 F4/F8: measure actual memoized bubbles/toolbar consumers, not a modeled subscription.
+it('FLM-245 updates only old/new held rows and preserves the toolbar handler identities', () => {
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    matches: query.includes('hover: hover'), media: query, onchange: null,
+    addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+  })))
+  const toolbar = MessageToolbar as unknown as { type: (props: MessageToolbarProps) => ReactNode }
+  const renders = vi.spyOn(toolbar, 'type')
+  const props = ['a', 'b', 'c'].map(id => createDefaultProps({ message: createTestMessage({ id: `held-${id}`, body: `Message ${id}` }) }))
+  function Rows() {
+    const scrollRef = useRef<HTMLDivElement>(null)
+    const interaction = useMessageInteractionHold({ scrollRef, conversationId: 'alice@example.com', enabled: true, begin: () => true, release: () => {} })
+    return <MessageInteractionContext.Provider value={interaction.context}>
+      <div ref={scrollRef} data-held={interaction.heldMessageId ?? ''}>
+        {props.map(p => <div key={p.message.id} data-testid={p.message.id} data-message-row-id={messageRowId(p.message)!}><MessageBubble {...p} /></div>)}
+      </div>
+    </MessageInteractionContext.Provider>
+  }
+  try {
+    render(<Rows />)
+    const initial = props.map(p => renders.mock.calls.find(([value]) => value.myReactions === p.myReactions)![0])
+    renders.mockClear()
+    fireEvent.mouseMove(document.body, { clientX: 0, clientY: 0 })
+    fireEvent.mouseMove(screen.getByTestId('held-a'), { clientX: 100, clientY: 200 })
+    expect(screen.getByTestId('held-a').parentElement).toHaveAttribute('data-held', 'held-a')
+    const count = (p: MessageBubbleProps) => renders.mock.calls.filter(([value]) => value.myReactions === p.myReactions).length
+    const firstCounts = props.map(count)
+    expect(firstCounts).toEqual([1, 0, 0])
+    const current = renders.mock.calls.at(-1)![0]
+    expect(current.onReply).toBe(initial[0].onReply)
+    expect(current.onEdit).toBe(initial[0].onEdit)
+    expect(current.onDelete).toBe(initial[0].onDelete)
+    renders.mockClear()
+    fireEvent.mouseMove(screen.getByTestId('held-b'), { clientX: 120, clientY: 250 })
+    const secondCounts = props.map(count)
+    expect(secondCounts).toEqual([1, 1, 0])
+    console.info('FLM-245 actual row renders', JSON.stringify({ firstCounts, secondCounts }))
+  } finally { renders.mockRestore(); vi.unstubAllGlobals() }
 })

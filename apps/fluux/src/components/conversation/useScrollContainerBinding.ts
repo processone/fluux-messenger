@@ -374,10 +374,12 @@ export function useScrollContainerBinding(
           }
           const onKeyDown = (event: KeyboardEvent) => {
             const target = event.target
+            // Keep list membership on the retargeted host, but inspect the actual shadow editor.
+            const editingTarget = event.composedPath()[0] ?? target
             if (
               event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey ||
               !(target instanceof HTMLElement) || !el.contains(target) ||
-              target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')
+              (editingTarget instanceof HTMLElement && editingTarget.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]'))
             ) return
             const upward = ['ArrowUp', 'PageUp', 'Home'].includes(event.key)
             const downward = ['ArrowDown', 'PageDown', 'End'].includes(event.key)

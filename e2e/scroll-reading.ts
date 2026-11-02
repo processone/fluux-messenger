@@ -3488,6 +3488,8 @@ test('direct chat keyboard selection preserves opaque literal row IDs', async ({
     }
     await page.mouse.move(0, 0)
     await expect(selected).toHaveCount(0)
+    // FLM-229: finish the intentional pointer interaction before fixture-only positioning.
+    await expect(list).not.toHaveAttribute('data-message-interaction')
     await list.evaluate((element, id) => {
       const offset = (window as unknown as { __fluuxGetVirtOffset: (id: string) => number | null })
         .__fluuxGetVirtOffset('client-row:' + JSON.stringify(id))

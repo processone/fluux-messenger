@@ -492,7 +492,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // REAL viewport-at-live-edge signal instead of `isActive && windowVisible`
   // alone — see ChatView's twin for the full rationale. `setActiveRoom` is the
   // SOLE caller of `beginViewportGeneration`; this view only reads the current
-  // generation and reports measured geometry against it.
+  // generation and reports measured geometry, or conservatively revokes follow-edge
+  // evidence while an interaction owns the view.
   //
   // Memoized on roomJid only — the KEY itself has no time-varying data, unlike
   // `viewportGeneration` below, which is read fresh on EVERY render (never
