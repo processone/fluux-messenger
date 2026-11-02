@@ -429,6 +429,7 @@ export class SessionLifecycleEngine {
       (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) ||
       roomsToAutojoin.length > 0
 
+    const queuedAutojoins = new Map<string, () => void>()
     if (hasRoomsToRejoin) {
       // Lift joinRoom()'s skip-guard just before actually rejoining. Doing this
       // here (vs at the top of runFreshSessionSetup) means the previous session's
@@ -438,18 +439,14 @@ export class SessionLifecycleEngine {
       // FLM-269: autojoins are already queued while active-room rejoins and
       // their own privacy discovery run. Do not expose them as idle rooms.
       for (const room of roomsToAutojoin) {
-        this.deps.emitSDK('room:updated', { roomJid: room.jid, updates: { isJoining: true } })
+        queuedAutojoins.set(room.jid, this.deps.muc.queueRoomJoin(room.jid))
       }
       this.deps.emitSDK('events:voice-requests-cleared', {})
     }
 
-    // Only this generation may cancel the queue it published; an older
-    // discovery response must not clear a newer session's joining state.
-    const clearQueuedAutojoin = (roomJid: string) => {
-      if (gen === this.sessionGeneration) {
-        this.deps.emitSDK('room:updated', { roomJid, updates: { isJoining: false } })
-      }
-    }
+    // MUC owns queue claims: stale chains release only work they still own,
+    // including after an SM resume advances the session generation.
+    const clearQueuedAutojoin = (roomJid: string) => queuedAutojoins.get(roomJid)?.()
 
     if (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) {
       const nonAutojoinRooms = previouslyJoinedRooms.filter(r => !autojoinJids.has(r.jid))

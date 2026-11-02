@@ -165,6 +165,9 @@ export class MUC extends BaseModule {
   /** Track pending room joins for timeout handling */
   private pendingJoins = new Map<string, PendingJoin>()
 
+  /** Queue claims are separate from joins that have actually started. */
+  private queuedJoins = new Map<string, symbol>()
+
   /** Track the awaitable outcome of in-flight joins (see joinResult). */
   private joinDeferreds = new Map<string, JoinDeferred>()
 
@@ -579,6 +582,26 @@ export class MUC extends BaseModule {
   }
 
   /**
+   * Mark scheduled membership work and return its owner-scoped release.
+   *
+   * @internal Session orchestration may release an abandoned queue even after
+   * SM resumes. A newer queue claim or an actual join consumes that authority.
+   */
+  queueRoomJoin(roomJid: string): () => void {
+    if (this.deps.stores?.room.getRoom(roomJid)?.joined) return () => {}
+    const owner = Symbol(roomJid)
+    this.queuedJoins.set(roomJid, owner)
+    this.deps.emitSDK('room:updated', { roomJid, updates: { isJoining: true } })
+    return () => {
+      if (this.queuedJoins.get(roomJid) !== owner) return
+      this.queuedJoins.delete(roomJid)
+      if (!this.deps.stores?.room.getRoom(roomJid)?.joined) {
+        this.deps.emitSDK('room:updated', { roomJid, updates: { isJoining: false } })
+      }
+    }
+  }
+
+  /**
    * Join a room on the user's behalf, without anyone awaiting the outcome.
    *
    * Used by the reconnect paths, which walk the bookmarks and rejoin what the
@@ -649,6 +672,10 @@ export class MUC extends BaseModule {
       clearTimeout(pending.timeoutId)
     }
     this.pendingJoins.clear()
+    for (const roomJid of this.queuedJoins.keys()) {
+      this.deps.emitSDK('room:updated', { roomJid, updates: { isJoining: false } })
+    }
+    this.queuedJoins.clear()
     this.pendingOccupants.clear()
     // Reject any unresolved join outcomes so joinResult() awaiters don't hang.
     for (const [roomJid, deferred] of Array.from(this.joinDeferreds.entries())) {
@@ -800,6 +827,8 @@ export class MUC extends BaseModule {
       return
     }
 
+    // Starting the actual join transfers ownership out of any scheduling queue.
+    this.queuedJoins.delete(roomJid)
     // Register (or reuse, on retry) the awaitable outcome for joinResult().
     this.getOrCreateJoinDeferred(roomJid)
 
@@ -939,7 +968,8 @@ export class MUC extends BaseModule {
     const room = this.deps.stores?.room.getRoom(roomJid)
     if (!room) return
 
-    // Clear any pending join timeout
+    // Clear any pending queue claim or join timeout.
+    this.queuedJoins.delete(roomJid)
     this.clearPendingJoin(roomJid)
 
     const presence = xml('presence', {
@@ -2178,16 +2208,14 @@ export class MUC extends BaseModule {
     if (roomsToRejoin.length === 0) return
 
     // All scheduled rooms are pending, including those behind a slow disco.
-    for (const room of roomsToRejoin) {
-      if (!this.deps.stores?.room.getRoom(room.jid)?.joined) {
-        this.deps.emitSDK('room:updated', { roomJid: room.jid, updates: { isJoining: true } })
-      }
-    }
-    for (const room of roomsToRejoin) {
+    const queue = roomsToRejoin.map(room => ({ room, release: this.queueRoomJoin(room.jid) }))
+    for (const { room, release } of queue) {
       try {
         await this.joinRoom(room.jid, room.nickname, { password: room.password })
       } catch (err) {
         console.error(`[MUC] Failed to rejoin ${room.jid}:`, err)
+      } finally {
+        release()
       }
     }
   }

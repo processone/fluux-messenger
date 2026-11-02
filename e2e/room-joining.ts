@@ -16,6 +16,8 @@ type DemoWindow = Window & {
   __releaseDiscovery?: () => void
   __reopening?: Promise<void>
   __failedSends?: number
+  __releaseOldQueue?: () => void
+  __releaseNewQueue?: () => void
 }
 
 async function openJoiningRoom(page: Page, jid: string) {
@@ -109,6 +111,34 @@ for (const [label, viewport] of [
         await info.attach('join-observations', { body: JSON.stringify({ joining, completed: await observe(page, jid) }, null, 2), contentType: 'application/json' })
       })
     }
+
+    test('G1 releases an abandoned queue without clearing its newer owner', async ({ page }, info) => {
+      await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(TEAM)}`)
+      await page.evaluate(async jid => {
+        const w = window as unknown as DemoWindow
+        w.__demoClient.stopAnimation()
+        await w.__roomStore.getState().activateRoom(jid)
+        w.__roomStore.getState().updateRoom(jid, { joined: false, isJoining: false })
+        w.__releaseOldQueue = w.__demoClient.rooms.queueRoomJoin(jid)
+        w.__releaseNewQueue = w.__demoClient.rooms.queueRoomJoin(jid)
+      }, TEAM)
+      const main = page.getByRole('main')
+      await expect(main.getByText('Joining...', { exact: true })).toBeVisible()
+      await page.evaluate(() => (window as unknown as DemoWindow).__releaseOldQueue!())
+      const newer = await observe(page, TEAM)
+      expect(newer.isJoining).toBe(true)
+      await expect(main.getByRole('button', { name: 'Join room to participate' })).toHaveCount(0)
+      await page.evaluate(() => (window as unknown as DemoWindow).__releaseNewQueue!())
+      const join = main.getByRole('button', { name: 'Join room to participate' })
+      await expect(join).toBeEnabled()
+      await expect(main.getByText('Joining...', { exact: true })).toHaveCount(0)
+      const released = await observe(page, TEAM)
+      expect(released.isJoining).toBe(false)
+      await shot(page, info, 'queue-released.png')
+      await join.click()
+      await expect(main.getByRole('combobox')).toBeVisible()
+      await info.attach('queue-abort-observations', { body: JSON.stringify({ newer, released, completed: await observe(page, TEAM) }, null, 2), contentType: 'application/json' })
+    })
 
     test('FLM-269 reopen keeps a cached room pending behind delayed discovery', async ({ page }, info) => {
       await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(TEAM)}`)

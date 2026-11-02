@@ -27,6 +27,9 @@ import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
 import { setupBackgroundSyncSideEffects } from './backgroundSync'
 import { NS_MAM } from './namespaces'
+import { MUC } from './modules/MUC'
+import type { MAM } from './modules/MAM'
+import type { ModuleDependencies } from './modules/BaseModule'
 
 /** Minimal module mocks — only the methods the engine actually calls. */
 function makeMockModules() {
@@ -49,6 +52,7 @@ function makeMockModules() {
       discoverMucService: vi.fn().mockResolvedValue(undefined),
       rejoinActiveRooms: vi.fn().mockResolvedValue(undefined),
       queryRoomFeatures: vi.fn().mockResolvedValue(null),
+      queueRoomJoin: vi.fn(),
     },
     profile: {
       refreshAllAvatarBlobUrls: vi.fn().mockResolvedValue(undefined),
@@ -72,6 +76,7 @@ describe('SessionLifecycleEngine', () => {
   let emitFreshSessionInputsReady: ReturnType<typeof vi.fn>
   let connectPresence: ReturnType<typeof vi.fn>
   let unsubscribe: () => void
+  let queueOwner: MUC
 
   beforeEach(() => {
     localStorageMock.clear()
@@ -87,6 +92,8 @@ describe('SessionLifecycleEngine', () => {
     unsubscribe = createStoreBindings(client, () => ({
       ...refs, room: roomStore.getState(), events: eventsStore.getState(),
     }))
+    queueOwner = new MUC({ stores, emitSDK: client.emit } as unknown as ModuleDependencies, {} as MAM)
+    modules.muc.queueRoomJoin.mockImplementation(jid => vi.fn(queueOwner.queueRoomJoin(jid)))
     ensureE2EEManager = vi.fn()
     emitOnline = vi.fn()
     emitFreshSessionInputsReady = vi.fn()
@@ -108,6 +115,7 @@ describe('SessionLifecycleEngine', () => {
   })
 
   afterEach(() => {
+    queueOwner.cleanup()
     unsubscribe()
     eventsStore.getState().reset()
     roomStore.getState().reset()
@@ -209,6 +217,66 @@ describe('SessionLifecycleEngine', () => {
     await setup
     expect(roomStore.getState().getRoom(bookmark.jid)?.isJoining).toBe(true)
     finishDiscovery({ isNonAnonymous: true, isPrivate: false })
+    await vi.waitFor(() => expect(roomStore.getState().getRoom(bookmark.jid)?.isJoining).toBe(false))
+    expect(modules.muc.autojoinRoom).not.toHaveBeenCalled()
+  })
+
+  // FLM-354 G1: the old fresh chain must release work it still owns after
+  // either abort checkpoint, even when a short SM resume changes generation.
+  it.each([
+    ['active-rejoin', 'disconnect'], ['active-rejoin', 'sm-resume'],
+    ['discovery', 'disconnect'], ['discovery', 'sm-resume'],
+  ] as const)('G1 releases an abandoned queue at %s after %s', async (checkpoint, interruption) => {
+    const active = createMockRoom('active@conference.example.com', { joined: true })
+    const bookmark = createMockRoom('bookmarked@conference.example.com', { joined: false, autojoin: true })
+    roomStore.getState().addRoom(active)
+    roomStore.getState().addRoom(bookmark)
+    modules.muc.fetchBookmarks.mockResolvedValue({
+      roomsToAutojoin: [{ jid: bookmark.jid, nick: bookmark.nickname }], allRoomJids: [bookmark.jid],
+    })
+    let release!: () => void
+    if (checkpoint === 'active-rejoin') {
+      modules.muc.rejoinActiveRooms.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
+    } else {
+      modules.muc.queryRoomFeatures.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(null) }))
+    }
+    const setup = engine.handleConnectionSuccess(false, [active])
+    await vi.waitFor(() => expect(checkpoint === 'active-rejoin' ? modules.muc.rejoinActiveRooms : modules.muc.queryRoomFeatures).toHaveBeenCalled())
+    const before = roomStore.getState().getRoom(bookmark.jid)?.isJoining
+    expect(before).toBe(true)
+    if (interruption === 'sm-resume') {
+      localStorageMock.setItem('fluux:cache-marker:me@example.com/web', '123')
+      await engine.handleConnectionSuccess(true, undefined, 5_000)
+      expect(engine.isSmResumed()).toBe(true)
+    } else {
+      stores.connection.getStatus.mockReturnValue('disconnected')
+    }
+    release()
+    await setup
+    await vi.waitFor(() => expect(roomStore.getState().getRoom(bookmark.jid)?.isJoining).toBe(false))
+    expect(modules.muc.autojoinRoom).not.toHaveBeenCalled()
+    console.info('G1 queue state', JSON.stringify({ checkpoint, interruption, before, after: roomStore.getState().getRoom(bookmark.jid)?.isJoining, autojoinCalls: modules.muc.autojoinRoom.mock.calls.length }))
+  })
+
+  it('G1 leaves a newer fresh-session queue intact when the old discovery completes', async () => {
+    const bookmark = createMockRoom('bookmarked@conference.example.com', { joined: false, autojoin: true })
+    roomStore.getState().addRoom(bookmark)
+    modules.muc.fetchBookmarks.mockResolvedValue({
+      roomsToAutojoin: [{ jid: bookmark.jid, nick: bookmark.nickname }], allRoomJids: [bookmark.jid],
+    })
+    let oldDiscovery!: (value: unknown) => void
+    let newDiscovery!: (value: unknown) => void
+    modules.muc.queryRoomFeatures
+      .mockImplementationOnce(() => new Promise(resolve => { oldDiscovery = resolve }))
+      .mockImplementationOnce(() => new Promise(resolve => { newDiscovery = resolve }))
+    await engine.handleConnectionSuccess(false)
+    const oldRelease = modules.muc.queueRoomJoin.mock.results[0].value
+    await engine.handleConnectionSuccess(false)
+    oldDiscovery(null)
+    await vi.waitFor(() => expect(oldRelease).toHaveBeenCalled())
+    expect(roomStore.getState().getRoom(bookmark.jid)?.isJoining).toBe(true)
+    // A deliberate privacy skip releases the new owner's queue, not the old one.
+    newDiscovery({ isNonAnonymous: true, isPrivate: false })
     await vi.waitFor(() => expect(roomStore.getState().getRoom(bookmark.jid)?.isJoining).toBe(false))
     expect(modules.muc.autojoinRoom).not.toHaveBeenCalled()
   })

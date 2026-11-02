@@ -1038,6 +1038,26 @@ describe('MUC Module', () => {
       consoleErrorSpy.mockRestore()
     })
 
+    // FLM-354 G1: only the current queue owner may release pending UI state.
+    it.each(['newer-queue', 'started-join'] as const)('G1 ignores an old release after %s takes ownership', async transfer => {
+      const room = createMockRoom('room@conference.example.org', { joined: false })
+      mockStores.room.getRoom.mockReturnValue(room)
+      mockEmitSDK.mockImplementation((event, payload) => {
+        if (event === 'room:updated') Object.assign(room, payload.updates)
+      })
+      const releaseOld = muc.queueRoomJoin(room.jid)
+      let releaseNew: (() => void) | undefined
+      if (transfer === 'newer-queue') releaseNew = muc.queueRoomJoin(room.jid)
+      else await muc.joinRoom(room.jid, room.nickname)
+      releaseOld()
+      expect(room.isJoining).toBe(true)
+      if (releaseNew) {
+        releaseNew()
+        expect(room.isJoining).toBe(false)
+      }
+      muc.cleanup()
+    })
+
     // FLM-269 / FLM-354 F1-F2: joining includes discovery and every queued
     // room, and a rejected transport send must leave an actionable retry.
     it('FLM-269 marks an existing room joining before delayed discovery', async () => {
