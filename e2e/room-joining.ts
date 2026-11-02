@@ -7,12 +7,15 @@ import { test, expect, type Page, type TestInfo } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
-import { ROOM_JID as TEAM, BOARD_ROOM_JID as BOARD, ENGINEERING_ROOM_JID as EMPTY } from '../apps/fluux/src/demo/constants'
+import { ROOM_JID as TEAM, BOARD_ROOM_JID as BOARD, ENGINEERING_ROOM_JID as EMPTY, DESIGN_ROOM_JID as DESIGN } from '../apps/fluux/src/demo/constants'
 type DemoWindow = Window & {
   __demoClient: DemoClient
   __roomStore: typeof roomStore
   __releaseJoin?: () => Promise<void>
   __joinOutcome?: string
+  __releaseDiscovery?: () => void
+  __reopening?: Promise<void>
+  __failedSends?: number
 }
 
 async function openJoiningRoom(page: Page, jid: string) {
@@ -106,6 +109,79 @@ for (const [label, viewport] of [
         await info.attach('join-observations', { body: JSON.stringify({ joining, completed: await observe(page, jid) }, null, 2), contentType: 'application/json' })
       })
     }
+
+    test('FLM-269 reopen keeps a cached room pending behind delayed discovery', async ({ page }, info) => {
+      await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(TEAM)}`)
+      await page.evaluate(async ({ selected, first }) => {
+        const w = window as unknown as DemoWindow
+        const store = w.__roomStore
+        const client = w.__demoClient
+        client.stopAnimation()
+        await store.getState().activateRoom(selected)
+        const rooms = [first, selected].map(jid => ({ jid, nickname: store.getState().getRoom(jid)!.nickname }))
+        const query = client.rooms.queryRoomFeatures.bind(client.rooms)
+        client.rooms.queryRoomFeatures = async jid => {
+          if (jid === first) await new Promise<void>(resolve => { w.__releaseDiscovery = resolve })
+          return query(jid)
+        }
+        for (const room of rooms) store.getState().updateRoom(room.jid, { joined: false, isJoining: false })
+        w.__reopening = client.rooms.rejoinActiveRooms(rooms)
+      }, { selected: TEAM, first: DESIGN })
+      const main = page.getByRole('main')
+      await expect.poll(() => page.evaluate(() => !!(window as unknown as DemoWindow).__releaseDiscovery)).toBe(true)
+      const pending = await page.evaluate(jids => jids.map(jid => {
+        const room = (window as unknown as DemoWindow).__roomStore.getState().getRoom(jid)!
+        return { jid, joined: room.joined, isJoining: room.isJoining }
+      }), [DESIGN, TEAM])
+      expect(pending.every(room => !room.joined && room.isJoining)).toBe(true)
+      await expect(main.getByText('Joining...', { exact: true })).toBeVisible()
+      await expect(main.getByText(/Cached history up to/)).toHaveCount(0)
+      await expect(main.getByRole('button', { name: 'Join room to participate' })).toHaveCount(0)
+      const waiting = await observe(page, TEAM)
+      await shot(page, info, 'discovery-pending.png')
+      await page.evaluate(async () => {
+        const w = window as unknown as DemoWindow
+        w.__releaseDiscovery!()
+        await w.__reopening
+      })
+      await expect(main.getByRole('combobox')).toBeVisible()
+      await info.attach('reopen-observations', { body: JSON.stringify({ pending, waiting, completed: await observe(page, TEAM) }, null, 2), contentType: 'application/json' })
+    })
+
+    test('FLM-269 failed presence send restores the join button and retries successfully', async ({ page }, info) => {
+      await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(TEAM)}`)
+      await page.evaluate(async jid => {
+        const w = window as unknown as DemoWindow
+        w.__demoClient.stopAnimation()
+        await w.__roomStore.getState().activateRoom(jid)
+        w.__roomStore.getState().updateRoom(jid, { joined: false, isJoining: false })
+        const transport = w.__demoClient as unknown as { beginStanzaSend(stanza: { name: string; attrs: { to?: string } }): Promise<void> }
+        const send = transport.beginStanzaSend.bind(w.__demoClient)
+        transport.beginStanzaSend = async stanza => {
+          if (stanza.name === 'presence' && stanza.attrs.to?.startsWith(jid + '/')) {
+            transport.beginStanzaSend = send
+            w.__failedSends = (w.__failedSends ?? 0) + 1
+            throw new Error('Socket not available')
+          }
+          return send(stanza)
+        }
+      }, TEAM)
+      const main = page.getByRole('main')
+      const join = main.getByRole('button', { name: 'Join room to participate' })
+      await join.click()
+      await expect.poll(() => page.evaluate(() => (window as unknown as DemoWindow).__failedSends)).toBe(1)
+      await expect(join).toBeEnabled()
+      const failed = await observe(page, TEAM)
+      expect(failed.joined).toBe(false)
+      expect(failed.isJoining).toBe(false)
+      await expect(main.getByText('Joining...', { exact: true })).toHaveCount(0)
+      const outcome = await page.evaluate(jid => (window as unknown as DemoWindow).__demoClient.rooms.joinResult(jid).then(() => 'unexpected success', error => error.message), TEAM)
+      expect(outcome).toBe('Socket not available')
+      await shot(page, info, 'send-failure.png')
+      await join.click()
+      await expect(main.getByRole('combobox')).toBeVisible()
+      await info.attach('send-failure-observations', { body: JSON.stringify({ failed, outcome, completed: await observe(page, TEAM) }, null, 2), contentType: 'application/json' })
+    })
 
     test('a refused join restores the prompt and password retry still works', async ({ page }, info) => {
       await openJoiningRoom(page, BOARD)

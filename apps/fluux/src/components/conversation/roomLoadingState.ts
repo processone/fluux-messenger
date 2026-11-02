@@ -5,8 +5,8 @@
  * There are two distinct "still loading" phases when entering a room, and both
  * are covered here:
  *
- *   1. Joining — presence sent, waiting for the server's self-presence (status
- *      110). `isJoining` is true, `joined` is false.
+ *   1. Joining — queued, discovering the room, or waiting for the server's
+ *      self-presence (status 110). `isJoining` is true, `joined` is false.
  *   2. First catch-up — the room is joined (the "Joining…" spinner is gone), but
  *      MAM history is still being fetched and there is nothing cached to render.
  *      Without this, the view falls through to the "No messages" empty state while

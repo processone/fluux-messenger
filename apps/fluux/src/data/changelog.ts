@@ -19,7 +19,7 @@ export const changelog: ChangelogEntry[] = [
     sections: [{
       type: 'fixed',
       items: [
-        'Reopening a room no longer asks you to join while it is already rejoining. The join button returns if the attempt fails',
+        'Reopening a room no longer shows the cached-history warning or asks you to join while its rejoin is pending. Failed joins restore the join button',
         'On desktop, new messages no longer move the message, action controls or menu you are using. Typing resumes following new messages if you were following before, unless a menu is open. The jump-to-latest button stays hidden while a message menu is open',
         'Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter. Private messages in rooms no longer make surrounding messages jump as you scroll.',
       ],

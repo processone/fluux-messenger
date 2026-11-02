@@ -189,6 +189,30 @@ describe('SessionLifecycleEngine', () => {
     })
   })
 
+  it('FLM-269 keeps autojoin pending behind active rejoins and privacy discovery, then clears a skipped join', async () => {
+    const active = createMockRoom('active@conference.example.com', { joined: true })
+    const bookmark = createMockRoom('bookmarked@conference.example.com', { joined: false, autojoin: true })
+    roomStore.getState().addRoom(active)
+    roomStore.getState().addRoom(bookmark)
+    modules.muc.fetchBookmarks.mockResolvedValue({
+      roomsToAutojoin: [{ jid: bookmark.jid, nick: bookmark.nickname }], allRoomJids: [bookmark.jid],
+    })
+    let finishRejoin!: () => void
+    modules.muc.rejoinActiveRooms.mockImplementationOnce(() => new Promise<void>(resolve => { finishRejoin = resolve }))
+    let finishDiscovery!: (value: unknown) => void
+    modules.muc.queryRoomFeatures.mockImplementationOnce(() => new Promise(resolve => { finishDiscovery = resolve }))
+    const setup = engine.handleConnectionSuccess(false, [active])
+    await vi.waitFor(() => expect(modules.muc.rejoinActiveRooms).toHaveBeenCalled())
+    expect(roomStore.getState().getRoom(bookmark.jid)?.isJoining).toBe(true)
+    expect(modules.muc.queryRoomFeatures).not.toHaveBeenCalled()
+    finishRejoin()
+    await setup
+    expect(roomStore.getState().getRoom(bookmark.jid)?.isJoining).toBe(true)
+    finishDiscovery({ isNonAnonymous: true, isPrivate: false })
+    await vi.waitFor(() => expect(roomStore.getState().getRoom(bookmark.jid)?.isJoining).toBe(false))
+    expect(modules.muc.autojoinRoom).not.toHaveBeenCalled()
+  })
+
   // Issue #1126: unattended rejoining of a password-protected room depends on
   // the bookmark's password reaching the join on connect.
   it('autojoins a bookmarked room with its stored password', async () => {
