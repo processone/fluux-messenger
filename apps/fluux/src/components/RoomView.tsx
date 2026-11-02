@@ -678,7 +678,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
               clearTargetMessageId={clearTargetMessageId}
               clearFirstNewMessageId={handleClearFirstNewMessageId}
               onMessageSeen={handleMessageSeen}
-              isJoined={activeRoom.joined}
+              membershipPhase={membershipPhase}
               isDarkMode={resolvedMode === 'dark'}
               onScrollToTop={fetchOlderHistory}
               onLoadAround={loadMessagesAround}
@@ -1005,7 +1005,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   clearTargetMessageId,
   clearFirstNewMessageId,
   onMessageSeen,
-  isJoined,
+  membershipPhase,
   isDarkMode,
   onScrollToTop,
   onLoadAround,
@@ -1068,7 +1068,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
   onMessageSeen?: (messageId: string) => void
-  isJoined?: boolean
+  membershipPhase: ReturnType<typeof selectRoomMembershipPhase>
   isDarkMode?: boolean
   onScrollToTop?: () => void
   onLoadAround?: (anchorRow: MessageRowRef) => Promise<unknown> | void
@@ -1148,11 +1148,10 @@ export const RoomMessageList = memo(function RoomMessageList({
 
   // Only an uncached first history fetch replaces the reading area.
   const isInitialLoading = selectRoomInitialLoading({
-    joined: room.joined ?? false,
+    joined: membershipPhase === 'joined',
     isCatchingUp: isCatchingUp ?? false,
     messageCount: loadedMessageCount,
   })
-  const membershipPhase = selectRoomMembershipPhase({ joined: isJoined, isJoining: room.isJoining })
   const loadingState = isInitialLoading ? (
     <div className="flex-1 flex flex-col items-center justify-center gap-3 text-fluux-muted">
       <Loader2 className="size-8 animate-spin text-fluux-brand" />

@@ -48,7 +48,7 @@ function listProps(): ComponentProps<typeof RoomMessageList> {
     activeReactionPickerMessageId: null, onReactionPickerChange: vi.fn(),
     retractMessage: vi.fn(), moderateMessage: vi.fn(), selectedMessageId: null,
     hasKeyboardSelection: false, showToolbarForSelection: false, clearFirstNewMessageId: vi.fn(),
-    isJoined: true, isHistoryComplete: true, setAffiliation: vi.fn(),
+    membershipPhase: 'joined' as const, isHistoryComplete: true, setAffiliation: vi.fn(),
   }
 }
 

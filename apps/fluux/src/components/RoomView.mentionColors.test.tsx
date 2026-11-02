@@ -28,7 +28,7 @@ const props = {
   showToolbarForSelection: false,
   clearFirstNewMessageId: vi.fn(),
   setAffiliation: vi.fn(),
-  isJoined: true,
+  membershipPhase: 'joined' as const,
 }
 
 let nextRoom = 0

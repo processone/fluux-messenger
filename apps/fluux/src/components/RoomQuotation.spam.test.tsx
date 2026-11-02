@@ -39,7 +39,7 @@ function Quotation({ view }: { view: 'timeline' | 'search' }) {
         onReply={vi.fn()} onEdit={vi.fn()} lastOutgoingMessageId={null} lastMessageId={reply.id} typingUsers={[]}
         activeReactionPickerMessageId={null} onReactionPickerChange={vi.fn()} retractMessage={vi.fn()} moderateMessage={vi.fn()}
         selectedMessageId={null} hasKeyboardSelection={false} showToolbarForSelection={false} clearFirstNewMessageId={vi.fn()}
-        isJoined isHistoryComplete setAffiliation={vi.fn()} />
+        membershipPhase="joined" isHistoryComplete setAffiliation={vi.fn()} />
 }
 
 beforeEach(async () => {

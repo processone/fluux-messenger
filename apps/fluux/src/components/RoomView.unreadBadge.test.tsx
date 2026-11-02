@@ -85,7 +85,7 @@ const ROOM_PROPS = {
   clearTargetMessageId: vi.fn(),
   clearFirstNewMessageId: vi.fn(),
   onMessageSeen: vi.fn(),
-  isJoined: true,
+  membershipPhase: 'joined' as const,
   isDarkMode: false,
   onMediaLoad: vi.fn(),
   onScrollToTop: vi.fn(),
