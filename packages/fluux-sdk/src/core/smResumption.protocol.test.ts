@@ -221,6 +221,13 @@ describe('stream management resumption against a controlled XMPP server', { time
     expect(client.getStreamManagementState()).toMatchObject({ windowMs: 300_000 })
   })
 
+  it.each(['abc', '0', '-5', '86400.5', '9e4', ''])('falls back to ten minutes when the server grants a malformed max (%j) on a 24-hour request', async (grant) => {
+    server.grant = grant
+    await login(86_400)
+    expect(server.last('enable')!.attrs.max).toBe('86400')
+    expect(client.getStreamManagementState()).toMatchObject({ windowMs: 600_000 })
+  })
+
   it('falls back to ten minutes when the server omits max, even for a 24-hour request', async () => {
     server.grant = undefined
     await login(86_400)
