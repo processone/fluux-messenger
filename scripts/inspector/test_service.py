@@ -544,16 +544,21 @@ class ServiceProof(unittest.TestCase):
         # Captain-selected W2 group-only: signal only this disposable helper's
         # new group, never the test runner, another task or a real application.
         code = '''
-import os, signal, socket, sys, threading, time
+import os, signal, socket, sys, time
 sys.path.insert(0, sys.argv[1])
 from reader import Budget
 from service import open_service
 bridge = socket.socket(fileno=int(sys.argv[5]))
-seen = threading.Event()
-signal.signal(signal.SIGINT, lambda *_: seen.set())
+# A Python signal handler must not acquire Event.wait's condition lock.
+# The runtime writes one signal byte to this nonblocking wakeup descriptor.
+wakeup, writer = socket.socketpair()
+writer.setblocking(False)
+wakeup.settimeout(1)
+signal.set_wakeup_fd(writer.fileno())
+signal.signal(signal.SIGINT, lambda *_: None)
 with open_service(sys.argv[2], sys.argv[3], Budget(), mux_socket=sys.argv[4], lifetime=2) as stream:
     bridge.sendall(b'R')
-    assert seen.wait(1)
+    assert wakeup.recv(1) == bytes([signal.SIGINT])
     assert stream._process.poll() is None
     payload = b'after-group-sigint'
     assert stream.send(payload) == len(payload)
@@ -567,7 +572,8 @@ with open_service(sys.argv[2], sys.argv[3], Budget(), mux_socket=sys.argv[4], li
             pass
     assert received == payload
 bridge.sendall(b'O')
-bridge.close()
+signal.set_wakeup_fd(-1)
+wakeup.close(); writer.close(); bridge.close()
 '''
         with DevicePeer() as peer:
             parent, child = socket.socketpair()
