@@ -14,6 +14,8 @@ import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
 import { parseArmorPassphraseFormat } from '@/e2ee/passphraseFormatHeader'
+import { BackupRecoveryDialog } from '@/components/BackupRecoveryDialog'
+import type { E2EEManager } from '@fluux/sdk'
 import { IdentityChoiceDialog } from '@/components/IdentityChoiceDialog'
 import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
 import { TrustStateCompromisedBanner } from '@/components/TrustStateCompromisedBanner'
@@ -30,6 +32,7 @@ import { isKeyLocked } from '@/e2ee/webPassphraseStore'
 import { platform } from '@/platform'
 
 type PluginStatus =
+  | 'recovery-needed'
   | 'disabled'
   | 'locked'
   | 'generating'
@@ -127,9 +130,11 @@ export function EncryptionSettings() {
   const { client } = useXMPPContext()
   const openpgpEnabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
   const setOpenpgpEnabled = useEncryptionSettingsStore((s) => s.setOpenpgpEnabled)
+  const pluginRegisteredAt = useEncryptionSettingsStore((s) => s.pluginRegisteredAt)
   const registrationError = useEncryptionSettingsStore((s) => s.registrationError)
   const addToast = useToastStore((s) => s.addToast)
 
+  const [recoveryManager, setRecoveryManager] = useState<E2EEManager | null>(null)
   const [fingerprint, setFingerprint] = useState<string | null>(null)
   // Native engine only: false when the key's passphrase fell back to a cleartext
   // file on disk (no OS secret service), i.e. the key is not protected at
@@ -139,6 +144,7 @@ export function EncryptionSettings() {
   const [isToggling, setIsToggling] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [recoveryNeeded, setRecoveryNeeded] = useState(false)
   const [generationFailed, setGenerationFailed] = useState(false)
   const [showBackupDialog, setShowBackupDialog] = useState(false)
   const [showRestoreDialog, setShowRestoreDialog] = useState(false)
@@ -202,13 +208,15 @@ export function EncryptionSettings() {
       ? 'waiting-online'
       : fingerprint
         ? 'ready'
-        : registrationError
-          ? 'registration-failed'
-          : webLocked
-            ? 'locked'
-            : generationFailed
-              ? 'generation-failed'
-              : 'generating'
+        : recoveryNeeded
+          ? 'recovery-needed'
+          : registrationError
+            ? 'registration-failed'
+            : webLocked
+              ? 'locked'
+              : generationFailed
+                ? 'generation-failed'
+                : 'generating'
 
   // Proactive PEP probe (XEP-0163): OpenPGP (XEP-0373) publishes keys to
   // PEP nodes on the account bare JID, so a server without PEP can never
@@ -250,6 +258,7 @@ export function EncryptionSettings() {
     if (!openpgpEnabled || !online) {
       setFingerprint(null)
       setGenerationFailed(false)
+      setRecoveryNeeded(false)
       return
     }
     // Registration already failed with a typed error — the status line
@@ -257,6 +266,8 @@ export function EncryptionSettings() {
     if (registrationError) return
 
     let cancelled = false
+    setFingerprint(null)
+    setRecoveryNeeded(false)
     const startedAt = Date.now()
 
     const poll = () => {
@@ -265,11 +276,16 @@ export function EncryptionSettings() {
       // polling early (edge case — UI rendered before handler ran), wait
       // one more tick rather than racing to a false-negative.
       const plugin = client.e2ee?.getPlugin('openpgp') as
-        | { getOwnFingerprint?: () => string | null }
+        | { getOwnFingerprint?: () => string | null; isKeyRecoveryNeeded?: () => boolean }
         | null
       const fp = plugin?.getOwnFingerprint?.() ?? null
       if (fp) {
         setFingerprint(fp)
+        setGenerationFailed(false)
+        return
+      }
+      if (plugin?.isKeyRecoveryNeeded?.()) {
+        setRecoveryNeeded(true)
         setGenerationFailed(false)
         return
       }
@@ -288,7 +304,7 @@ export function EncryptionSettings() {
     return () => {
       cancelled = true
     }
-  }, [openpgpEnabled, online, client, registrationError])
+  }, [openpgpEnabled, online, client, registrationError, jid, pluginRegisteredAt])
 
   // Surface recovery from Settings when a local key exists but can't be
   // unlocked. The connect-time dialog (App.tsx) may have been dismissed, and
@@ -299,6 +315,8 @@ export function EncryptionSettings() {
   // Settings or toggling re-offers it.
   const recoveryPromptedRef = useRef(false)
   useEffect(() => {
+    // macOS uses the single startup offer and a persistent explicit entry here.
+    if (platform().shell === 'desktop' && platform().os === 'macos') return
     if (recoveryPromptedRef.current) return
     if (!online || !openpgpEnabled || pendingIdentityChoice || registrationError) {
       return
@@ -361,6 +379,7 @@ export function EncryptionSettings() {
   }, [fingerprint, client])
 
   const handleToggle = useCallback(async () => {
+    const manager = client.e2ee
     const next = !openpgpEnabled
     setIsToggling(true)
     try {
@@ -400,6 +419,7 @@ export function EncryptionSettings() {
         // `needs-identity-decision` so registration succeeds in either
         // state.
         await registerE2EEPlugins(client)
+        if (client.e2ee !== manager) return
         if (!bareJid) {
           if (isKeyLocked()) openWebUnlockDialog()
           return
@@ -453,6 +473,7 @@ export function EncryptionSettings() {
       // The probe runs only in the second case; the common path
       // (returning device) pays no extra IQ.
       await registerE2EEPlugins(client)
+      if (client.e2ee !== manager) return
       const plugin = client.e2ee?.getPlugin('openpgp') as
         | {
             hasNoLocalKey?: () => Promise<boolean>
@@ -467,12 +488,19 @@ export function EncryptionSettings() {
       // Settings to "fix encryption" would see the toggle report all-good
       // while encryption silently never starts.
       const recoveryNeeded = plugin?.isKeyRecoveryNeeded?.() === true
+      if (recoveryNeeded && platform().os === 'macos' && manager) {
+        setRecoveryNeeded(true)
+        setRecoveryManager(manager)
+        return
+      }
       const hasNoLocal =
         !recoveryNeeded && plugin?.hasNoLocalKey
           ? await plugin.hasNoLocalKey()
           : false
+      if (client.e2ee !== manager) return
       if (!recoveryNeeded && !hasNoLocal) return
       const state = await probeRemoteIdentityState(pepReaderFor(client), bareJid)
+      if (client.e2ee !== manager) return
       // For a missing key we only prompt when the server has an identity to
       // reconcile against; an unrecoverable local key always needs a decision
       // (import/replace remain available even with no server backup).
@@ -483,6 +511,7 @@ export function EncryptionSettings() {
         reason: recoveryNeeded ? 'local-key-unrecoverable' : 'no-local-key',
       })
     } catch (err) {
+      if (client.e2ee !== manager) return
       // A probe failure is structurally different from a generic toggle
       // failure: nothing was registered, nothing was generated, nothing
       // was published. The user just needs to retry once their network /
@@ -1046,6 +1075,7 @@ export function EncryptionSettings() {
               >
                 {pluginStatus === 'waiting-online' &&
                   t('settings.encryption.statusWaitingOnline')}
+                {pluginStatus === 'recovery-needed' && t('settings.encryption.statusRecoveryNeeded')}
                 {pluginStatus === 'locked' &&
                   t('settings.encryption.statusLocked')}
                 {pluginStatus === 'generating' &&
@@ -1096,6 +1126,14 @@ export function EncryptionSettings() {
               <X className="size-3.5" />
             </button>
           </div>
+        )}
+
+        {platform().shell === 'desktop' && platform().os === 'macos' && (
+          <button type="button" className="px-3 py-2 text-sm rounded-lg bg-fluux-hover text-fluux-text hover:bg-fluux-active"
+            disabled={!online || !client.e2ee?.getPlugin('openpgp')}
+            onClick={() => setRecoveryManager(client.e2ee ?? null)}>
+            {t('settings.encryption.recoveryTitle')}
+          </button>
         )}
 
         {/* Backup to server — only when a key actually exists to back up. */}
@@ -1410,6 +1448,15 @@ export function EncryptionSettings() {
         />
       )}
 
+      {recoveryManager && <BackupRecoveryDialog client={client} manager={recoveryManager}
+        onClose={() => setRecoveryManager(null)} onRestored={restoredFingerprint => {
+          setFingerprint(restoredFingerprint)
+          setRecoveryNeeded(false)
+          setGenerationFailed(false)
+          setRecoveryManager(null)
+          useEncryptionSettingsStore.getState().notifyPluginRegistered()
+          addToast('success', t('settings.encryption.restoreSuccess'))
+        }} />}
       {pendingIdentityChoice && (
         <IdentityChoiceDialog
           reason={pendingIdentityChoice.reason}

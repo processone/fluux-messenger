@@ -137,6 +137,8 @@ export function IdentityChoiceDialog({
     setError(null)
     try {
       await onImportFromFile()
+      // A cancelled platform picker leaves the dialog mounted and usable.
+      setPhase('choose')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setPhase('choose')
@@ -159,7 +161,7 @@ export function IdentityChoiceDialog({
     }
   }, [onReplaceIdentity])
 
-  const isBusy = phase === 'importing' || phase === 'replacing'
+  const isBusy = isRestoring || phase === 'importing' || phase === 'replacing'
 
   return (
     <ModalOverlay

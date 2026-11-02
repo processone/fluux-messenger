@@ -51,6 +51,7 @@ interface RestorePassphraseDialogProps {
    */
   isBackupCode?: boolean
   /**
+   * 'recovery' preserves every passphrase byte and disables credential autofill.
    * 'import' = entering a FOREIGN key's passphrase (GnuPG / OpenKeychain): adds
    * a reveal toggle, disables password-manager autofill, and trims the value.
    * It does NOT pick the field type — the masked backup-code vs free-text choice
@@ -58,7 +59,7 @@ interface RestorePassphraseDialogProps {
    * Passphrase-Format header). 'restore' (default) is the server-restore flow
    * whose passphrase is the user's own saved Fluux backup code.
    */
-  mode?: 'restore' | 'import'
+  mode?: 'restore' | 'import' | 'recovery'
 }
 
 /**
@@ -89,7 +90,7 @@ export function RestorePassphraseDialog({
   const inputRef = useRef<HTMLInputElement | null>(null)
   const backupCursorRef = useRef<number>(0)
 
-  const isImport = mode === 'import'
+  const isImport = mode === 'import' || mode === 'recovery'
   // The masked field is driven solely by isBackupCode. Import-from-file sites
   // pass it based on the file's Passphrase-Format header (a Fluux xep0373 backup
   // gets the mask; a foreign key's arbitrary passphrase stays free text).
@@ -154,7 +155,7 @@ export function RestorePassphraseDialog({
     try {
       // Import passphrases are often pasted/transcribed codes — trim stray
       // whitespace so the verbatim raw-key path doesn't fail on it.
-      await onConfirm(isImport ? passphrase.trim() : passphrase)
+      await onConfirm(mode === 'import' ? passphrase.trim() : passphrase)
       // Parent is expected to close the dialog on success; we stay
       // mounted and spinner-disabled so a successful-but-slow path
       // doesn't let the user mash the button.
@@ -166,7 +167,7 @@ export function RestorePassphraseDialog({
       setError(err instanceof Error ? err.message : String(err))
       setIsRestoring(false)
     }
-  }, [onConfirm, passphrase, isImport])
+  }, [onConfirm, passphrase, mode])
 
   return (
     <ModalOverlay

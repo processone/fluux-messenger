@@ -18,6 +18,7 @@ import { E2EEPluginError } from '@fluux/sdk'
 import { platform } from '@/platform'
 import {
   OpenPGPPluginBase,
+  type BackupRecoveryMode,
   type CertValidation,
   type DecryptOutput,
   type KeyBundle,
@@ -95,6 +96,10 @@ function boundedInvoke(invoke: InvokeFn, timeouts: NativeCallTimeouts): InvokeFn
     return Promise.race([invoke<T>(cmd, args), expiry]).finally(() => clearTimeout(timer))
   }
 }
+
+// A lost IPC result may still be writing. Keep the guard across plugin replacement
+// until a new application process can load the durable outcome.
+const uncertainImports = new Set<string>()
 
 export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   private readonly invoke: InvokeFn
@@ -219,13 +224,29 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     backupMessage: string,
     passphrase: string,
     selectedFingerprint: string,
+    recovery?: BackupRecoveryMode,
   ): Promise<KeyBundle> {
-    return this.invoke<KeyBundle>('openpgp_backup_import_selected', {
-      accountJid,
-      backupMessage,
-      passphrase,
-      selectedFingerprint,
-    })
+    if (uncertainImports.has(accountJid)) {
+      throw new Error('A native restore is pending or its outcome is unknown. Restart the app to check the saved identity before restoring again.')
+    }
+    uncertainImports.add(accountJid)
+    try {
+      const result = await this.invoke<KeyBundle>('openpgp_backup_import_selected', {
+        accountJid,
+        backupMessage,
+        passphrase,
+        selectedFingerprint,
+        ...(recovery && platform().shell === 'desktop' && platform().os === 'macos'
+          ? { withoutMigration: true } : {}),
+      })
+      uncertainImports.delete(accountJid)
+      return result
+    } catch (error) {
+      const uncertain = error instanceof NativeCallTimeoutError
+        || String(error).includes('openpgp-restore-outcome-uncertain:')
+      if (!uncertain) uncertainImports.delete(accountJid)
+      throw error
+    }
   }
 
   protected async forgetAccount(accountJid: string): Promise<void> {
@@ -282,16 +303,11 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   /** @internal Used by the settings UI to check if a key already exists on disk. */
   async hasPersistedKey(): Promise<boolean> {
     const ctx = this.requireCtx()
-    try {
-      return await this.invoke<boolean>('openpgp_has_persisted_key', {
-        accountJid: ctx.account.jid,
-      })
-    } catch (err) {
-      // A lost call says nothing about the key file. Reporting "absent" would
-      // route a device that holds its key to the identity-choice flow.
-      if (err instanceof NativeCallTimeoutError) throw err
-      return false
-    }
+    // Neither a failed nor a lost call establishes absence. In particular it
+    // must not grant the silent-generation path access to an unknown identity.
+    return this.invoke<boolean>('openpgp_has_persisted_key', {
+      accountJid: ctx.account.jid,
+    })
   }
 
   // ---------------------------------------------------------------------------

@@ -36,6 +36,7 @@ const BASE_URL = useDevServer ? 'http://localhost:5173' : 'http://localhost:4173
  */
 
 const SUITES = [
+  { name: 'backup-recovery', testMatch: 'backup-recovery.ts' },
   { name: 'archiving', testMatch: 'archiving-preferences.ts' },
   { name: 'message-updates', testMatch: 'message-updates.ts' },
   { name: 'mobile-members', testMatch: 'mobile-members.ts' },

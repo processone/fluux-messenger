@@ -16,6 +16,7 @@ import { HashRouter } from 'react-router'
 import { XMPPProvider, E2EEManager, InMemoryStorageBackend, subscribeDiagnostics } from '@fluux/sdk'
 import { DemoClient, setResidentWindowSize } from '@fluux/sdk/demo'
 import { adminStore, cacheMigrationStore, chatStore, connectionStore, ignoreStore, roomStore } from '@fluux/sdk/stores'
+import { createBackupRecoveryFixture } from './demo/BackupRecoveryFixture'
 import { DemoOpenPGPPlugin, DEMO_AVA_FINGERPRINT } from './demo/DemoOpenPGPPlugin'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { useThemeStore } from './stores/themeStore'
@@ -152,16 +153,21 @@ if (perfParam !== null && perfParam !== '0' && perfParam !== 'false') {
 // Seed E2EE state so the encryption badge is visible on Ava's conversation.
 // URL param ?e2ee=conflict starts with no local key to trigger IdentityChoiceDialog.
 const forceConflict = params.get('e2ee') === 'conflict'
-const demoOpenpgpPlugin = new DemoOpenPGPPlugin({ forceConflict })
+const recoveryFixture = params.get('e2ee') === 'recovery' ? createBackupRecoveryFixture() : null
+const demoOpenpgpPlugin = recoveryFixture?.plugin ?? new DemoOpenPGPPlugin({ forceConflict })
 const noopXmpp = { sendStanza: async () => {}, queryDisco: async () => ({ features: [], identities: [] }), publishPEP: async () => {}, retractPEP: async () => {}, deletePEP: async () => {}, queryPEP: async () => [] as any[], subscribePEP: () => ({ unsubscribe: () => {} }) }
-demoClient.e2ee = new E2EEManager({ storage: new InMemoryStorageBackend(), xmpp: noopXmpp, account: { jid: 'you@fluux.chat' } })
+demoClient.e2ee = new E2EEManager({ storage: new InMemoryStorageBackend(), xmpp: recoveryFixture?.xmpp ?? noopXmpp, account: { jid: 'you@fluux.chat' } })
 // The demo builds its manager directly, so it misses XMPPClient's callback
 // wiring. Mirror the one that drives deferred-decrypt retries after a key
 // restore (see XMPPClient.setupE2EEManagerCallbacks).
 demoClient.e2ee.onKeyUnlocked(() => demoClient.notifyE2EEKeyUnlocked())
-void demoClient.e2ee.register(demoOpenpgpPlugin).then(() => {
+const demoRegistration = demoClient.e2ee.register(demoOpenpgpPlugin).then(async () => {
   useEncryptionSettingsStore.getState().setOpenpgpEnabled(true)
   useEncryptionSettingsStore.getState().notifyPluginRegistered()
+  if (recoveryFixture) {
+    await recoveryFixture.seedPending()
+    if (demoOpenpgpPlugin.getOwnFingerprint()) await demoClient.retryPendingDecrypts()
+  }
 })
 useVerifiedPeerKeysStore.getState().setVerified('ava@fluux.chat', DEMO_AVA_FINGERPRINT)
 setSessionPassphrase('demo')
@@ -299,7 +305,7 @@ const application = (
   </ThemeProvider>
 )
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const renderDemo = () => ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RenderLoopBoundary>
       <XMPPProvider client={demoClient}>
@@ -319,3 +325,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 // Animation is started inside DemoTutorialProvider's useEffect to avoid
 // a timing race with React StrictMode's mount/destroy/remount cycle.
+
+// The recovery fixture must finish the injected native read before App mounts,
+// so its real registration hook observes the recovery-capable plugin.
+if (recoveryFixture) void demoRegistration.then(renderDemo)
+else renderDemo()

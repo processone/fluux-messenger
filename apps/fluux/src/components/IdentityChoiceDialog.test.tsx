@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import recoveryMeta from '../e2ee/fixtures/sequoia_meta.json'
 import { IdentityChoiceDialog } from './IdentityChoiceDialog'
 import { EscapeModal } from '@/test-utils/escapeModal'
 
@@ -278,6 +279,31 @@ describe('IdentityChoiceDialog', () => {
     await waitFor(() => {
       expect(baseProps.onImportFromFile).toHaveBeenCalledTimes(1)
     })
+  })
+
+  // FLM-343: cancelling a recovery file picker must not strand the chooser.
+  it('returns to usable choices when the file picker completes without an import', async () => {
+    render(<IdentityChoiceDialog {...baseProps} />)
+    fireEvent.click(screen.getByText('settings.encryption.identityChoice.importFromFileTitle').closest('button')!)
+    await waitFor(() => expect(screen.getByText('settings.encryption.identityChoice.restoreFromServerTitle')).toBeInTheDocument())
+    expect(baseProps.onRestoreFromServer).not.toHaveBeenCalled()
+    expect(baseProps.onReplaceIdentity).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }))
+    expect(baseProps.onCancel).toHaveBeenCalledTimes(1)
+  })
+
+  // FLM-343: a pending native operation cannot be cancelled or submitted again.
+  it('does not dismiss the choice dialog while its restore is pending', async () => {
+    let finish!: () => void
+    const restore = vi.fn(() => new Promise<void>(resolve => { finish = resolve }))
+    render(<IdentityChoiceDialog {...baseProps} onRestoreFromServer={restore} />)
+    fireEvent.click(screen.getByText('settings.encryption.identityChoice.restoreFromServerTitle').closest('button')!)
+    fireEvent.change(document.querySelector('input[type="password"]')!, { target: { value: recoveryMeta.backupPassphrase } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.identityChoice.restoreAction' }))
+    expect(document.querySelector('[data-modal] > button')).toBeDisabled()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(baseProps.onCancel).not.toHaveBeenCalled()
+    await act(async () => { finish() })
   })
 
   it('requires confirmation before triggering replace', async () => {

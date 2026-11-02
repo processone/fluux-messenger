@@ -5,12 +5,14 @@ import type { KeyBundle } from '../e2ee/OpenPGPPluginBase'
 import { ModalOverlay } from './ModalOverlay'
 
 interface KeyPickerDialogProps {
+  warning?: string
+  recommendedFingerprint?: string
   candidates: KeyBundle[]
   onConfirm: (fingerprint: string) => Promise<void>
   onCancel: () => void
 }
 
-export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDialogProps) {
+export function KeyPickerDialog({ warning, recommendedFingerprint, candidates, onConfirm, onCancel }: KeyPickerDialogProps) {
   const { t, i18n } = useTranslation()
 
   const sorted = [...candidates].sort((a, b) => {
@@ -18,7 +20,8 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
     const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
     return db - da
   })
-  const [selected, setSelected] = useState(sorted[0]?.fingerprint ?? '')
+  const recommendation = sorted.find(bundle => bundle.fingerprint === recommendedFingerprint)?.fingerprint ?? sorted[0]?.fingerprint ?? ''
+  const [selected, setSelected] = useState(recommendation)
   const [isInstalling, setIsInstalling] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -55,16 +58,17 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
     >
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
-            {t('settings.encryption.keyPicker.title')}
+            {t(warning ? 'settings.encryption.recoveryConfirmTitle' : 'settings.encryption.keyPicker.title')}
           </h3>
+          {warning && <p className="text-sm text-fluux-muted mb-3">{warning}</p>}
           <p className="text-sm text-fluux-muted">
-            {t('settings.encryption.keyPicker.body')}
+            {t(warning ? 'settings.encryption.recoveryConfirmBody' : 'settings.encryption.keyPicker.body')}
           </p>
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0 px-5">
           <div className="space-y-2 mb-4">
-            {sorted.map((bundle, idx) => (
+            {sorted.map((bundle) => (
               <label
                 key={bundle.fingerprint}
                 className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
@@ -85,10 +89,10 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
                 <Key className="size-4 text-fluux-muted flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-fluux-text truncate">
-                      …{bundle.fingerprint.slice(-8).toUpperCase()}
+                    <span className={`text-xs font-mono text-fluux-text ${warning ? 'break-all' : 'truncate'}`}>
+                      {warning ? bundle.fingerprint.toUpperCase() : `…${bundle.fingerprint.slice(-8).toUpperCase()}`}
                     </span>
-                    {idx === 0 && (
+                    {bundle.fingerprint === recommendation && (
                       <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-fluux-brand">
                         <Star className="size-3" />
                         {t('settings.encryption.keyPicker.recommended')}

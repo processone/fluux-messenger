@@ -230,3 +230,9 @@ swift-rs = { git = "https://github.com/alchaplinsky/swift-rs", rev = "aaf38d45ab
 # release containing the fix (#1502).
 # For the crate-local lint allowances, see vendor/wry/FLUUX_PATCH.md.
 wry = { path = "vendor/wry" }
+
+# FLM-343: opt-in native journey with injected stores, never an installed app.
+[[test]]
+name = "backup_recovery_host"
+path = "tests/backup_recovery_host.rs"
+harness = false

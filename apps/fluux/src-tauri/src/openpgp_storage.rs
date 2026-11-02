@@ -265,7 +265,13 @@ impl KeyStorage {
         if !key_path.exists() && !pre_restore_path(&key_path).exists() {
             return Ok(None);
         }
-        let stored = self.read_passphrase(jid)?;
+        let stored = self.read_passphrase(jid).map_err(|error| {
+            if error.is::<NativeStorageReadError>() {
+                anyhow!("openpgp-storage-unavailable: {error:#}")
+            } else {
+                error
+            }
+        })?;
         let armored = match fs::read(&key_path) {
             Ok(bytes) => Ok(bytes),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Err(error),
@@ -424,7 +430,7 @@ impl KeyStorage {
                     match store.restored(&account) {
                         Ok(true) if !was_restored => {
                             return Err(anyhow!(
-                                "{error:#}; the restored key is in use but its record is not \
+                                "openpgp-restore-outcome-uncertain: {error:#}; the restored key is in use but its record is not \
                                  confirmed durable. The previous key is kept at {}",
                                 backup_path.display()
                             ));
@@ -434,7 +440,7 @@ impl KeyStorage {
                         // the backup exactly as they are.
                         Err(probe) => {
                             return Err(anyhow!(
-                                "{error:#}; whether the restored key's record was published could \
+                                "openpgp-restore-outcome-uncertain: {error:#}; whether the restored key's record was published could \
                                  not be read back ({probe}). Nothing was rolled back; the previous \
                                  key is kept at {}",
                                 backup_path.display()
@@ -458,6 +464,9 @@ impl KeyStorage {
                             "; could not put the previous key back, it is kept at {}: {e}",
                             backup_path.display()
                         )),
+                    }
+                    if !notes.is_empty() {
+                        return Err(anyhow!("openpgp-restore-outcome-uncertain: {error:#}{notes}"));
                     }
                     return Err(anyhow!("{error:#}{notes}"));
                 }
@@ -867,6 +876,17 @@ fn remove_keychain_passphrase(
         .map_err(|error| anyhow!(error))
 }
 
+// Only `load` of an existing TSK turns a native secret-read failure into the
+// recovery signal. A failed save/generation is not evidence of a stored identity.
+#[derive(Debug)]
+struct NativeStorageReadError(String);
+impl std::fmt::Display for NativeStorageReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+impl std::error::Error for NativeStorageReadError {}
+
 #[cfg(any(target_os = "macos", test))]
 fn read_keychain_passphrase_from(
     store: &(impl crate::credentials::SecretStore + ?Sized),
@@ -874,7 +894,7 @@ fn read_keychain_passphrase_from(
 ) -> Result<Option<Vec<u8>>> {
     store
         .get(&keyring_account(jid))
-        .map_err(|error| anyhow!(error))?
+        .map_err(|error| anyhow!(NativeStorageReadError(error)))?
         .map(|encoded| {
             B64.decode(encoded.trim())
                 .context("keychain passphrase is not valid base64")
@@ -888,7 +908,7 @@ fn read_recovery_passphrases_from(
 ) -> Result<Vec<Vec<u8>>> {
     let copies = store
         .recovery_candidates(&keyring_account(jid))
-        .map_err(|error| anyhow!(error))?;
+        .map_err(|error| anyhow!(NativeStorageReadError(error)))?;
     Ok(copies
         .into_iter()
         .filter_map(|encoded| match B64.decode(encoded.trim()) {
@@ -908,7 +928,7 @@ fn read_legacy_passphrase_from(
 ) -> Result<Option<Vec<u8>>> {
     store
         .legacy_candidate(&keyring_account(jid))
-        .map_err(|error| anyhow!(error))?
+        .map_err(|error| anyhow!(NativeStorageReadError(error)))?
         .map(|encoded| {
             B64.decode(encoded.trim())
                 .context("legacy keychain passphrase is not valid base64")
@@ -2432,6 +2452,8 @@ mod tests {
         let before = fs::read(storage.key_file_path(jid).unwrap()).unwrap();
         let error = storage.save_fresh(jid, &generate_cert(jid)).unwrap_err();
         assert!(format!("{error:#}").contains("marker not writable"));
+        // FLM-343: a completed rollback is a known failed save, not an unknown outcome.
+        assert!(!format!("{error:#}").contains("openpgp-restore-outcome-uncertain:"));
         assert_eq!(fs::read(storage.key_file_path(jid).unwrap()).unwrap(), before);
         assert_eq!(
             storage.load(jid).unwrap().unwrap().cert.fingerprint(),
@@ -2693,6 +2715,8 @@ mod tests {
             .store(true, std::sync::atomic::Ordering::SeqCst);
         let error = hooked_storage(&raw, &dir).save_fresh(jid, &restored).unwrap_err();
         assert!(format!("{error:#}").contains("not confirmed durable"), "{error:#}");
+        // FLM-343: the host must not resend an uncertain native restore.
+        assert!(format!("{error:#}").contains("openpgp-restore-outcome-uncertain:"));
         assert_eq!(
             hooked_storage(&raw, &dir).load(jid).unwrap().unwrap().cert.fingerprint(),
             restored.fingerprint()
@@ -2713,6 +2737,8 @@ mod tests {
         raw.unreadable_after_fail.store(true, std::sync::atomic::Ordering::SeqCst);
         let error = hooked_storage(&raw, &dir).save_fresh(jid, &restored).unwrap_err();
         assert!(format!("{error:#}").contains("Nothing was rolled back"), "{error:#}");
+        // FLM-343: preserve the native uncertainty signal as well as the rollback details.
+        assert!(format!("{error:#}").contains("openpgp-restore-outcome-uncertain:"));
         // The record becomes readable again: the restored key still unlocks.
         raw.records_unreadable.store(false, std::sync::atomic::Ordering::SeqCst);
         assert_eq!(
@@ -3001,4 +3027,43 @@ mod tests {
         assert_eq!(fs::read(&saved).unwrap(), previous);
         fs::remove_dir_all(dir).unwrap();
     }
+
+    // FLM-343: a persisted identity's native storage read failure has a scoped
+    // signal, never absence or a reason to generate. No OS store is accessed.
+    #[test]
+    fn persisted_storage_read_failure_is_scoped_and_preserves_files() {
+        use crate::credentials::SecretStore;
+        struct Unavailable(i32);
+        impl SecretStore for Unavailable {
+            fn get(&self, _: &str) -> std::result::Result<Option<String>, String> {
+                Err(format!("macOS keychain ({})", self.0))
+            }
+            fn set(&self, _: &str, _: &str) -> std::result::Result<(), String> {
+                panic!("a failed read must not write")
+            }
+            fn delete(&self, _: &str) -> std::result::Result<(), String> {
+                panic!("a failed read must not delete")
+            }
+        }
+        for code in [-25293, -128, -25308, -25291] {
+            let dir = fresh_tmp_dir();
+            let jid = "alice@example.com";
+            let original = KeyStorage::for_testing(dir.clone());
+            original.save(jid, &generate_cert(jid)).unwrap();
+            let path = original.key_file_path(jid).unwrap();
+            let before = fs::read(&path).unwrap();
+            let storage = KeyStorage::for_testing_with_store(dir.clone(), std::sync::Arc::new(Unavailable(code)));
+            let error = format!("{:#}", storage.load(jid).err().unwrap());
+            assert!(error.contains("openpgp-storage-unavailable:"), "{error}");
+            assert!(error.contains(&code.to_string()), "{error}");
+            assert_eq!(fs::read(path).unwrap(), before);
+            assert!(storage.load("absent@example.com").unwrap().is_none());
+            let absent_save = storage.save("absent@example.com", &generate_cert("absent@example.com"));
+            let save_error = format!("{:#}", absent_save.err().unwrap());
+            assert!(!save_error.contains("openpgp-storage-unavailable:"), "a failed new save is not a stored identity: {save_error}");
+            assert!(!storage.has_persisted_key("absent@example.com"));
+            fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
 }
