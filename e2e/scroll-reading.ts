@@ -2488,13 +2488,46 @@ test.describe('Insertion drift while scrolled up', () => {
     '/demo.html?tutorial=false&virt=1&stress=rooms:1,messages:200,mode:live,msgStep:0'
   const FULL_WINDOW_INSERTION_URL =
     '/demo.html?tutorial=false&virt=1&window=200&stress=rooms:1,messages:200,mode:live,msgStep:0'
+  /** The demo's stress 1:1 chat, seeded with as many messages as the stress room. */
+  const STRESS_CHAT_JID = 'stress-contact@fluux.chat'
+  type ConversationKind = 'room' | 'chat'
+  const conversationJid = (kind: ConversationKind) =>
+    kind === 'room' ? STRESS_ROOM_JID : STRESS_CHAT_JID
 
-  /** Open the stress room and scroll clear of the bottom, with content above AND below. */
+  /**
+   * The stress chat opens on its latest 100 messages and keeps the rest in the local cache; a
+   * load-older served from that cache lands at once and never waits on the archive. Load them first,
+   * so the load-older under test goes to the (gated) archive, as the room's does.
+   */
+  async function loadCachedChatHistory(page: Page) {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const state = await page.evaluate((jid) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const store = (window as any).__chatStore.getState()
+        return {
+          first: (store.messages.get(jid)?.[0]?.id as string | undefined) ?? null,
+          loading: Boolean(store.getMAMQueryState(jid)?.isLoading),
+        }
+      }, STRESS_CHAT_JID)
+      if (state.first === `${STRESS_CHAT_JID}::seed-0` && !state.loading) return
+      await page.evaluate(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const trigger = (window as any).__fluuxTriggerLoadOlder
+        if (typeof trigger === 'function') trigger()
+      })
+      await settle(page)
+    }
+    throw new Error('the stress chat never finished loading its cached history')
+  }
+
+  /** Open the stress room (or the stress chat) and scroll clear of the bottom, with content above
+   *  AND below. */
   async function openScrolledUp(
     page: Page,
     url = INSERTION_URL,
     targetDistanceFromBottom?: number,
     virtualized = true,
+    kind: ConversationKind = 'room',
   ): Promise<void> {
     await bootDemo(page, url)
     await page.evaluate(() => {
@@ -2507,7 +2540,17 @@ test.describe('Insertion drift while scrolled up', () => {
         localStorage.setItem('fluux:flags:enableMessageVirtualization', 'false')
       })
     }
-    await navigateToStressRoom(page, virtualized)
+    if (kind === 'room') {
+      await navigateToStressRoom(page, virtualized)
+    } else {
+      await activateChat(page, STRESS_CHAT_JID)
+      await page.waitForSelector(
+        virtualized ? '[data-index]' : '.message-row[data-message-id]',
+        { timeout: 15_000 },
+      )
+      await settle(page)
+      await loadCachedChatHistory(page)
+    }
     const list = page.locator('[data-message-list]').first()
     await list.evaluate((element, { targetDistance, virtualized: usesVirtualizer }) => {
       const scroller = element as HTMLElement
@@ -2524,7 +2567,7 @@ test.describe('Insertion drift while scrolled up', () => {
   }
 
   /** Rendered rows (scroller-relative) plus the resident array, read together. */
-  const readView = (page: Page) => page.evaluate((jid) => {
+  const readView = (page: Page, kind: ConversationKind = 'room') => page.evaluate(([jid, kind]) => {
     const s = document.querySelector('[data-message-list]') as HTMLElement | null
     if (!s) return null
     const sr = s.getBoundingClientRect()
@@ -2535,7 +2578,10 @@ test.describe('Insertion drift while scrolled up', () => {
       })
       .sort((a, b) => a.top - b.top)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const msgs: any[] = (window as any).__roomStore.getState().messages.get(jid) ?? []
+    const w = window as any
+    const store = kind === 'room' ? w.__roomStore : w.__chatStore
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const msgs: any[] = store.getState().messages.get(jid) ?? []
     return {
       scrollTop: Math.round(s.scrollTop),
       distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
@@ -2547,7 +2593,7 @@ test.describe('Insertion drift while scrolled up', () => {
       ids: msgs.map((m) => m.id as string),
       stamps: msgs.map((m) => new Date(m.timestamp).getTime()),
     }
-  }, STRESS_ROOM_JID)
+  }, [conversationJid(kind), kind] as const)
 
   /**
    * Inject `bodies` as delayed arrivals through the REAL live path (roomStore.addMessage →
@@ -2952,6 +2998,101 @@ test.describe('Insertion drift while scrolled up', () => {
   }
 
   /**
+   * Hold the demo's older-history MAM answer open until `__releaseOlderLoad` runs. The cache path in
+   * front of it returns nothing in demo mode (all seeded messages are already resident), so this is
+   * the whole delivery of a load-older.
+   */
+  async function gateOlderLoad(page: Page, kind: ConversationKind) {
+    const gated = await page.evaluate((kind) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const demo = (window as any).__demoClient
+      if (!demo?.messages) return false
+      const method = kind === 'room' ? 'queryRoomMAM' : 'queryMAM'
+      const original = demo.messages[method].bind(demo.messages)
+      let open: () => void = () => {}
+      const gate = new Promise<void>((resolve) => {
+        open = resolve
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__releaseOlderLoad = open
+      demo.messages[method] = async (options: unknown) => {
+        await gate
+        return original(options)
+      }
+      return true
+    }, kind)
+    expect(gated, 'the demo older-history answer must be gateable for this scenario').toBe(true)
+  }
+
+  /** Start a load-older WITHOUT moving the reader (handleLoadEarlier, not a scroll to the top), and
+   *  check it is still waiting for its batch. */
+  async function startOlderLoad(page: Page, kind: ConversationKind) {
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const trigger = (window as any).__fluuxTriggerLoadOlder
+      if (typeof trigger === 'function') trigger()
+    })
+    await page.waitForTimeout(200)
+    const inFlight = await page.evaluate(([jid, kind]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      const state = kind === 'room'
+        ? w.__roomStore.getState().getRoomMAMQueryState(jid)
+        : w.__chatStore.getState().getMAMQueryState(jid)
+      return Boolean(state?.isLoading)
+    }, [conversationJid(kind), kind] as const)
+    expect(inFlight, 'precondition: the load-older must still be in flight').toBe(true)
+  }
+
+  /** A delayed message through the REAL live path (the action the `room:message` and
+   *  `chat:message` bindings call), sorted in at its old `timestamp`. */
+  async function deliverDelayed(
+    page: Page,
+    kind: ConversationKind,
+    message: { id: string; timestamp: number; body: string },
+  ) {
+    await page.evaluate(([jid, kind, { id, timestamp, body }]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      if (kind === 'room') {
+        w.__roomStore.getState().addMessage(jid, {
+          type: 'groupchat',
+          id,
+          stanzaId: `sid-${id}`,
+          from: `${jid}/DelayedSender`,
+          nick: 'DelayedSender',
+          body,
+          timestamp: new Date(timestamp),
+          isOutgoing: false,
+          isDelayed: true,
+          roomJid: jid,
+        })
+      } else {
+        w.__chatStore.getState().addMessage({
+          type: 'chat',
+          conversationId: jid,
+          id,
+          stanzaId: `sid-${id}`,
+          originId: undefined,
+          from: jid,
+          body,
+          timestamp: new Date(timestamp),
+          isOutgoing: false,
+          isDelayed: true,
+        }, { isLiveArrival: true })
+      }
+    }, [conversationJid(kind), kind, message] as const)
+  }
+
+  /** Let the gated load-older deliver its batch. */
+  async function releaseOlderLoad(page: Page) {
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__releaseOlderLoad?.()
+    })
+  }
+
+  /**
    * Hold the demo's older-history MAM answer open, so an arrival can be injected while a
    * load-older is genuinely IN FLIGHT, then let the batch land and report how far the tracked
    * reading row moved across the whole sequence.
@@ -2968,30 +3109,13 @@ test.describe('Insertion drift while scrolled up', () => {
       slowArchive?: boolean
       wheelDuringWaitPx?: number
       scrollBeforeArrival?: { direction: 'up' | 'down'; px: number }
+      kind?: ConversationKind
     } = {},
   ) {
-    // Gate the synthetic MAM batch. The cache path in front of it returns nothing in demo mode
-    // (all seeded messages are already resident), so this is the whole delivery of a load-older.
-    const gated = await page.evaluate(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const demo = (window as any).__demoClient
-      if (!demo?.messages) return false
-      const original = demo.messages.queryRoomMAM.bind(demo.messages)
-      let open: () => void = () => {}
-      const gate = new Promise<void>((resolve) => {
-        open = resolve
-      })
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(window as any).__releaseOlderLoad = open
-      demo.messages.queryRoomMAM = async (options: unknown) => {
-        await gate
-        return original(options)
-      }
-      return true
-    })
-    expect(gated, 'the demo older-history answer must be gateable for this scenario').toBe(true)
+    const kind = options.kind ?? 'room'
+    await gateOlderLoad(page, kind)
 
-    const before = await readView(page)
+    const before = await readView(page, kind)
     expect(before, 'the message list must be readable').not.toBeNull()
     expect(
       before!.distFromBottom,
@@ -3014,20 +3138,9 @@ test.describe('Insertion drift while scrolled up', () => {
       scrolled === 'up' ? topIdx - 2 : scrolled === 'down' ? topIdx + 2 : topIdx - 10
     ]
 
-    // Arm the directional snapshot WITHOUT moving the reader: handleLoadEarlier, not a
-    // scroll-to-top, so the reader stays mid-history with content above and below.
-    await page.evaluate(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const trigger = (window as any).__fluuxTriggerLoadOlder
-      if (typeof trigger === 'function') trigger()
-    })
-    await page.waitForTimeout(200)
-
-    const inFlight = await page.evaluate((jid) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return Boolean((window as any).__roomStore.getState().getRoomMAMQueryState(jid)?.isLoading)
-    }, STRESS_ROOM_JID)
-    expect(inFlight, 'precondition: the load-older must still be in flight').toBe(true)
+    // Arm the directional snapshot WITHOUT moving the reader, so the reader stays mid-history with
+    // content above and below.
+    await startOlderLoad(page, kind)
 
     // The reader scrolls while the load waits, before any arrival: the rows the load started from
     // leave the view, and the rows the reader now sees are the ones to hold (FLM-210, review
@@ -3039,7 +3152,7 @@ test.describe('Insertion drift while scrolled up', () => {
       await page.mouse.wheel(0, direction === 'up' ? -px : px)
       await page.waitForTimeout(400)
       await syncEngineGeometry(page)
-      const moved = await readView(page)
+      const moved = await readView(page, kind)
       expect(moved, 'the message list must be readable').not.toBeNull()
       expect(
         moved!.visible.length,
@@ -3050,21 +3163,7 @@ test.describe('Insertion drift while scrolled up', () => {
     }
 
     // The delayed arrival lands while that load is still waiting for its batch.
-    await page.evaluate(([jid, ts, text]) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(window as any).__roomStore.getState().addMessage(jid as string, {
-        type: 'groupchat',
-        id: 'delayed-arrival-0',
-        stanzaId: 'sid-delayed-arrival-0',
-        from: `${jid}/DelayedSender`,
-        nick: 'DelayedSender',
-        body: text as string,
-        timestamp: new Date(ts as number),
-        isOutgoing: false,
-        isDelayed: true,
-        roomJid: jid as string,
-      })
-    }, [STRESS_ROOM_JID, insertTs, body] as const)
+    await deliverDelayed(page, kind, { id: 'delayed-arrival-0', timestamp: insertTs, body })
     await page.waitForTimeout(400)
     await syncEngineGeometry(page)
 
@@ -3077,7 +3176,7 @@ test.describe('Insertion drift while scrolled up', () => {
       return el.getBoundingClientRect().top - s.getBoundingClientRect().top
     }, track.id)
 
-    const midway = await readView(page)
+    const midway = await readView(page, kind)
     const midwayTop = await readTrackedTop()
 
     // The reader scrolls on while the load still waits, after the arrival: from here, the rows they
@@ -3099,14 +3198,11 @@ test.describe('Insertion drift while scrolled up', () => {
     }
 
     // Let the load-older deliver its batch.
-    await page.evaluate(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(window as any).__releaseOlderLoad?.()
-    })
+    await releaseOlderLoad(page)
     await page.waitForTimeout(2000)
     await syncEngineGeometry(page)
 
-    const after = await readView(page)
+    const after = await readView(page, kind)
     const trackedTop = await readTrackedTop()
 
     // Read placement from the MIDWAY array: the batch that lands afterwards renumbers every index.
@@ -3152,6 +3248,142 @@ test.describe('Insertion drift while scrolled up', () => {
       residentCountAfter: after!.ids.length,
       scrollTopBefore: before!.scrollTop,
       scrollTopAfter: after!.scrollTop,
+    }
+  }
+
+  /** Lines enough that the expanded message is more than twice the height of the view. */
+  const TALL_MESSAGE_LINES = 150
+
+  /**
+   * A reader inside a message taller than the view while a load-older waits (review FLM-338 R2):
+   * that message is the only row on screen, more than half of it above the top, and the row after
+   * it sits below the view. A delayed message then lands between the two, below the view, and the
+   * batch lands after it. Reports how far the tall message moved.
+   *
+   * `when` says how the reader got there: `before-load` puts them inside it when the load starts,
+   * so the load captures it; `during-load` starts the load below it and wheels the reader up into
+   * it while the load waits, so the load follows them there.
+   */
+  async function tallMessageDuringLoad(
+    page: Page,
+    kind: ConversationKind,
+    when: 'before-load' | 'during-load',
+  ) {
+    // Rows of one time sort by sender, then id: this id puts the tall message before the arrival.
+    const tallId = 'a-tall-message'
+    const list = page.locator('[data-message-list]').first()
+    await gateOlderLoad(page, kind)
+
+    // A long message lands just under the top of the view, and the reader expands it.
+    const start = await readView(page, kind)
+    expect(start, 'the message list must be readable').not.toBeNull()
+    const topIdx = start!.ids.indexOf(start!.visible[0].id)
+    expect(topIdx, 'precondition: the top-visible row is in the resident array').toBeGreaterThan(12)
+    // Both the tall message and the arrival take this time, so both land just before that row, the
+    // arrival right after the tall message (checked below).
+    const tallTs = start!.stamps[topIdx + 1]
+    await deliverDelayed(page, kind, {
+      id: tallId,
+      timestamp: tallTs,
+      body: Array.from(
+        { length: TALL_MESSAGE_LINES },
+        (_, i) => `line ${i + 1} of a long message`,
+      ).join('\n'),
+    })
+    await settle(page)
+    // Dispatched, not clicked: a click first scrolls the button into view, and in a virtualized
+    // room the hold for the tall message's own arrival scrolls back, so the row never settles.
+    await page
+      .locator(`[data-message-list] .message-row[data-message-id="${tallId}"]`)
+      .getByRole('button', { name: 'Show more' })
+      .dispatchEvent('click')
+    await settle(page)
+    await syncEngineGeometry(page)
+
+    const readTall = () => list.evaluate((element, id) => {
+      const scroller = element as HTMLElement
+      const row = scroller.querySelector(
+        `.message-row[data-message-id="${CSS.escape(id)}"]`,
+      ) as HTMLElement | null
+      if (!row) return null
+      const rect = row.getBoundingClientRect()
+      return {
+        top: rect.top - scroller.getBoundingClientRect().top,
+        height: rect.height,
+        view: scroller.clientHeight,
+      }
+    }, tallId)
+    const scrollBy = async (delta: number) => {
+      await list.evaluate((element, by) => {
+        const scroller = element as HTMLElement
+        scroller.scrollTop += by
+        scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+      }, delta)
+      await settle(page)
+      await syncEngineGeometry(page)
+    }
+
+    const expanded = await readTall()
+    expect(expanded, 'the tall message must be rendered').not.toBeNull()
+    expect(
+      expanded!.height,
+      `precondition: the expanded message must be more than twice the view — ${JSON.stringify(expanded)}`,
+    ).toBeGreaterThan(2 * expanded!.view + 100)
+    // Deep enough that more than half of it is above the top, shallow enough that it fills the view.
+    const depth = Math.round((expanded!.height / 2 + (expanded!.height - expanded!.view)) / 2)
+
+    if (when === 'before-load') {
+      await scrollBy(expanded!.top + depth)
+      await startOlderLoad(page, kind)
+    } else {
+      // The load starts on the rows below the tall message, then the reader wheels up into it.
+      await scrollBy(expanded!.top + expanded!.height + 200)
+      await startOlderLoad(page, kind)
+      const below = await readTall()
+      expect(below, 'the tall message must stay rendered above the view').not.toBeNull()
+      await list.hover()
+      await page.mouse.wheel(0, Math.round(below!.top + depth))
+      await page.waitForTimeout(400)
+      await syncEngineGeometry(page)
+    }
+
+    const reading = await readView(page, kind)
+    const before = await readTall()
+    expect(before, 'the tall message must be rendered').not.toBeNull()
+
+    // The delayed arrival lands right after the tall message, below the view, while the load waits.
+    await deliverDelayed(page, kind, {
+      id: 'delayed-arrival-0',
+      timestamp: tallTs,
+      body: 'delayed arrival under a tall message\n'.repeat(18),
+    })
+    await page.waitForTimeout(400)
+    await syncEngineGeometry(page)
+    const midway = await readView(page, kind)
+    const midwayTall = await readTall()
+
+    await releaseOlderLoad(page)
+    await page.waitForTimeout(2000)
+    await syncEngineGeometry(page)
+    const after = await readView(page, kind)
+    const afterTall = await readTall()
+
+    return {
+      height: Math.round(before!.height),
+      view: before!.view,
+      depth,
+      beforeTop: Math.round(before!.top),
+      midwayTop: midwayTall === null ? null : Math.round(midwayTall.top),
+      afterTop: afterTall === null ? null : Math.round(afterTall.top),
+      midwayDrift: midwayTall === null ? Number.POSITIVE_INFINITY : Math.abs(midwayTall.top - before!.top),
+      drift: afterTall === null ? Number.POSITIVE_INFINITY : Math.abs(afterTall.top - before!.top),
+      onlyRowInView: reading!.firstShownId === tallId && reading!.lastShownId === tallId,
+      mostlyAboveTop: before!.top < -before!.height / 2,
+      arrivalRightAfterTall:
+        midway!.ids.indexOf('delayed-arrival-0') === midway!.ids.indexOf(tallId) + 1,
+      firstIdBefore: reading!.ids[0],
+      firstIdMidway: midway!.ids[0],
+      firstIdAfter: after!.ids[0],
     }
   }
 
@@ -3358,6 +3590,110 @@ test.describe('Insertion drift while scrolled up', () => {
       `an arrival above the reader moved their rows by ${r.drift}px once the batch landed — ${JSON.stringify(r)}`,
     ).toBeLessThanOrEqual(HELD_ROW_PX)
   })
+
+  // FLM-210, review FLM-338 R1 with virtualization off (the flag's documented opt-out): that path
+  // had no following, so the restore an arrival started put the row the load started from back
+  // where it was, undoing the reader's own scroll.
+  for (const kind of ['room', 'chat'] as const) {
+    test(`invariant-14s (${kind}): without virtualization, a reader who scrolls up while a load-older waits keeps their rows when a delayed message lands below them`, async ({ page }) => {
+      await openScrolledUp(page, INSERTION_URL, undefined, false, kind)
+      const r = await insertDuringInFlightLoadOlder(
+        page,
+        'delayed arrival below a reader who scrolled up\n'.repeat(18),
+        { scrollBeforeArrival: { direction: 'up', px: 1200 }, kind },
+      )
+      console.log(`── INSERTION-DRIFT unvirtualized-below-moved-reader ${kind} ──`, JSON.stringify(r))
+      expect(
+        r.loadStartBelowViewport,
+        `precondition: the wheel must take the rows the load started from below the view — ${JSON.stringify(r)}`,
+      ).toBe(true)
+      expect(r.insertedBelowViewport, `the arrival must land BELOW the viewport — ${JSON.stringify(r)}`).toBe(true)
+      expect(
+        r.insertedAboveLoadStart,
+        `the arrival must land above the rows the load started from — ${JSON.stringify(r)}`,
+      ).toBe(true)
+      expect(
+        r.firstIdAfter,
+        `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+      ).not.toBe(r.firstIdBefore)
+      expect(
+        r.midwayDrift,
+        `an arrival below the reader moved their rows by ${r.midwayDrift}px while the load waited — ${JSON.stringify(r)}`,
+      ).toBeLessThanOrEqual(HELD_ROW_PX)
+      expect(
+        r.drift,
+        `an arrival below the reader moved their rows by ${r.drift}px once the batch landed — ${JSON.stringify(r)}`,
+      ).toBeLessThanOrEqual(HELD_ROW_PX)
+    })
+
+    test(`invariant-14t (${kind}): without virtualization, a reader who scrolls down while a load-older waits keeps their rows when a delayed message lands above them`, async ({ page }) => {
+      await openScrolledUp(page, INSERTION_URL, undefined, false, kind)
+      const r = await insertDuringInFlightLoadOlder(
+        page,
+        'delayed arrival above a reader who scrolled down\n'.repeat(18),
+        { scrollBeforeArrival: { direction: 'down', px: 1200 }, kind },
+      )
+      console.log(`── INSERTION-DRIFT unvirtualized-above-moved-reader ${kind} ──`, JSON.stringify(r))
+      expect(
+        r.loadStartAboveViewport,
+        `precondition: the wheel must take the rows the load started from above the view — ${JSON.stringify(r)}`,
+      ).toBe(true)
+      expect(r.insertedAboveReading, `the arrival must land ABOVE the viewport — ${JSON.stringify(r)}`).toBe(true)
+      expect(
+        r.insertedBelowLoadStart,
+        `the arrival must land below the rows the load started from — ${JSON.stringify(r)}`,
+      ).toBe(true)
+      expect(
+        r.firstIdAfter,
+        `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+      ).not.toBe(r.firstIdBefore)
+      expect(
+        r.midwayDrift,
+        `an arrival above the reader moved their rows by ${r.midwayDrift}px while the load waited — ${JSON.stringify(r)}`,
+      ).toBeLessThanOrEqual(HELD_ROW_PX)
+      expect(
+        r.drift,
+        `an arrival above the reader moved their rows by ${r.drift}px once the batch landed — ${JSON.stringify(r)}`,
+      ).toBeLessThanOrEqual(HELD_ROW_PX)
+    })
+  }
+
+  // FLM-210, review FLM-338 R2: the restore skipped a row more than half above the top even when it
+  // was the only row on screen, and held the row after it, below the view. An arrival between the
+  // two then moved the message the reader was reading by the arrival's height.
+  for (const virtualized of [true, false]) {
+    for (const kind of ['room', 'chat'] as const) {
+      const variant = `${kind}, ${virtualized ? 'virtualized' : 'not virtualized'}`
+      for (const when of ['before-load', 'during-load'] as const) {
+        const title = when === 'before-load'
+          ? `invariant-14u (${variant}): a reader inside a message taller than the view when a load-older starts keeps it in place when a delayed message lands below it`
+          : `invariant-14v (${variant}): a reader who scrolls into a message taller than the view while a load-older waits keeps it in place when a delayed message lands below it`
+        test(title, async ({ page }) => {
+          await openScrolledUp(page, INSERTION_URL, undefined, virtualized, kind)
+          const r = await tallMessageDuringLoad(page, kind, when)
+          console.log(`── INSERTION-DRIFT tall-message ${when} ${variant} ──`, JSON.stringify(r))
+          expect(r.onlyRowInView, `precondition: the tall message must be the only row in view — ${JSON.stringify(r)}`).toBe(true)
+          expect(r.mostlyAboveTop, `precondition: more than half of it must be above the top — ${JSON.stringify(r)}`).toBe(true)
+          expect(
+            r.arrivalRightAfterTall,
+            `precondition: the arrival must land right after the tall message — ${JSON.stringify(r)}`,
+          ).toBe(true)
+          expect(
+            r.firstIdAfter,
+            `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+          ).not.toBe(r.firstIdBefore)
+          expect(
+            r.midwayDrift,
+            `an arrival below the tall message moved it by ${r.midwayDrift}px while the load waited — ${JSON.stringify(r)}`,
+          ).toBeLessThanOrEqual(HELD_ROW_PX)
+          expect(
+            r.drift,
+            `an arrival below the tall message moved it by ${r.drift}px once the batch landed — ${JSON.stringify(r)}`,
+          ).toBeLessThanOrEqual(HELD_ROW_PX)
+        })
+      }
+    }
+  }
 
   test('invariant-14l: an interior arrival at the resident bound holds the reading position across an in-flight load-older', async ({ page }) => {
     await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
