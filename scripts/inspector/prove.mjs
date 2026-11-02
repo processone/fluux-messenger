@@ -1,7 +1,9 @@
 // FLM-349/351: disposable-only proof. Never discovers or connects to a phone.
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { webkit } from 'playwright'
 
@@ -47,7 +49,27 @@ const run = spawnSync('python3', ['-B', fileURLToPath(new URL('./test_reader.py'
 process.stderr.write(run.stderr || '')
 assert.equal(run.error, undefined)
 const transport = JSON.parse(run.stdout)
-console.log(JSON.stringify({ boundary: 'disposable WebKit + actual host reader on local sockets; not an iPhone',
-  webkit: version, browserClosed: true, samples, samplerRemovedAndReattached: true, transport }, null, 2))
-// Keep completed failed-case observations as well as their nonzero exit status.
-assert.equal(run.status, 0)
+const scratch = mkdtempSync(join(process.env.FLUUX_INSPECTOR_TEMP || tmpdir(), 'fluux-service-'))
+let service
+try {
+  const worker = join(scratch, 'service-worker')
+  const build = spawnSync('bash', [fileURLToPath(new URL('./build-service.sh', import.meta.url)), worker], {
+    encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024,
+  })
+  process.stderr.write(build.stderr || '')
+  assert.equal(build.error, undefined)
+  assert.equal(build.status, 0)
+  const proof = spawnSync('python3', ['-B', fileURLToPath(new URL('./test_service.py', import.meta.url)), worker], {
+    input: JSON.stringify(samples), encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024,
+  })
+  process.stderr.write(proof.stderr || '')
+  assert.equal(proof.error, undefined)
+  service = JSON.parse(proof.stdout)
+  console.log(JSON.stringify({ boundary: 'disposable WebKit + actual host reader and opener; not an iPhone',
+    webkit: version, browserClosed: true, samples, samplerRemovedAndReattached: true, transport, service }, null, 2))
+  // Preserve completed failed-case observations as well as their nonzero exit status.
+  assert.equal(run.status, 0)
+  assert.equal(proof.status, 0)
+} finally {
+  rmSync(scratch, { recursive: true, force: true })
+}
