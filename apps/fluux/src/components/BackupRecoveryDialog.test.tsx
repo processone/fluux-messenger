@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { E2EEPluginError, type E2EEManager } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
 import { BackupRecoveryDialog } from './BackupRecoveryDialog'
@@ -18,6 +18,7 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 function setup() {
   const preview = { needsPicker: true, candidates: [{ fingerprint: meta.aliceFingerprint, publicArmored, keychainBacked: true }], backupContext: { message: backup, passphrase: meta.backupPassphrase } }
   const plugin = {
+    isBackupRestoreUncertain: vi.fn(() => false),
     restoreSecretKey: vi.fn().mockResolvedValue(preview), importKeyFromFile: vi.fn().mockResolvedValue(preview),
     pickKeyFile: vi.fn().mockResolvedValue(backup), installSelectedKey: vi.fn().mockResolvedValue({ fingerprint: meta.aliceFingerprint }),
   }
@@ -114,6 +115,56 @@ describe('BackupRecoveryDialog', () => {
     expect(f.plugin.installSelectedKey).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByText('settings.encryption.recoveryErrorDetails'))
     expect(screen.getByText('native rollback: prior key retained; saved identity uncertain')).toBeVisible()
+    expect(f.onRestored).not.toHaveBeenCalled()
+  })
+
+  it('FLM-365 N1 snapshots the pre-existing guard, not the current pending install, across parent renders and ordinary failure', async () => {
+    const f = setup()
+    let guard = false
+    let rejectSave!: (error: Error) => void
+    f.plugin.isBackupRestoreUncertain.mockImplementation(() => guard)
+    f.plugin.installSelectedKey.mockImplementationOnce(() => {
+      guard = true
+      return new Promise((_, reject) => { rejectSave = reject })
+    })
+    const view = render(<BackupRecoveryDialog {...f.props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.identityChoice.restoreFromServerTitle' }))
+    await enterCode()
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.keyPicker.confirm' }))
+    await waitFor(() => expect(f.plugin.installSelectedKey).toHaveBeenCalledOnce())
+    view.rerender(<BackupRecoveryDialog {...f.props} />)
+    expect(screen.queryByText('settings.encryption.recoveryRestartRequired')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'settings.encryption.keyPicker.confirm' })).toBeDisabled()
+    guard = false
+    await act(async () => { rejectSave(new Error('known save failure; previous key restored')) })
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.encryption.recoveryFailed')
+    const confirm = screen.getByRole('button', { name: 'settings.encryption.keyPicker.confirm' })
+    expect(confirm).toBeEnabled()
+    fireEvent.click(confirm)
+    await waitFor(() => expect(f.onRestored).toHaveBeenCalledWith(meta.aliceFingerprint))
+    expect(f.plugin.installSelectedKey).toHaveBeenCalledTimes(2)
+  })
+  it('FLM-365 N1 still blocks a restore already unsettled before the preview opens', async () => {
+    const f = setup()
+    f.plugin.isBackupRestoreUncertain.mockReturnValue(true)
+    render(<BackupRecoveryDialog {...f.props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.identityChoice.restoreFromServerTitle' }))
+    await enterCode()
+    expect(screen.getByRole('alert')).toHaveTextContent('settings.encryption.recoveryRestartRequired')
+    expect(screen.getByRole('button', { name: 'settings.encryption.keyPicker.confirm' })).toBeDisabled()
+    expect(f.plugin.installSelectedKey).not.toHaveBeenCalled()
+  })
+  it('FLM-365 N2 localizes a file-picker failure and keeps its diagnostic details separate', async () => {
+    const f = setup()
+    f.plugin.pickKeyFile.mockRejectedValue(new Error('file could not be read'))
+    render(<BackupRecoveryDialog {...f.props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.identityChoice.importFromFileTitle' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.encryption.recoveryFailed')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Error:')
+    fireEvent.click(screen.getByText('settings.encryption.recoveryErrorDetails'))
+    expect(screen.getByText('file could not be read')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'settings.encryption.identityChoice.restoreFromServerTitle' })).toBeEnabled()
+    expect(f.plugin.installSelectedKey).not.toHaveBeenCalled()
     expect(f.onRestored).not.toHaveBeenCalled()
   })
 

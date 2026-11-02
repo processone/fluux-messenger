@@ -7,6 +7,8 @@ import { parseArmorPassphraseFormat } from '@/e2ee/passphraseFormatHeader'
 import { ModalOverlay } from './ModalOverlay'
 import { RestorePassphraseDialog } from './RestorePassphraseDialog'
 import { KeyPickerDialog } from './KeyPickerDialog'
+import { backupRecoveryError } from './backupRecoveryError'
+import { BackupRecoveryFailure } from './BackupRecoveryFailure'
 
 /** FLM-343: one account-bound flow for startup and Settings. Preview never installs;
  * even a single automatically selected key is confirmed with its fingerprint. */
@@ -24,8 +26,8 @@ export function BackupRecoveryDialog({ client, manager, onClose, onRestored }: {
     && manager.getAccountJid() === accountJid && jid?.split('/')[0] === accountJid
   const [source, setSource] = useState<'choose' | 'server' | 'file'>('choose')
   const [file, setFile] = useState<string | null>(null)
-  const [preview, setPreview] = useState<Extract<RestoreResult, { needsPicker: true }> | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<(Extract<RestoreResult, { needsPicker: true }> & { restoreBlocked: boolean }) | null>(null)
+  const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const running = useRef(false)
   const mounted = useRef(true)
@@ -43,7 +45,7 @@ export function BackupRecoveryDialog({ client, manager, onClose, onRestored }: {
       const content = await plugin!.pickKeyFile()
       assertCurrent()
       if (content) { setFile(content); setSource('file') }
-    } catch (e) { if (mounted.current) setError(String(e)) }
+    } catch (e) { if (mounted.current) setError(e) }
     finally { running.current = false; if (mounted.current) setBusy(false) }
   }
   const readBackup = async (passphrase: string) => {
@@ -54,7 +56,9 @@ export function BackupRecoveryDialog({ client, manager, onClose, onRestored }: {
       : await plugin!.restoreSecretKey(passphrase, mode)
     assertCurrent()
     if (!('needsPicker' in result)) throw new Error(t('settings.encryption.recoveryPreviewInvalid'))
-    setPreview(result)
+    // Snapshot a previous unsettled restore only when entering this preview.
+    // The current install sets the mutable guard while pending, not a restart error.
+    setPreview({ ...result, restoreBlocked: plugin!.isBackupRestoreUncertain?.() === true })
   }
   const install = async (fingerprint: string) => {
     if (running.current || !preview) return
@@ -69,7 +73,7 @@ export function BackupRecoveryDialog({ client, manager, onClose, onRestored }: {
   }
   if (!current()) return null
   if (preview) return <KeyPickerDialog candidates={preview.candidates} recommendedFingerprint={preview.recommendedFingerprint} onConfirm={install} onCancel={onClose}
-    restoreBlocked={plugin?.isBackupRestoreUncertain?.()} warning={t('settings.encryption.recoveryWarning', { account: accountJid })} />
+    restoreBlocked={preview.restoreBlocked} warning={t('settings.encryption.recoveryWarning', { account: accountJid })} />
   if (source !== 'choose') return <RestorePassphraseDialog title={t('settings.encryption.recoveryTitle')}
     body={t('settings.encryption.recoveryCodeBody', { account: accountJid })}
     confirmLabel={t('settings.encryption.recoveryPreview')} mode={source === 'file' ? 'import' : 'restore'} isBackupCode={source === 'file' ? parseArmorPassphraseFormat(file!) === 'xep0373' : undefined}
@@ -82,7 +86,7 @@ export function BackupRecoveryDialog({ client, manager, onClose, onRestored }: {
         <button className="px-4 py-2 rounded-lg bg-fluux-brand text-white" disabled={busy} onClick={() => setSource('server')}>{t('settings.encryption.identityChoice.restoreFromServerTitle')}</button>
         <button className="px-4 py-2 rounded-lg bg-fluux-hover text-fluux-text" disabled={busy} onClick={() => void pickFile()}>{t('settings.encryption.identityChoice.importFromFileTitle')}</button>
       </div>
-      {error && <p role="alert" className="text-sm text-fluux-error">{error}</p>}
+      <BackupRecoveryFailure failure={error ? backupRecoveryError(error, t, true) : null} />
       <button className="px-4 py-2 rounded-lg bg-fluux-hover text-fluux-text" disabled={busy} onClick={onClose}>{t('common.cancel')}</button>
     </div>
   </ModalOverlay>
