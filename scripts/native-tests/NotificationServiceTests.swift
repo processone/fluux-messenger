@@ -237,6 +237,9 @@ import UniformTypeIdentifiers
         let names = SharedNames(rooms: ["team@muc.example.com": "Team"], account: "me@example.com")
         let content = NotificationPresentation.localContent(title: "Alice @ Team", body: "Fixture", from: "team@muc.example.com/Alice",
                                                             extra: ["navType": "room", "navTarget": "team@muc.example.com"], names: names)
+        // Captain's audio-ownership rule: the app hook, not local content, supplies message sound.
+        precondition(content.sound == nil, "Local content must not add a default OS sound")
+        print("local-content OS sound: none")
         precondition(content.body == "Fixture")
         precondition(content.threadIdentifier == "team@muc.example.com")
         precondition((content.userInfo["__EXTRA__"] as? [String: String])?["navTarget"] == "team@muc.example.com")

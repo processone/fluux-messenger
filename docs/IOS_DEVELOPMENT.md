@@ -645,6 +645,8 @@ Each iOS attachment gets its own file because the system consumes it; a later or
 concurrent notification must not reuse that path. Desktop file caching is unchanged.
 In-app room toasts use the room picture (or the shared # fallback), with the sender
 first and the room name and message below; generic status toasts are unchanged.
+Local room content adds no OS sound: `useSoundNotification` remains the owner of
+local message audio and its enabled/disabled preference.
 
 On a signed iPhone build, check the room-avatar correction manually:
 

@@ -163,7 +163,7 @@ enum NotificationPresentation {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
-        content.sound = .default
+        // useSoundNotification owns local message audio; do not add a second OS sound.
         content.userInfo = ["__EXTRA__": extra, localMarker: true]
         if let bare = bareJid(from) { content.threadIdentifier = bare }
         return communication(content, from: from, names: names)
