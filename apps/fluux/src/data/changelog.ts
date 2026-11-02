@@ -34,7 +34,7 @@ export const changelog: ChangelogEntry[] = [
       {
         type: 'fixed',
         items: [
-          'Reopening a room no longer shows the cached-history warning or asks you to join while its rejoin is pending. Failed joins restore the join button',
+          'Room history stays readable while joining, with only the message box replaced by a joining status. Reopening a room no longer shows the cached-history warning or asks you to join while its rejoin is pending. Failed joins restore the join button',
           'On desktop, new messages no longer move the message, action controls or menu you are using. Typing resumes following new messages if you were following before, unless a menu is open. The jump-to-latest button stays hidden while a message menu is open',
           'Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter. Private messages in rooms no longer make surrounding messages jump as you scroll. Scrolling on iOS also keeps your reading position during overscroll and touch release',
           'A hidden window no longer marks messages as read or suppresses their notifications',

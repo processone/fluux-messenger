@@ -89,7 +89,7 @@ async function observe(page: Page, jid: string) {
 }
 
 // Assert the actual reading surface, not just the absence of a second join button.
-async function expectPendingHistory(page: Page, jid: string) {
+async function expectPendingHistory(page: Page, jid: string, expectedHistory: 'cached' | 'empty') {
   const main = page.getByRole('main')
   const status = main.locator('[data-conversation-tail]').getByRole('status')
   await expect(status).toHaveText('Joining...')
@@ -100,13 +100,15 @@ async function expectPendingHistory(page: Page, jid: string) {
   await expect(main.getByText(/Cached history up to/)).toHaveCount(0)
   await expect(main.getByText('Join to load messages', { exact: true })).toHaveCount(0)
   const observed = await observe(page, jid)
-  if (observed.cachedMessages) {
+  if (expectedHistory === 'cached') {
+    expect(observed.cachedMessages).toBeGreaterThan(0)
     await expect.poll(() => main.locator('[data-message-id]').evaluateAll(rows => rows.filter(row => {
       const r = row.getBoundingClientRect()
       const v = row.closest('[data-message-list]')!.getBoundingClientRect()
       return r.height > 0 && r.bottom > v.top && r.top < v.bottom
     }).length)).toBeGreaterThan(0)
   } else {
+    expect(observed.cachedMessages).toBe(0)
     await expect(main.getByText('No history available yet', { exact: true })).toBeVisible()
     await expect(main.getByText('No messages yet. Say hello!', { exact: true })).toHaveCount(0)
   }
@@ -129,12 +131,10 @@ for (const [label, viewport] of [
         await expect(main.getByText(/Cached history up to/)).toHaveCount(0)
         await expect(main.getByText('You are not in this room')).toHaveCount(0)
         await expect(main.getByRole('combobox')).toHaveCount(0)
-        await expectPendingHistory(page, jid)
+        await expectPendingHistory(page, jid, empty ? 'empty' : 'cached')
         const joining = await observe(page, jid)
         expect(joining.isJoining).toBe(true)
         expect(joining.joined).toBe(false)
-        if (empty) expect(joining.cachedMessages).toBe(0)
-        else expect(joining.cachedMessages).toBeGreaterThan(0)
         await shot(page, info, 'joining.png')
 
         await page.evaluate(() => (window as unknown as DemoWindow).__releaseJoin!())
@@ -162,7 +162,7 @@ for (const [label, viewport] of [
         expect(anchor).not.toBeNull()
         await headerControl.focus()
       })
-      await expectPendingHistory(page, TEAM)
+      await expectPendingHistory(page, TEAM, 'cached')
       const status = main.locator('[data-conversation-tail]').getByRole('status')
       await expect(status.locator('svg')).toHaveCSS('animation-name', 'none')
       await expect(headerControl).toBeFocused()
@@ -188,7 +188,7 @@ for (const [label, viewport] of [
 
     test('FLM-361 distinguishes pending empty cache, first history fetch and settled empty', async ({ page }, info) => {
       await openJoiningRoom(page, EMPTY)
-      await expectPendingHistory(page, EMPTY)
+      await expectPendingHistory(page, EMPTY, 'empty')
       await page.evaluate(() => (window as unknown as DemoWindow).__releaseJoin!())
       const main = page.getByRole('main')
       await expect(main.getByRole('combobox')).toBeVisible()
@@ -214,7 +214,7 @@ for (const [label, viewport] of [
       }, TEAM)
       const main = page.getByRole('main')
       await expect(main.getByText('Joining...', { exact: true })).toBeVisible()
-      await expectPendingHistory(page, TEAM)
+      await expectPendingHistory(page, TEAM, 'cached')
       await page.evaluate(() => (window as unknown as DemoWindow).__releaseOldQueue!())
       const newer = await observe(page, TEAM)
       expect(newer.isJoining).toBe(true)
@@ -258,7 +258,7 @@ for (const [label, viewport] of [
       await expect(main.getByText('Joining...', { exact: true })).toBeVisible()
       await expect(main.getByText(/Cached history up to/)).toHaveCount(0)
       await expect(main.getByRole('button', { name: 'Join room to participate' })).toHaveCount(0)
-      await expectPendingHistory(page, TEAM)
+      await expectPendingHistory(page, TEAM, 'cached')
       const waiting = await observe(page, TEAM)
       await shot(page, info, 'discovery-pending.png')
       await page.evaluate(async () => {

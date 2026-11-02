@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { selectRoomInitialLoading } from './roomLoadingState'
+import { selectRoomInitialLoading, selectRoomMembershipPhase } from './roomLoadingState'
 
 describe('selectRoomInitialLoading', () => {
   it('FLM-361: leaves the reading area available before membership confirmation', () => {
     expect(
-      selectRoomInitialLoading({ joined: false, isCatchingUp: false, messageCount: 0 }),
+      selectRoomInitialLoading({ joined: false, isCatchingUp: true, messageCount: 0 }),
     ).toBe(false)
   })
 
@@ -36,5 +36,16 @@ describe('selectRoomInitialLoading', () => {
     expect(
       selectRoomInitialLoading({ joined: false, isCatchingUp: false, messageCount: 0 }),
     ).toBe(false)
+  })
+})
+
+// FLM-361 / review R5: both footer and history guards consume one presentation phase.
+describe('selectRoomMembershipPhase', () => {
+  it.each([
+    [{ joined: true, isJoining: false }, 'joined'],
+    [{ joined: false, isJoining: true }, 'joining'],
+    [{ joined: false, isJoining: false }, 'not-joined'],
+  ] as const)('maps SDK membership %j to %s', (membership, phase) => {
+    expect(selectRoomMembershipPhase(membership)).toBe(phase)
   })
 })

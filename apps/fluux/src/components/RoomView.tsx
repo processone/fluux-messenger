@@ -17,7 +17,7 @@ import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { usePendingAttachment } from '@/hooks/usePendingAttachment'
 import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveRoomAvatar, resolveSenderColor, rememberRoomNickIdentities, resolveRoomMentionColors, type RoomNickIdentity } from './conversation/roomSenderResolution'
-import { selectRoomInitialLoading } from './conversation/roomLoadingState'
+import { selectRoomInitialLoading, selectRoomMembershipPhase } from './conversation/roomLoadingState'
 import type { ReactorDetails } from './conversation/MessageReactorsSheet'
 import { format } from 'date-fns'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
@@ -540,6 +540,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   if (!activeRoom) return null
 
+  const membershipPhase = selectRoomMembershipPhase(activeRoom)
+
   // Room media trust: open rooms are public; members-only/hidden are private.
   // A room whose disco hasn't resolved has isPrivate falsy → treated as public
   // (fail-safe). Strangers do not apply to rooms.
@@ -706,7 +708,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             <EasterEggMentions conversationId={activeRoom.jid} onReplay={(animation, senderName) => roomStore.getState().triggerAnimation(activeRoom.jid, animation, senderName)} />
 
             {/* Membership owns the footer; joining never replaces the reading area. */}
-            {activeRoom.joined ? (
+            {membershipPhase === 'joined' ? (
               <RoomVoiceControls room={activeRoom} isConnected={isConnected} allowWhisper={!!whisperTarget}>
                 <RoomMessageInput
                   key={activeRoom.jid}
@@ -742,7 +744,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                   isDarkMode={resolvedMode === 'dark'}
                 />
               </RoomVoiceControls>
-            ) : activeRoom.isJoining ? (
+            ) : membershipPhase === 'joining' ? (
               <RoomJoiningPanel />
             ) : (
               <RoomJoinPrompt
@@ -1150,7 +1152,7 @@ export const RoomMessageList = memo(function RoomMessageList({
     isCatchingUp: isCatchingUp ?? false,
     messageCount: loadedMessageCount,
   })
-  const isJoiningPhase = (room.isJoining ?? false) && !(room.joined ?? false)
+  const membershipPhase = selectRoomMembershipPhase({ joined: isJoined, isJoining: room.isJoining })
   const loadingState = isInitialLoading ? (
     <div className="flex-1 flex flex-col items-center justify-center gap-3 text-fluux-muted">
       <Loader2 className="size-8 animate-spin text-fluux-brand" />
@@ -1161,7 +1163,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   // Empty state: different for joined vs not joined
   const emptyState = (
     <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted gap-3">
-      {!isJoined && !isJoiningPhase && (
+      {membershipPhase === 'not-joined' && (
         <div className="flex items-center gap-2 text-fluux-yellow mb-1">
           <AlertCircle className="size-4" />
           <span className="text-sm">{t('rooms.notJoinedNoHistory')}</span>
@@ -1170,8 +1172,8 @@ export const RoomMessageList = memo(function RoomMessageList({
       <div className="size-16 rounded-full bg-fluux-brand/10 border border-fluux-brand/25 flex items-center justify-center">
         <Hash className="size-7 text-fluux-brand" />
       </div>
-      <p className="text-sm">{isJoined ? t('chat.noMessages') : isJoiningPhase ? t('rooms.noHistoryYet') : t('rooms.joinToLoadHistory')}</p>
-      {isJoined && !isHistoryComplete && onScrollToTop && (
+      <p className="text-sm">{membershipPhase === 'joined' ? t('chat.noMessages') : membershipPhase === 'joining' ? t('rooms.noHistoryYet') : t('rooms.joinToLoadHistory')}</p>
+      {membershipPhase === 'joined' && !isHistoryComplete && onScrollToTop && (
         <button
           type="button"
           onClick={() => onScrollToTop()}
@@ -1185,7 +1187,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   )
 
   // Extra content: cached history warning banner when not joined
-  const extraContent = !isJoined && !isJoiningPhase && messages.length > 0 ? (
+  const extraContent = membershipPhase === 'not-joined' && messages.length > 0 ? (
     <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-700 dark:text-amber-400">
       <AlertCircle className="size-4 flex-shrink-0" />
       <span className="text-sm">

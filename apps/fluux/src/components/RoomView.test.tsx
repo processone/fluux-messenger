@@ -791,11 +791,24 @@ describe('RoomView', () => {
       mockActiveRoom = { ...mockActiveRoom, isJoining: true }
       rerender(<RoomView />)
       expect(screen.queryByText('rooms.joinToParticipate')).not.toBeInTheDocument()
-      mockActiveRoom = { ...mockActiveRoom, joined: true, isJoining: true }
+      mockActiveRoom = { ...mockActiveRoom, joined: true, isJoining: false }
       rerender(<RoomView />)
       expect(screen.queryByText('rooms.joinToParticipate')).not.toBeInTheDocument()
       expect(screen.queryByText('rooms.joining')).not.toBeInTheDocument()
       expect(screen.getByTestId('message-input')).toBeInTheDocument()
+    })
+
+    it('FLM-361: confirmed membership takes precedence over a stale joining flag', () => {
+      // A defensive presentation case, not an SDK success transition: setRoomJoined
+      // atomically clears isJoining. The retry journey above covers that real transition.
+      mockActiveRoom = createRoom({ joined: true, isJoining: true })
+      mockActiveMessages = [createRoomMessage()]
+      render(<RoomView />)
+      expect(screen.getByTestId('message-input')).toBeInTheDocument()
+      expect(screen.getByText(mockActiveMessages[0].body)).toBeInTheDocument()
+      expect(screen.queryByText('rooms.joining')).not.toBeInTheDocument()
+      expect(screen.queryByText('rooms.joinToParticipate')).not.toBeInTheDocument()
+      expect(screen.queryByText('rooms.cachedHistoryWarning')).not.toBeInTheDocument()
     })
 
     it('toasts a localized message when the join fails', async () => {
