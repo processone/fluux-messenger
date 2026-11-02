@@ -58,6 +58,7 @@ class Peer:
         self.sample_index = 0
         self.partial_started = False
         self.partial_cut_bytes = 0
+        self.write_failed = False
 
     def send(self, selector, arg):
         data = frame(selector, arg)
@@ -65,7 +66,11 @@ class Peer:
             body = plistlib.dumps({"__selector": selector, "__argument": arg})
             data = struct.pack(">I", len(body)) + body
         self.total_sent += len(data)
-        self.sock.sendall(data)
+        try:
+            self.sock.sendall(data)
+        except (BrokenPipeError, ConnectionResetError):
+            self.write_failed = True
+            raise
 
     def data(self, message, **overrides):
         self.send("_rpc_applicationSentData:", dict({
@@ -111,6 +116,9 @@ class Peer:
                 elif sel == "_rpc_forwardSocketSetup:":
                     self.sender = arg["WIRSenderKey"]
                     assert arg["WIRAutomaticallyPause"] is False
+                    if self.mode == "destroyed-before-target":
+                        self.data({"method": "Target.targetDestroyed", "params": {"private": PRIVATE}})
+                        continue
                     self.data({"method": "Target.targetCreated", "params": {"targetInfo": {
                         "targetId": self.target, "type": "page", "title": PRIVATE, "url": PRIVATE}}})
                 elif sel == "_rpc_forwardSocketData:":
@@ -128,6 +136,16 @@ class Peer:
                                             else "present" if exp == PRESENT else "install")
                     if self.partial_started:
                         continue
+                    if exp == REMOVE and self.mode == "peer-write-failure":
+                        # S4: fail the real response write while keeping the read half
+                        # open but unobserved until the reader has closed its socket.
+                        self.sock.shutdown(socket.SHUT_WR)
+                        try:
+                            self.data({"id": inner["id"], "result": {}})
+                        except (BrokenPipeError, ConnectionResetError):
+                            assert self.released.wait(4)
+                            return
+                        raise AssertionError("write-half shutdown did not fail")
                     if exp == REMOVE and self.mode in ("frozen", "interrupt-cleanup", "interrupt-target-cleanup"):
                         # Interrupt unanswered removal without racing a response writer's
                         # broken pipe against its observation of the close message.
@@ -146,7 +164,7 @@ class Peer:
                     if exp == SAMPLE:
                         self.times.append(time.monotonic())
                         if ((self.sample_index == 3 and self.mode in ("normal", "xml", "fragmented"))
-                                or (self.sample_index == 1 and self.mode in ("one-sample", "partial-cleanup"))):
+                                or (self.sample_index == 1 and self.mode in ("one-sample", "partial-cleanup", "peer-write-failure"))):
                             self.stop.set()
                             continue
                         if self.mode == "disconnect":
@@ -238,6 +256,20 @@ class ReaderTests(unittest.TestCase):
 
             def __init__(self):
                 self.request_times = []
+                self.outbound = bytearray()
+                self.sent_selectors = []
+
+            def write(self, data):
+                sent = client.send(data)
+                self.outbound.extend(data[:sent])
+                while len(self.outbound) >= 4:
+                    size = struct.unpack(">I", self.outbound[:4])[0]
+                    if len(self.outbound) < size + 4:
+                        break
+                    rpc = plistlib.loads(self.outbound[4:4 + size])
+                    self.sent_selectors.append(rpc["__selector"])
+                    del self.outbound[:4 + size]
+                return sent
 
             def recv(self, count):
                 if getattr(reader, "read_desynchronized", False):
@@ -256,7 +288,7 @@ class ReaderTests(unittest.TestCase):
 
             def send(self, data):
                 if self.cut:
-                    sent = client.send(data)
+                    sent = self.write(data)
                     self.writes_after_cut += sent
                     return sent
                 try:
@@ -270,7 +302,7 @@ class ReaderTests(unittest.TestCase):
                 if expression == REMOVE and getattr(reader, "read_desynchronized", False):
                     self.inbound_budget_at_cleanup = reader.budget.input
                 if mode == "send-cutoff" and expression == SAMPLER:
-                    sent = client.send(data[:8])
+                    sent = self.write(data[:8])
                     self.cut = True
                     stop.set()
                     return sent
@@ -278,7 +310,7 @@ class ReaderTests(unittest.TestCase):
                         and ((mode == "interrupt-sample" and expression == SAMPLE)
                              or (mode in ("interrupt-cleanup", "interrupt-target-cleanup") and expression == REMOVE))):
                     self.interrupt_pending = True
-                return client.send(data)
+                return self.write(data)
 
             def shutdown(self, how):
                 if mode == "interrupt-shutdown":
@@ -326,7 +358,9 @@ class ReaderTests(unittest.TestCase):
             if request["selector"] in ("_rpc_forwardGetListing:", "_rpc_forwardSocketSetup:"):
                 self.assertEqual(request["app"], "PID:321")
         PROOF.append({"case": mode, "result": result, "retained": [json.loads(line) for line in persisted.splitlines()],
-                      "selectors": [r["selector"] for r in peer.requests], "commands": peer.expressions,
+                      "selectors": [r["selector"] for r in peer.requests],
+                      "outboundSelectors": controlled.sent_selectors,
+                      "peerWriteFailed": peer.write_failed, "commands": peer.expressions,
                       "sampleIntervals": [round(b - a, 4) for a, b in zip(controlled.request_times, controlled.request_times[1:])],
                       "peerArrivalIntervals": [round(b - a, 4) for a, b in zip(peer.times, peer.times[1:])],
                       "peerClosed": peer.closed,
@@ -346,7 +380,7 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(len(persisted.splitlines()), 3)
         self.assertTrue(all(value >= SAMPLE_INTERVAL for value in PROOF[-1]["sampleIntervals"]))
         self.assertEqual(peer.expressions[-1], "remove")
-        self.assertIn("_rpc_forwardDidClose:", [r["selector"] for r in peer.requests])
+        self.assertIn("_rpc_forwardDidClose:", PROOF[-1]["outboundSelectors"])
         with self.assertRaises(ValueError):
             Reader(None, Budget(0))
 
@@ -365,6 +399,7 @@ class ReaderTests(unittest.TestCase):
                              ("identity-changed", "identity-boundary"), ("page-changed", "page-boundary"),
                              ("target-destroyed", "target-destroyed"),
                              ("other-target-destroyed", "target-boundary"),
+                             ("destroyed-before-target", "target-boundary"),
                              ("target-replaced", "target-boundary")]:
             with self.subTest(mode=mode):
                 result, _, persisted = self.exercise(mode)
@@ -382,12 +417,12 @@ class ReaderTests(unittest.TestCase):
     def test_real_time_hung_partial_and_frozen_cleanup(self):
         for mode in ("silent", "partial", "no-fluux", "frozen"):
             with self.subTest(mode=mode):
-                result, peer, _ = self.exercise(mode, duration=.15)
+                result, peer, _ = self.exercise(mode, duration=.15, cleanup=.15)
                 self.assertEqual(result["reason"], "time-limit")
                 self.assertEqual(result["cleanup"], "unconfirmed" if mode == "frozen" else "not-installed")
                 if mode == "frozen":
-                    # FLM-352 F1: unanswered removal must leave time for close.
-                    self.assertIn("_rpc_forwardDidClose:", [r["selector"] for r in peer.requests])
+                    # F1/S4: unanswered removal must leave time to write close.
+                    self.assertIn("_rpc_forwardDidClose:", PROOF[-1]["outboundSelectors"])
 
     def test_preexisting_sampler_is_not_removed(self):
         result, peer, persisted = self.exercise("preexisting")
@@ -400,7 +435,7 @@ class ReaderTests(unittest.TestCase):
         result, peer, _ = self.exercise("frozen", duration=.15, cleanup=5)
         self.assertEqual(result["reason"], "time-limit")
         self.assertEqual(result["cleanup"], "unconfirmed")
-        self.assertIn("_rpc_forwardDidClose:", [r["selector"] for r in peer.requests])
+        self.assertIn("_rpc_forwardDidClose:", PROOF[-1]["outboundSelectors"])
         self.assertLess(result["elapsedSeconds"], 1.1)
 
     def test_unsafe_output_rejected_before_discovery(self):
@@ -442,10 +477,10 @@ class ReaderTests(unittest.TestCase):
                     self.assertTrue(proof["writeDesynchronized"])
                     self.assertFalse(proof["readDesynchronized"])
                     self.assertNotIn("remove", peer.expressions)
-                    self.assertNotIn("_rpc_forwardDidClose:", proof["selectors"])
+                    self.assertNotIn("_rpc_forwardDidClose:", proof["outboundSelectors"])
                 else:
                     self.assertIn("remove", peer.expressions)
-                    self.assertIn("_rpc_forwardDidClose:", proof["selectors"])
+                    self.assertIn("_rpc_forwardDidClose:", proof["outboundSelectors"])
                     self.assertTrue(proof["readDesynchronized"])
                     self.assertFalse(proof["writeDesynchronized"])
                     if proof["inputReservedAtInboundCleanup"] is not None:
@@ -460,7 +495,16 @@ class ReaderTests(unittest.TestCase):
                 self.assertEqual(result["reason"], expected)
                 self.assertEqual(result["cleanup"], "unconfirmed" if mode in ("interrupt-cleanup", "interrupt-target-cleanup") else "confirmed")
                 self.assertTrue(PROOF[-1]["interruptPropagatedAfterClose"])
-                self.assertIn("_rpc_forwardDidClose:", [r["selector"] for r in peer.requests])
+                self.assertIn("_rpc_forwardDidClose:", PROOF[-1]["outboundSelectors"])
+
+    def test_close_write_evidence_survives_peer_response_failure(self):
+        # S4: a queued complete write is not the same fact as peer observation.
+        result, peer, _ = self.exercise("peer-write-failure", duration=2)
+        self.assertEqual(result["reason"], "stopped")
+        self.assertEqual(result["cleanup"], "unconfirmed")
+        self.assertTrue(peer.write_failed)
+        self.assertIn("_rpc_forwardDidClose:", PROOF[-1]["outboundSelectors"])
+        self.assertNotIn("_rpc_forwardDidClose:", PROOF[-1]["selectors"])
 
     def test_oversized_header_never_reads_body(self):
         result, _, persisted = self.exercise("oversize")

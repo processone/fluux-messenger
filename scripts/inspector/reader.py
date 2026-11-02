@@ -295,7 +295,7 @@ class Reader:
             self.target = target
             return None
         if method == "Target.targetDestroyed":
-            if message["params"].get("targetId") != self.target:
+            if self.target is None or message["params"].get("targetId") != self.target:
                 raise Boundary("target-boundary")
             raise Boundary("target-destroyed")
         if method == "Target.didCommitProvisionalTarget":

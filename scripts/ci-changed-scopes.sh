@@ -2,13 +2,15 @@
 #
 # Classify a set of changed paths into the CI scopes they can affect.
 #
-# Reads one path per line on stdin, writes exactly two lines on stdout in
+# Reads one path per line on stdin, writes three lines on stdout in
 # GITHUB_OUTPUT format:
 #
 #   js=true|false     -> run SDK/checks, app tests, and browser invariants
 #   rust=true|false   -> run the Rust and Rust (Windows) jobs
+#   inspector=true|false -> run the disposable inspector proof for named reader changes
 #
-# Both false means the diff cannot break any job (docs, assets, metadata).
+# The inspector probe is selected only by scripts/inspector/ paths, independently
+# of broad JS/Rust fallbacks, so unrelated changes do not run its live timing checks.
 #
 # Usage:
 #   printf 'README.md\n' | scripts/ci-changed-scopes.sh
@@ -17,7 +19,7 @@
 # Two properties this file must keep:
 #
 #   1. Fail-safe. A path that matches no explicit rule falls through to the
-#      catch-all and enables BOTH scopes. Forgetting a pattern can only waste
+#      catch-all and enables BOTH product scopes. Forgetting a pattern can only waste
 #      CI minutes (this repo is public, so they are free) — it can never
 #      silence a job that should have run.
 #
@@ -37,13 +39,18 @@ readonly API_FILE_LIMIT=3000
 
 js=false
 rust=false
+inspector=false
 count=0
 
 while IFS= read -r path || [ -n "$path" ]; do
     [ -n "$path" ] || continue
     count=$((count + 1))
 
-    # Both scopes already on: nothing left to learn from the remaining paths.
+    # Always inspect the full path list for the opt-in probe, even after broad
+    # scopes have selected both product families.
+    case "$path" in scripts/inspector/*) inspector=true ;; esac
+
+    # Product scope selection is complete, but probe selection may not be.
     if [ "$js" = true ] && [ "$rust" = true ]; then
         continue
     fi
@@ -89,7 +96,8 @@ while IFS= read -r path || [ -n "$path" ]; do
 done
 
 # No input at all, or a file list we have reason to believe was truncated:
-# we do not know what changed, so run everything.
+# we do not know what changed, so run both product families. The timing probe
+# still requires a named reader path rather than an unrelated broad fallback.
 if [ "$count" -eq 0 ] || [ "$count" -ge "$API_FILE_LIMIT" ]; then
     js=true
     rust=true
@@ -97,3 +105,4 @@ fi
 
 echo "js=$js"
 echo "rust=$rust"
+echo "inspector=$inspector"

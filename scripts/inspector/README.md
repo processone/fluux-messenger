@@ -14,10 +14,12 @@ node scripts/inspector/prove.mjs
 node --test scripts/inspector/ci-scope.test.mjs
 ```
 
-CI runs the WebKit/socket proof in its own workflow, only for pull requests or
-main-branch pushes that change `scripts/inspector/**`. It is not a browser-invariant
-shard step. The fast scope contract exercises the actual workflow filters against
-current project filenames; it does not execute GitHub's event engine.
+The shared changed-scope classifier selects the inspector job only when its file
+list names `scripts/inspector/` changes. `ci.yml` skips that job with `if:` otherwise
+and reuses the shared Playwright and apt caches. There is no separate path-filtered
+workflow or browser-invariant shard step. Runs without a changed-file list do not
+select this timing probe through broad JS/Rust fallbacks. The fast scope contract
+executes the actual classifier; it does not execute GitHub's job scheduler.
 
 The command closes a real disposable WebKit browser after measuring visible,
 hidden and missing message-list states, rejecting immediate duplicate pulls,
@@ -34,6 +36,11 @@ host reader's framing, requests, filtering, accounting and bounded socket closur
 not Apple's real transport, an installed app's inspectability, frozen iPhone
 cleanup, native rendering or a recurrence of the blank page. The separate browser
 check proves sampler removal on disposable WebKit, not on a frozen phone.
+Positive peer checks use the reader API's production cleanup budget; explicit
+frozen/time-limit checks also exercise shortened budgets. Proof records complete
+outbound frames accepted by the socket separately from peer-received selectors.
+A failed peer response writer can miss a queued close frame; a sent frame alone
+is not evidence that the peer processed it.
 
 ## Integration contract for FLM-350
 
@@ -102,7 +109,8 @@ The current protocol requires one `page` Target and uses Target-wrapped fixed
 `Runtime.evaluate` commands. It checks for a pre-existing sampler before installation
 and stops without removing it. No other inspector may mutate this page concurrently.
 Destruction of the selected page target records only the fixed `target-destroyed`
-reason. Provisional or unrelated target changes keep `target-boundary`; no private
+reason. No selected target or a missing target identity cannot produce that reason.
+Provisional or unrelated target changes keep `target-boundary`; no private
 event payload is retained. A destroyed target alone does not establish a crash or
 explain the blank page. Unsupported protocol variants fail closed; do not add a
 fallback that guesses a page or enables raw logging.

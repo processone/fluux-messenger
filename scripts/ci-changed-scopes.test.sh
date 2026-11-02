@@ -24,7 +24,9 @@ expect() {
     for p in "$@"; do input+="$p"$'\n'; done
 
     local got want
-    got="$(printf '%s' "$input" | bash "$CLASSIFY")"
+    # This table owns product-family selection. The inspector probe's separate
+    # CLI contract is exercised by scripts/inspector/ci-scope.test.mjs.
+    got="$(printf '%s' "$input" | bash "$CLASSIFY" | grep -E '^(js|rust)=')"
     want="js=$want_js"$'\n'"rust=$want_rust"
 
     if [ "$got" = "$want" ]; then
