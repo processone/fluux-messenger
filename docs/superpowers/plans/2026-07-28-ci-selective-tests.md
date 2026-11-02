@@ -1,5 +1,10 @@
 # Selective CI: run only the jobs a change can affect
 
+> Historical plan: the current classifier also emits an `inspector` output for
+> named `scripts/inspector/` changes. Its separate `ci.yml` job uses `if:` and the
+> shared browser/apt caches; broad product-scope fallbacks do not select the probe.
+> See the [reader contract](../../../scripts/inspector/README.md) for current behavior.
+
 **Goal:** A pull request should only pay for the CI jobs its diff can actually break. A docs-only PR runs nothing; a Rust-only PR skips the Node and Playwright jobs; a TypeScript-only PR skips the two Rust jobs.
 
 **Architecture:** A pure classifier (`scripts/ci-changed-scopes.sh`) maps a list of changed paths to two booleans, `js` and `rust`. A new `changes` job in `.github/workflows/ci.yml` fetches the PR's file list from the GitHub API, pipes it through the classifier, and publishes the booleans as job outputs. The four existing jobs gain `needs: changes` and an `if:` guard. No job's own steps change.

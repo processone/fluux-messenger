@@ -29,6 +29,7 @@ jobs:
     outputs:
       js: ${{ steps.classify.outputs.js }}
       rust: ${{ steps.classify.outputs.rust }}
+      inspector: ${{ steps.classify.outputs.inspector }}
 
     steps:
       - name: Checkout
@@ -55,6 +56,8 @@ jobs:
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "js=true" >> "$GITHUB_OUTPUT"
             echo "rust=true" >> "$GITHUB_OUTPUT"
+            # Timing probes require an actual changed-file list, not an all-scope fallback.
+            echo "inspector=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           gh api --paginate \
@@ -65,6 +68,78 @@ jobs:
           sed 's/^/  /' changed-files.txt
 
           scripts/ci-changed-scopes.sh < changed-files.txt | tee -a "$GITHUB_OUTPUT"
+
+  inspector-proof:
+    name: Restricted inspector (disposable WebKit and sockets)
+    needs: changes
+    if: needs.changes.outputs.inspector == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: npm
+
+      - name: Test inspector scope selection
+        run: node --test scripts/inspector/ci-scope.test.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compute Playwright browser cache key
+        id: playwright-cache-key
+        run: echo "prefix=$RUNNER_OS-$ImageOS-playwright-" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.playwright-cache-key.outputs.prefix }}${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ steps.playwright-cache-key.outputs.prefix }}
+
+      - name: Install WebKit
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install webkit
+
+      - name: Compute apt package cache key
+        id: apt-cache-key
+        run: echo "key=apt-debs-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      - name: Restore apt package cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.apt-debs
+          key: ${{ steps.apt-cache-key.outputs.key }}
+          restore-keys: |
+            apt-debs-
+
+      - name: Seed apt archives from cache
+        run: |
+          if [ -d "$HOME/.apt-debs" ]; then
+            sudo cp "$HOME"/.apt-debs/*.deb /var/cache/apt/archives/ 2>/dev/null || true
+            echo "Seeded $(ls "$HOME"/.apt-debs/*.deb 2>/dev/null | wc -l) cached .deb file(s)"
+          fi
+
+      - name: Install WebKit OS dependencies
+        env:
+          CI_RETRY_CLEANUP: scripts/ci-apt-cleanup.sh
+        run: |
+          scripts/ci-apt-prepare.sh
+          sudo --preserve-env=CI_RETRY_CLEANUP env "PATH=$PATH" scripts/ci-retry.sh 3 300 \
+            npx playwright install-deps webkit
+
+      - name: Prove the restricted reader on disposable content
+        run: node scripts/inspector/prove.mjs
 
   test:
     name: Test (SDK + checks)
@@ -89,6 +164,9 @@ jobs:
       # The gate validates itself before it gates anything, as the classifier does.
       - name: Comments describe the code they are attached to
         run: npm run check:comments
+
+      - name: Test inspector scope selection
+        run: node --test scripts/inspector/ci-scope.test.mjs
 
       - name: Install dependencies
         run: npm ci
