@@ -387,49 +387,6 @@ are not guessed from differing strings: detecting which value is valid requires 
 outside this storage layer. The encrypted key files and browser/IndexedDB data are untouched; the native app has no OMEMO keychain backend, and
 unrecognized entries under the service are preserved too.
 
-### Guided macOS backup recovery
-
-If native secret storage fails while loading an existing OpenPGP key, registration retains a
-recovery-capable plugin with `key-storage-unavailable`, distinct from absent keys, desynchronized
-key material, network failures and unknown native outcomes. App offers recovery once for that
-plugin's failure episode. Dismissal changes no identity. **Restore from backup** remains in
-Settings → Encryption outside the ready-key gate; opening Settings does not prompt again.
-
-Server and file recovery first decrypt a read-only preview. Even a single automatically found key
-requires fingerprint confirmation, naming the account and local-key replacement. Only the final,
-account-bound macOS recovery install passes `withoutMigration: true`; ordinary imports and other
-platforms keep their storage path. Legacy backup-code fallback still works, but recovery does not
-heal/re-publish the secret backup. Public-key publication, trust subscriptions and the key-unlocked
-notification resume after durable save. Old items remain, and this account uses fresh storage on
-later launches. Fresh storage still needs accessible protected storage; recovery cannot bypass a
-locked login keychain. Advanced retry, identity replacement, cleanup and release publication are
-not part of this flow. A native import that times out or reports uncertain durability/rollback is not resent within the process,
-even if the plugin is replaced; restart first to load its durable outcome.
-
-The controlled fixture uses committed encrypted backups, DemoClient's local protocol primitives,
-and the actual App/plugin/SDK deferred-decrypt path. Browser tests mock native IPC. The opt-in
-Tauri/WKWebView host includes production OpenPGP commands with injected filesystem-backed logical
-secrets, uses a scratch HOME and its own app identifier/profile, registers no credential plugins,
-and neither signs nor installs anything. A waiting ciphertext made before restore must decrypt in
-the current session and after closing/reopening that host; its operation log rejects old-item reads
-on restart and checks that the other fixture account and credential stay unchanged.
-
-```bash
-npm run build:e2e
-npm run preview -w @xmpp/fluux -- --host 127.0.0.1 --port 5197 --strictPort
-# In another terminal, use new absolute disposable directories, not existing data:
-FLUUX_E2E_PORT=5197 npm run test:e2e -- --project=backup-recovery-chromium --project=backup-recovery-webkit
-bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-server server
-bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-file file
-```
-
-Each native invocation runs restore and process restart with the same scratch storage, bounds its
-owned processes and refuses to replay an existing lab. It substitutes `security` and `codesign`
-commands and rejects any attempted use. The host runs only with `--run-recovery-host` and a scratch
-HOME marker; normal `cargo test` compiles it but does not open a window. These fixtures prove the
-application and injected native storage chain, not a real login keychain, signing identity, remote
-XMPP service or another person's Mac. Real keychain qualification remains separate.
-
 Already-trusted legacy items need no migration approvals. Otherwise, expect one per old item:
 normally three, four with MCP, plus inactive-account secrets or recovery copies. Use Always Allow;
 Allow permits only that operation. A launch interrupted before the combined write can ask again for
@@ -477,6 +434,55 @@ A Flatpak bundle with a new app-id installs next to the previous one rather than
 To replay the migration, quit the app, delete `.identity-migrated` and the
 `net.processone.fluux*` directories (including their per-copy completion files), and
 restore the `com.processone.fluux*` ones.
+
+### Guided macOS backup recovery
+
+If native secret storage fails while loading an existing OpenPGP key, registration retains a
+recovery-capable plugin with `key-storage-unavailable`, distinct from absent keys, desynchronized
+key material, network failures and unknown native outcomes. App offers recovery once for that
+plugin's failure episode. Dismissal changes no identity. **Restore from backup** remains in
+Settings → Encryption outside the ready-key gate; storage refusal does not prompt again there.
+Recognized desynchronization/corruption retains the identity-choice dialog, including replacement,
+at startup, the Settings auto-prompt and the toggle, with or without a server backup.
+
+Server and file recovery first decrypt a read-only preview. Server code entry uses the ordinary
+backup-code mask; file imports retain their header-defined input and trimming rules.
+Even a single automatically found key
+requires fingerprint confirmation, naming the account and local-key replacement. Only the final,
+account-bound macOS recovery install passes `withoutMigration: true`; ordinary imports and other
+platforms keep their storage path. Legacy backup-code fallback still works, but recovery does not
+heal/re-publish the secret backup. Public-key publication, trust subscriptions and the key-unlocked
+notification resume after durable save. Old items remain, and this account uses fresh storage on
+later launches. Fresh storage still needs accessible protected storage; recovery cannot bypass a
+locked login keychain. Advanced retry, identity replacement, cleanup and release publication are
+not part of this flow. A native import that times out or reports uncertain durability/rollback is not resent within the process,
+even if the plugin is replaced or the WebView reloads. The first uncertain result immediately shows
+localized restart guidance and disables confirmation, while native details remain available separately.
+Restart first to load the durable outcome.
+
+The controlled fixture uses committed encrypted backups, DemoClient's local protocol primitives,
+and the actual App/plugin/SDK deferred-decrypt path. Browser tests mock native IPC. The opt-in
+Tauri/WKWebView host includes production OpenPGP commands with injected filesystem-backed logical
+secrets, uses a scratch HOME and its own app identifier/profile, registers no credential plugins,
+and neither signs nor installs anything. A waiting ciphertext made before restore must decrypt in
+the current session and after closing/reopening that host; its operation log rejects old-item reads
+on restart and checks that the other fixture account and credential stay unchanged.
+
+```bash
+npm run build:e2e
+npm run preview -w @xmpp/fluux -- --host 127.0.0.1 --port 5197 --strictPort
+# In another terminal, use new absolute disposable directories, not existing data:
+FLUUX_E2E_PORT=5197 npm run test:e2e -- --project=backup-recovery-chromium --project=backup-recovery-webkit
+bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-server server
+bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-file file
+```
+
+Each native invocation runs restore and process restart with the same scratch storage, bounds its
+owned processes and refuses to replay an existing lab. It substitutes `security` and `codesign`
+commands and rejects any attempted use. The host runs only with `--run-recovery-host` and a scratch
+HOME marker; normal `cargo test` compiles it but does not open a window. These fixtures prove the
+application and injected native storage chain, not a real login keychain, signing identity, remote
+XMPP service or another person's Mac. Real keychain qualification remains separate.
 
 ## Screenshots
 

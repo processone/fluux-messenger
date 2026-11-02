@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { E2EEManager } from '@fluux/sdk'
+import { E2EEPluginError, type E2EEManager } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
 import { BackupRecoveryDialog } from './BackupRecoveryDialog'
 
@@ -28,20 +28,20 @@ function setup() {
   return { ...props, plugin, preview, props }
 }
 async function enterCode() {
-  const input = document.querySelector('input[type="password"]')!
+  const input = document.querySelector('input[name="backup-code"], input[name="passphrase"]')!
   fireEvent.change(input, { target: { value: `  ${meta.backupPassphrase}  ` } })
   fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.recoveryPreview' }))
   await screen.findByText(meta.aliceFingerprint)
 }
 beforeEach(() => { jid = 'alice@example.com/laptop' })
 describe('BackupRecoveryDialog', () => {
-  it.each(['server', 'file'])('%s previews before confirming a fingerprint and preserves the backup code verbatim', async source => {
+  it.each(['server', 'file'])('%s previews before confirming a fingerprint and uses ordinary backup-code formatting and import trimming', async source => {
     const f = setup(); render(<BackupRecoveryDialog {...f.props} />)
     fireEvent.click(screen.getByRole('button', { name: source === 'server' ? 'settings.encryption.identityChoice.restoreFromServerTitle' : 'settings.encryption.identityChoice.importFromFileTitle' }))
     await screen.findByText('settings.encryption.recoveryCodeBody')
     await enterCode()
     const method = source === 'server' ? f.plugin.restoreSecretKey : f.plugin.importKeyFromFile
-    expect(method).toHaveBeenCalledWith(...(source === 'server' ? [] : [backup]), `  ${meta.backupPassphrase}  `, { accountJid: 'alice@example.com' })
+    expect(method).toHaveBeenCalledWith(...(source === 'server' ? [] : [backup]), meta.backupPassphrase, { accountJid: 'alice@example.com' })
     expect(f.plugin.installSelectedKey).not.toHaveBeenCalled()
     expect(f.onRestored).not.toHaveBeenCalled()
     expect(screen.getByText('settings.encryption.recoveryWarning')).toBeInTheDocument()
@@ -79,7 +79,7 @@ describe('BackupRecoveryDialog', () => {
     f.plugin.restoreSecretKey.mockImplementation(() => new Promise(resolve => { finish = resolve }))
     const view = render(<BackupRecoveryDialog {...f.props} />)
     fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.identityChoice.restoreFromServerTitle' }))
-    fireEvent.change(document.querySelector('input[type="password"]')!, { target: { value: meta.backupPassphrase } })
+    fireEvent.change(document.querySelector('input[name="backup-code"], input[name="passphrase"]')!, { target: { value: meta.backupPassphrase } })
     fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.recoveryPreview' }))
     jid = 'bob@example.com/laptop'; f.client.e2ee = null
     view.rerender(<BackupRecoveryDialog {...f.props} />)
@@ -94,8 +94,27 @@ describe('BackupRecoveryDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.identityChoice.restoreFromServerTitle' }))
     await enterCode()
     fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.keyPicker.confirm' }))
-    await screen.findByText('durable save failed; previous key restored')
+    await screen.findByText('settings.encryption.recoveryFailed')
+    fireEvent.click(screen.getByText('settings.encryption.recoveryErrorDetails'))
+    expect(screen.getByText('durable save failed; previous key restored')).toBeVisible()
     expect(f.onRestored).not.toHaveBeenCalled()
     expect(f.plugin.installSelectedKey).toHaveBeenCalledTimes(1)
   })
+  it('FLM-365 F4 immediately localizes an uncertain save, preserves its details and prevents a second confirmation', async () => {
+    const f = setup()
+    f.plugin.installSelectedKey.mockRejectedValue(new E2EEPluginError('permanent', 'restore-outcome-uncertain', 'native rollback: prior key retained; saved identity uncertain'))
+    render(<BackupRecoveryDialog {...f.props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.identityChoice.restoreFromServerTitle' }))
+    await enterCode()
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.keyPicker.confirm' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.encryption.recoveryRestartRequired')
+    const confirm = screen.getByRole('button', { name: 'settings.encryption.keyPicker.confirm' })
+    expect(confirm).toBeDisabled()
+    fireEvent.click(confirm)
+    expect(f.plugin.installSelectedKey).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByText('settings.encryption.recoveryErrorDetails'))
+    expect(screen.getByText('native rollback: prior key retained; saved identity uncertain')).toBeVisible()
+    expect(f.onRestored).not.toHaveBeenCalled()
+  })
+
 })

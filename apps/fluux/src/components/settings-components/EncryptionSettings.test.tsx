@@ -10,6 +10,7 @@
  *   immediately (specific text for `pep-unsupported`, generic for other
  *   codes) instead of spinning on "Generating your key..." for 60s.
  */
+import { StrictMode } from 'react'
 import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
@@ -832,7 +833,7 @@ describe('macOS guided recovery entry', () => {
     mockStatus = 'online'
     usePlatform('desktop', 'macos')
     mockCheckPepSupport.mockResolvedValue(true)
-    mockPlugin = { getOwnFingerprint: () => null, isKeyRecoveryNeeded: () => true }
+    mockPlugin = { getOwnFingerprint: () => null, isKeyRecoveryNeeded: () => true, isKeyStorageUnavailable: () => true }
     useEncryptionSettingsStore.setState({ openpgpEnabled: true, pluginRegisteredAt: 0, registrationError: null })
   })
   it('routes an unlock failure discovered while enabling encryption through guided recovery too', async () => {
@@ -854,4 +855,27 @@ describe('macOS guided recovery entry', () => {
     expect(screen.queryByText('settings.encryption.recoveryFailedBody')).not.toBeInTheDocument()
     expect(entry).toBeEnabled()
   })
+  it('FLM-365 F1 keeps the desync Settings prompt and Replace identity under StrictMode effect replay', async () => {
+    mockPlugin!.isKeyStorageUnavailable = () => false
+    render(<StrictMode><EncryptionSettings /></StrictMode>)
+    expect(await screen.findByRole('button', { name: /settings.encryption.identityChoice.replaceTitle/ })).toBeEnabled()
+    expect(screen.queryByText('settings.encryption.recoveryFailedBody')).not.toBeInTheDocument()
+  })
+  it('FLM-365 F1 keeps the desync toggle decision on macOS', async () => {
+    mockPlugin!.isKeyStorageUnavailable = () => false
+    useEncryptionSettingsStore.setState({ openpgpEnabled: false })
+    render(<EncryptionSettings />)
+    fireEvent.click(toggleButton())
+    expect(await screen.findByRole('button', { name: /settings.encryption.identityChoice.replaceTitle/ })).toBeEnabled()
+    expect(screen.queryByText('settings.encryption.recoveryFailedBody')).not.toBeInTheDocument()
+  })
+  it('FLM-365 F3 does not route a macOS browser through the desktop-only toggle branch', async () => {
+    usePlatform('web', 'macos')
+    useEncryptionSettingsStore.setState({ openpgpEnabled: false })
+    render(<EncryptionSettings />)
+    fireEvent.click(toggleButton())
+    expect(await screen.findByRole('button', { name: /settings.encryption.identityChoice.replaceTitle/ })).toBeEnabled()
+    expect(screen.queryByText('settings.encryption.recoveryFailedBody')).not.toBeInTheDocument()
+  })
+
 })

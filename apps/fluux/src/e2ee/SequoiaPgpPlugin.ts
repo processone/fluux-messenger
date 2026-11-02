@@ -100,6 +100,18 @@ function boundedInvoke(invoke: InvokeFn, timeouts: NativeCallTimeouts): InvokeFn
 // A lost IPC result may still be writing. Keep the guard across plugin replacement
 // and WebView reload until a new application window can load the durable outcome.
 const uncertainImports = new Set<string>()
+const PENDING_IMPORT_PREFIX = '__wry_pending_native_restore:'
+
+/** @internal Test isolation only; never clears a running app's restore guard. */
+export function resetUncertainImportsForTesting(): void {
+  uncertainImports.clear()
+  if (typeof window === 'undefined') return
+  const session = window.sessionStorage
+  for (let i = session.length - 1; i >= 0; i--) {
+    const key = session.key(i)
+    if (key?.startsWith(PENDING_IMPORT_PREFIX)) session.removeItem(key)
+  }
+}
 
 export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   private readonly invoke: InvokeFn
@@ -231,9 +243,9 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     // dispatch: an unavailable browser store must fail before a native write.
     const session = platform().shell === 'desktop' && platform().os === 'macos'
       && typeof window !== 'undefined' ? window.sessionStorage : null
-    const marker = `__wry_pending_native_restore:${accountJid}`
+    const marker = `${PENDING_IMPORT_PREFIX}${accountJid}`
     if (uncertainImports.has(accountJid) || session?.getItem(marker)) {
-      throw new Error('A native restore is pending or its outcome is unknown. Restart the app to check the saved identity before restoring again.')
+      throw new E2EEPluginError('permanent', 'restore-outcome-uncertain', '')
     }
     session?.setItem(marker, '1')
     uncertainImports.add(accountJid)
@@ -260,7 +272,21 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
       const uncertain = error instanceof NativeCallTimeoutError
         || String(error).includes('openpgp-restore-outcome-uncertain:')
       if (!uncertain) clearGuard()
+      if (uncertain) throw new E2EEPluginError('permanent', 'restore-outcome-uncertain', error instanceof Error ? error.message : String(error))
       throw error
+    }
+  }
+
+  override isBackupRestoreUncertain(): boolean {
+    const accountJid = this.ctx?.account.jid
+    if (!accountJid) return false
+    if (uncertainImports.has(accountJid)) return true
+    if (platform().shell !== 'desktop' || platform().os !== 'macos' || typeof window === 'undefined') return false
+    try {
+      return window.sessionStorage.getItem(`${PENDING_IMPORT_PREFIX}${accountJid}`) !== null
+    } catch {
+      // An unreadable guard cannot establish that dispatch is safe.
+      return true
     }
   }
 

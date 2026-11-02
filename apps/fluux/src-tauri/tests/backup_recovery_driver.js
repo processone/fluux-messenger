@@ -23,7 +23,7 @@
     }
     if (!window.__FLUUX_RECOVERY_RESTART__) {
       ;(await wait(() => button(window.__FLUUX_RECOVERY_SOURCE__ === 'file' ? 'Import from a file' : 'Restore from server backup'), 'backup source chooser')).click()
-      const input = await wait(() => document.querySelector('input[type="password"]'), 'backup code field')
+      const input = await wait(() => document.querySelector('input[name="backup-code"], input[name="passphrase"]'), 'backup code field')
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, meta.backupPassphrase)
       input.dispatchEvent(new Event('input', { bubbles: true }))
       ;(await wait(() => button('Preview backup'), 'enabled preview action')).click()
@@ -37,7 +37,7 @@
   const failure = error => {
     const state = { ready: document.readyState, headings: [...document.querySelectorAll('h1,h2,h3')].map(el => el.textContent),
       buttons: [...document.querySelectorAll('[data-modal] button')].filter(el => el.offsetWidth).map(el => ({ text: el.textContent.trim(), disabled: el.disabled })),
-      inputLength: document.querySelector('input[type="password"]')?.value.length,
+      inputLength: document.querySelector('input[name="backup-code"], input[name="passphrase"]')?.value.length,
       audit: window.__recoveryFixture }
     return window.__TAURI_INTERNALS__.invoke('recovery_failure', { reason: error.message + '; ' + JSON.stringify(state) })
   }

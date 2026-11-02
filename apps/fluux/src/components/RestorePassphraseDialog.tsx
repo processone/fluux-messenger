@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
+import { BackupRecoveryFailure } from './BackupRecoveryFailure'
+import { backupRecoveryError } from './backupRecoveryError'
 import { ModalOverlay } from './ModalOverlay'
 
 const BACKUP_CODE_ALPHABET = '123456789ABCDEFGHIJKLMNPQRSTUVWXYZ'
@@ -51,7 +53,6 @@ interface RestorePassphraseDialogProps {
    */
   isBackupCode?: boolean
   /**
-   * 'recovery' preserves every passphrase byte and disables credential autofill.
    * 'import' = entering a FOREIGN key's passphrase (GnuPG / OpenKeychain): adds
    * a reveal toggle, disables password-manager autofill, and trims the value.
    * It does NOT pick the field type — the masked backup-code vs free-text choice
@@ -59,7 +60,7 @@ interface RestorePassphraseDialogProps {
    * Passphrase-Format header). 'restore' (default) is the server-restore flow
    * whose passphrase is the user's own saved Fluux backup code.
    */
-  mode?: 'restore' | 'import' | 'recovery'
+  mode?: 'restore' | 'import'
 }
 
 /**
@@ -90,7 +91,7 @@ export function RestorePassphraseDialog({
   const inputRef = useRef<HTMLInputElement | null>(null)
   const backupCursorRef = useRef<number>(0)
 
-  const isImport = mode === 'import' || mode === 'recovery'
+  const isImport = mode === 'import'
   // The masked field is driven solely by isBackupCode. Import-from-file sites
   // pass it based on the file's Passphrase-Format header (a Fluux xep0373 backup
   // gets the mask; a foreign key's arbitrary passphrase stays free text).
@@ -98,7 +99,7 @@ export function RestorePassphraseDialog({
 
   const [passphrase, setPassphrase] = useState('')
   const [isRestoring, setIsRestoring] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
   const [showPassphrase, setShowPassphrase] = useState(false)
 
   useEffect(() => {
@@ -164,7 +165,7 @@ export function RestorePassphraseDialog({
       // wrong passphrase; we don't try to parse that specifically —
       // whatever the message, the UX is the same: show it, let the
       // user edit the field and retry.
-      setError(err instanceof Error ? err.message : String(err))
+      setError(err)
       setIsRestoring(false)
     }
   }, [onConfirm, passphrase, mode])
@@ -262,11 +263,7 @@ export function RestorePassphraseDialog({
             </div>
           )}
 
-          {error && (
-            <p className="text-xs text-fluux-error mb-3 break-words">
-              {error}
-            </p>
-          )}
+          <BackupRecoveryFailure failure={error ? backupRecoveryError(error, t) : null} />
         </div>
 
         <div className="px-5 pb-5 pt-3 flex gap-2 justify-end">

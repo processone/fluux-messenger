@@ -249,8 +249,8 @@ function App() {
 
   const handleE2EERegistered = useCallback(async (manager: E2EEManager) => {
     if (!isOpenpgpEnabled()) return
-    // Connect-time E2EE recovery routing. macOS stored-key failures use
-    // guided backup recovery; missing keys and other platforms retain
+    // Only a macOS desktop secret-store refusal uses guided backup recovery.
+    // Recognized desync/corruption, missing keys and other platforms retain
     // the existing IdentityChoiceDialog:
     //
     //   - `local-key-unrecoverable`: a local key exists but couldn't
@@ -266,13 +266,14 @@ function App() {
       | {
           hasNoLocalKey?: () => Promise<boolean>
           isKeyRecoveryNeeded?: () => boolean
+          isKeyStorageUnavailable?: () => boolean
         }
       | null
       | undefined
     if (accountJid && plugin) {
       try {
         const recoveryNeeded = plugin.isKeyRecoveryNeeded?.() === true
-        if (recoveryNeeded && platform().shell === 'desktop' && platform().os === 'macos') {
+        if (plugin.isKeyStorageUnavailable?.() && platform().shell === 'desktop' && platform().os === 'macos') {
           if (client.e2ee !== manager) return
           if (!recoveryOffers.current.has(plugin)) {
             recoveryOffers.current.add(plugin)

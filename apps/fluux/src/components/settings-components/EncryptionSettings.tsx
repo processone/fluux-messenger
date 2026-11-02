@@ -316,20 +316,23 @@ export function EncryptionSettings() {
   // Settings or toggling re-offers it.
   const recoveryPromptedRef = useRef(false)
   useEffect(() => {
-    // macOS uses the single startup offer and a persistent explicit entry here.
-    if (platform().shell === 'desktop' && platform().os === 'macos') return
     if (recoveryPromptedRef.current) return
     if (!online || !openpgpEnabled || pendingIdentityChoice || registrationError) {
       return
     }
     const plugin = client.e2ee?.getPlugin('openpgp') as
-      | { isKeyRecoveryNeeded?: () => boolean }
+      | {
+          isKeyRecoveryNeeded?: () => boolean
+          isKeyStorageUnavailable?: () => boolean
+        }
       | null
       | undefined
+    // Storage refusal has one startup offer and an explicit Settings entry.
+    // Desync/corruption must retain main's import/replace decision on macOS too.
+    if (plugin?.isKeyStorageUnavailable?.() && platform().shell === 'desktop' && platform().os === 'macos') return
     if (plugin?.isKeyRecoveryNeeded?.() !== true) return
     const bareJid = jid ? getBareJid(jid) : null
     if (!bareJid) return
-    recoveryPromptedRef.current = true
     let cancelled = false
     void (async () => {
       let next: {
@@ -356,12 +359,17 @@ export function EncryptionSettings() {
           reason: 'local-key-unrecoverable',
         }
       }
-      if (!cancelled) setPendingIdentityChoice(next)
+      if (!cancelled) {
+        // Latch only a delivered prompt. StrictMode replay or a changed session
+        // cancels this probe and must not consume the account's only offer.
+        recoveryPromptedRef.current = true
+        setPendingIdentityChoice(next)
+      }
     })()
     return () => {
       cancelled = true
     }
-  }, [online, openpgpEnabled, pendingIdentityChoice, registrationError, client, jid])
+  }, [online, openpgpEnabled, pendingIdentityChoice, registrationError, client, jid, pluginRegisteredAt])
 
   // Track whether the active key is keychain-backed (native engine only). Keyed on
   // `fingerprint` so it refreshes after every path that establishes a key
@@ -479,6 +487,7 @@ export function EncryptionSettings() {
         | {
             hasNoLocalKey?: () => Promise<boolean>
             isKeyRecoveryNeeded?: () => boolean
+            isKeyStorageUnavailable?: () => boolean
           }
         | null
         | undefined
@@ -489,7 +498,7 @@ export function EncryptionSettings() {
       // Settings to "fix encryption" would see the toggle report all-good
       // while encryption silently never starts.
       const recoveryNeeded = plugin?.isKeyRecoveryNeeded?.() === true
-      if (recoveryNeeded && platform().os === 'macos' && manager) {
+      if (plugin?.isKeyStorageUnavailable?.() && platform().shell === 'desktop' && platform().os === 'macos' && manager) {
         setRecoveryNeeded(true)
         setRecoveryManager(manager)
         return

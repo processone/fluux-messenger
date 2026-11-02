@@ -4,6 +4,7 @@
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { invoke as nativeInvoke } from '@tauri-apps/api/core'
 import { decrypt, encrypt, createMessage, readMessage, readKey, unarmor } from 'openpgp'
+import { xml, type Element } from '@fluux/sdk/xmpp'
 import type { XMPPPrimitives } from '@fluux/sdk'
 import { chatStore } from '@fluux/sdk/stores'
 import { SequoiaPgpPlugin, type InvokeFn } from '@/e2ee/SequoiaPgpPlugin'
@@ -14,10 +15,13 @@ import backup from '@/e2ee/fixtures/sequoia_alice_backup.asc?raw'
 import meta from '@/e2ee/fixtures/sequoia_meta.json'
 
 export function createBackupRecoveryFixture() {
+  const params = new URLSearchParams(location.search)
+  const desync = params.get('recoveryFailure') === 'desync'
+  const backupAbsent = params.get('recoveryBackup') === 'absent'
   const native = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
   if (!native) {
     mockWindows('main')
-    mockIPC(cmd => cmd === 'plugin:share-inbox|list' ? [] : null, { shouldMockEvents: true })
+    mockIPC((cmd, args) => cmd.startsWith('openpgp_') ? invoke(cmd, args as Record<string, unknown>) : cmd === 'plugin:share-inbox|list' ? [] : null, { shouldMockEvents: true })
   }
   setPlatformForTesting({ shell: 'desktop', os: 'macos' })
   setPlatformForTesting({ ...platform(), hasInAppUpdates: false })
@@ -32,6 +36,7 @@ export function createBackupRecoveryFixture() {
     if (cmd === 'openpgp_has_persisted_key') return true as T
     if (cmd === 'openpgp_ensure_key') {
       if (installed) return installed as T
+      if (desync) throw new Error('decrypt persisted TSK: decrypt primary secret key: unexpected EOF')
       throw new Error('openpgp-storage-unavailable: macOS keychain (-25293): authorization refused')
     }
     if (cmd === 'openpgp_backup_import_all' || cmd === 'openpgp_backup_import_selected') {
@@ -70,9 +75,26 @@ export function createBackupRecoveryFixture() {
   const xmpp: XMPPPrimitives = {
     sendStanza: async () => {},
     queryDisco: async () => ({ features: [{ var: 'http://jabber.org/protocol/pubsub' }, { var: 'http://jabber.org/protocol/pubsub#publish-options' }], identities: [{ category: 'pubsub', type: 'pep' }] }),
-    queryPEP: async (_jid, node) => node === 'urn:xmpp:openpgp:0:secret-key' ? [{ id: 'current', payload: { name: 'secretkey', attrs: { xmlns: 'urn:xmpp:openpgp:0' }, children: [btoa(String.fromCharCode(...(await unarmor(backup)).data))] } }] : [],
+    queryPEP: async (_jid, node) => !backupAbsent && node === 'urn:xmpp:openpgp:0:secret-key' ? [{ id: 'current', payload: { name: 'secretkey', attrs: { xmlns: 'urn:xmpp:openpgp:0' }, children: [btoa(String.fromCharCode(...(await unarmor(backup)).data))] } }] : [],
     publishPEP: async node => { audit.publications.push(node) },
     retractPEP: async () => {}, deletePEP: async () => {}, subscribePEP: () => ({ unsubscribe: () => {} }),
+  }
+  // The App's raw-PEP facade and the plugin must observe the same protocol fixture.
+  // Substitute only the demo IQ service's OpenPGP reads with real wire elements;
+  // do not pass text-bearing replies through DemoClient's transport MockElement format.
+  const attachPepReader = (client: object) => {
+    const service = client as { sendIQ: (stanza: Element, timeoutMs?: number) => Promise<Element> }
+    const original = service.sendIQ.bind(client)
+    service.sendIQ = async (stanza, timeoutMs) => {
+      const items = stanza.getChild('pubsub', 'http://jabber.org/protocol/pubsub')?.getChild('items')
+      const node = items?.attrs.node
+      if (!node?.startsWith('urn:xmpp:openpgp:0:')) return original(stanza, timeoutMs)
+      const response = await xmpp.queryPEP(stanza.attrs.to, node)
+      return xml('iq', { type: 'result', id: stanza.attrs.id },
+        xml('pubsub', { xmlns: 'http://jabber.org/protocol/pubsub' },
+          xml('items', { node }, ...response.map(item => xml('item', { id: item.id },
+            xml(item.payload.name, item.payload.attrs, ...item.payload.children))))))
+    }
   }
   const seedPending = async () => {
     const envelope = `<signcrypt xmlns='urn:xmpp:openpgp:0'><to jid='ava@fluux.chat'/><time stamp='2026-01-01T00:00:00Z'/><rpad>fixture</rpad><payload xmlns='jabber:client'><body>${meta.plaintext}</body></payload></signcrypt>`
@@ -84,5 +106,5 @@ export function createBackupRecoveryFixture() {
       type: 'chat', from: 'you@fluux.chat', conversationId: 'ava@fluux.chat', timestamp: new Date(),
       isOutgoing: true, body: '[could not decrypt]', encryptedPayload: `<openpgp xmlns='urn:xmpp:openpgp:0'>${encoded}</openpgp>` }, { isLiveArrival: false })
   }
-  return { seedPending, plugin: new FixturePlugin({ invoke }) as SequoiaPgpPlugin, xmpp, meta, audit }
+  return { attachPepReader, seedPending, plugin: new FixturePlugin({ invoke }) as SequoiaPgpPlugin, xmpp, meta, audit }
 }

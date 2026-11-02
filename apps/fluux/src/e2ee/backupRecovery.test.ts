@@ -8,7 +8,7 @@ import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPluginStorage, InMemoryStorageBackend, type PluginContext } from '@fluux/sdk'
 import { decrypt, encrypt, readMessage, createMessage, readKey, unarmor } from 'openpgp'
-import { SequoiaPgpPlugin, type InvokeFn } from './SequoiaPgpPlugin'
+import { resetUncertainImportsForTesting, SequoiaPgpPlugin, type InvokeFn } from './SequoiaPgpPlugin'
 import { classifyBoundaryError, type KeyBundle } from './OpenPGPPluginBase'
 import { parseSecretKeysFromBackupPayload } from './backupKeyMaterial'
 import { legacyNormalizeBackupPassphrase } from './backupPassphrase'
@@ -21,7 +21,9 @@ const sourceBackup = fixture('sequoia_alice_backup.asc')
 let restorePlatform: () => void
 const plugins: SequoiaPgpPlugin[] = []
 vi.setConfig({ testTimeout: 30_000 })
-beforeEach(() => { localStorage.clear(); restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' }) })
+beforeEach(() => {
+  resetUncertainImportsForTesting(); localStorage.clear(); restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' }) })
+afterEach(resetUncertainImportsForTesting)
 afterEach(async () => { for (const p of plugins.splice(0)) await p.shutdown(); restorePlatform() })
 
 async function setup(error = 'openpgp-storage-unavailable: macOS keychain (-25293): authorization refused', jid = accountJid) {
@@ -81,10 +83,20 @@ describe('guided backup recovery', () => {
     const f = await setup(`openpgp-storage-unavailable: macOS keychain (${code})`)
     await f.plugin.init(f.ctx)
     expect(f.plugin.isKeyRecoveryNeeded()).toBe(true)
+    expect(f.plugin.isKeyStorageUnavailable()).toBe(true)
     expect(f.plugin.getOwnFingerprint()).toBeNull()
     expect(f.publications).toEqual([])
     expect(f.calls.map(c => c.cmd)).toEqual(['openpgp_has_persisted_key', 'openpgp_ensure_key'])
   })
+  it.each(['decrypt persisted TSK: decrypt primary secret key: unexpected EOF', "passphrase for account 'alice@example.com' is not in the keychain"])(
+    'FLM-365 F1 keeps recognized desync distinct from storage refusal: %s', async error => {
+      const f = await setup(error)
+      await f.plugin.init(f.ctx)
+      expect(f.plugin.isKeyRecoveryNeeded()).toBe(true)
+      expect(f.plugin.isKeyStorageUnavailable()).toBe(false)
+      expect(f.publications).toEqual([])
+    },
+  )
   it.each(['network disconnected', 'native call timeout after 120000 ms'])('does not classify unrelated failure %s as recoverable storage', async error => {
     const f = await setup(error)
     await expect(f.plugin.init(f.ctx)).rejects.toThrow()
@@ -197,7 +209,7 @@ describe('guided backup recovery', () => {
     const device = new SequoiaPgpPlugin({ invoke }); plugins.push(device)
     await device.init(f.ctx)
     await expect(device.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid: jid })).rejects.toThrow(reading)
-    await expect(device.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid: jid })).rejects.toThrow(/outcome is unknown/)
+    await expect(device.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid: jid })).rejects.toMatchObject({ code: 'restore-outcome-uncertain' })
     expect(installs).toBe(1)
     expect(f.ctx.notifyKeyUnlocked).not.toHaveBeenCalled()
   })
@@ -214,7 +226,7 @@ describe('guided backup recovery', () => {
       await vi.advanceTimersByTimeAsync(1000); await timedOut
       const replacement = new SequoiaPgpPlugin({ invoke }); plugins.push(replacement)
       await replacement.init(f.ctx)
-      await expect(replacement.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid })).rejects.toThrow(/outcome is unknown/)
+      await expect(replacement.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid })).rejects.toMatchObject({ code: 'restore-outcome-uncertain' })
       expect(f.ctx.notifyKeyUnlocked).not.toHaveBeenCalled()
     } finally { vi.useRealTimers() }
   })

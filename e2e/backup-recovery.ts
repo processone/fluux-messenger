@@ -29,9 +29,12 @@ async function capture(page: Page, name: string) {
   await syncEngineGeometry(page)
   await page.screenshot({ animations: 'disabled', path: test.info().outputPath(name) })
 }
+function backupInput(page: Page) {
+  return page.locator('input[name="backup-code"], input[name="passphrase"]')
+}
 async function serverCode(page: Page, value = code) {
   await page.getByRole('button', { name: 'Restore from server backup', exact: true }).click()
-  await page.locator('input[type="password"]').fill(value)
+  await backupInput(page).fill(value)
 }
 async function previewServer(page: Page) {
   await serverCode(page)
@@ -51,7 +54,7 @@ for (const source of ['server', 'file']) {
       await page.getByRole('button', { name: 'Restore from backup', exact: true }).click()
     }
     await page.getByRole('button', { name: source === 'server' ? 'Restore from server backup' : 'Import from a file', exact: true }).click()
-    const input = page.locator('input[type="password"]')
+    const input = backupInput(page)
     await input.fill(code)
     await capture(page, `after-${source}-code.png`)
     await page.getByRole('button', { name: 'Preview backup', exact: true }).click()
@@ -93,7 +96,7 @@ test('wrong code and cancellation leave the identity untouched and recovery usab
   await expect(page.getByText(/Session key decryption failed/i)).toBeVisible()
   expect((await audit(page)).commands).not.toContain('openpgp_backup_import_selected')
   await capture(page, 'wrong-code.png')
-  await page.locator('input[type="password"]').fill(code)
+  await backupInput(page).fill(code)
   await page.getByRole('button', { name: 'Preview backup', exact: true }).click()
   await expect(page.getByText(fingerprint, { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
@@ -117,8 +120,7 @@ for (const state of ['absent', 'unknown']) {
   })
 }
 
-test('an uncertain native save preserves its details and cannot be submitted again from Settings', async ({ page }) => {
-  await openRecovery(page)
+async function injectUncertainSave(page: Page) {
   await page.evaluate(() => {
     const w = window as any, plugin = w.__demoClient.e2ee.getPlugin('openpgp')
     const invoke = plugin.invoke.bind(plugin)
@@ -131,24 +133,32 @@ test('an uncertain native save preserves its details and cannot be submitted aga
       return invoke(cmd, args)
     }
   })
+}
+
+test('an uncertain native save preserves its details and cannot be submitted again from Settings', async ({ page }) => {
+  await openRecovery(page)
+  await injectUncertainSave(page)
   await previewServer(page)
   await page.getByRole('button', { name: 'Use this key', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveText(/Restart the app to check the saved identity/)
+  await expect(page.getByRole('button', { name: 'Use this key', exact: true })).toBeDisabled()
+  await page.getByText('Technical details', { exact: true }).click()
   await expect(page.getByText(/not confirmed durable/)).toBeVisible()
   await capture(page, 'uncertain-native-save.png')
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   await page.evaluate(() => { location.hash = '/settings/encryption' })
   await page.getByRole('button', { name: 'Restore from backup', exact: true }).click()
   await previewServer(page)
-  await page.getByRole('button', { name: 'Use this key', exact: true }).click()
-  await expect(page.getByText(/outcome is unknown/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Use this key', exact: true })).toBeDisabled()
+  await expect(page.getByRole('alert')).toHaveText(/Restart the app to check the saved identity/)
   expect(await page.evaluate(() => (window as any).__nativeAttempts)).toBe(1)
   expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
   // A WebView reload is not an application restart or a known native outcome.
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeVisible()
   await previewServer(page)
-  await page.getByRole('button', { name: 'Use this key', exact: true }).click()
-  await expect(page.getByText(/outcome is unknown/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Use this key', exact: true })).toBeDisabled()
+  await expect(page.getByRole('alert')).toHaveText(/Restart the app to check the saved identity/)
   expect((await audit(page)).commands).not.toContain('openpgp_backup_import_selected')
 })
 
@@ -230,4 +240,55 @@ test('a real multi-key backup requires the intended fingerprint before installat
   await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
   await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
   expect((await audit(page)).commands.filter((cmd: string) => cmd === 'openpgp_backup_import_selected')).toHaveLength(1)
+})
+
+// FLM-365 F1: corruption/desync is not protected-storage refusal. Replacement
+// remains a deliberate available decision, never executed by this test.
+for (const backup of ['present', 'absent']) {
+  test(`macOS desync with ${backup} backup retains identity choice at startup, Settings and toggle`, async ({ page }) => {
+    await bootDemo(page, `/demo.html?tutorial=false&e2ee=recovery&recoveryFailure=desync&recoveryBackup=${backup}`)
+    expect(await audit(page)).toMatchObject({ build: expectedBuild })
+    const unknown = JSON.parse(readFileSync(new URL('../apps/fluux/src/i18n/locales/en.json', import.meta.url), 'utf8')).settings.encryption.identityChoice.restoreFromServerUnknown
+    const expectDecision = async () => {
+      await expect(page.getByRole('button', { name: /Replace the published identity/ })).toBeEnabled()
+      const server = page.getByRole('button', { name: /Restore from server backup/ })
+      if (backup === 'present') await expect(server).toBeEnabled()
+      else await expect(server).toBeDisabled()
+      // A failed probe must not masquerade as the present fixture.
+      await expect(page.getByText(unknown, { exact: true })).toBeHidden()
+    }
+    await expectDecision()
+    await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeHidden()
+    await capture(page, `desync-${backup}-startup.png`)
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await page.evaluate(() => { location.hash = '/settings/encryption' })
+    await expectDecision()
+    await capture(page, `desync-${backup}-settings.png`)
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    const toggle = page.getByRole('switch', { name: 'OpenPGP end-to-end encryption', exact: true })
+    // Main's Cancel intentionally disables encryption; re-enable from that state.
+    await expect(toggle).toHaveAttribute('aria-checked', 'false')
+    await toggle.click()
+    await expectDecision()
+    await capture(page, `desync-${backup}-toggle.png`)
+    expect((await audit(page)).commands).not.toContain('openpgp_forget_account')
+    expect((await audit(page)).commands).not.toContain('openpgp_backup_import_selected')
+    expect(await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').getOwnFingerprint())).toBeNull()
+    expect((await audit(page)).publications).toEqual([])
+  })
+}
+
+// FLM-365 F4: translated guidance is primary; native diagnostic details stay available.
+test('French recovery displays restart guidance immediately in French after an uncertain save', async ({ page }) => {
+  const fr = JSON.parse(readFileSync(new URL('../apps/fluux/src/i18n/locales/fr.json', import.meta.url), 'utf8')).settings.encryption
+  await openRecovery(page)
+  await injectUncertainSave(page)
+  await previewServer(page)
+  await page.evaluate(() => (window as any).__i18n.changeLanguage('fr'))
+  await page.getByRole('button', { name: fr.keyPicker.confirm, exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveText(fr.recoveryRestartRequired)
+  await capture(page, 'french-uncertain-save.png')
+  await page.getByText(fr.recoveryErrorDetails, { exact: true }).click()
+  await expect(page.getByText(/not confirmed durable/)).toBeVisible()
+  await capture(page, 'french-uncertain-save-details.png')
 })

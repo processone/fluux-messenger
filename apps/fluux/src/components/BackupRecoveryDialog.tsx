@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useConnection, type E2EEManager } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
 import type { OpenPGPPluginBase, RestoreResult } from '@/e2ee/OpenPGPPluginBase'
+import { parseArmorPassphraseFormat } from '@/e2ee/passphraseFormatHeader'
 import { ModalOverlay } from './ModalOverlay'
 import { RestorePassphraseDialog } from './RestorePassphraseDialog'
 import { KeyPickerDialog } from './KeyPickerDialog'
@@ -52,7 +53,7 @@ export function BackupRecoveryDialog({ client, manager, onClose, onRestored }: {
       ? await plugin!.importKeyFromFile(file!, passphrase, mode)
       : await plugin!.restoreSecretKey(passphrase, mode)
     assertCurrent()
-    if (!('needsPicker' in result)) throw new Error('Backup preview unexpectedly installed a key')
+    if (!('needsPicker' in result)) throw new Error(t('settings.encryption.recoveryPreviewInvalid'))
     setPreview(result)
   }
   const install = async (fingerprint: string) => {
@@ -68,10 +69,10 @@ export function BackupRecoveryDialog({ client, manager, onClose, onRestored }: {
   }
   if (!current()) return null
   if (preview) return <KeyPickerDialog candidates={preview.candidates} recommendedFingerprint={preview.recommendedFingerprint} onConfirm={install} onCancel={onClose}
-    warning={t('settings.encryption.recoveryWarning', { account: accountJid })} />
+    restoreBlocked={plugin?.isBackupRestoreUncertain?.()} warning={t('settings.encryption.recoveryWarning', { account: accountJid })} />
   if (source !== 'choose') return <RestorePassphraseDialog title={t('settings.encryption.recoveryTitle')}
     body={t('settings.encryption.recoveryCodeBody', { account: accountJid })}
-    confirmLabel={t('settings.encryption.recoveryPreview')} mode="recovery" isBackupCode={false}
+    confirmLabel={t('settings.encryption.recoveryPreview')} mode={source === 'file' ? 'import' : 'restore'} isBackupCode={source === 'file' ? parseArmorPassphraseFormat(file!) === 'xep0373' : undefined}
     onConfirm={readBackup} onCancel={onClose} />
   return <ModalOverlay onClose={onClose} dismissable={!busy} width="max-w-lg">
     <div className="p-5 space-y-4">

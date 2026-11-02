@@ -2,9 +2,12 @@ import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Key, Loader2, Star } from 'lucide-react'
 import type { KeyBundle } from '../e2ee/OpenPGPPluginBase'
+import { BackupRecoveryFailure } from './BackupRecoveryFailure'
+import { backupRecoveryError } from './backupRecoveryError'
 import { ModalOverlay } from './ModalOverlay'
 
 interface KeyPickerDialogProps {
+  restoreBlocked?: boolean
   warning?: string
   recommendedFingerprint?: string
   candidates: KeyBundle[]
@@ -12,7 +15,7 @@ interface KeyPickerDialogProps {
   onCancel: () => void
 }
 
-export function KeyPickerDialog({ warning, recommendedFingerprint, candidates, onConfirm, onCancel }: KeyPickerDialogProps) {
+export function KeyPickerDialog({ restoreBlocked = false, warning, recommendedFingerprint, candidates, onConfirm, onCancel }: KeyPickerDialogProps) {
   const { t, i18n } = useTranslation()
 
   const sorted = [...candidates].sort((a, b) => {
@@ -23,19 +26,22 @@ export function KeyPickerDialog({ warning, recommendedFingerprint, candidates, o
   const recommendation = sorted.find(bundle => bundle.fingerprint === recommendedFingerprint)?.fingerprint ?? sorted[0]?.fingerprint ?? ''
   const [selected, setSelected] = useState(recommendation)
   const [isInstalling, setIsInstalling] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
+
+  const failure = error ? backupRecoveryError(error, t, !!warning) : null
+  const blocked = restoreBlocked || failure?.uncertain === true
 
   const handleConfirm = useCallback(async () => {
-    if (!selected) return
+    if (!selected || blocked) return
     setIsInstalling(true)
     setError(null)
     try {
       await onConfirm(selected)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(err)
       setIsInstalling(false)
     }
-  }, [onConfirm, selected])
+  }, [onConfirm, selected, blocked])
 
   const formatDate = (iso: string) => {
     try {
@@ -82,7 +88,7 @@ export function KeyPickerDialog({ warning, recommendedFingerprint, candidates, o
                   name="key-picker"
                   value={bundle.fingerprint}
                   checked={selected === bundle.fingerprint}
-                  disabled={isInstalling}
+                  disabled={isInstalling || blocked}
                   onChange={() => setSelected(bundle.fingerprint)}
                   className="accent-fluux-brand"
                 />
@@ -110,11 +116,7 @@ export function KeyPickerDialog({ warning, recommendedFingerprint, candidates, o
             ))}
           </div>
 
-          {error && (
-            <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
-              {error}
-            </p>
-          )}
+          <BackupRecoveryFailure failure={failure} blocked={blocked} />
         </div>
 
         <div className="px-5 pb-5 pt-3 flex gap-2 justify-end">
@@ -129,7 +131,7 @@ export function KeyPickerDialog({ warning, recommendedFingerprint, candidates, o
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!selected || isInstalling}
+            disabled={!selected || isInstalling || blocked}
             className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isInstalling && <Loader2 className="size-3.5 animate-spin" />}

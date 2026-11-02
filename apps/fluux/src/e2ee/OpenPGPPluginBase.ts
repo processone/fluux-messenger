@@ -565,22 +565,32 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   /**
    * Set by {@link init} when {@link ensureIdentity} fails with a
-   * `key-unrecoverable` error — a local key exists but cannot be unlocked
+   * `key-unrecoverable` or `key-storage-unavailable` error — a local key
+   * cannot be unlocked
    * (keychain/key desync, a corrupted secret-key packet, or a passphrase
    * that has gone missing). The plugin stays REGISTERED (init swallows the
    * error) so the host can read this flag and route the user to recovery
-   * via the IdentityChoiceDialog (restore from server backup / import file /
-   * replace identity), instead of dead-ending on an opaque registration
-   * failure. Cleared the moment a usable identity is established.
+   * through the appropriate storage-refusal or desync decision, instead of
+   * dead-ending on an opaque registration failure. Cleared the moment a usable identity is established.
    */
-  protected _keyRecoveryNeeded = false
+  protected _keyRecoveryReason: 'key-unrecoverable' | 'key-storage-unavailable' | null = null
 
   /**
    * True when a local key exists but could not be unlocked, so the host
-   * should route the user through recovery. @see {@link _keyRecoveryNeeded}.
+   * should route the user through recovery. @see {@link _keyRecoveryReason}.
    */
   isKeyRecoveryNeeded(): boolean {
-    return this._keyRecoveryNeeded
+    return this._keyRecoveryReason !== null
+  }
+
+  /** Only a refused native secret-store read selects guided macOS recovery. */
+  isKeyStorageUnavailable(): boolean {
+    return this._keyRecoveryReason === 'key-storage-unavailable'
+  }
+
+  /** Native adapters override this when a restore must be reconciled on restart. */
+  isBackupRestoreUncertain(): boolean {
+    return false
   }
 
   // ---------------------------------------------------------------------------
@@ -714,6 +724,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   async init(ctx: PluginContext): Promise<void> {
     this.ctx = ctx
+    this._keyRecoveryReason = null
     if (!ctx.account.jid) {
       throw new Error(`${this.pluginName()}: requires a logged-in account JID`)
     }
@@ -751,7 +762,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         // the user to its platform's recovery flow, instead of failing
         // registration with an
         // opaque error the UI can only render as "(unknown)".
-        this._keyRecoveryNeeded = true
+        this._keyRecoveryReason = err.code
         return
       }
       throw err
@@ -989,7 +1000,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
     // A usable identity is established — clear any prior recovery flag so a
     // successful restore/import/replace lifts the host's recovery routing.
-    this._keyRecoveryNeeded = false
+    this._keyRecoveryReason = null
 
     await this.publishOwnIdentity(bundle)
     return { fingerprint: bundle.fingerprint }
@@ -1385,7 +1396,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const ctx = this.requireCtx()
     this.assertRecoveryAccount(recovery)
     const armoredMessage = await this.fetchSecretKeyBackup()
-    if (this.ctx !== ctx) throw new Error('Backup restore account changed')
+    if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
     if (!armoredMessage) {
       throw new E2EEPluginError(
         'permanent',
@@ -1402,7 +1413,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         'restoreSecretKey',
       )
 
-    if (this.ctx !== ctx) throw new Error('Backup restore account changed')
+    if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
     const selection = await this.selectKeyFromBackup(bundles)
     if (!selection) {
       throw new E2EEPluginError(
@@ -1412,7 +1423,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       )
     }
 
-    if (this.ctx !== ctx) throw new Error('Backup restore account changed')
+    if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
     this.assertRecoveryAccount(recovery)
     if (!selection.needsPicker && !recovery) {
       const info = await this.doInstallKey(
@@ -1515,7 +1526,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       'importKeyFromFile',
     )
 
-    if (this.ctx !== ctx) throw new Error('Backup restore account changed')
+    if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
     const selection = await this.selectKeyFromBackup(bundles)
     if (!selection) {
       throw new E2EEPluginError(
@@ -1525,7 +1536,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       )
     }
 
-    if (this.ctx !== ctx) throw new Error('Backup restore account changed')
+    if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
     this.assertRecoveryAccount(recovery)
     if (!selection.needsPicker && !recovery) {
       return this.doInstallKey(armoredMessage, workingPassphrase, selection.selected.fingerprint)
@@ -1576,7 +1587,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   private assertRecoveryAccount(recovery?: BackupRecoveryMode): void {
     if (recovery && recovery.accountJid !== this.requireCtx().account.jid) {
-      throw new Error('Backup restore account changed')
+      throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
     }
   }
 
@@ -1588,7 +1599,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   ): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
     this.assertRecoveryAccount(recovery)
-    if (this.runningOwnKeyOperations) throw new Error('An identity change is already in progress')
+    if (this.runningOwnKeyOperations) throw new E2EEPluginError('transient', 'identity-change-pending', 'An identity change is already in progress')
     const previousFingerprint = this.ownBundle?.fingerprint
     const identity = await this.ownKeyOperation(async () => {
       let bundle: KeyBundle
@@ -1603,16 +1614,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       } catch (err) {
         throw this.toPluginError('installKey', err)
       }
-      if (this.ctx !== ctx) throw new Error('Backup restore account changed')
+      if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
       this.ownBundle = bundle
-      this._keyRecoveryNeeded = false
+      this._keyRecoveryReason = null
       if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
       writeBackedUpFingerprint(ctx.account.jid, bundle.fingerprint)
 
       const current = () => this.ctx === ctx && this.ownBundle === bundle
       try {
         await this.publishOwnPublicKeyData(bundle, current)
-        if (this.ctx !== ctx) throw new Error('Backup restore account changed')
+        if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
         // The key we just replaced is no longer ours to decrypt with, so it must
         // not stay advertised — but any SIBLING device's entry has to survive.
         await this.publishOwnPublicKeyMetadata(
@@ -1620,7 +1631,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           previousFingerprint ? [previousFingerprint] : [],
           current,
         )
-        if (this.ctx !== ctx) throw new Error('Backup restore account changed')
+        if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
         if (previousFingerprint) {
           await this.retractStalePublicKeyDataNode(previousFingerprint, bundle.fingerprint)
         }
@@ -1634,7 +1645,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // host so it re-runs deferred decrypts immediately — otherwise messages
       // stashed while the key was absent stay "could not be decrypted" until an
       // unrelated trigger (reconnect, app restart) re-registers the plugin.
-      if (!current()) throw new Error('Backup restore account changed')
+      if (!current()) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
       ctx.notifyKeyUnlocked?.()
 
       return { fingerprint: bundle.fingerprint }
