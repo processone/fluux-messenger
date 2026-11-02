@@ -265,9 +265,14 @@ describe('stream management resumption against a controlled XMPP server', { time
     const first = server.inlineAuths[0]
     expect(first).toMatchObject({ bindEnable: true, answered: 'enabled' })
 
+    // The client reports the session online only after it processed the server's <resumed/>.
+    const onlineAgain = new Promise<void>(resolve => {
+      const stop = client.subscribe('connection:status', ({ status }) => {
+        if (status === 'online' && server.inlineAuths.length === 2) { stop(); resolve() }
+      })
+    })
     server.drop()
-    await until(() => server.count('authenticate') === 2)
-    await until(() => client.getStreamManagementState() !== null)
+    await onlineAgain
     // The second authenticate resumed the first session inline: it named that session, the server
     // answered <resumed/>, no new session was enabled, and the client still holds the same id.
     expect(server.inlineAuths).toHaveLength(2)
