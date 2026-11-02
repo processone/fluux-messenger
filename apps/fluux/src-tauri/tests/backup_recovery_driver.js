@@ -1,9 +1,9 @@
 // FLM-343: test-only driver of the real App, not a second recovery model.
 // All waits observe rendered state; no retry, sleeps or sensitive input.
 (() => {
-  const wait = predicate => new Promise((resolve, reject) => {
+  const wait = (predicate, label) => new Promise((resolve, reject) => {
     const observer = new MutationObserver(check)
-    const timeout = setTimeout(() => { observer.disconnect(); reject(new Error('native recovery journey timed out')) }, 90000)
+    const timeout = setTimeout(() => { observer.disconnect(); reject(new Error('native recovery journey timed out: ' + label)) }, 90000)
     function check() {
       const result = predicate()
       if (result) { clearTimeout(timeout); observer.disconnect(); resolve(result) }
@@ -15,20 +15,27 @@
   const start = async () => {
     const meta = window.__FLUUX_RECOVERY_META__
     const fp = meta.aliceFingerprint
-    await wait(() => document.querySelector('[data-nav="messages"]'))
+    await wait(() => document.querySelector('[data-nav="messages"]'), 'app shell')
     if (!window.__FLUUX_RECOVERY_RESTART__) {
-      ;(await wait(() => button(window.__FLUUX_RECOVERY_SOURCE__ === 'file' ? 'Import from a file' : 'Restore from server backup'))).click()
-      const input = await wait(() => document.querySelector('input[type="password"]'))
+      ;(await wait(() => button(window.__FLUUX_RECOVERY_SOURCE__ === 'file' ? 'Import from a file' : 'Restore from server backup'), 'backup source chooser')).click()
+      const input = await wait(() => document.querySelector('input[type="password"]'), 'backup code field')
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, meta.backupPassphrase)
       input.dispatchEvent(new Event('input', { bubbles: true }))
-      ;(await wait(() => button('Preview backup'))).click()
-      await wait(() => [...document.querySelectorAll('span')].some(el => el.textContent === fp))
-      ;(await wait(() => button('Use this key'))).click()
+      ;(await wait(() => button('Preview backup'), 'enabled preview action')).click()
+      await wait(() => [...document.querySelectorAll('span')].some(el => el.textContent === fp), 'fingerprint preview')
+      ;(await wait(() => button('Use this key'), 'enabled key confirmation')).click()
     }
-    await wait(() => window.__demoClient?.e2ee?.getPlugin('openpgp')?.getOwnFingerprint() === fp && !document.querySelector('[data-modal]'))
-    await wait(() => window.__chatStore?.getState().messages.get('ava@fluux.chat')?.some(m => m.id === 'recovery-waiting' && m.body === meta.plaintext && !m.encryptedPayload) && document.body.textContent.includes(meta.plaintext))
+    await wait(() => window.__demoClient?.e2ee?.getPlugin('openpgp')?.getOwnFingerprint() === fp && !document.querySelector('[data-modal]'), 'restored identity and closed dialog')
+    await wait(() => window.__chatStore?.getState().messages.get('ava@fluux.chat')?.some(m => m.id === 'recovery-waiting' && m.body === meta.plaintext && !m.encryptedPayload) && document.body.textContent.includes(meta.plaintext), 'decrypted waiting message')
     await window.__TAURI_INTERNALS__.invoke('recovery_checkpoint', { fingerprint: fp })
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => start().catch(error => window.__TAURI_INTERNALS__.invoke('recovery_failure', { reason: error.message })), { once: true })
-  else start().catch(error => window.__TAURI_INTERNALS__.invoke('recovery_failure', { reason: error.message }))
+  const failure = error => {
+    const state = { ready: document.readyState, headings: [...document.querySelectorAll('h1,h2,h3')].map(el => el.textContent),
+      buttons: [...document.querySelectorAll('button')].filter(el => el.offsetWidth).map(el => ({ text: el.textContent.trim(), disabled: el.disabled })),
+      inputLength: document.querySelector('input[type="password"]')?.value.length,
+      audit: window.__recoveryFixture }
+    return window.__TAURI_INTERNALS__.invoke('recovery_failure', { reason: error.message + '; ' + JSON.stringify(state) })
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => start().catch(failure), { once: true })
+  else start().catch(failure)
 })()
