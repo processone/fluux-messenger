@@ -426,6 +426,26 @@ describe('useDesktopNotifications posting + guard', () => {
     })
   })
 
+  // FLM-201's native mirror optimization must not drop pictures from the iOS web adapter.
+  it('keeps the room picture on the iOS web shell', async () => {
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'web', os: 'ios' })
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+    const avatar = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+    vi.mocked(getNotificationAvatarUrl).mockResolvedValueOnce(avatar)
+    try {
+      renderHook(() => useDesktopNotifications())
+      await handlers.onRoomMessage?.(
+        { jid: 'xsf@muc.xmpp.org', name: 'XSF', nickname: 'Receiver', avatar, avatarHash: 'web-room-picture', notifyAll: true },
+        { id: 'web-room-picture', nick: 'Sender', from: 'xsf@muc.xmpp.org/Sender' },
+      )
+      expect(showWebNotification).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ icon: avatar }), expect.anything(), expect.any(Function))
+      expect(invoke).not.toHaveBeenCalledWith('plugin:push|post_local_notification', expect.anything())
+    } finally {
+      vi.mocked(getNotificationAvatarUrl).mockReset().mockResolvedValue(undefined)
+    }
+  })
+
   // Captain's F5 choice: refresh only display names; other metadata/eligibility changes still cancel.
   it.each(['contact', 'room', 'other-metadata'] as const)('finalizes preparation after a %s change with current presentation only', async change => {
     let prepared!: (token: string) => void

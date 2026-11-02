@@ -317,8 +317,8 @@ export function useDesktopNotifications(): void {
     const avatar = target.kind === 'chat'
       ? rosterStore.getState().getContact(target.entity.id)
       : target.entity
-    // iOS rooms are posted with the room picture from the shared mirror, so no attachment is prepared.
-    const iosRoom = target.kind === 'room' && platform().os === 'ios'
+    // Native iOS rooms use the shared mirror; web notifications still need their icon.
+    const iosRoom = target.kind === 'room' && platform().shell === 'mobile' && platform().os === 'ios'
     const avatarUrl = iosRoom ? undefined : await getNotificationAvatarUrl(avatar?.avatar, avatar?.avatarHash)
     const mobile = desktop && await isMobileTauri()
     // Avatar/platform work may outlive a decrypt repair, edit, read or account change.
