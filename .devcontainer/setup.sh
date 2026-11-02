@@ -5,9 +5,9 @@ set -e
 
 echo "=== Setting up Fluux Messenger development environment ==="
 
-# Install Node.js 20 from NodeSource
-echo ">>> Installing Node.js 20..."
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+# Install Node.js 26 from NodeSource (same major as CI)
+echo ">>> Installing Node.js 26..."
+curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -
 
 # Install Rust
 echo ">>> Installing Rust..."
