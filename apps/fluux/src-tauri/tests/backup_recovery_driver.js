@@ -1,6 +1,8 @@
 // FLM-343: test-only driver of the real App, not a second recovery model.
 // All waits observe rendered state; no retry, sleeps or sensitive input.
 (() => {
+  // The disposable native profile must use the same language as the driver.
+  localStorage.setItem('i18nextLng', 'en')
   const wait = (predicate, label) => new Promise((resolve, reject) => {
     const observer = new MutationObserver(check)
     const timeout = setTimeout(() => { observer.disconnect(); reject(new Error('native recovery journey timed out: ' + label)) }, 90000)
@@ -31,7 +33,7 @@
   }
   const failure = error => {
     const state = { ready: document.readyState, headings: [...document.querySelectorAll('h1,h2,h3')].map(el => el.textContent),
-      buttons: [...document.querySelectorAll('button')].filter(el => el.offsetWidth).map(el => ({ text: el.textContent.trim(), disabled: el.disabled })),
+      buttons: [...document.querySelectorAll('[data-modal] button')].filter(el => el.offsetWidth).map(el => ({ text: el.textContent.trim(), disabled: el.disabled })),
       inputLength: document.querySelector('input[type="password"]')?.value.length,
       audit: window.__recoveryFixture }
     return window.__TAURI_INTERNALS__.invoke('recovery_failure', { reason: error.message + '; ' + JSON.stringify(state) })
