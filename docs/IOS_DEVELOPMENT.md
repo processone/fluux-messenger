@@ -641,6 +641,8 @@ runs, local room notifications use the same communication presentation through t
 push plugin, retaining the local tap destination. They read the shared avatar mirror
 rather than preparing an unused attachment. Direct-chat local notifications still
 use the notification plugin and convert browser image addresses to temporary files.
+Each iOS attachment gets its own file because the system consumes it; a later or
+concurrent notification must not reuse that path. Desktop file caching is unchanged.
 In-app room toasts use the room picture (or the shared # fallback), with the sender
 first and the room name and message below; generic status toasts are unchanged.
 
