@@ -7,9 +7,7 @@ import { test, expect, type Page } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
-
-const TEAM = 'team@conference.fluux.chat'
-const BOARD = 'board@conference.fluux.chat'
+import { ROOM_JID as TEAM, BOARD_ROOM_JID as BOARD, ENGINEERING_ROOM_JID as EMPTY } from '../apps/fluux/src/demo/constants'
 type DemoWindow = Window & {
   __demoClient: DemoClient
   __roomStore: typeof roomStore
@@ -17,17 +15,20 @@ type DemoWindow = Window & {
   __joinOutcome?: string
 }
 
-async function openJoiningRoom(page: Page, jid: string, empty = false) {
+async function openJoiningRoom(page: Page, jid: string) {
   await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(jid)}`)
-  await page.evaluate(async ({ jid, empty }) => {
+  await page.evaluate(async ({ jid, team }) => {
     const w = window as unknown as DemoWindow
     const client = w.__demoClient
     const store = w.__roomStore
     client.stopAnimation()
-    // Restore the selected room through the real activation/cache boundary.
-    await store.getState().activateRoom(jid)
-    if (empty) store.setState(state => ({ messages: new Map(state.messages).set(jid, []) }))
-    store.getState().updateRoom(jid, { joined: false, isJoining: false })
+    const nickname = store.getState().getRoom(team)!.nickname
+    // Restore an existing room through the real activation/cache boundary.
+    // The discoverable Engineering fixture has no cached history to clear.
+    if (store.getState().getRoom(jid)) {
+      await store.getState().activateRoom(jid)
+      store.getState().updateRoom(jid, { joined: false, isJoining: false })
+    }
 
     // Hold only the simulated service's first response, not the SDK state machine.
     const transport = client as unknown as { beginStanzaSend(stanza: { name: string; attrs: { to?: string } }): Promise<void> }
@@ -42,12 +43,13 @@ async function openJoiningRoom(page: Page, jid: string, empty = false) {
       }
       return send(stanza)
     }
-    await client.rooms.joinRoom(jid, store.getState().getRoom(jid)!.nickname)
+    await client.rooms.joinRoom(jid, nickname)
+    await store.getState().activateRoom(jid)
     void client.rooms.joinResult(jid).then(
       () => { w.__joinOutcome = 'joined' },
       () => { w.__joinOutcome = 'refused' },
     )
-  }, { jid, empty })
+  }, { jid, team: TEAM })
 }
 
 async function observe(page: Page, jid: string) {
@@ -73,14 +75,15 @@ for (const [label, viewport] of [
 
     for (const empty of [false, true]) {
       test(`${empty ? 'empty' : 'cached'} room hides join instructions until success`, async ({ page }, info) => {
-        await openJoiningRoom(page, TEAM, empty)
+        const jid = empty ? EMPTY : TEAM
+        await openJoiningRoom(page, jid)
         const main = page.getByRole('main')
         await expect(main.getByText('Joining...', { exact: true })).toBeVisible()
         await expect(main.getByRole('button', { name: 'Join room to participate' })).toHaveCount(0)
         await expect(main.getByText(/Cached history up to/)).toHaveCount(0)
         await expect(main.getByText('You are not in this room')).toHaveCount(0)
-        await expect(main.getByRole('textbox')).toHaveCount(0)
-        const joining = await observe(page, TEAM)
+        await expect(main.getByRole('combobox')).toHaveCount(0)
+        const joining = await observe(page, jid)
         expect(joining.isJoining).toBe(true)
         expect(joining.joined).toBe(false)
         if (empty) expect(joining.cachedMessages).toBe(0)
@@ -88,11 +91,11 @@ for (const [label, viewport] of [
         if (info.repeatEachIndex === 0) await page.screenshot({ path: info.outputPath('joining.png') })
 
         await page.evaluate(() => (window as unknown as DemoWindow).__releaseJoin!())
-        await expect.poll(async () => (await observe(page, TEAM)).joined).toBe(true)
-        await expect(main.getByRole('textbox')).toBeVisible()
+        await expect.poll(async () => (await observe(page, jid)).joined).toBe(true)
+        await expect(main.getByRole('combobox')).toBeVisible()
         await expect(main.getByText('Joining...', { exact: true })).toHaveCount(0)
         if (info.repeatEachIndex === 0) await page.screenshot({ path: info.outputPath('joined.png') })
-        await info.attach('join-observations', { body: JSON.stringify({ joining, completed: await observe(page, TEAM) }, null, 2), contentType: 'application/json' })
+        await info.attach('join-observations', { body: JSON.stringify({ joining, completed: await observe(page, jid) }, null, 2), contentType: 'application/json' })
       })
     }
 
@@ -109,13 +112,13 @@ for (const [label, viewport] of [
       const failed = await observe(page, BOARD)
       if (info.repeatEachIndex === 0) await page.screenshot({ path: info.outputPath('retry.png') })
       await retry.click()
-      const password = page.getByRole('textbox', { name: 'Room password' })
+      const password = page.getByLabel('Room password', { exact: true })
       await expect(password).toBeVisible()
       await password.fill('fluux')
       if (info.repeatEachIndex === 0) await page.screenshot({ path: info.outputPath('password.png') })
       await password.press('Enter')
       await expect.poll(async () => (await observe(page, BOARD)).joined).toBe(true)
-      await expect(main.getByRole('textbox')).toBeVisible()
+      await expect(main.getByRole('combobox')).toBeVisible()
       await expect(password).toHaveCount(0)
       await info.attach('retry-observations', { body: JSON.stringify({ failed, completed: await observe(page, BOARD) }, null, 2), contentType: 'application/json' })
     })
