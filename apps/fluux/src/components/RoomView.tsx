@@ -374,6 +374,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
       prev.jid !== activeRoom.jid ||
       prev.nickname !== activeRoom.nickname ||
       prev.joined !== activeRoom.joined ||
+      prev.isJoining !== activeRoom.isJoining ||
       prev.supportsReactions !== activeRoom.supportsReactions ||
       prev.isIrcGateway !== activeRoom.isIrcGateway ||
       prev.occupants !== activeRoom.occupants ||
@@ -704,7 +705,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             <ReactionMentions conversationId={activeRoom.jid} onSee={(id) => roomStore.getState().setTargetMessageId(id)} />
             <EasterEggMentions conversationId={activeRoom.jid} onReplay={(animation, senderName) => roomStore.getState().triggerAnimation(activeRoom.jid, animation, senderName)} />
 
-            {/* Input - show composer if joined, join prompt if not */}
+            {/* Input - show composer if joined, join prompt only when no join is in flight */}
             {activeRoom.joined ? (
               <RoomVoiceControls room={activeRoom} isConnected={isConnected} allowWhisper={!!whisperTarget}>
                 <RoomMessageInput
@@ -741,7 +742,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                   isDarkMode={resolvedMode === 'dark'}
                 />
               </RoomVoiceControls>
-            ) : (
+            ) : !activeRoom.isJoining ? (
               <RoomJoinPrompt
                 onJoin={async () => {
                   // Issue #37: warn before joining a room that would expose the user's real JID.
@@ -755,7 +756,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                   }
                 }}
               />
-            )}
+            ) : null}
           </ConversationTail>
         </ConversationColumn>
         {warningDialog}

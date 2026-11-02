@@ -1038,6 +1038,83 @@ describe('MUC Module', () => {
       consoleErrorSpy.mockRestore()
     })
 
+    // FLM-354 G1: only the current queue owner may release pending UI state.
+    it.each(['newer-queue', 'started-join'] as const)('G1 ignores an old release after %s takes ownership', async transfer => {
+      const room = createMockRoom('room@conference.example.org', { joined: false })
+      mockStores.room.getRoom.mockReturnValue(room)
+      mockEmitSDK.mockImplementation((event, payload) => {
+        if (event === 'room:updated') Object.assign(room, payload.updates)
+      })
+      const releaseOld = muc.queueRoomJoin(room.jid)
+      let releaseNew: (() => void) | undefined
+      if (transfer === 'newer-queue') releaseNew = muc.queueRoomJoin(room.jid)
+      else await muc.joinRoom(room.jid, room.nickname)
+      releaseOld()
+      expect(room.isJoining).toBe(true)
+      if (releaseNew) {
+        releaseNew()
+        expect(room.isJoining).toBe(false)
+      }
+      muc.cleanup()
+    })
+
+    // FLM-269 / FLM-354 F1-F2: joining includes discovery and every queued
+    // room, and a rejected transport send must leave an actionable retry.
+    it('FLM-269 marks an existing room joining before delayed discovery', async () => {
+      const room = createMockRoom('room@conference.example.org', { joined: false })
+      mockStores.room.getRoom.mockReturnValue(room)
+      let release!: (value: unknown) => void
+      mockSendIQ.mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+      const joining = muc.joinRoom(room.jid, room.nickname)
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', { roomJid: room.jid, updates: { isJoining: true } })
+      expect(mockSendStanza).not.toHaveBeenCalled()
+      release(createMockElement('iq', { type: 'result' }))
+      await joining
+    })
+
+    it('FLM-269 marks every queued rejoin before the first discovery resolves', async () => {
+      const rooms = ['one', 'two'].map(name => createMockRoom(`${name}@conference.example.org`, { joined: false }))
+      mockStores.room.getRoom.mockImplementation(jid => rooms.find(room => room.jid === jid))
+      let release!: (value: unknown) => void
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+      mockSendIQ.mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+      const joining = muc.rejoinActiveRooms(rooms)
+      for (const room of rooms) expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', { roomJid: room.jid, updates: { isJoining: true } })
+      expect(mockSendStanza).not.toHaveBeenCalled()
+      release(createMockElement('iq', { type: 'result' }))
+      await joining
+    })
+
+    it.each(['direct', 'autojoin', 'rejoin', 'timeout-retry'] as const)('FLM-269 clears failed sends through %s and permits a later join', async caller => {
+      const room = createMockRoom('room@conference.example.org', { joined: false })
+      mockStores.room.getRoom.mockReturnValue(room)
+      const error = new Error('Socket not available')
+      if (caller === 'timeout-retry') {
+        await muc.joinRoom(room.jid, room.nickname)
+        // A normal occupant arrives while waiting for our self-presence.
+        muc.handle(createMockElement('presence', { from: `${room.jid}/Alice` }, [
+          { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' }, children: [
+            { name: 'item', attrs: { affiliation: 'member', role: 'participant' } },
+          ] },
+        ]))
+      }
+      mockSendStanza.mockRejectedValueOnce(error)
+      if (caller === 'autojoin') await muc.autojoinRoom(room.jid, room.nickname)
+      else if (caller === 'rejoin') await muc.rejoinActiveRooms([room])
+      else if (caller === 'timeout-retry') await vi.runOnlyPendingTimersAsync()
+      else await expect(muc.joinRoom(room.jid, room.nickname)).rejects.toBe(error)
+      await expect(muc.joinResult(room.jid)).rejects.toMatchObject({ text: 'Socket not available' })
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', { roomJid: room.jid, updates: { joined: false, isJoining: false } })
+      expect((muc as unknown as { pendingJoins: Map<string, unknown> }).pendingJoins.size).toBe(0)
+      expect((muc as unknown as { pendingOccupants: Map<string, unknown> }).pendingOccupants.size).toBe(0)
+      const sends = mockSendStanza.mock.calls.length
+      await vi.runOnlyPendingTimersAsync()
+      expect(mockSendStanza).toHaveBeenCalledTimes(sends)
+      await muc.joinRoom(room.jid, room.nickname)
+      muc.confirmSimulatedJoin(room.jid)
+      await expect(muc.joinResult(room.jid)).resolves.toBeUndefined()
+    })
+
     it('sets isJoining=true when joining room', async () => {
       await muc.joinRoom('room@conference.example.org', 'mynick')
 
@@ -1701,12 +1778,10 @@ describe('MUC Module', () => {
         })
       )
 
-      // Check that room:added event includes supportsMAM: true
-      expect(mockEmitSDK).toHaveBeenCalledWith('room:added', {
-        room: expect.objectContaining({
-          jid: 'room@conference.example.org',
-          supportsMAM: true,
-        }),
+      // FLM-269 publishes the room before discovery, then updates its features.
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'room@conference.example.org',
+        updates: expect.objectContaining({ supportsMAM: true }),
       })
     })
 
@@ -1744,12 +1819,10 @@ describe('MUC Module', () => {
         })
       )
 
-      // Check that room:added event includes supportsMAM: false
-      expect(mockEmitSDK).toHaveBeenCalledWith('room:added', {
-        room: expect.objectContaining({
-          jid: 'room@conference.example.org',
-          supportsMAM: false,
-        }),
+      // FLM-269 publishes the room before discovery, then updates its features.
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'room@conference.example.org',
+        updates: expect.objectContaining({ supportsMAM: false }),
       })
     })
 
@@ -1778,11 +1851,9 @@ describe('MUC Module', () => {
       )
 
       // supportsMAM and supportsReactions should be false when detection fails
-      expect(mockEmitSDK).toHaveBeenCalledWith('room:added', {
-        room: expect.objectContaining({
-          supportsMAM: false,
-          supportsReactions: false,
-        }),
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'room@conference.example.org',
+        updates: expect.objectContaining({ supportsMAM: false, supportsReactions: false }),
       })
       warnSpy.mockRestore()
     })
@@ -1841,13 +1912,10 @@ describe('MUC Module', () => {
 
       await muc.joinRoom('quickchat-user-happy-fox-a1b2@conference.example.org', 'mynick', { isQuickChat: true })
 
-      // Check that room:added event includes the proper room name from disco#info
-      expect(mockEmitSDK).toHaveBeenCalledWith('room:added', {
-        room: expect.objectContaining({
-          jid: 'quickchat-user-happy-fox-a1b2@conference.example.org',
-          name: 'Quick Chat: Alice & Bob',
-          isQuickChat: true,
-        }),
+      // Discovery updates the provisional room without replacing its runtime.
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'quickchat-user-happy-fox-a1b2@conference.example.org',
+        updates: expect.objectContaining({ name: 'Quick Chat: Alice & Bob', isQuickChat: true }),
       })
     })
 

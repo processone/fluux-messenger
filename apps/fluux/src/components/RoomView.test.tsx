@@ -759,6 +759,40 @@ describe('RoomView', () => {
       expect(screen.getByText(/rooms.joinToParticipate/)).toBeInTheDocument()
     })
 
+    // FLM-269: reopening an already-joining room must not ask the user to join again.
+    // Keep the same occupants reference: joining may end without an occupant update.
+    it.each([false, true])('hides join instructions while joining, then restores retry (cached: %s)', (cached) => {
+      mockActiveRoom = createRoom({ joined: false, isJoining: false })
+      mockActiveMessages = cached ? [createRoomMessage()] : []
+      const { rerender } = render(<RoomView />)
+      expect(screen.getByText('rooms.joinToParticipate')).toBeInTheDocument()
+      expect(screen.getByText(cached ? 'rooms.cachedHistoryWarning' : 'rooms.notJoinedNoHistory')).toBeInTheDocument()
+
+      mockActiveRoom = { ...mockActiveRoom, isJoining: true }
+      rerender(<RoomView />)
+      expect(screen.getByText('rooms.joining')).toBeInTheDocument()
+      expect(screen.queryByText('rooms.joinToParticipate')).not.toBeInTheDocument()
+      expect(screen.queryByText('rooms.cachedHistoryWarning')).not.toBeInTheDocument()
+      expect(screen.queryByText('rooms.notJoinedNoHistory')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('message-input')).not.toBeInTheDocument()
+      expect(mockJoinRoom).not.toHaveBeenCalled()
+
+      mockActiveRoom = { ...mockActiveRoom, isJoining: false }
+      rerender(<RoomView />)
+      expect(screen.queryByText('rooms.joining')).not.toBeInTheDocument()
+      expect(screen.getByText('rooms.joinToParticipate')).toBeInTheDocument()
+      expect(screen.getByText(cached ? 'rooms.cachedHistoryWarning' : 'rooms.notJoinedNoHistory')).toBeInTheDocument()
+
+      mockActiveRoom = { ...mockActiveRoom, isJoining: true }
+      rerender(<RoomView />)
+      expect(screen.queryByText('rooms.joinToParticipate')).not.toBeInTheDocument()
+      mockActiveRoom = { ...mockActiveRoom, joined: true, isJoining: false }
+      rerender(<RoomView />)
+      expect(screen.queryByText('rooms.joinToParticipate')).not.toBeInTheDocument()
+      expect(screen.queryByText('rooms.joining')).not.toBeInTheDocument()
+      expect(screen.getByTestId('message-input')).toBeInTheDocument()
+    })
+
     it('toasts a localized message when the join fails', async () => {
       const { useToastStore } = await import('@/stores/toastStore')
       useToastStore.setState({ toasts: [] })

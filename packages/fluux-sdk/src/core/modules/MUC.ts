@@ -165,6 +165,9 @@ export class MUC extends BaseModule {
   /** Track pending room joins for timeout handling */
   private pendingJoins = new Map<string, PendingJoin>()
 
+  /** Queue claims are separate from joins that have actually started. */
+  private queuedJoins = new Map<string, symbol>()
+
   /** Track the awaitable outcome of in-flight joins (see joinResult). */
   private joinDeferreds = new Map<string, JoinDeferred>()
 
@@ -564,14 +567,38 @@ export class MUC extends BaseModule {
     // Surface in the exportable XMPP console as an at-a-glance error event
     // (the raw error stanza is already logged, this is the readable summary).
     this.deps.emitSDK('console:event', { message: `Failed to join ${roomJid}: ${summary}`, category: 'error' })
-    this.clearPendingJoin(roomJid) // stops the retry on terminal errors
-    this.pendingOccupants.delete(roomJid)
-    // SDK event only - binding calls store.updateRoom
-    this.deps.emitSDK('room:updated', { roomJid, updates: { joined: false, isJoining: false } })
-    this.settleJoinError(
+    this.clearFailedJoin(
       roomJid,
       new RoomJoinError(roomJid, error?.condition ?? 'undefined-condition', error?.type, error?.text, { passwordSent })
     )
+  }
+
+  /** Release the membership attempt on every terminal failure, including a failed send. */
+  private clearFailedJoin(roomJid: string, error: RoomJoinError): void {
+    this.clearPendingJoin(roomJid)
+    this.pendingOccupants.delete(roomJid)
+    this.deps.emitSDK('room:updated', { roomJid, updates: { joined: false, isJoining: false } })
+    this.settleJoinError(roomJid, error)
+  }
+
+  /**
+   * Mark scheduled membership work and return its owner-scoped release.
+   *
+   * @internal Session orchestration may release an abandoned queue even after
+   * SM resumes. A newer queue claim or an actual join consumes that authority.
+   */
+  queueRoomJoin(roomJid: string): () => void {
+    if (this.deps.stores?.room.getRoom(roomJid)?.joined) return () => {}
+    const owner = Symbol(roomJid)
+    this.queuedJoins.set(roomJid, owner)
+    this.deps.emitSDK('room:updated', { roomJid, updates: { isJoining: true } })
+    return () => {
+      if (this.queuedJoins.get(roomJid) !== owner) return
+      this.queuedJoins.delete(roomJid)
+      if (!this.deps.stores?.room.getRoom(roomJid)?.joined) {
+        this.deps.emitSDK('room:updated', { roomJid, updates: { isJoining: false } })
+      }
+    }
   }
 
   /**
@@ -645,6 +672,10 @@ export class MUC extends BaseModule {
       clearTimeout(pending.timeoutId)
     }
     this.pendingJoins.clear()
+    for (const roomJid of this.queuedJoins.keys()) {
+      this.deps.emitSDK('room:updated', { roomJid, updates: { isJoining: false } })
+    }
+    this.queuedJoins.clear()
     this.pendingOccupants.clear()
     // Reject any unresolved join outcomes so joinResult() awaiters don't hang.
     for (const [roomJid, deferred] of Array.from(this.joinDeferreds.entries())) {
@@ -712,11 +743,7 @@ export class MUC extends BaseModule {
     } else {
       // Max retries reached, give up
       logErr(`Room join timeout: ${roomJid} after ${MAX_JOIN_RETRIES} retries, giving up`)
-      this.pendingJoins.delete(roomJid)
-      this.pendingOccupants.delete(roomJid) // Clear buffered occupants on timeout
-      // SDK event only - binding calls store.updateRoom
-      this.deps.emitSDK('room:updated', { roomJid, updates: { isJoining: false, joined: false } })
-      this.settleJoinError(roomJid, new RoomJoinError(roomJid, 'timeout'))
+      this.clearFailedJoin(roomJid, new RoomJoinError(roomJid, 'timeout'))
     }
   }
 
@@ -800,6 +827,8 @@ export class MUC extends BaseModule {
       return
     }
 
+    // Starting the actual join transfers ownership out of any scheduling queue.
+    this.queuedJoins.delete(roomJid)
     // Register (or reuse, on retry) the awaitable outcome for joinResult().
     this.getOrCreateJoinDeferred(roomJid)
 
@@ -812,6 +841,19 @@ export class MUC extends BaseModule {
     const password = options?.password ?? existingRoom?.password
 
     const isQuickChat = options?.isQuickChat ?? existingRoom?.isQuickChat
+
+    // FLM-269: discovery is part of joining, not an idle bookmarked-room state.
+    // Publish the intent before its first await, including for a newly opened room.
+    if (existingRoom) {
+      this.deps.emitSDK('room:updated', { roomJid, updates: { isJoining: true } })
+    } else {
+      this.deps.emitSDK('room:added', { room: {
+        jid: roomJid, name: getLocalPart(roomJid), nickname,
+        joined: false, isJoining: true, isBookmarked: false,
+        isQuickChat: options?.isQuickChat,
+        occupants: new Map(), typingUsers: new Set(), unreadCount: 0, mentionsCount: 0,
+      } })
+    }
 
     // Query room features to get room name and detect MAM support.
     // Callers that already inspected the room before joining (e.g. the pre-join
@@ -832,52 +874,25 @@ export class MUC extends BaseModule {
     const supportsModeration = roomFeatures ? roomFeatures.supportsModeration : existingRoom?.supportsModeration
     const roomName = roomFeatures?.name || existingRoom?.name || getLocalPart(roomJid)
 
-    if (!existingRoom) {
-      const room: Room = {
-        jid: roomJid,
-        name: roomName,
-        nickname,
-        joined: false,
-        isJoining: true,
-        isBookmarked: false,
-        isQuickChat: options?.isQuickChat,
-        supportsMAM,
-        supportsReactions,
-        supportsHats,
-        isNonAnonymous,
-        isPrivate,
-        isIrcGateway,
-        supportsModeration,
-        occupants: new Map(),
-        unreadCount: 0,
-        mentionsCount: 0,
-        typingUsers: new Set(),
-      }
-      // SDK event only - binding calls store.addRoom
-      this.deps.emitSDK('room:added', { room })
-    } else {
-      const updates: Partial<Room> = {
-        nickname,
-        isJoining: true,
-        supportsMAM,
-        supportsReactions,
-        supportsHats,
-        isNonAnonymous,
-        isPrivate,
-        isIrcGateway,
-        supportsModeration,
-        occupants: new Map() as Map<string, RoomOccupant>,
-        selfOccupant: undefined,
-        typingUsers: new Set() as Set<string>,
-        ...(options?.isQuickChat !== undefined && { isQuickChat: options.isQuickChat }),
-      }
-      // Update room name if we fetched a proper name and it's different from local part
-      if (roomFeatures?.name && existingRoom.name === getLocalPart(roomJid)) {
-        updates.name = roomFeatures.name
-      }
-      // SDK event only - binding calls store.updateRoom
-      this.deps.emitSDK('room:updated', { roomJid, updates })
+    const updates: Partial<Room> = {
+      nickname,
+      isJoining: true,
+      supportsMAM,
+      supportsReactions,
+      supportsHats,
+      isNonAnonymous,
+      isPrivate,
+      isIrcGateway,
+      supportsModeration,
+      occupants: new Map() as Map<string, RoomOccupant>,
+      selfOccupant: undefined,
+      typingUsers: new Set() as Set<string>,
+      ...(options?.isQuickChat !== undefined && { isQuickChat: options.isQuickChat }),
     }
+    if (!existingRoom || (roomFeatures?.name && existingRoom.name === getLocalPart(roomJid))) {
+      updates.name = roomName
+    }
+    this.deps.emitSDK('room:updated', { roomJid, updates })
 
     const xChildren: (Element | undefined)[] = []
 
@@ -916,7 +931,16 @@ export class MUC extends BaseModule {
     )
 
     logInfo(`Joining room: ${roomJid}`)
-    await this.deps.sendStanza(presence)
+    try {
+      await this.deps.sendStanza(presence)
+    } catch (error) {
+      // No timeout is armed when the transport rejects the initial send. The
+      // same cleanup also ends timeout retries and unattended reconnect joins.
+      this.clearFailedJoin(roomJid, error instanceof RoomJoinError ? error : new RoomJoinError(
+        roomJid, 'undefined-condition', undefined, error instanceof Error ? error.message : String(error),
+      ))
+      throw error
+    }
 
     // Start timeout - if no self-presence received within timeout, will retry or give up.
     // Remember the RESOLVED password so a retry re-sends it and the success path
@@ -944,7 +968,8 @@ export class MUC extends BaseModule {
     const room = this.deps.stores?.room.getRoom(roomJid)
     if (!room) return
 
-    // Clear any pending join timeout
+    // Clear any pending queue claim or join timeout.
+    this.queuedJoins.delete(roomJid)
     this.clearPendingJoin(roomJid)
 
     const presence = xml('presence', {
@@ -2182,11 +2207,15 @@ export class MUC extends BaseModule {
     const roomsToRejoin = previouslyJoinedRooms.filter(room => !room.autojoin)
     if (roomsToRejoin.length === 0) return
 
-    for (const room of roomsToRejoin) {
+    // All scheduled rooms are pending, including those behind a slow disco.
+    const queue = roomsToRejoin.map(room => ({ room, release: this.queueRoomJoin(room.jid) }))
+    for (const { room, release } of queue) {
       try {
         await this.joinRoom(room.jid, room.nickname, { password: room.password })
       } catch (err) {
         console.error(`[MUC] Failed to rejoin ${room.jid}:`, err)
+      } finally {
+        release()
       }
     }
   }

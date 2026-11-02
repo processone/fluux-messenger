@@ -203,7 +203,7 @@ export interface RoomEntity {
   nickname: string
   /** Whether we're currently joined to the room */
   joined: boolean
-  /** True while join is in progress */
+  /** True while a join is queued, discovering the room, or awaiting self-presence */
   isJoining?: boolean
   /** Room subject/topic */
   subject?: string

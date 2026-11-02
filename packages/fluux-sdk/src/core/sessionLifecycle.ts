@@ -429,20 +429,33 @@ export class SessionLifecycleEngine {
       (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) ||
       roomsToAutojoin.length > 0
 
+    const queuedAutojoins = new Map<string, () => void>()
     if (hasRoomsToRejoin) {
       // Lift joinRoom()'s skip-guard just before actually rejoining. Doing this
       // here (vs at the top of runFreshSessionSetup) means the previous session's
       // room state stays visible through roster/bookmark fetches, so a socket
       // death in that window doesn't strand the store in "nothing joined".
       this.deps.getStores()?.room.markAllRoomsNotJoined()
+      // FLM-269: autojoins are already queued while active-room rejoins and
+      // their own privacy discovery run. Do not expose them as idle rooms.
+      for (const room of roomsToAutojoin) {
+        queuedAutojoins.set(room.jid, this.deps.muc.queueRoomJoin(room.jid))
+      }
       this.deps.emitSDK('events:voice-requests-cleared', {})
     }
+
+    // MUC owns queue claims: stale chains release only work they still own,
+    // including after an SM resume advances the session generation.
+    const clearQueuedAutojoin = (roomJid: string) => queuedAutojoins.get(roomJid)?.()
 
     if (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) {
       const nonAutojoinRooms = previouslyJoinedRooms.filter(r => !autojoinJids.has(r.jid))
       if (nonAutojoinRooms.length > 0) {
         await this.deps.muc.rejoinActiveRooms(nonAutojoinRooms)
-        if (this.isSessionSuperseded(gen, 'Fresh session aborted after rejoinActiveRooms')) return
+        if (this.isSessionSuperseded(gen, 'Fresh session aborted after rejoinActiveRooms')) {
+          roomsToAutojoin.forEach(room => clearQueuedAutojoin(room.jid))
+          return
+        }
       }
     }
 
@@ -457,10 +470,14 @@ export class SessionLifecycleEngine {
         // joinRoom() so it doesn't re-run disco.
         void (async () => {
           const features = await this.deps.muc.queryRoomFeatures(room.jid).catch(() => null)
-          if (this.isSessionSuperseded(gen, 'Fresh session aborted before autojoin')) return
+          if (this.isSessionSuperseded(gen, 'Fresh session aborted before autojoin')) {
+            clearQueuedAutojoin(room.jid)
+            return
+          }
           const exposesRealJid = features ? (features.isNonAnonymous && !features.isPrivate) : false
           if (exposesRealJid && !this.deps.getStores()?.room.isNonAnonymousRoomAcknowledged(room.jid)) {
             logInfo(`Skipping autojoin of non-anonymous room ${room.jid} (real-JID exposure not acknowledged)`)
+            clearQueuedAutojoin(room.jid)
             return
           }
           await this.deps.muc.autojoinRoom(room.jid, room.nick, {
