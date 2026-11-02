@@ -83,11 +83,11 @@ export function BackupRecoveryDialog({ client, manager, onClose, onRestored }: {
       <h3 className="text-lg font-semibold text-fluux-text">{t('settings.encryption.recoveryTitle')}</h3>
       <p className="text-sm text-fluux-muted">{t(plugin?.isKeyRecoveryNeeded?.() ? 'settings.encryption.recoveryFailedBody' : 'settings.encryption.recoveryBody', { account: accountJid })}</p>
       <div className="flex flex-col gap-2">
-        <button className="px-4 py-2 rounded-lg bg-fluux-brand text-white" disabled={busy} onClick={() => setSource('server')}>{t('settings.encryption.identityChoice.restoreFromServerTitle')}</button>
-        <button className="px-4 py-2 rounded-lg bg-fluux-hover text-fluux-text" disabled={busy} onClick={() => void pickFile()}>{t('settings.encryption.identityChoice.importFromFileTitle')}</button>
+        <button type="button" className="px-4 py-2 rounded-lg bg-fluux-brand text-white" disabled={busy} onClick={() => setSource('server')}>{t('settings.encryption.identityChoice.restoreFromServerTitle')}</button>
+        <button type="button" className="px-4 py-2 rounded-lg bg-fluux-hover text-fluux-text" disabled={busy} onClick={() => void pickFile()}>{t('settings.encryption.identityChoice.importFromFileTitle')}</button>
       </div>
       <BackupRecoveryFailure failure={error ? backupRecoveryError(error, t, true) : null} />
-      <button className="px-4 py-2 rounded-lg bg-fluux-hover text-fluux-text" disabled={busy} onClick={onClose}>{t('common.cancel')}</button>
+      <button type="button" className="px-4 py-2 rounded-lg bg-fluux-hover text-fluux-text" disabled={busy} onClick={onClose}>{t('common.cancel')}</button>
     </div>
   </ModalOverlay>
 }

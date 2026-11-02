@@ -18,7 +18,7 @@ export function createBackupRecoveryFixture() {
   const params = new URLSearchParams(location.search)
   const desync = params.get('recoveryFailure') === 'desync'
   const backupAbsent = params.get('recoveryBackup') === 'absent'
-  const native = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+  const native = platform().nativeOpenpgp
   if (!native) {
     mockWindows('main')
     mockIPC((cmd, args) => cmd.startsWith('openpgp_') ? invoke(cmd, args as Record<string, unknown>) : cmd === 'plugin:share-inbox|list' ? [] : null, { shouldMockEvents: true })
