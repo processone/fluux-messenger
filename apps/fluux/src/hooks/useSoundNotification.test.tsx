@@ -9,6 +9,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 let status = 'online'
 let onConversationMessage: ((conv: unknown, message: unknown) => void) | undefined
 let onConversationRead: ((id: string) => void) | undefined
+let onRoomMessage: ((room: unknown, message: unknown) => void) | undefined
 const oscillators = vi.fn()
 
 vi.mock('@fluux/sdk', () => ({
@@ -16,9 +17,10 @@ vi.mock('@fluux/sdk', () => ({
   useConnectionStatus: () => ({ status }),
 }))
 vi.mock('./useNotificationEvents', () => ({
-  useNotificationEvents: (h: { onConversationMessage?: typeof onConversationMessage; onConversationRead?: typeof onConversationRead }) => {
+  useNotificationEvents: (h: { onConversationMessage?: typeof onConversationMessage; onConversationRead?: typeof onConversationRead; onRoomMessage?: typeof onRoomMessage }) => {
     onConversationMessage = h.onConversationMessage
     onConversationRead = h.onConversationRead
+    onRoomMessage = h.onRoomMessage
   },
 }))
 vi.mock('./useNativePush', () => ({ announcedByPush: () => false }))
@@ -50,6 +52,17 @@ describe('useSoundNotification', () => {
     onConversationMessage?.({}, {})
     onConversationMessage?.({}, {})
     expect(oscillators).toHaveBeenCalledTimes(4) // two tones per chime
+  })
+
+  // Captain's local-audio ownership rule: the existing hook keeps the room-message mute preference.
+  it('does not chime for a room message when message sounds are disabled', () => {
+    renderHook(() => useSoundNotification())
+    act(() => { useSettingsStore.getState().setSoundEnabled(false) })
+    onRoomMessage?.(
+      { jid: 'team@muc.example.com', name: 'Team', nickname: 'me' },
+      { id: 'muted-room-message', type: 'groupchat', from: 'team@muc.example.com/Alice', nick: 'Alice', body: 'Muted room message' },
+    )
+    expect(oscillators).not.toHaveBeenCalled()
   })
 
   it('chimes once for a reconnect burst, after the wait', () => {
