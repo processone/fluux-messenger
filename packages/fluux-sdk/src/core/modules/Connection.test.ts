@@ -5123,7 +5123,7 @@ describe('XMPPClient Connection', () => {
         expect(sendSpy).toHaveBeenCalledWith({ type: 'SM_ENABLED', maxMs: 300_000 })
       })
 
-      it('does not send SM_ENABLED when the server omits max', async () => {
+      it('resets the window to the ten-minute fallback when the server omits max', async () => {
         const actor = getActor()
         const sendSpy = vi.spyOn(actor, 'send')
 
@@ -5135,7 +5135,81 @@ describe('XMPPClient Connection', () => {
         mockXmppClientInstance._emit('online')
         await p
 
-        expect(sendSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'SM_ENABLED' }))
+        expect(sendSpy).toHaveBeenCalledWith({ type: 'SM_ENABLED', maxMs: 600_000 })
+      })
+
+      it('requests the configured duration on every client it creates', async () => {
+        const configured = new XMPPClient({ debug: false, streamManagementMaxSeconds: 86_400 })
+        bindStoresForTesting(configured, mockStores)
+        const p = configured.connect({
+          jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+        })
+        await vi.advanceTimersByTimeAsync(10)
+        mockXmppClientInstance._emit('online')
+        await p
+        expect((mockXmppClientInstance.streamManagement as { preferredMaximum?: number }).preferredMaximum).toBe(86_400)
+      })
+
+      it('requests ten minutes by default and rejects an invalid duration before connecting', async () => {
+        const p = xmppClient.connect({
+          jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+        })
+        mockXmppClientInstance._emit('online')
+        await p
+        expect((mockXmppClientInstance.streamManagement as { preferredMaximum?: number }).preferredMaximum).toBe(600)
+        expect(() => new XMPPClient({ debug: false, streamManagementMaxSeconds: 0 })).toThrow(/streamManagementMaxSeconds/)
+      })
+
+      it('keeps an explicitly restored 24-hour grant through resumption', async () => {
+        const dayClient = new XMPPClient({ debug: false, streamManagementMaxSeconds: 86_400 })
+        bindStoresForTesting(dayClient, mockStores)
+        const sendSpy = vi.spyOn((dayClient.connection as any).getConnectionActor(), 'send')
+        const now = Date.now()
+        const p = dayClient.connect({
+          jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+          smState: { id: 'sm-day', inbound: 3, outbound: 2, timestamp: now - 3600_000, windowMs: 86_400_000, interruptedAt: now - 3600_000 },
+        })
+        await vi.advanceTimersByTimeAsync(10)
+        ;(mockXmppClientInstance as any).streamManagement = { id: 'sm-day', inbound: 3, outbound: 2, enabled: true, on: vi.fn() }
+        mockXmppClientInstance._emit('nonza', createMockElement('resumed', { xmlns: 'urn:xmpp:sm:3', previd: 'sm-day', h: '2' }))
+        await p
+        expect(sendSpy).toHaveBeenCalledWith({ type: 'SM_ENABLED', maxMs: 86_400_000 })
+        expect(sendSpy).not.toHaveBeenCalledWith({ type: 'SM_ENABLED', maxMs: 600_000 })
+        expect(dayClient.getStreamManagementState()).toMatchObject({ id: 'sm-day', windowMs: 86_400_000 })
+      })
+
+      it('does not hydrate a snapshot whose window ran out before the transport attempt (R6)', async () => {
+        const connectPromise = xmppClient.connect({
+          jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+        })
+        mockXmppClientInstance._emit('online')
+        await connectPromise
+
+        const connection = (xmppClient as unknown as { connection: { hydrateStreamManagement(s?: unknown): void } }).connection
+        const now = Date.now()
+        const snapshot = { id: 'sm-late', inbound: 3, outbound: 2, timestamp: now - 900, windowMs: 1000, interruptedAt: now - 900 }
+        const sm = mockXmppClientInstance.streamManagement as { id?: string }
+
+        connection.hydrateStreamManagement(snapshot)
+        expect(sm.id).toBe('sm-late')
+
+        sm.id = 'untouched'
+        await vi.advanceTimersByTimeAsync(200) // discovery or a failed attempt ate the rest of the window
+        connection.hydrateStreamManagement(snapshot)
+        expect(sm.id).toBe('untouched')
+      })
+
+      it('records the window of an inline Bind 2 enable from the live stream', async () => {
+        const sendSpy = vi.spyOn(getActor(), 'send')
+
+        const p = xmppClient.connect({
+          jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+        })
+        ;(mockXmppClientInstance as any).streamManagement = { id: 'sm-inline', inbound: 0, enabled: true, max: '300' }
+        mockXmppClientInstance._emit('online')
+        await p
+
+        expect(sendSpy).toHaveBeenCalledWith({ type: 'SM_ENABLED', maxMs: 300_000 })
       })
     })
 

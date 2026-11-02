@@ -1,6 +1,6 @@
 import type { DiscoveryDiagnostics } from '../../utils/websocketDiscovery'
 import { installOrderTolerantErrors } from '../../utils/xmppError'
-import type { DiscoveryFailure } from '../types/connection'
+import type { DiscoveryFailure, SmResumptionState } from '../types/connection'
 import { client, Client, Element, xml } from '@xmpp/client'
 import { getMechanism } from '@xmpp/client/lib/createOnAuthenticate.js'
 import { createActor } from 'xstate'
@@ -59,6 +59,7 @@ import {
   fallbackWebSocketUrlFor,
 } from './serverResolution'
 import { SmPersistence } from './smPersistence'
+import { resolveSmRequestSeconds } from './smResumptionPolicy'
 import { ClientStateIndication } from './clientStateIndication'
 import { fetchFastToken, saveFastToken, deleteFastToken } from '../fastTokenStorage'
 import { invalidateFastTokenOnServer } from '../fastTokenInvalidation'
@@ -226,6 +227,10 @@ export class Connection extends BaseModule {
 
   // SM state persistence (cache + storage)
   private smPersistence: SmPersistence
+  /** Stream Management resumption duration requested from the server (seconds). */
+  private smRequestSeconds: number
+  /** Id of the session whose `max` was last recorded, so inline Bind 2 enables are recorded once. */
+  private smBegunId: string | null = null
 
   // SM patches state (ack debounce timer + original send reference)
   // See smPatches.ts for implementation details
@@ -349,7 +354,9 @@ export class Connection extends BaseModule {
     })
 
     // Create SM persistence helper
+    this.smRequestSeconds = resolveSmRequestSeconds(deps.streamManagementMaxSeconds)
     this.smPersistence = new SmPersistence({
+      requestSeconds: this.smRequestSeconds,
       storageAdapter: deps.storageAdapter,
       getJoinedRooms: () => (this.stores.room.joinedRooms() ?? []).map(room => ({
         jid: room.jid,
@@ -742,6 +749,16 @@ export class Connection extends BaseModule {
       }
     }
 
+    // Validate against the window (explicit state included) and seed the cache so
+    // a resumption keeps the negotiated window; an expired record starts fresh.
+    const restoredSmState = effectiveSmState ? this.smPersistence.restore(effectiveSmState) : null
+    if (restoredSmState) {
+      this.smPersistence.adopt(restoredSmState)
+      this.syncSmWindow()
+    } else if (effectiveSmState) {
+      this.stores.console.addEvent('Provided SM state has expired, starting a fresh session', 'sm')
+    }
+
     const discoveryContext: { failure: DiscoveryFailure | null } = { failure: null }
     const onFallback = (failure: DiscoveryFailure | null) => { discoveryContext.failure = failure }
 
@@ -801,7 +818,7 @@ export class Connection extends BaseModule {
       this.credentials = { jid, password, server: resolvedServer, resource, lang, disableSmKeepalive, rememberSession }
       this.installXmppClient({ jid, password, server: resolvedServer, resource, lang, rememberSession })
       attemptAuthentication = this.xmpp ? this.authentications.get(this.xmpp) : undefined
-      this.hydrateStreamManagement(effectiveSmState)
+      this.hydrateStreamManagement(restoredSmState ?? undefined)
       this.setupHandlers()
 
       await this.runTimedConnectionAttempt(
@@ -1185,7 +1202,7 @@ export class Connection extends BaseModule {
    * (e.g., after socket death during sleep). The cache is updated
    * whenever SM is enabled or resumed.
    */
-  getStreamManagementState(): { id: string; inbound: number; outbound: number } | null {
+  getStreamManagementState(): SmResumptionState | null {
     return this.smPersistence.getState(this.xmpp)
   }
 
@@ -1443,6 +1460,9 @@ export class Connection extends BaseModule {
           ['mode', probeMode],
         ])
       }
+      // The stream answered: any earlier interruption is over.
+      this.smPersistence.clearInterruption()
+      this.smPersistence.getState(this.xmpp)
       return 'healthy'
     } catch (err) {
       if (this.xmpp && this.xmpp !== clientAtStart) return 'stale'
@@ -1616,6 +1636,7 @@ export class Connection extends BaseModule {
     // Note: the state machine tracks smResumeViable — attemptReconnect reads it
     // from context to decide whether to hydrate SM state or start fresh.
     this.smPersistence.getState(this.xmpp)
+    this.smPersistence.markInterrupted()
     this.cleanupClient()
 
     if (immediateReconnect) {
@@ -1684,6 +1705,8 @@ export class Connection extends BaseModule {
         break
 
       case 'sleeping':
+        this.smPersistence.getState(this.xmpp)
+        this.smPersistence.markInterrupted()
         this.sendMachineEvent({ type: 'SLEEP' }, 'notifySystemState:sleeping')
         this.stores.console.addEvent('System state: sleeping', 'connection')
         break
@@ -1731,6 +1754,11 @@ export class Connection extends BaseModule {
   private async handleAwakeImpl(sleepDurationMs: number | undefined, wake: WakeKind): Promise<void> {
     const sleepSec = sleepDurationMs != null ? Math.round(sleepDurationMs / 1000) : null
     logInfo(`System state: ${wake.label}${sleepSec != null ? ` (sleep: ${sleepSec}s)` : ''}`)
+
+    // The window started when the system went to sleep, even if nothing noticed then.
+    if (sleepDurationMs != null && sleepDurationMs > 0) {
+      this.smPersistence.markInterrupted(Date.now() - sleepDurationMs)
+    }
 
     if (wake.networkMaySettle) {
       this.lastWakeTimestamp = Date.now()
@@ -2027,12 +2055,12 @@ export class Connection extends BaseModule {
 
     this.disableBuiltInReconnect(xmppClient)
 
-    // Request 10-minute SM resumption timeout (XEP-0198)
+    // Request the configured SM resumption timeout (XEP-0198).
     // The server may grant less, but this allows longer session survival
     // during brief disconnections (e.g., network switches, laptop sleep)
     const sm = xmppClient.streamManagement
     if (sm) {
-      sm.preferredMaximum = 600 // 10 minutes in seconds
+      sm.preferredMaximum = this.smRequestSeconds
 
       // Optionally disable xmpp.js's built-in SM keepalive interval
       // when the app implements its own keepalive (e.g., native timer)
@@ -2135,12 +2163,42 @@ export class Connection extends BaseModule {
    * Hydrate Stream Management state for session resumption (XEP-0198).
    * Must be called after creating the client but before starting.
    */
-  private hydrateStreamManagement(smState?: { id: string; inbound: number; outbound: number }): void {
+  /**
+   * A new SM session was enabled (traditional or inline): record the window the
+   * server granted, capped at our request, and give it to the state machine.
+   * A missing or malformed `max` still resets the previous grant.
+   */
+  private recordSmEnabled(id: string, advertisedMax: unknown): void {
+    this.smBegunId = id
+    this.smPersistence.beginSession(id, 0, advertisedMax)
+    this.syncSmWindow()
+    if (this.credentials?.jid) {
+      void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
+    }
+  }
+
+  /** Give the state machine the window of the session in the cache. */
+  private syncSmWindow(): void {
+    const windowMs = this.smPersistence.getWindowMs()
+    if (windowMs != null) {
+      this.sendMachineEvent({ type: 'SM_ENABLED', maxMs: windowMs }, 'sm-window')
+    }
+  }
+
+  private hydrateStreamManagement(requested?: SmResumptionState): void {
     // Reset resume tracking - we're starting a new resume attempt
     // This ensures 'fail' events during resume are properly logged as resume failures
     this.smResumeCompleted = false
 
-    if (!smState || !this.xmpp?.streamManagement) return
+    if (!requested || !this.xmpp?.streamManagement) return
+    // Discovery, proxy fallback and earlier failed attempts can outlast the window
+    // after the snapshot was taken: check it again for every transport attempt.
+    const smState = this.smPersistence.restore(requested)
+    if (!smState) {
+      this.stores.console.addEvent('SM window ran out before this attempt, starting a fresh session', 'sm')
+      this.smPersistence.clearCache()
+      return
+    }
     const sm = this.xmpp.streamManagement
     sm.id = smState.id
     sm.inbound = smState.inbound
@@ -2213,6 +2271,7 @@ export class Connection extends BaseModule {
           logInfo(`SM session resumed via SASL2 inline (id: ${previd.slice(0, 8)}..., h: ${inbound}, out: ${outbound})`)
           this.smResumeCompleted = true
           this.smPersistence.updateCache(previd, inbound, outbound)
+          this.syncSmWindow()
           if (this.credentials?.jid) {
             void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
           }
@@ -2241,32 +2300,12 @@ export class Connection extends BaseModule {
         const smMax = nonza.attrs.max != null ? `${nonza.attrs.max}s` : 'unknown'
         this.stores.console.addEvent(`Stream Management enabled (id: ${smId})`, 'sm')
         logInfo(`SM enabled (id: ${smId}, server max: ${smMax})`)
-        // Source the SM resume window from the server (XEP-0198 §3 <enabled max>,
-        // seconds). The machine guards compare sleep duration against this window
-        // instead of the hardcoded SM_SESSION_TIMEOUT_MS, which over-estimates
-        // (ejabberd often grants 300s). Only override when the server sends max;
-        // otherwise the machine keeps its SM_SESSION_TIMEOUT_MS default.
-        if (nonza.attrs.max != null) {
-          const maxSec = Number(nonza.attrs.max)
-          if (Number.isFinite(maxSec) && maxSec > 0) {
-            this.sendMachineEvent(
-              { type: 'SM_ENABLED', maxMs: maxSec * 1000 },
-              'sm-enabled:server-max'
-            )
-          }
-        }
         // New session means no pending resume, so any future 'fail' events are real failures
         this.smResumeCompleted = true
         // Cache SM state for reconnection (survives socket death).
         // Read from the live SM object since xmpp.js has already processed the attrs.
-        const smObj = this.xmpp?.streamManagement
-        if (smObj?.id) {
-          // New session: outbound starts at 0 (xmpp.js resets on <enabled/>).
-          this.smPersistence.updateCache(smObj.id, smObj.inbound || 0, 0)
-          if (this.credentials?.jid) {
-            void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
-          }
-        }
+        // xmpp.js may not have applied the id to the live object yet; use the element.
+        if (nonza.attrs.id) this.recordSmEnabled(String(nonza.attrs.id), nonza.attrs.max)
       } else if (nonza.is('resumed', 'urn:xmpp:sm:3')) {
         // SM session successfully resumed
         const previd = nonza.attrs.previd as string
@@ -2282,6 +2321,7 @@ export class Connection extends BaseModule {
 
         // Update cached SM state (survives socket death for next reconnection)
         this.smPersistence.updateCache(previd, inbound, outbound)
+        this.syncSmWindow()
         if (this.credentials?.jid) {
           void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
         }
@@ -2309,6 +2349,17 @@ export class Connection extends BaseModule {
     // Therefore, whenever 'online' fires, it's a new session.
     this.xmpp.on('online', () => {
       logInfo(`Connection handshake complete: online (resolved=${resolved})`)
+      // SM enabled inline (SASL2 Bind 2) produces no top-level <enabled/>. xmpp.js emits
+      // 'online' before it hands the <bound/> children to the SM module, so the id and max
+      // reach the live object only after this handler returns: read them one microtask later,
+      // before anything awaiting the connection can run.
+      const xmppForInline = this.xmpp
+      queueMicrotask(() => {
+        const smInline = xmppForInline?.streamManagement
+        if (this.xmpp === xmppForInline && smInline?.enabled && smInline.id && smInline.id !== this.smBegunId) {
+          this.recordSmEnabled(smInline.id, (smInline as { max?: unknown }).max)
+        }
+      })
       handleResult(false)
     })
 
@@ -2721,6 +2772,7 @@ export class Connection extends BaseModule {
 
         // Capture SM state into cache BEFORE nulling the client reference.
         this.smPersistence.getState(this.xmpp)
+        this.smPersistence.markInterrupted()
 
         // Null the client reference synchronously to prevent race conditions:
         // - verifyConnection() may be awaiting and will see xmpp=null, returning false fast

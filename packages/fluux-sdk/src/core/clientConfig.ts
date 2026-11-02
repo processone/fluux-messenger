@@ -58,6 +58,13 @@ export interface XMPPClientConfig {
    */
   storageAdapter?: StorageAdapter
   /**
+   * How long to ask the server to keep a dropped XEP-0198 session resumable, in
+   * seconds (positive integer, default 600). The server may grant less; a
+   * missing or malformed grant is treated as 600. The SDK does not choose this
+   * per platform — the app does.
+   */
+  streamManagementMaxSeconds?: number
+  /**
    * Storage for XEP-0484 FAST authentication tokens.
    *
    * Browsers default to localStorage. Headless runtimes default to memory. To

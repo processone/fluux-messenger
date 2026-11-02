@@ -25,6 +25,7 @@ import { getReconnectIntent } from './utils/reconnectIntent'
 import { captureWebLoginPrefill } from './utils/loginPrefillSources'
 import { useLoginPrefillStore } from './stores/loginPrefillStore'
 import { platform } from './platform'
+import { streamManagementMaxSeconds } from './platform/capabilities'
 import { detectWindowChrome } from './platform/windowChrome'
 import { installMobileViewport } from './utils/mobileViewport'
 import { installKeychainFastTokens } from './utils/keychainFastTokenStorage'
@@ -175,6 +176,7 @@ const renderApp = () => ReactDOM.createRoot(document.getElementById('root')!).re
       <XMPPProvider
         debug={import.meta.env.DEV}
         proxyAdapter={proxyAdapter}
+        streamManagementMaxSeconds={streamManagementMaxSeconds(platform())}
         shouldAutoReconnect={() => getReconnectIntent() === 'active'}
         e2eePlugins={E2EE_PLUGIN_IDS}
       >

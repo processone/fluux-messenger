@@ -113,6 +113,8 @@ import { Admin } from './modules/Admin'
 import { Profile } from './modules/Profile'
 import { Discovery } from './modules/Discovery'
 import { Connection } from './modules/Connection'
+import type { SmResumptionState } from './types/connection'
+import { resolveSmRequestSeconds } from './modules/smResumptionPolicy'
 import { PubSub } from './modules/PubSub'
 import { Blocking } from './modules/Blocking'
 import { Ignore } from './modules/Ignore'
@@ -263,6 +265,7 @@ export class XMPPClient {
   private shouldAutoReconnect?: () => boolean
   private e2eeStorageBackend: StorageBackend = new InMemoryStorageBackend()
   private proxyAdapter?: ProxyAdapter
+  private streamManagementMaxSeconds?: number
   private privacyOptions?: PrivacyOptions
   private readonly e2eePlugins?: readonly string[]
   private stateSnapshot?: StateSnapshot
@@ -520,6 +523,8 @@ export class XMPPClient {
     this.userAgentId = config.userAgentId
     this.shouldAutoReconnect = config.shouldAutoReconnect
     this.proxyAdapter = config.proxyAdapter
+    this.streamManagementMaxSeconds = config.streamManagementMaxSeconds
+    resolveSmRequestSeconds(this.streamManagementMaxSeconds) // reject invalid values before connecting
     // Store privacy options for avatar fetching behavior
     this.privacyOptions = config.privacyOptions
     this.e2eePlugins = config.e2eePlugins
@@ -730,6 +735,7 @@ export class XMPPClient {
       fastTokenStorage: this.fastTokenStorage,
       userAgentId: this.userAgentId,
       proxyAdapter: this.proxyAdapter,
+      streamManagementMaxSeconds: this.streamManagementMaxSeconds,
       registerMAMCollector: (queryId: string, collector: (stanza: Element) => void) => this.registerMAMCollector(queryId, collector),
       privacyOptions: this.privacyOptions,
       getE2EEManager: () => this.e2ee,
@@ -1680,7 +1686,7 @@ export class XMPPClient {
    * await client.connect({ ...options, smState: stored ? JSON.parse(stored) : undefined })
    * ```
    */
-  getStreamManagementState(): { id: string; inbound: number; outbound: number } | null {
+  getStreamManagementState(): SmResumptionState | null {
     return this.connection.getStreamManagementState()
   }
 

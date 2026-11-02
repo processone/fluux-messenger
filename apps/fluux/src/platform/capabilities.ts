@@ -305,3 +305,18 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     followsSystemTextSize: ios,
   }
 }
+
+/** Stream Management resumption request for the standard window: ten minutes. */
+const SM_RESUME_STANDARD_SECONDS = 600
+/** Provisional native-iOS request: suspended apps may be away overnight. */
+const SM_RESUME_NATIVE_IOS_SECONDS = 24 * 60 * 60
+
+/**
+ * How long to ask the server to keep a dropped XMPP session resumable (XEP-0198).
+ *
+ * Only the native iOS/iPadOS app asks for a day; iOS browsers, Android and
+ * desktop keep ten minutes. Read from the platform record, not the user agent.
+ */
+export function streamManagementMaxSeconds(host: Pick<PlatformCapabilities, 'shell' | 'os'>): number {
+  return host.shell === 'mobile' && host.os === 'ios' ? SM_RESUME_NATIVE_IOS_SECONDS : SM_RESUME_STANDARD_SECONDS
+}

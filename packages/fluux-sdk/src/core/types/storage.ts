@@ -46,9 +46,13 @@ export interface SessionState {
    * the empty in-memory queue after page reload.
    */
   smOutbound: number
+  /** Resumption window (ms) negotiated for this session. Absent in older records (ten minutes). */
+  smWindowMs?: number
+  /** When the session was interrupted (ms since epoch); the window runs from here when set. */
+  smInterruptedAt?: number
   /** XMPP resource for this session */
   resource: string
-  /** Timestamp when this state was saved */
+  /** When live session state was last captured (ms since epoch); not renewed by saving */
   timestamp: number
   /**
    * Rooms that were joined when session was saved.

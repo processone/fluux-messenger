@@ -63,6 +63,8 @@ export interface XMPPProviderProps {
    * ```
    */
   proxyAdapter?: ProxyAdapter
+  /** Stream Management resumption duration to request, in seconds. See {@link XMPPClientConfig.streamManagementMaxSeconds}. */
+  streamManagementMaxSeconds?: number
   /**
    * Pre-created XMPPClient instance to use instead of creating a new one.
    *
@@ -152,6 +154,7 @@ export function XMPPProvider({
   debug = false,
   storageAdapter = sessionStorageAdapter,
   proxyAdapter,
+  streamManagementMaxSeconds,
   client,
   shouldAutoReconnect,
   e2eePlugins,
@@ -167,7 +170,7 @@ export function XMPPProvider({
     if (client) {
       clientRef.current = client
     } else {
-      const config: XMPPClientConfig = { debug, storageAdapter, proxyAdapter, shouldAutoReconnect, e2eePlugins }
+      const config: XMPPClientConfig = { debug, storageAdapter, proxyAdapter, streamManagementMaxSeconds, shouldAutoReconnect, e2eePlugins }
       clientRef.current = new XMPPClient(config)
     }
   }
