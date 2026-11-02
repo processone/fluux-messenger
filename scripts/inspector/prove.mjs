@@ -46,7 +46,8 @@ const run = spawnSync('python3', ['-B', fileURLToPath(new URL('./test_reader.py'
 })
 process.stderr.write(run.stderr || '')
 assert.equal(run.error, undefined)
-assert.equal(run.status, 0)
 const transport = JSON.parse(run.stdout)
 console.log(JSON.stringify({ boundary: 'disposable WebKit + actual host reader on local sockets; not an iPhone',
   webkit: version, browserClosed: true, samples, samplerRemovedAndReattached: true, transport }, null, 2))
+// Keep completed failed-case observations as well as their nonzero exit status.
+assert.equal(run.status, 0)

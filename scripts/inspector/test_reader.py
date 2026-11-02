@@ -7,6 +7,7 @@ webinspectord, including unwanted app metadata and asynchronous console events.
 import contextlib
 import copy
 import io
+from inspect import signature
 import json
 import os
 import plistlib
@@ -215,7 +216,10 @@ class Peer:
 
 
 class ReaderTests(unittest.TestCase):
-    def exercise(self, mode, *, duration=.65, budget=None, cleanup=.15):
+    # Positive lifecycle checks use the actual API budget, not a shorter fixture
+    # deadline that can legitimately leave responsive XML cleanup unconfirmed.
+    def exercise(self, mode, *, duration=.65, budget=None,
+                 cleanup=signature(Reader.run).parameters["cleanup_timeout"].default):
         client, server = socket.socketpair()
         if mode == "blocked-send":
             client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024)
@@ -517,6 +521,7 @@ class ReaderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     outcome = unittest.main(exit=False, verbosity=2)
+    print(json.dumps({"tests": outcome.result.testsRun,
+                      "success": outcome.result.wasSuccessful(), "cases": PROOF}))
     if not outcome.result.wasSuccessful():
         sys.exit(1)
-    print(json.dumps({"tests": outcome.result.testsRun, "cases": PROOF}))
