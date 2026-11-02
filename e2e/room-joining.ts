@@ -3,7 +3,7 @@
  * Exercise the actual app and MUC.joinRoom; only the demo service response is held.
  * Restored selection is a fixture, not proof of native iOS background/resume.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page, type TestInfo } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
@@ -52,6 +52,14 @@ async function openJoiningRoom(page: Page, jid: string) {
   }, { jid, team: TEAM })
 }
 
+// Capture is opt-in, like connection-step.ts: browser screenshots are evidence,
+// not part of the repeated join invariant. All UI/state assertions still run.
+async function shot(page: Page, info: TestInfo, name: string) {
+  if (process.env.ROOM_JOINING_SHOTS === '1' && info.repeatEachIndex === 0) {
+    await page.screenshot({ path: info.outputPath(name) })
+  }
+}
+
 async function observe(page: Page, jid: string) {
   return page.evaluate(jid => {
     const w = window as unknown as DemoWindow
@@ -88,13 +96,13 @@ for (const [label, viewport] of [
         expect(joining.joined).toBe(false)
         if (empty) expect(joining.cachedMessages).toBe(0)
         else expect(joining.cachedMessages).toBeGreaterThan(0)
-        if (info.repeatEachIndex === 0) await page.screenshot({ path: info.outputPath('joining.png') })
+        await shot(page, info, 'joining.png')
 
         await page.evaluate(() => (window as unknown as DemoWindow).__releaseJoin!())
         await expect.poll(async () => (await observe(page, jid)).joined).toBe(true)
         await expect(main.getByRole('combobox')).toBeVisible()
         await expect(main.getByText('Joining...', { exact: true })).toHaveCount(0)
-        if (info.repeatEachIndex === 0) await page.screenshot({ path: info.outputPath('joined.png') })
+        await shot(page, info, 'joined.png')
         await info.attach('join-observations', { body: JSON.stringify({ joining, completed: await observe(page, jid) }, null, 2), contentType: 'application/json' })
       })
     }
@@ -110,12 +118,12 @@ for (const [label, viewport] of [
       await expect(main.getByText('Joining...', { exact: true })).toHaveCount(0)
       await expect(main.getByText(/Cached history up to/)).toBeVisible()
       const failed = await observe(page, BOARD)
-      if (info.repeatEachIndex === 0) await page.screenshot({ path: info.outputPath('retry.png') })
+      await shot(page, info, 'retry.png')
       await retry.click()
       const password = page.getByLabel('Password', { exact: true })
       await expect(password).toBeVisible()
       await password.fill('fluux')
-      if (info.repeatEachIndex === 0) await page.screenshot({ path: info.outputPath('password.png') })
+      await shot(page, info, 'password.png')
       await password.press('Enter')
       await expect.poll(async () => (await observe(page, BOARD)).joined).toBe(true)
       await expect(main.getByRole('combobox')).toBeVisible()
