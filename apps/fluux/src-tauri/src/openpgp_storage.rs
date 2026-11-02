@@ -243,43 +243,92 @@ impl KeyStorage {
         }
     }
 
-    /// Cheap presence check — returns `true` iff an encrypted key file
-    /// exists for `jid`. Used by the boot-time prewarm path to decide
+    /// Cheap presence check for an encrypted key file or its restore backup.
+    /// Used by the boot-time prewarm path to decide
     /// whether it's safe to call `ensure_key` without accidentally
     /// generating a fresh key for a user who never opted into E2EE.
     pub fn has_persisted_key(&self, jid: &str) -> bool {
         match self.key_file_path(jid) {
-            Ok(path) => path.exists(),
+            Ok(path) => path.exists() || pre_restore_path(&path).exists(),
             Err(_) => false,
         }
     }
 
     /// Load the persisted key for `jid`, if one exists.
     ///
-    /// Returns `Ok(None)` when there is no stored key file for this
-    /// account — the caller should generate a fresh key. Returns `Err`
-    /// when the file exists but can't be read or decrypted, which is a
-    /// genuine corruption or migration situation the caller must not
-    /// silently paper over.
+    /// Returns `Ok(None)` only when neither the key file nor its restore backup
+    /// exists. A failed load attempts [`Self::recover_pre_restore`], except for
+    /// permission and other I/O errors on the current file. Unresolved failures
+    /// return `Err`; the caller must not silently generate a fresh key.
     pub fn load(&self, jid: &str) -> Result<Option<PersistedKey>> {
         let key_path = self.key_file_path(jid)?;
-        if !key_path.exists() {
+        if !key_path.exists() && !pre_restore_path(&key_path).exists() {
             return Ok(None);
         }
         let stored = self.read_passphrase(jid)?;
-        let armored =
-            fs::read(&key_path).with_context(|| format!("read {}", key_path.display()))?;
-        let encrypted = Cert::from_bytes(&armored)
-            .with_context(|| format!("parse persisted TSK at {}", key_path.display()))?;
-        unlock_persisted_key(
-            jid,
-            encrypted,
-            stored,
-            || self.read_recovery_passphrases(jid),
-            || self.read_legacy_passphrase(jid),
-            |passphrase| self.adopt_legacy_passphrase(jid, passphrase),
-        )
-        .map(Some)
+        let armored = match fs::read(&key_path) {
+            Ok(bytes) => Ok(bytes),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Err(error),
+            Err(error) => {
+                return Err(anyhow!(error).context(format!("read {}", key_path.display())))
+            }
+        };
+        let loaded = (|| {
+            let armored = armored.with_context(|| format!("read {}", key_path.display()))?;
+            let encrypted = Cert::from_bytes(&armored)
+                .with_context(|| format!("parse persisted TSK at {}", key_path.display()))?;
+            unlock_persisted_key(
+                jid,
+                encrypted,
+                stored.clone(),
+                || self.read_recovery_passphrases(jid),
+                || self.read_legacy_passphrase(jid),
+                |passphrase| self.adopt_legacy_passphrase(jid, passphrase),
+            )
+        })();
+        match loaded {
+            Ok(key) => Ok(Some(key)),
+            Err(failure) => self
+                .recover_pre_restore(&key_path, stored)
+                .with_context(|| format!("recover interrupted restore after: {failure:#}"))?
+                .map_or_else(|| Err(failure), |key| Ok(Some(key))),
+        }
+    }
+
+    /// A restore can stop after replacing the file but before promoting its secret.
+    /// Only a saved key that unlocks with the live secret may replace that file.
+    fn recover_pre_restore(
+        &self,
+        key_path: &Path,
+        stored: Option<(Vec<u8>, PassphraseBacking)>,
+    ) -> Result<Option<PersistedKey>> {
+        let Some((passphrase, backing)) = stored else {
+            return Ok(None);
+        };
+        let backup_path = pre_restore_path(key_path);
+        let bytes = match fs::read(&backup_path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(anyhow!(error).context("read the saved previous key")),
+        };
+        let cert = match Cert::from_bytes(&bytes).and_then(|cert| {
+            // Recovery must prove possession of the live secret before replacing a key.
+            anyhow::ensure!(
+                cert.keys()
+                    .secret()
+                    .any(|key| key.key().secret().is_encrypted()),
+                "saved previous key has no encrypted secret material"
+            );
+            decrypt_cert_secrets(cert, &Password::from(passphrase))
+        }) {
+            Ok(cert) => cert,
+            Err(_) => return Ok(None),
+        };
+        atomic_write(key_path, &bytes).context("put the saved previous key back")?;
+        #[cfg(unix)]
+        restrict_permissions(key_path);
+        let _ = remove_durably(&backup_path);
+        Ok(Some(PersistedKey { cert, backing }))
     }
 
     // One selector keeps injected and production stores identical in all six paths.
@@ -2799,5 +2848,157 @@ mod tests {
         assert!(raw.get(&keyring_account(jid)).unwrap().is_none());
         assert!(storage.load(jid).unwrap().is_none());
         fs::remove_dir_all(&storage.base_dir).unwrap();
+    }
+    #[cfg(unix)]
+    #[test]
+    fn interrupted_second_restore_recovers_on_restart() {
+        use crate::credentials::SecretStore;
+        use std::sync::Arc;
+        struct Interrupted(crate::macos_secrets::Secrets<HookedMemory>);
+        impl SecretStore for Interrupted {
+            fn get(&self, a: &str) -> std::result::Result<Option<String>, String> {
+                self.0.get(a)
+            }
+            fn set(&self, a: &str, s: &str) -> std::result::Result<(), String> {
+                self.0.set(a, s)
+            }
+            fn delete(&self, a: &str) -> std::result::Result<(), String> {
+                self.0.delete(a)
+            }
+            fn fresh_write(&self, a: &str, s: &str) -> std::result::Result<(), String> {
+                self.0.fresh_write(a, s)
+            }
+            fn restored(&self, a: &str) -> std::result::Result<bool, String> {
+                self.0.restored(a)
+            }
+            fn commit_fresh(&self, _: &str) -> std::result::Result<(), String> {
+                panic!("simulated process exit before secret promotion")
+            }
+        }
+        let raw = HookedMemory::default();
+        let dir = fresh_tmp_dir();
+        let jid = "alice@example.com";
+        let first = generate_cert(jid);
+        hooked_storage(&raw, &dir).save_fresh(jid, &first).unwrap();
+        let storage = KeyStorage::for_testing_with_store(
+            dir.clone(),
+            Arc::new(Interrupted(crate::macos_secrets::Secrets::new(raw.clone()))),
+        );
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+            || storage.save_fresh(jid, &generate_cert(jid))
+        ))
+        .is_err());
+        // A fresh instance represents restart. The previous key must remain usable.
+        let restarted = hooked_storage(&raw, &dir);
+        assert_eq!(
+            restarted.load(jid).unwrap().unwrap().cert.fingerprint(),
+            first.fingerprint()
+        );
+        assert_eq!(
+            hooked_storage(&raw, &dir)
+                .load(jid)
+                .unwrap()
+                .unwrap()
+                .cert
+                .fingerprint(),
+            first.fingerprint()
+        );
+        assert!(!pre_restore_path(&restarted.key_file_path(jid).unwrap()).exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn restore_recovery_never_replaces_a_loadable_current_key() {
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir.clone());
+        let jid = "alice@example.com";
+        storage.save(jid, &generate_cert(jid)).unwrap();
+        let path = storage.key_file_path(jid).unwrap();
+        let previous = fs::read(&path).unwrap();
+        let current = generate_cert(jid);
+        storage.save(jid, &current).unwrap();
+        atomic_write(&pre_restore_path(&path), &previous).unwrap();
+        assert_eq!(
+            storage.load(jid).unwrap().unwrap().cert.fingerprint(),
+            current.fingerprint()
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn restore_recovery_rejects_invalid_or_wrongly_protected_saved_keys() {
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir.clone());
+        let jid = "alice@example.com";
+        storage.save(jid, &generate_cert(jid)).unwrap();
+        let path = storage.key_file_path(jid).unwrap();
+        let unrelated_dir = fresh_tmp_dir();
+        let unrelated = KeyStorage::for_testing(unrelated_dir.clone());
+        unrelated.save(jid, &generate_cert(jid)).unwrap();
+        let other_key = fs::read(unrelated.key_file_path(jid).unwrap()).unwrap();
+        let cert = generate_cert(jid);
+        let public_only = cert
+            .clone()
+            .strip_secret_key_material()
+            .armored()
+            .to_vec()
+            .unwrap();
+        let unprotected = cert.as_tsk().armored().to_vec().unwrap();
+        for backup in [
+            public_only,
+            unprotected,
+            b"invalid saved key".to_vec(),
+            other_key,
+        ] {
+            atomic_write(&path, b"unreadable current key").unwrap();
+            let saved = pre_restore_path(&path);
+            atomic_write(&saved, &backup).unwrap();
+            assert!(storage.load(jid).is_err());
+            assert_eq!(fs::read(&path).unwrap(), b"unreadable current key");
+            assert_eq!(fs::read(&saved).unwrap(), backup);
+        }
+        fs::remove_dir_all(dir).unwrap();
+        fs::remove_dir_all(unrelated_dir).unwrap();
+    }
+
+    #[test]
+    fn restore_recovery_does_not_treat_a_missing_current_file_as_a_new_identity() {
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir.clone());
+        let jid = "alice@example.com";
+        let original = generate_cert(jid);
+        storage.save(jid, &original).unwrap();
+        let path = storage.key_file_path(jid).unwrap();
+        fs::rename(&path, pre_restore_path(&path)).unwrap();
+        assert!(storage.has_persisted_key(jid));
+        assert_eq!(
+            storage.load(jid).unwrap().unwrap().cert.fingerprint(),
+            original.fingerprint()
+        );
+        assert!(path.exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn restore_recovery_does_not_replace_an_unreadable_current_key() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir.clone());
+        let jid = "alice@example.com";
+        storage.save(jid, &generate_cert(jid)).unwrap();
+        let path = storage.key_file_path(jid).unwrap();
+        let previous = fs::read(&path).unwrap();
+        storage.save(jid, &generate_cert(jid)).unwrap();
+        let current = fs::read(&path).unwrap();
+        let saved = pre_restore_path(&path);
+        atomic_write(&saved, &previous).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+        let result = storage.load(jid);
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(result.is_err());
+        assert_eq!(fs::read(&path).unwrap(), current);
+        assert_eq!(fs::read(&saved).unwrap(), previous);
+        fs::remove_dir_all(dir).unwrap();
     }
 }
