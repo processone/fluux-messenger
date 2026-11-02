@@ -98,7 +98,7 @@ function boundedInvoke(invoke: InvokeFn, timeouts: NativeCallTimeouts): InvokeFn
 }
 
 // A lost IPC result may still be writing. Keep the guard across plugin replacement
-// until a new application process can load the durable outcome.
+// and WebView reload until a new application window can load the durable outcome.
 const uncertainImports = new Set<string>()
 
 export class SequoiaPgpPlugin extends OpenPGPPluginBase {
@@ -226,10 +226,25 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     selectedFingerprint: string,
     recovery?: BackupRecoveryMode,
   ): Promise<KeyBundle> {
-    if (uncertainImports.has(accountJid)) {
+    // Session storage survives a WebView reload, but not a new application
+    // window. This marker contains no key material and must be retained before
+    // dispatch: an unavailable browser store must fail before a native write.
+    const session = platform().shell === 'desktop' && platform().os === 'macos'
+      && typeof window !== 'undefined' ? window.sessionStorage : null
+    const marker = `__wry_pending_native_restore:${accountJid}`
+    if (uncertainImports.has(accountJid) || session?.getItem(marker)) {
       throw new Error('A native restore is pending or its outcome is unknown. Restart the app to check the saved identity before restoring again.')
     }
+    session?.setItem(marker, '1')
     uncertainImports.add(accountJid)
+    const clearGuard = () => {
+      try {
+        session?.removeItem(marker)
+        uncertainImports.delete(accountJid)
+      } catch {
+        // Keep the guard if cleanup fails; do not hide the known native result.
+      }
+    }
     try {
       const result = await this.invoke<KeyBundle>('openpgp_backup_import_selected', {
         accountJid,
@@ -239,12 +254,12 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
         ...(recovery && platform().shell === 'desktop' && platform().os === 'macos'
           ? { withoutMigration: true } : {}),
       })
-      uncertainImports.delete(accountJid)
+      clearGuard()
       return result
     } catch (error) {
       const uncertain = error instanceof NativeCallTimeoutError
         || String(error).includes('openpgp-restore-outcome-uncertain:')
-      if (!uncertain) uncertainImports.delete(accountJid)
+      if (!uncertain) clearGuard()
       throw error
     }
   }

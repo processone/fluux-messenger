@@ -217,6 +217,9 @@ test('a real multi-key backup requires the intended fingerprint before installat
   await page.evaluate(backup => { (window as any).__demoClient.e2ee.getPlugin('openpgp').fetchSecretKeyBackup = async () => backup }, backup)
   await previewServer(page)
   await expect(page.getByRole('radio')).toHaveCount(keys.length)
+  const otherFingerprint = keys.map(key => key.getFingerprint().toUpperCase()).find(value => value !== fingerprint)!
+  await page.getByRole('radio', { name: new RegExp(otherFingerprint) }).check()
+  await expect(page.getByRole('radio', { name: new RegExp(fingerprint) })).not.toBeChecked()
   await page.getByRole('radio', { name: new RegExp(fingerprint) }).check()
   expect((await audit(page)).commands).not.toContain('openpgp_backup_import_selected')
   await capture(page, 'multi-key-confirmation.png')
