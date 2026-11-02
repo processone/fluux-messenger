@@ -249,8 +249,9 @@ function App() {
 
   const handleE2EERegistered = useCallback(async (manager: E2EEManager) => {
     if (!isOpenpgpEnabled()) return
-    // Connect-time E2EE recovery routing (both platforms). Two
-    // conditions resolve through the same IdentityChoiceDialog:
+    // Connect-time E2EE recovery routing. macOS stored-key failures use
+    // guided backup recovery; missing keys and other platforms retain
+    // the existing IdentityChoiceDialog:
     //
     //   - `local-key-unrecoverable`: a local key exists but couldn't
     //     be unlocked (keychain/key desync, corruption, missing

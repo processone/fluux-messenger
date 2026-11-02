@@ -306,8 +306,9 @@ export function EncryptionSettings() {
     }
   }, [openpgpEnabled, online, client, registrationError, jid, pluginRegisteredAt])
 
-  // Surface recovery from Settings when a local key exists but can't be
-  // unlocked. The connect-time dialog (App.tsx) may have been dismissed, and
+  // Other platforms keep their existing Settings recovery prompt. macOS
+  // uses the explicit entry below instead. A local key can exist but fail to
+  // unlock; the connect-time dialog may have been dismissed, and
   // the toggle gates on `hasNoLocalKey()` which is false for a present-but-
   // broken key — so without this the panel would report a misleading state
   // and the user would be stuck. Auto-open ONCE per mount (the ref guard

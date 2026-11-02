@@ -748,8 +748,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         // A local key exists but cannot be unlocked (keychain/key desync,
         // corrupted secret packet, or a missing passphrase). Keep the
         // plugin registered and flag the condition so the host can route
-        // the user to recovery (restore / import / replace) via the
-        // IdentityChoiceDialog, instead of failing registration with an
+        // the user to its platform's recovery flow, instead of failing
+        // registration with an
         // opaque error the UI can only render as "(unknown)".
         this._keyRecoveryNeeded = true
         return
