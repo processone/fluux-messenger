@@ -124,9 +124,11 @@ export async function captureTargetHighlight(
   }, messageId)
   try {
     await navigate()
+    // Target convergence counts rendered frames. Keep the journey's existing deadline rather than
+    // imposing a shorter wall-clock deadline while a loaded engine is still converging.
     await page.waitForFunction(() => (window as unknown as {
       __targetHighlightCapture?: { reading: TargetHighlightReading | null }
-    }).__targetHighlightCapture?.reading != null, undefined, { timeout: 5_000 })
+    }).__targetHighlightCapture?.reading != null, undefined, { timeout: 0 })
     const reading = await page.evaluate(() => (window as unknown as {
       __targetHighlightCapture: { reading: TargetHighlightReading }
     }).__targetHighlightCapture.reading)
