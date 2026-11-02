@@ -40,15 +40,26 @@ export interface DirectionalHistoryBrowserAdapterOptions {
  * A reader who scrolls while the load waits moves on to other rows: the anchor becomes the row
  * then at the top of the view, so the load's capture row may be off screen. A delayed arrival
  * between the view and that row moves it but none of the rows the reader is reading (FLM-210).
+ * This holds with virtualization off too, the flag's documented opt-out (review FLM-338 R1).
  */
 interface FollowedAnchor {
   /** The load's captured anchor: the restore request this follow belongs to names it. */
   capturedId: string
-  /** The window's first row, which no anchor takes; see `capture`. */
+  /** The window's first row, which a virtualized anchor takes last; see `anchorRowInView`. */
   windowFirstId: string
+  /** Whether the virtualizer rendered the list at capture: `index` counts its rows if so, and the
+   *  rendered message rows if not. */
+  virtual: boolean
   id: string
   index: number | null
   offsetFromTop: number
+}
+
+/** A rendered row, `top` measured from the top of the view. */
+interface RowInView {
+  id: string
+  top: number
+  height: number
 }
 
 /** The row a restore holds, and where it places it. */
@@ -87,6 +98,8 @@ export class DirectionalHistoryBrowserAdapter {
     const virtualizer = this.options.getVirtualizer()
     const { scrollTop, scrollHeight, clientHeight } = scroller
     let anchor: DirectionalHistoryBrowserCapture['anchor'] = null
+    // Without a virtualizer, the anchor's place among the rendered message rows.
+    let messageIndex: number | null = null
     const items = virtualizer?.getVirtualItems() ?? []
 
     // At scrollTop 0 the first message is on screen. A virtual window that does not reach the top
@@ -101,7 +114,8 @@ export class DirectionalHistoryBrowserAdapter {
         offsetFromTop: rowStart(virtualizer, firstMessageId) ?? 0,
       }
     } else if (virtualizer) {
-      anchor = firstVisibleRow(scroller, items, firstMessageId)
+      const row = anchorRowInView(virtualRowsInView(scroller, items), clientHeight, firstMessageId)
+      anchor = row ? { id: row.id, offsetFromTop: row.top } : null
       if (!anchor && firstMessageId) {
         anchor = {
           id: firstMessageId,
@@ -112,20 +126,11 @@ export class DirectionalHistoryBrowserAdapter {
       }
     } else {
       const messages = messageRowElements(scroller)
-      const scrollerRect = scroller.getBoundingClientRect()
-      for (const message of messages) {
-        const element = message as HTMLElement
-        const rect = element.getBoundingClientRect()
-        if (rect.top - scrollerRect.top < -rect.height / 2) continue
-        const messageId = readMessageRowId(element)
-        if (!messageId) continue
-        anchor = {
-          id: messageId,
-          offsetFromTop: element.offsetTop - scrollTop,
-        }
-        break
-      }
-      if (!anchor) {
+      const row = anchorRowInView(messageRowsInView(scroller, messages), clientHeight)
+      if (row) {
+        anchor = { id: row.id, offsetFromTop: row.element.offsetTop - scrollTop }
+        messageIndex = messages.indexOf(row.element)
+      } else {
         const first = messages[0] as HTMLElement | undefined
         const messageId = first ? readMessageRowId(first) : undefined
         if (first && messageId) {
@@ -133,16 +138,18 @@ export class DirectionalHistoryBrowserAdapter {
             id: messageId,
             offsetFromTop: first.offsetTop - scrollTop,
           }
+          messageIndex = 0
         }
       }
     }
 
-    this.followed = virtualizer && anchor
+    this.followed = anchor
       ? {
           capturedId: anchor.id,
           windowFirstId: firstMessageId,
+          virtual: Boolean(virtualizer),
           id: anchor.id,
-          index: virtualizer.getIndexForMessageId(anchor.id),
+          index: virtualizer ? virtualizer.getIndexForMessageId(anchor.id) : messageIndex,
           offsetFromTop: anchor.offsetFromTop,
         }
       : null
@@ -169,37 +176,20 @@ export class DirectionalHistoryBrowserAdapter {
    * as a live message, do not move it.
    *
    * While rendered rows cover the top of the view, the anchor is the row the reader now sees there,
-   * chosen as `capture` chooses it: an arrival below it then moves none of the rows the reader is
-   * reading, and the restore it starts leaves them where they are (FLM-210). Past the top in a
-   * bounce, or with a stale window, no rendered row can name the view, so the anchor stays and only
-   * its offset follows.
+   * chosen as `capture` chooses it: an arrival outside the view then moves none of the rows the
+   * reader is reading, and the restore it starts leaves them where they are (FLM-210). Past the top
+   * in a bounce, or with a stale window, no rendered row can name the view, so the anchor stays and
+   * only its offset follows.
    */
   observeScroll(): void {
     const followed = this.followed
     if (!followed) return
     const scroller = this.options.getScroller()
+    if (!scroller) return
     const virtualizer = this.options.getVirtualizer()
-    if (!scroller || !virtualizer) return
-    if (virtualizer.getIndexForMessageId(followed.id) !== followed.index) return
-    const items = virtualizer.getVirtualItems()
-    const scrollTop = scroller.scrollTop
-    if (items.some(item => item.start <= scrollTop && item.start + item.size > scrollTop)) {
-      const current = firstVisibleRow(scroller, items, followed.windowFirstId)
-      const index = current ? virtualizer.getIndexForMessageId(current.id) : null
-      if (current && index !== null) {
-        followed.id = current.id
-        followed.index = index
-        followed.offsetFromTop = current.offsetFromTop
-        return
-      }
-    }
-    // Rendered rows include the library's hold during a gesture; the layout start is the fallback
-    // for an anchor the reader scrolled out of the rendered window.
-    const start =
-      virtualizer.getVirtualItems().find(item => item.index === followed.index)?.start ??
-      rowStart(virtualizer, followed.id)
-    if (start === null) return
-    followed.offsetFromTop = start - scroller.scrollTop
+    if (Boolean(virtualizer) !== followed.virtual) return
+    if (virtualizer) followVirtualRows(followed, scroller, virtualizer)
+    else followMessageRows(followed, scroller)
   }
 
   /**
@@ -387,30 +377,136 @@ export class DirectionalHistoryBrowserAdapter {
   }
 }
 
+function followVirtualRows(
+  followed: FollowedAnchor,
+  scroller: HTMLElement,
+  virtualizer: MessageVirtualizer,
+): void {
+  if (virtualizer.getIndexForMessageId(followed.id) !== followed.index) return
+  const items = virtualizer.getVirtualItems()
+  const scrollTop = scroller.scrollTop
+  if (items.some(item => item.start <= scrollTop && item.start + item.size > scrollTop)) {
+    const current = anchorRowInView(
+      virtualRowsInView(scroller, items),
+      scroller.clientHeight,
+      followed.windowFirstId,
+    )
+    const index = current ? virtualizer.getIndexForMessageId(current.id) : null
+    if (current && index !== null) {
+      followed.id = current.id
+      followed.index = index
+      followed.offsetFromTop = current.top
+      return
+    }
+  }
+  // Rendered rows include the library's hold during a gesture; the layout start is the fallback
+  // for an anchor the reader scrolled out of the rendered window.
+  const start =
+    items.find(item => item.index === followed.index)?.start ??
+    rowStart(virtualizer, followed.id)
+  if (start === null) return
+  followed.offsetFromTop = start - scrollTop
+}
+
+/** The unvirtualized path: every message row is rendered, so only a bounce past the top leaves the
+ *  view without a row to name it. */
+function followMessageRows(followed: FollowedAnchor, scroller: HTMLElement): void {
+  const messages = messageRowElements(scroller)
+  const index = messages.findIndex(element => readMessageRowId(element) === followed.id)
+  if (index < 0 || index !== followed.index) return
+  const scrollTop = scroller.scrollTop
+  if (scrollTop >= 0) {
+    const current = anchorRowInView(messageRowsInView(scroller, messages), scroller.clientHeight)
+    if (current) {
+      followed.id = current.id
+      followed.index = messages.indexOf(current.element)
+      followed.offsetFromTop = current.element.offsetTop - scrollTop
+      return
+    }
+  }
+  followed.offsetFromTop = messages[index].offsetTop - scrollTop
+}
+
 /**
- * The first row at least half in view, skipping the window's first row: prepended history changes
- * that row, which stops heading its group and loses its sender line (~43 px) when older messages of
- * the same sender land above it. Anchoring on it would keep its top still while the text under the
- * reader jumps.
+ * The row a load holds, from the rows in view in order: the row at the top of the view. Only a row
+ * in view qualifies, so an arrival outside the view moves none of the rows the reader reads.
+ *
+ * A row mostly scrolled past the top gives way to the next row when that row starts in the top half
+ * of the view, as it always does when the first row is no taller than the view: the reader is
+ * reading the next one. A row taller than the view that still fills most of it stays the anchor
+ * (review FLM-338 R2): the next row is off screen or barely in it, and an arrival between the two
+ * would otherwise move the message being read.
+ *
+ * The window's first row, `skipId`, is held only when it is the only row in view: prepended history
+ * changes that row, which stops heading its group and loses its sender line (~43 px) when older
+ * messages of the same sender land above it, so its top would stay still while the text under the
+ * reader jumped.
  */
-function firstVisibleRow(
+function anchorRowInView<Row extends RowInView>(
+  rowsInView: Iterable<Row>,
+  viewHeight: number,
+  skipId?: string,
+): Row | null {
+  let first: Row | null = null
+  let skipped: Row | null = null
+  for (const row of rowsInView) {
+    if (row.id === skipId) {
+      skipped = row
+      continue
+    }
+    if (!first) {
+      if (row.top >= -row.height / 2) return row
+      first = row
+      continue
+    }
+    return row.top < viewHeight / 2 ? row : first
+  }
+  return first ?? skipped
+}
+
+/** The virtualizer's message rows that are in view, in order. */
+function* virtualRowsInView(
   scroller: HTMLElement,
   items: readonly { index: number; start: number; size: number }[],
-  windowFirstId: string,
-): { id: string; offsetFromTop: number } | null {
+): Generator<RowInView> {
   const scrollTop = scroller.scrollTop
+  const viewHeight = scroller.clientHeight
   for (const item of items) {
-    const viewportOffset = item.start - scrollTop
-    if (viewportOffset < -item.size / 2) continue
+    const top = item.start - scrollTop
+    if (top + item.size <= 0) continue
+    if (top >= viewHeight) return
     const wrapper = scroller.querySelector(`[data-index="${item.index}"]`)
     const message = wrapper?.querySelector(
       '[data-message-row-id], [data-message-id]',
     ) as HTMLElement | null
-    const messageId = message ? readMessageRowId(message) : undefined
-    if (!messageId || messageId === windowFirstId) continue
-    return { id: messageId, offsetFromTop: viewportOffset }
+    const id = message ? readMessageRowId(message) : undefined
+    if (id) yield { id, top, height: item.size }
   }
-  return null
+}
+
+/** The rendered message rows that are in view, in order. They are laid out in DOM order, so the
+ *  first one is found by bisection rather than by measuring every row above the view. */
+function* messageRowsInView(
+  scroller: HTMLElement,
+  messages: readonly HTMLElement[],
+): Generator<RowInView & { element: HTMLElement }> {
+  const viewTop = scroller.getBoundingClientRect().top
+  const viewHeight = scroller.clientHeight
+  let low = 0
+  let high = messages.length
+  while (low < high) {
+    const middle = (low + high) >> 1
+    if (messages[middle].getBoundingClientRect().bottom - viewTop <= 0) low = middle + 1
+    else high = middle
+  }
+  for (let index = low; index < messages.length; index += 1) {
+    const element = messages[index]
+    const rect = element.getBoundingClientRect()
+    const top = rect.top - viewTop
+    if (top >= viewHeight) return
+    const id = readMessageRowId(element)
+    if (id) yield { id, top, height: rect.height, element }
+  }
 }
 
 /**

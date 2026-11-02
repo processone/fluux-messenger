@@ -145,6 +145,90 @@ function mountedList(input: {
   return { viewport, virtualizer, holdAnchor }
 }
 
+interface LaidOutRow { id: string; start: number; size: number }
+
+/**
+ * A list laid out by `rows` (in order), rendered through the virtualizer or, with virtualization
+ * off, as plain message rows. `land` puts an arrival right after `afterId`: every row after it
+ * moves down by the arrival's size.
+ */
+function laidOutList(input: { virtualized: boolean; scrollTop: number; rows: LaidOutRow[] }) {
+  const viewport = scrollerHarness({ scrollTop: input.scrollTop, scrollHeight: 30_000, clientHeight: 796 })
+  const rows = input.rows.map(row => ({ ...row }))
+  const elements = new Map<string, HTMLElement>()
+  for (const [index, row] of rows.entries()) {
+    const message = document.createElement('div')
+    message.dataset.messageId = row.id
+    elements.set(row.id, message)
+    if (input.virtualized) {
+      const wrapper = document.createElement('div')
+      wrapper.dataset.index = String(index)
+      wrapper.append(message)
+      viewport.scroller.append(wrapper)
+    } else {
+      Object.defineProperty(message, 'offsetTop', { configurable: true, get: () => row.start })
+      message.getBoundingClientRect = () => {
+        const top = row.start - viewport.scrollTop
+        return { top, bottom: top + row.size, height: row.size, left: 0, right: 600, width: 600, x: 0, y: top, toJSON: () => ({}) }
+      }
+      viewport.scroller.append(message)
+    }
+  }
+  const indexOf = (id: string) => {
+    const index = rows.findIndex(row => row.id === id)
+    return index < 0 ? null : index
+  }
+  const scrollToOffset = vi.fn((offset: number) => { viewport.scrollTop = offset; return appliedWrite(offset) })
+  const holdAnchor = vi.fn()
+  const virtualizer: MessageVirtualizer | undefined = input.virtualized
+    ? {
+        getVirtualItems: () => rows.map((row, index) => ({ index, start: row.start, size: row.size, key: row.id })),
+        getTotalSize: () => 30_000,
+        itemCount: rows.length,
+        getOffsetForMessageId: id => rows.find(row => row.id === id)?.start ?? null,
+        getIndexForMessageId: indexOf,
+        ensureMessageMounted: vi.fn(async () => {}),
+        measureElement: vi.fn(),
+        scrollToOffset,
+        scrollToIndex: vi.fn(),
+        beginAnimatedScrollToOffset: vi.fn(),
+        holdAnchor,
+      }
+    : undefined
+  const land = (afterId: string, arrival: LaidOutRow) => {
+    const at = indexOf(afterId)! + 1
+    for (const row of rows.slice(at)) row.start += arrival.size
+    rows.splice(at, 0, { ...arrival, start: rows[at - 1].start + rows[at - 1].size })
+    const message = document.createElement('div')
+    message.dataset.messageId = arrival.id
+    const placed = rows[at]
+    if (input.virtualized) {
+      // The virtualizer renumbers the rows after it; the arrival itself is not mounted yet.
+      for (const [index, row] of rows.entries()) {
+        const wrapper = elements.get(row.id)?.parentElement
+        if (wrapper) wrapper.dataset.index = String(index)
+      }
+    } else {
+      Object.defineProperty(message, 'offsetTop', { configurable: true, get: () => placed.start })
+      message.getBoundingClientRect = () => {
+        const top = placed.start - viewport.scrollTop
+        return { top, bottom: top + placed.size, height: placed.size, left: 0, right: 600, width: 600, x: 0, y: top, toJSON: () => ({}) }
+      }
+      elements.get(afterId)!.after(message)
+    }
+  }
+  return { viewport, virtualizer, holdAnchor, land }
+}
+
+/** Rows 100 px tall from `from` to `to`, each starting where its number says, in hundreds. */
+function evenRows(from: number, to: number): LaidOutRow[] {
+  return Array.from({ length: to - from + 1 }, (_, i) => ({
+    id: `message-${from + i}`,
+    start: (from + i) * 100,
+    size: 100,
+  }))
+}
+
 function adapterHarness(input: {
   scroller: HTMLElement | null
   virtualizer?: MessageVirtualizer
@@ -345,6 +429,75 @@ describe('DirectionalHistoryBrowserAdapter', () => {
     expect(list.viewport.scrollTop).toBe(target)
     expect(onPlaced).toHaveBeenCalledWith({ messageId: held, offsetFromTop: 40 })
     expect(list.holdAnchor).toHaveBeenCalledWith(held)
+  })
+
+  // Intent: FLM-210, review FLM-338 finding R1 with virtualization off (the flag's documented
+  // opt-out). That path followed nothing while the load waited, so the restore a delayed arrival
+  // started put row 110, where the load began, back where it was, undoing the reader's scroll.
+  it.each([
+    { order: 'scrolled up, arrival below the view', scrollTop: 9_060, arrivalAfter: 'message-99', held: 'message-91', target: 9_060 },
+    { order: 'scrolled down, arrival above the view', scrollTop: 12_260, arrivalAfter: 'message-114', held: 'message-123', target: 12_684 },
+  ])('without virtualization, holds the row the reader now sees when they $order', ({ scrollTop, arrivalAfter, held, target }) => {
+    const list = laidOutList({ virtualized: false, scrollTop: 11_000, rows: evenRows(85, 134) })
+    const { adapter } = adapterHarness({ scroller: list.viewport.scroller })
+    expect(adapter.capture('message-1', 200)?.anchor).toEqual({ id: 'message-110', offsetFromTop: 0 })
+
+    list.viewport.scrollTop = scrollTop
+    adapter.observeScroll()
+    list.land(arrivalAfter, { id: 'delayed-arrival', start: 0, size: 424 })
+    adapter.observeScroll()
+
+    const onPlaced = vi.fn()
+    adapter.createExecutor(vi.fn(), onPlaced).positionFrame(request({
+      desired: {
+        kind: 'anchor',
+        messageId: 'message-110',
+        placement: { kind: 'top-offset', offsetPx: pixelOffset(0) },
+      },
+    }), lease())
+
+    // The held row stays where the reader last saw it, 40 px below the top of the view.
+    expect(list.viewport.scrollTop).toBe(target)
+    expect(onPlaced).toHaveBeenCalledWith({ messageId: held, offsetFromTop: 40 })
+  })
+
+  // Intent: FLM-210, review FLM-338 finding R2. A reader 1,100 px into a 2,000 px message in a
+  // 796 px view sees only that message, more than half of it above the top. The restore skipped it
+  // and held the next row, below the view, so a 424 px arrival between the two moved the message
+  // the reader was reading up by 424 px. The same held where only the next row's first pixels show.
+  it.each([
+    { virtualized: true, when: 'the load starts inside it', captureAt: 13_100, readAt: 13_100 },
+    { virtualized: true, when: 'the reader scrolls into it while the load waits', captureAt: 11_000, readAt: 13_100 },
+    { virtualized: true, when: 'only the next row\'s first pixels show under it', captureAt: 11_000, readAt: 13_210 },
+    { virtualized: false, when: 'the load starts inside it', captureAt: 13_100, readAt: 13_100 },
+    { virtualized: false, when: 'the reader scrolls into it while the load waits', captureAt: 11_000, readAt: 13_100 },
+    { virtualized: false, when: 'only the next row\'s first pixels show under it', captureAt: 11_000, readAt: 13_210 },
+  ])('holds a message taller than the view when $when (virtualized: $virtualized)', ({ virtualized, captureAt, readAt }) => {
+    const rows = [
+      ...evenRows(100, 119),
+      { id: 'message-120', start: 12_000, size: 2_000 },
+      ...evenRows(121, 140).map(row => ({ ...row, start: row.start + 1_900 })),
+    ]
+    const list = laidOutList({ virtualized, scrollTop: captureAt, rows })
+    const { adapter } = adapterHarness({ scroller: list.viewport.scroller, virtualizer: list.virtualizer })
+    const captured = adapter.capture('message-1', 200)!.anchor!
+
+    list.viewport.scrollTop = readAt
+    adapter.observeScroll()
+    list.land('message-120', { id: 'delayed-arrival', start: 0, size: 424 })
+    adapter.observeScroll()
+
+    const onPlaced = vi.fn()
+    adapter.createExecutor(vi.fn(), onPlaced).positionFrame(request({
+      desired: {
+        kind: 'anchor',
+        messageId: captured.id,
+        placement: { kind: 'top-offset', offsetPx: pixelOffset(captured.offsetFromTop) },
+      },
+    }), lease())
+
+    expect(list.viewport.scrollTop).toBe(readAt)
+    expect(onPlaced).toHaveBeenCalledWith({ messageId: 'message-120', offsetFromTop: 12_000 - readAt })
   })
 
   it('positions through the virtualizer and waits through a temporary missing anchor', () => {

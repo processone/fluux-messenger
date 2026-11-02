@@ -154,12 +154,16 @@ anchor where the reader last saw it rather than at its capture-time `offsetPx` (
 the top keeps moving the rows after capture, and the landing commit clamps `scrollTop` to 0).
 While rendered rows cover the top of the view, the followed anchor becomes the row the reader now
 sees there, chosen as at capture: a reader who scrolled on while the load waited no longer reads
-the capture row, which an arrival between it and the view would move without moving theirs. Past
-the top, or with a stale window, the anchor stays and only its offset follows. The followed anchor
-stops changing once rows land before it, since only the restore may place it from then on. The
-load's snapshot records the row the restore held and its placement, and a restart of the same load
-requests them instead of the capture row and offset, so the rows stay where the first restore put
-them. From its first
+the capture row, which an arrival between it and the view would move without moving theirs. Only a
+row in view qualifies, so an arrival outside the view moves no row the reader reads. A row mostly
+scrolled past the top gives way to the next row only when that row starts in the top half of the
+view: a message taller than the view that fills it stays the anchor, rather than the row below the
+view. With virtualization off the adapter captures and follows the rendered message rows the same
+way. Past the top, or with a stale window, the anchor stays and only its offset follows. The
+followed anchor stops changing once rows land before it, since only the restore may place it from
+then on. The load's snapshot records the row the restore held and its placement, and a restart of
+the same load requests them instead of the capture row and offset, so the rows stay where the first
+restore put them. From its first
 write until its execution ends, the restore holds that anchor in the virtualizer: every row before
 the anchor that resizes is compensated, including rows between the viewport top and the anchor,
 which the library alone leaves to move it.
