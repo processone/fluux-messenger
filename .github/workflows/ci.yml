@@ -138,7 +138,15 @@ jobs:
           sudo --preserve-env=CI_RETRY_CLEANUP env "PATH=$PATH" scripts/ci-retry.sh 3 300 \
             npx playwright install-deps webkit
 
-      - name: Prove the restricted reader on disposable content
+      - name: Install service-opener build dependencies
+        env:
+          CI_RETRY_CLEANUP: scripts/ci-apt-cleanup.sh
+        run: |
+          scripts/ci-apt-prepare.sh
+          sudo --preserve-env=CI_RETRY_CLEANUP scripts/ci-retry.sh 3 300 \
+            apt-get install -y libplist-dev libssl-dev pkg-config
+
+      - name: Prove the restricted reader and service opener on disposable content
         run: node scripts/inspector/prove.mjs
 
   test:
