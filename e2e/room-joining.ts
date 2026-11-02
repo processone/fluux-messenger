@@ -112,7 +112,7 @@ for (const [label, viewport] of [
       const failed = await observe(page, BOARD)
       if (info.repeatEachIndex === 0) await page.screenshot({ path: info.outputPath('retry.png') })
       await retry.click()
-      const password = page.getByLabel('Room password', { exact: true })
+      const password = page.getByLabel('Password', { exact: true })
       await expect(password).toBeVisible()
       await password.fill('fluux')
       if (info.repeatEachIndex === 0) await page.screenshot({ path: info.outputPath('password.png') })
