@@ -254,7 +254,7 @@ describe('interaction position ownership', () => {
       complete,
     }
     controller.beginExplicitTarget({ conversationId, messageId: 'after-target-resize', executor })
-    expect(controller.hasPendingMessageNavigation(conversationId)).toBe(true)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(true)
     expect(controller.beginInteractionHold({ conversationId, desired, executor: anchor() })).toBeNull()
     while (frames.length) frames.shift()!()
     expect(complete).toHaveBeenCalledOnce()
