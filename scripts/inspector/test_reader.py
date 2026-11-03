@@ -45,12 +45,15 @@ def icon():
 
 
 # FLM-377: the entry shape the captain's iPhone (iOS 27.0.1) sent in live sessions,
-# recorded as field presence and types only. Fluux's own entry was not listed live;
-# it is assumed to share the shape every other app entry had.
+# recorded as field presence and types only. Fluux's own entry had the same keys
+# (fourth session); its flags were kept: active as 2, and not ready until its page
+# was set up.
 IPHONE_ENTRY = {"WIRApplicationIconKey": icon(), "WIRAutomationAvailabilityKey": "WIRAutomationAvailabilityNotAvailable",
                 "WIRIsApplicationActiveKey": 1, "WIRIsApplicationProxyKey": False, "WIRIsApplicationReadyKey": True}
-IPHONE_APP = dict(APP, **IPHONE_ENTRY)
+IPHONE_APP = {**APP, **IPHONE_ENTRY, "WIRIsApplicationActiveKey": 2, "WIRIsApplicationReadyKey": False}
 IPHONE_OTHER = dict(OTHER, **IPHONE_ENTRY)
+# Extra keys on Fluux's live page listing; only their presence and types were kept.
+IPHONE_PAGE = {"WIRHostApplicationIdentifierKey": "PID:321", "WIROverrideNameKey": PRIVATE}
 
 
 def frame(selector, arg):
@@ -106,10 +109,11 @@ class Peer:
             "WIRApplicationIdentifierKey": "PID:321", "WIRDestinationKey": self.sender,
             "WIRMessageDataKey": json.dumps(message)}, **overrides))
 
-    def listing(self, app="PID:321", pages=1):
+    def listing(self, app="PID:321", pages=1, **extra):
         self.send("_rpc_applicationSentListing:", {"WIRApplicationIdentifierKey": app,
                   "WIRListingKey": {str(i): {"WIRPageIdentifierKey": i, "WIRTypeKey": "WIRTypeWebPage",
-                                            "WIRTitleKey": PRIVATE, "WIRURLKey": "https://example.invalid/" + PRIVATE}
+                                            "WIRTitleKey": PRIVATE, "WIRURLKey": "https://example.invalid/" + PRIVATE,
+                                            **extra}
                                     for i in range(1, pages + 1)}})
 
     def iphone_announcements(self):
@@ -127,6 +131,15 @@ class Peer:
                                                       WIRIsApplicationActiveKey=0))
         self.send("_rpc_reportConnectedApplicationList:", {"WIRApplicationDictionaryKey": apps})
         self.ignored += 4
+
+    def iphone_relisting(self):
+        """Live, during sampling: Fluux lists its one page again, now naming the
+        connection, and reports itself ready; another app sends its empty listing."""
+        self.listing(**IPHONE_PAGE, WIRConnectionIdentifierKey=PRIVATE)
+        self.send("_rpc_applicationUpdated:", dict(IPHONE_APP, WIRIsApplicationReadyKey=True))
+        self.send("_rpc_applicationSentListing:", {"WIRApplicationIdentifierKey": "PID:655", "WIRListingKey": {}})
+        self.send("_rpc_applicationUpdated:", dict(IPHONE_OTHER, WIRApplicationIdentifierKey="PID:655"))
+        self.ignored += 1
 
     def run(self):
         try:
@@ -165,13 +178,18 @@ class Peer:
                         self.send("_rpc_applicationSentListing:", {"WIRApplicationIdentifierKey": "PID:321",
                                   "WIRTitleKey": PRIVATE})
                         continue
-                    self.listing(pages=2 if self.mode == "multiple-pages" else 1)
+                    self.listing(pages=2 if self.mode == "multiple-pages" else 1,
+                                 **(IPHONE_PAGE if self.mode == "iphone" else {}))
                 elif sel == "_rpc_forwardSocketSetup:":
                     self.sender = arg["WIRSenderKey"]
                     assert arg["WIRAutomaticallyPause"] is False
                     if self.mode == "destroyed-before-target":
                         self.data({"method": "Target.targetDestroyed", "params": {"private": PRIVATE}})
                         continue
+                    if self.mode == "iphone":
+                        # Live: Fluux turns ready and another app connects before the target.
+                        self.send("_rpc_applicationUpdated:", dict(IPHONE_APP, WIRIsApplicationReadyKey=True))
+                        self.send("_rpc_applicationConnected:", dict(IPHONE_OTHER, WIRApplicationIdentifierKey="PID:658"))
                     self.data({"method": "Target.targetCreated", "params": {"targetInfo": {
                         "targetId": self.target, "type": "page", "title": PRIVATE, "url": PRIVATE}}})
                 elif sel == "_rpc_forwardSocketData:":
@@ -268,6 +286,8 @@ class Peer:
                         "targetId": self.target, "message": json.dumps({"id": inner["id"],
                         "result": {"result": {"type": "object" if exp == SAMPLE else "boolean", "value": value,
                                                "description": PRIVATE}}})}})
+                    if self.mode == "iphone" and exp == SAMPLE and self.sample_index == 1:
+                        self.iphone_relisting()
                     if self.mode == "blocked-send" and exp == PRESENT:
                         # After the presence check, read only the install frame's header.
                         # A tiny client send buffer stalls the actual fixed install command.
@@ -713,7 +733,8 @@ class ReaderTests(unittest.TestCase):
     def test_iphone_announcements_keep_the_fluux_session(self):
         # FLM-377: the captain's iPhone announces its state, every inspectable app
         # with icon and state flags, an empty driver list, other apps' arrivals and
-        # listings unasked, and a repeated list. None of it may change the session.
+        # listings unasked, and a repeated list. Fluux turns ready after page setup and
+        # lists its page again during sampling. None of it may change the session.
         normal, normal_peer, _ = self.exercise("normal", duration=2)
         result, peer, persisted = self.exercise("iphone", duration=2, tap=True)
         self.assertEqual((result["reason"], result["phase"], result["cleanup"], result["samples"]),
@@ -733,6 +754,17 @@ class ReaderTests(unittest.TestCase):
                           "WIRIsApplicationReadyKey": {"bool"}})
         self.assertEqual((apps["count"], apps["fluux"], apps["proxies"]), (2, 1, 0))
         self.assertGreater(len(IPHONE_ENTRY["WIRApplicationIconKey"]), 4000)
+        # Fluux's own entry and page as the fourth live session recorded them.
+        self.assertEqual(apps["fluuxEntries"][0]["flags"], {"WIRIsApplicationActiveKey": 2,
+                         "WIRIsApplicationProxyKey": False, "WIRIsApplicationReadyKey": False})
+        live_page = {"WIRHostApplicationIdentifierKey", "WIROverrideNameKey", "WIRPageIdentifierKey",
+                     "WIRTitleKey", "WIRTypeKey", "WIRURLKey"}
+        listings = [set(m["pages"]["keys"]) for m in messages
+                    if m["selector"] == "_rpc_applicationSentListing:" and m.get("forFluux")]
+        self.assertEqual(listings, [live_page, live_page | {"WIRConnectionIdentifierKey"}])
+        ready = [m["entry"]["flags"]["WIRIsApplicationReadyKey"] for m in messages
+                 if m["selector"] == "_rpc_applicationUpdated:" and m.get("forFluux")]
+        self.assertEqual(ready, [True, True])
 
     def test_structure_tap_does_not_change_reader_outcomes(self):
         # Observation must never alter what the reader receives or decides.

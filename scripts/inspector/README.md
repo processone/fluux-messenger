@@ -79,8 +79,8 @@ is not evidence that the peer processed it.
    `pymobiledevice3.WebinspectorService` or `InspectorSession`: those already
    request other apps' listings or may format raw responses. The opener below is
    proved on disposable peers. In FLM-377 it opened the captain's iPhone (iOS
-   27.0.1) and carried the reader through the announcement phase; attaching to a
-   Fluux page on a real phone is still unqualified.
+   27.0.1), and the reader attached to Fluux's page, took four content-free
+   samples and confirmed their removal.
 3. Create one `Budget()` for the **whole attempt**, share it with the native-log
    collector, and charge that collector's raw input with `budget.charge(n)` before
    copying/decoding it. Charge its sanitized output with
@@ -186,7 +186,7 @@ Disposable proof runs every reader scenario with and without the tap and checks
 that reason, phase, fault, cleanup, samples and persisted output are identical,
 and that no titles, routes, text or console content reach the report.
 
-What the real iPhone sent (iOS 27.0.1, three FLM-377 sessions): `_rpc_reportCurrentState:`
+What the real iPhone sent (iOS 27.0.1, four FLM-377 sessions): `_rpc_reportCurrentState:`
 (an automation-availability string), the application list, and an empty
 `_rpc_reportConnectedDriverList:`. Each application entry carried its bundle
 identifier, a PNG icon of about 4 KB, its identifier, name, automation
@@ -195,11 +195,15 @@ flags as booleans. Other apps then arrived through `_rpc_applicationConnected:`
 and `_rpc_applicationUpdated:`, each with an unrequested
 `_rpc_applicationSentListing:`, and the list could repeat. The reader accepted all
 of it; the `iphone` peer mode in `test_reader.py` reproduces that order and shape.
-Fluux itself was not listed in any of those sessions, including the third, for
-which the captain was asked to keep Fluux on screen, so its own entry is assumed
-to share that shape. Fluux's Tauri build enables the `devtools` feature on every
-target, which asks WebKit to make the web view inspectable on iOS too; the
-absence is not explained by that setting.
+Fluux was listed only in the fourth session. The captain reported another app on
+screen in the first two and did not think Fluux was running in the third. Its Tauri build enables the `devtools` feature on every
+target, which makes the web view inspectable on iOS too. Fluux's entry had the
+same keys, with `WIRIsApplicationActiveKey` 2 and not ready until its page was
+set up, then an `_rpc_applicationUpdated:` marked it ready. Its one
+`WIRTypeWebPage` listing carried a host application identifier, an override name,
+an integer page identifier, title, type and URL; during sampling Fluux listed the
+same page again with a connection identifier added. The `iphone` peer mode
+reproduces Fluux's part too.
 
 The second FLM-377 session stopped with `protocol-boundary` from a transport fault,
 not a message shape: the reader's fault named `ServiceError`/`service-io` at its
@@ -352,7 +356,8 @@ All workers, peer threads, sockets, fixture files and browsers are closed/remove
 
 These are live **host** executions against a disposable usbmuxd/lockdown/inspector
 peer, not an Apple daemon or an iPhone. FLM-377's live sessions exercised the
-real pairing, certificate and announcement phase; Fluux inspectability, page
-attachment and remote frozen-page cleanup on a real phone remain unqualified. A different
+real pairing, certificate and announcement phase, and in the fourth session page
+attachment, sampling and confirmed removal on Fluux's page; remote frozen-page
+cleanup on a real phone remains unqualified. A different
 pin or protocol shape fails closed; do not weaken the boundary or add a pairing
 fallback to make a live connection work. No earlier audit finding was contradicted.
