@@ -121,6 +121,14 @@ is not evidence that the peer processed it.
    `unconfirmed` is not success. Report it without restarting the app.
    `not-installed` means installation was never attempted, not that a remote page
    was inspected and found clean.
+7. `phase` and `fault` locate a stop without retaining what caused it. `phase`
+   is the furthest step reached: `output`, `applications`, `listing`, `target`,
+   `presence`, `install` or `sampling`. `fault` names the exception class from a
+   fixed list (else `other`), the reader function and line where it was raised,
+   an allowlisted protocol field name for a missing-key fault, and the opener's
+   fixed category for a transport fault (for example `service-closed`). It
+   never carries exception text or remote values. `reason` keeps its existing
+   categories, so a transport fault still reports `protocol-boundary`.
 
 The reader selects only the exact `net.processone.fluux` bundle from unavoidable
 service-level application metadata. Other app metadata is transient and never
@@ -151,6 +159,30 @@ and `services/web_protocol/inspector_session.py`. This module intentionally uses
 standard-library socket/plist/JSON operations instead of those default sessions.
 The sampler is the disposable FLM-350 sampler, preserved without changing its
 measurement contract. No earlier audit conclusion was contradicted.
+
+## Structural observer for real-device diagnosis (FLM-377)
+
+`structure.StructureTap(stream, shared_budget)` wraps the opened service and is
+handed to `Reader` in its place. The reader stays the only protocol actor; the
+tap forwards every call unchanged and never sends, retries or reconnects. It
+reassembles complete frames in each direction and keeps at most 128 structural
+entries: the selector, each argument key with its value's type, application and
+listing counts, whether the Fluux bundle and its hosted WebKit processes are
+present, Target and Runtime method names, and the type of each JSON field.
+Keys and names outside fixed patterns are only counted. Payloads are released
+as soon as they are described. Only Fluux's own listing is described;
+other applications contribute counts and key presence, never identifiers.
+
+The tap charges its retained entries to the attempt's shared budget as output.
+A decode failure or budget refusal stops observation (`observerFault`,
+`truncated`) but never changes the reader's outcome. `report()` returns the
+entries plus counts of omitted messages and the sizes of any partial frame.
+Call `assert_sanitized(report)` before writing it: it rejects any key or
+string outside the allowlisted vocabulary and any non-integer number.
+
+Disposable proof runs every reader scenario with and without the tap and checks
+that reason, phase, fault, cleanup, samples and persisted output are identical,
+and that no titles, routes, text or console content reach the report.
 
 ## Existing-pairing-only service opener (FLM-366)
 

@@ -25,10 +25,53 @@ SAMPLE = "window.__flm350_measurements.sample()"
 REMOVE = "window.__flm350_measurements.stop()"
 # FLM-349 allows no more than four pulls per second.
 SAMPLE_INTERVAL = 1 / 4
+# FLM-377: names a stop may report beside its fixed reason. Each is owned by this
+# code or the FLM-366 opener, never copied from a remote value.
+FAULT_CLASSES = frozenset({
+    "Boundary", "KeyboardInterrupt", "KeyError", "TypeError", "AttributeError", "ValueError",
+    "JSONDecodeError", "InvalidFileException", "UnicodeDecodeError", "IndexError", "OverflowError",
+    "RecursionError", "MemoryError", "error", "OSError", "TimeoutError", "BrokenPipeError",
+    "ConnectionResetError", "ConnectionAbortedError", "ServiceError"})
+# Constant keys this module indexes; a KeyError names one of these, not remote data.
+FAULT_FIELDS = frozenset({
+    "__selector", "__argument", "WIRApplicationDictionaryKey", "WIRApplicationIdentifierKey",
+    "WIRListingKey", "WIRPageIdentifierKey", "WIRMessageDataKey", "method", "params", "targetInfo",
+    "targetId", "message", "result", "errors", "stackFrames", "viewport", "root", "list",
+    "elapsedMs", "gapMs", "visible", "focused", "mountedRows", "intersectingRows", "display",
+    "visibility", "x", "y", "width", "height", "opacity", "scrollTop", "scrollHeight",
+    "clientHeight", "visualWidth", "visualHeight"})
+# The FLM-366 opener's fixed ServiceError categories (an OSError subclass).
+TRANSPORT_FAULTS = frozenset({
+    "service-closed", "service-deadline", "service-io", "service-protocol", "service-write",
+    "service-concurrent-use", "device-boundary", "pairing-unavailable", "session-unavailable",
+    "service-unavailable"})
 
 
 class Boundary(Exception):
     """Only fixed categories, never remote values, may cross the API boundary."""
+
+
+def describe_fault(error):
+    """Name only code-owned facts about the exception that ended collection.
+
+    The class comes from FAULT_CLASSES, the site is the innermost frame of this
+    file (function and line), a KeyError names one of this module's constant keys
+    and a transport OSError names one of the opener's fixed categories. Messages,
+    reprs and remote values are never read.
+    """
+    name = type(error).__name__
+    fault = {"class": name if name in FAULT_CLASSES else "other"}
+    trace = error.__traceback__
+    while trace is not None:
+        if trace.tb_frame.f_code.co_filename == __file__:
+            fault["site"], fault["line"] = trace.tb_frame.f_code.co_name, trace.tb_lineno
+        trace = trace.tb_next
+    first = error.args[0] if len(error.args) == 1 else None
+    if isinstance(error, KeyError) and type(first) is str and first in FAULT_FIELDS:
+        fault["field"] = first
+    if isinstance(error, OSError) and type(first) is str and first in TRANSPORT_FAULTS:
+        fault["category"] = first
+    return fault
 
 
 class Budget:
@@ -144,7 +187,9 @@ class Reader:
         self.sequence = 0
         self.used = False
         self.attached = False
+        self.started = False
         self.install_attempted = False
+        self.sampling = False
         self.received = 0
         self.discarded = 0
         self.samples = 0
@@ -327,6 +372,22 @@ class Reader:
             remote = result["result"]
             return remote.get("value")
 
+    def _phase(self):
+        """The furthest step reached; read before cleanup clears the selection."""
+        if not self.started:
+            return "output"
+        if self.sampling:
+            return "sampling"
+        if self.install_attempted:
+            return "install"
+        if self.target is not None:
+            return "presence"
+        if self.page is not None:
+            return "target"
+        if self.app is not None:
+            return "listing"
+        return "applications"
+
     def run(self, output, *, stop=None, duration=120, cleanup_timeout=.5):
         if self.used:
             raise ValueError("single-use-reader")
@@ -337,12 +398,14 @@ class Reader:
         reason = "protocol-boundary"
         cleanup = "not-installed"
         interrupted = None
+        phase, fault = "output", {"class": "other"}
         started = time.monotonic()
         try:
             mode = os.fstat(output.fileno())
             if (not stat.S_ISREG(mode.st_mode) or mode.st_mode & 0o077
                     or mode.st_size != 0 or output.tell() != 0):
                 raise Boundary("unsafe-output")
+            self.started = True
             self._send("_rpc_reportIdentifier:")
             self._send("_rpc_getConnectedApplications:")
             while self.page is None or self.target is None:
@@ -352,6 +415,7 @@ class Reader:
             self.install_attempted = True
             if self._evaluate(SAMPLER) is not True:
                 raise Boundary("evaluation-failed")
+            self.sampling = True
             next_sample = 0
             while True:
                 self._check()
@@ -377,11 +441,15 @@ class Reader:
                 self.samples += 1
         except Boundary as error:
             reason = error.args[0]
+            phase, fault = self._phase(), describe_fault(error)
         except KeyboardInterrupt as error:
             reason, interrupted = "stopped", error
-        except Exception:
+            phase, fault = self._phase(), describe_fault(error)
+        except Exception as error:
             # No exception repr, logger, traceback, protocol payload or free text.
+            # The reason keeps its category; fault adds only code-owned names.
             reason = "protocol-boundary"
+            phase, fault = self._phase(), describe_fault(error)
         finally:
             # Signal other collector readers immediately, before bounded cleanup.
             self.stop.set()
@@ -426,7 +494,8 @@ class Reader:
                         interrupted = error
                     finally:
                         self.app = self.page = self.target = None
-        self.result = {"reason": reason, "cleanup": cleanup, "samples": self.samples,
+        self.result = {"reason": reason, "phase": phase, "fault": fault,
+                       "cleanup": cleanup, "samples": self.samples,
                        "discarded": self.discarded, "receivedBytes": self.received,
                        "reservedInputBytes": self.budget.input, "outputBytes": self.budget.output,
                        "elapsedSeconds": round(time.monotonic() - started, 4)}

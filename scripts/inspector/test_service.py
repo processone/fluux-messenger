@@ -534,6 +534,12 @@ class ServiceProof(unittest.TestCase):
                 result = Reader(stream, budget).run(output, duration=2)
                 self.assertEqual(result['reason'], 'protocol-boundary' if mode == 'inspector-disconnect' else 'evaluation-failed')
                 self.assertEqual(result['cleanup'], 'unconfirmed' if mode == 'inspector-disconnect' else 'confirmed')
+                if mode == 'inspector-disconnect':
+                    # FLM-377: the same W3 reason now tells a closed transport apart
+                    # from a message-shape fault, using only the opener's category.
+                    self.assertEqual({k: result['fault'].get(k) for k in ('class', 'site', 'category')},
+                                     {'class': 'ServiceError', 'site': '_read', 'category': 'service-closed'})
+                    self.assertEqual(result['phase'], 'sampling')
                 output.seek(0)
                 self.assertNotIn(PRIVATE.encode(), output.read())
                 peer.wait_closed()

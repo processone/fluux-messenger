@@ -21,6 +21,7 @@ import time
 import unittest
 
 from reader import BUNDLE, CAP, Budget, Boundary, Reader, PRESENT, SAMPLER, SAMPLE, REMOVE, SAMPLE_INTERVAL, sanitize_sample
+from structure import StructureTap, assert_sanitized
 
 SAMPLES = json.load(sys.stdin)
 PROOF = []
@@ -117,6 +118,11 @@ class Peer:
                     self.send("_rpc_reportConnectedApplicationList:", {"WIRApplicationDictionaryKey": apps})
                 elif sel == "_rpc_forwardGetListing:":
                     assert arg["WIRApplicationIdentifierKey"] == "PID:321"
+                    if self.mode == "missing-listing":
+                        # FLM-377: a listing without its page map must name that field.
+                        self.send("_rpc_applicationSentListing:", {"WIRApplicationIdentifierKey": "PID:321",
+                                  "WIRTitleKey": PRIVATE})
+                        continue
                     self.listing(pages=2 if self.mode == "multiple-pages" else 1)
                 elif sel == "_rpc_forwardSocketSetup:":
                     self.sender = arg["WIRSenderKey"]
@@ -242,7 +248,7 @@ class ReaderTests(unittest.TestCase):
     # Positive lifecycle checks use the actual API budget, not a shorter fixture
     # deadline that can legitimately leave responsive XML cleanup unconfirmed.
     def exercise(self, mode, *, duration=.65, budget=None, app_list_delay=0,
-                 expire_on_sample=False,
+                 expire_on_sample=False, tap=False,
                  cleanup=signature(Reader.run).parameters["cleanup_timeout"].default):
         client, server = socket.socketpair()
         if mode == "blocked-send":
@@ -346,7 +352,9 @@ class ReaderTests(unittest.TestCase):
                 return getattr(client, name)
 
         controlled = ControlledSocket()
-        reader = Reader(controlled, budget or Budget())
+        budget = budget or Budget()
+        observer = StructureTap(controlled, budget, **({"limit": tap} if type(tap) is int else {})) if tap else None
+        reader = Reader(observer or controlled, budget)
         interrupt_propagated = False
         stdout, stderr = io.StringIO(), io.StringIO()
         try:
@@ -369,7 +377,11 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(peer.errors, [])
         self.assertTrue(peer.closed)
         self.assertTrue(stop.is_set())
-        self.assertNotIn(PRIVATE, persisted.decode() + stdout.getvalue() + stderr.getvalue() + json.dumps(result))
+        structure = observer.report() if observer else None
+        self.assertNotIn(PRIVATE, persisted.decode() + stdout.getvalue() + stderr.getvalue() + json.dumps(result)
+                         + json.dumps(structure))
+        if observer:
+            assert_sanitized(structure)
         self.assertEqual(stdout.getvalue() + stderr.getvalue(), "")
         self.assertLessEqual(result["reservedInputBytes"] + result["outputBytes"], reader.budget.limit)
         self.assertLessEqual(result["receivedBytes"], result["reservedInputBytes"])
@@ -391,6 +403,7 @@ class ReaderTests(unittest.TestCase):
                       "writesAfterCutoff": controlled.writes_after_cut,
                       "interruptPropagatedAfterClose": interrupt_propagated,
                       "applicationListDelaySeconds": app_list_delay,
+                      "structure": structure,
                       "collectionExpiredAfterInstall": controlled.expired_after_install,
                       "cleanupElapsedSeconds": (round(controlled.closed_at - controlled.cleanup_started, 4)
                                                 if controlled.cleanup_started is not None else None)})
@@ -399,6 +412,8 @@ class ReaderTests(unittest.TestCase):
     def test_normal_filtered_sampling_and_detach(self):
         result, peer, persisted = self.exercise("normal", duration=2)
         self.assertEqual(result["reason"], "stopped")
+        self.assertEqual((result["phase"], result["fault"]["class"], result["fault"]["site"]),
+                         ("sampling", "Boundary", "_check"))
         self.assertEqual(result["cleanup"], "confirmed")
         self.assertEqual(result["samples"], 3)
         self.assertEqual(len(persisted.splitlines()), 3)
@@ -418,24 +433,40 @@ class ReaderTests(unittest.TestCase):
 
     def test_identity_and_routing_boundaries(self):
         # Captain-approved F4: only the selected target's destruction gets its signal.
-        for mode, reason in [("duplicate-app", "identity-boundary"), ("multiple-pages", "page-boundary"),
-                             ("wrong-session", "session-boundary"), ("wrong-app", "session-boundary"),
-                             ("identity-changed", "identity-boundary"), ("page-changed", "page-boundary"),
-                             ("target-destroyed", "target-destroyed"),
-                             ("other-target-destroyed", "target-boundary"),
-                             ("destroyed-before-target", "target-boundary"),
-                             ("target-replaced", "target-boundary")]:
+        # FLM-377: the phase names how far discovery got before the boundary.
+        for mode, reason, phase in [("duplicate-app", "identity-boundary", "applications"),
+                                    ("multiple-pages", "page-boundary", "listing"),
+                                    ("wrong-session", "session-boundary", "sampling"),
+                                    ("wrong-app", "session-boundary", "sampling"),
+                                    ("identity-changed", "identity-boundary", "sampling"),
+                                    ("page-changed", "page-boundary", "sampling"),
+                                    ("target-destroyed", "target-destroyed", "sampling"),
+                                    ("other-target-destroyed", "target-boundary", "sampling"),
+                                    ("destroyed-before-target", "target-boundary", "target"),
+                                    ("target-replaced", "target-boundary", "sampling")]:
             with self.subTest(mode=mode):
                 result, _, persisted = self.exercise(mode)
                 self.assertEqual(result["reason"], reason)
+                self.assertEqual((result["phase"], result["fault"]["class"], result["fault"]["site"]),
+                                 (phase, "Boundary", "_event"))
                 self.assertEqual(persisted, b"")
 
     def test_payloads_do_not_escape_error_paths(self):
-        for mode, reason in [("malformed", "protocol-boundary"), ("eval-error", "evaluation-failed"),
-                             ("bad-sample", "invalid-sample"), ("disconnect", "disconnected")]:
+        # FLM-377: FLM-350's live stop said only protocol-boundary. The fault names
+        # the exception class, reader site and constant field, never a remote value.
+        for mode, reason, phase, fault in [
+                ("malformed", "protocol-boundary", "sampling", {"class": "JSONDecodeError", "site": "_event"}),
+                ("missing-listing", "protocol-boundary", "listing",
+                 {"class": "KeyError", "site": "_event", "field": "WIRListingKey"}),
+                ("eval-error", "evaluation-failed", "sampling", {"class": "Boundary", "site": "_evaluate"}),
+                ("bad-sample", "invalid-sample", "sampling", {"class": "Boundary", "site": "count"}),
+                ("disconnect", "disconnected", "sampling", {"class": "Boundary", "site": "_read"})]:
             with self.subTest(mode=mode):
                 result, _, persisted = self.exercise(mode)
                 self.assertEqual(result["reason"], reason)
+                self.assertEqual(result["phase"], phase)
+                self.assertEqual({k: v for k, v in result["fault"].items() if k != "line"}, fault)
+                self.assertEqual(type(result["fault"]["line"]), int)
                 self.assertEqual(persisted, b"")
 
     def test_real_time_hung_partial_and_frozen_cleanup(self):
@@ -444,6 +475,7 @@ class ReaderTests(unittest.TestCase):
                 result, peer, _ = self.exercise(mode, duration=.15, cleanup=.15,
                                                expire_on_sample=True)
                 self.assertEqual(result["reason"], "time-limit")
+                self.assertEqual(result["phase"], "applications")
                 self.assertEqual(result["cleanup"], "not-installed")
                 self.assertFalse(PROOF[-1]["collectionExpiredAfterInstall"])
         # FLM-366/368: frozen cleanup needs an installed sampler, not a fast
@@ -463,6 +495,7 @@ class ReaderTests(unittest.TestCase):
     def test_preexisting_sampler_is_not_removed(self):
         result, peer, persisted = self.exercise("preexisting")
         self.assertEqual(result["reason"], "sampler-already-present")
+        self.assertEqual(result["phase"], "presence")
         self.assertEqual(result["cleanup"], "not-installed")
         self.assertEqual(peer.expressions, ["present"])
         self.assertEqual(persisted, b"")
@@ -495,6 +528,7 @@ class ReaderTests(unittest.TestCase):
                 reader = Reader(client, Budget())
                 result = reader.run(output, duration=.15)
                 self.assertEqual(result["reason"], "unsafe-output")
+                self.assertEqual((result["phase"], result["fault"]["site"]), ("output", "run"))
                 self.assertEqual(server.recv(1), b"")
                 self.assertEqual(result["receivedBytes"], 0)
                 with self.assertRaises(ValueError):
@@ -603,6 +637,61 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(exact["reason"], "byte-limit")
         self.assertEqual(retained, persisted)
         self.assertEqual(exact["reservedInputBytes"] + exact["outputBytes"], boundary)
+
+    def test_structure_tap_keeps_only_allowlisted_shapes(self):
+        # FLM-377: establish the real iPhone's shape from selector/type/field-presence
+        # facts only. Titles, URLs, names and evaluated values stay private.
+        result, _, persisted = self.exercise("normal", duration=2, tap=True)
+        self.assertEqual((result["reason"], result["cleanup"], result["samples"]), ("stopped", "confirmed", 3))
+        self.assertEqual(len(persisted.splitlines()), 3)
+        messages = PROOF[-1]["structure"]["messages"]
+        flow = [(m["dir"], m["selector"]) for m in messages]
+        self.assertEqual(flow[:2], [("out", "_rpc_reportIdentifier:"), ("out", "_rpc_getConnectedApplications:")])
+        apps = next(m["apps"] for m in messages if m["selector"] == "_rpc_reportConnectedApplicationList:")
+        self.assertEqual((apps["count"], apps["fluux"], apps["hostedByFluux"]), (2, 1, 0))
+        self.assertEqual(apps["keys"]["WIRApplicationNameKey"], {"str": 2})
+        self.assertEqual(apps["fluuxEntries"][0]["identifierForm"], "pid")
+        listings = [m for m in messages if m["selector"] == "_rpc_applicationSentListing:"]
+        self.assertEqual([m["forFluux"] for m in listings], [False, True])
+        self.assertNotIn("pages", listings[0])
+        pages = listings[1]["pages"]
+        self.assertEqual((pages["count"], pages["types"], pages["pageIdTypes"]), (1, {"WIRTypeWebPage": 1}, {"int": 1}))
+        self.assertEqual(pages["keys"]["WIRTitleKey"], {"str": 1})
+        created = next(m for m in messages if m.get("data", {}).get("method") == "Target.targetCreated")
+        self.assertEqual((created["destination"], created["data"]["targetInfo"]["type"]), ("sender", "page"))
+        self.assertEqual([m["expression"] for m in messages if "expression" in m][:3], ["present", "install", "sample"])
+        replies = [m["data"]["inner"]["result"]["remote"] for m in messages
+                   if m.get("data", {}).get("method") == "Target.dispatchMessageFromTarget"]
+        self.assertEqual([(r["type"], r["valueType"]) for r in replies[:3]],
+                         [("boolean", "bool"), ("boolean", "bool"), ("object", "dict")])
+        for leaked in ("PRIVATE-CANARY", "hello", "https://example.invalid/x"):
+            with self.subTest(leaked=leaked), self.assertRaises(ValueError):
+                assert_sanitized({"messages": [{"selector": leaked}]})
+
+    def test_structure_tap_does_not_change_reader_outcomes(self):
+        # Observation must never alter what the reader receives or decides.
+        for mode in ("fragmented", "xml", "malformed", "missing-listing", "eval-error", "wrong-session",
+                     "duplicate-app", "multiple-pages", "destroyed-before-target", "preexisting", "partial"):
+            with self.subTest(mode=mode):
+                plain, _, plain_saved = self.exercise(mode, duration=.65 if mode != "partial" else .15)
+                observed, _, observed_saved = self.exercise(mode, duration=.65 if mode != "partial" else .15,
+                                                            tap=True)
+                same = ("reason", "phase", "fault", "cleanup", "samples", "discarded", "receivedBytes",
+                        "reservedInputBytes")
+                self.assertEqual({k: plain[k] for k in same}, {k: observed[k] for k in same})
+                self.assertEqual(plain_saved, observed_saved)
+                self.assertGreater(observed["outputBytes"], plain["outputBytes"])
+        partial = PROOF[-1]["structure"]["partial"]
+        self.assertEqual(partial, [{"dir": "in", "bytes": 2048, "received": 6}])
+
+    def test_structure_tap_is_bounded(self):
+        result, _, _ = self.exercise("normal", duration=2, tap=2)
+        structure = PROOF[-1]["structure"]
+        self.assertEqual(result["reason"], "stopped")
+        self.assertEqual(len(structure["messages"]), 2)
+        self.assertGreater(structure["omitted"], 0)
+        with self.assertRaises(ValueError):
+            StructureTap(None, Budget(), limit=129)
 
     def test_schema_rejects_private_numeric_and_stack_fields(self):
         for key, value in [("mountedRows", True), ("elapsedMs", float("nan")),
