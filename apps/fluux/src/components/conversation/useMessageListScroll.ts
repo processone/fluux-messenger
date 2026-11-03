@@ -43,7 +43,10 @@ import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
 import { ViewportSession, type ViewportGeometry } from './viewportSession'
 import { ScrollPersistenceAdapter } from './scrollPersistenceAdapter'
-import { DirectionalHistoryWindowCoordinator } from './directionalHistoryWindowCoordinator'
+import {
+  DirectionalHistoryWindowCoordinator,
+  type DirectionalHistoryRequestFacts,
+} from './directionalHistoryWindowCoordinator'
 import { TARGET_HIGHLIGHT_MS } from './explicitTargetBrowserAdapter'
 import { decideOnNewMessage } from './newMessageDecision'
 import { createArrivalBaseline } from './arrivalBaseline'
@@ -133,6 +136,19 @@ function useStableCallback<Args extends unknown[]>(
   const latest = useRef(callback)
   latest.current = callback
   return useCallback((...args: Args) => latest.current(...args), [])
+}
+
+/** What the positioning controller answers about a directional load's restore request. */
+function directionalRequestFacts(
+  controllerRef: { readonly current: PositioningController | null | undefined },
+  conversationId: string,
+): DirectionalHistoryRequestFacts {
+  return {
+    pending: (generation) =>
+      controllerRef.current?.isDirectionalHistoryPending(conversationId, generation) ?? false,
+    readingHeld: (generation) =>
+      controllerRef.current?.holdsDirectionalReading(conversationId, generation) ?? false,
+  }
 }
 
 // ============================================================================
@@ -874,8 +890,7 @@ export function useMessageListScroll({
         directionalWindowRef.current?.isPendingWindowShift(
           id,
           window,
-          (generation) =>
-            positioningControllerRef.current?.holdsDirectionalReading(id, generation) ?? false,
+          directionalRequestFacts(positioningControllerRef, id),
         ) ?? false,
       beginLayoutPreservation: (input) => {
         if (!reconcileMessageTargetAfterResize()) positioningControllerRef.current?.beginLayoutPreservation(input)
@@ -2099,8 +2114,7 @@ export function useMessageListScroll({
       conversationId,
       firstMessageId: firstMessageId ?? '',
       interiorPlacementVersion,
-      readingHeld: (generation) =>
-        positioningControllerRef.current?.holdsDirectionalReading(conversationId, generation) ?? false,
+      request: directionalRequestFacts(positioningControllerRef, conversationId),
     }) ?? { kind: 'none' as const }
     if (decision.kind === 'none') return
     const saved = decision.snapshot
@@ -2118,7 +2132,8 @@ export function useMessageListScroll({
     // the cap. It still moves every row below it, and the load's pending request makes the
     // controller refuse ambient insertion preservation, so the load restores its anchor for it now
     // and again when its batch lands (FLM-210). The coordinator reads it from the store's interior
-    // placement version.
+    // placement version. A load whose request the controller refused, under a hover hold for one,
+    // holds nothing: the coordinator drops it and ambient insertion preservation keeps the shift.
     if (decision.kind === 'waiting') {
       debugLog('PREPEND WAITING', {
         messageCount,
@@ -2136,7 +2151,7 @@ export function useMessageListScroll({
       debugLog(
         saved.restored
           ? 'DIRECTIONAL HISTORY DROPPED (reader moved on before the load settled)'
-          : 'DIRECTIONAL HISTORY DROPPED (controller unavailable)',
+          : 'DIRECTIONAL HISTORY DROPPED (no pending request: ambient handling holds the reader)',
         {
           oldFirstId: saved.oldFirstId,
           firstMessageId,

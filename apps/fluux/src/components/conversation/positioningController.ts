@@ -1365,11 +1365,16 @@ export class PositioningController {
     )
   }
 
-  isDirectionalHistoryPending(conversationId: string): boolean {
+  /**
+   * Whether a directional history request, the one with `generation` when given, is accepted, still
+   * current and not yet applied.
+   */
+  isDirectionalHistoryPending(conversationId: string, generation?: number): boolean {
     const execution = this.directionalHistoryExecution
     return Boolean(
       execution &&
       execution.request.conversationId === conversationId &&
+      (generation === undefined || execution.request.generation === generation) &&
       this.isDirectionalHistoryExecutionCurrent(execution) &&
       !execution.applied,
     )

@@ -122,11 +122,20 @@ function windowShifted(
   )
 }
 
-/**
- * Whether the reader still reads where the restore holding `generation` put them: nothing they did
- * or asked for has moved them since. Answered by the positioning controller.
- */
-export type DirectionalHistoryReadingHeld = (generation: number) => boolean
+/** What the positioning controller answers about a load's restore request with `generation`. */
+export interface DirectionalHistoryRequestFacts {
+  /**
+   * The controller accepted the request and still holds it, not yet applied, so the load's restore
+   * can still hold the reader. A request it refused, under a hover hold for one, or superseded since
+   * cannot (FLM-210).
+   */
+  pending: (generation: number) => boolean
+  /**
+   * The reader still reads where the restore holding `generation` put them: nothing they did or
+   * asked for has moved them since.
+   */
+  readingHeld: (generation: number) => boolean
+}
 
 /** Value-only policy owner for directional history window loads. */
 export class DirectionalHistoryWindowCoordinator {
@@ -220,36 +229,53 @@ export class DirectionalHistoryWindowCoordinator {
       : null
   }
 
+  /**
+   * Whether this commit's window shift is the active load's to restore, so ambient insertion
+   * handling stands aside for it. Any other shift stays ambient's.
+   */
   isPendingWindowShift(
     conversationId: string,
     window: DirectionalHistoryWindow,
-    readingHeld: DirectionalHistoryReadingHeld,
+    request: DirectionalHistoryRequestFacts,
   ): boolean {
     const snapshot = this.activeSnapshot(conversationId)
     if (!snapshot) return false
-    if (!snapshot.restored) return this.shiftedBeforeRestore(snapshot, window)
-    return this.shiftedAfterRestore(snapshot, window, readingHeld)
+    if (!snapshot.restored) return this.shiftedBeforeRestore(snapshot, window, request)
+    return this.shiftedAfterRestore(snapshot, window, request)
   }
 
   /**
-   * The window moved under a load that has not restored yet: its batch landed, or a delayed arrival
-   * moved the rows first. At the resident bound that arrival evicts the oldest row and moves the
-   * first id; under it, it only advances the interior placement version. Either way the load's own
-   * restore is the one owner that may hold the reader, since its pending request makes the
-   * controller refuse ambient insertion preservation (FLM-210).
+   * The window moved under a load that has not restored yet, and whose request the controller still
+   * holds pending: its batch landed, or a delayed arrival moved the rows first. At the resident bound
+   * that arrival evicts the oldest row and moves the first id; under it, it only advances the
+   * interior placement version. The pending request makes the controller refuse ambient insertion
+   * preservation, so the load's own restore is the one owner left to hold the reader (FLM-210).
    */
   private shiftedBeforeRestore(
     snapshot: DirectionalHistorySnapshot,
     window: DirectionalHistoryWindow,
+    request: DirectionalHistoryRequestFacts,
   ): boolean {
-    return windowShifted(snapshot.oldFirstId, snapshot.oldInteriorPlacementVersion, window)
+    return (
+      windowShifted(snapshot.oldFirstId, snapshot.oldInteriorPlacementVersion, window) &&
+      this.pendingGeneration(snapshot, request) !== null
+    )
+  }
+
+  /** The generation of this load's restore request, while the controller still holds it pending. */
+  private pendingGeneration(
+    snapshot: DirectionalHistorySnapshot,
+    request: DirectionalHistoryRequestFacts,
+  ): number | null {
+    const { generation } = snapshot
+    return generation !== undefined && request.pending(generation) ? generation : null
   }
 
   /** A restored load still in flight whose window shifted again, while the reader stayed put. */
   private shiftedAfterRestore(
     snapshot: DirectionalHistorySnapshot,
     window: DirectionalHistoryWindow,
-    readingHeld: DirectionalHistoryReadingHeld,
+    request: DirectionalHistoryRequestFacts,
   ): boolean {
     return (
       !snapshot.loadSettled &&
@@ -259,7 +285,7 @@ export class DirectionalHistoryWindowCoordinator {
         window,
       ) &&
       snapshot.generation !== undefined &&
-      readingHeld(snapshot.generation)
+      request.readingHeld(snapshot.generation)
     )
   }
 
@@ -371,7 +397,7 @@ export class DirectionalHistoryWindowCoordinator {
 
   observeWindow(input: DirectionalHistoryWindow & {
     conversationId: string
-    readingHeld: DirectionalHistoryReadingHeld
+    request: DirectionalHistoryRequestFacts
   }): DirectionalHistoryWindowDecision {
     const snapshot = this.active
     if (
@@ -395,26 +421,27 @@ export class DirectionalHistoryWindowCoordinator {
       ) {
         return { kind: 'none' }
       }
-      if (!this.shiftedAfterRestore(snapshot, input, input.readingHeld)) {
+      if (!this.shiftedAfterRestore(snapshot, input, input.request)) {
         this.active = null
         return { kind: 'dropped', snapshot }
       }
       this.restoringFor(snapshot, input)
       return { kind: 'restart', snapshot }
     }
-    if (!this.shiftedBeforeRestore(snapshot, input)) {
+    if (
+      !windowShifted(snapshot.oldFirstId, snapshot.oldInteriorPlacementVersion, input)
+    ) {
       return { kind: 'waiting', snapshot }
     }
-    if (snapshot.generation === undefined) {
+    const generation = this.pendingGeneration(snapshot, input.request)
+    if (generation === null) {
+      // The controller refused this load's request or superseded it: the load cannot hold the
+      // reader, so this shift and its batch's stay with ambient insertion handling.
       this.active = null
       return { kind: 'dropped', snapshot }
     }
     this.restoringFor(snapshot, input)
-    return {
-      kind: 'reconcile',
-      snapshot,
-      generation: snapshot.generation,
-    }
+    return { kind: 'reconcile', snapshot, generation }
   }
 
   /** Remember which row a restore of this load held and where, for a restart of the same load. */

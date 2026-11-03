@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DirectionalHistoryWindowCoordinator,
   type BeginDirectionalHistoryInput,
+  type DirectionalHistoryRequestFacts,
 } from './directionalHistoryWindowCoordinator'
 
 function input(
@@ -29,8 +30,11 @@ function input(
   }
 }
 
-/** The reader has not moved since the restore. */
-const readingHeld = () => true
+/** The controller still holds the load's request, and the reader has not moved since its restore. */
+const held: DirectionalHistoryRequestFacts = {
+  pending: () => true,
+  readingHeld: () => true,
+}
 
 /** The resident window as the coordinator reads it. */
 const at = (firstMessageId: string, interiorPlacementVersion = 0) => ({
@@ -160,13 +164,13 @@ describe('DirectionalHistoryWindowCoordinator', () => {
     expect(coordinator.observeWindow({
       conversationId: 'room-a',
       ...at('older-1'),
-      readingHeld,
+      request: held,
     })).toMatchObject({
       kind: 'reconcile',
       generation: 12,
       snapshot: { requestId: started.snapshot.requestId },
     })
-    expect(coordinator.isPendingWindowShift('room-a', at('older-1'), readingHeld)).toBe(true)
+    expect(coordinator.isPendingWindowShift('room-a', at('older-1'), held)).toBe(true)
     coordinator.markRestored(started.snapshot.requestId, 1_100)
     coordinator.markLoadSettled(started.snapshot.requestId)
     expect(coordinator.releaseSettledWithoutShift({
@@ -191,7 +195,7 @@ describe('DirectionalHistoryWindowCoordinator', () => {
       expect(coordinator.observeWindow({
         conversationId: 'room-a',
         ...at('message-2'),
-        readingHeld,
+        request: held,
       })).toMatchObject({ kind: 'reconcile', generation: 12 })
       coordinator.markRestored(requestId, 1_100)
       return requestId
@@ -202,25 +206,25 @@ describe('DirectionalHistoryWindowCoordinator', () => {
       const requestId = restoredOnArrival(coordinator)
 
       // Re-renders of the shifted window are not a new shift.
-      expect(coordinator.isPendingWindowShift('room-a', at('message-2'), readingHeld)).toBe(false)
+      expect(coordinator.isPendingWindowShift('room-a', at('message-2'), held)).toBe(false)
       expect(coordinator.observeWindow({
         conversationId: 'room-a',
         ...at('message-2'),
-        readingHeld,
+        request: held,
       })).toEqual({ kind: 'none' })
 
       // The older batch lands: ambient insertion handling must stand aside for it, and it restores.
-      expect(coordinator.isPendingWindowShift('room-a', at('older-1'), readingHeld)).toBe(true)
+      expect(coordinator.isPendingWindowShift('room-a', at('older-1'), held)).toBe(true)
       expect(coordinator.observeWindow({
         conversationId: 'room-a',
         ...at('older-1'),
-        readingHeld,
+        request: held,
       })).toMatchObject({ kind: 'restart', snapshot: { requestId } })
       expect(coordinator.attachGeneration(requestId, 14)).toBe(true)
       expect(coordinator.observeWindow({
         conversationId: 'room-a',
         ...at('older-1'),
-        readingHeld,
+        request: held,
       })).toEqual({ kind: 'none' })
     })
 
@@ -240,7 +244,7 @@ describe('DirectionalHistoryWindowCoordinator', () => {
       expect(coordinator.observeWindow({
         conversationId: 'room-a',
         ...at('older-2'),
-        readingHeld,
+        request: held,
       })).toEqual({ kind: 'none' })
     })
 
@@ -257,16 +261,19 @@ describe('DirectionalHistoryWindowCoordinator', () => {
       const coordinator = new DirectionalHistoryWindowCoordinator(500)
       restoredOnArrival(coordinator)
       const asked: number[] = []
-      const movedOn = (generation: number) => {
-        asked.push(generation)
-        return false
+      const movedOn: DirectionalHistoryRequestFacts = {
+        pending: () => false,
+        readingHeld: (generation) => {
+          asked.push(generation)
+          return false
+        },
       }
 
       expect(coordinator.isPendingWindowShift('room-a', at('older-1'), movedOn)).toBe(false)
       expect(coordinator.observeWindow({
         conversationId: 'room-a',
         ...at('older-1'),
-        readingHeld: movedOn,
+        request: movedOn,
       })).toMatchObject({ kind: 'dropped' })
       expect(asked).toEqual([12, 12])
       expect(coordinator.activeSnapshot('room-a')).toBeNull()
@@ -278,19 +285,20 @@ describe('DirectionalHistoryWindowCoordinator', () => {
   // ambient insertion hold. The reader's rows moved down by the arrival until the batch landed
   // (invariant-14k read midway: 424 px).
   describe('an interior arrival under the resident bound while the load is pending', () => {
-    function pendingLoad(coordinator: DirectionalHistoryWindowCoordinator) {
+    /** `accepted` false: the controller refused the load's request, so no generation attaches. */
+    function pendingLoad(coordinator: DirectionalHistoryWindowCoordinator, accepted = true) {
       coordinator.enterConversation('room-a', false)
       const started = coordinator.begin(input({ mode: 'explicit', interiorPlacementVersion: 3 }))
       if (started.kind !== 'started') throw new Error('the load must start')
-      coordinator.attachGeneration(started.snapshot.requestId, 12)
+      if (accepted) coordinator.attachGeneration(started.snapshot.requestId, 12)
       return started.snapshot.requestId
     }
 
     const observe = (
       coordinator: DirectionalHistoryWindowCoordinator,
       window: ReturnType<typeof at>,
-      held = readingHeld,
-    ) => coordinator.observeWindow({ conversationId: 'room-a', ...window, readingHeld: held })
+      request = held,
+    ) => coordinator.observeWindow({ conversationId: 'room-a', ...window, request })
 
     /** The arrival sorts between resident rows: same first id, next interior placement. */
     function restoredOnArrival(coordinator: DirectionalHistoryWindowCoordinator) {
@@ -309,10 +317,10 @@ describe('DirectionalHistoryWindowCoordinator', () => {
       const requestId = pendingLoad(coordinator)
 
       // A re-render of the same window, or an arrival at the tail, is not a shift.
-      expect(coordinator.isPendingWindowShift('room-a', at('message-1', 3), readingHeld)).toBe(false)
+      expect(coordinator.isPendingWindowShift('room-a', at('message-1', 3), held)).toBe(false)
       expect(observe(coordinator, at('message-1', 3))).toMatchObject({ kind: 'waiting' })
 
-      expect(coordinator.isPendingWindowShift('room-a', at('message-1', 4), readingHeld)).toBe(true)
+      expect(coordinator.isPendingWindowShift('room-a', at('message-1', 4), held)).toBe(true)
       expect(observe(coordinator, at('message-1', 4))).toMatchObject({
         kind: 'reconcile',
         generation: 12,
@@ -325,7 +333,7 @@ describe('DirectionalHistoryWindowCoordinator', () => {
       const requestId = restoredOnArrival(coordinator)
 
       expect(observe(coordinator, at('message-1', 4))).toEqual({ kind: 'none' })
-      expect(coordinator.isPendingWindowShift('room-a', at('older-1', 4), readingHeld)).toBe(true)
+      expect(coordinator.isPendingWindowShift('room-a', at('older-1', 4), held)).toBe(true)
       expect(observe(coordinator, at('older-1', 4))).toMatchObject({
         kind: 'restart',
         snapshot: { requestId },
@@ -343,10 +351,44 @@ describe('DirectionalHistoryWindowCoordinator', () => {
       expect(observe(coordinator, at('message-1', 5))).toEqual({ kind: 'none' })
     })
 
+    // FLM-210 (CI, chromium and webkit): the pointer rested on a row as the load began, so a hover
+    // hold made the controller refuse the load's request. Ambient handling stood aside for the
+    // arrival all the same, and the reader's rows moved by it (invariant-14q midway: 264 px).
+    it('leaves the arrival and the batch to ambient handling when the controller refused the load\'s request', () => {
+      const coordinator = new DirectionalHistoryWindowCoordinator(500)
+      pendingLoad(coordinator, false)
+
+      expect(coordinator.isPendingWindowShift('room-a', at('message-1', 4), held)).toBe(false)
+      expect(observe(coordinator, at('message-1', 4))).toMatchObject({ kind: 'dropped' })
+      expect(coordinator.activeSnapshot('room-a')).toBeNull()
+      expect(coordinator.isPendingWindowShift('room-a', at('older-1', 4), held)).toBe(false)
+    })
+
+    it('leaves the arrival to ambient handling once the controller no longer holds the load\'s request', () => {
+      const coordinator = new DirectionalHistoryWindowCoordinator(500)
+      pendingLoad(coordinator)
+      const asked: number[] = []
+      const superseded: DirectionalHistoryRequestFacts = {
+        pending: (generation) => {
+          asked.push(generation)
+          return false
+        },
+        readingHeld: () => false,
+      }
+
+      expect(coordinator.isPendingWindowShift('room-a', at('message-1', 4), superseded)).toBe(false)
+      expect(observe(coordinator, at('message-1', 4), superseded)).toMatchObject({ kind: 'dropped' })
+      expect(asked).toEqual([12, 12])
+      expect(coordinator.activeSnapshot('room-a')).toBeNull()
+    })
+
     it('leaves the batch to ambient handling once the reader moved on after the arrival restore', () => {
       const coordinator = new DirectionalHistoryWindowCoordinator(500)
       restoredOnArrival(coordinator)
-      const movedOn = () => false
+      const movedOn: DirectionalHistoryRequestFacts = {
+        pending: () => false,
+        readingHeld: () => false,
+      }
 
       expect(coordinator.isPendingWindowShift('room-a', at('older-1', 4), movedOn)).toBe(false)
       expect(observe(coordinator, at('older-1', 4), movedOn)).toMatchObject({ kind: 'dropped' })
@@ -375,7 +417,7 @@ describe('DirectionalHistoryWindowCoordinator', () => {
     expect(coordinator.observeWindow({
       conversationId: 'room-a',
       ...at('older-1'),
-      readingHeld,
+      request: held,
     })).toEqual({ kind: 'none' })
 
     const active = coordinator.begin(input({

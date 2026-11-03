@@ -63,7 +63,10 @@ request that would otherwise hold them. The directional window therefore also ca
 interior placement version: while the load is pending, a new interior placement counts as a window
 shift, so the load restores its own anchor at the arrival exactly as it does after an eviction at
 the bound, and restores again when its batch lands under the same reader-held rule. Ambient
-insertion handling stands aside for any shift the load restores.
+insertion handling stands aside for any shift the load restores. A load whose request the controller
+refused, as it does under a hover interaction hold, or has superseded since, holds nothing: the
+coordinator drops it at its first shift, and ambient insertion handling keeps that shift and the
+batch's.
 All authoritative slices share the same controller-owned
 `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
 measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,

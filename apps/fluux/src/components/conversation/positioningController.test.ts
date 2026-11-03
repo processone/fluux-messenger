@@ -1648,6 +1648,47 @@ describe('positioning controller directional-history ownership', () => {
     })
   })
 
+  // FLM-210 (CI, chromium and webkit): the pointer rested on a row as a load-older began, so a hover
+  // hold refused the load's request. The coordinator hands a shift to the load only while its own
+  // request is still pending here; otherwise ambient insertion handling must hold the reader.
+  it('reports a load pending only for its own accepted request, until a hover hold supersedes it', () => {
+    const history = directionalHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = beginDirectional(controller, history.executor)
+    expect(controller.isDirectionalHistoryPending(conversationId, request.generation)).toBe(true)
+    expect(controller.isDirectionalHistoryPending(conversationId, request.generation + 1)).toBe(false)
+    expect(controller.isDirectionalHistoryPending('other@example.test', request.generation)).toBe(false)
+
+    const hovered: AnchorPreservationExecutor = {
+      observeGeometry: () => {},
+      reachability: () => ({ kind: 'available', index: 5, mounted: true, placement: 'viable' }),
+      beginLoop: () => null,
+      positionFrame: () => ({ kind: 'positioned', scrollTop: 400, reassert: false }),
+      complete: () => {},
+    }
+    const hold = controller.beginInteractionHold({
+      conversationId,
+      desired: {
+        kind: 'anchor',
+        messageId: 'hovered-row',
+        placement: { kind: 'top-offset', offsetPx: pixelOffset(120) },
+      },
+      executor: hovered,
+    })
+    expect(hold).not.toBeNull()
+    expect(controller.isDirectionalHistoryPending(conversationId, request.generation)).toBe(false)
+
+    // While the hold lasts, the controller refuses the next load's request outright.
+    expect(controller.beginDirectionalHistory({
+      conversationId,
+      desired: request.desired,
+      distanceFromBottom: pixelOffset(640),
+      executor: history.executor,
+    })).toBeNull()
+    expect(controller.isDirectionalHistoryPending(conversationId)).toBe(false)
+  })
+
   it('drops a pending anchor when a forward load reaches the live edge without shifting', () => {
     const history = directionalHarness()
     const controller = new PositioningController()
