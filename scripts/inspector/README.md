@@ -186,7 +186,7 @@ Disposable proof runs every reader scenario with and without the tap and checks
 that reason, phase, fault, cleanup, samples and persisted output are identical,
 and that no titles, routes, text or console content reach the report.
 
-What the real iPhone sent (iOS 27.0.1, two FLM-377 sessions): `_rpc_reportCurrentState:`
+What the real iPhone sent (iOS 27.0.1, three FLM-377 sessions): `_rpc_reportCurrentState:`
 (an automation-availability string), the application list, and an empty
 `_rpc_reportConnectedDriverList:`. Each application entry carried its bundle
 identifier, a PNG icon of about 4 KB, its identifier, name, automation
@@ -195,14 +195,19 @@ flags as booleans. Other apps then arrived through `_rpc_applicationConnected:`
 and `_rpc_applicationUpdated:`, each with an unrequested
 `_rpc_applicationSentListing:`, and the list could repeat. The reader accepted all
 of it; the `iphone` peer mode in `test_reader.py` reproduces that order and shape.
-Fluux itself was not listed in those sessions, so its own entry is assumed to
-share that shape.
+Fluux itself was not listed in any of those sessions, including the third, for
+which the captain was asked to keep Fluux on screen, so its own entry is assumed
+to share that shape. Fluux's Tauri build enables the `devtools` feature on every
+target, which asks WebKit to make the web view inspectable on iOS too; the
+absence is not explained by that setting.
 
 The second FLM-377 session stopped with `protocol-boundary` from a transport fault,
 not a message shape: the reader's fault named `ServiceError`/`service-io` at its
 read while it waited in the applications phase. FLM-350's earlier stop had the
 same reason but kept no fault detail. `test_service.py` pauses a healthy worker for 150 ms
-during an idle read and through a whole reader journey to keep that fixed.
+during an idle read and through a whole reader journey to keep that fixed. With
+the larger reply margin, the third session stayed connected for its full 15
+seconds with no fault.
 
 ## Existing-pairing-only service opener (FLM-366)
 
