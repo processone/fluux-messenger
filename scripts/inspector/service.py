@@ -18,7 +18,12 @@ CREDIT = 64 * 1024
 BLOCK = 64 * 1024
 # E1: leave bounded local IPC margin after the native service wait. In particular,
 # a Reader's final 1ms no-data read must not destroy the stream before cleanup.
-CONTROL_GRACE = .025
+# FLM-377: the margin must also absorb scheduling delay. A background process's
+# short timers ran up to 150 ms late on the fleet's Mac, and a 25 ms margin turned
+# a healthy late reply into a closed stream on the real iPhone. A stopped worker is
+# still detected once its wait and this margin pass. The margin also extends cleanup
+# and must be inside the lifetime: see README.md, Bounds and accounting.
+CONTROL_GRACE = .5
 HEADER = struct.Struct('>cII')
 REQUEST = struct.Struct('>cIII')
 
@@ -173,7 +178,8 @@ def open_service(worker, device_id, budget, *, startup_timeout=5, lifetime=120.5
     infer consent here. mux_socket is a private disposable socket in tests; live
     callers keep the system default. No environment-based daemon redirection.
     Startup reserves 256 KiB in the existing attempt's Budget before any I/O.
-    Lifetime includes reader cleanup; supply the original remaining host deadline.
+    Lifetime is the time left to the capture deadline plus reader cleanup plus
+    CONTROL_GRACE (README.md, Bounds and accounting); at most 121 seconds.
     No retry, reconnect, trust prompt, pairing write, app launch or page request.
     """
     _seconds(startup_timeout, 5)

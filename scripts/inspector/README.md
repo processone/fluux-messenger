@@ -78,7 +78,9 @@ is not evidence that the peer processed it.
    be audited and bounded before live use. Do not instantiate the default
    `pymobiledevice3.WebinspectorService` or `InspectorSession`: those already
    request other apps' listings or may format raw responses. The opener below is
-   supplied and proved on disposable peers, **not qualified on a real phone**.
+   proved on disposable peers. In FLM-377 it opened the captain's iPhone (iOS
+   27.0.1), and the reader attached to Fluux's page, took four content-free
+   samples and confirmed their removal.
 3. Create one `Budget()` for the **whole attempt**, share it with the native-log
    collector, and charge that collector's raw input with `budget.charge(n)` before
    copying/decoding it. Charge its sanitized output with
@@ -110,6 +112,13 @@ is not evidence that the peer processed it.
    500ms. On an aligned stream it gives fixed sampler removal at most half of
    that time, reserving the rest for the page-socket close message even when the
    page never answers removal. It then shuts down and closes the transport.
+   Through the opener, a reply the host scheduled late can still finish up to
+   500 ms after either deadline (see Bounds and accounting), so cleanup can last
+   up to about 1.1 seconds. A removal reply that ends after the cleanup deadline
+   leaves no time for the close message, which is then skipped. A worker that
+   stops answering holds cleanup about 0.65 s when it stops at removal, and up to
+   about 0.9 s when it stops at the close message, before the opener kills and
+   reaps it.
    Inbound and outbound alignment are tracked separately. A partial inbound
    prefix/body forbids further reads, but aligned outbound removal and page-close
    messages are still sent. Without an acknowledgment, removal stays unconfirmed.
@@ -121,6 +130,14 @@ is not evidence that the peer processed it.
    `unconfirmed` is not success. Report it without restarting the app.
    `not-installed` means installation was never attempted, not that a remote page
    was inspected and found clean.
+7. `phase` and `fault` locate a stop without retaining what caused it. `phase`
+   is the furthest step reached: `output`, `applications`, `listing`, `target`,
+   `presence`, `install` or `sampling`. `fault` names the exception class from a
+   fixed list (else `other`), the reader function and line where it was raised,
+   an allowlisted protocol field name for a missing-key fault, and the opener's
+   fixed category for a transport fault (for example `service-closed`). It
+   never carries exception text or remote values. `reason` keeps its existing
+   categories, so a transport fault still reports `protocol-boundary`.
 
 The reader selects only the exact `net.processone.fluux` bundle from unavoidable
 service-level application metadata. Other app metadata is transient and never
@@ -152,6 +169,62 @@ standard-library socket/plist/JSON operations instead of those default sessions.
 The sampler is the disposable FLM-350 sampler, preserved without changing its
 measurement contract. No earlier audit conclusion was contradicted.
 
+## Structural observer for real-device diagnosis (FLM-377)
+
+`structure.StructureTap(stream, shared_budget)` wraps the opened service and is
+handed to `Reader` in its place. The reader stays the only protocol actor; the
+tap forwards every call unchanged and never sends, retries or reconnects. It
+reassembles complete frames in each direction and keeps at most 128 structural
+entries: the selector, each argument key with its value's type, application and
+listing counts, whether the Fluux bundle and its hosted WebKit processes are
+present, Target and Runtime method names, and the type of each JSON field.
+Keys and names outside fixed patterns are only counted. Payloads are released
+as soon as they are described. Only Fluux's own listing is described;
+other applications contribute counts and key presence, never identifiers.
+
+The tap charges its retained entries to the attempt's shared budget as output.
+A decode failure or budget refusal stops observation (`observerFault`,
+`truncated`) but never changes the reader's outcome. `report()` returns the
+entries plus counts of omitted messages and the sizes of any partial frame.
+Call `assert_sanitized(report)` before writing it. It checks form, as a second
+line of defense: keys must be schema words, fixed labels, `WIR…` key names or a
+single camelCase word; strings must be schema words, fixed labels, `_rpc_…:`
+selectors or `Domain.method` names; numbers must be integers or booleans. Any
+short lowercase word passes as a key and any `Word.word` string as a method
+name, so the tap's own rules keep values out: it writes only protocol key
+names, selectors, method names and type tags in those places.
+
+Disposable proof runs every reader scenario with and without the tap and checks
+that reason, phase, fault, cleanup, samples and persisted output are identical,
+and that no titles, routes, text or console content reach the report.
+
+What the real iPhone sent (iOS 27.0.1, four FLM-377 sessions): `_rpc_reportCurrentState:`
+(an automation-availability string), the application list, and an empty
+`_rpc_reportConnectedDriverList:`. Each application entry carried its bundle
+identifier, a PNG icon of about 4 KB, its identifier, name, automation
+availability, `WIRIsApplicationActiveKey` as an integer, and proxy and ready
+flags as booleans. Other apps then arrived through `_rpc_applicationConnected:`
+and `_rpc_applicationUpdated:`, each with an unrequested
+`_rpc_applicationSentListing:`, and the list could repeat. The reader accepted all
+of it; the `iphone` peer mode in `test_reader.py` reproduces that order and shape.
+Fluux was listed only in the fourth session. The captain reported another app on
+screen in the first two and did not think Fluux was running in the third. Its Tauri build enables the `devtools` feature on every
+target, which makes the web view inspectable on iOS too. Fluux's entry had the
+same keys, with `WIRIsApplicationActiveKey` 2 and not ready until its page was
+set up, then an `_rpc_applicationUpdated:` marked it ready. Its one
+`WIRTypeWebPage` listing carried a host application identifier, an override name,
+an integer page identifier, title, type and URL; during sampling Fluux listed the
+same page again with a connection identifier added. The `iphone` peer mode
+reproduces Fluux's part too.
+
+The second FLM-377 session stopped with `protocol-boundary` from a transport fault,
+not a message shape: the reader's fault named `ServiceError`/`service-io` at its
+read while it waited in the applications phase. FLM-350's earlier stop had the
+same reason but kept no fault detail. `test_service.py` pauses a healthy worker for 150 ms
+during an idle read and through a whole reader journey to keep that fixed. With
+the larger reply margin, the third session stayed connected for its full 15
+seconds with no fault.
+
 ## Existing-pairing-only service opener (FLM-366)
 
 `service_worker.c` owns usbmuxd, lockdown and in-memory TLS.
@@ -169,15 +242,19 @@ After **separate live attachment/device consent and qualification in FLM-350**,
 the integration shape is:
 
 ```python
-from service import open_service
+import time
+
+from service import CONTROL_GRACE, open_service
 from reader import Reader
 
 # Existing whole-attempt Budget, private empty output and original host deadline
 # come from FLM-350's coordinator. Never create a second allowance for this opener.
+# Lifetime covers the rest of the capture, the reader's 0.5 s cleanup and one
+# reply margin: at most 121 s for the 120 s maximum capture.
 with open_service(worker_path, fresh_authorized_usb_identity, shared_budget,
-                  lifetime=remaining_seconds_including_cleanup) as service:
+                  lifetime=capture_deadline - time.monotonic() + .5 + CONTROL_GRACE) as service:
     result = Reader(service, shared_budget).run(
-        private_output, stop=shared_stop, duration=remaining_capture_seconds)
+        private_output, stop=shared_stop, duration=capture_deadline - time.monotonic())
 ```
 
 This is an API example, not a runnable live launcher or consent grant. Never print,
@@ -244,8 +321,15 @@ file-based certificate/private-key loading required by Python's default TLS API.
   Outbound commands are bounded but are not retained collected evidence.
 - One control request/returned chunk is at most 64 KiB. Native service waits use
   the caller's positive timeout, at most one second. The local control exchange
-  adds one fixed 25 ms reply margin, so the reader's final 1 ms poll can return
-  no-data without destroying its cleanup channel. The whole exchange has one
+  adds one fixed 500 ms reply margin, so the reader's final 1 ms poll can return
+  no-data without destroying its cleanup channel, and a healthy worker that the
+  host scheduled late still answers. On the Mac that runs the fleet, short timers
+  in a background process ran up to about 150 ms late; the earlier 25 ms margin
+  turned such a late reply into a closed stream on the real iPhone (FLM-377). The
+  margin runs past whatever wait the reader set, so a late reply can end a capture
+  poll or a cleanup step up to 500 ms after the reader's own deadline. A stopped
+  worker is still detected once its wait and this margin pass, then killed and
+  reaped: about 0.65 s for the reader's 25 ms polls. The whole exchange has one
   absolute deadline; fragments do not reset it. Native no-data polling has no
   1 ms minimum wait. A completed no-data read raises `socket.timeout` and keeps
   partial TLS records safely inside OpenSSL. Native writes wait for readiness
@@ -254,8 +338,16 @@ file-based certificate/private-key loading required by Python's default TLS API.
   An incomplete or interrupted local exchange still aborts the worker with a
   fixed error instead of replaying possibly consumed/sent bytes.
 - The worker's independent wall timer ends idle or orphaned work, even if the
-  Python caller stops reading. Lifetime is at most 121 seconds (default 120.5),
-  including startup/cleanup; FLM-350 supplies its original remaining deadline.
+  Python caller stops reading, and ends the worker even mid-exchange. Lifetime is
+  at most 121 seconds and covers startup, capture, cleanup and one reply margin:
+  supply the time left to the capture deadline plus the reader's 500 ms cleanup
+  plus `CONTROL_GRACE` (500 ms), which stays within 121 seconds for the
+  120-second maximum capture. The default 120.5 therefore suits a capture of at
+  most 119.5 seconds; FLM-350 supplies its own value from its original deadline.
+  Sized as capture plus cleanup only, a late close reply outlives the worker: its
+  timer ends it and the close message is lost. This sizing covers one late reply.
+  If the final capture poll and a cleanup reply are both late, the lifetime can
+  still cut removal or the close message, and a cut removal reports `unconfirmed`.
   `close` closes the private channel, gives graceful teardown 100 ms, then kills
   and reaps a stalled worker. The worker starts in a separate session/process
   group, so Ctrl-C sent to the caller's group does not kill it independently.
@@ -290,8 +382,9 @@ that span a controlled peer read pause, as well as bounded permanent-stall closu
 All workers, peer threads, sockets, fixture files and browsers are closed/removed.
 
 These are live **host** executions against a disposable usbmuxd/lockdown/inspector
-peer, not an Apple daemon or an iPhone. Real-device pairing-record/service shapes,
-the installed device's certificate choice, iOS compatibility, Fluux inspectability
-and remote frozen-page cleanup remain FLM-350's separate qualification. A different
+peer, not an Apple daemon or an iPhone. FLM-377's live sessions exercised the
+real pairing, certificate and announcement phase, and in the fourth session page
+attachment, sampling and confirmed removal on Fluux's page; remote frozen-page
+cleanup on a real phone remains unqualified. A different
 pin or protocol shape fails closed; do not weaken the boundary or add a pairing
 fallback to make a live connection work. No earlier audit finding was contradicted.

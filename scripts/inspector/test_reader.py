@@ -6,6 +6,7 @@ webinspectord, including unwanted app metadata and asynchronous console events.
 """
 import contextlib
 import copy
+import hashlib
 import io
 from inspect import signature
 import json
@@ -19,8 +20,10 @@ import tempfile
 import threading
 import time
 import unittest
+import zlib
 
 from reader import BUNDLE, CAP, Budget, Boundary, Reader, PRESENT, SAMPLER, SAMPLE, REMOVE, SAMPLE_INTERVAL, sanitize_sample
+from structure import StructureTap, assert_sanitized
 
 SAMPLES = json.load(sys.stdin)
 PROOF = []
@@ -28,6 +31,29 @@ PRIVATE = "PRIVATE-CANARY"
 APP = {"WIRApplicationIdentifierKey": "PID:321", "WIRApplicationBundleIdentifierKey": BUNDLE,
        "WIRApplicationNameKey": PRIVATE}
 OTHER = dict(APP, WIRApplicationIdentifierKey="PID:654", WIRApplicationBundleIdentifierKey="com.apple.mobilesafari")
+
+
+def icon():
+    """A valid PNG of the size the iPhone attached to each app entry (about 4 KB)."""
+    side = 32
+    pixels = b"".join(hashlib.sha256(b"icon-%d" % i).digest() for i in range(side * side * 4 // 32))
+    rows = b"".join(b"\x00" + pixels[y * side * 4:(y + 1) * side * 4] for y in range(side))
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", side, side, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
+# FLM-377: the entry shape the captain's iPhone (iOS 27.0.1) sent in live sessions,
+# recorded as field presence and types only. Fluux's own entry had the same keys
+# (fourth session); its flags were kept: active as 2, and not ready until its page
+# was set up.
+IPHONE_ENTRY = {"WIRApplicationIconKey": icon(), "WIRAutomationAvailabilityKey": "WIRAutomationAvailabilityNotAvailable",
+                "WIRIsApplicationActiveKey": 1, "WIRIsApplicationProxyKey": False, "WIRIsApplicationReadyKey": True}
+IPHONE_APP = {**APP, **IPHONE_ENTRY, "WIRIsApplicationActiveKey": 2, "WIRIsApplicationReadyKey": False}
+IPHONE_OTHER = dict(OTHER, **IPHONE_ENTRY)
+# Extra keys on Fluux's live page listing; only their presence and types were kept.
+IPHONE_PAGE = {"WIRHostApplicationIdentifierKey": "PID:321", "WIROverrideNameKey": PRIVATE}
 
 
 def frame(selector, arg):
@@ -60,6 +86,7 @@ class Peer:
         self.partial_started = False
         self.partial_cut_bytes = 0
         self.write_failed = False
+        self.ignored = 0  # Messages Reader must count as discarded, sent before sampling.
 
     def send(self, selector, arg):
         if selector == "_rpc_reportConnectedApplicationList:" and self.app_list_delay:
@@ -82,11 +109,37 @@ class Peer:
             "WIRApplicationIdentifierKey": "PID:321", "WIRDestinationKey": self.sender,
             "WIRMessageDataKey": json.dumps(message)}, **overrides))
 
-    def listing(self, app="PID:321", pages=1):
+    def listing(self, app="PID:321", pages=1, **extra):
         self.send("_rpc_applicationSentListing:", {"WIRApplicationIdentifierKey": app,
                   "WIRListingKey": {str(i): {"WIRPageIdentifierKey": i, "WIRTypeKey": "WIRTypeWebPage",
-                                            "WIRTitleKey": PRIVATE, "WIRURLKey": "https://example.invalid/" + PRIVATE}
+                                            "WIRTitleKey": PRIVATE, "WIRURLKey": "https://example.invalid/" + PRIVATE,
+                                            **extra}
                                     for i in range(1, pages + 1)}})
+
+    def iphone_announcements(self):
+        """Live order: state, app list, empty driver list, then other apps arriving,
+        changing state and sending their own listings unasked; the list may repeat."""
+        apps = {"PID:654": IPHONE_OTHER, "PID:321": IPHONE_APP}
+        self.send("_rpc_reportCurrentState:", {"WIRAutomationAvailabilityKey": "WIRAutomationAvailabilityNotAvailable"})
+        self.send("_rpc_reportConnectedApplicationList:", {"WIRApplicationDictionaryKey": apps})
+        self.send("_rpc_reportConnectedDriverList:", {"WIRDriverDictionaryKey": {}})
+        for pid in ("PID:655", "PID:656", "PID:657"):
+            self.send("_rpc_applicationConnected:", dict(IPHONE_OTHER, WIRApplicationIdentifierKey=pid))
+        for pid in ("PID:655", "PID:656"):
+            self.send("_rpc_applicationSentListing:", {"WIRApplicationIdentifierKey": pid, "WIRListingKey": {}})
+            self.send("_rpc_applicationUpdated:", dict(IPHONE_OTHER, WIRApplicationIdentifierKey=pid,
+                                                      WIRIsApplicationActiveKey=0))
+        self.send("_rpc_reportConnectedApplicationList:", {"WIRApplicationDictionaryKey": apps})
+        self.ignored += 4
+
+    def iphone_relisting(self):
+        """Live, during sampling: Fluux lists its one page again, now naming the
+        connection, and reports itself ready; another app sends its empty listing."""
+        self.listing(**IPHONE_PAGE, WIRConnectionIdentifierKey=PRIVATE)
+        self.send("_rpc_applicationUpdated:", dict(IPHONE_APP, WIRIsApplicationReadyKey=True))
+        self.send("_rpc_applicationSentListing:", {"WIRApplicationIdentifierKey": "PID:655", "WIRListingKey": {}})
+        self.send("_rpc_applicationUpdated:", dict(IPHONE_OTHER, WIRApplicationIdentifierKey="PID:655"))
+        self.ignored += 1
 
     def run(self):
         try:
@@ -106,9 +159,12 @@ class Peer:
                     self.sock.sendall(struct.pack(">I", CAP + 1))
                     self.mode = "silent"
                     continue
-                if sel == "_rpc_getConnectedApplications:":
+                if sel == "_rpc_getConnectedApplications:" and self.mode == "iphone":
+                    self.iphone_announcements()
+                elif sel == "_rpc_getConnectedApplications:":
                     # An unsolicited other-app listing must never cause attachment.
                     self.listing("PID:654")
+                    self.ignored += 1
                     apps = {"PID:654": OTHER, "PID:321": APP}
                     if self.mode == "duplicate-app":
                         apps["PID:999"] = dict(APP, WIRApplicationIdentifierKey="PID:999")
@@ -117,13 +173,23 @@ class Peer:
                     self.send("_rpc_reportConnectedApplicationList:", {"WIRApplicationDictionaryKey": apps})
                 elif sel == "_rpc_forwardGetListing:":
                     assert arg["WIRApplicationIdentifierKey"] == "PID:321"
-                    self.listing(pages=2 if self.mode == "multiple-pages" else 1)
+                    if self.mode == "missing-listing":
+                        # FLM-377: a listing without its page map must name that field.
+                        self.send("_rpc_applicationSentListing:", {"WIRApplicationIdentifierKey": "PID:321",
+                                  "WIRTitleKey": PRIVATE})
+                        continue
+                    self.listing(pages=2 if self.mode == "multiple-pages" else 1,
+                                 **(IPHONE_PAGE if self.mode == "iphone" else {}))
                 elif sel == "_rpc_forwardSocketSetup:":
                     self.sender = arg["WIRSenderKey"]
                     assert arg["WIRAutomaticallyPause"] is False
                     if self.mode == "destroyed-before-target":
                         self.data({"method": "Target.targetDestroyed", "params": {"private": PRIVATE}})
                         continue
+                    if self.mode == "iphone":
+                        # Live: Fluux turns ready and another app connects before the target.
+                        self.send("_rpc_applicationUpdated:", dict(IPHONE_APP, WIRIsApplicationReadyKey=True))
+                        self.send("_rpc_applicationConnected:", dict(IPHONE_OTHER, WIRApplicationIdentifierKey="PID:658"))
                     self.data({"method": "Target.targetCreated", "params": {"targetInfo": {
                         "targetId": self.target, "type": "page", "title": PRIVATE, "url": PRIVATE}}})
                 elif sel == "_rpc_forwardSocketData:":
@@ -168,7 +234,7 @@ class Peer:
                         continue
                     if exp == SAMPLE:
                         self.times.append(time.monotonic())
-                        if ((self.sample_index == 3 and self.mode in ("normal", "xml", "fragmented"))
+                        if ((self.sample_index == 3 and self.mode in ("normal", "xml", "fragmented", "iphone"))
                                 or (self.sample_index == 1 and self.mode in ("one-sample", "partial-cleanup", "peer-write-failure"))):
                             self.stop.set()
                             continue
@@ -220,6 +286,8 @@ class Peer:
                         "targetId": self.target, "message": json.dumps({"id": inner["id"],
                         "result": {"result": {"type": "object" if exp == SAMPLE else "boolean", "value": value,
                                                "description": PRIVATE}}})}})
+                    if self.mode == "iphone" and exp == SAMPLE and self.sample_index == 1:
+                        self.iphone_relisting()
                     if self.mode == "blocked-send" and exp == PRESENT:
                         # After the presence check, read only the install frame's header.
                         # A tiny client send buffer stalls the actual fixed install command.
@@ -242,7 +310,7 @@ class ReaderTests(unittest.TestCase):
     # Positive lifecycle checks use the actual API budget, not a shorter fixture
     # deadline that can legitimately leave responsive XML cleanup unconfirmed.
     def exercise(self, mode, *, duration=.65, budget=None, app_list_delay=0,
-                 expire_on_sample=False,
+                 expire_on_sample=False, tap=False,
                  cleanup=signature(Reader.run).parameters["cleanup_timeout"].default):
         client, server = socket.socketpair()
         if mode == "blocked-send":
@@ -346,7 +414,9 @@ class ReaderTests(unittest.TestCase):
                 return getattr(client, name)
 
         controlled = ControlledSocket()
-        reader = Reader(controlled, budget or Budget())
+        budget = budget or Budget()
+        observer = StructureTap(controlled, budget, **({"limit": tap} if type(tap) is int else {})) if tap else None
+        reader = Reader(observer or controlled, budget)
         interrupt_propagated = False
         stdout, stderr = io.StringIO(), io.StringIO()
         try:
@@ -369,7 +439,11 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(peer.errors, [])
         self.assertTrue(peer.closed)
         self.assertTrue(stop.is_set())
-        self.assertNotIn(PRIVATE, persisted.decode() + stdout.getvalue() + stderr.getvalue() + json.dumps(result))
+        structure = observer.report() if observer else None
+        self.assertNotIn(PRIVATE, persisted.decode() + stdout.getvalue() + stderr.getvalue() + json.dumps(result)
+                         + json.dumps(structure))
+        if observer:
+            assert_sanitized(structure)
         self.assertEqual(stdout.getvalue() + stderr.getvalue(), "")
         self.assertLessEqual(result["reservedInputBytes"] + result["outputBytes"], reader.budget.limit)
         self.assertLessEqual(result["receivedBytes"], result["reservedInputBytes"])
@@ -391,6 +465,7 @@ class ReaderTests(unittest.TestCase):
                       "writesAfterCutoff": controlled.writes_after_cut,
                       "interruptPropagatedAfterClose": interrupt_propagated,
                       "applicationListDelaySeconds": app_list_delay,
+                      "structure": structure,
                       "collectionExpiredAfterInstall": controlled.expired_after_install,
                       "cleanupElapsedSeconds": (round(controlled.closed_at - controlled.cleanup_started, 4)
                                                 if controlled.cleanup_started is not None else None)})
@@ -399,6 +474,8 @@ class ReaderTests(unittest.TestCase):
     def test_normal_filtered_sampling_and_detach(self):
         result, peer, persisted = self.exercise("normal", duration=2)
         self.assertEqual(result["reason"], "stopped")
+        self.assertEqual((result["phase"], result["fault"]["class"], result["fault"]["site"]),
+                         ("sampling", "Boundary", "_check"))
         self.assertEqual(result["cleanup"], "confirmed")
         self.assertEqual(result["samples"], 3)
         self.assertEqual(len(persisted.splitlines()), 3)
@@ -418,24 +495,40 @@ class ReaderTests(unittest.TestCase):
 
     def test_identity_and_routing_boundaries(self):
         # Captain-approved F4: only the selected target's destruction gets its signal.
-        for mode, reason in [("duplicate-app", "identity-boundary"), ("multiple-pages", "page-boundary"),
-                             ("wrong-session", "session-boundary"), ("wrong-app", "session-boundary"),
-                             ("identity-changed", "identity-boundary"), ("page-changed", "page-boundary"),
-                             ("target-destroyed", "target-destroyed"),
-                             ("other-target-destroyed", "target-boundary"),
-                             ("destroyed-before-target", "target-boundary"),
-                             ("target-replaced", "target-boundary")]:
+        # FLM-377: the phase names how far discovery got before the boundary.
+        for mode, reason, phase in [("duplicate-app", "identity-boundary", "applications"),
+                                    ("multiple-pages", "page-boundary", "listing"),
+                                    ("wrong-session", "session-boundary", "sampling"),
+                                    ("wrong-app", "session-boundary", "sampling"),
+                                    ("identity-changed", "identity-boundary", "sampling"),
+                                    ("page-changed", "page-boundary", "sampling"),
+                                    ("target-destroyed", "target-destroyed", "sampling"),
+                                    ("other-target-destroyed", "target-boundary", "sampling"),
+                                    ("destroyed-before-target", "target-boundary", "target"),
+                                    ("target-replaced", "target-boundary", "sampling")]:
             with self.subTest(mode=mode):
                 result, _, persisted = self.exercise(mode)
                 self.assertEqual(result["reason"], reason)
+                self.assertEqual((result["phase"], result["fault"]["class"], result["fault"]["site"]),
+                                 (phase, "Boundary", "_event"))
                 self.assertEqual(persisted, b"")
 
     def test_payloads_do_not_escape_error_paths(self):
-        for mode, reason in [("malformed", "protocol-boundary"), ("eval-error", "evaluation-failed"),
-                             ("bad-sample", "invalid-sample"), ("disconnect", "disconnected")]:
+        # FLM-377: FLM-350's live stop said only protocol-boundary. The fault names
+        # the exception class, reader site and constant field, never a remote value.
+        for mode, reason, phase, fault in [
+                ("malformed", "protocol-boundary", "sampling", {"class": "JSONDecodeError", "site": "_event"}),
+                ("missing-listing", "protocol-boundary", "listing",
+                 {"class": "KeyError", "site": "_event", "field": "WIRListingKey"}),
+                ("eval-error", "evaluation-failed", "sampling", {"class": "Boundary", "site": "_evaluate"}),
+                ("bad-sample", "invalid-sample", "sampling", {"class": "Boundary", "site": "count"}),
+                ("disconnect", "disconnected", "sampling", {"class": "Boundary", "site": "_read"})]:
             with self.subTest(mode=mode):
                 result, _, persisted = self.exercise(mode)
                 self.assertEqual(result["reason"], reason)
+                self.assertEqual(result["phase"], phase)
+                self.assertEqual({k: v for k, v in result["fault"].items() if k != "line"}, fault)
+                self.assertEqual(type(result["fault"]["line"]), int)
                 self.assertEqual(persisted, b"")
 
     def test_real_time_hung_partial_and_frozen_cleanup(self):
@@ -444,6 +537,7 @@ class ReaderTests(unittest.TestCase):
                 result, peer, _ = self.exercise(mode, duration=.15, cleanup=.15,
                                                expire_on_sample=True)
                 self.assertEqual(result["reason"], "time-limit")
+                self.assertEqual(result["phase"], "applications")
                 self.assertEqual(result["cleanup"], "not-installed")
                 self.assertFalse(PROOF[-1]["collectionExpiredAfterInstall"])
         # FLM-366/368: frozen cleanup needs an installed sampler, not a fast
@@ -463,6 +557,7 @@ class ReaderTests(unittest.TestCase):
     def test_preexisting_sampler_is_not_removed(self):
         result, peer, persisted = self.exercise("preexisting")
         self.assertEqual(result["reason"], "sampler-already-present")
+        self.assertEqual(result["phase"], "presence")
         self.assertEqual(result["cleanup"], "not-installed")
         self.assertEqual(peer.expressions, ["present"])
         self.assertEqual(persisted, b"")
@@ -495,6 +590,7 @@ class ReaderTests(unittest.TestCase):
                 reader = Reader(client, Budget())
                 result = reader.run(output, duration=.15)
                 self.assertEqual(result["reason"], "unsafe-output")
+                self.assertEqual((result["phase"], result["fault"]["site"]), ("output", "run"))
                 self.assertEqual(server.recv(1), b"")
                 self.assertEqual(result["receivedBytes"], 0)
                 with self.assertRaises(ValueError):
@@ -603,6 +699,99 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(exact["reason"], "byte-limit")
         self.assertEqual(retained, persisted)
         self.assertEqual(exact["reservedInputBytes"] + exact["outputBytes"], boundary)
+
+    def test_structure_tap_keeps_only_allowlisted_shapes(self):
+        # FLM-377: establish the real iPhone's shape from selector/type/field-presence
+        # facts only. Titles, URLs, names and evaluated values stay private.
+        result, _, persisted = self.exercise("normal", duration=2, tap=True)
+        self.assertEqual((result["reason"], result["cleanup"], result["samples"]), ("stopped", "confirmed", 3))
+        self.assertEqual(len(persisted.splitlines()), 3)
+        messages = PROOF[-1]["structure"]["messages"]
+        flow = [(m["dir"], m["selector"]) for m in messages]
+        self.assertEqual(flow[:2], [("out", "_rpc_reportIdentifier:"), ("out", "_rpc_getConnectedApplications:")])
+        apps = next(m["apps"] for m in messages if m["selector"] == "_rpc_reportConnectedApplicationList:")
+        self.assertEqual((apps["count"], apps["fluux"], apps["hostedByFluux"]), (2, 1, 0))
+        self.assertEqual(apps["keys"]["WIRApplicationNameKey"], {"str": 2})
+        self.assertEqual(apps["fluuxEntries"][0]["identifierForm"], "pid")
+        listings = [m for m in messages if m["selector"] == "_rpc_applicationSentListing:"]
+        self.assertEqual([m["forFluux"] for m in listings], [False, True])
+        self.assertNotIn("pages", listings[0])
+        pages = listings[1]["pages"]
+        self.assertEqual((pages["count"], pages["types"], pages["pageIdTypes"]), (1, {"WIRTypeWebPage": 1}, {"int": 1}))
+        self.assertEqual(pages["keys"]["WIRTitleKey"], {"str": 1})
+        created = next(m for m in messages if m.get("data", {}).get("method") == "Target.targetCreated")
+        self.assertEqual((created["destination"], created["data"]["targetInfo"]["type"]), ("sender", "page"))
+        self.assertEqual([m["expression"] for m in messages if "expression" in m][:3], ["present", "install", "sample"])
+        replies = [m["data"]["inner"]["result"]["remote"] for m in messages
+                   if m.get("data", {}).get("method") == "Target.dispatchMessageFromTarget"]
+        self.assertEqual([(r["type"], r["valueType"]) for r in replies[:3]],
+                         [("boolean", "bool"), ("boolean", "bool"), ("object", "dict")])
+        for leaked in ("PRIVATE-CANARY", "hello", "https://example.invalid/x"):
+            with self.subTest(leaked=leaked), self.assertRaises(ValueError):
+                assert_sanitized({"messages": [{"selector": leaked}]})
+
+    def test_iphone_announcements_keep_the_fluux_session(self):
+        # FLM-377: the captain's iPhone announces its state, every inspectable app
+        # with icon and state flags, an empty driver list, other apps' arrivals and
+        # listings unasked, and a repeated list. Fluux turns ready after page setup and
+        # lists its page again during sampling. None of it may change the session.
+        normal, normal_peer, _ = self.exercise("normal", duration=2)
+        result, peer, persisted = self.exercise("iphone", duration=2, tap=True)
+        self.assertEqual((result["reason"], result["phase"], result["cleanup"], result["samples"]),
+                         ("stopped", "sampling", "confirmed", 3))
+        self.assertEqual(len(persisted.splitlines()), 3)
+        self.assertEqual(result["discarded"] - peer.ignored, normal["discarded"] - normal_peer.ignored)
+        messages = PROOF[-1]["structure"]["messages"]
+        inbound = [m["selector"] for m in messages if m["dir"] == "in"]
+        self.assertEqual(inbound[:3], ["_rpc_reportCurrentState:", "_rpc_reportConnectedApplicationList:",
+                                       "_rpc_reportConnectedDriverList:"])
+        apps = next(m["apps"] for m in messages if m["selector"] == "_rpc_reportConnectedApplicationList:")
+        # The live sessions' key set and types, as the observer recorded them there.
+        self.assertEqual({k: set(v) for k, v in apps["keys"].items() if k != "WIRApplicationBundleIdentifierKey"},
+                         {"WIRApplicationIconKey": {"bytes"}, "WIRApplicationIdentifierKey": {"str"},
+                          "WIRApplicationNameKey": {"str"}, "WIRAutomationAvailabilityKey": {"str"},
+                          "WIRIsApplicationActiveKey": {"int"}, "WIRIsApplicationProxyKey": {"bool"},
+                          "WIRIsApplicationReadyKey": {"bool"}})
+        self.assertEqual((apps["count"], apps["fluux"], apps["proxies"]), (2, 1, 0))
+        self.assertGreater(len(IPHONE_ENTRY["WIRApplicationIconKey"]), 4000)
+        # Fluux's own entry and page as the fourth live session recorded them.
+        self.assertEqual(apps["fluuxEntries"][0]["flags"], {"WIRIsApplicationActiveKey": 2,
+                         "WIRIsApplicationProxyKey": False, "WIRIsApplicationReadyKey": False})
+        live_page = {"WIRHostApplicationIdentifierKey", "WIROverrideNameKey", "WIRPageIdentifierKey",
+                     "WIRTitleKey", "WIRTypeKey", "WIRURLKey"}
+        listings = [set(m["pages"]["keys"]) for m in messages
+                    if m["selector"] == "_rpc_applicationSentListing:" and m.get("forFluux")]
+        self.assertEqual(listings, [live_page, live_page | {"WIRConnectionIdentifierKey"}])
+        ready = [m["entry"]["flags"]["WIRIsApplicationReadyKey"] for m in messages
+                 if m["selector"] == "_rpc_applicationUpdated:" and m.get("forFluux")]
+        self.assertEqual(ready, [True, True])
+
+    def test_structure_tap_does_not_change_reader_outcomes(self):
+        # Observation must never alter what the reader receives or decides.
+        for mode in ("fragmented", "xml", "malformed", "missing-listing", "eval-error", "wrong-session",
+                     "duplicate-app", "multiple-pages", "destroyed-before-target", "preexisting", "partial"):
+            with self.subTest(mode=mode):
+                # Streaming modes end on the peer's stop after three samples, never on a
+                # timer, so both runs see the same samples; "partial" ends at its cut.
+                duration = .15 if mode == "partial" else 2
+                plain, _, plain_saved = self.exercise(mode, duration=duration)
+                observed, _, observed_saved = self.exercise(mode, duration=duration, tap=True)
+                same = ("reason", "phase", "fault", "cleanup", "samples", "discarded", "receivedBytes",
+                        "reservedInputBytes")
+                self.assertEqual({k: plain[k] for k in same}, {k: observed[k] for k in same})
+                self.assertEqual(plain_saved, observed_saved)
+                self.assertGreater(observed["outputBytes"], plain["outputBytes"])
+        partial = PROOF[-1]["structure"]["partial"]
+        self.assertEqual(partial, [{"dir": "in", "bytes": 2048, "received": 6}])
+
+    def test_structure_tap_is_bounded(self):
+        result, _, _ = self.exercise("normal", duration=2, tap=2)
+        structure = PROOF[-1]["structure"]
+        self.assertEqual(result["reason"], "stopped")
+        self.assertEqual(len(structure["messages"]), 2)
+        self.assertGreater(structure["omitted"], 0)
+        with self.assertRaises(ValueError):
+            StructureTap(None, Budget(), limit=129)
 
     def test_schema_rejects_private_numeric_and_stack_fields(self):
         for key, value in [("mountedRows", True), ("elapsedMs", float("nan")),

@@ -31,6 +31,9 @@ SAMPLES = json.load(sys.stdin)
 PROOF = []
 UDID = '00008030-0012345678901234'
 PRIVATE = 'DISPOSABLE-PRIVATE-CANARY'
+# FLM-377: on the Mac that runs the fleet, a 12 ms background timer measured up to
+# 150 ms late, and a live worker reply arrived after the opener's margin.
+SCHEDULER_STALL = .15
 ROOT = tempfile.TemporaryDirectory(prefix='flm366-cert-', dir=WORKER.parent)
 FILES = Path(ROOT.name)
 
@@ -534,6 +537,12 @@ class ServiceProof(unittest.TestCase):
                 result = Reader(stream, budget).run(output, duration=2)
                 self.assertEqual(result['reason'], 'protocol-boundary' if mode == 'inspector-disconnect' else 'evaluation-failed')
                 self.assertEqual(result['cleanup'], 'unconfirmed' if mode == 'inspector-disconnect' else 'confirmed')
+                if mode == 'inspector-disconnect':
+                    # FLM-377: the same W3 reason now tells a closed transport apart
+                    # from a message-shape fault, using only the opener's category.
+                    self.assertEqual({k: result['fault'].get(k) for k in ('class', 'site', 'category')},
+                                     {'class': 'ServiceError', 'site': '_read', 'category': 'service-closed'})
+                    self.assertEqual(result['phase'], 'sampling')
                 output.seek(0)
                 self.assertNotIn(PRIVATE.encode(), output.read())
                 peer.wait_closed()
@@ -733,6 +742,49 @@ wakeup.close(); writer.close(); bridge.close()
             peer.wait_closed()
         PROOF.append({'scenario': 'reader-stream', 'result': 'pass', 'splitEncryptedRecordPreserved': True,
                       'unresponsiveWorkerReapedSeconds': round(elapsed, 4)})
+
+    def stall_worker(self, stream):
+        """Pause a healthy worker for a scheduler-sized stall, then resume it."""
+        os.kill(stream._process.pid, signal.SIGSTOP)
+        timer = threading.Timer(SCHEDULER_STALL, os.kill, (stream._process.pid, signal.SIGCONT))
+        timer.start()
+        return timer
+
+    def test_worker_scheduling_stall_is_not_fatal(self):
+        # FLM-377: the captain's iPhone session and FLM-350's attempt stopped with
+        # protocol-boundary because a healthy worker answered an idle read after the
+        # opener's local margin. A late reply is still the only reply: it must stay
+        # a retryable no-data result, never a closed stream.
+        with DevicePeer('silent') as peer:
+            stream = self.open(peer)
+            stream.settimeout(.025)
+            timer = self.stall_worker(stream)
+            try:
+                with self.assertRaises(socket.timeout):
+                    stream.recv(4)
+            finally:
+                timer.join()
+            self.assertFalse(stream.closed)
+            with self.assertRaises(socket.timeout):
+                stream.recv(4)
+            self.assertFalse(stream.closed)
+            stream.close()
+            peer.wait_closed()
+        with DevicePeer('inspector') as peer, tempfile.TemporaryFile('w+b', dir=WORKER.parent) as output:
+            budget = Budget()
+            stream = self.open(peer, budget)
+            reader = Reader(stream, budget)
+            stop = threading.Event()
+            timer = self.stall_worker(stream)
+            try:
+                result = reader.run(StopAfterSample(output, stop), stop=stop, duration=2)
+            finally:
+                timer.join()
+            self.assertEqual((result['reason'], result['cleanup'], result['samples']), ('stopped', 'confirmed', 1))
+            self.assertIsNotNone(stream._process.poll())
+            peer.wait_closed()
+        PROOF.append({'scenario': 'scheduler-stall', 'result': 'pass', 'stallSeconds': SCHEDULER_STALL,
+                      'idleReadRetryable': True, 'reader': result})
 
     def test_shared_budget_exhaustion_and_flood(self):
         budget = Budget(START_CREDIT - 1)
