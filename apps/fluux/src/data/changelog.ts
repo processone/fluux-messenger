@@ -15,35 +15,37 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '0.18.2',
-    date: 'Unreleased',
+    date: '2026-11-05',
     sections: [
       {
         type: 'added',
         items: [
-          'On macOS, restore an encryption backup after the local key cannot be unlocked, or from Encryption settings. Preview and confirm the account and key before saving to fresh protected storage without retrying old items',
-          'iOS: room push notifications now name the sender from muc_nick',
-          'iOS: drag down on a conversation to lower the keyboard',
-          'iOS: Fluux lays out around the iPhone Duo hinge',
+          'macOS: when your OpenPGP key can no longer be unlocked, Fluux offers to restore it from your server backup or a backup file. The same recovery is available from Encryption settings. You confirm the account and the full key fingerprint before anything is saved, your existing keychain items and backup files are kept, and messages waiting to be decrypted show their text once the restore is done',
+          'iOS: room notifications now show the nickname of the person who wrote the message',
+          'iOS and iPadOS: drag down on a conversation to hide the keyboard, in the app and in Safari',
+          'iOS: on iPhone Duo held half open, Fluux arranges itself around the fold. In landscape, the conversation list sits on one side and the chat on the other; in portrait, messages stay above the fold and the message box below it, leaving room for the keyboard',
         ],
       },
       {
         type: 'changed',
         items: [
-          'iOS: Fluux asks servers to keep a disconnected session resumable for up to 24 hours, helping it reconnect after a long time in the background',
+          'iOS: Fluux asks the server to keep a disconnected session resumable for up to 24 hours, so it can pick up where it left off after a long time in the background. On every platform, Fluux follows the duration your server actually grants and no longer tries to resume a session the server has already closed',
         ],
       },
       {
         type: 'fixed',
         items: [
-          'Room history stays readable while joining, with only the message box replaced by a joining status. Reopening a room no longer shows the cached-history warning or asks you to join while its rejoin is pending. Failed joins restore the join button',
-          'On desktop, new messages no longer move the message, action controls or menu you are using. Typing resumes following new messages if you were following before, unless a menu is open. The jump-to-latest button stays hidden while a message menu is open',
-          'Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter. Private messages in rooms no longer make surrounding messages jump as you scroll. Scrolling on iOS also keeps your reading position during overscroll and touch release',
-          'A hidden window no longer marks messages as read or suppresses their notifications',
-          'Encrypted messages that arrive before the sender\'s key is cached now show their text after decryption',
-          'Older history now loads past archive pages with no messages, and late edits still appear',
-          'Typing just after picking a mention no longer moves the caret back',
-          'iOS: notifications keep readable text when a preview lookup misses, and generic wording follows the app language',
-          'The composer no longer sends duplicate messages and keeps failed drafts. Send, edit and delete errors now have separate messages in every language',
+          'Room history stays readable while you join a room: only the message box is replaced by a joining status. Reopening a room no longer shows the cached-history warning or asks you to join while it is already rejoining, and a failed join brings back the join button',
+          'On desktop, new messages no longer move the message, action buttons or menu you are using. Typing resumes following new messages if you were following before, unless a menu is open, and the jump-to-latest button stays hidden while a message menu is open',
+          'Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter, and private messages in rooms no longer make the messages around them jump as you scroll. On iOS, your reading position also holds when you pull past the top or bottom and when you lift your finger',
+          'A Fluux window that is minimized or otherwise not visible no longer marks messages as read or holds back their notifications',
+          'Encrypted messages that arrive before Fluux has the sender\'s key now show their text once decrypted, instead of staying encrypted',
+          'Scrolling back now reaches older history even when the server archive holds long stretches without visible messages, and edits to older messages still appear once those messages load',
+          'Typing right after picking a mention no longer moves the cursor back',
+          'The message box no longer sends the same message twice, and a message that fails to send stays in the message box so you can try again. Errors when sending, editing or deleting a message now each have their own wording, in every language',
+          'iOS: notifications keep the message text when the preview cannot be prepared in time, and the generic wording follows the app language',
+          'macOS: if Fluux stopped in the middle of restoring an encryption backup, it puts your previous key back at the next launch instead of leaving encryption locked',
+          'Forgetting your OpenPGP key while Fluux is still unlocking, importing or rotating it now waits for that work to finish, so a key can no longer be saved with the passphrase being deleted',
         ],
       },
     ],
