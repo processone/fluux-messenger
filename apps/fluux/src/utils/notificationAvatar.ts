@@ -1,5 +1,5 @@
 /**
- * Utility for preparing avatar images for notifications.
+ * Utility for preparing avatar images for desktop notifications.
  *
  * Tauri notifications require file:// URLs for attachments. See
  * {@link getNotificationAvatarUrl} for conversion and caching.
@@ -16,7 +16,7 @@ const avatarFileCache = new Map<string, string>()
  * - For Web: returns the avatar URL directly (works as icon)
  *
  * @param blobUrl - The avatar URL to display
- * @param hash - Avatar hash for desktop file reuse; iOS attachments need independent files.
+ * @param hash - Avatar hash for caching (optional but recommended)
  * @returns URL suitable for notification icon/attachment, or undefined if unavailable
  */
 export async function getNotificationAvatarUrl(
@@ -25,16 +25,13 @@ export async function getNotificationAvatarUrl(
 ): Promise<string | undefined> {
   if (!blobUrl) return undefined
 
-  const capabilities = platform()
-  if (!capabilities.notificationsNeedFileUrls) {
+  if (!platform().notificationsNeedFileUrls) {
     return blobUrl
   }
 
-  // iOS moves an attachment into its own storage. A cached or shared path can
-  // lose a later notification, so each iOS preparation must own a fresh file.
-  const reusableHash = capabilities.notificationAttachmentsConsumed ? undefined : hash
-  if (reusableHash && avatarFileCache.has(reusableHash)) {
-    return avatarFileCache.get(reusableHash)
+  // Check cache first if hash provided
+  if (hash && avatarFileCache.has(hash)) {
+    return avatarFileCache.get(hash)
   }
 
   try {
@@ -50,9 +47,9 @@ export async function getNotificationAvatarUrl(
     // Determine file extension from mime type
     const ext = getExtensionFromMimeType(blob.type)
 
-    // Desktop pictures may be reused; consumable iOS attachments must not collide.
-    const filename = reusableHash
-      ? `avatar-${reusableHash}.${ext}`
+    // Generate filename (use hash if available, otherwise random)
+    const filename = hash
+      ? `avatar-${hash}.${ext}`
       : `avatar-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
     // Write to temp directory (use join for cross-platform path handling)
@@ -68,8 +65,9 @@ export async function getNotificationAvatarUrl(
       ? `file://${normalizedPath}`
       : `file:///${normalizedPath}` // Windows paths need extra slash
 
-    if (reusableHash) {
-      avatarFileCache.set(reusableHash, fileUrl)
+    // Cache if hash provided
+    if (hash) {
+      avatarFileCache.set(hash, fileUrl)
     }
 
     return fileUrl

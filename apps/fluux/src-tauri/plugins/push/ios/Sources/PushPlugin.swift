@@ -212,21 +212,6 @@ class PushPlugin: Plugin {
         } catch { invoke.reject("Invalid notification preview snapshot") }
     }
 
-    /// Posts the notification for a message that arrived while the app runs, with the room
-    /// picture and participants of a push. The notification plugin cannot apply them.
-    @objc public func postLocalNotification(_ invoke: Invoke) {
-        do {
-            let message = try invoke.parseArgs(LocalNotification.self)
-            mirrorQueue.async {
-                let content = NotificationPresentation.localContent(title: message.title, body: message.body, from: message.from, extra: message.extra)
-                let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-                UNUserNotificationCenter.current().add(request) { error in
-                    if let error { invoke.reject(error.localizedDescription) } else { invoke.resolve() }
-                }
-            }
-        } catch { invoke.reject(error.localizedDescription) }
-    }
-
     @objc public func setNotificationAvatar(_ invoke: Invoke) {
         do {
             let avatar = try invoke.parseArgs(NotificationAvatar.self)
@@ -475,9 +460,6 @@ private class RemoteNotificationDelegate: NSObject, UNUserNotificationCenterDele
         if RemoteNotificationDelegate.isRemote(notification) {
             DispatchQueue.main.async { PushPlugin.shared?.restoreBadge() }
             completionHandler([])
-        } else if notification.request.content.userInfo[NotificationPresentation.localMarker] as? Bool == true {
-            // The notification plugin only knows the notifications it posted, and traps on any other.
-            completionHandler([.badge, .sound, .alert])
         } else if let wrapped = wrapped, wrapped.responds(to: #selector(UNUserNotificationCenterDelegate.userNotificationCenter(_:willPresent:withCompletionHandler:))) {
             wrapped.userNotificationCenter?(center, willPresent: notification, withCompletionHandler: completionHandler)
         } else {
@@ -502,13 +484,6 @@ private class RemoteNotificationDelegate: NSObject, UNUserNotificationCenterDele
             completionHandler()
         }
     }
-}
-
-private struct LocalNotification: Decodable {
-    let title: String
-    let body: String
-    let from: String
-    let extra: [String: String]
 }
 
 private struct DismissTarget: Decodable {

@@ -11,7 +11,6 @@
   "permissions": [
     "core:default",
     "core:path:default",
-    "fs:allow-temp-write-recursive",
     "fs:allow-appcache-write-recursive",
     "fs:allow-appcache-read-recursive",
     "fs:allow-appcache-meta-recursive",

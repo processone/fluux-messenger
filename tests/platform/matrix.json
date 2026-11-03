@@ -135,9 +135,7 @@
         "nativeOpenpgp",
         "nativeUploads",
         "nativeXmppProxy",
-        "notificationAttachmentsConsumed",
         "notificationsManagedByOS",
-        "notificationsNeedFileUrls",
         "opensLinksInSystemBrowser",
         "reducesLargePhotos",
         "savesThroughShareSheet",
@@ -251,7 +249,6 @@
       "savesThroughShareSheet"
     ],
     "notifications": [
-      "notificationAttachmentsConsumed",
       "notificationsNeedFileUrls",
       "notificationsManagedByOS",
       "usesWebPush",

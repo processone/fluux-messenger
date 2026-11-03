@@ -26,12 +26,6 @@ describe('deriveCapabilities', () => {
     }
   })
 
-  // FLM-201: iOS rejects blob: and data: notification attachments with "Unrecognized attachment file type".
-  it('asks iOS for file-backed notification pictures, not the WebView addresses', () => {
-    expect(deriveCapabilities('mobile', 'ios').notificationsNeedFileUrls).toBe(true)
-    expect(deriveCapabilities('web', 'ios').notificationsNeedFileUrls).toBe(false)
-  })
-
   it('gives desktop and web opposite answers on the ones that pair up', () => {
     const desktop = deriveCapabilities('desktop', 'macos')
     const web = deriveCapabilities('web', 'macos')
@@ -170,6 +164,28 @@ describe('experimental mobile shell', () => {
     expect(platform().hasNativeConnectionKeepalive).toBe(true)
   })
 
+  it.each(['ios', 'android'] as const)('enables only capabilities provided by the experimental %s host', (os) => {
+    const granted = Object.entries(deriveCapabilities('mobile', os))
+      .filter(([, value]) => value === true)
+      .map(([key]) => key)
+      .sort()
+
+    expect(granted).toEqual([
+      ...(os === 'ios' ? ['finishesWorkInBackground', 'followsSystemTextSize', 'hasDeepLinkEvents'] : []),
+      'hasStableInstallIdentity',
+      'interceptsInAppNavigation',
+      ...(os === 'ios' ? ['keychainSessionSecrets'] : ['keyNeedsSessionPassphrase']),
+      ...(os === 'ios' ? ['nativeHaptics', 'nativeHttpFetch', 'nativeKeychain', 'nativeLocalStorage', 'nativeMediaCache', 'nativeOpenpgp', 'nativeUploads'] : []),
+      'nativeXmppProxy',
+      'notificationsManagedByOS',
+      'opensLinksInSystemBrowser',
+      ...(os === 'ios' ? ['reducesLargePhotos', 'savesThroughShareSheet'] : []),
+      'scrollInputAlwaysObserved',
+      ...(os === 'ios' ? ['supportsKeyRotation'] : []),
+      'suspendedInBackground',
+      ...(os === 'ios' ? ['syncsNativeAppearance', 'usesNativePush'] : []),
+    ])
+  })
 })
 
 describe('native communication test update capability', () => {

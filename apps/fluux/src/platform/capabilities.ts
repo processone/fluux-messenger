@@ -62,8 +62,6 @@ export interface PlatformCapabilities {
   readonly nativeFileDrop: boolean
   /** Notification icons must be file paths rather than blob URLs. */
   readonly notificationsNeedFileUrls: boolean
-  /** The OS moves attachment files into its own storage; each post needs its own source. */
-  readonly notificationAttachmentsConsumed: boolean
   /** External links are handed to the system browser rather than a new tab. */
   readonly opensLinksInSystemBrowser: boolean
   /** In-app link clicks must be intercepted before the webview navigates. */
@@ -252,9 +250,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     savesThroughShareSheet: ios,
     nativeClipboardImages: desktop,
     nativeFileDrop: desktop,
-    // The native iOS attachment loader rejects the blob: and data: addresses the WebView holds.
-    notificationsNeedFileUrls: desktop || ios,
-    notificationAttachmentsConsumed: ios,
+    notificationsNeedFileUrls: desktop,
     opensLinksInSystemBrowser: native,
     interceptsInAppNavigation: native,
     nativeHttpFetch: desktop || ios,

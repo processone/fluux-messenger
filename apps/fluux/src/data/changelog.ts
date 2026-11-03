@@ -20,7 +20,7 @@ export const changelog: ChangelogEntry[] = [
       type: 'fixed',
       items: [
         'When a delayed message arrives while older messages are still loading, the messages you are reading no longer move, whether it lands above them or, after you scrolled during the load, below them, including when you are partway through a long expanded message',
-        'Room banners show the room picture or # fallback, with the sender above the room name and message. Combined browser message counts show the room name instead of the latest sender. Successive iOS direct-message notifications keep their pictures',
+        'In-app room banners on the web and iOS show the room picture or # fallback, with the sender above the room name and message. Combined browser message counts show the room name instead of the latest sender. Room pictures in iOS system banners remain unverified',
       ],
     }],
   },

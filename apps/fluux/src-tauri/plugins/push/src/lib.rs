@@ -115,31 +115,6 @@ mod platform {
             .map_err(|e| e.to_string())
     }
 
-    #[derive(serde::Serialize, serde::Deserialize)]
-    pub struct LocalNotification {
-        title: String,
-        body: String,
-        from: String,
-        extra: std::collections::HashMap<String, String>,
-    }
-
-    /// Posts the notification of a message that arrived while the app runs, with the
-    /// room picture and participants of a push.
-    #[tauri::command]
-    async fn post_local_notification<R: Runtime>(
-        app: tauri::AppHandle<R>,
-        message: LocalNotification,
-    ) -> Result<(), String> {
-        if !valid_bare_jid(message.from.split('/').next().unwrap_or_default()) {
-            return Err("Invalid notification sender".into());
-        }
-        app.state::<Push<R>>()
-            .0
-            .run_mobile_plugin_async("postLocalNotification", message)
-            .await
-            .map_err(|e| e.to_string())
-    }
-
     #[derive(serde::Serialize)]
     struct DismissTarget {
         target: String,
@@ -283,7 +258,6 @@ mod platform {
                 remove_conversation_donations,
                 set_notification_sound,
                 set_notification_avatar,
-                post_local_notification,
                 set_notification_preview,
                 export_notification_diagnostic,
                 set_badge,

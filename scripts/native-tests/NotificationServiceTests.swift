@@ -232,23 +232,6 @@ import UniformTypeIdentifiers
         }
     }
 
-    /// FLM-201: the app's own notification keeps its title, body and tap `extra`, and is grouped by room.
-    static func localContent() {
-        let names = SharedNames(rooms: ["team@muc.example.com": "Team"], account: "me@example.com")
-        let content = NotificationPresentation.localContent(title: "Alice @ Team", body: "Fixture", from: "team@muc.example.com/Alice",
-                                                            extra: ["navType": "room", "navTarget": "team@muc.example.com"], names: names)
-        // Captain's audio-ownership rule: the app hook, not local content, supplies message sound.
-        precondition(content.sound == nil, "Local content must not add a default OS sound")
-        print("local-content OS sound: none")
-        precondition(content.body == "Fixture")
-        precondition(content.threadIdentifier == "team@muc.example.com")
-        precondition((content.userInfo["__EXTRA__"] as? [String: String])?["navTarget"] == "team@muc.example.com")
-        precondition(NotificationPresentation.conversation(of: content.userInfo) == "team@muc.example.com")
-        #if !os(iOS)
-        precondition(content.title == "Alice @ Team")
-        #endif
-    }
-
     static func intents() {
         let names = SharedNames(contacts: ["alice@example.com": "Alice"], rooms: ["team@muc.example.com": "Team"], account: "me@example.com")
         let direct = NotificationPresentation.intent(from: "alice@example.com/phone", body: "Fixture", names: names)!
@@ -405,8 +388,6 @@ import UniformTypeIdentifiers
             try! mirror()
         case "intents":
             intents()
-        case "local-content":
-            localContent()
         case "conversations":
             conversations()
         case "direct":

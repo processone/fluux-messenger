@@ -238,7 +238,7 @@ describe('useDesktopNotifications posting + guard', () => {
       useToastStore.getState().toasts[0].onClick?.()
       expect(navigateToRoom).toHaveBeenCalledWith('team@conf.example.com', 'summary-room-message')
       expect(showWebNotification).not.toHaveBeenCalled()
-      expect(invoke).not.toHaveBeenCalledWith('plugin:push|post_local_notification', expect.anything())
+      expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
     })
 
     it('opens the conversation at the message when tapped', async () => {
@@ -411,71 +411,6 @@ describe('useDesktopNotifications posting + guard', () => {
       invoke.mockResolvedValue(null)
     }
   })
-  // FLM-201: an iOS room notification gets the room picture and participants through the push plugin.
-  describe('iOS room notification while Fluux is not in front', () => {
-    const arrive = () => handlers.onRoomMessage?.(
-      { jid: 'xsf@muc.xmpp.org', name: 'XSF', nickname: 'Receiver', notifyAll: true },
-      { id: 'room-picture', nick: 'Sender', body: 'Avatar diagnostic', from: 'xsf@muc.xmpp.org/Sender' })
-
-    beforeEach(() => {
-      restorePlatform()
-      restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
-      isMobileTauri.mockResolvedValue(true)
-    })
-
-    it('posts through the push plugin with the room and sender, not the notification plugin', async () => {
-      renderHook(() => useDesktopNotifications())
-      await arrive()
-      expect(invoke).toHaveBeenCalledWith('plugin:push|post_local_notification', { message: {
-        title: 'Sender @ XSF', body: 'body text', from: 'xsf@muc.xmpp.org/Sender',
-        extra: expect.objectContaining({ navType: 'room', navTarget: 'xsf@muc.xmpp.org', messageId: 'room-picture' }),
-      } })
-      expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
-    })
-
-    it('does not fetch or write a room picture the push plugin takes from its own mirror', async () => {
-      renderHook(() => useDesktopNotifications())
-      await arrive()
-      expect(getNotificationAvatarUrl).not.toHaveBeenCalled()
-    })
-
-    it('still prepares the avatar attachment for a direct chat', async () => {
-      renderHook(() => useDesktopNotifications())
-      await handlers.onConversationMessage?.({ id: 'alice@example.com', name: 'Alice' }, { id: 'chat-picture', from: 'alice@example.com' })
-      expect(getNotificationAvatarUrl).toHaveBeenCalled()
-    })
-
-    it('still posts the notification when the push plugin refuses it', async () => {
-      invoke.mockImplementation(async (command) => {
-        if (command === 'plugin:push|post_local_notification') throw new Error('refused')
-        return null
-      })
-      renderHook(() => useDesktopNotifications())
-      await arrive()
-      expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', { options: expect.objectContaining({ title: 'Sender @ XSF' }) })
-    })
-  })
-
-  // FLM-201's native mirror optimization must not drop pictures from the iOS web adapter.
-  it('keeps the room picture on the iOS web shell', async () => {
-    restorePlatform()
-    restorePlatform = setPlatformForTesting({ shell: 'web', os: 'ios' })
-    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
-    const avatar = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
-    vi.mocked(getNotificationAvatarUrl).mockResolvedValueOnce(avatar)
-    try {
-      renderHook(() => useDesktopNotifications())
-      await handlers.onRoomMessage?.(
-        { jid: 'xsf@muc.xmpp.org', name: 'XSF', nickname: 'Receiver', avatar, avatarHash: 'web-room-picture', notifyAll: true },
-        { id: 'web-room-picture', nick: 'Sender', from: 'xsf@muc.xmpp.org/Sender' },
-      )
-      expect(showWebNotification).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ icon: avatar }), expect.anything(), expect.any(Function))
-      expect(invoke).not.toHaveBeenCalledWith('plugin:push|post_local_notification', expect.anything())
-    } finally {
-      vi.mocked(getNotificationAvatarUrl).mockReset().mockResolvedValue(undefined)
-    }
-  })
-
   // Captain's F5 choice: refresh only display names; other metadata/eligibility changes still cancel.
   it.each(['contact', 'room', 'other-metadata'] as const)('finalizes preparation after a %s change with current presentation only', async change => {
     let prepared!: (token: string) => void

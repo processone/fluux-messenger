@@ -279,9 +279,8 @@ What runs natively:
 - **OpenPGP.** The same Sequoia engine as the desktop. The key is unlocked from
   the keychain at login, so no passphrase is asked per session, and key
   rotation is available.
-- **Notifications.** Local notifications go through the OS. While the app runs, room
-  notifications on iOS use the push plugin's local command and keep their tap
-  destination. Room-picture rendering in system banners remains unverified.
+- **Notifications.** Local notifications go through the OS. Room-picture rendering
+  in iOS system banners remains unverified; in-app room toasts are separate.
   Remote push uses APNs and XEP-0357 (see [Remote push notifications](#remote-push-notifications)).
   Tapping a notification attributed to the signed-in account opens its conversation.
   See [badge snapshot semantics](../README.md#siri-and-shortcuts-on-ios) for what
@@ -636,28 +635,19 @@ content updates; simulator compilation covers those APIs. Real-device acceptance
 requires remote pushes with fixture identities: direct and room avatars,
 missing-avatar fallback, avatar replacement/removal, logout, and delivery while
 locked after first unlock. Simulator builds and fixtures do not prove APNs
-extension execution or the rendered Notification Center appearance. While the app
-runs, local room notifications submit communication metadata through the push
-plugin, retaining the local tap destination. They read the shared avatar mirror
-rather than preparing an unused attachment. Accepting this metadata does not prove
-that iOS renders the room picture: current simulator banners still show the app
-icon. If the room has not reached the mirror,
-they keep the app's plain sender/room title instead of applying a contact intent.
-The platform capability `usesNativePush` selects this room producer in
-`platform/ios/postRoomNotification.ts`; browsers on iOS keep their web icon path.
-Direct-chat local notifications still use the notification plugin and convert
-browser image addresses to temporary files.
-Each iOS attachment gets its own file because the system consumes it; a later or
-concurrent notification must not reuse that path. The
-`notificationAttachmentsConsumed` capability expresses this ownership rule;
-desktop file caching is unchanged.
-In-app room toasts use the room picture (or the shared # fallback), with the sender
-first and the room name and message below. Browser combined-count summaries name
-the room above the count instead of attributing several messages to the latest
-sender; they keep the picture, separate dismiss control and navigation.
-Generic status toasts are unchanged.
-Local room content adds no OS sound: `useSoundNotification` remains the owner of
-local message audio and its enabled/disabled preference.
+extension execution or the rendered Notification Center appearance. The room
+picture in iOS system banners remains unverified. A separate simulator probe
+accepted the communication metadata but still displayed the app icon; awaiting
+the interaction donation failed before posting a banner. Neither result qualifies
+physical-device rendering. System-banner changes remain a separate follow-up.
+
+In-app room toasts on the web and iOS use the room picture (or the shared # fallback),
+with the sender first and the room name and message below. Browser combined-count
+summaries name the room above the count instead of attributing several messages
+to the latest sender; they keep the picture, separate dismiss control and navigation.
+Generic status toasts and system-notification producers are unchanged.
+`useSoundNotification` remains the owner of local message audio and its
+enabled/disabled preference.
 
 To qualify room-picture presentation on a signed iPhone build:
 

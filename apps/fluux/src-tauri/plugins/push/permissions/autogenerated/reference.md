@@ -11,7 +11,6 @@ Register this device for remote push notifications, receive its token updates an
 - `allow-remove-conversation-donations`
 - `allow-set-notification-sound`
 - `allow-set-notification-avatar`
-- `allow-post-local-notification`
 - `allow-set-notification-preview`
 - `allow-export-notification-diagnostic`
 - `allow-set-badge`
@@ -102,32 +101,6 @@ Enables the export_notification_diagnostic command without any pre-configured sc
 <td>
 
 Denies the export_notification_diagnostic command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`push:allow-post-local-notification`
-
-</td>
-<td>
-
-Enables the post_local_notification command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`push:deny-post-local-notification`
-
-</td>
-<td>
-
-Denies the post_local_notification command without any pre-configured scope.
 
 </td>
 </tr>

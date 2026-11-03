@@ -150,31 +150,6 @@ enum NotificationPresentation {
         content.title = sender.title
         if let subtitle = sender.subtitle { content.subtitle = subtitle }
         if var badge = SharedBadge.load() { content.badge = NSNumber(value: badge.count(adding: from, rooms: names.rooms)) }
-        return communication(content, from: from, names: names)
-    }
-
-    /// Marks a notification the push plugin posted itself, which the notification plugin does not know.
-    static let localMarker = "__FLUUX_LOCAL__"
-
-    /// A notification the app posts itself for a message. It keeps the app's title and the `extra`
-    /// the tap routing reads, and takes the room picture and participants a push gets.
-    static func localContent(title: String, body: String, from: String, extra: [String: Any],
-                             names: SharedNames = SharedNames.load()) -> UNNotificationContent {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        // useSoundNotification owns local message audio; do not add a second OS sound.
-        content.userInfo = ["__EXTRA__": extra, localMarker: true]
-        guard let bare = bareJid(from) else { return content }
-        content.threadIdentifier = bare
-        // The room mirror may not be ready yet. Keep the app's sender/room title
-        // rather than applying a contact intent to an unknown room.
-        guard names.rooms[bare] != nil else { return content }
-        return communication(content, from: from, names: names)
-    }
-
-    /// Applies the conversation's communication intent, keeping the grouping id, badge and sound.
-    private static func communication(_ content: UNMutableNotificationContent, from: String, names: SharedNames) -> UNNotificationContent {
         #if os(iOS)
         if #available(iOS 15.0, *), let intent = intent(from: from, body: content.body, names: names) {
             let interaction = INInteraction(intent: intent, response: nil)

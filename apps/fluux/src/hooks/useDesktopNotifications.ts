@@ -24,7 +24,6 @@ import { useArrivalJumpStore } from '@/stores/arrivalJumpStore'
 import { announcedByPush } from './useNativePush'
 import { dismissNotification } from '@/utils/dismissNotification'
 import { postPluginNotification } from '@/utils/postPluginNotification'
-import { postIOSRoomNotification } from '@/platform/ios/postRoomNotification'
 import { currentAccountId, postNativeDesktopNotification } from '@/utils/nativeNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
 import { requestAttention } from '@/utils/attention'
@@ -318,9 +317,7 @@ export function useDesktopNotifications(): void {
     const avatar = target.kind === 'chat'
       ? rosterStore.getState().getContact(target.entity.id)
       : target.entity
-    // Native iOS rooms use the shared mirror; web notifications still need their icon.
-    const iosRoom = target.kind === 'room' && platform().usesNativePush
-    const avatarUrl = iosRoom ? undefined : await getNotificationAvatarUrl(avatar?.avatar, avatar?.avatarHash)
+    const avatarUrl = await getNotificationAvatarUrl(avatar?.avatar, avatar?.avatarHash)
     const mobile = desktop && await isMobileTauri()
     // Avatar/platform work may outlive a decrypt repair, edit, read or account change.
     target = await resolveTarget(original)
@@ -373,14 +370,9 @@ export function useDesktopNotifications(): void {
           return true
         }, frontNow)
       } else {
-        const options = { title, body,
+        await postPluginNotification({ title, body,
           attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
-          extra: { navType, navTarget, messageId, accountId } }
-        if (iosRoom && target.kind === 'room') {
-          await postIOSRoomNotification(options, `${navTarget}/${target.message.nick}`, frontNow)
-        } else {
-          await postPluginNotification(options, messageRowRef(target.message), frontNow)
-        }
+          extra: { navType, navTarget, messageId, accountId } }, messageRowRef(target.message), frontNow)
       }
     } else {
       await showWebNotification(title, { body, icon: avatarUrl || './icon-512.png', tag: webTag(navType, navTarget),
