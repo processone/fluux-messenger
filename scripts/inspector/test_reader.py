@@ -6,6 +6,7 @@ webinspectord, including unwanted app metadata and asynchronous console events.
 """
 import contextlib
 import copy
+import hashlib
 import io
 from inspect import signature
 import json
@@ -19,6 +20,7 @@ import tempfile
 import threading
 import time
 import unittest
+import zlib
 
 from reader import BUNDLE, CAP, Budget, Boundary, Reader, PRESENT, SAMPLER, SAMPLE, REMOVE, SAMPLE_INTERVAL, sanitize_sample
 from structure import StructureTap, assert_sanitized
@@ -29,6 +31,26 @@ PRIVATE = "PRIVATE-CANARY"
 APP = {"WIRApplicationIdentifierKey": "PID:321", "WIRApplicationBundleIdentifierKey": BUNDLE,
        "WIRApplicationNameKey": PRIVATE}
 OTHER = dict(APP, WIRApplicationIdentifierKey="PID:654", WIRApplicationBundleIdentifierKey="com.apple.mobilesafari")
+
+
+def icon():
+    """A valid PNG of the size the iPhone attached to each app entry (about 4 KB)."""
+    side = 32
+    pixels = b"".join(hashlib.sha256(b"icon-%d" % i).digest() for i in range(side * side * 4 // 32))
+    rows = b"".join(b"\x00" + pixels[y * side * 4:(y + 1) * side * 4] for y in range(side))
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", side, side, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
+# FLM-377: the entry shape the captain's iPhone (iOS 27.0.1) sent in live sessions,
+# recorded as field presence and types only. Fluux's own entry was not listed live;
+# it is assumed to share the shape every other app entry had.
+IPHONE_ENTRY = {"WIRApplicationIconKey": icon(), "WIRAutomationAvailabilityKey": "WIRAutomationAvailabilityNotAvailable",
+                "WIRIsApplicationActiveKey": 1, "WIRIsApplicationProxyKey": False, "WIRIsApplicationReadyKey": True}
+IPHONE_APP = dict(APP, **IPHONE_ENTRY)
+IPHONE_OTHER = dict(OTHER, **IPHONE_ENTRY)
 
 
 def frame(selector, arg):
@@ -61,6 +83,7 @@ class Peer:
         self.partial_started = False
         self.partial_cut_bytes = 0
         self.write_failed = False
+        self.ignored = 0  # Messages Reader must count as discarded, sent before sampling.
 
     def send(self, selector, arg):
         if selector == "_rpc_reportConnectedApplicationList:" and self.app_list_delay:
@@ -89,6 +112,22 @@ class Peer:
                                             "WIRTitleKey": PRIVATE, "WIRURLKey": "https://example.invalid/" + PRIVATE}
                                     for i in range(1, pages + 1)}})
 
+    def iphone_announcements(self):
+        """Live order: state, app list, empty driver list, then other apps arriving,
+        changing state and sending their own listings unasked; the list may repeat."""
+        apps = {"PID:654": IPHONE_OTHER, "PID:321": IPHONE_APP}
+        self.send("_rpc_reportCurrentState:", {"WIRAutomationAvailabilityKey": "WIRAutomationAvailabilityNotAvailable"})
+        self.send("_rpc_reportConnectedApplicationList:", {"WIRApplicationDictionaryKey": apps})
+        self.send("_rpc_reportConnectedDriverList:", {"WIRDriverDictionaryKey": {}})
+        for pid in ("PID:655", "PID:656", "PID:657"):
+            self.send("_rpc_applicationConnected:", dict(IPHONE_OTHER, WIRApplicationIdentifierKey=pid))
+        for pid in ("PID:655", "PID:656"):
+            self.send("_rpc_applicationSentListing:", {"WIRApplicationIdentifierKey": pid, "WIRListingKey": {}})
+            self.send("_rpc_applicationUpdated:", dict(IPHONE_OTHER, WIRApplicationIdentifierKey=pid,
+                                                      WIRIsApplicationActiveKey=0))
+        self.send("_rpc_reportConnectedApplicationList:", {"WIRApplicationDictionaryKey": apps})
+        self.ignored += 4
+
     def run(self):
         try:
             self.sock.settimeout(4)
@@ -107,9 +146,12 @@ class Peer:
                     self.sock.sendall(struct.pack(">I", CAP + 1))
                     self.mode = "silent"
                     continue
-                if sel == "_rpc_getConnectedApplications:":
+                if sel == "_rpc_getConnectedApplications:" and self.mode == "iphone":
+                    self.iphone_announcements()
+                elif sel == "_rpc_getConnectedApplications:":
                     # An unsolicited other-app listing must never cause attachment.
                     self.listing("PID:654")
+                    self.ignored += 1
                     apps = {"PID:654": OTHER, "PID:321": APP}
                     if self.mode == "duplicate-app":
                         apps["PID:999"] = dict(APP, WIRApplicationIdentifierKey="PID:999")
@@ -174,7 +216,7 @@ class Peer:
                         continue
                     if exp == SAMPLE:
                         self.times.append(time.monotonic())
-                        if ((self.sample_index == 3 and self.mode in ("normal", "xml", "fragmented"))
+                        if ((self.sample_index == 3 and self.mode in ("normal", "xml", "fragmented", "iphone"))
                                 or (self.sample_index == 1 and self.mode in ("one-sample", "partial-cleanup", "peer-write-failure"))):
                             self.stop.set()
                             continue
@@ -668,14 +710,40 @@ class ReaderTests(unittest.TestCase):
             with self.subTest(leaked=leaked), self.assertRaises(ValueError):
                 assert_sanitized({"messages": [{"selector": leaked}]})
 
+    def test_iphone_announcements_keep_the_fluux_session(self):
+        # FLM-377: the captain's iPhone announces its state, every inspectable app
+        # with icon and state flags, an empty driver list, other apps' arrivals and
+        # listings unasked, and a repeated list. None of it may change the session.
+        normal, normal_peer, _ = self.exercise("normal", duration=2)
+        result, peer, persisted = self.exercise("iphone", duration=2, tap=True)
+        self.assertEqual((result["reason"], result["phase"], result["cleanup"], result["samples"]),
+                         ("stopped", "sampling", "confirmed", 3))
+        self.assertEqual(len(persisted.splitlines()), 3)
+        self.assertEqual(result["discarded"] - peer.ignored, normal["discarded"] - normal_peer.ignored)
+        messages = PROOF[-1]["structure"]["messages"]
+        inbound = [m["selector"] for m in messages if m["dir"] == "in"]
+        self.assertEqual(inbound[:3], ["_rpc_reportCurrentState:", "_rpc_reportConnectedApplicationList:",
+                                       "_rpc_reportConnectedDriverList:"])
+        apps = next(m["apps"] for m in messages if m["selector"] == "_rpc_reportConnectedApplicationList:")
+        # The live sessions' key set and types, as the observer recorded them there.
+        self.assertEqual({k: set(v) for k, v in apps["keys"].items() if k != "WIRApplicationBundleIdentifierKey"},
+                         {"WIRApplicationIconKey": {"bytes"}, "WIRApplicationIdentifierKey": {"str"},
+                          "WIRApplicationNameKey": {"str"}, "WIRAutomationAvailabilityKey": {"str"},
+                          "WIRIsApplicationActiveKey": {"int"}, "WIRIsApplicationProxyKey": {"bool"},
+                          "WIRIsApplicationReadyKey": {"bool"}})
+        self.assertEqual((apps["count"], apps["fluux"], apps["proxies"]), (2, 1, 0))
+        self.assertGreater(len(IPHONE_ENTRY["WIRApplicationIconKey"]), 4000)
+
     def test_structure_tap_does_not_change_reader_outcomes(self):
         # Observation must never alter what the reader receives or decides.
         for mode in ("fragmented", "xml", "malformed", "missing-listing", "eval-error", "wrong-session",
                      "duplicate-app", "multiple-pages", "destroyed-before-target", "preexisting", "partial"):
             with self.subTest(mode=mode):
-                plain, _, plain_saved = self.exercise(mode, duration=.65 if mode != "partial" else .15)
-                observed, _, observed_saved = self.exercise(mode, duration=.65 if mode != "partial" else .15,
-                                                            tap=True)
+                # Streaming modes end on the peer's stop after three samples, never on a
+                # timer, so both runs see the same samples; "partial" ends at its cut.
+                duration = .15 if mode == "partial" else 2
+                plain, _, plain_saved = self.exercise(mode, duration=duration)
+                observed, _, observed_saved = self.exercise(mode, duration=duration, tap=True)
                 same = ("reason", "phase", "fault", "cleanup", "samples", "discarded", "receivedBytes",
                         "reservedInputBytes")
                 self.assertEqual({k: plain[k] for k in same}, {k: observed[k] for k in same})

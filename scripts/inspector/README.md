@@ -78,7 +78,9 @@ is not evidence that the peer processed it.
    be audited and bounded before live use. Do not instantiate the default
    `pymobiledevice3.WebinspectorService` or `InspectorSession`: those already
    request other apps' listings or may format raw responses. The opener below is
-   supplied and proved on disposable peers, **not qualified on a real phone**.
+   proved on disposable peers. In FLM-377 it opened the captain's iPhone (iOS
+   27.0.1) and carried the reader through the announcement phase; attaching to a
+   Fluux page on a real phone is still unqualified.
 3. Create one `Budget()` for the **whole attempt**, share it with the native-log
    collector, and charge that collector's raw input with `budget.charge(n)` before
    copying/decoding it. Charge its sanitized output with
@@ -184,6 +186,24 @@ Disposable proof runs every reader scenario with and without the tap and checks
 that reason, phase, fault, cleanup, samples and persisted output are identical,
 and that no titles, routes, text or console content reach the report.
 
+What the real iPhone sent (iOS 27.0.1, two FLM-377 sessions): `_rpc_reportCurrentState:`
+(an automation-availability string), the application list, and an empty
+`_rpc_reportConnectedDriverList:`. Each application entry carried its bundle
+identifier, a PNG icon of about 4 KB, its identifier, name, automation
+availability, `WIRIsApplicationActiveKey` as an integer, and proxy and ready
+flags as booleans. Other apps then arrived through `_rpc_applicationConnected:`
+and `_rpc_applicationUpdated:`, each with an unrequested
+`_rpc_applicationSentListing:`, and the list could repeat. The reader accepted all
+of it; the `iphone` peer mode in `test_reader.py` reproduces that order and shape.
+Fluux itself was not listed in those sessions, so its own entry is assumed to
+share that shape.
+
+The second FLM-377 session stopped with `protocol-boundary` from a transport fault,
+not a message shape: the reader's fault named `ServiceError`/`service-io` at its
+read while it waited in the applications phase. FLM-350's earlier stop had the
+same reason but kept no fault detail. `test_service.py` pauses a healthy worker for 150 ms
+during an idle read and through a whole reader journey to keep that fixed.
+
 ## Existing-pairing-only service opener (FLM-366)
 
 `service_worker.c` owns usbmuxd, lockdown and in-memory TLS.
@@ -276,8 +296,12 @@ file-based certificate/private-key loading required by Python's default TLS API.
   Outbound commands are bounded but are not retained collected evidence.
 - One control request/returned chunk is at most 64 KiB. Native service waits use
   the caller's positive timeout, at most one second. The local control exchange
-  adds one fixed 25 ms reply margin, so the reader's final 1 ms poll can return
-  no-data without destroying its cleanup channel. The whole exchange has one
+  adds one fixed 500 ms reply margin, so the reader's final 1 ms poll can return
+  no-data without destroying its cleanup channel, and a healthy worker that the
+  host scheduled late still answers. On the Mac that runs the fleet, short timers
+  in a background process ran up to about 150 ms late; the earlier 25 ms margin
+  turned such a late reply into a closed stream on the real iPhone (FLM-377). A
+  stopped worker is still detected and reaped within a second. The whole exchange has one
   absolute deadline; fragments do not reset it. Native no-data polling has no
   1 ms minimum wait. A completed no-data read raises `socket.timeout` and keeps
   partial TLS records safely inside OpenSSL. Native writes wait for readiness
@@ -322,8 +346,8 @@ that span a controlled peer read pause, as well as bounded permanent-stall closu
 All workers, peer threads, sockets, fixture files and browsers are closed/removed.
 
 These are live **host** executions against a disposable usbmuxd/lockdown/inspector
-peer, not an Apple daemon or an iPhone. Real-device pairing-record/service shapes,
-the installed device's certificate choice, iOS compatibility, Fluux inspectability
-and remote frozen-page cleanup remain FLM-350's separate qualification. A different
+peer, not an Apple daemon or an iPhone. FLM-377's live sessions exercised the
+real pairing, certificate and announcement phase; Fluux inspectability, page
+attachment and remote frozen-page cleanup on a real phone remain unqualified. A different
 pin or protocol shape fails closed; do not weaken the boundary or add a pairing
 fallback to make a live connection work. No earlier audit finding was contradicted.
