@@ -112,6 +112,13 @@ is not evidence that the peer processed it.
    500ms. On an aligned stream it gives fixed sampler removal at most half of
    that time, reserving the rest for the page-socket close message even when the
    page never answers removal. It then shuts down and closes the transport.
+   Through the opener, a reply the host scheduled late can still finish up to
+   500 ms after either deadline (see Bounds and accounting), so cleanup can last
+   up to about 1.1 seconds. A removal reply that ends after the cleanup deadline
+   leaves no time for the close message, which is then skipped. A worker that
+   stops answering holds cleanup about 0.65 s when it stops at removal, and up to
+   about 0.9 s when it stops at the close message, before the opener kills and
+   reaps it.
    Inbound and outbound alignment are tracked separately. A partial inbound
    prefix/body forbids further reads, but aligned outbound removal and page-close
    messages are still sent. Without an acknowledgment, removal stays unconfirmed.
@@ -179,8 +186,13 @@ The tap charges its retained entries to the attempt's shared budget as output.
 A decode failure or budget refusal stops observation (`observerFault`,
 `truncated`) but never changes the reader's outcome. `report()` returns the
 entries plus counts of omitted messages and the sizes of any partial frame.
-Call `assert_sanitized(report)` before writing it: it rejects any key or
-string outside the allowlisted vocabulary and any non-integer number.
+Call `assert_sanitized(report)` before writing it. It checks form, as a second
+line of defense: keys must be schema words, fixed labels, `WIR…` key names or a
+single camelCase word; strings must be schema words, fixed labels, `_rpc_…:`
+selectors or `Domain.method` names; numbers must be integers or booleans. Any
+short lowercase word passes as a key and any `Word.word` string as a method
+name, so the tap's own rules keep values out: it writes only protocol key
+names, selectors, method names and type tags in those places.
 
 Disposable proof runs every reader scenario with and without the tap and checks
 that reason, phase, fault, cleanup, samples and persisted output are identical,
@@ -230,15 +242,19 @@ After **separate live attachment/device consent and qualification in FLM-350**,
 the integration shape is:
 
 ```python
-from service import open_service
+import time
+
+from service import CONTROL_GRACE, open_service
 from reader import Reader
 
 # Existing whole-attempt Budget, private empty output and original host deadline
 # come from FLM-350's coordinator. Never create a second allowance for this opener.
+# Lifetime covers the rest of the capture, the reader's 0.5 s cleanup and one
+# reply margin: at most 121 s for the 120 s maximum capture.
 with open_service(worker_path, fresh_authorized_usb_identity, shared_budget,
-                  lifetime=remaining_seconds_including_cleanup) as service:
+                  lifetime=capture_deadline - time.monotonic() + .5 + CONTROL_GRACE) as service:
     result = Reader(service, shared_budget).run(
-        private_output, stop=shared_stop, duration=remaining_capture_seconds)
+        private_output, stop=shared_stop, duration=capture_deadline - time.monotonic())
 ```
 
 This is an API example, not a runnable live launcher or consent grant. Never print,
@@ -309,8 +325,11 @@ file-based certificate/private-key loading required by Python's default TLS API.
   no-data without destroying its cleanup channel, and a healthy worker that the
   host scheduled late still answers. On the Mac that runs the fleet, short timers
   in a background process ran up to about 150 ms late; the earlier 25 ms margin
-  turned such a late reply into a closed stream on the real iPhone (FLM-377). A
-  stopped worker is still detected and reaped within a second. The whole exchange has one
+  turned such a late reply into a closed stream on the real iPhone (FLM-377). The
+  margin runs past whatever wait the reader set, so a late reply can end a capture
+  poll or a cleanup step up to 500 ms after the reader's own deadline. A stopped
+  worker is still detected once its wait and this margin pass, then killed and
+  reaped: about 0.65 s for the reader's 25 ms polls. The whole exchange has one
   absolute deadline; fragments do not reset it. Native no-data polling has no
   1 ms minimum wait. A completed no-data read raises `socket.timeout` and keeps
   partial TLS records safely inside OpenSSL. Native writes wait for readiness
@@ -319,8 +338,16 @@ file-based certificate/private-key loading required by Python's default TLS API.
   An incomplete or interrupted local exchange still aborts the worker with a
   fixed error instead of replaying possibly consumed/sent bytes.
 - The worker's independent wall timer ends idle or orphaned work, even if the
-  Python caller stops reading. Lifetime is at most 121 seconds (default 120.5),
-  including startup/cleanup; FLM-350 supplies its original remaining deadline.
+  Python caller stops reading, and ends the worker even mid-exchange. Lifetime is
+  at most 121 seconds and covers startup, capture, cleanup and one reply margin:
+  supply the time left to the capture deadline plus the reader's 500 ms cleanup
+  plus `CONTROL_GRACE` (500 ms), which stays within 121 seconds for the
+  120-second maximum capture. The default 120.5 therefore suits a capture of at
+  most 119.5 seconds; FLM-350 supplies its own value from its original deadline.
+  Sized as capture plus cleanup only, a late close reply outlives the worker: its
+  timer ends it and the close message is lost. This sizing covers one late reply.
+  If the final capture poll and a cleanup reply are both late, the lifetime can
+  still cut removal or the close message, and a cut removal reports `unconfirmed`.
   `close` closes the private channel, gives graceful teardown 100 ms, then kills
   and reaps a stalled worker. The worker starts in a separate session/process
   group, so Ctrl-C sent to the caller's group does not kill it independently.
