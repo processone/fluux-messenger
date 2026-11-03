@@ -63,6 +63,7 @@ const SUITES = [
   { name: 'presence-burst', testMatch: 'presence-burst.ts' },
   { name: 'connection-step', testMatch: 'connection-step.ts' },
   { name: 'hinge-layout', testMatch: 'hinge-layout.ts' },
+  { name: 'harness-activate-chat', testMatch: 'harness-activate-chat.ts' },
 ] as const
 
 /**
