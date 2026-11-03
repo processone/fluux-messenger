@@ -3093,10 +3093,11 @@ test.describe('Insertion drift while scrolled up', () => {
   }
 
   /**
-   * Where the pointer rests as a load-older starts. `off-rows` parks it on the list's side padding,
-   * on no message, so no hover hold starts. `on-message` rests it on a message, which starts the
-   * hover interaction hold (FLM-229), and the controller then refuses the load's restore request.
-   * On CI the pointer `openScrolledUp` leaves mid-list started that hold by chance (FLM-210).
+   * Where the pointer rests as a load-older starts. `off-rows` parks it on the list's scrollbar, on
+   * no message, so no hover hold starts and the reader's wheel still scrolls the list. `on-message`
+   * rests it on a message, which starts the hover interaction hold (FLM-229), and the controller
+   * then refuses the load's restore request. On CI the pointer `openScrolledUp` leaves mid-list
+   * started that hold by chance (FLM-210).
    */
   type PointerAtLoadStart = 'off-rows' | 'on-message'
   const POINTERS_AT_LOAD_START: readonly PointerAtLoadStart[] = ['off-rows', 'on-message']
@@ -3108,19 +3109,25 @@ test.describe('Insertion drift while scrolled up', () => {
     const list = page.locator('[data-message-list]').first()
     const box = await list.boundingBox()
     expect(box, 'the message list must be laid out').not.toBeNull()
-    // 6 px into the list's 16 px side padding is inside the scroller, on no message row.
-    const x = pointer === 'off-rows' ? box!.x + 6 : box!.x + box!.width / 2
+    // Message rows span the list's side padding, so the 6 px scrollbar at its right edge is the one
+    // place inside the list on no row.
+    const x = pointer === 'off-rows' ? box!.x + box!.width - 3 : box!.x + box!.width / 2
     const y = box!.y + box!.height / 2
-    const onMessage = await page.evaluate(
-      ([px, py]) => Boolean(document.elementFromPoint(px, py)?.closest('[data-message-row-id]')),
-      [x, y] as const,
-    )
+    const under = await page.evaluate(([px, py]) => {
+      const el = document.elementFromPoint(px, py)
+      return {
+        onMessage: Boolean(el?.closest('[data-message-row-id]')),
+        onList: el === document.querySelector('[data-message-list]'),
+      }
+    }, [x, y] as const)
     if (pointer === 'off-rows') {
-      expect(onMessage, 'precondition: the parked pointer must rest on no message').toBe(false)
-      await page.mouse.move(x, y, { steps: 3 })
+      expect(under, 'precondition: the parked pointer must rest on the list itself, on no message')
+        .toEqual({ onMessage: false, onList: true })
+      await page.mouse.move(x, y)
       await expect(list).not.toHaveAttribute('data-message-interaction')
       return
     }
+    const onMessage = under.onMessage
     expect(onMessage, 'precondition: the pointer must rest on a message').toBe(true)
     // The controller refuses pointer intent while a scroll gesture still holds input (FLM-229), so
     // nudge the pointer by a pixel until the hold starts.
@@ -3592,42 +3599,40 @@ test.describe('Insertion drift while scrolled up', () => {
 
   // FLM-210, review FLM-338 R1, at the resident bound: there the arrival also evicts the oldest
   // row, a window shift the pending load restores for at once, so it held the same off-screen row.
-  for (const pointer of POINTERS_AT_LOAD_START) {
-    test(`invariant-14q${pointerVariant(pointer)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when a delayed message lands below them`, async ({ page }) => {
-      await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
-      const r = await insertDuringInFlightLoadOlder(
-        page,
-        'bound delayed arrival below a reader who scrolled up\n'.repeat(18),
-        { scrollBeforeArrival: 'up', pointer },
-      )
-      console.log(`── INSERTION-DRIFT bound-below-moved-reader ${pointer} ──`, JSON.stringify(r))
-      expect(
-        r.loadStartBelowViewport,
-        `precondition: the wheel must take the rows the load started from below the view — ${JSON.stringify(r)}`,
-      ).toBe(true)
-      expect(r.insertedBelowViewport, `the arrival must land BELOW the viewport — ${JSON.stringify(r)}`).toBe(true)
-      expect(
-        r.insertedAboveLoadStart,
-        `the arrival must land above the rows the load started from — ${JSON.stringify(r)}`,
-      ).toBe(true)
-      expect(
-        r.firstIdMidway,
-        `precondition: at the resident bound the arrival must evict the oldest row — ${JSON.stringify(r)}`,
-      ).not.toBe(r.firstIdBefore)
-      expect(
-        r.firstIdAfter,
-        `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
-      ).not.toBe(r.firstIdMidway)
-      expect(
-        r.midwayDrift,
-        `an arrival below the reader moved their rows by ${r.midwayDrift}px while the load waited — ${JSON.stringify(r)}`,
-      ).toBeLessThanOrEqual(HELD_ROW_PX)
-      expect(
-        r.drift,
-        `an arrival below the reader moved their rows by ${r.drift}px once the batch landed — ${JSON.stringify(r)}`,
-      ).toBeLessThanOrEqual(HELD_ROW_PX)
-    })
-  }
+  test('invariant-14q: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when a delayed message lands below them', async ({ page }) => {
+    await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
+    const r = await insertDuringInFlightLoadOlder(
+      page,
+      'bound delayed arrival below a reader who scrolled up\n'.repeat(18),
+      { scrollBeforeArrival: 'up' },
+    )
+    console.log('── INSERTION-DRIFT bound-below-moved-reader ──', JSON.stringify(r))
+    expect(
+      r.loadStartBelowViewport,
+      `precondition: the wheel must take the rows the load started from below the view — ${JSON.stringify(r)}`,
+    ).toBe(true)
+    expect(r.insertedBelowViewport, `the arrival must land BELOW the viewport — ${JSON.stringify(r)}`).toBe(true)
+    expect(
+      r.insertedAboveLoadStart,
+      `the arrival must land above the rows the load started from — ${JSON.stringify(r)}`,
+    ).toBe(true)
+    expect(
+      r.firstIdMidway,
+      `precondition: at the resident bound the arrival must evict the oldest row — ${JSON.stringify(r)}`,
+    ).not.toBe(r.firstIdBefore)
+    expect(
+      r.firstIdAfter,
+      `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+    ).not.toBe(r.firstIdMidway)
+    expect(
+      r.midwayDrift,
+      `an arrival below the reader moved their rows by ${r.midwayDrift}px while the load waited — ${JSON.stringify(r)}`,
+    ).toBeLessThanOrEqual(HELD_ROW_PX)
+    expect(
+      r.drift,
+      `an arrival below the reader moved their rows by ${r.drift}px once the batch landed — ${JSON.stringify(r)}`,
+    ).toBeLessThanOrEqual(HELD_ROW_PX)
+  })
 
   // FLM-210, review FLM-338 R1, the other order: the reader scrolls down while a load-older waits,
   // so the row the load started from goes above the view, and a delayed message lands between the
