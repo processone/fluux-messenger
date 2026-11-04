@@ -1162,7 +1162,7 @@ export function EncryptionSettings() {
         )}
 
         {platform().shell === 'desktop' && platform().os === 'macos' && (
-          <button type="button" className="px-3 py-2 text-sm rounded-lg bg-fluux-hover text-fluux-text hover:bg-fluux-active"
+          <button type="button" className="px-3 py-2 text-sm rounded-lg bg-fluux-hover text-fluux-text hover:bg-fluux-active disabled:opacity-60"
             disabled={!online || !client.e2ee?.getPlugin('openpgp') || keychainRetryBusy}
             onClick={() => setRecoveryManager(client.e2ee ?? null)}>
             {t('settings.encryption.recoveryTitle')}
