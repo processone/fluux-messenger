@@ -24,7 +24,7 @@ import { UnsupportedEncryptionNotice } from './UnsupportedEncryptionNotice'
 import { MessageReactions } from './MessageReactions'
 import { MessageReactorsSheet, type ReactorDetails } from './MessageReactorsSheet'
 import { isActionMessage, type WhisperThreadPosition } from './messageGrouping'
-import { messageRowId } from './messageRowIdentity'
+import { messageRowId, messageOccurrenceKey } from './messageRowIdentity'
 import { messageRowRef, type MessageRowRef } from '@fluux/sdk'
 import { useRequestMessageTarget } from './messageTargetContext'
 import { useOwnGroupWidth } from './messageGroupWidth'
@@ -773,7 +773,7 @@ export const MessageBubble = memo(function MessageBubble({
         )}
 
         {/* Collapsible wrapper for long messages */}
-        <CollapsibleContent messageId={messageRowId(message) ?? message.id} hasMedia={!!(message.attachment || message.linkPreview)}>
+        <CollapsibleContent messageId={messageRowId(message) ?? message.id} wrapKey={messageOccurrenceKey(message)} hasMedia={!!(message.attachment || message.linkPreview)}>
           {/* Encryption placeholders take precedence over body text so the
               sender's plaintext fallback never reaches the UI. encryptedPayload:
               an E2EE stanza we couldn't decrypt. unsupportedEncryption: a
@@ -784,7 +784,7 @@ export const MessageBubble = memo(function MessageBubble({
             <UnsupportedEncryptionNotice method={message.unsupportedEncryption.name} />
           ) : (
             <MessageBody
-              messageId={messageRowId(message) ?? message.id}
+              messageId={messageOccurrenceKey(message)}
               body={message.body}
               isEdited={message.isEdited}
               originalBody={message.originalBody}

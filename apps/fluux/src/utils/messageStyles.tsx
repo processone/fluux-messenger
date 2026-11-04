@@ -405,6 +405,12 @@ function CodeContent({ code, highlightedHtml }: { code: string; highlightedHtml:
 /** Classes making a code block wrap long lines instead of scrolling sideways */
 const WRAP_CLASSES = 'whitespace-pre-wrap [overflow-wrap:anywhere]'
 
+/**
+ * Code controls must not trigger the enclosing row's click (e.g. a search
+ * preview closing and navigating away); ordinary row clicks are untouched.
+ */
+const stopRowClick = (e: React.SyntheticEvent) => e.stopPropagation()
+
 /** Toggle button shown in the code block header (and the enlarged view) */
 function WrapButton({ wrapped, onToggle }: { wrapped: boolean; onToggle: () => void }) {
   const { t } = useTranslation()
@@ -441,7 +447,10 @@ function CodeExpandModal({
   onToggleWrap: () => void
   onClose: () => void
 }) {
+  // React events bubble through portals to the React ancestors, so the modal
+  // is isolated from row navigation the same way the inline controls are.
   return createPortal(
+    <div style={{ display: 'contents' }} onClick={stopRowClick}>
     <ModalShell
       title={language || 'Code'}
       onClose={onClose}
@@ -457,7 +466,8 @@ function CodeExpandModal({
         <WrapButton wrapped={wrapped} onToggle={onToggleWrap} />
         <CopyButton text={code} />
       </div>
-    </ModalShell>,
+    </ModalShell>
+    </div>,
     document.body,
   )
 }
@@ -484,7 +494,7 @@ function CodeBlock({ code, language, keyProp, messageId, blockIndex }: { code: s
     <>
       <div key={keyProp} className="my-1 rounded-lg overflow-hidden border border-fluux-border">
         {/* Header bar with language label, expand and copy buttons */}
-        <div className="flex items-center justify-between px-2 bg-fluux-sidebar border-b border-fluux-border">
+        <div onClick={stopRowClick} className="flex items-center justify-between px-2 bg-fluux-sidebar border-b border-fluux-border">
           {language ? (
             <span className="text-xs text-fluux-muted select-none py-1">{language}</span>
           ) : (

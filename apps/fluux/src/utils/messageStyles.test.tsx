@@ -1280,3 +1280,37 @@ describe('code block wrap button', () => {
     expect(container.querySelector('pre')?.className).toContain('whitespace-pre-wrap')
   })
 })
+
+// Source: review FLM-404 R4 — code controls must not trigger the row's click
+// (a search preview closes and navigates away on a row click).
+describe('code block controls inside a clickable row', () => {
+  beforeEach(() => useWrappedCodeBlocksStore.getState().clear())
+  const renderRow = () => {
+    const onRowClick = vi.fn()
+    render(
+      <div onClick={onRowClick} data-testid="row">
+        {renderStyledMessage('```\nlong line\n```', undefined, undefined, undefined, undefined, undefined, 'k1')}
+        <span>plain text</span>
+      </div>,
+    )
+    return onRowClick
+  }
+
+  it('wrap, expand and copy clicks do not reach the row', () => {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn().mockResolvedValue(undefined) }, configurable: true })
+    const onRowClick = renderRow()
+    fireEvent.click(screen.getByTitle('chat.wrapLines'))
+    fireEvent.click(screen.getByTitle('Copy code'))
+    fireEvent.click(screen.getByTitle('Expand code'))
+    expect(onRowClick).not.toHaveBeenCalled()
+  })
+
+  it('enlarged view clicks (portal) do not reach the row, ordinary row clicks still do', () => {
+    const onRowClick = renderRow()
+    fireEvent.click(screen.getByTitle('Expand code'))
+    fireEvent.click(screen.getAllByTitle('chat.wrapLines')[1])
+    expect(onRowClick).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText('plain text'))
+    expect(onRowClick).toHaveBeenCalledTimes(1)
+  })
+})

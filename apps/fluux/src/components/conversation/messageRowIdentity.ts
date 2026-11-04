@@ -55,6 +55,21 @@ export function messageRowKey(message: Parameters<typeof messageRowId>[0] & { ti
 }
 
 /**
+ * A key for per-message session UI state (such as a wrapped code block) that
+ * must be scoped to the conversation and survive archive-id enrichment.
+ *
+ * {@link messageRowId} is unsuitable: it is unscoped, and it changes when a
+ * MAM/carbon archive id qualifies the handle. The client id and, for rooms, the
+ * receipt instant (stable across an archive-stamp merge) do not change, and the
+ * conversation or room JID keeps legacy messages that share an id apart.
+ */
+export function messageOccurrenceKey(message: { id?: string; type?: 'chat' | 'groupchat'; conversationId?: string; roomJid?: string; timestamp?: Date; receivedAt?: Date }): string | undefined {
+  if (!message.id) return undefined
+  const instant = message.type === 'groupchat' ? (message.receivedAt ?? message.timestamp)?.getTime() ?? null : null
+  return JSON.stringify([message.roomJid ?? message.conversationId ?? null, message.id, instant])
+}
+
+/**
  * The keys one rendered list mounts its rows under, by message.
  *
  * A direct-chat row keys on its client id while no other row in the list shares

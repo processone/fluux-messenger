@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CollapsibleContent } from './CollapsibleContent'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
@@ -59,21 +60,42 @@ describe('CollapsibleContent', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 0 })
   })
 
+  // Source: review FLM-404 R1 — crossing the 500px threshold must not remount
+  // the children (it would close an open enlarged code view).
+  it('keeps children mounted when crossing the collapse threshold', () => {
+    const heightRef = { value: 100 }
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => heightRef.value })
+    const mounts = vi.fn()
+    function Probe() {
+      useEffect(() => { mounts(); return undefined }, [])
+      return <p>probe</p>
+    }
+    const child = <Probe />
+    render(<CollapsibleContent messageId="m-mount" wrapKey="k-mount">{child}</CollapsibleContent>)
+    heightRef.value = 900
+    act(() => useWrappedCodeBlocksStore.getState().toggle('k-mount', 0))
+    expect(screen.getByText('Show more')).toBeTruthy()
+    heightRef.value = 100
+    act(() => useWrappedCodeBlocksStore.getState().toggle('k-mount', 0))
+    expect(screen.queryByText('Show more')).toBeNull()
+    expect(mounts).toHaveBeenCalledTimes(1)
+  })
+
   // Source: FLM-399 — wrapping a code block makes a message taller without
   // changing its children; the toggle must trigger the "Show more" re-check.
   it('re-checks height when a code block of the message is wrapped', () => {
     const heightRef = { value: 100 }
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => heightRef.value })
     const children = <p>content</p>
-    render(<CollapsibleContent messageId="m-wrap">{children}</CollapsibleContent>)
+    render(<CollapsibleContent messageId="m-wrap" wrapKey="k-wrap">{children}</CollapsibleContent>)
     expect(screen.queryByText('Show more')).toBeNull()
 
     heightRef.value = 900 // the wrapped block now needs more lines
-    act(() => useWrappedCodeBlocksStore.getState().toggle('m-wrap', 0))
+    act(() => useWrappedCodeBlocksStore.getState().toggle('k-wrap', 0))
     expect(screen.getByText('Show more')).toBeTruthy()
 
     heightRef.value = 100 // unwrapped again
-    act(() => useWrappedCodeBlocksStore.getState().toggle('m-wrap', 0))
+    act(() => useWrappedCodeBlocksStore.getState().toggle('k-wrap', 0))
     expect(screen.queryByText('Show more')).toBeNull()
   })
 
