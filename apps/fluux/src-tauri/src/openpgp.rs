@@ -3114,9 +3114,16 @@ mod tests {
         // Never automatic: unlocking again, prewarming and offering the retry
         // all keep the refusal without asking the keychain.
         assert!(state.ensure_key_sync(jid, "Alice").is_err());
+        // The prewarm unlocks in the background. Once it has started, the next
+        // unlock waits for it to end, so no answer below is taken while the
+        // prewarm holds the store (which answers `Pending`).
+        let runs = state.blocking_run_count();
         state.prewarm(jid.into(), "Alice".into());
-        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
+        while state.blocking_run_count() == runs {
+            std::thread::yield_now();
+        }
         assert!(state.ensure_key_sync(jid, "Alice").is_err());
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
         assert_eq!(keychain.reads(), 1, "no read without the user's request");
 
         // One request, one read; a new refusal is kept like the first.
