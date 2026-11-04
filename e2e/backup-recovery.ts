@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { syncEngineGeometry } from './harness/compositorSync'
 import type { Locator, Page } from '@playwright/test'
-import { bootDemo } from './harness/demoBoot'
+import { bootDemo, reloadDemo } from './harness/demoBoot'
 
 const meta = JSON.parse(readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/sequoia_meta.json', import.meta.url), 'utf8')) as {
   aliceFingerprint: string; backupPassphrase: string; plaintext: string
@@ -387,8 +387,7 @@ test('the advanced keychain retry asks macOS only on request and unlocks the sam
   await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
   await capture(page, 'after-keychain-decrypted-message.png')
 
-  await page.reload()
-  await expect(page.locator('[data-nav="messages"]')).toBeVisible()
+  await reloadDemo(page)
   await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeHidden()
   await page.evaluate(() => { location.hash = '/settings/encryption' })
   await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()

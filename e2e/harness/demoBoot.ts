@@ -130,22 +130,43 @@ async function describeStall(
 export async function bootDemo(page: Page, url: string): Promise<void> {
   const diagnostics = attachDiagnostics(page)
   const deadline = Date.now() + MOUNT_BUDGET_MS
-  const remaining = () => Math.max(1, deadline - Date.now())
 
   // Explicit, so the ceiling does not depend on where the Page came from: inside a test
   // page.goto carries no limit of its own and is bounded by the test budget, while a Page
   // from a raw browser.launch() gets Playwright's 30s default.
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: remaining() })
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: remainingUntil(deadline) })
+  await waitForMount(page, diagnostics, deadline)
+  await waitForDemoSeeded(page)
+}
 
+/**
+ * Reload the demo and return once it is mounted and fully seeded again.
+ *
+ * A reload starts the whole app over, so it gets the same staged budget as the first boot
+ * rather than an assertion's 5s default: on a loaded runner an empty #root several seconds
+ * after the reload is a slow boot, not a regression (FLM-304's keychain retry journey).
+ */
+export async function reloadDemo(page: Page): Promise<void> {
+  const diagnostics = attachDiagnostics(page)
+  const deadline = Date.now() + MOUNT_BUDGET_MS
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: remainingUntil(deadline) })
+  await waitForMount(page, diagnostics, deadline)
+  await waitForDemoSeeded(page)
+}
+
+function remainingUntil(deadline: number): number {
+  return Math.max(1, deadline - Date.now())
+}
+
+/** Walk the mount stages within the shared budget, naming the stage that stalls. */
+async function waitForMount(page: Page, diagnostics: BootDiagnostics, deadline: number): Promise<void> {
   for (const stage of MOUNT_STAGES) {
     try {
-      await page.waitForFunction(stage.probe, undefined, { timeout: remaining(), polling: 250 })
+      await page.waitForFunction(stage.probe, undefined, { timeout: remainingUntil(deadline), polling: 250 })
     } catch {
-      throw new Error(await describeStall(page, stage, diagnostics, MOUNT_BUDGET_MS - remaining()))
+      throw new Error(await describeStall(page, stage, diagnostics, MOUNT_BUDGET_MS - remainingUntil(deadline)))
     }
   }
-
-  await waitForDemoSeeded(page)
 }
 
 /**
