@@ -24,6 +24,7 @@ export const changelog: ChangelogEntry[] = [
     }, {
       type: 'fixed',
       items: [
+        'iOS: tapping a Siri suggestion to send a message to a contact or room now opens that conversation, instead of leaving Fluux on the screen it was showing',
         'When a delayed message arrives while older messages are still loading, the messages you are reading no longer move, whether it lands above them or, after you scrolled during the load, below them, including when you are partway through a long expanded message',
         'In-app room banners on the web and iOS show the room picture or # fallback, with the sender above the room name and message. Combined browser message counts show the room name instead of the latest sender',
       ],

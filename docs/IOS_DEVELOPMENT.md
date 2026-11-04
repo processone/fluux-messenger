@@ -447,7 +447,7 @@ file's own signature before allowing the larger size. Multi-file selections are
 not advertised. The normal server upload limit still applies. Imports belong to this installed app, not
 to a particular XMPP account: the user chooses the recipient after signing in.
 The extension cannot send messages itself. Successful sends donate account-bound
-conversation metadata to iOS for share-sheet suggestions. Logout, account changes,
+conversation metadata to iOS for share-sheet and Siri suggestions. Logout, account changes,
 and removed contacts, rooms or local conversations remove their donations.
 Suggestions never authorize a send without recipient confirmation.
 

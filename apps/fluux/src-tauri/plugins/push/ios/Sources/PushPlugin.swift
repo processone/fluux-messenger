@@ -511,7 +511,12 @@ enum PushError: LocalizedError {
 }
 
 @_cdecl("init_plugin_push")
-func initPlugin() -> Plugin { PushPlugin() }
+func initPlugin() -> Plugin {
+    // Tauri creates plugins while it builds the app, before UIKit connects the
+    // scene that may carry a tapped suggestion.
+    SuggestionLaunch.install()
+    return PushPlugin()
+}
 
 private struct PreviewArguments: Decodable {
     let snapshot: Data?
