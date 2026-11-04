@@ -109,3 +109,49 @@ describe('identity comparison', () => {
     expect(isWrapIdentityEnrichment(ident('m1'), ident('m2', { stanzaId: 's' }))).toBe(false)
   })
 })
+
+// Source: review FLM-404 R3/R9 and the captain's R3 choice — a choice follows its own message
+// through enrichment while the list is evicted, and never goes to a look-alike twin.
+describe('reconcile', () => {
+  const base = { scope: 'bob@x.org', id: 'm1', from: 'bob@x.org', instant: null }
+  const original = { ...base }
+  const enriched = { ...base, stanzaId: 'A', originId: 'o1' }
+  const twin = { ...base, stanzaId: 'B' }
+  const state = () => useWrappedCodeBlocksStore.getState()
+
+  beforeEach(() => state().clear())
+
+  it('remembers the twins seen beside a wrapped message, so a later list can tell them apart', () => {
+    state().toggle(original, 0)
+    state().reconcile(base.scope, [original, twin])
+    state().reconcile(base.scope, [twin, enriched])
+    expect(state().isWrapped(enriched, 0)).toBe(true)
+    expect(state().isWrapped(twin, 0)).toBe(false)
+    expect(state().isWrapped(original, 0)).toBe(false)
+  })
+
+  it('leaves the choice alone when the list cannot say which copy is the original', () => {
+    state().toggle(original, 0)
+    state().reconcile(base.scope, [original])
+    state().reconcile(base.scope, [enriched, twin])
+    expect(state().isWrapped(original, 0)).toBe(true)
+    expect(state().isWrapped(enriched, 0)).toBe(false)
+    expect(state().isWrapped(twin, 0)).toBe(false)
+  })
+
+  it('does not hand one enrichment to two choices', () => {
+    const peer = { ...base, from: 'bob@x.org' }
+    state().toggle(original, 0)
+    state().toggle({ ...peer, originId: 'o1' }, 0)
+    state().reconcile(base.scope, [enriched])
+    expect(state().entries).toHaveLength(2)
+  })
+
+  it('ignores other scopes and does nothing when no list identity relates to a choice', () => {
+    state().toggle(original, 0)
+    const before = state().entries
+    state().reconcile('other@x.org', [enriched])
+    state().reconcile(base.scope, [{ ...base, id: 'm2', stanzaId: 'Z' }])
+    expect(state().entries).toBe(before)
+  })
+})
