@@ -17,6 +17,8 @@ fi
 echo ">>> Installing build dependencies..."
 sudo apt-get update
 sudo apt-get install -y \
+    ca-certificates \
+    curl \
     debhelper \
     devscripts \
     libwebkit2gtk-4.1-dev \
@@ -31,8 +33,15 @@ sudo apt-get install -y \
 
 # Check for Node.js
 if ! command -v node &> /dev/null; then
-    echo ">>> Installing Node.js..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    # Node.js 26 from NodeSource, the same major as CI and the release .deb build.
+    # Distribution nodejs packages are older than package.json engines.node allows.
+    echo ">>> Installing Node.js 26..."
+    # Download before running: a failed download must stop here instead of
+    # falling back to the distribution's nodejs below.
+    NODESOURCE_SETUP=$(mktemp)
+    curl -fsSL https://deb.nodesource.com/setup_26.x -o "$NODESOURCE_SETUP"
+    sudo -E bash "$NODESOURCE_SETUP"
+    rm -f "$NODESOURCE_SETUP"
     sudo apt-get install -y nodejs
 fi
 
