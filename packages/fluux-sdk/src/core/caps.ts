@@ -80,13 +80,28 @@ export const CLIENT_FEATURES = [
   NS_VCARD_UPDATE,          // XEP-0153 vCard avatar updates
 ]
 
+const textEncoder = new TextEncoder()
+
+function compareOctets(a: string, b: string): number {
+  //XEP-0115 §5.1 requires i;octet (UTF-8 byte) collation.
+
+  const left = textEncoder.encode(a)
+  const right = textEncoder.encode(b)
+  const length = Math.min(left.length, right.length)
+  for (let index = 0; index < length; index++) {
+    const diff = left[index] - right[index]
+    if (diff !== 0) return diff
+  }
+  return left.length - right.length
+}
+
 /**
  * Every feature to advertise in disco#info, sorted and without duplicates.
  *
  * @param extraFeatures - Features enabled at runtime, added to {@link CLIENT_FEATURES}
  */
 export function getClientFeatures(extraFeatures: readonly string[] = []): string[] {
-  return [...new Set([...CLIENT_FEATURES, ...extraFeatures])].sort()
+  return [...new Set([...CLIENT_FEATURES, ...extraFeatures])].sort(compareOctets)
 }
 
 /**
