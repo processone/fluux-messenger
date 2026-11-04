@@ -35,7 +35,8 @@ use std::sync::{Arc, Mutex};
 use tauri::State;
 use tokio::sync::{Mutex as AsyncMutex, OnceCell as AsyncOnceCell, OwnedMutexGuard};
 
-use crate::openpgp_storage::{KeyStorage, PassphraseBacking};
+use crate::keychain_refusal::RefusalState;
+use crate::openpgp_storage::{KeyStorage, PassphraseBacking, PersistedKey};
 
 use openpgp::{
     cert::{amalgamation::ValidateAmalgamation, Cert, CertBuilder},
@@ -159,6 +160,34 @@ pub struct DecryptOutput {
 #[cfg(any(target_os = "ios", test))]
 #[path = "openpgp_notification_subkeys.rs"]
 mod notification_subkeys;
+
+/// What the recovery panel may do with `account_jid`'s locked key (FLM-304).
+/// Answered from cached state only, never from the keychain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum KeychainRetryAvailability {
+    /// No refusal is held and no key is unlocked, so nothing is left to do.
+    NotHeld,
+    /// The user refused the items this launch, and nothing has read them since.
+    Held,
+    /// A keychain read is under way, perhaps an earlier retry still waiting on
+    /// the user's answer. Its outcome decides, so neither answer holds yet.
+    Pending,
+    /// The key is unlocked here, for example by a retry whose prompt the user
+    /// allowed after its caller stopped waiting (FLM-408 R5). Using it reads
+    /// no keychain item.
+    Unlocked,
+}
+
+impl From<RefusalState> for KeychainRetryAvailability {
+    fn from(state: RefusalState) -> Self {
+        match state {
+            RefusalState::NotHeld => Self::NotHeld,
+            RefusalState::Held => Self::Held,
+            RefusalState::Pending => Self::Pending,
+        }
+    }
+}
 
 /// State held by the Tauri managed-state system. One entry per logged-in
 /// account, keyed on the bare JID.
@@ -446,6 +475,75 @@ impl OpenpgpState {
         .map_err(|error| format!("OpenPGP forget task panicked: {error}"))?
     }
 
+    /// Whether the recovery panel may offer the keychain retry for
+    /// `account_jid`: `Held` when its key exists on disk but is locked, and
+    /// this launch holds the user's refusal of the items that unlock it.
+    /// `Pending` while a keychain read is under way, such as a retry still
+    /// waiting on the user's answer: the panel must not take that for a
+    /// consumed refusal. `Unlocked` once the key is unlocked here, so a
+    /// retry whose late answer unlocked it can still be used: the next retry
+    /// returns that key without a read. It never reads the keychain and
+    /// never waits.
+    pub fn keychain_retry_available(
+        &self,
+        account_jid: &str,
+    ) -> Result<KeychainRetryAvailability, String> {
+        if self.read_cached_bundle(account_jid, "account").is_ok() {
+            return Ok(KeychainRetryAvailability::Unlocked);
+        }
+        if !self.storage.has_persisted_key(account_jid) {
+            return Ok(KeychainRetryAvailability::NotHeld);
+        }
+        self.storage
+            .refused_access(account_jid)
+            .map(KeychainRetryAvailability::from)
+            .map_err(anyhow_to_string)
+    }
+
+    /// The user's explicit request, from the recovery panel, to ask the OS
+    /// once more for the refused items that unlock `account_jid`'s key.
+    /// Nothing calls it on its own. It unlocks only the key already on disk:
+    /// it never generates, replaces or deletes one, and a restored account
+    /// never reads its old items. Errors keep their recovery codes:
+    /// `openpgp-keychain-refused:` when the user refuses again, and
+    /// `openpgp-keychain-retry-unavailable:` when there is nothing to retry.
+    pub async fn retry_keychain_access(
+        self: &Arc<Self>,
+        account_jid: String,
+    ) -> Result<KeyBundle, String> {
+        let lifecycle = self.change_turn(&account_jid).await;
+        let this = Arc::clone(self);
+        tauri::async_runtime::spawn_blocking(move || {
+            let _lifecycle = lifecycle;
+            if let Ok(bundle) = this.read_cached_bundle(&account_jid, "account") {
+                return Ok(bundle);
+            }
+            let unavailable = || {
+                format!("openpgp-keychain-retry-unavailable: no refused keychain access to retry for {account_jid}")
+            };
+            if !this.storage.has_persisted_key(&account_jid)
+                || !this
+                    .storage
+                    .retry_refused_access(&account_jid)
+                    .map_err(anyhow_to_string)?
+            {
+                return Err(unavailable());
+            }
+            let persisted = this
+                .storage
+                .load(&account_jid)
+                .map_err(anyhow_to_string)?
+                .ok_or_else(unavailable)?;
+            let bundle = Self::unlocked_bundle(&this.storage, &account_jid, persisted)?;
+            let cell = Arc::new(AsyncOnceCell::new());
+            let _ = cell.set(Ok(bundle.clone()));
+            this.entries.lock().unwrap().insert(account_jid, cell);
+            Ok(bundle)
+        })
+        .await
+        .unwrap_or_else(|join_err| Err(format!("keychain retry task panicked: {join_err}")))
+    }
+
     /// Produce a passphrase-encrypted backup of the currently-loaded TSK
     /// for `account_jid`, suitable for publishing to the XEP-0373 §5
     /// `urn:xmpp:openpgp:0:secret-key` PEP node.
@@ -730,33 +828,43 @@ impl OpenpgpState {
     /// run it on a dedicated worker thread without capturing `&self`.
     fn run_blocking(storage: &KeyStorage, jid: &str, user_id: &str) -> Result<KeyBundle, String> {
         if let Some(persisted) = storage.load(jid).map_err(anyhow_to_string)? {
-            // Heal keys generated before we stopped setting a validity
-            // period: Gajim refuses to restore an expiring secret key, and
-            // the expiry lives in the signatures rather than in the backup
-            // blob, so it has to be cleared here — once, on the way in.
-            // A failure is logged and tolerated: an unhealed key still
-            // works locally, and losing the unlock would lock the user out
-            // of their own messages over an interop nicety.
-            match strip_key_expiration(persisted.cert.clone()) {
-                Ok(Some(healed)) => {
-                    let backing = storage.save(jid, &healed).map_err(anyhow_to_string)?;
-                    tracing::info!("openpgp: cleared key expiration for {}", jid);
-                    return bundle_from_cert(&healed, backing).map_err(anyhow_to_string);
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    tracing::warn!(
-                        "openpgp: could not clear key expiration for {}: {:#}",
-                        jid,
-                        e
-                    )
-                }
-            }
-            return bundle_from_cert(&persisted.cert, persisted.backing).map_err(anyhow_to_string);
+            return Self::unlocked_bundle(storage, jid, persisted);
         }
         let cert = generate_cert(user_id).map_err(anyhow_to_string)?;
         let backing = storage.save(jid, &cert).map_err(anyhow_to_string)?;
         bundle_from_cert(&cert, backing).map_err(anyhow_to_string)
+    }
+
+    /// The bundle of a persisted key that just unlocked, at startup or after
+    /// the user's keychain retry.
+    fn unlocked_bundle(
+        storage: &KeyStorage,
+        jid: &str,
+        persisted: PersistedKey,
+    ) -> Result<KeyBundle, String> {
+        // Heal keys generated before we stopped setting a validity
+        // period: Gajim refuses to restore an expiring secret key, and
+        // the expiry lives in the signatures rather than in the backup
+        // blob, so it has to be cleared here — once, on the way in.
+        // A failure is logged and tolerated: an unhealed key still
+        // works locally, and losing the unlock would lock the user out
+        // of their own messages over an interop nicety.
+        match strip_key_expiration(persisted.cert.clone()) {
+            Ok(Some(healed)) => {
+                let backing = storage.save(jid, &healed).map_err(anyhow_to_string)?;
+                tracing::info!("openpgp: cleared key expiration for {}", jid);
+                return bundle_from_cert(&healed, backing).map_err(anyhow_to_string);
+            }
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(
+                    "openpgp: could not clear key expiration for {}: {:#}",
+                    jid,
+                    e
+                )
+            }
+        }
+        bundle_from_cert(&persisted.cert, persisted.backing).map_err(anyhow_to_string)
     }
 
     /// Test helper — number of times the blocking KDF path executed
@@ -968,6 +1076,31 @@ pub async fn openpgp_forget_account(
 #[tauri::command]
 pub fn openpgp_has_persisted_key(account_jid: String, state: State<'_, Arc<OpenpgpState>>) -> bool {
     state.storage.has_persisted_key(&account_jid)
+}
+
+/// Whether the recovery panel may offer to ask the OS again for the items
+/// the user refused this launch: `"held"`, `"not-held"`, `"pending"` while
+/// a keychain read is under way, or `"unlocked"` once the key is unlocked
+/// here. Reads only cached answers, never the keychain.
+#[tauri::command]
+pub fn openpgp_keychain_retry_available(
+    account_jid: String,
+    state: State<'_, Arc<OpenpgpState>>,
+) -> Result<KeychainRetryAvailability, String> {
+    state.keychain_retry_available(&account_jid)
+}
+
+/// The user's explicit keychain retry from the recovery panel. Unlocks the
+/// existing key and returns its public projection; never generates one.
+#[tauri::command]
+pub async fn openpgp_retry_keychain_access(
+    account_jid: String,
+    state: State<'_, Arc<OpenpgpState>>,
+) -> Result<PublicKeyInfo, String> {
+    Arc::clone(&state)
+        .retry_keychain_access(account_jid)
+        .await
+        .map(|bundle| PublicKeyInfo::from(&bundle))
 }
 
 /// Encrypt the in-memory TSK for `account_jid` under `passphrase`. The
@@ -2876,6 +3009,328 @@ mod tests {
                 assert!(items.contains_key("secrets-fresh-v1"));
             }
         }
+    }
+
+    /// A stand-in keychain whose user refuses the items named in `refused`.
+    /// Every read of an old item is logged; nothing touches a real keychain.
+    #[derive(Clone, Default)]
+    struct RefusingKeychain {
+        items: Arc<Mutex<std::collections::BTreeMap<String, String>>>,
+        refused: Arc<Mutex<std::collections::BTreeSet<String>>>,
+        reads: Arc<Mutex<Vec<String>>>,
+        /// While set, a read waits here, like macOS's prompt left open.
+        prompt: Arc<Mutex<Option<std::sync::mpsc::Receiver<()>>>>,
+    }
+    impl crate::credentials::SecretStore for RefusingKeychain {
+        fn get(&self, a: &str) -> Result<Option<String>, String> {
+            Ok(self.items.lock().unwrap().get(a).cloned())
+        }
+        fn set(&self, a: &str, v: &str) -> Result<(), String> {
+            self.items.lock().unwrap().insert(a.into(), v.into());
+            Ok(())
+        }
+        fn delete(&self, a: &str) -> Result<(), String> {
+            self.items.lock().unwrap().remove(a);
+            Ok(())
+        }
+    }
+    impl crate::macos_secrets::Backend for RefusingKeychain {
+        fn read(&self, a: &str) -> Result<Option<String>, crate::macos_secrets::StoreError> {
+            self.reads.lock().unwrap().push(a.into());
+            if let Some(answer) = self.prompt.lock().unwrap().take() {
+                let _ = answer.recv();
+            }
+            if self.refused.lock().unwrap().contains(a) {
+                return Err(crate::macos_secrets::StoreError::denied());
+            }
+            Ok(self.items.lock().unwrap().get(a).cloned())
+        }
+        fn accounts(&self) -> Result<Vec<String>, crate::macos_secrets::StoreError> {
+            Ok(self.items.lock().unwrap().keys().cloned().collect())
+        }
+    }
+    impl RefusingKeychain {
+        fn set_secret(&self, name: &str, value: &str) {
+            self.items.lock().unwrap().insert(name.into(), value.into());
+        }
+        fn reads(&self) -> usize {
+            self.reads.lock().unwrap().len()
+        }
+        fn refuse(&self, names: &[&str]) {
+            *self.refused.lock().unwrap() = names.iter().map(|name| name.to_string()).collect();
+        }
+        /// Leave the next read's prompt open until the returned sender answers.
+        fn open_prompt(&self) -> std::sync::mpsc::Sender<()> {
+            let (answer, prompt) = std::sync::mpsc::channel();
+            *self.prompt.lock().unwrap() = Some(prompt);
+            answer
+        }
+        /// A launch: a new process cache over the same items and key files.
+        fn launch(&self, dir: &std::path::Path) -> Arc<OpenpgpState> {
+            Arc::new(OpenpgpState::for_testing_with_storage(KeyStorage::for_testing_with_store(
+                dir.to_path_buf(),
+                Arc::new(crate::macos_secrets::Secrets::new(self.clone())),
+            )))
+        }
+    }
+    fn key_files(dir: &std::path::Path) -> std::collections::BTreeMap<std::ffi::OsString, Vec<u8>> {
+        std::fs::read_dir(dir.join("openpgp"))
+            .unwrap()
+            .map(|entry| {
+                let entry = entry.unwrap();
+                (entry.file_name(), std::fs::read(entry.path()).unwrap())
+            })
+            .collect()
+    }
+
+    /// FLM-304, the captain on FLM-298 review R3: "Never, but maybe an
+    /// explicit retry try could be proposed in a advanced panel, in case there
+    /// is no other way to recover the key". After the user refused the
+    /// keychain at startup, nothing reads it again on its own; each explicit
+    /// retry asks once; a granted retry unlocks the same key, which decrypts
+    /// what arrived before, with no key generated, replaced or deleted.
+    #[test]
+    fn flm304_explicit_keychain_retry_unlocks_the_same_key_only_on_request() {
+        let jid = "alice@example.com";
+        let keychain = RefusingKeychain::default();
+        let dir = fresh_tmp_dir();
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let first = keychain.launch(&dir);
+        let original = first.ensure_key_sync(jid, "Alice").unwrap();
+        let ciphertext = first
+            .encrypt(jid, &[original.public_armored.clone()], "waiting message")
+            .unwrap();
+        assert!(keychain.items.lock().unwrap().contains_key("secrets-v1"));
+        let files = key_files(&dir);
+
+        // The next launch, the user refuses the keychain prompt.
+        keychain.refuse(&["secrets-v1"]);
+        keychain.reads.lock().unwrap().clear();
+        let state = keychain.launch(&dir);
+        let refused = state.ensure_key_sync(jid, "Alice").unwrap_err();
+        assert!(refused.starts_with("openpgp-storage-unavailable:"), "{refused}");
+        assert_eq!(keychain.reads(), 1);
+
+        // Never automatic: unlocking again, prewarming and offering the retry
+        // all keep the refusal without asking the keychain.
+        assert!(state.ensure_key_sync(jid, "Alice").is_err());
+        // The prewarm unlocks in the background. Once it has started, the next
+        // unlock waits for it to end, so no answer below is taken while the
+        // prewarm holds the store (which answers `Pending`).
+        let runs = state.blocking_run_count();
+        state.prewarm(jid.into(), "Alice".into());
+        while state.blocking_run_count() == runs {
+            std::thread::yield_now();
+        }
+        assert!(state.ensure_key_sync(jid, "Alice").is_err());
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
+        assert_eq!(keychain.reads(), 1, "no read without the user's request");
+
+        // One request, one read; a new refusal is kept like the first.
+        let again = rt.block_on(state.retry_keychain_access(jid.into())).unwrap_err();
+        assert!(again.starts_with("openpgp-keychain-refused:"), "{again}");
+        assert_eq!(keychain.reads(), 2);
+        assert!(state.ensure_key_sync(jid, "Alice").is_err());
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
+        assert_eq!(keychain.reads(), 2);
+
+        // The user grants access on the next request.
+        keychain.refuse(&[]);
+        let runs = state.blocking_run_count();
+        let unlocked = rt.block_on(state.retry_keychain_access(jid.into())).unwrap();
+        assert_eq!(keychain.reads(), 3);
+        assert_eq!(unlocked.fingerprint, original.fingerprint);
+        assert_eq!(state.decrypt(jid, &ciphertext, &[]).unwrap().plaintext, "waiting message");
+        assert_eq!(state.ensure_key_sync(jid, "Alice").unwrap().fingerprint, original.fingerprint);
+        assert_eq!(state.blocking_run_count(), runs, "the retry primed the unlocked key");
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Unlocked));
+        assert_eq!(
+            rt.block_on(state.retry_keychain_access(jid.into())).unwrap().fingerprint,
+            original.fingerprint
+        );
+        assert_eq!(keychain.reads(), 3, "an unlocked key reads nothing more");
+        assert_eq!(key_files(&dir), files, "no key generated, replaced or deleted");
+
+        // The next launch unlocks as usual.
+        let restarted = keychain.launch(&dir);
+        assert_eq!(restarted.ensure_key_sync(jid, "Alice").unwrap().fingerprint, original.fingerprint);
+        assert_eq!(restarted.decrypt(jid, &ciphertext, &[]).unwrap().plaintext, "waiting message");
+    }
+
+    /// FLM-304: the retry is offered for, and reads, only a refusal that keeps
+    /// an existing key locked. Without a key it neither reads nor generates.
+    #[test]
+    fn flm304_keychain_retry_never_generates_a_key() {
+        let keychain = RefusingKeychain::default();
+        keychain.set_secret("mcp-token", "token");
+        keychain.refuse(&["secrets-v1"]);
+        let dir = fresh_tmp_dir();
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let state = keychain.launch(&dir);
+        assert_eq!(state.keychain_retry_available("carol@example.com"), Ok(KeychainRetryAvailability::NotHeld));
+        let unavailable = rt
+            .block_on(state.retry_keychain_access("carol@example.com".into()))
+            .unwrap_err();
+        assert!(unavailable.starts_with("openpgp-keychain-retry-unavailable:"), "{unavailable}");
+        assert_eq!(keychain.reads(), 0);
+        assert!(!state.storage.has_persisted_key("carol@example.com"));
+    }
+
+    /// FLM-304: a key whose combined-item secret no longer unlocks it, and
+    /// whose old per-account item the user refused, is the other locked case.
+    /// The retry reads only that item, once, and unlocks the same key.
+    #[test]
+    fn flm304_retry_rereads_a_refused_old_item_for_a_desynced_key() {
+        let jid = "alice@example.com";
+        let account = "openpgp_passphrase:alice@example.com";
+        let keychain = RefusingKeychain::default();
+        let dir = fresh_tmp_dir();
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let original = keychain.launch(&dir).ensure_key_sync(jid, "Alice").unwrap();
+        // The old item keeps the working secret; the combined item lost it.
+        let bundle = keychain.items.lock().unwrap()["secrets-v1"].clone();
+        let mut parsed: serde_json::Value = serde_json::from_str(&bundle).unwrap();
+        let working = parsed["items"][account].as_str().unwrap().to_owned();
+        parsed["items"][account] = "c3RhbGU=".into();
+        keychain.set_secret("secrets-v1", &parsed.to_string());
+        keychain.set_secret(account, &working);
+        keychain.refuse(&[account]);
+
+        let state = keychain.launch(&dir);
+        let locked = state.ensure_key_sync(jid, "Alice").unwrap_err();
+        assert!(locked.contains("decrypt persisted TSK"), "{locked}");
+        let old_reads = || keychain.reads.lock().unwrap().iter().filter(|a| *a == account).count();
+        assert_eq!(old_reads(), 1);
+        assert!(state.ensure_key_sync(jid, "Alice").is_err());
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
+        assert_eq!(old_reads(), 1, "no read without the user's request");
+
+        keychain.refuse(&[]);
+        let unlocked = rt.block_on(state.retry_keychain_access(jid.into())).unwrap();
+        assert_eq!(unlocked.fingerprint, original.fingerprint);
+        assert_eq!(old_reads(), 2);
+        assert_eq!(keychain.items.lock().unwrap()[account], working, "the old item is kept");
+    }
+
+    /// FLM-408 R2: a granted read whose secret still cannot unlock the key
+    /// consumes the refusal. Nothing is left to retry, so the panel's action
+    /// goes away, and a further request reads nothing.
+    #[test]
+    fn flm304_a_granted_read_that_cannot_unlock_leaves_nothing_to_retry() {
+        let jid = "alice@example.com";
+        let account = "openpgp_passphrase:alice@example.com";
+        let keychain = RefusingKeychain::default();
+        let dir = fresh_tmp_dir();
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        keychain.launch(&dir).ensure_key_sync(jid, "Alice").unwrap();
+        // Neither the combined item nor the old item holds the working secret.
+        let bundle = keychain.items.lock().unwrap()["secrets-v1"].clone();
+        let mut parsed: serde_json::Value = serde_json::from_str(&bundle).unwrap();
+        parsed["items"][account] = "c3RhbGU=".into();
+        keychain.set_secret("secrets-v1", &parsed.to_string());
+        keychain.set_secret(account, "b2xk");
+        keychain.refuse(&[account]);
+
+        let state = keychain.launch(&dir);
+        assert!(state.ensure_key_sync(jid, "Alice").is_err());
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
+        let old_reads = || keychain.reads.lock().unwrap().iter().filter(|a| *a == account).count();
+        assert_eq!(old_reads(), 1);
+
+        keychain.refuse(&[]);
+        let failed = rt.block_on(state.retry_keychain_access(jid.into())).unwrap_err();
+        assert!(!failed.starts_with("openpgp-keychain-refused:"), "{failed}");
+        assert_eq!(old_reads(), 2);
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::NotHeld));
+        let unavailable = rt.block_on(state.retry_keychain_access(jid.into())).unwrap_err();
+        assert!(unavailable.starts_with("openpgp-keychain-retry-unavailable:"), "{unavailable}");
+        assert_eq!(old_reads(), 2, "nothing is left to ask again");
+    }
+
+    /// FLM-408 R4: a retry whose caller gave up while macOS's prompt stays
+    /// open is unfinished, not a consumed refusal. Asking meanwhile answers
+    /// `Pending` at once, and once the user refuses, the retry is offered again.
+    #[test]
+    fn flm304_a_retry_still_on_its_prompt_is_pending_not_consumed() {
+        let jid = "alice@example.com";
+        let keychain = RefusingKeychain::default();
+        let dir = fresh_tmp_dir();
+        keychain.launch(&dir).ensure_key_sync(jid, "Alice").unwrap();
+        keychain.refuse(&["secrets-v1"]);
+        keychain.reads.lock().unwrap().clear();
+        let state = keychain.launch(&dir);
+        assert!(state.ensure_key_sync(jid, "Alice").is_err());
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
+        assert_eq!(keychain.reads(), 1);
+
+        let answer = keychain.open_prompt();
+        let retry = {
+            let state = Arc::clone(&state);
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+                rt.block_on(state.retry_keychain_access(jid.into()))
+            })
+        };
+        while keychain.reads() < 2 {
+            std::thread::yield_now();
+        }
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Pending));
+
+        // The user refuses on the prompt that stayed open.
+        answer.send(()).unwrap();
+        let refused = retry.join().unwrap().unwrap_err();
+        assert!(refused.starts_with("openpgp-keychain-refused:"), "{refused}");
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
+        assert_eq!(keychain.reads(), 2, "asking while the prompt was open read nothing");
+    }
+
+    /// FLM-408 R5: the user allows a retry's prompt only after the App
+    /// stopped waiting for it. The key is then unlocked here while the App
+    /// still has it locked, so asking answers `Unlocked`, not `NotHeld`, and
+    /// the next request returns that key without reading the keychain.
+    #[test]
+    fn flm304_a_retry_allowed_after_its_caller_gave_up_leaves_the_key_ready() {
+        let jid = "alice@example.com";
+        let keychain = RefusingKeychain::default();
+        let dir = fresh_tmp_dir();
+        let original = keychain.launch(&dir).ensure_key_sync(jid, "Alice").unwrap();
+        let files = key_files(&dir);
+        keychain.refuse(&["secrets-v1"]);
+        keychain.reads.lock().unwrap().clear();
+        let state = keychain.launch(&dir);
+        assert!(state.ensure_key_sync(jid, "Alice").is_err());
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
+
+        // The App's request outlives its time limit on the open prompt; its
+        // caller no longer waits for the answer.
+        let answer = keychain.open_prompt();
+        let retry = {
+            let state = Arc::clone(&state);
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+                rt.block_on(state.retry_keychain_access(jid.into()))
+            })
+        };
+        while keychain.reads() < 2 {
+            std::thread::yield_now();
+        }
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Pending));
+
+        // The user then allows that prompt.
+        keychain.refuse(&[]);
+        answer.send(()).unwrap();
+        assert_eq!(retry.join().unwrap().unwrap().fingerprint, original.fingerprint);
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Unlocked));
+        assert_eq!(keychain.reads(), 2);
+
+        // The panel's next press uses that key and asks the keychain nothing.
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        assert_eq!(
+            rt.block_on(state.retry_keychain_access(jid.into())).unwrap().fingerprint,
+            original.fingerprint
+        );
+        assert_eq!(keychain.reads(), 2, "using the unlocked key reads nothing");
+        assert_eq!(key_files(&dir), files, "no key generated, replaced or deleted");
     }
 
     // ---- encryption-subkey rotation --------------------------------

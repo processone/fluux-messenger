@@ -945,6 +945,18 @@
             "recoveryPreviewInvalid": "Impossibile verificare l’anteprima del backup. Nessuna chiave è stata confermata.",
             "recoveryErrorDetails": "Dettagli tecnici",
             "recoveryFailed": "Impossibile ripristinare il backup.",
+            "keychainRetry": {
+                "title": "Avanzate: chiedi di nuovo al portachiavi",
+                "body": "macOS ha negato l’accesso a questa chiave nel portachiavi, quindi la chiave resta bloccata. Se non hai alcun backup, puoi chiedere a macOS ancora una volta. macOS potrebbe chiedere la password del portachiavi di login, che può essere una password precedente di questo Mac.",
+                "backupHint": "Se hai un codice o un file di backup, usa invece «{{action}}».",
+                "action": "Chiedi di nuovo a macOS",
+                "busy": "In attesa di macOS…",
+                "refusedAgain": "macOS ha negato di nuovo l’accesso. La chiave resta bloccata.",
+                "failed": "Impossibile sbloccare la chiave.",
+                "success": "Chiave sbloccata",
+                "readyBody": "macOS ha consentito l’accesso dopo la scadenza della richiesta precedente. La chiave è sbloccata ma non è ancora in uso.",
+                "readyAction": "Usa la chiave sbloccata"
+            },
             "restoreAction": "Ripristina dal server",
             "restoreDialogTitle": "Ripristina la tua chiave OpenPGP dal backup",
             "restoreDialogBody": "Inserisci la passphrase salvata al momento della creazione del backup. La chiave ripristinata sostituirà quella attualmente memorizzata su questo dispositivo.",

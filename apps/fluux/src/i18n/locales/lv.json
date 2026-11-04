@@ -944,6 +944,18 @@
             "recoveryPreviewInvalid": "Neizdevās pārbaudīt dublējuma priekšskatījumu. Neviena atslēga netika apstiprināta.",
             "recoveryErrorDetails": "Tehniskā informācija",
             "recoveryFailed": "Dublējumu neizdevās atjaunot.",
+            "keychainRetry": {
+                "title": "Papildu: vēlreiz vaicāt atslēgu saišķim",
+                "body": "macOS liedza piekļuvi šai atslēgai atslēgu saišķī, tāpēc atslēga paliek bloķēta. Ja jums nav rezerves kopijas, varat vēl vienu reizi vaicāt macOS. macOS var prasīt pieteikšanās atslēgu saišķa paroli, kas var būt šī Mac iepriekšējā parole.",
+                "backupHint": "Ja jums ir rezerves kopijas kods vai rezerves kopijas fails, izmantojiet “{{action}}”.",
+                "action": "Vēlreiz vaicāt macOS",
+                "busy": "Gaida macOS…",
+                "refusedAgain": "macOS atkal liedza piekļuvi. Atslēga joprojām ir bloķēta.",
+                "failed": "Atslēgu nevarēja atbloķēt.",
+                "success": "Atslēga atbloķēta",
+                "readyBody": "macOS atļāva piekļuvi pēc tam, kad iepriekšējā pieprasījuma laiks bija beidzies. Atslēga ir atbloķēta, bet vēl netiek izmantota.",
+                "readyAction": "Izmantot atbloķēto atslēgu"
+            },
             "restoreAction": "Atjaunot no servera",
             "restoreDialogTitle": "Atjaunot OpenPGP atslēgu no rezerves kopijas",
             "restoreDialogBody": "Ievadiet paroles frāzi, ko saglabājāt, izveidojot šo rezerves kopiju. Atjaunotā atslēga aizstās to, kas pašlaik tiek glabāta šajā ierīcē.",

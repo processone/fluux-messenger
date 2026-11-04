@@ -347,6 +347,59 @@ describe('IdentityChoiceDialog', () => {
     ).toBeInTheDocument()
   })
 
+  // Intent FLM-304: a desynced key's last-resort keychain retry sits with the
+  // choices, so it never mixes into a restore or replacement already started.
+  it('shows a caller-supplied advanced recovery only while the user is choosing', () => {
+    render(
+      <IdentityChoiceDialog
+        {...baseProps}
+        reason="local-key-unrecoverable"
+        advanced={() => <button type="button">advanced recovery</button>}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'advanced recovery' })).toBeInTheDocument()
+    fireEvent.click(
+      screen
+        .getByText('settings.encryption.identityChoice.restoreFromServerTitle')
+        .closest('button')!,
+    )
+    expect(screen.queryByRole('button', { name: 'advanced recovery' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'common.back' }))
+    expect(screen.getByRole('button', { name: 'advanced recovery' })).toBeInTheDocument()
+  })
+
+  // Intent FLM-408 R1: while the advanced recovery asks macOS, no restore,
+  // import or replacement may start and nothing may close the choice, or the
+  // retry would report a key another flow has since replaced.
+  it('holds every choice and its Cancel while the advanced recovery runs', () => {
+    let report!: (busy: boolean) => void
+    render(
+      <IdentityChoiceDialog
+        {...baseProps}
+        reason="local-key-unrecoverable"
+        advanced={({ onBusyChange }) => {
+          report = onBusyChange
+          return <button type="button">advanced recovery</button>
+        }}
+      />,
+    )
+    const choices = ['restoreFromServerTitle', 'importFromFileTitle', 'replaceTitle']
+      .map(key => screen.getByText(`settings.encryption.identityChoice.${key}`).closest('button')!)
+    const cancel = screen.getByRole('button', { name: 'common.cancel' })
+    act(() => report(true))
+    for (const choice of choices) expect(choice).toBeDisabled()
+    expect(cancel).toBeDisabled()
+    expect(document.querySelector('[data-modal] > button')).toBeDisabled()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(baseProps.onCancel).not.toHaveBeenCalled()
+
+    act(() => report(false))
+    for (const choice of choices) expect(choice).toBeEnabled()
+    expect(cancel).toBeEnabled()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(baseProps.onCancel).toHaveBeenCalledOnce()
+  })
+
   it('escape during sub-phase returns to chooser without dismissing the dialog', () => {
     render(<IdentityChoiceDialog {...baseProps} />)
     fireEvent.click(

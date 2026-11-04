@@ -947,6 +947,18 @@
             "recoveryPreviewInvalid": "Nie udało się zweryfikować podglądu kopii. Nie potwierdzono żadnego klucza.",
             "recoveryErrorDetails": "Szczegóły techniczne",
             "recoveryFailed": "Nie udało się przywrócić kopii zapasowej.",
+            "keychainRetry": {
+                "title": "Zaawansowane: zapytaj ponownie pęk kluczy",
+                "body": "macOS odmówił dostępu do tego klucza w pęku kluczy, więc klucz pozostaje zablokowany. Jeśli nie masz żadnej kopii zapasowej, możesz zapytać macOS jeszcze raz. macOS może poprosić o hasło pęku kluczy logowania, które może być wcześniejszym hasłem tego Maca.",
+                "backupHint": "Jeśli masz kod lub plik kopii zapasowej, użyj zamiast tego opcji „{{action}}”.",
+                "action": "Zapytaj ponownie macOS",
+                "busy": "Oczekiwanie na macOS…",
+                "refusedAgain": "macOS ponownie odmówił dostępu. Klucz nadal jest zablokowany.",
+                "failed": "Nie udało się odblokować klucza.",
+                "success": "Klucz odblokowany",
+                "readyBody": "macOS zezwolił na dostęp po wygaśnięciu poprzedniej prośby. Klucz jest odblokowany, ale jeszcze nie jest używany.",
+                "readyAction": "Użyj odblokowanego klucza"
+            },
             "restoreAction": "Przywróć z serwera",
             "restoreDialogTitle": "Przywróć swój klucz OpenPGP z kopii zapasowej",
             "restoreDialogBody": "Wprowadź hasło, które zapisałeś tworząc tę kopię. Przywrócony klucz zastąpi ten, który jest obecnie na tym urządzeniu.",

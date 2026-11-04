@@ -13,6 +13,8 @@ mod share_inbox_tests;
 // Shared credential operations; macOS stores their logical accounts in one item.
 #[cfg(any(target_os = "macos", test))]
 mod credentials;
+// Refusals of keychain items, answered on every platform for the OpenPGP key storage.
+mod keychain_refusal;
 #[cfg(any(target_os = "macos", test))]
 mod macos_secrets;
 
@@ -1553,6 +1555,8 @@ fn main() {
             openpgp::openpgp_validate_cert,
             openpgp::openpgp_forget_account,
             openpgp::openpgp_has_persisted_key,
+            openpgp::openpgp_keychain_retry_available,
+            openpgp::openpgp_retry_keychain_access,
             openpgp::openpgp_backup_encrypt,
             openpgp::openpgp_backup_import,
             openpgp::openpgp_backup_import_all,

@@ -46,6 +46,17 @@ interface IdentityChoiceDialogProps {
   onReplaceIdentity: () => Promise<void>
   /** Closes the dialog without doing anything. Caller decides what to roll back. */
   onCancel: () => void
+  /**
+   * A last-resort recovery the caller adds below the three choices while
+   * the user is still choosing, such as the macOS keychain retry (FLM-304).
+   * It reports when it runs, and the dialog holds its choices meanwhile.
+   */
+  advanced?: (recovery: AdvancedRecovery) => React.ReactNode
+}
+
+/** What the dialog lends the caller's advanced recovery. */
+export interface AdvancedRecovery {
+  onBusyChange: (busy: boolean) => void
 }
 
 /**
@@ -74,6 +85,7 @@ export function IdentityChoiceDialog({
   onImportFromFile,
   onReplaceIdentity,
   onCancel,
+  advanced,
 }: IdentityChoiceDialogProps) {
   const { t } = useTranslation()
   const bodyKey =
@@ -88,6 +100,9 @@ export function IdentityChoiceDialog({
   // Fetching and unlocking the backup takes seconds (Argon2id); a second
   // restore must not start while one is running.
   const [isRestoring, setIsRestoring] = useState(false)
+  // The caller's advanced recovery is running: no other choice may start or
+  // close the dialog until it reports which key is in use.
+  const [advancedBusy, setAdvancedBusy] = useState(false)
 
   // Focus the passphrase input as soon as the user enters the restore phase.
   useEffect(() => {
@@ -101,7 +116,7 @@ export function IdentityChoiceDialog({
   // while busy, so it can't also fire the window-level conversation shortcut
   // (scroll-to-bottom / mark-read) behind the modal.
   const handleEscape = () => {
-    if (isRestoring) return
+    if (isRestoring || advancedBusy) return
     // Escape backs out of the sub-phase to the chooser, NOT out of the
     // dialog entirely — Cancel is the only path that closes, to make
     // sure the user is making an explicit choice.
@@ -163,7 +178,7 @@ export function IdentityChoiceDialog({
     }
   }, [onReplaceIdentity])
 
-  const isBusy = isRestoring || phase === 'importing' || phase === 'replacing'
+  const isBusy = isRestoring || phase === 'importing' || phase === 'replacing' || advancedBusy
 
   return (
     <ModalOverlay
@@ -200,22 +215,25 @@ export function IdentityChoiceDialog({
                 icon={<Server className="size-4" />}
                 title={t('settings.encryption.identityChoice.restoreFromServerTitle')}
                 description={t(RESTORE_DESCRIPTION_KEY[serverBackup])}
-                disabled={serverBackup === 'absent'}
+                disabled={serverBackup === 'absent' || advancedBusy}
                 onClick={handleStartRestore}
               />
               <ChoiceButton
                 icon={<FileUp className="size-4" />}
                 title={t('settings.encryption.identityChoice.importFromFileTitle')}
                 description={t('settings.encryption.identityChoice.importFromFileBody')}
+                disabled={advancedBusy}
                 onClick={handleImportFile}
               />
               <ChoiceButton
                 icon={<RotateCcw className="size-4 text-fluux-yellow" />}
                 title={t('settings.encryption.identityChoice.replaceTitle')}
                 description={t('settings.encryption.identityChoice.replaceBody')}
+                disabled={advancedBusy}
                 onClick={handleStartReplace}
                 danger
               />
+              {advanced?.({ onBusyChange: setAdvancedBusy })}
             </div>
           )}
 
@@ -270,7 +288,8 @@ export function IdentityChoiceDialog({
             <button
               type="button"
               onClick={onCancel}
-              className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
+              disabled={advancedBusy}
+              className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
             >
               {t('common.cancel')}
             </button>

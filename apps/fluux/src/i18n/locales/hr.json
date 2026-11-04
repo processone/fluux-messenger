@@ -943,6 +943,18 @@
             "recoveryPreviewInvalid": "Pregled sigurnosne kopije nije moguće provjeriti. Nijedan ključ nije potvrđen.",
             "recoveryErrorDetails": "Tehnički detalji",
             "recoveryFailed": "Sigurnosnu kopiju nije moguće obnoviti.",
+            "keychainRetry": {
+                "title": "Napredno: ponovno pitaj privjesak ključeva",
+                "body": "macOS je odbio pristup ovom ključu u privjesku ključeva, pa ključ ostaje zaključan. Ako nemate nijednu sigurnosnu kopiju, možete još jednom pitati macOS. macOS može tražiti lozinku privjeska ključeva za prijavu, koja može biti ranija lozinka ovog Maca.",
+                "backupHint": "Ako imate kod ili datoteku sigurnosne kopije, radije upotrijebite „{{action}}”.",
+                "action": "Ponovno pitaj macOS",
+                "busy": "Čeka se macOS…",
+                "refusedAgain": "macOS je ponovno odbio pristup. Ključ je i dalje zaključan.",
+                "failed": "Ključ nije moguće otključati.",
+                "success": "Ključ otključan",
+                "readyBody": "macOS je dopustio pristup nakon što je prethodni zahtjev istekao. Ključ je otključan, ali se još ne koristi.",
+                "readyAction": "Koristi otključani ključ"
+            },
             "restoreAction": "Obnovi s poslužitelja",
             "restoreDialogTitle": "Obnovi vaš OpenPGP ključ iz sigurnosne kopije",
             "restoreDialogBody": "Unesite lozinku koju ste spremili pri stvaranju ove sigurnosne kopije. Obnovljeni ključ zamijenit će onaj koji je trenutno spremljen na ovom uređaju.",

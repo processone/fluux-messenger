@@ -17,6 +17,11 @@ export const changelog: ChangelogEntry[] = [
     version: '0.18.3',
     date: 'Unreleased',
     sections: [{
+      type: 'added',
+      items: [
+        'macOS: if your OpenPGP key stays locked because the keychain refused access and you have no backup, Fluux offers an advanced option to ask macOS again, in Encryption settings or in the recovery choice it shows. Fluux asks only when you press its button, and it unlocks the same key without creating a new one',
+      ],
+    }, {
       type: 'fixed',
       items: [
         'When a delayed message arrives while older messages are still loading, the messages you are reading no longer move, whether it lands above them or, after you scrolled during the load, below them, including when you are partway through a long expanded message',

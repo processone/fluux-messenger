@@ -941,6 +941,18 @@
             "recoveryPreviewInvalid": "A biztonsági másolat előnézete nem ellenőrizhető. Egyetlen kulcs sem lett megerősítve.",
             "recoveryErrorDetails": "Technikai részletek",
             "recoveryFailed": "A biztonsági másolatot nem sikerült visszaállítani.",
+            "keychainRetry": {
+                "title": "Speciális: kulcskarika ismételt megkérdezése",
+                "body": "A macOS megtagadta a hozzáférést ehhez a kulcshoz a kulcskarikában, ezért a kulcs zárolva marad. Ha nincs biztonsági mentésed, még egyszer megkérdezheted a macOS-t. A macOS kérheti a bejelentkezési kulcskarika jelszavát, amely lehet ennek a Macnek egy korábbi jelszava.",
+                "backupHint": "Ha van biztonsági mentési kódod vagy mentési fájlod, inkább ezt használd: „{{action}}”.",
+                "action": "macOS ismételt megkérdezése",
+                "busy": "Várakozás a macOS-re…",
+                "refusedAgain": "A macOS ismét megtagadta a hozzáférést. A kulcs továbbra is zárolva van.",
+                "failed": "A kulcsot nem sikerült feloldani.",
+                "success": "Kulcs feloldva",
+                "readyBody": "A macOS az előző kérés lejárta után engedélyezte a hozzáférést. A kulcs fel van oldva, de még nincs használatban.",
+                "readyAction": "A feloldott kulcs használata"
+            },
             "restoreAction": "Visszaállítás a kiszolgálóról",
             "restoreDialogTitle": "OpenPGP-kulcs visszaállítása biztonsági mentésből",
             "restoreDialogBody": "Adja meg azt a jelmondatot, amelyet a biztonsági mentés létrehozásakor mentett el. A visszaállított kulcs felülírja azt, amelyik jelenleg ezen az eszközön található.",

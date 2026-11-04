@@ -13,7 +13,7 @@
 import { StrictMode } from 'react'
 import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { E2EEPluginError } from '@fluux/sdk'
 import { EncryptionSettings } from './EncryptionSettings'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
@@ -878,4 +878,216 @@ describe('macOS guided recovery entry', () => {
     expect(screen.queryByText('settings.encryption.recoveryFailedBody')).not.toBeInTheDocument()
   })
 
+})
+
+// Intent FLM-304, the captain's words on FLM-298: "Never, but maybe an explicit
+// retry try could be proposed in a advanced panel, in case there is no other way
+// to recover the key". The plugin decides when the retry is offered
+// (keychainRetry.test.ts); this view keeps it folded, macOS-only, and reads the
+// keychain only on the button press.
+describe('macOS keychain retry panel', () => {
+  const FINGERPRINT = 'ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234'
+  let unlockedFingerprint: string | null
+  // The native store still holds this launch's refusal; a granted read consumes it.
+  let refusalHeld: boolean
+  // A request still on macOS's prompt locks the native cache, so nothing is confirmed.
+  let promptOpen: boolean
+  // The native store unlocked the key, as when the user allowed a timed-out retry late.
+  let nativeUnlocked: boolean
+  let retryKeychainAccess: ReturnType<typeof vi.fn>
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    mockStatus = 'online'
+    usePlatform('desktop', 'macos')
+    mockCheckPepSupport.mockResolvedValue(true)
+    useToastStore.setState({ toasts: [] })
+    unlockedFingerprint = null
+    refusalHeld = true
+    promptOpen = false
+    nativeUnlocked = false
+    retryKeychainAccess = vi.fn()
+    mockPlugin = {
+      getOwnFingerprint: () => unlockedFingerprint,
+      isKeyRecoveryNeeded: () => unlockedFingerprint === null,
+      isKeyStorageUnavailable: () => unlockedFingerprint === null,
+      keychainRetryState: vi.fn(async () =>
+        unlockedFingerprint !== null ? 'none' : promptOpen ? 'unconfirmed' : nativeUnlocked ? 'ready' : refusalHeld ? 'offered' : 'none'),
+      retryKeychainAccess,
+    }
+    useEncryptionSettingsStore.setState({ openpgpEnabled: true, pluginRegisteredAt: 0, registrationError: null })
+  })
+  const panelTitle = 'settings.encryption.keychainRetry.title'
+  const retryButton = () => screen.getByRole('button', { name: 'settings.encryption.keychainRetry.action' })
+
+  it('stays folded under the restore entry and reads nothing until the user asks', async () => {
+    render(<EncryptionSettings />)
+    const title = await screen.findByRole('button', { name: panelTitle })
+    expect(title).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: 'settings.encryption.recoveryTitle' })).toBeEnabled()
+    fireEvent.click(title)
+    expect(screen.getByText('settings.encryption.keychainRetry.body')).toBeVisible()
+    expect(retryKeychainAccess).not.toHaveBeenCalled()
+  })
+
+  it('keeps the key locked after a second refusal, then unlocks it on the next press', async () => {
+    render(<EncryptionSettings />)
+    fireEvent.click(await screen.findByRole('button', { name: panelTitle }))
+    retryKeychainAccess.mockRejectedValueOnce(new E2EEPluginError('permanent', 'keychain-refused', 'openpgp-keychain-refused: refused again'))
+    fireEvent.click(retryButton())
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.encryption.keychainRetry.refusedAgain')
+    expect(screen.getByText('settings.encryption.statusRecoveryNeeded')).toBeInTheDocument()
+    expect(retryButton()).toBeEnabled()
+
+    retryKeychainAccess.mockImplementationOnce(async () => {
+      unlockedFingerprint = FINGERPRINT
+      return { fingerprint: FINGERPRINT }
+    })
+    fireEvent.click(retryButton())
+    expect(await screen.findByText('settings.encryption.statusReady')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: panelTitle })).not.toBeInTheDocument()
+    expect(retryKeychainAccess).toHaveBeenCalledTimes(2)
+    expect(useToastStore.getState().toasts.map(t => [t.type, t.message])).toEqual([['success', 'settings.encryption.keychainRetry.success']])
+  })
+
+  // Intent FLM-304 and FLM-408 R2: macOS granted the read but the key still
+  // cannot be unlocked, so nothing is left to ask again; the details stay.
+  it('keeps the native details but no action when a granted read cannot unlock the key', async () => {
+    retryKeychainAccess.mockImplementationOnce(async () => {
+      refusalHeld = false
+      throw new E2EEPluginError('permanent', 'key-unrecoverable', 'decrypt persisted TSK: unexpected EOF')
+    })
+    render(<EncryptionSettings />)
+    fireEvent.click(await screen.findByRole('button', { name: panelTitle }))
+    fireEvent.click(retryButton())
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.encryption.keychainRetry.failed')
+    expect(screen.getByText('decrypt persisted TSK: unexpected EOF')).toBeInTheDocument()
+    await waitFor(() => expect(retryButton()).toBeDisabled())
+    expect(screen.getByRole('button', { name: panelTitle })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'settings.encryption.recoveryTitle' })).toBeEnabled()
+    expect(retryKeychainAccess).toHaveBeenCalledOnce()
+  })
+
+  // Intent FLM-408 R1: a restore must not start while the retry asks macOS,
+  // or the retry would report a key the restore has since replaced.
+  it('holds the restore entry while the retry asks macOS', async () => {
+    let answer!: (refusal: Error) => void
+    retryKeychainAccess.mockImplementationOnce(() => new Promise((_resolve, reject) => { answer = reject }))
+    render(<EncryptionSettings />)
+    const restore = screen.getByRole('button', { name: 'settings.encryption.recoveryTitle' })
+    fireEvent.click(await screen.findByRole('button', { name: panelTitle }))
+    fireEvent.click(retryButton())
+    await waitFor(() => expect(restore).toBeDisabled())
+    await act(async () => { answer(new E2EEPluginError('permanent', 'keychain-refused', 'openpgp-keychain-refused: refused again')) })
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.encryption.keychainRetry.refusedAgain')
+    expect(restore).toBeEnabled()
+  })
+
+  // A desynced key opens the identity choice over this view, and its Cancel
+  // turns encryption off, so the retry must be reachable inside that choice.
+  it('sits inside the identity choice for a desynced key, and unlocking closes it with encryption on', async () => {
+    mockPlugin!.isKeyStorageUnavailable = () => false
+    render(<EncryptionSettings />)
+    const replace = await screen.findByRole('button', { name: /settings.encryption.identityChoice.replaceTitle/ })
+    const title = await screen.findByRole('button', { name: panelTitle })
+    expect(replace.closest('[data-modal]')).toContainElement(title)
+    expect(screen.getAllByRole('button', { name: panelTitle })).toHaveLength(1)
+    fireEvent.click(title)
+    expect(retryKeychainAccess).not.toHaveBeenCalled()
+
+    // FLM-408 R1: while macOS is asked, the choice holds its other recoveries.
+    let grant!: () => void
+    retryKeychainAccess.mockImplementationOnce(() => new Promise(resolve => {
+      grant = () => { unlockedFingerprint = FINGERPRINT; resolve({ fingerprint: FINGERPRINT }) }
+    }))
+    fireEvent.click(retryButton())
+    await waitFor(() => expect(replace).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'common.cancel' })).toBeDisabled()
+    await act(async () => { grant() })
+    expect(await screen.findByText('settings.encryption.statusReady')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /settings.encryption.identityChoice.replaceTitle/ })).not.toBeInTheDocument()
+    expect(useEncryptionSettingsStore.getState().openpgpEnabled).toBe(true)
+    expect(useToastStore.getState().toasts.map(t => [t.type, t.message])).toEqual([['success', 'settings.encryption.keychainRetry.success']])
+  })
+
+  // Intent FLM-408 R4: a retry that outlived its time limit may still be on
+  // macOS's prompt. That is unfinished, not a consumed refusal: the action
+  // stays in either placement, and asks again once the user has refused.
+  it.each([
+    ['under the restore entry', true],
+    ['inside the identity choice', false],
+  ])('keeps the action %s while a timed-out retry is still on its prompt', async (_placement, storageUnavailable) => {
+    mockPlugin!.isKeyStorageUnavailable = () => unlockedFingerprint === null && storageUnavailable
+    retryKeychainAccess.mockImplementationOnce(async () => {
+      promptOpen = true
+      throw new E2EEPluginError('transient', 'unknown',
+        'SequoiaPgpPlugin: retryKeychainAccess: SequoiaPgpPlugin: native call openpgp_retry_keychain_access timeout after 120000 ms')
+    })
+    render(<EncryptionSettings />)
+    fireEvent.click(await screen.findByRole('button', { name: panelTitle }))
+    fireEvent.click(retryButton())
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.encryption.keychainRetry.failed')
+    // The press ends only after the panel has asked whether anything is left.
+    await waitFor(() => expect(retryButton()).toHaveTextContent('settings.encryption.keychainRetry.action'))
+    expect(retryButton()).toBeEnabled()
+
+    // The user refuses on the prompt that stayed open; the next press asks again.
+    promptOpen = false
+    retryKeychainAccess.mockRejectedValueOnce(new E2EEPluginError('permanent', 'keychain-refused', 'openpgp-keychain-refused: refused again'))
+    fireEvent.click(retryButton())
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.encryption.keychainRetry.refusedAgain')
+    expect(retryButton()).toBeEnabled()
+    expect(retryKeychainAccess).toHaveBeenCalledTimes(2)
+  })
+
+  // Intent FLM-408 R5: the user allowed a retry's prompt after it timed out,
+  // so the key is unlocked natively but not in use. Reopening either
+  // placement offers to use it; the press reads no keychain item.
+  it.each([
+    ['under the restore entry', true],
+    ['inside the identity choice', false],
+  ])('offers to use a key macOS allowed after a timed-out retry %s', async (_placement, storageUnavailable) => {
+    mockPlugin!.isKeyStorageUnavailable = () => unlockedFingerprint === null && storageUnavailable
+    nativeUnlocked = true
+    render(<EncryptionSettings />)
+    const title = await screen.findByRole('button', { name: panelTitle })
+    expect(title).toHaveAttribute('aria-expanded', 'false')
+    if (!storageUnavailable) {
+      expect(screen.getByRole('button', { name: /settings.encryption.identityChoice.replaceTitle/ }).closest('[data-modal]')).toContainElement(title)
+    }
+    fireEvent.click(title)
+    expect(screen.getByText('settings.encryption.keychainRetry.readyBody')).toBeVisible()
+    expect(screen.queryByText('settings.encryption.keychainRetry.backupHint')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'settings.encryption.keychainRetry.action' })).not.toBeInTheDocument()
+    const use = screen.getByRole('button', { name: 'settings.encryption.keychainRetry.readyAction' })
+    expect(use).toBeEnabled()
+    expect(retryKeychainAccess).not.toHaveBeenCalled()
+
+    retryKeychainAccess.mockImplementationOnce(async () => {
+      unlockedFingerprint = FINGERPRINT
+      return { fingerprint: FINGERPRINT }
+    })
+    fireEvent.click(use)
+    expect(await screen.findByText('settings.encryption.statusReady')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: panelTitle })).not.toBeInTheDocument()
+    expect(useEncryptionSettingsStore.getState().openpgpEnabled).toBe(true)
+    expect(retryKeychainAccess).toHaveBeenCalledOnce()
+    expect(useToastStore.getState().toasts.map(t => [t.type, t.message])).toEqual([['success', 'settings.encryption.keychainRetry.success']])
+  })
+
+  it('is absent when the plugin does not offer the retry', async () => {
+    mockPlugin!.keychainRetryState = vi.fn(async () => 'none')
+    render(<EncryptionSettings />)
+    expect(await screen.findByText('settings.encryption.statusRecoveryNeeded')).toBeInTheDocument()
+    await waitFor(() => expect(mockPlugin!.keychainRetryState).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: panelTitle })).not.toBeInTheDocument()
+  })
+
+  it.each([['desktop', 'windows'], ['web', 'macos']] as const)('is absent on %s %s', async (shell, os) => {
+    usePlatform(shell, os)
+    render(<EncryptionSettings />)
+    expect(await screen.findByText('settings.encryption.statusRecoveryNeeded')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: panelTitle })).not.toBeInTheDocument()
+    expect(mockPlugin!.keychainRetryState).not.toHaveBeenCalled()
+  })
 })

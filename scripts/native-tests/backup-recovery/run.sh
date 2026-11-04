@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # FLM-343: actual Tauri/WKWebView recovery with injected stores only.
+# FLM-304: `retry` drives the Settings keychain retry instead of a restore;
+# `retry-desync` drives it inside the startup identity choice of a desynced key.
+# FLM-408 R4: both also press once while a held prompt outlives the time limit.
+# FLM-408 R5: in `retry`, the user allows the last such prompt late, and the
+# reopened panel uses the unlocked key without reading the keychain.
 # Start the bundled e2e preview on 127.0.0.1:5197 first. Nothing is signed or installed.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 LAB="${1:?Provide an absolute disposable lab directory}"
 SOURCE="${2:-server}"
-[[ "$LAB" = /* && "$LAB" != / && "$SOURCE" =~ ^(server|file)$ ]] || exit 2
+[[ "$LAB" = /* && "$LAB" != / && "$SOURCE" =~ ^(server|file|retry|retry-desync)$ ]] || exit 2
 if [[ -e "$LAB" ]]; then
   echo 'Use a new disposable directory for each journey; existing results are never replayed' >&2
   exit 2

@@ -941,6 +941,18 @@
             "recoveryPreviewInvalid": "Varmuuskopion esikatselua ei voitu vahvistaa. Yhtään avainta ei vahvistettu.",
             "recoveryErrorDetails": "Tekniset tiedot",
             "recoveryFailed": "Varmuuskopiota ei voitu palauttaa.",
+            "keychainRetry": {
+                "title": "Lisäasetukset: kysy avainnipulta uudelleen",
+                "body": "macOS esti pääsyn tähän avaimeen avainnipussa, joten avain pysyy lukittuna. Jos sinulla ei ole varmuuskopiota, voit kysyä macOS:ltä vielä kerran. macOS voi pyytää kirjautumisavainnipun salasanaa, joka voi olla tämän Macin aiempi salasana.",
+                "backupHint": "Jos sinulla on varmuuskopion koodi tai varmuuskopiotiedosto, käytä sen sijaan toimintoa ”{{action}}”.",
+                "action": "Kysy macOS:ltä uudelleen",
+                "busy": "Odotetaan macOS:ää…",
+                "refusedAgain": "macOS esti pääsyn uudelleen. Avain on edelleen lukittu.",
+                "failed": "Avaimen lukitusta ei voitu avata.",
+                "success": "Avaimen lukitus avattu",
+                "readyBody": "macOS salli käytön sen jälkeen, kun edellinen pyyntö oli vanhentunut. Avaimen lukitus on avattu, mutta avainta ei vielä käytetä.",
+                "readyAction": "Käytä avattua avainta"
+            },
             "restoreAction": "Palauta palvelimelta",
             "restoreDialogTitle": "Palauta OpenPGP-avaimesi varmuuskopiosta",
             "restoreDialogBody": "Anna tunnuslause, jonka tallensit luodessasi tämän varmuuskopion. Palautettu avain korvaa nykyisen tällä laitteella tallennetun.",

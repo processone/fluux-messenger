@@ -945,6 +945,18 @@
             "recoveryPreviewInvalid": "Não foi possível verificar a pré-visualização da cópia. Nenhuma chave foi confirmada.",
             "recoveryErrorDetails": "Detalhes técnicos",
             "recoveryFailed": "Não foi possível restaurar a cópia de segurança.",
+            "keychainRetry": {
+                "title": "Avançado: perguntar novamente ao porta-chaves",
+                "body": "O macOS recusou o acesso a esta chave no porta-chaves, pelo que a chave continua bloqueada. Se não tens nenhuma cópia de segurança, podes perguntar ao macOS mais uma vez. O macOS pode pedir a palavra-passe do porta-chaves de início de sessão, que pode ser uma palavra-passe anterior deste Mac.",
+                "backupHint": "Se tens um código ou um ficheiro de cópia de segurança, usa antes «{{action}}».",
+                "action": "Perguntar novamente ao macOS",
+                "busy": "A aguardar o macOS…",
+                "refusedAgain": "O macOS recusou novamente o acesso. A chave continua bloqueada.",
+                "failed": "Não foi possível desbloquear a chave.",
+                "success": "Chave desbloqueada",
+                "readyBody": "O macOS permitiu o acesso depois de o pedido anterior ter expirado. A chave está desbloqueada, mas ainda não está em uso.",
+                "readyAction": "Usar a chave desbloqueada"
+            },
             "restoreAction": "Restaurar a partir do servidor",
             "restoreDialogTitle": "Restaurar a tua chave OpenPGP a partir da cópia de segurança",
             "restoreDialogBody": "Introduz a frase-passe que guardaste ao criar esta cópia. A chave restaurada substituirá a que está atualmente guardada neste dispositivo.",

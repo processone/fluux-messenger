@@ -17,6 +17,7 @@ import { UnlockEncryptionDialog } from './components/UnlockEncryptionDialog'
 import { BackupRecoveryDialog } from './components/BackupRecoveryDialog'
 import { KeyPickerDialog } from './components/KeyPickerDialog'
 import { IdentityChoiceDialog } from './components/IdentityChoiceDialog'
+import { KeychainRetryOffer } from './components/KeychainRetryPanel'
 import { RestorePassphraseDialog } from './components/RestorePassphraseDialog'
 import { parseArmorPassphraseFormat } from './e2ee/passphraseFormatHeader'
 import { useWebUnlockDialogStore } from './stores/webUnlockDialogStore'
@@ -440,6 +441,14 @@ function App() {
     addToast('success', t('settings.encryption.restoreSuccess'))
   }, [client, pendingIdentityChoice, t, addToast])
 
+  // FLM-304: the macOS keychain retry inside the choice unlocked the existing key.
+  // Only the choice that asked closes; a newer one opened meanwhile stays.
+  const handleIdentityKeychainUnlocked = useCallback((choice: NonNullable<typeof pendingIdentityChoice>) => {
+    if (client.e2ee !== choice.manager) return
+    setPendingIdentityChoice(current => current === choice ? null : current)
+    addToast('success', t('settings.encryption.keychainRetry.success'))
+  }, [client, t, addToast])
+
   // Check if we have a stored session (for reconnect scenarios)
   const hasSession = getSession() !== null
 
@@ -574,6 +583,14 @@ function App() {
           onImportFromFile={handleIdentityImportFromFile}
           onReplaceIdentity={handleIdentityReplaceIdentity}
           onCancel={() => setPendingIdentityChoice(null)}
+          advanced={pendingIdentityChoice.reason === 'local-key-unrecoverable' ? ({ onBusyChange }) => (
+            <KeychainRetryOffer
+              plugin={pendingIdentityChoice.manager.getPlugin('openpgp')}
+              hintAction={t('settings.encryption.identityChoice.importFromFileTitle')}
+              onBusyChange={onBusyChange}
+              onUnlocked={() => handleIdentityKeychainUnlocked(pendingIdentityChoice)}
+            />
+          ) : undefined}
         />
       )}
       {pendingImportFile && client.e2ee === pendingImportFile.manager && (

@@ -941,6 +941,18 @@
             "recoveryPreviewInvalid": "Förhandsvisningen av säkerhetskopian kunde inte verifieras. Ingen nyckel bekräftades.",
             "recoveryErrorDetails": "Tekniska detaljer",
             "recoveryFailed": "Säkerhetskopian kunde inte återställas.",
+            "keychainRetry": {
+                "title": "Avancerat: fråga nyckelringen igen",
+                "body": "macOS nekade åtkomst till den här nyckeln i nyckelringen, så nyckeln förblir låst. Om du inte har någon säkerhetskopia kan du fråga macOS en gång till. macOS kan be om lösenordet till din inloggningsnyckelring, som kan vara ett tidigare lösenord för den här Macen.",
+                "backupHint": "Om du har en säkerhetskopiekod eller en säkerhetskopiefil, använd ”{{action}}” i stället.",
+                "action": "Fråga macOS igen",
+                "busy": "Väntar på macOS …",
+                "refusedAgain": "macOS nekade åtkomst igen. Nyckeln är fortfarande låst.",
+                "failed": "Nyckeln kunde inte låsas upp.",
+                "success": "Nyckel upplåst",
+                "readyBody": "macOS gav åtkomst efter att den förra begäran hade gått ut. Nyckeln är upplåst men används inte än.",
+                "readyAction": "Använd den upplåsta nyckeln"
+            },
             "restoreAction": "Återställ från server",
             "restoreDialogTitle": "Återställ din OpenPGP-nyckel från säkerhetskopia",
             "restoreDialogBody": "Ange lösenfrasen du sparade när du skapade säkerhetskopian. Den återställda nyckeln ersätter den som för närvarande lagras på denna enhet.",

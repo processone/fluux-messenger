@@ -6,6 +6,10 @@
 
 use serde::{Deserialize, Serialize};
 
+// Only the macOS store answers about refused items; iOS builds this module too.
+#[cfg(any(target_os = "macos", test))]
+use crate::keychain_refusal::{RefusalState, RefusedRetry};
+
 const LAST_USER: &str = "last_user";
 
 /// Credentials stored in the keychain.
@@ -47,6 +51,20 @@ pub trait SecretStore {
     /// Explicit erase may retry a startup denial once; ordinary logout must not.
     #[cfg(any(target_os = "macos", test))]
     fn retry_denied_access(&self) -> Result<(), String> { Ok(()) }
+    /// Whether this launch holds the user's refusal of the old items that
+    /// `account` reads. It inspects only what this launch already cached and
+    /// never asks the OS: offering a retry must not cause one.
+    #[cfg(any(target_os = "macos", test))]
+    fn refused_access(&self, _account: &str) -> Result<RefusalState, String> {
+        Ok(RefusalState::NotHeld)
+    }
+    /// The user's explicit request to read the old items refused for
+    /// `account` once more: one attempt, and only for a refusal this launch
+    /// holds. A restored account never reads its old items again.
+    #[cfg(any(target_os = "macos", test))]
+    fn retry_refused_access(&self, _account: &str) -> Result<RefusedRetry, String> {
+        Ok(RefusedRetry::NothingRefused)
+    }
     /// Optional old-layout read for a caller that validates a recovery candidate.
     #[cfg(any(target_os = "macos", test))]
     fn legacy_candidate(&self, _account: &str) -> Result<Option<String>, String> {

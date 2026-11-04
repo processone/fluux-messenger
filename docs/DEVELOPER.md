@@ -308,7 +308,8 @@ saves and keep-data logout require a restart after denial. Explicit full wipe (`
 and restored-account `secrets-fresh-v1` caches, allowing one new authorization per item.
 A second denial remains cached and is returned rather than retried in a loop.
 This explicit retry does not clear a deterministic decode/version failure; restart after repairing
-the item or opening it with a compatible version.
+the item or opening it with a compatible version. The Settings keychain retry described under backup
+recovery below is the only other path that asks again after a denial, one request per press.
 
 The first launch reads every legacy service entry and recovery copy, writes the combined item, then
 reads it back to verify it. **This release does not delete or rewrite any originals during migration.**
@@ -454,11 +455,41 @@ platforms keep their storage path. Legacy backup-code fallback still works, but 
 heal/re-publish the secret backup. Public-key publication, trust subscriptions and the key-unlocked
 notification resume after durable save. Old items remain, and this account uses fresh storage on
 later launches. Fresh storage still needs accessible protected storage; recovery cannot bypass a
-locked login keychain. Advanced retry, identity replacement, cleanup and release publication are
-not part of this flow. A native import that times out or reports uncertain durability/rollback is not resent within the process,
+locked login keychain. Identity replacement, cleanup and release publication are not part of this
+flow; the keychain retry below is a separate last resort. A native import that times out or reports uncertain durability/rollback is not resent within the process,
 even if the plugin is replaced or the WebView reloads. The first uncertain result immediately shows
 localized restart guidance and disables confirmation, while native details remain available separately.
 Restart first to load the durable outcome.
+
+When macOS refused the keychain read this launch and the server reports no backup, Settings →
+Encryption also shows a folded **Advanced: ask the keychain again** panel. It never runs on its own.
+Deciding whether to show it (`openpgp_keychain_retry_available`) inspects only cached answers: it
+answers `held`, `not-held`, `pending` while a read is under way, without waiting for that read, or
+`unlocked` once the native store holds the key unlocked.
+Each press of its button (`openpgp_retry_keychain_access`) makes one OS request under the
+`secrets-v1` cache lock: a refused combined load is loaded again, and a refused old item of a
+desynced account is read again for that account only. A new refusal is cached
+like the first; any other failure keeps the earlier refusal, so nothing reads again before the next
+press. A granted read unlocks the existing key in place, and the App then publishes it and decrypts
+waiting messages as after a normal start. The retry never generates, restores or deletes a key, and an
+account restored into fresh storage never reads its old items again. The plugin's key operation
+lasts until the unlocked key is published, so a restore or replacement started meanwhile is refused,
+and a log out or another key during that time rejects the retry's result. While a press waits for
+macOS, the restore entry beside the panel, or the identity choice's options and Cancel around it,
+are disabled, and only the choice that asked closes when the key unlocks. When macOS allows the read
+but the key still does not unlock, the refusal is spent: the panel keeps the failure and its details
+and disables its button. A press that outlives its time limit while the prompt stays open has not
+spent it: the store answers `pending`, so the panel keeps the failure and its button. Once the user
+answers that prompt, the next press reads again after a refusal, or uses the key a granted read
+unlocked. Such a late grant leaves the key unlocked natively while the App still has it locked: the
+store answers `unlocked`, and the panel, also when Settings or the identity choice opens again,
+offers **Use the unlocked key**, whose press uses that key without reading the keychain, as the
+next normal start would. A newly registered plugin gets a new, folded panel. The panel stays hidden
+while a server backup exists or its probe fails (unless the key is already unlocked), while a
+restore awaits restart, once the App uses the key, and outside desktop macOS. A desynced key, whose refused item is its own old passphrase item, opens the
+identity choice instead (at startup and in Settings), so the same folded panel sits inside that
+choice, below its three options, rather than under the restore entry it covers. Unlocking closes the
+choice and leaves encryption on; the choice's Cancel keeps its earlier meaning.
 
 The controlled fixture uses committed encrypted backups, DemoClient's local protocol primitives,
 and the actual App/plugin/SDK deferred-decrypt path. Browser tests mock native IPC. The opt-in
@@ -475,12 +506,33 @@ npm run preview -w @xmpp/fluux -- --host 127.0.0.1 --port 5197 --strictPort
 FLUUX_E2E_PORT=5197 npm run test:e2e -- --project=backup-recovery-chromium --project=backup-recovery-webkit
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-server server
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-file file
+bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-retry retry
+bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-retry-desync retry-desync
 ```
 
 Each native invocation runs restore and process restart with the same scratch storage, bounds its
 owned processes and refuses to replay an existing lab. It substitutes `security` and `codesign`
 commands and rejects any attempted use. The host runs only with `--run-recovery-host` and a scratch
-HOME marker; normal `cargo test` compiles it but does not open a window. These fixtures prove the
+HOME marker; normal `cargo test` compiles it but does not open a window. The `retry` journey keeps
+the key's real passphrase in its old fixture item, declines the startup restore, opens the Settings
+panel, refuses the first press and allows the last. Between them, a press waits on a held prompt
+until its time limit (shortened for that press) expires: the store must answer `pending`, the panel
+must keep the failure and its button, and once the prompt is refused the store must answer `held`
+again. The last press also outlives its time limit, and the user allows its prompt afterwards: the
+store must answer `unlocked` while the App still has the key locked, and Settings opened again must
+offer **Use the unlocked key**, whose press reads nothing. Before the first and last press it also
+calls the login prewarm and the normal unlock,
+unregisters the plugin and lets the App's registration hook register a new one (declining the restore the App offers again), reconnects, and reopens Settings. The driver
+marks each of these steps in the operation log, which must show no read in any of them or after the
+refused held prompt, one refused old-item read at startup and one OS request per press, none when
+the unlocked key is used, the key file unchanged while the key is locked, no fresh-account route,
+and no old-item read after restart. The `retry-desync`
+journey gives the combined item a stale passphrase, so nothing migrates and the key is desynced; it
+runs the same presses and steps from the panel inside the startup identity choice, and its log must show only
+that account's old item, once at startup and once per press, then only the combined item after
+restart. After each restore,
+the `server` and `file` journeys check that the restored account is not offered the retry, that a
+direct retry request answers with the restored key, and that nothing reads an old item. These fixtures prove the
 application and injected native storage chain, not a real login keychain, signing identity, remote
 XMPP service or another person's Mac. Real keychain qualification remains separate.
 

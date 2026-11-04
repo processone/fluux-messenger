@@ -947,6 +947,18 @@
             "recoveryPreviewInvalid": "Níorbh fhéidir réamhamharc an chúltaca a fhíorú. Níor deimhníodh aon eochair.",
             "recoveryErrorDetails": "Sonraí teicniúla",
             "recoveryFailed": "Níorbh fhéidir an cúltaca a athchóiriú.",
+            "keychainRetry": {
+                "title": "Ardleibhéal: fiafraigh den eochairfháinne arís",
+                "body": "Dhiúltaigh macOS rochtain ar an eochair seo san eochairfháinne, mar sin fanann an eochair faoi ghlas. Mura bhfuil cúltaca agat, is féidir leat macOS a fhiafraí uair amháin eile. D’fhéadfadh macOS pasfhocal d’eochairfháinne logála isteach a iarraidh, agus d’fhéadfadh gur pasfhocal níos sine den Mac seo é.",
+                "backupHint": "Má tá cód cúltaca nó comhad cúltaca agat, úsáid “{{action}}” ina ionad.",
+                "action": "Fiafraigh de macOS arís",
+                "busy": "Ag fanacht le macOS…",
+                "refusedAgain": "Dhiúltaigh macOS rochtain arís. Tá an eochair fós faoi ghlas.",
+                "failed": "Níorbh fhéidir an eochair a dhíghlasáil.",
+                "success": "Eochair díghlasáilte",
+                "readyBody": "Thug macOS rochtain tar éis don iarratas roimhe sin dul in éag. Tá an eochair díghlasáilte ach níl sí in úsáid fós.",
+                "readyAction": "Úsáid an eochair dhíghlasáilte"
+            },
             "restoreAction": "Aischur ó fhreastalaí",
             "restoreDialogTitle": "Aischur d'eochair OpenPGP ón gcúltaca",
             "restoreDialogBody": "Iontráil an pasfhrása a shábháil tú nuair a chruthaigh tú an cúltaca seo. Cuirfidh an eochair aischurtha in ionad an cheann atá stóráilte ar an ngléas seo.",

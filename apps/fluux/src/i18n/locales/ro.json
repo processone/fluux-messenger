@@ -945,6 +945,18 @@
             "recoveryPreviewInvalid": "Previzualizarea copiei nu a putut fi verificată. Nicio cheie nu a fost confirmată.",
             "recoveryErrorDetails": "Detalii tehnice",
             "recoveryFailed": "Copia de siguranță nu a putut fi restaurată.",
+            "keychainRetry": {
+                "title": "Avansat: întreabă din nou portcheile",
+                "body": "macOS a refuzat accesul la această cheie din portchei, așa că cheia rămâne blocată. Dacă nu ai nicio copie de rezervă, poți întreba macOS încă o dată. macOS poate cere parola portcheii de autentificare, care poate fi o parolă anterioară a acestui Mac.",
+                "backupHint": "Dacă ai un cod sau un fișier de copie de rezervă, folosește în schimb „{{action}}”.",
+                "action": "Întreabă din nou macOS",
+                "busy": "Se așteaptă macOS…",
+                "refusedAgain": "macOS a refuzat din nou accesul. Cheia rămâne blocată.",
+                "failed": "Cheia nu a putut fi deblocată.",
+                "success": "Cheie deblocată",
+                "readyBody": "macOS a permis accesul după ce cererea anterioară a expirat. Cheia este deblocată, dar nu este încă folosită.",
+                "readyAction": "Folosește cheia deblocată"
+            },
             "restoreAction": "Restaurează de pe server",
             "restoreDialogTitle": "Restaurează cheia OpenPGP din copia de rezervă",
             "restoreDialogBody": "Introduceți fraza de acces pe care ați salvat-o când ați creat această copie. Cheia restaurată va înlocui pe cea actualmente stocată pe acest dispozitiv.",
