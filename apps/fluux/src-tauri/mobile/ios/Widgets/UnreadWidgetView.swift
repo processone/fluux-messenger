@@ -26,7 +26,15 @@ struct UnreadWidgetView: View {
         }
     }
 
+    /// Opens the conversation list: a tap anywhere but on a row, and the whole of the small and
+    /// lock-screen sizes. The app reads a link without a conversation as that request.
+    private var listURL: URL? { scheme.flatMap { URL(string: "\($0)://shortcut") } }
+
     var body: some View {
+        content.widgetURL(listURL)
+    }
+
+    @ViewBuilder private var content: some View {
         switch family {
         case .accessoryCircular: circular
         case .accessoryInline: inline
@@ -114,9 +122,9 @@ struct UnreadWidgetView: View {
 
     @ViewBuilder private func link(_ row: UnreadList.Row, list: UnreadList) -> some View {
         if let url = url(for: row, account: list.account) {
-            Link(destination: url) { UnreadRowView(row: row, image: avatar(row)) }
+            Link(destination: url) { UnreadRowView(row: row, image: avatar(row), now: entry.date) }
         } else {
-            UnreadRowView(row: row, image: avatar(row))
+            UnreadRowView(row: row, image: avatar(row), now: entry.date)
         }
     }
 
@@ -150,6 +158,8 @@ struct UnreadWidgetView: View {
 struct UnreadRowView: View {
     let row: UnreadList.Row
     let image: Image?
+    /// The entry's time, so the labels are right at each midnight without a redraw.
+    let now: Date
 
     var body: some View {
         HStack(spacing: 8) {
@@ -162,7 +172,7 @@ struct UnreadRowView: View {
             VStack(alignment: .trailing, spacing: 1) {
                 Text("\(row.unread)").font(.caption.bold())
                 if let date = row.date {
-                    Text(Self.when(date)).font(.caption2).foregroundStyle(.secondary)
+                    Text(Self.when(date, now: now)).font(.caption2).foregroundStyle(.secondary)
                 }
             }
         }

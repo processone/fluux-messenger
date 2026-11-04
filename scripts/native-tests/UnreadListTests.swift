@@ -89,6 +89,21 @@ import UserNotifications
             full.rows = (0..<UnreadList.maxRows).map { .init(id: "c\($0)@example.com", kind: "chat", name: "C\($0)", unread: 1, mentions: 0, last: 1) }
             let next = full.adding("new@example.com", kind: "chat", name: "New", account: account, total: 99)!
             precondition(next.rows.count == UnreadList.maxRows && next.rows[0].id == "new@example.com" && next.total == 99)
+        case "concurrent-pushes":
+            // FLM-418 R2: overlapping read-modify-write changes must not lose a row.
+            var list = fixture()
+            list.rows = []
+            try list.write(root: root)
+            DispatchQueue.concurrentPerform(iterations: 10) { index in
+                UnreadList.recordPush(conversation: "c\(index)@example.com", kind: "chat", name: "C\(index)",
+                                      account: account, total: index, root: root)
+            }
+            precondition(Set(UnreadList.load(root: root)!.rows.map(\.id)).count == 10, "No push may lose another's row")
+        case "clear-wins":
+            try fixture().write(root: root)
+            try UnreadList.clear(root: root)
+            UnreadList.recordPush(conversation: "late@example.com", kind: "chat", name: "Late", account: account, total: 1, root: root)
+            precondition(UnreadList.load(root: root) == nil, "A push after the clear must not bring the list back")
         case "clear":
             try fixture().write(root: root)
             try UnreadList.clear(root: root)

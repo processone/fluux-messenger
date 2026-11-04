@@ -28,13 +28,21 @@ struct UnreadProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<UnreadEntry>) -> Void) {
-        // The app asks for a redraw whenever the list changes.
-        completion(Timeline(entries: [current()], policy: .never))
+        // The app asks for a redraw whenever the list changes. Between changes the labels still move
+        // on: an entry at each midnight turns a time into "Yesterday" and then a weekday.
+        let now = current()
+        let calendar = Calendar.current
+        let midnights = (1...7).compactMap { calendar.date(byAdding: .day, value: $0, to: calendar.startOfDay(for: now.date)) }
+        let entries = [now] + midnights.map { UnreadEntry(date: $0, list: now.list, names: now.names) }
+        completion(Timeline(entries: entries, policy: .atEnd))
     }
 
     private func current() -> UnreadEntry {
         let root = NotificationMirror.root
-        return UnreadEntry(date: Date(), list: UnreadList.load(root: root), names: SharedNames.load(root: root))
+        let names = SharedNames.load(root: root)
+        // The list belongs to the account the app is signed in with; a signed-out or switched app leaves none to show.
+        let list = UnreadList.load(root: root).flatMap { $0.account == names.account ? $0 : nil }
+        return UnreadEntry(date: Date(), list: list, names: names)
     }
 
     /// Sample data for the gallery, not the user's conversations.

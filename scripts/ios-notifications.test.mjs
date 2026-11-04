@@ -122,7 +122,7 @@ test('iOS unread widget list follows the badge and holds no message text', { ski
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-unread-widget-'))
   try {
     const binary = compileNotificationTests(scratch, 'UnreadListTests.swift')
-    for (const scenario of ['round-trip', 'no-message-text', 'push-adds-row', 'room-rule', 'other-account', 'cap', 'clear']) {
+    for (const scenario of ['round-trip', 'no-message-text', 'push-adds-row', 'room-rule', 'other-account', 'cap', 'concurrent-pushes', 'clear-wins', 'clear']) {
       await t.test(scenario, () => {
         assert.match(execFileSync(binary, [scenario]).toString(), /passed/)
       })

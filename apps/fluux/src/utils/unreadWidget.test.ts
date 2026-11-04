@@ -27,7 +27,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 })
 
 import {
-  resetSharedUnreadWidgetList, shareUnreadWidgetList, startUnreadWidgetPublisher, unreadWidgetList,
+  clearUnreadWidgetList, resetSharedUnreadWidgetList, shareUnreadWidgetList, startUnreadWidgetPublisher, unreadWidgetList,
 } from './unreadWidget'
 
 type Rooms = Parameters<typeof unreadWidgetList>[2]
@@ -118,5 +118,30 @@ describe('startUnreadWidgetPublisher', () => {
     await vi.advanceTimersByTimeAsync(600)
     expect(mockInvoke).toHaveBeenLastCalledWith('plugin:widgets|set_unread_list', { list: null })
     stop()
+  })
+
+  it('does not bring the account back while a sign-out clears the list (FLM-418 R1)', async () => {
+    const stop = startUnreadWidgetPublisher(() => 0)
+    await vi.advanceTimersByTimeAsync(600)
+    mockInvoke.mockClear()
+    // A change is pending when the sign-out starts, with the account still connected.
+    asStore(chatStore).set({ conversations: new Map([[chats[0].id, chats[0]]]) })
+    const cleared = clearUnreadWidgetList()
+    await vi.advanceTimersByTimeAsync(2000)
+    await cleared
+    expect(mockInvoke.mock.calls.map(call => call[1].list)).toEqual([null])
+    // Later changes for the same account, such as unmounting, stay silent too.
+    asStore(chatStore).set({ conversations: new Map() })
+    await vi.advanceTimersByTimeAsync(2000)
+    stop()
+    expect(mockInvoke).toHaveBeenCalledTimes(1)
+  })
+
+  it('publishes for another account after a sign-out', async () => {
+    startUnreadWidgetPublisher(() => 0)
+    await clearUnreadWidgetList()
+    asStore(connectionStore).set({ jid: 'other@example.com/phone' })
+    await vi.advanceTimersByTimeAsync(600)
+    expect(mockInvoke.mock.lastCall?.[1].list).toMatchObject({ account: 'other@example.com' })
   })
 })

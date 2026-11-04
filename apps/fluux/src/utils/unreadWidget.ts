@@ -59,9 +59,13 @@ function toRow(row: UnreadConversation): UnreadWidgetRow {
 }
 
 let shared: string | null = null
+// Writes reach native code in order, so a stale list cannot land after a newer one or after a clear.
+let writes: Promise<void> = Promise.resolve()
+let active: { stop: () => void; cancel: () => void } | undefined
+// The account being signed out: nothing is published for it until the app has another one.
+let clearedAccount: string | null = null
 
-/** Writes the list for the widget, or empties it for `null`, unless unchanged. */
-export async function shareUnreadWidgetList(list: UnreadWidgetList | null): Promise<void> {
+async function write(list: UnreadWidgetList | null): Promise<void> {
   // `updated` moves on every build; only the content decides whether to write.
   const serialized = JSON.stringify(list && { ...list, updated: 0 })
   if (serialized === shared) return
@@ -75,9 +79,30 @@ export async function shareUnreadWidgetList(list: UnreadWidgetList | null): Prom
   }
 }
 
+/** Writes the list for the widget, or empties it for `null`, unless unchanged. */
+export function shareUnreadWidgetList(list: UnreadWidgetList | null): Promise<void> {
+  const next = writes.then(() => write(list))
+  writes = next
+  return next
+}
+
+/**
+ * Empties the widget's list: drops the publisher's pending publication and
+ * keeps it silent for this account, so nothing can bring the account back while
+ * the sign-out is still running. Another account is published as usual.
+ */
+export function clearUnreadWidgetList(): Promise<void> {
+  active?.cancel()
+  clearedAccount = connectionStore.getState().jid?.split('/')[0] ?? null
+  return shareUnreadWidgetList(null)
+}
+
 /** Forgets what was last shared, so the next list is sent. For tests. */
 export function resetSharedUnreadWidgetList(): void {
   shared = null
+  writes = Promise.resolve()
+  active = undefined
+  clearedAccount = null
 }
 
 const PUBLISH_DELAY_MS = 500
@@ -88,18 +113,28 @@ const PUBLISH_DELAY_MS = 500
  */
 export function startUnreadWidgetPublisher(events: () => number): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined
+  let stopped = false
   const publish = () => {
     timer = undefined
+    if (stopped) return
     const account = connectionStore.getState().jid?.split('/')[0]
+    if (account && account === clearedAccount) return
+    if (account !== clearedAccount) clearedAccount = null
     void shareUnreadWidgetList(account
       ? unreadWidgetList(account, chatStore.getState().conversations.values(), roomStore.getState(), events())
       : null)
   }
-  const schedule = () => { timer ??= setTimeout(publish, PUBLISH_DELAY_MS) }
+  const schedule = () => { if (!stopped) timer ??= setTimeout(publish, PUBLISH_DELAY_MS) }
   const unsubscribe = [chatStore.subscribe(schedule), roomStore.subscribe(schedule), connectionStore.subscribe(schedule)]
-  schedule()
-  return () => {
-    clearTimeout(timer)
-    unsubscribe.forEach(stop => stop())
+  const cancel = () => { clearTimeout(timer); timer = undefined }
+  const stop = () => {
+    stopped = true
+    cancel()
+    unsubscribe.forEach(unsubscribeOne => unsubscribeOne())
+    if (active?.stop === stop) active = undefined
   }
+  active?.stop()
+  active = { stop, cancel }
+  schedule()
+  return stop
 }

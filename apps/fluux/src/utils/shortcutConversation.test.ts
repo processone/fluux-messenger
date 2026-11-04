@@ -27,6 +27,11 @@ describe('Siri conversation metadata', () => {
     }
     expect(resolveShortcutURL(url(), null, chats, rooms)).toBeNull()
   })
+  it('reads the widget\'s link without a conversation as a request for the list, in every scheme (FLM-418 R4)', () => {
+    for (const scheme of ['net.processone.fluux', 'net.processone.fluux.demo', 'net.processone.fluux.dev']) {
+      expect(resolveShortcutURL(`${scheme}://shortcut`, account, chats, rooms)).toBeNull()
+    }
+  })
   it('leaves unrelated links to their existing handlers', () => {
     expect(resolveShortcutURL('xmpp:friend@example.com?message', account, chats, rooms)).toBeUndefined()
     expect(resolveShortcutURL('https://example.com/shortcut', account, chats, rooms)).toBeUndefined()

@@ -23,6 +23,7 @@ struct UnreadList: Codable, Equatable {
     }
 
     static let fileName = "UnreadWidget.json"
+    static let lockName = "UnreadWidget.lock"
     /// Matches the kind of the widget's configuration.
     static let widgetKind = "FluuxUnreadWidget"
     /// The widget's largest size shows six rows; a few more keep a push-added row from displacing a listed one.
@@ -40,7 +41,28 @@ struct UnreadList: Codable, Equatable {
         return try? JSONDecoder().decode(UnreadList.self, from: data)
     }
 
+    /// The app and the notification extension are separate processes that both change the file, so
+    /// every change takes this lock: a push cannot overwrite a newer list with an older one, or bring
+    /// back a list the app just emptied for a sign-out.
+    private static func locked<T>(root: URL, _ body: () throws -> T) rethrows -> T {
+        let descriptor = open(root.appendingPathComponent(lockName).path, O_CREAT | O_RDWR, 0o600)
+        if descriptor >= 0 {
+            flock(descriptor, LOCK_EX)
+        }
+        defer {
+            if descriptor >= 0 {
+                flock(descriptor, LOCK_UN)
+                close(descriptor)
+            }
+        }
+        return try body()
+    }
+
     func write(root: URL) throws {
+        try Self.locked(root: root) { try writeUnlocked(root: root) }
+    }
+
+    private func writeUnlocked(root: URL) throws {
         try JSONEncoder().encode(self).write(
             to: root.appendingPathComponent(Self.fileName),
             options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
@@ -49,8 +71,10 @@ struct UnreadList: Codable, Equatable {
 
     /// Signing out leaves nothing to show.
     static func clear(root: URL) throws {
-        let url = root.appendingPathComponent(fileName)
-        if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+        try locked(root: root) {
+            let url = root.appendingPathComponent(fileName)
+            if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+        }
     }
 
     /// A push from a conversation not yet listed adds it, with the badge's new total.
@@ -70,9 +94,14 @@ struct UnreadList: Codable, Equatable {
     /// and asks for a redraw. iOS may defer that redraw until the app next opens; the file is right either way.
     static func recordPush(conversation: String, kind: String, name: String, account: String?,
                            total: Int, root: URL?) {
-        guard let root = root, let list = load(root: root),
-              let next = list.adding(conversation, kind: kind, name: name, account: account, total: total),
-              (try? next.write(root: root)) != nil else { return }
+        guard let root = root else { return }
+        // Read and write under one lock: a clear or a newer list from the app lands before or after, never between.
+        let added: Bool = locked(root: root) {
+            guard let list = load(root: root),
+                  let next = list.adding(conversation, kind: kind, name: name, account: account, total: total) else { return false }
+            return (try? next.writeUnlocked(root: root)) != nil
+        }
+        guard added else { return }
         #if os(iOS) && canImport(WidgetKit)
         if #available(iOS 14.0, *) { WidgetCenter.shared.reloadTimelines(ofKind: widgetKind) }
         #endif
