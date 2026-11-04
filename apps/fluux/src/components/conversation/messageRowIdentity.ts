@@ -59,14 +59,21 @@ export function messageRowKey(message: Parameters<typeof messageRowId>[0] & { ti
  * must be scoped to the conversation and survive archive-id enrichment.
  *
  * {@link messageRowId} is unsuitable: it is unscoped, and it changes when a
- * MAM/carbon archive id qualifies the handle. The client id and, for rooms, the
- * receipt instant (stable across an archive-stamp merge) do not change, and the
- * conversation or room JID keeps legacy messages that share an id apart.
+ * MAM/carbon archive id (`stanzaId`) qualifies the handle. The key therefore
+ * leaves `stanzaId` out and keeps every discriminator that is already present
+ * when the message first renders: the conversation or room JID, the client id,
+ * the author (`from`, which also separates one's own twin from the peer's), the
+ * sender-assigned origin id and occupant id, and for rooms the receipt instant,
+ * which is stable across an archive-stamp merge. Twins that differ in any of
+ * these keep separate state; twins that differ only by an archive id still
+ * share it, since that is the one thing that cannot be told apart from
+ * enrichment of a single message.
  */
-export function messageOccurrenceKey(message: { id?: string; type?: 'chat' | 'groupchat'; conversationId?: string; roomJid?: string; timestamp?: Date; receivedAt?: Date }): string | undefined {
+export function messageOccurrenceKey(message: { id?: string; type?: 'chat' | 'groupchat'; conversationId?: string; roomJid?: string; from?: string; originId?: string; occupantId?: string; timestamp?: Date; receivedAt?: Date }): string | undefined {
   if (!message.id) return undefined
   const instant = message.type === 'groupchat' ? (message.receivedAt ?? message.timestamp)?.getTime() ?? null : null
-  return JSON.stringify([message.roomJid ?? message.conversationId ?? null, message.id, instant])
+  return JSON.stringify([message.roomJid ?? message.conversationId ?? null, message.id, message.from ?? null,
+    message.originId ?? null, message.occupantId ?? null, instant])
 }
 
 /**

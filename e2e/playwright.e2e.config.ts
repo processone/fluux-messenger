@@ -55,6 +55,7 @@ const SUITES = [
   { name: 'scroll-touch-start', testMatch: 'scroll-touch-start.ts' },
   { name: 'message-hover', testMatch: 'message-hover.ts' },
   { name: 'reply-quote', testMatch: 'reply-quote.ts' },
+  { name: 'message-code-wrap', testMatch: 'message-code-wrap.ts' },
   { name: 'composer', testMatch: 'composer-geometry.ts' },
   { name: 'composer-send', testMatch: 'composer-send.ts' },
   { name: 'popover', testMatch: 'popover-geometry.ts' },

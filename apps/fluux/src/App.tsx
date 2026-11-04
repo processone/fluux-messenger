@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Routes, Route, Navigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
+import { useForgetWrapOnAccountChange } from '@/hooks/useForgetWrapOnAccountChange'
 import { useConnectionStatus, useXMPPContext } from '@fluux/sdk'
 import type { E2EEManager } from '@fluux/sdk'
 import { useE2EEPluginRegistration } from './hooks/useE2EEPluginRegistration'
@@ -86,7 +87,8 @@ function App() {
   // Detect render loops before they freeze the UI
   detectRenderLoop('App')
 
-  const { status } = useConnectionStatus()
+  const { status, jid: accountJid } = useConnectionStatus()
+  useForgetWrapOnAccountChange(status, accountJid)
   const { client } = useXMPPContext()
   useMcpBridge(client)
   const { t } = useTranslation()
