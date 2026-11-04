@@ -3153,6 +3153,41 @@ mod tests {
         assert_eq!(keychain.items.lock().unwrap()[account], working, "the old item is kept");
     }
 
+    /// FLM-408 R2: a granted read whose secret still cannot unlock the key
+    /// consumes the refusal. Nothing is left to retry, so the panel's action
+    /// goes away, and a further request reads nothing.
+    #[test]
+    fn flm304_a_granted_read_that_cannot_unlock_leaves_nothing_to_retry() {
+        let jid = "alice@example.com";
+        let account = "openpgp_passphrase:alice@example.com";
+        let keychain = RefusingKeychain::default();
+        let dir = fresh_tmp_dir();
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        keychain.launch(&dir).ensure_key_sync(jid, "Alice").unwrap();
+        // Neither the combined item nor the old item holds the working secret.
+        let bundle = keychain.items.lock().unwrap()["secrets-v1"].clone();
+        let mut parsed: serde_json::Value = serde_json::from_str(&bundle).unwrap();
+        parsed["items"][account] = "c3RhbGU=".into();
+        keychain.set_secret("secrets-v1", &parsed.to_string());
+        keychain.set_secret(account, "b2xk");
+        keychain.refuse(&[account]);
+
+        let state = keychain.launch(&dir);
+        assert!(state.ensure_key_sync(jid, "Alice").is_err());
+        assert_eq!(state.keychain_retry_available(jid), Ok(true));
+        let old_reads = || keychain.reads.lock().unwrap().iter().filter(|a| *a == account).count();
+        assert_eq!(old_reads(), 1);
+
+        keychain.refuse(&[]);
+        let failed = rt.block_on(state.retry_keychain_access(jid.into())).unwrap_err();
+        assert!(!failed.starts_with("openpgp-keychain-refused:"), "{failed}");
+        assert_eq!(old_reads(), 2);
+        assert_eq!(state.keychain_retry_available(jid), Ok(false));
+        let unavailable = rt.block_on(state.retry_keychain_access(jid.into())).unwrap_err();
+        assert!(unavailable.starts_with("openpgp-keychain-retry-unavailable:"), "{unavailable}");
+        assert_eq!(old_reads(), 2, "nothing is left to ask again");
+    }
+
     // ---- encryption-subkey rotation --------------------------------
 
     /// Count the alive encryption-capable subkeys in `cert` under the

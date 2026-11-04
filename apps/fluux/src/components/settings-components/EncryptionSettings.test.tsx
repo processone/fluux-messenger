@@ -888,6 +888,8 @@ describe('macOS guided recovery entry', () => {
 describe('macOS keychain retry panel', () => {
   const FINGERPRINT = 'ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234'
   let unlockedFingerprint: string | null
+  // The native store still holds this launch's refusal; a granted read consumes it.
+  let refusalHeld: boolean
   let retryKeychainAccess: ReturnType<typeof vi.fn>
   beforeEach(() => {
     vi.clearAllMocks()
@@ -897,12 +899,13 @@ describe('macOS keychain retry panel', () => {
     mockCheckPepSupport.mockResolvedValue(true)
     useToastStore.setState({ toasts: [] })
     unlockedFingerprint = null
+    refusalHeld = true
     retryKeychainAccess = vi.fn()
     mockPlugin = {
       getOwnFingerprint: () => unlockedFingerprint,
       isKeyRecoveryNeeded: () => unlockedFingerprint === null,
       isKeyStorageUnavailable: () => unlockedFingerprint === null,
-      isKeychainRetryOffered: vi.fn(async () => unlockedFingerprint === null),
+      isKeychainRetryOffered: vi.fn(async () => unlockedFingerprint === null && refusalHeld),
       retryKeychainAccess,
     }
     useEncryptionSettingsStore.setState({ openpgpEnabled: true, pluginRegisteredAt: 0, registrationError: null })
@@ -940,13 +943,22 @@ describe('macOS keychain retry panel', () => {
     expect(useToastStore.getState().toasts.map(t => [t.type, t.message])).toEqual([['success', 'settings.encryption.keychainRetry.success']])
   })
 
-  it('shows the native details when the key still cannot be unlocked', async () => {
-    retryKeychainAccess.mockRejectedValueOnce(new E2EEPluginError('permanent', 'key-unrecoverable', 'decrypt persisted TSK: unexpected EOF'))
+  // Intent FLM-304 and FLM-408 R2: macOS granted the read but the key still
+  // cannot be unlocked, so nothing is left to ask again; the details stay.
+  it('keeps the native details but no action when a granted read cannot unlock the key', async () => {
+    retryKeychainAccess.mockImplementationOnce(async () => {
+      refusalHeld = false
+      throw new E2EEPluginError('permanent', 'key-unrecoverable', 'decrypt persisted TSK: unexpected EOF')
+    })
     render(<EncryptionSettings />)
     fireEvent.click(await screen.findByRole('button', { name: panelTitle }))
     fireEvent.click(retryButton())
     expect(await screen.findByRole('alert')).toHaveTextContent('settings.encryption.keychainRetry.failed')
     expect(screen.getByText('decrypt persisted TSK: unexpected EOF')).toBeInTheDocument()
+    await waitFor(() => expect(retryButton()).toBeDisabled())
+    expect(screen.getByRole('button', { name: panelTitle })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'settings.encryption.recoveryTitle' })).toBeEnabled()
+    expect(retryKeychainAccess).toHaveBeenCalledOnce()
   })
 
   // Intent FLM-408 R1: a restore must not start while the retry asks macOS,

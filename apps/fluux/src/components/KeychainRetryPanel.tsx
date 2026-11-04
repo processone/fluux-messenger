@@ -74,6 +74,8 @@ function KeychainRetryPanel({ plugin, onUnlocked, hintAction, onBusyChange }: Ke
   const [busy, setBusy] = useState(false)
   const [refusedAgain, setRefusedAgain] = useState(false)
   const [failure, setFailure] = useState<RetryFailure | null>(null)
+  // A failed retry with nothing left to ask again keeps its details but no action.
+  const [spent, setSpent] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -103,6 +105,9 @@ function KeychainRetryPanel({ plugin, onUnlocked, hintAction, onBusyChange }: Ke
         setOffered(await plugin.isKeychainRetryOffered().catch(() => false))
       } else {
         setFailure(retryFailure(error, t))
+        // A granted read that still cannot unlock the key consumes the
+        // refusal; ask the native store whether anything is left to retry.
+        setSpent(!(await plugin.isKeychainRetryOffered().catch(() => false)))
       }
     } finally {
       setBusy(false)
@@ -125,7 +130,7 @@ function KeychainRetryPanel({ plugin, onUnlocked, hintAction, onBusyChange }: Ke
       <button
         type="button"
         className="px-3 py-2 text-sm rounded-lg bg-fluux-hover text-fluux-text hover:bg-fluux-active disabled:opacity-60"
-        disabled={busy}
+        disabled={busy || spent}
         onClick={() => { void retry() }}
       >
         {busy ? t('settings.encryption.keychainRetry.busy') : t('settings.encryption.keychainRetry.action')}
