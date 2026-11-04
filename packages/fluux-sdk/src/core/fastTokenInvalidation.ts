@@ -95,7 +95,8 @@ export async function invalidateFastTokenOnServer(
   }
 
   const domain = getDomain(jid)
-  const username = getLocalPart(jid)
+  // Lowercase to match the stream header and the sign-in identity (see Connection.createXmppClient).
+  const username = getLocalPart(jid).toLowerCase()
   if (!domain || !username) {
     return { ok: false, reason: 'invalid-jid' }
   }
