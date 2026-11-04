@@ -14,11 +14,14 @@ import {
 test.afterEach(assertScrollShadow)
 
 const ROOM = 'wrap-code@conference.fluux.chat'
+const URL_ROOM = 'wrap-url@conference.fluux.chat'
+const LONG_URL = 'https://example.com/archive/' + 'segment-of-an-unbroken-path/'.repeat(8) + 'file.tar.gz?token=' + 'abcdef0123456789'.repeat(6)
+const URL_CODE_BODY = 'Link:\n```\n' + LONG_URL + '\n```'
 const OTHER_ROOM = 'wrap-other@conference.fluux.chat'
 const LONG_LINE = 'I am Adrien from ProcessOne, following up on a long email whose lines never end: ' + 'lorem ipsum dolor sit amet '.repeat(10)
 const CODE_BODY = 'Draft:\n```\n' + Array.from({ length: 6 }, (_, i) => `${i + 1}. ${LONG_LINE}`).join('\n') + '\n```'
 
-async function seedRoom(page: Page, jid: string, codeEvery: number): Promise<void> {
+async function seedRoom(page: Page, jid: string, codeEvery: number, codeBody: string = CODE_BODY): Promise<void> {
   await page.evaluate(({ jid, codeEvery, codeBody }) => {
     const scope = window as unknown as {
       __roomStore: { getState: () => { rooms: Map<string, object> } }
@@ -40,7 +43,7 @@ async function seedRoom(page: Page, jid: string, codeEvery: number): Promise<voi
         incrementUnread: false,
       })
     }
-  }, { jid, codeEvery, codeBody: CODE_BODY })
+  }, { jid, codeEvery, codeBody })
   await page.waitForFunction((j) => {
     const s = window as unknown as { __roomStore: { getState: () => { messages: Map<string, unknown[]> } } }
     return s.__roomStore.getState().messages.get(j)?.length === 60
@@ -170,5 +173,26 @@ test.describe('Wrap lines in the message list', () => {
     await page.waitForTimeout(300)
     expect(await isWrapped(wrapButtons(page).last())).toEqual({ wrapped: true, overflows: false })
     expect(await distanceFromBottom(page)).toBeGreaterThan(AT_BOTTOM_OK_PX)
+  })
+  // Review FLM-404 R8: the plan's adverse cases for wrap-readable — a 340px viewport and a long
+  // unbroken URL (no whitespace to break on) — in the real list.
+  test('wraps and unwraps a long unbroken URL at 340px width', async ({ page }) => {
+    await page.setViewportSize({ width: 340, height: 800 })
+    await loadDemo(page)
+    await seedRoom(page, URL_ROOM, 10, URL_CODE_BODY)
+    await openRoom(page, URL_ROOM)
+    await scrollToBottom(page)
+    expect(await page.evaluate(() => window.innerWidth)).toBe(340)
+
+    const button = wrapButtons(page).last()
+    expect(await isWrapped(button)).toEqual({ wrapped: false, overflows: true })
+    await button.click()
+    await settle(page)
+    expect(await isWrapped(wrapButtons(page).last())).toEqual({ wrapped: true, overflows: false })
+    // The text itself is untouched: the URL is still one unbroken string.
+    expect(await wrapButtons(page).last().evaluate((b) => b.closest('.rounded-lg')!.querySelector('pre')!.textContent)).toBe(LONG_URL)
+    await wrapButtons(page).last().click()
+    await settle(page)
+    expect(await isWrapped(wrapButtons(page).last())).toEqual({ wrapped: false, overflows: true })
   })
 })
