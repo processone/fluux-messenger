@@ -200,12 +200,13 @@ test.describe('contact suggestion popover geometry', () => {
    * whose box is still moving. Placing it once leaves it misaligned for the rest
    * of the dialog's life.
    *
-   * The animation is stretched to an hour, far past the test timeout, so it is
-   * still running however slowly the steps before the check execute; a 2s one
-   * ran out under parallel load. The test then moves it to its midpoint, which
-   * moves the field while the animation keeps running. Pausing it instead would
-   * not do: the list follows its anchor only while an ancestor animation is
-   * running.
+   * Nothing here may depend on how fast the machine is. The animation is
+   * stretched to an hour, far past the test timeout, so it is still running
+   * however slowly the steps before the check execute; a 2s one ran out under
+   * parallel load. The test then moves it to its midpoint, which moves the field
+   * while the animation keeps running. Pausing it instead would not do: the list
+   * follows its anchor only while an ancestor animation is running. The check
+   * then waits for animation frames, not for time.
    */
   test('stays anchored while the dialog finishes opening', async ({ page }) => {
     await bootDemo(page, DEMO_URL)
@@ -237,9 +238,15 @@ test.describe('contact suggestion popover geometry', () => {
     // Without this the test cannot fail: a list placed once would still be aligned.
     expect(fieldShift, 'moving the opening to its midpoint must move the field').toBeGreaterThan(EPSILON)
 
+    // The list follows its field on the next animation frame. Waiting two frames
+    // makes the check independent of callback order, and counting frames instead of
+    // polling for seconds keeps it independent of how fast a loaded machine renders.
+    await page.evaluate(() => new Promise<void>(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+
     // The gap is passed in, not closed over: this body is serialized and evaluated
     // in the page, where module-scope constants do not exist.
-    await expect.poll(async () => page.evaluate((gap) => {
+    expect(await page.evaluate((gap) => {
       const menu = document.querySelector('[data-testid="contact-suggestions"]')
       const input = document.querySelector('[data-modal="true"] input[type="text"]')
       if (!menu || !input) return null
@@ -250,7 +257,7 @@ test.describe('contact suggestion popover geometry', () => {
         Math.abs(menuBox.width - inputBox.width),
         Math.abs(menuBox.top - inputBox.bottom - gap),
       )
-    }, TRIGGER_GAP_PX)).toBeLessThanOrEqual(EPSILON)
+    }, TRIGGER_GAP_PX), 'the list must follow its field').toBeLessThanOrEqual(EPSILON)
   })
 
   /**
