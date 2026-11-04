@@ -111,7 +111,7 @@ handling, optional push notifications and third-party services.
 - **In-Band Password Change** - Change your account password without leaving the app
 
 ### Desktop & Cross-Platform
-- **Cross-platform** - Available on the web, macOS (Intel & Apple Silicon), Windows, and Linux (deb, rpm, flatpak, AUR)
+- **Cross-platform** - Available on the web, macOS (Intel & Apple Silicon), Windows, and Linux (deb, rpm, flatpak, AUR). Experimental iPhone and iPad support through TestFlight ([iOS development](docs/IOS_DEVELOPMENT.md))
 - **Auto Updates** - Built-in update checker with release notes and one-click install (desktop)
 - **Native Notifications** - Desktop notifications with click-to-focus; web push notifications even when the tab is closed. On iOS, remote message notifications can show cached contact and room avatars; [OpenPGP notification previews](docs/IOS_DEVELOPMENT.md#openpgp-notification-previews) are available as a per-account opt-in. Contact requests, room invitations, and voice requests raise actionable alerts that respect Do Not Disturb and open the relevant request or room.
 - **Auto-Away** - Automatically sets your status to away on system idle and restores it on activity
@@ -275,7 +275,7 @@ The web version downloads each encrypted attachment and decrypts it in the brows
 
 #### Does Fluux Messenger support end-to-end encryption?
 
-Yes. **OpenPGP (OX-IM, XEP-0373/0374)** is implemented for one-to-one chats. Messages in 1:1 conversations are encrypted and signed using each participant's published OpenPGP key. Features include automatic key discovery, peer verification with cross-device sync, secret key backup, and MAM history decryption. Group-chat (MUC) encryption is not yet supported. **OMEMO** may follow: beyond the implementation work it raises licensing questions we want to address properly. We're also watching **MLS** as an option for large-scale group chats.
+Yes. **OpenPGP (OX-IM, XEP-0373/0374)** is implemented for one-to-one chats. Messages in 1:1 conversations are encrypted and signed using each participant's published OpenPGP key. Features include automatic key discovery, peer verification with cross-device sync, secret key backup, and MAM history decryption. Group-chat (MUC) encryption is not yet supported. **OMEMO** is in development but not in a release yet: we are writing our own implementation so it brings no licensing constraints into Fluux. We're also watching **MLS** as an option for large-scale group chats.
 
 While Fluux is running in the background, app-generated notifications wait for encrypted messages to become readable before showing a preview. A message read before decryption completes does not produce a late notification. Unsupported encryption methods such as OMEMO still produce an unsupported-method notice. Remote iOS push previews have a separate [per-account opt-in](docs/IOS_DEVELOPMENT.md#openpgp-notification-previews). See the [notification content contract](docs/NOTIFICATION_CONTENT.md) for remote push fallback text and platform differences.
 
@@ -297,7 +297,7 @@ Yes, translations are welcome. Locale files live under `apps/fluux/src/i18n/loca
 
 #### Is there a roadmap?
 
-There's no formal roadmap document, but we track upcoming work through GitHub [Milestones](https://github.com/processone/fluux-messenger/milestones) and [Issues](https://github.com/processone/fluux-messenger/issues). Follow, comment or open a new issue for anything you'd like to see.
+Yes. [ROADMAP_2026.md](docs/ROADMAP_2026.md) describes the overall direction and priorities. Day-to-day work is tracked in GitHub [Milestones](https://github.com/processone/fluux-messenger/milestones) and [Issues](https://github.com/processone/fluux-messenger/issues). Follow, comment or open a new issue for anything you'd like to see.
 
 ### Troubleshooting
 
