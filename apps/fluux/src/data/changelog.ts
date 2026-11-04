@@ -17,6 +17,11 @@ export const changelog: ChangelogEntry[] = [
     version: '0.18.3',
     date: 'Unreleased',
     sections: [{
+      type: 'added',
+      items: [
+        'macOS: if your OpenPGP key stays locked because the keychain refused access and you have no backup, Fluux offers an advanced option to ask macOS again, in Encryption settings or in the recovery choice it shows. Fluux asks only when you press its button, and it unlocks the same key without creating a new one',
+      ],
+    }, {
       type: 'fixed',
       items: [
         'When a delayed message arrives while older messages are still loading, the messages you are reading no longer move, whether it lands above them or, after you scrolled during the load, below them, including when you are partway through a long expanded message',
@@ -32,7 +37,6 @@ export const changelog: ChangelogEntry[] = [
         type: 'added',
         items: [
           'macOS: when your OpenPGP key can no longer be unlocked, Fluux offers to restore it from your server backup or a backup file. The same recovery is available from Encryption settings. You confirm the account and the full key fingerprint before anything is saved, your existing keychain items and backup files are kept, and messages waiting to be decrypted show their text once the restore is done',
-          'macOS: if your OpenPGP key stays locked because the keychain refused access and you have no backup, Encryption settings offers an advanced option to ask macOS again. Fluux asks only when you press its button, and it unlocks the same key without creating a new one',
           'iOS: room notifications now show the nickname of the person who wrote the message',
           'iOS and iPadOS: drag down on a conversation to hide the keyboard, in the app and in Safari',
           'iOS: on iPhone Duo held half open, Fluux arranges itself around the fold. In landscape, the conversation list sits on one side and the chat on the other; in portrait, messages stay above the fold and the message box below it, leaving room for the keyboard',

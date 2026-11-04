@@ -5,6 +5,7 @@ import { isE2EEPluginError } from '@fluux/sdk'
 import { SettingsDisclosure } from '@/components/ui/SettingsDisclosure'
 import { backupRecoveryError } from '@/components/backupRecoveryError'
 import { BackupRecoveryFailure } from '@/components/BackupRecoveryFailure'
+import { platform } from '@/platform'
 
 type RetryFailure = ReturnType<typeof backupRecoveryError>
 
@@ -23,9 +24,23 @@ export interface KeychainRetryPlugin {
   retryKeychainAccess(): Promise<{ fingerprint: string }>
 }
 
-export function supportsKeychainRetry(plugin: unknown): plugin is KeychainRetryPlugin {
+function supportsKeychainRetry(plugin: unknown): plugin is KeychainRetryPlugin {
   const candidate = plugin as Partial<KeychainRetryPlugin> | null | undefined
   return typeof candidate?.isKeychainRetryOffered === 'function' && typeof candidate.retryKeychainAccess === 'function'
+}
+
+/**
+ * The retry asks the macOS keychain again, so only desktop macOS offers it.
+ * Callers place it where a locked key's recovery is shown: under Settings'
+ * restore entry, or inside the identity choice a desynced key opens.
+ */
+export function KeychainRetryOffer({ plugin, onUnlocked, hintAction }: {
+  plugin: unknown
+  onUnlocked: (fingerprint: string) => void
+  hintAction?: string
+}) {
+  if (platform().shell !== 'desktop' || platform().os !== 'macos' || !supportsKeychainRetry(plugin)) return null
+  return <KeychainRetryPanel plugin={plugin} onUnlocked={onUnlocked} hintAction={hintAction} />
 }
 
 /**
@@ -35,9 +50,11 @@ export function supportsKeychainRetry(plugin: unknown): plugin is KeychainRetryP
  * retry (a keychain refusal this launch, no server backup), stays folded
  * until opened, and reads the keychain only when the user presses its button.
  */
-export function KeychainRetryPanel({ plugin, onUnlocked }: {
+function KeychainRetryPanel({ plugin, onUnlocked, hintAction }: {
   plugin: KeychainRetryPlugin
   onUnlocked: (fingerprint: string) => void
+  /** The recovery action the backup hint names; Settings' restore entry by default. */
+  hintAction?: string
 }) {
   const { t } = useTranslation()
   const [offered, setOffered] = useState(false)
@@ -82,7 +99,7 @@ export function KeychainRetryPanel({ plugin, onUnlocked }: {
     <SettingsDisclosure title={t('settings.encryption.keychainRetry.title')} stayOpen={busy}>
       <div className="space-y-2 text-xs text-fluux-muted leading-snug">
         <p>{t('settings.encryption.keychainRetry.body')}</p>
-        <p>{t('settings.encryption.keychainRetry.backupHint', { action: t('settings.encryption.recoveryTitle') })}</p>
+        <p>{t('settings.encryption.keychainRetry.backupHint', { action: hintAction ?? t('settings.encryption.recoveryTitle') })}</p>
       </div>
       {refusedAgain && (
         <p role="alert" className="text-xs text-fluux-error break-words">

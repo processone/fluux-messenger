@@ -56,6 +56,36 @@
       await wait(() => document.body.textContent.includes('Your key is ready and published.'), 'unlocked status')
       if (await retryOffered()) throw new Error('the keychain retry is still offered after the key unlocked')
       location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat')
+    } else if (!window.__FLUUX_RECOVERY_RESTART__ && window.__FLUUX_RECOVERY_SOURCE__ === 'retry-desync') {
+      // FLM-304: the desynced key opens the identity choice at startup; its
+      // folded retry asks macOS for the refused old item.
+      const advanced = () => [...document.querySelectorAll('[data-modal] button')].find(b => b.textContent.trim() === 'Advanced: ask the keychain again' && !b.disabled)
+      const ask = () => button('Ask macOS again')
+      // The prewarm and the normal unlock, then folding and opening the panel
+      // again, must not read the refused item.
+      const triggers = async label => {
+        const unlock = { ...account, userId: 'xmpp:you@fluux.chat' }
+        await window.__TAURI_INTERNALS__.invoke('openpgp_prewarm', unlock)
+        await window.__TAURI_INTERNALS__.invoke('openpgp_ensure_key', unlock)
+          .then(() => { throw new Error('the key unlocked without a press') }, () => {})
+        advanced().click()
+        await wait(() => advanced()?.getAttribute('aria-expanded') === 'false', label + ': folded keychain retry')
+        advanced().click()
+        return wait(() => advanced()?.getAttribute('aria-expanded') === 'true' && ask(), label + ': keychain retry action')
+      }
+      ;(await wait(advanced, 'keychain retry in the startup identity choice')).click()
+      await wait(ask, 'keychain retry action')
+      await triggers('before the first press')
+      await note('click-1')
+      ask().click()
+      await wait(() => [...document.querySelectorAll('[role="alert"]')].some(el => el.textContent === 'macOS refused access again. The key is still locked.') && ask(), 'second refusal shown')
+      await triggers('after the second refusal')
+      await window.__TAURI_INTERNALS__.invoke('recovery_grant_keychain')
+      await note('click-2')
+      ask().click()
+      await wait(() => !document.querySelector('[data-modal]'), 'identity choice closed by the unlock')
+      if (await retryOffered()) throw new Error('the keychain retry is still offered after the key unlocked')
+      location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat')
     } else if (!window.__FLUUX_RECOVERY_RESTART__) {
       ;(await wait(() => button(window.__FLUUX_RECOVERY_SOURCE__ === 'file' ? 'Import from a file' : 'Restore from server backup'), 'backup source chooser')).click()
       const input = await wait(() => document.querySelector('input[name="backup-code"], input[name="passphrase"]'), 'backup code field')
@@ -67,7 +97,7 @@
     }
     await wait(() => window.__demoClient?.e2ee?.getPlugin('openpgp')?.getOwnFingerprint() === fp && !document.querySelector('[data-modal]'), 'restored identity and closed dialog')
     await wait(() => window.__chatStore?.getState().messages.get('ava@fluux.chat')?.some(m => m.id === 'recovery-waiting' && m.body === meta.plaintext && !m.encryptedPayload) && document.body.textContent.includes(meta.plaintext), 'decrypted waiting message')
-    if (window.__FLUUX_RECOVERY_SOURCE__ !== 'retry') {
+    if (!window.__FLUUX_RECOVERY_SOURCE__.startsWith('retry')) {
       // FLM-304: a restored account is never offered the keychain retry, and a
       // direct request answers with the restored key; the host's operation log
       // rejects any old-item read after the restore.

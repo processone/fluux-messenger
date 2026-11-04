@@ -21,7 +21,7 @@ import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
 import { TrustStateCompromisedBanner } from '@/components/TrustStateCompromisedBanner'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { KeyPickerDialog } from '@/components/KeyPickerDialog'
-import { KeychainRetryPanel, supportsKeychainRetry } from './KeychainRetryPanel'
+import { KeychainRetryOffer } from '@/components/KeychainRetryPanel'
 import type { KeyBundle, BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
 import {
   probeRemoteIdentityState,
@@ -1157,13 +1157,11 @@ export function EncryptionSettings() {
         )}
 
         {/* FLM-304: last-resort retry of a refused keychain read, folded under
-            the restore entry and offered only when no backup can recover it. */}
-        {platform().shell === 'desktop' && platform().os === 'macos' && pluginStatus === 'recovery-needed' && (() => {
-          const plugin = client.e2ee?.getPlugin('openpgp')
-          return supportsKeychainRetry(plugin)
-            ? <KeychainRetryPanel plugin={plugin} onUnlocked={handleKeychainUnlocked} />
-            : null
-        })()}
+            the restore entry and offered only when no backup can recover it.
+            While the identity choice is open, the retry sits inside it. */}
+        {pluginStatus === 'recovery-needed' && !pendingIdentityChoice && (
+          <KeychainRetryOffer plugin={client.e2ee?.getPlugin('openpgp')} onUnlocked={handleKeychainUnlocked} />
+        )}
 
         {/* Backup to server — only when a key actually exists to back up. */}
         {pluginStatus === 'ready' && (
@@ -1495,6 +1493,16 @@ export function EncryptionSettings() {
           onImportFromFile={handleIdentityChoiceImportFile}
           onReplaceIdentity={handleIdentityChoiceReplace}
           onCancel={handleIdentityChoiceCancel}
+          advanced={pendingIdentityChoice.reason === 'local-key-unrecoverable' && (
+            <KeychainRetryOffer
+              plugin={client.e2ee?.getPlugin('openpgp')}
+              hintAction={t('settings.encryption.identityChoice.importFromFileTitle')}
+              onUnlocked={(unlockedFingerprint) => {
+                setPendingIdentityChoice(null)
+                handleKeychainUnlocked(unlockedFingerprint)
+              }}
+            />
+          )}
         />
       )}
 

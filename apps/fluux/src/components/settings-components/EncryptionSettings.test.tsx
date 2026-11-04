@@ -949,6 +949,29 @@ describe('macOS keychain retry panel', () => {
     expect(screen.getByText('decrypt persisted TSK: unexpected EOF')).toBeInTheDocument()
   })
 
+  // A desynced key opens the identity choice over this view, and its Cancel
+  // turns encryption off, so the retry must be reachable inside that choice.
+  it('sits inside the identity choice for a desynced key, and unlocking closes it with encryption on', async () => {
+    mockPlugin!.isKeyStorageUnavailable = () => false
+    render(<EncryptionSettings />)
+    const replace = await screen.findByRole('button', { name: /settings.encryption.identityChoice.replaceTitle/ })
+    const title = await screen.findByRole('button', { name: panelTitle })
+    expect(replace.closest('[data-modal]')).toContainElement(title)
+    expect(screen.getAllByRole('button', { name: panelTitle })).toHaveLength(1)
+    fireEvent.click(title)
+    expect(retryKeychainAccess).not.toHaveBeenCalled()
+
+    retryKeychainAccess.mockImplementationOnce(async () => {
+      unlockedFingerprint = FINGERPRINT
+      return { fingerprint: FINGERPRINT }
+    })
+    fireEvent.click(retryButton())
+    expect(await screen.findByText('settings.encryption.statusReady')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /settings.encryption.identityChoice.replaceTitle/ })).not.toBeInTheDocument()
+    expect(useEncryptionSettingsStore.getState().openpgpEnabled).toBe(true)
+    expect(useToastStore.getState().toasts.map(t => [t.type, t.message])).toEqual([['success', 'settings.encryption.keychainRetry.success']])
+  })
+
   it('is absent when the plugin does not offer the retry', async () => {
     mockPlugin!.isKeychainRetryOffered = vi.fn(async () => false)
     render(<EncryptionSettings />)

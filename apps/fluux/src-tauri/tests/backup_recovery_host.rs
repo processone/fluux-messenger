@@ -2,7 +2,9 @@
 //! production OpenPGP commands with test-only storage constructors. There is no
 //! OS credential store, signing or installed application access.
 //! FLM-304 adds the `retry` journey: the user's explicit retry of a refused
-//! keychain read from the Settings Advanced panel.
+//! keychain read from the Settings Advanced panel, and `retry-desync`: the same
+//! retry inside the startup identity choice, for a key whose combined item holds
+//! a stale passphrase and whose refused old item holds the real one.
 #![allow(dead_code)]
 #[cfg(not(test))]
 compile_error!("the recovery host requires test-only storage constructors");
@@ -209,7 +211,7 @@ mod host {
         {
             return Err("decrypt mismatch".into());
         }
-        let retry = fixture.source == "retry";
+        let retry = fixture.source.starts_with("retry");
         let fresh = fixture.raw.fresh_accounts().map_err(|e| e.to_string())?;
         // The retry unlocks the existing key; it never restores into fresh items.
         let expected_fresh: &[&str] = if retry {
@@ -270,13 +272,20 @@ mod host {
         }
         // FLM-304: one refused read at startup, then one OS request per click;
         // showing and opening the panel, or a normal unlock, reads nothing.
-        // recovery_note proved the key file unchanged up to each press.
+        // recovery_note proved the key file unchanged up to each press. A
+        // refused migration stops at its first item; a desynced key asks only
+        // for its own old item.
         if retry && !fixture.restart {
-            let refused = vec!["last_user".to_string()];
+            let (refused, granted) = if fixture.source == "retry-desync" {
+                let own = vec![format!("openpgp_passphrase:{JID}")];
+                (own.clone(), own)
+            } else {
+                (vec!["last_user".to_string()], OLD_ITEMS.map(String::from).to_vec())
+            };
             let expected = vec![
                 ("startup".to_string(), refused.clone()),
                 ("click-1".to_string(), refused),
-                ("click-2".to_string(), OLD_ITEMS.map(String::from).to_vec()),
+                ("click-2".to_string(), granted),
             ];
             let steps = old_reads_by_step(&operations);
             if steps != expected {
@@ -308,7 +317,7 @@ mod host {
         fs::create_dir_all(&root).unwrap();
         let restart = root.join("restore-passed").exists();
         let source = std::env::var("FLUUX_RECOVERY_SOURCE").unwrap_or_else(|_| "server".into());
-        assert!(["server", "file", "retry"].contains(&source.as_str()));
+        assert!(["server", "file", "retry", "retry-desync"].contains(&source.as_str()));
         let raw = Files {
             root: root.clone(),
             lock: Arc::new(Mutex::new(())),
@@ -332,7 +341,7 @@ mod host {
                 .encrypt(JID, &[original.public_armored], &envelope)
                 .unwrap();
             fs::write(root.join("original-ciphertext.asc"), ciphertext).unwrap();
-            if source == "retry" {
+            if source.starts_with("retry") {
                 // FLM-304: the old keychain item holds this key's real
                 // passphrase, so only a granted read of it unlocks the key.
                 let pass = root.join("keys").join("openpgp").join(format!("{JID}.pass"));
@@ -341,6 +350,14 @@ mod host {
                     format!("openpgp_passphrase:{JID}"),
                     fs::read_to_string(&pass).unwrap().trim().into(),
                 );
+                if source == "retry-desync" {
+                    // The combined item exists, so nothing migrates, and its
+                    // stale passphrase leaves the key desynced.
+                    items.insert(
+                        "secrets-v1".into(),
+                        serde_json::json!({"version": 1, "items": {format!("openpgp_passphrase:{JID}"): "b2xk"}}).to_string(),
+                    );
+                }
                 fs::write(root.join("fixture-items.json"), serde_json::to_vec(&items).unwrap()).unwrap();
                 fs::remove_file(pass).unwrap();
             }
@@ -377,7 +394,7 @@ mod host {
                 openpgp::openpgp_validate_cert, openpgp::openpgp_encrypt, openpgp::openpgp_decrypt])
             .setup(move |app| {
                 // The retry is offered only when the server has no backup.
-                let url = format!("http://127.0.0.1:5197/demo.html?tutorial=false&e2ee=recovery{}", if source == "retry" { "&recoveryBackup=absent" } else { "" });
+                let url = format!("http://127.0.0.1:5197/demo.html?tutorial=false&e2ee=recovery{}", if source.starts_with("retry") { "&recoveryBackup=absent" } else { "" });
                 tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::External(url.parse().unwrap()))
                     .initialization_script(format!("window.__FLUUX_RECOVERY_RESTART__ = {}; window.__FLUUX_RECOVERY_META__ = {}; window.__FLUUX_RECOVERY_SOURCE__ = {};", restart, metadata(), serde_json::to_string(&source).unwrap()))
                     .initialization_script(format!("window.__FLUUX_RECOVERY_EXPECTED_BUILD__ = {};", serde_json::to_string(&std::env::var("FLUUX_RECOVERY_BUILD").expect("run the recovery launcher to identify its app build")).unwrap()))

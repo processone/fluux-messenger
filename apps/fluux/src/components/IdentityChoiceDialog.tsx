@@ -46,6 +46,11 @@ interface IdentityChoiceDialogProps {
   onReplaceIdentity: () => Promise<void>
   /** Closes the dialog without doing anything. Caller decides what to roll back. */
   onCancel: () => void
+  /**
+   * A last-resort recovery the caller adds below the three choices while
+   * the user is still choosing, such as the macOS keychain retry (FLM-304).
+   */
+  advanced?: React.ReactNode
 }
 
 /**
@@ -74,6 +79,7 @@ export function IdentityChoiceDialog({
   onImportFromFile,
   onReplaceIdentity,
   onCancel,
+  advanced,
 }: IdentityChoiceDialogProps) {
   const { t } = useTranslation()
   const bodyKey =
@@ -216,6 +222,7 @@ export function IdentityChoiceDialog({
                 onClick={handleStartReplace}
                 danger
               />
+              {advanced}
             </div>
           )}
 

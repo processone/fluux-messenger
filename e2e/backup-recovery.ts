@@ -375,6 +375,68 @@ test('the keychain retry stays hidden on desktop Windows', async ({ page }) => {
   expect(await retryReads(page)).toBe(0)
 })
 
+// Intent FLM-304: "in case there is no other way to recover the key". A desynced
+// key whose old keychain item macOS refused opens the identity choice instead of
+// Settings' restore entry, so the folded retry sits inside that choice, at
+// startup and in Settings. The fixture refuses the first retried read.
+for (const entry of ['startup', 'Settings']) {
+  test(`a desynced key with a refused keychain item offers the retry inside the identity choice in ${entry}`, async ({ page }) => {
+    await bootDemo(page, '/demo.html?tutorial=false&e2ee=recovery&recoveryFailure=desync-refused&recoveryBackup=absent')
+    expect(await audit(page)).toMatchObject({ build: expectedBuild })
+    const choice = JSON.parse(readFileSync(new URL('../apps/fluux/src/i18n/locales/en.json', import.meta.url), 'utf8')).settings.encryption.identityChoice
+    const dialog = page.locator('[data-modal="true"]')
+    const replace = dialog.getByRole('button', { name: new RegExp(choice.replaceTitle) })
+    await expect(replace).toBeEnabled()
+    await expect(dialog.getByRole('button', { name: new RegExp(choice.restoreFromServerTitle) })).toBeDisabled()
+    if (entry === 'Settings') {
+      // The startup Cancel only closes the choice; Settings opens it again.
+      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await expect(replace).toBeHidden()
+      await page.evaluate(() => { location.hash = '/settings/encryption' })
+      await expect(replace).toBeEnabled()
+    }
+    const advanced = dialog.getByRole('button', { name: keychainRetryTitle, exact: true })
+    await expect(advanced).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByRole('button', { name: keychainRetryTitle, exact: true })).toHaveCount(1)
+    if (entry === 'startup') await capture(page, 'after-desync-keychain-retry-folded.png')
+    await advanced.click()
+    const ask = dialog.getByRole('button', { name: keychainRetry.action, exact: true })
+    await expect(ask).toBeVisible()
+    await expect(dialog.getByText(keychainRetry.backupHint.replace('{{action}}', choice.importFromFileTitle), { exact: true })).toBeVisible()
+    expect(await retryReads(page), 'Showing or opening the retry must not read the keychain').toBe(0)
+    if (entry === 'startup') await capture(page, 'after-desync-keychain-retry-open.png')
+
+    await ask.click()
+    await expect(dialog.getByRole('alert')).toHaveText(keychainRetry.refusedAgain)
+    await expect(replace).toBeEnabled()
+    await expect(ask).toBeEnabled()
+    expect(await retryReads(page)).toBe(1)
+    if (entry === 'startup') await capture(page, 'after-desync-keychain-refused-again.png')
+
+    await ask.click()
+    await expect(replace).toBeHidden()
+    await expect(page.getByText(keychainRetry.success, { exact: true })).toBeVisible()
+    expect(await retryReads(page)).toBe(2)
+    expect(await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').getOwnFingerprint())).toBe(fingerprint)
+    const unlocked = await audit(page)
+    for (const effect of ['openpgp_backup_import_all', 'openpgp_backup_import_selected', 'openpgp_forget_account', 'openpgp_rotate_encryption_subkey']) {
+      expect(unlocked.commands).not.toContain(effect)
+    }
+    expect(unlocked.publications).toContain('urn:xmpp:openpgp:0:public-keys')
+    expect(unlocked.publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
+    if (entry === 'Settings') {
+      // Closing the choice by unlocking leaves encryption on, unlike its Cancel.
+      await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()
+      await expect(page.getByRole('switch', { name: 'OpenPGP end-to-end encryption', exact: true })).toHaveAttribute('aria-checked', 'true')
+      await capture(page, 'after-desync-keychain-unlocked-settings.png')
+    } else {
+      await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
+      await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
+      await capture(page, 'after-desync-keychain-decrypted-message.png')
+    }
+  })
+}
+
 for (const backup of ['present', 'unknown']) {
   test(`the keychain retry stays hidden when a ${backup} server backup may recover the key`, async ({ page }) => {
     await bootDemo(page, '/demo.html?tutorial=false&e2ee=recovery')

@@ -16,7 +16,11 @@ import meta from '@/e2ee/fixtures/sequoia_meta.json'
 
 export function createBackupRecoveryFixture() {
   const params = new URLSearchParams(location.search)
-  const desync = params.get('recoveryFailure') === 'desync'
+  const failure = params.get('recoveryFailure')
+  const desync = failure === 'desync' || failure === 'desync-refused'
+  // FLM-304: a refusal is held for the launch, of the protected storage or,
+  // with desync-refused, of the old item that may hold this key's passphrase.
+  const refusalHeld = failure !== 'desync'
   const backupAbsent = params.get('recoveryBackup') === 'absent'
   // FLM-304: the user refuses the first macOS prompt the explicit retry opens.
   let retryReads = 0
@@ -43,10 +47,10 @@ export function createBackupRecoveryFixture() {
       throw new Error('openpgp-storage-unavailable: macOS keychain (-25293): authorization refused')
     }
     // The refusal is held for the launch until the user's explicit retry.
-    if (cmd === 'openpgp_keychain_retry_available') return (!installed && !desync) as T
+    if (cmd === 'openpgp_keychain_retry_available') return (!installed && refusalHeld) as T
     if (cmd === 'openpgp_retry_keychain_access') {
       if (installed) return installed as T
-      if (desync) throw new Error(`openpgp-keychain-retry-unavailable: no refused keychain access to retry for ${args!.accountJid}`)
+      if (!refusalHeld) throw new Error(`openpgp-keychain-retry-unavailable: no refused keychain access to retry for ${args!.accountJid}`)
       retryReads++
       if (retryReads === 1) throw new Error('openpgp-keychain-refused: access to the protected items was refused again')
       const key = await privateKey()

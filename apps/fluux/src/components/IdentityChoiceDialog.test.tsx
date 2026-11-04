@@ -347,6 +347,27 @@ describe('IdentityChoiceDialog', () => {
     ).toBeInTheDocument()
   })
 
+  // Intent FLM-304: a desynced key's last-resort keychain retry sits with the
+  // choices, so it never mixes into a restore or replacement already started.
+  it('shows a caller-supplied advanced recovery only while the user is choosing', () => {
+    render(
+      <IdentityChoiceDialog
+        {...baseProps}
+        reason="local-key-unrecoverable"
+        advanced={<button type="button">advanced recovery</button>}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'advanced recovery' })).toBeInTheDocument()
+    fireEvent.click(
+      screen
+        .getByText('settings.encryption.identityChoice.restoreFromServerTitle')
+        .closest('button')!,
+    )
+    expect(screen.queryByRole('button', { name: 'advanced recovery' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'common.back' }))
+    expect(screen.getByRole('button', { name: 'advanced recovery' })).toBeInTheDocument()
+  })
+
   it('escape during sub-phase returns to chooser without dismissing the dialog', () => {
     render(<IdentityChoiceDialog {...baseProps} />)
     fireEvent.click(

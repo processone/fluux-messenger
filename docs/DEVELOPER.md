@@ -472,7 +472,10 @@ press. A granted read unlocks the existing key in place, and the App then publis
 waiting messages as after a normal start. The retry never generates, restores or deletes a key, and an
 account restored into fresh storage never reads its old items again. The panel stays hidden while a
 server backup exists or its probe fails, while a restore awaits restart, once the key is unlocked,
-and outside desktop macOS.
+and outside desktop macOS. A desynced key, whose refused item is its own old passphrase item, opens the
+identity choice instead (at startup and in Settings), so the same folded panel sits inside that
+choice, below its three options, rather than under the restore entry it covers. Unlocking closes the
+choice and leaves encryption on; the choice's Cancel keeps its earlier meaning.
 
 The controlled fixture uses committed encrypted backups, DemoClient's local protocol primitives,
 and the actual App/plugin/SDK deferred-decrypt path. Browser tests mock native IPC. The opt-in
@@ -490,6 +493,7 @@ FLUUX_E2E_PORT=5197 npm run test:e2e -- --project=backup-recovery-chromium --pro
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-server server
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-file file
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-retry retry
+bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-retry-desync retry-desync
 ```
 
 Each native invocation runs restore and process restart with the same scratch storage, bounds its
@@ -500,7 +504,11 @@ the key's real passphrase in its old fixture item, declines the startup restore,
 panel, refuses the first press and allows the second. Before each press it also calls the login
 prewarm and the normal unlock and reopens Settings, which must read nothing. Its operation log must
 show one refused old-item read at startup and one OS request per press, the key file unchanged until
-the granted press, no fresh-account route, and no old-item read after restart. After each restore,
+the granted press, no fresh-account route, and no old-item read after restart. The `retry-desync`
+journey gives the combined item a stale passphrase, so nothing migrates and the key is desynced; it
+runs the same presses from the panel inside the startup identity choice, and its log must show only
+that account's old item, once at startup and once per press, then only the combined item after
+restart. After each restore,
 the `server` and `file` journeys check that the restored account is not offered the retry, that a
 direct retry request answers with the restored key, and that nothing reads an old item. These fixtures prove the
 application and injected native storage chain, not a real login keychain, signing identity, remote
