@@ -471,7 +471,8 @@ like the first; any other failure keeps the earlier refusal, so nothing reads ag
 press. A granted read unlocks the existing key in place, and the App then publishes it and decrypts
 waiting messages as after a normal start. The retry never generates, restores or deletes a key, and an
 account restored into fresh storage never reads its old items again. The panel stays hidden while a
-server backup exists or its probe fails, while a restore awaits restart, and once the key is unlocked.
+server backup exists or its probe fails, while a restore awaits restart, once the key is unlocked,
+and outside desktop macOS.
 
 The controlled fixture uses committed encrypted backups, DemoClient's local protocol primitives,
 and the actual App/plugin/SDK deferred-decrypt path. Browser tests mock native IPC. The opt-in
@@ -496,10 +497,12 @@ owned processes and refuses to replay an existing lab. It substitutes `security`
 commands and rejects any attempted use. The host runs only with `--run-recovery-host` and a scratch
 HOME marker; normal `cargo test` compiles it but does not open a window. The `retry` journey keeps
 the key's real passphrase in its old fixture item, declines the startup restore, opens the Settings
-panel, refuses the first press and allows the second. Before each press it also calls the normal
-unlock and reopens Settings, which must read nothing. Its operation log must show one refused
-old-item read at startup and one OS request per press, the key file unchanged until the granted
-press, no fresh-account route, and no old-item read after restart. These fixtures prove the
+panel, refuses the first press and allows the second. Before each press it also calls the login
+prewarm and the normal unlock and reopens Settings, which must read nothing. Its operation log must
+show one refused old-item read at startup and one OS request per press, the key file unchanged until
+the granted press, no fresh-account route, and no old-item read after restart. After each restore,
+the `server` and `file` journeys check that the restored account is not offered the retry, that a
+direct retry request answers with the restored key, and that nothing reads an old item. These fixtures prove the
 application and injected native storage chain, not a real login keychain, signing identity, remote
 XMPP service or another person's Mac. Real keychain qualification remains separate.
 

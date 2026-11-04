@@ -25,7 +25,8 @@ export function createBackupRecoveryFixture() {
     mockWindows('main')
     mockIPC((cmd, args) => cmd.startsWith('openpgp_') ? invoke(cmd, args as Record<string, unknown>) : cmd === 'plugin:share-inbox|list' ? [] : null, { shouldMockEvents: true })
   }
-  setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+  // FLM-304: a journey may run as desktop Windows to show the macOS-only retry stays hidden.
+  setPlatformForTesting({ shell: 'desktop', os: params.get('recoveryOs') === 'windows' ? 'windows' : 'macos' })
   setPlatformForTesting({ ...platform(), hasInAppUpdates: false })
   const audit = { native, build: __GIT_COMMIT__, commands: [] as string[], publications: [] as string[] }
   ;(window as any).__recoveryFixture = audit

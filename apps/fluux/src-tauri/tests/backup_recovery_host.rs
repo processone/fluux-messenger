@@ -254,6 +254,20 @@ mod host {
         {
             return Err("restart read an old item".into());
         }
+        // FLM-304: once a restore routes the account to fresh storage, nothing
+        // reads an old item again, including the driver's direct retry request.
+        if !retry {
+            let restore = operations.split("phase restart\n").next().unwrap();
+            let Some((_, after_route)) = restore.split_once("\nmark ") else {
+                return Err("the restore never routed the account to fresh storage".into());
+            };
+            if after_route.lines().any(|line| {
+                line.strip_prefix("read ")
+                    .is_some_and(|item| OLD_ITEMS.contains(&item))
+            }) {
+                return Err("an old item was read after the restore".into());
+            }
+        }
         // FLM-304: one refused read at startup, then one OS request per click;
         // showing and opening the panel, or a normal unlock, reads nothing.
         // recovery_note proved the key file unchanged up to each press.

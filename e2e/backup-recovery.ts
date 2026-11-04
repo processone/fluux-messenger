@@ -352,6 +352,22 @@ test('the advanced keychain retry asks macOS only on request and unlocks the sam
   expect(await retryReads(page)).toBe(0)
 })
 
+// Intent FLM-304: the retry asks the macOS keychain again, so it is offered on
+// desktop macOS only, even when another OS reports the same refusal and no backup.
+test('the keychain retry stays hidden on desktop Windows', async ({ page }) => {
+  await bootDemo(page, '/demo.html?tutorial=false&e2ee=recovery&recoveryBackup=absent&recoveryOs=windows')
+  expect(await audit(page)).toMatchObject({ build: expectedBuild })
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await page.evaluate(() => { location.hash = '/settings/encryption' })
+  await expect(page.getByText('The local key could not be unlocked.', { exact: false })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Restore from backup', exact: true })).toBeEnabled()
+  // On macOS the panel asks the native probe as soon as this view renders.
+  expect((await audit(page)).commands).not.toContain('openpgp_keychain_retry_available')
+  await expect(page.getByRole('button', { name: keychainRetryTitle, exact: true })).toBeHidden()
+  expect(await retryReads(page)).toBe(0)
+  await capture(page, 'keychain-retry-hidden-windows.png')
+})
+
 for (const backup of ['present', 'unknown']) {
   test(`the keychain retry stays hidden when a ${backup} server backup may recover the key`, async ({ page }) => {
     await bootDemo(page, '/demo.html?tutorial=false&e2ee=recovery')
