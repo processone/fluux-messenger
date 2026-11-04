@@ -89,6 +89,26 @@ import UniformTypeIdentifiers
         }
     }
 
+    /// FLM-418 R8: the widget is told when the names change owner, and only then.
+    static func widgetReloadOnAccountChange() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        func update(_ account: String?) {
+            let done = DispatchSemaphore(value: 0)
+            ShareSuggestions.update(SharedNames(account: account), root: root, deleteAll: { $0(nil) }, delete: { $1(nil) },
+                                    accountChanged: { reloads += 1 }) { _ in done.signal() }
+            precondition(done.wait(timeout: .now() + 5) == .success)
+        }
+        var reloads = 0
+        update("me@example.com")
+        precondition(reloads == 1, "Signing in reloads the widget")
+        update("me@example.com")
+        precondition(reloads == 1, "The same account leaves it alone")
+        update(nil)
+        precondition(reloads == 2, "Signing out reloads it")
+    }
+
     /// An opted-in snapshot that does not cover the sender leaves the server's body alone.
     static func uncoveredBody() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -421,6 +441,8 @@ import UniformTypeIdentifiers
             try! roomParticipants()
         case "account-guard":
             accountGuard()
+        case "widget-reload":
+            try! widgetReloadOnAccountChange()
         case "stalled-mirror-cleanup":
             try! stalledMirrorCleanup()
         case "signed-out":

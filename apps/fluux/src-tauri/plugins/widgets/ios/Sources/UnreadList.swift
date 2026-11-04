@@ -41,6 +41,13 @@ struct UnreadList: Codable, Equatable {
         return try? JSONDecoder().decode(UnreadList.self, from: data)
     }
 
+    /// What the widget may show for the account the shared names confirm. A list written for another
+    /// account, or before the names caught up, is hidden and `awaitingAccount` asks for another look soon.
+    static func shown(root: URL?, account: String?) -> (list: UnreadList?, awaitingAccount: Bool) {
+        guard let written = load(root: root) else { return (nil, false) }
+        return written.account == account ? (written, false) : (nil, true)
+    }
+
     /// The app and the notification extension are separate processes that both change the file, so
     /// every change takes this lock: a push cannot overwrite a newer list with an older one, or bring
     /// back a list the app just emptied for a sign-out.

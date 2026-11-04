@@ -128,6 +128,18 @@ import UserNotifications
             precondition(UnreadList.when(message, now: inThree, calendar: calendar, locale: locale) == "Mon")
             precondition(!UnreadList.when(message, now: inTen, calendar: calendar, locale: locale).contains(":"))
             precondition(UnreadList.when(message, now: nextDay, calendar: calendar, locale: Locale(identifier: "fr_FR")) == "Hier")
+        case "mismatched-owner":
+            // FLM-418 R8: a list ahead of the names is hidden and asks for another look; a match shows it.
+            try fixture().write(root: root)
+            var result = UnreadList.shown(root: root, account: nil)
+            precondition(result.list == nil && result.awaitingAccount, "Names that have not caught up hide the list and retry")
+            result = UnreadList.shown(root: root, account: "other@example.com")
+            precondition(result.list == nil && result.awaitingAccount, "Another account's list is hidden")
+            result = UnreadList.shown(root: root, account: account)
+            precondition(result.list != nil && !result.awaitingAccount, "The confirmed account's list shows")
+            try UnreadList.clear(root: root)
+            result = UnreadList.shown(root: root, account: nil)
+            precondition(result.list == nil && !result.awaitingAccount, "A signed-out app with no list has nothing to wait for")
         case "clear-wins":
             try fixture().write(root: root)
             try UnreadList.clear(root: root)

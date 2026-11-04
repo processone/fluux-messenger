@@ -30,10 +30,10 @@ struct UnreadProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<UnreadEntry>) -> Void) {
         // The app asks for a redraw whenever the list changes. Between changes the labels still move
         // on: an entry at each midnight turns a time into "Yesterday" and then a weekday.
-        let now = current()
+        let (now, awaitingAccount) = shown()
         // A list whose account the names do not yet confirm is the app mid-sign-in: the two files are
         // written moments apart. Look again soon, so a signed-out entry is not kept for days.
-        if now.list == nil, let written = UnreadList.load(root: NotificationMirror.root), written.account != now.names.account {
+        if awaitingAccount {
             completion(Timeline(entries: [now], policy: .after(now.date.addingTimeInterval(60))))
             return
         }
@@ -43,12 +43,14 @@ struct UnreadProvider: TimelineProvider {
         completion(Timeline(entries: entries, policy: .atEnd))
     }
 
-    private func current() -> UnreadEntry {
+    private func current() -> UnreadEntry { shown().0 }
+
+    private func shown() -> (UnreadEntry, Bool) {
         let root = NotificationMirror.root
         let names = SharedNames.load(root: root)
         // The list belongs to the account the app is signed in with; a signed-out or switched app leaves none to show.
-        let list = UnreadList.load(root: root).flatMap { $0.account == names.account ? $0 : nil }
-        return UnreadEntry(date: Date(), list: list, names: names)
+        let shown = UnreadList.shown(root: root, account: names.account)
+        return (UnreadEntry(date: Date(), list: shown.list, names: names), shown.awaitingAccount)
     }
 
     /// Sample data for the gallery, not the user's conversations.
