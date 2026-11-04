@@ -953,7 +953,9 @@
                 "busy": "Se așteaptă macOS…",
                 "refusedAgain": "macOS a refuzat din nou accesul. Cheia rămâne blocată.",
                 "failed": "Cheia nu a putut fi deblocată.",
-                "success": "Cheie deblocată"
+                "success": "Cheie deblocată",
+                "readyBody": "macOS a permis accesul după ce cererea anterioară a expirat. Cheia este deblocată, dar nu este încă folosită.",
+                "readyAction": "Folosește cheia deblocată"
             },
             "restoreAction": "Restaurează de pe server",
             "restoreDialogTitle": "Restaurează cheia OpenPGP din copia de rezervă",

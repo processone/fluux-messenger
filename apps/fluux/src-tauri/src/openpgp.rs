@@ -161,6 +161,34 @@ pub struct DecryptOutput {
 #[path = "openpgp_notification_subkeys.rs"]
 mod notification_subkeys;
 
+/// What the recovery panel may do with `account_jid`'s locked key (FLM-304).
+/// Answered from cached state only, never from the keychain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum KeychainRetryAvailability {
+    /// No refusal is held and no key is unlocked, so nothing is left to do.
+    NotHeld,
+    /// The user refused the items this launch, and nothing has read them since.
+    Held,
+    /// A keychain read is under way, perhaps an earlier retry still waiting on
+    /// the user's answer. Its outcome decides, so neither answer holds yet.
+    Pending,
+    /// The key is unlocked here, for example by a retry whose prompt the user
+    /// allowed after its caller stopped waiting (FLM-408 R5). Using it reads
+    /// no keychain item.
+    Unlocked,
+}
+
+impl From<RefusalState> for KeychainRetryAvailability {
+    fn from(state: RefusalState) -> Self {
+        match state {
+            RefusalState::NotHeld => Self::NotHeld,
+            RefusalState::Held => Self::Held,
+            RefusalState::Pending => Self::Pending,
+        }
+    }
+}
+
 /// State held by the Tauri managed-state system. One entry per logged-in
 /// account, keyed on the bare JID.
 ///
@@ -452,15 +480,23 @@ impl OpenpgpState {
     /// this launch holds the user's refusal of the items that unlock it.
     /// `Pending` while a keychain read is under way, such as a retry still
     /// waiting on the user's answer: the panel must not take that for a
-    /// consumed refusal. It never reads the keychain and never waits.
-    pub fn keychain_retry_available(&self, account_jid: &str) -> Result<RefusalState, String> {
-        if self.read_cached_bundle(account_jid, "account").is_ok()
-            || !self.storage.has_persisted_key(account_jid)
-        {
-            return Ok(RefusalState::NotHeld);
+    /// consumed refusal. `Unlocked` once the key is unlocked here, so a
+    /// retry whose late answer unlocked it can still be used: the next retry
+    /// returns that key without a read. It never reads the keychain and
+    /// never waits.
+    pub fn keychain_retry_available(
+        &self,
+        account_jid: &str,
+    ) -> Result<KeychainRetryAvailability, String> {
+        if self.read_cached_bundle(account_jid, "account").is_ok() {
+            return Ok(KeychainRetryAvailability::Unlocked);
+        }
+        if !self.storage.has_persisted_key(account_jid) {
+            return Ok(KeychainRetryAvailability::NotHeld);
         }
         self.storage
             .refused_access(account_jid)
+            .map(KeychainRetryAvailability::from)
             .map_err(anyhow_to_string)
     }
 
@@ -1043,13 +1079,14 @@ pub fn openpgp_has_persisted_key(account_jid: String, state: State<'_, Arc<Openp
 }
 
 /// Whether the recovery panel may offer to ask the OS again for the items
-/// the user refused this launch: `"held"`, `"not-held"`, or `"pending"` while
-/// a keychain read is under way. Reads only cached answers, never the keychain.
+/// the user refused this launch: `"held"`, `"not-held"`, `"pending"` while
+/// a keychain read is under way, or `"unlocked"` once the key is unlocked
+/// here. Reads only cached answers, never the keychain.
 #[tauri::command]
 pub fn openpgp_keychain_retry_available(
     account_jid: String,
     state: State<'_, Arc<OpenpgpState>>,
-) -> Result<RefusalState, String> {
+) -> Result<KeychainRetryAvailability, String> {
     state.keychain_retry_available(&account_jid)
 }
 
@@ -3078,7 +3115,7 @@ mod tests {
         // all keep the refusal without asking the keychain.
         assert!(state.ensure_key_sync(jid, "Alice").is_err());
         state.prewarm(jid.into(), "Alice".into());
-        assert_eq!(state.keychain_retry_available(jid), Ok(RefusalState::Held));
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
         assert!(state.ensure_key_sync(jid, "Alice").is_err());
         assert_eq!(keychain.reads(), 1, "no read without the user's request");
 
@@ -3087,7 +3124,7 @@ mod tests {
         assert!(again.starts_with("openpgp-keychain-refused:"), "{again}");
         assert_eq!(keychain.reads(), 2);
         assert!(state.ensure_key_sync(jid, "Alice").is_err());
-        assert_eq!(state.keychain_retry_available(jid), Ok(RefusalState::Held));
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
         assert_eq!(keychain.reads(), 2);
 
         // The user grants access on the next request.
@@ -3099,7 +3136,7 @@ mod tests {
         assert_eq!(state.decrypt(jid, &ciphertext, &[]).unwrap().plaintext, "waiting message");
         assert_eq!(state.ensure_key_sync(jid, "Alice").unwrap().fingerprint, original.fingerprint);
         assert_eq!(state.blocking_run_count(), runs, "the retry primed the unlocked key");
-        assert_eq!(state.keychain_retry_available(jid), Ok(RefusalState::NotHeld));
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Unlocked));
         assert_eq!(
             rt.block_on(state.retry_keychain_access(jid.into())).unwrap().fingerprint,
             original.fingerprint
@@ -3123,7 +3160,7 @@ mod tests {
         let dir = fresh_tmp_dir();
         let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
         let state = keychain.launch(&dir);
-        assert_eq!(state.keychain_retry_available("carol@example.com"), Ok(RefusalState::NotHeld));
+        assert_eq!(state.keychain_retry_available("carol@example.com"), Ok(KeychainRetryAvailability::NotHeld));
         let unavailable = rt
             .block_on(state.retry_keychain_access("carol@example.com".into()))
             .unwrap_err();
@@ -3158,7 +3195,7 @@ mod tests {
         let old_reads = || keychain.reads.lock().unwrap().iter().filter(|a| *a == account).count();
         assert_eq!(old_reads(), 1);
         assert!(state.ensure_key_sync(jid, "Alice").is_err());
-        assert_eq!(state.keychain_retry_available(jid), Ok(RefusalState::Held));
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
         assert_eq!(old_reads(), 1, "no read without the user's request");
 
         keychain.refuse(&[]);
@@ -3189,7 +3226,7 @@ mod tests {
 
         let state = keychain.launch(&dir);
         assert!(state.ensure_key_sync(jid, "Alice").is_err());
-        assert_eq!(state.keychain_retry_available(jid), Ok(RefusalState::Held));
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
         let old_reads = || keychain.reads.lock().unwrap().iter().filter(|a| *a == account).count();
         assert_eq!(old_reads(), 1);
 
@@ -3197,7 +3234,7 @@ mod tests {
         let failed = rt.block_on(state.retry_keychain_access(jid.into())).unwrap_err();
         assert!(!failed.starts_with("openpgp-keychain-refused:"), "{failed}");
         assert_eq!(old_reads(), 2);
-        assert_eq!(state.keychain_retry_available(jid), Ok(RefusalState::NotHeld));
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::NotHeld));
         let unavailable = rt.block_on(state.retry_keychain_access(jid.into())).unwrap_err();
         assert!(unavailable.starts_with("openpgp-keychain-retry-unavailable:"), "{unavailable}");
         assert_eq!(old_reads(), 2, "nothing is left to ask again");
@@ -3216,7 +3253,7 @@ mod tests {
         keychain.reads.lock().unwrap().clear();
         let state = keychain.launch(&dir);
         assert!(state.ensure_key_sync(jid, "Alice").is_err());
-        assert_eq!(state.keychain_retry_available(jid), Ok(RefusalState::Held));
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
         assert_eq!(keychain.reads(), 1);
 
         let answer = keychain.open_prompt();
@@ -3230,14 +3267,63 @@ mod tests {
         while keychain.reads() < 2 {
             std::thread::yield_now();
         }
-        assert_eq!(state.keychain_retry_available(jid), Ok(RefusalState::Pending));
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Pending));
 
         // The user refuses on the prompt that stayed open.
         answer.send(()).unwrap();
         let refused = retry.join().unwrap().unwrap_err();
         assert!(refused.starts_with("openpgp-keychain-refused:"), "{refused}");
-        assert_eq!(state.keychain_retry_available(jid), Ok(RefusalState::Held));
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
         assert_eq!(keychain.reads(), 2, "asking while the prompt was open read nothing");
+    }
+
+    /// FLM-408 R5: the user allows a retry's prompt only after the App
+    /// stopped waiting for it. The key is then unlocked here while the App
+    /// still has it locked, so asking answers `Unlocked`, not `NotHeld`, and
+    /// the next request returns that key without reading the keychain.
+    #[test]
+    fn flm304_a_retry_allowed_after_its_caller_gave_up_leaves_the_key_ready() {
+        let jid = "alice@example.com";
+        let keychain = RefusingKeychain::default();
+        let dir = fresh_tmp_dir();
+        let original = keychain.launch(&dir).ensure_key_sync(jid, "Alice").unwrap();
+        let files = key_files(&dir);
+        keychain.refuse(&["secrets-v1"]);
+        keychain.reads.lock().unwrap().clear();
+        let state = keychain.launch(&dir);
+        assert!(state.ensure_key_sync(jid, "Alice").is_err());
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Held));
+
+        // The App's request outlives its time limit on the open prompt; its
+        // caller no longer waits for the answer.
+        let answer = keychain.open_prompt();
+        let retry = {
+            let state = Arc::clone(&state);
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+                rt.block_on(state.retry_keychain_access(jid.into()))
+            })
+        };
+        while keychain.reads() < 2 {
+            std::thread::yield_now();
+        }
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Pending));
+
+        // The user then allows that prompt.
+        keychain.refuse(&[]);
+        answer.send(()).unwrap();
+        assert_eq!(retry.join().unwrap().unwrap().fingerprint, original.fingerprint);
+        assert_eq!(state.keychain_retry_available(jid), Ok(KeychainRetryAvailability::Unlocked));
+        assert_eq!(keychain.reads(), 2);
+
+        // The panel's next press uses that key and asks the keychain nothing.
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        assert_eq!(
+            rt.block_on(state.retry_keychain_access(jid.into())).unwrap().fingerprint,
+            original.fingerprint
+        );
+        assert_eq!(keychain.reads(), 2, "using the unlocked key reads nothing");
+        assert_eq!(key_files(&dir), files, "no key generated, replaced or deleted");
     }
 
     // ---- encryption-subkey rotation --------------------------------

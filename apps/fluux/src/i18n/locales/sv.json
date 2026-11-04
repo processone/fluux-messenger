@@ -949,7 +949,9 @@
                 "busy": "Väntar på macOS …",
                 "refusedAgain": "macOS nekade åtkomst igen. Nyckeln är fortfarande låst.",
                 "failed": "Nyckeln kunde inte låsas upp.",
-                "success": "Nyckel upplåst"
+                "success": "Nyckel upplåst",
+                "readyBody": "macOS gav åtkomst efter att den förra begäran hade gått ut. Nyckeln är upplåst men används inte än.",
+                "readyAction": "Använd den upplåsta nyckeln"
             },
             "restoreAction": "Återställ från server",
             "restoreDialogTitle": "Återställ din OpenPGP-nyckel från säkerhetskopia",

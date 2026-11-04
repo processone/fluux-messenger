@@ -949,7 +949,9 @@
                 "busy": "Venter på macOS…",
                 "refusedAgain": "macOS afviste adgang igen. Nøglen er stadig låst.",
                 "failed": "Nøglen kunne ikke låses op.",
-                "success": "Nøgle låst op"
+                "success": "Nøgle låst op",
+                "readyBody": "macOS gav adgang, efter at den forrige anmodning var udløbet. Nøglen er låst op, men er ikke i brug endnu.",
+                "readyAction": "Brug den oplåste nøgle"
             },
             "restoreAction": "Gendan fra server",
             "restoreDialogTitle": "Gendan din OpenPGP-nøgle fra sikkerhedskopi",

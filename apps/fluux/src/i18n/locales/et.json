@@ -951,7 +951,9 @@
                 "busy": "Ootan macOS-i…",
                 "refusedAgain": "macOS keelas juurdepääsu uuesti. Võti on endiselt lukus.",
                 "failed": "Võtit ei õnnestunud avada.",
-                "success": "Võti avatud"
+                "success": "Võti avatud",
+                "readyBody": "macOS lubas juurdepääsu pärast seda, kui eelmine päring aegus. Võti on avatud, kuid seda ei kasutata veel.",
+                "readyAction": "Kasuta avatud võtit"
             },
             "restoreAction": "Taasta serverist",
             "restoreDialogTitle": "Taasta oma OpenPGP võti varukoopiast",

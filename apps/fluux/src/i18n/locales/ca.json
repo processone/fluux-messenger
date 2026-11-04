@@ -953,7 +953,9 @@
                 "busy": "Esperant el macOS…",
                 "refusedAgain": "El macOS ha tornat a denegar l’accés. La clau continua bloquejada.",
                 "failed": "No s’ha pogut desbloquejar la clau.",
-                "success": "Clau desbloquejada"
+                "success": "Clau desbloquejada",
+                "readyBody": "El macOS ha permès l’accés després que caduqués la sol·licitud anterior. La clau està desbloquejada, però encara no s’utilitza.",
+                "readyAction": "Fes servir la clau desbloquejada"
             },
             "restoreAction": "Restaura des del servidor",
             "restoreDialogTitle": "Restaura la teva clau OpenPGP des de la còpia de seguretat",

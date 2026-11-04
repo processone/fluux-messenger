@@ -464,7 +464,8 @@ Restart first to load the durable outcome.
 When macOS refused the keychain read this launch and the server reports no backup, Settings →
 Encryption also shows a folded **Advanced: ask the keychain again** panel. It never runs on its own.
 Deciding whether to show it (`openpgp_keychain_retry_available`) inspects only cached answers: it
-answers `held`, `not-held`, or `pending` while a read is under way, without waiting for that read.
+answers `held`, `not-held`, `pending` while a read is under way, without waiting for that read, or
+`unlocked` once the native store holds the key unlocked.
 Each press of its button (`openpgp_retry_keychain_access`) makes one OS request under the
 `secrets-v1` cache lock: a refused combined load is loaded again, and a refused old item of a
 desynced account is read again for that account only. A new refusal is cached
@@ -480,9 +481,12 @@ but the key still does not unlock, the refusal is spent: the panel keeps the fai
 and disables its button. A press that outlives its time limit while the prompt stays open has not
 spent it: the store answers `pending`, so the panel keeps the failure and its button. Once the user
 answers that prompt, the next press reads again after a refusal, or uses the key a granted read
-unlocked. A newly registered plugin gets a new, folded panel. The panel stays hidden while a
-server backup exists or its probe fails, while a restore awaits restart, once the key is unlocked,
-and outside desktop macOS. A desynced key, whose refused item is its own old passphrase item, opens the
+unlocked. Such a late grant leaves the key unlocked natively while the App still has it locked: the
+store answers `unlocked`, and the panel, also when Settings or the identity choice opens again,
+offers **Use the unlocked key**, whose press uses that key without reading the keychain, as the
+next normal start would. A newly registered plugin gets a new, folded panel. The panel stays hidden
+while a server backup exists or its probe fails (unless the key is already unlocked), while a
+restore awaits restart, once the App uses the key, and outside desktop macOS. A desynced key, whose refused item is its own old passphrase item, opens the
 identity choice instead (at startup and in Settings), so the same folded panel sits inside that
 choice, below its three options, rather than under the restore entry it covers. Unlocking closes the
 choice and leaves encryption on; the choice's Cancel keeps its earlier meaning.
@@ -514,11 +518,15 @@ the key's real passphrase in its old fixture item, declines the startup restore,
 panel, refuses the first press and allows the last. Between them, a press waits on a held prompt
 until its time limit (shortened for that press) expires: the store must answer `pending`, the panel
 must keep the failure and its button, and once the prompt is refused the store must answer `held`
-again. Before the first and last press it also calls the login prewarm and the normal unlock,
+again. The last press also outlives its time limit, and the user allows its prompt afterwards: the
+store must answer `unlocked` while the App still has the key locked, and Settings opened again must
+offer **Use the unlocked key**, whose press reads nothing. Before the first and last press it also
+calls the login prewarm and the normal unlock,
 unregisters the plugin and lets the App's registration hook register a new one (declining the restore the App offers again), reconnects, and reopens Settings. The driver
 marks each of these steps in the operation log, which must show no read in any of them or after the
-refused held prompt, one refused old-item read at startup and one OS request per press, the key file
-unchanged until the granted press, no fresh-account route, and no old-item read after restart. The `retry-desync`
+refused held prompt, one refused old-item read at startup and one OS request per press, none when
+the unlocked key is used, the key file unchanged while the key is locked, no fresh-account route,
+and no old-item read after restart. The `retry-desync`
 journey gives the combined item a stale passphrase, so nothing migrates and the key is desynced; it
 runs the same presses and steps from the panel inside the startup identity choice, and its log must show only
 that account's old item, once at startup and once per press, then only the combined item after

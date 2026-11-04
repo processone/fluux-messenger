@@ -953,7 +953,9 @@
                 "busy": "Laukiama macOS…",
                 "refusedAgain": "macOS vėl neleido prieigos. Raktas vis dar užrakintas.",
                 "failed": "Rakto atrakinti nepavyko.",
-                "success": "Raktas atrakintas"
+                "success": "Raktas atrakintas",
+                "readyBody": "macOS leido prieigą, kai ankstesnės užklausos laikas jau buvo pasibaigęs. Raktas atrakintas, bet dar nenaudojamas.",
+                "readyAction": "Naudoti atrakintą raktą"
             },
             "restoreAction": "Atkurti iš serverio",
             "restoreDialogTitle": "Atkurti OpenPGP raktą iš atsarginės kopijos",

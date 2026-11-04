@@ -572,6 +572,78 @@ for (const placement of ['Settings', 'identity choice']) {
   })
 }
 
+// Intent FLM-408 R5: macOS allows a prompt only after its press timed out,
+// so the key is unlocked natively while the App still has it locked.
+// Reopening Settings or the identity choice keeps an action to use that key,
+// and pressing it asks macOS nothing.
+for (const placement of ['Settings', 'identity choice']) {
+  test(`a key macOS allowed after a timed-out retry stays ready to use in the ${placement}`, async ({ page }) => {
+    const desync = placement === 'identity choice'
+    await bootDemo(page, `/demo.html?tutorial=false&e2ee=recovery&recoveryBackup=absent${desync ? '&recoveryFailure=desync-refused' : ''}`)
+    expect(await audit(page)).toMatchObject({ build: expectedBuild })
+    const scope = desync ? page.locator('[data-modal="true"]') : page.locator('body')
+    if (!desync) {
+      await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await page.evaluate(() => { location.hash = '/settings/encryption' })
+    }
+    const advanced = scope.getByRole('button', { name: keychainRetryTitle, exact: true })
+    await advanced.click()
+    const ask = scope.getByRole('button', { name: keychainRetry.action, exact: true })
+    await ask.click()
+    await expect(scope.getByRole('alert')).toHaveText(keychainRetry.refusedAgain)
+    // The next press outlives its two-minute limit on an open prompt.
+    await page.clock.install()
+    await page.evaluate(() => (window as any).__recoveryPrompt.hold())
+    await ask.click()
+    await expect(scope.getByRole('button', { name: keychainRetry.busy, exact: true })).toBeDisabled()
+    await page.clock.fastForward(121_000)
+    await expect(scope.getByRole('alert')).toHaveText(keychainRetry.failed)
+    // The user then allows that prompt; the fixture's native side unlocks the key.
+    await page.evaluate(() => (window as any).__recoveryPrompt.answer())
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('__test_recovery_bundle') !== null)).toBe(true)
+    const plugin = () => page.evaluate(() => {
+      const p = (window as any).__demoClient.e2ee.getPlugin('openpgp')
+      return { locked: p.isKeyRecoveryNeeded() as boolean, fingerprint: p.getOwnFingerprint() as string | null }
+    })
+    expect(await plugin()).toEqual({ locked: true, fingerprint: null })
+    const presses = await retryReads(page)
+    const probes = async () => (await audit(page)).commands.filter((cmd: string) => cmd === 'openpgp_keychain_retry_available').length
+    const probed = await probes()
+    // Leave and reopen the panel's place: Settings, or the identity choice Settings opens.
+    if (desync) {
+      await scope.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await expect(scope).toBeHidden()
+    }
+    await page.evaluate(() => { location.hash = '/messages' })
+    await page.evaluate(() => { location.hash = '/settings/encryption' })
+    if (desync) await expect(scope.getByRole('button', { name: new RegExp(encryptionCopy.identityChoice.importFromFileTitle) })).toBeEnabled()
+    else await expect(page.getByRole('button', { name: 'Restore from backup', exact: true })).toBeEnabled()
+    await expect.poll(probes, 'the reopened panel asked again whether a retry applies').toBeGreaterThan(probed)
+    await expect(advanced).toHaveAttribute('aria-expanded', 'false')
+    await capture(page, `after-${desync ? 'desync-' : ''}keychain-retry-ready-reopened.png`)
+    await advanced.click()
+    await expect(scope.getByText(keychainRetry.readyBody, { exact: true })).toBeVisible()
+    const use = scope.getByRole('button', { name: keychainRetry.readyAction, exact: true })
+    await expect(use).toBeEnabled()
+    await expect(ask).toBeHidden()
+    await capture(page, `after-${desync ? 'desync-' : ''}keychain-retry-ready.png`)
+    await use.click()
+    await expect(page.getByText(keychainRetry.success, { exact: true })).toBeVisible()
+    if (desync) await expect(scope).toBeHidden()
+    else await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()
+    expect(await plugin()).toEqual({ locked: false, fingerprint })
+    // One more request, answered with the key already unlocked: the fixture
+    // asks macOS nothing for it, and nothing restores or replaces a key.
+    expect(await retryReads(page)).toBe(presses + 1)
+    const unlocked = await audit(page)
+    for (const effect of ['openpgp_backup_import_all', 'openpgp_backup_import_selected', 'openpgp_forget_account', 'openpgp_rotate_encryption_subkey']) {
+      expect(unlocked.commands).not.toContain(effect)
+    }
+    expect(unlocked.publications).toContain('urn:xmpp:openpgp:0:public-keys')
+  })
+}
+
 for (const backup of ['present', 'unknown']) {
   test(`the keychain retry stays hidden when a ${backup} server backup may recover the key`, async ({ page }) => {
     await bootDemo(page, '/demo.html?tutorial=false&e2ee=recovery')
@@ -589,7 +661,9 @@ for (const backup of ['present', 'unknown']) {
     await expect(page.getByText('The local key could not be unlocked.', { exact: false })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Restore from backup', exact: true })).toBeEnabled()
     await expect.poll(() => page.evaluate(() => (window as any).__retryOffers.length)).toBeGreaterThan(0)
-    expect(await page.evaluate(() => (window as any).__retryOffers)).not.toContain('offered')
+    const offers: string[] = await page.evaluate(() => (window as any).__retryOffers)
+    expect(offers).not.toContain('offered')
+    expect(offers).not.toContain('ready')
     expect((await audit(page)).commands).toContain('openpgp_keychain_retry_available')
     await expect(page.getByRole('button', { name: keychainRetryTitle, exact: true })).toBeHidden()
     expect(await retryReads(page)).toBe(0)

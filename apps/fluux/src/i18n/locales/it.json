@@ -953,7 +953,9 @@
                 "busy": "In attesa di macOS…",
                 "refusedAgain": "macOS ha negato di nuovo l’accesso. La chiave resta bloccata.",
                 "failed": "Impossibile sbloccare la chiave.",
-                "success": "Chiave sbloccata"
+                "success": "Chiave sbloccata",
+                "readyBody": "macOS ha consentito l’accesso dopo la scadenza della richiesta precedente. La chiave è sbloccata ma non è ancora in uso.",
+                "readyAction": "Usa la chiave sbloccata"
             },
             "restoreAction": "Ripristina dal server",
             "restoreDialogTitle": "Ripristina la tua chiave OpenPGP dal backup",

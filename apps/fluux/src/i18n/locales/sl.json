@@ -955,7 +955,9 @@
                 "busy": "Čakanje na macOS …",
                 "refusedAgain": "macOS je znova zavrnil dostop. Ključ ostaja zaklenjen.",
                 "failed": "Ključa ni bilo mogoče odkleniti.",
-                "success": "Ključ odklenjen"
+                "success": "Ključ odklenjen",
+                "readyBody": "macOS je dovolil dostop, potem ko je prejšnja zahteva potekla. Ključ je odklenjen, vendar se še ne uporablja.",
+                "readyAction": "Uporabi odklenjeni ključ"
             },
             "restoreAction": "Obnovi s strežnika",
             "restoreDialogTitle": "Obnovi vaš ključ OpenPGP iz varnostne kopije",

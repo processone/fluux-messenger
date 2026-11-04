@@ -951,7 +951,9 @@
                 "busy": "Warte auf macOS…",
                 "refusedAgain": "macOS hat den Zugriff erneut verweigert. Der Schlüssel bleibt gesperrt.",
                 "failed": "Der Schlüssel konnte nicht entsperrt werden.",
-                "success": "Schlüssel entsperrt"
+                "success": "Schlüssel entsperrt",
+                "readyBody": "macOS hat den Zugriff erlaubt, nachdem die vorige Anfrage abgelaufen war. Der Schlüssel ist entsperrt, wird aber noch nicht verwendet.",
+                "readyAction": "Entsperrten Schlüssel verwenden"
             },
             "restoreAction": "Vom Server wiederherstellen",
             "restoreDialogTitle": "Deinen OpenPGP-Schlüssel aus dem Backup wiederherstellen",

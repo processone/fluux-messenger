@@ -30,6 +30,16 @@ function readRetryState(plugin: KeychainRetryPlugin): Promise<KeychainRetryState
   return plugin.keychainRetryState().catch((): KeychainRetryState => 'unconfirmed')
 }
 
+/**
+ * What the panel shows: `retry` asks macOS again; `ready` uses a key macOS
+ * allowed after an earlier request timed out, which asks nothing (FLM-408 R5).
+ */
+type PanelMode = 'retry' | 'ready'
+
+function panelMode(state: KeychainRetryState): PanelMode | null {
+  return state === 'offered' ? 'retry' : state === 'ready' ? 'ready' : null
+}
+
 function supportsKeychainRetry(plugin: unknown): plugin is KeychainRetryPlugin {
   const candidate = plugin as Partial<KeychainRetryPlugin> | null | undefined
   return typeof candidate?.keychainRetryState === 'function' && typeof candidate.retryKeychainAccess === 'function'
@@ -73,10 +83,12 @@ export function KeychainRetryOffer({ plugin, ...props }: Omit<KeychainRetryPanel
  * way to recover the key". The panel shows only when the plugin offers the
  * retry (a keychain refusal this launch, no server backup), stays folded
  * until opened, and reads the keychain only when the user presses its button.
+ * When macOS allowed an earlier request after it timed out, the panel instead
+ * offers to use that unlocked key, which reads nothing (FLM-408 R5).
  */
 function KeychainRetryPanel({ plugin, onUnlocked, hintAction, onBusyChange }: KeychainRetryPanelProps) {
   const { t } = useTranslation()
-  const [offered, setOffered] = useState(false)
+  const [mode, setMode] = useState<PanelMode | null>(null)
   const [busy, setBusy] = useState(false)
   const [refusedAgain, setRefusedAgain] = useState(false)
   const [failure, setFailure] = useState<RetryFailure | null>(null)
@@ -85,12 +97,12 @@ function KeychainRetryPanel({ plugin, onUnlocked, hintAction, onBusyChange }: Ke
 
   useEffect(() => {
     let cancelled = false
-    setOffered(false)
-    void readRetryState(plugin).then((next) => { if (!cancelled) setOffered(next === 'offered') })
+    setMode(null)
+    void readRetryState(plugin).then((next) => { if (!cancelled) setMode(panelMode(next)) })
     return () => { cancelled = true }
   }, [plugin])
 
-  if (!offered) return null
+  if (!mode) return null
 
   const retry = async () => {
     setBusy(true)
@@ -105,14 +117,16 @@ function KeychainRetryPanel({ plugin, onUnlocked, hintAction, onBusyChange }: Ke
         setRefusedAgain(true)
       } else if (isE2EEPluginError(error) && error.code === 'keychain-retry-unavailable') {
         // Nothing is refused any more, for example after a restore elsewhere.
-        setOffered((await readRetryState(plugin)) === 'offered')
+        setMode(panelMode(await readRetryState(plugin)))
       } else {
         setFailure(retryFailure(error, t))
         // A granted read that still cannot unlock the key consumes the
         // refusal, and only that confirmed answer retires the action. A
         // request that outlived its time limit may still be on macOS's
         // prompt; its answer comes later, so the action stays (FLM-408 R4).
-        setSpent((await readRetryState(plugin)) === 'none')
+        const next = await readRetryState(plugin)
+        setSpent(next === 'none')
+        setMode((current) => panelMode(next) ?? current)
       }
     } finally {
       setBusy(false)
@@ -123,8 +137,14 @@ function KeychainRetryPanel({ plugin, onUnlocked, hintAction, onBusyChange }: Ke
   return (
     <SettingsDisclosure title={t('settings.encryption.keychainRetry.title')} stayOpen={busy}>
       <div className="space-y-2 text-xs text-fluux-muted leading-snug">
-        <p>{t('settings.encryption.keychainRetry.body')}</p>
-        <p>{t('settings.encryption.keychainRetry.backupHint', { action: hintAction ?? t('settings.encryption.recoveryTitle') })}</p>
+        {mode === 'ready' ? (
+          <p>{t('settings.encryption.keychainRetry.readyBody')}</p>
+        ) : (
+          <>
+            <p>{t('settings.encryption.keychainRetry.body')}</p>
+            <p>{t('settings.encryption.keychainRetry.backupHint', { action: hintAction ?? t('settings.encryption.recoveryTitle') })}</p>
+          </>
+        )}
       </div>
       {refusedAgain && (
         <p role="alert" className="text-xs text-fluux-error break-words">
@@ -138,7 +158,9 @@ function KeychainRetryPanel({ plugin, onUnlocked, hintAction, onBusyChange }: Ke
         disabled={busy || spent}
         onClick={() => { void retry() }}
       >
-        {busy ? t('settings.encryption.keychainRetry.busy') : t('settings.encryption.keychainRetry.action')}
+        {mode === 'ready'
+          ? t('settings.encryption.keychainRetry.readyAction')
+          : busy ? t('settings.encryption.keychainRetry.busy') : t('settings.encryption.keychainRetry.action')}
       </button>
     </SettingsDisclosure>
   )

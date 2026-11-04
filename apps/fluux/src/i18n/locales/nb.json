@@ -949,7 +949,9 @@
                 "busy": "Venter på macOS …",
                 "refusedAgain": "macOS nektet tilgang igjen. Nøkkelen er fortsatt låst.",
                 "failed": "Nøkkelen kunne ikke låses opp.",
-                "success": "Nøkkel låst opp"
+                "success": "Nøkkel låst opp",
+                "readyBody": "macOS ga tilgang etter at den forrige forespørselen hadde utløpt. Nøkkelen er låst opp, men er ikke i bruk ennå.",
+                "readyAction": "Bruk den opplåste nøkkelen"
             },
             "restoreAction": "Gjenopprett fra server",
             "restoreDialogTitle": "Gjenopprett OpenPGP-nøkkelen din fra sikkerhetskopi",

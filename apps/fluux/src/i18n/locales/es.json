@@ -953,7 +953,9 @@
                 "busy": "Esperando a macOS…",
                 "refusedAgain": "macOS ha vuelto a denegar el acceso. La clave sigue bloqueada.",
                 "failed": "No se ha podido desbloquear la clave.",
-                "success": "Clave desbloqueada"
+                "success": "Clave desbloqueada",
+                "readyBody": "macOS ha permitido el acceso después de que caducara la solicitud anterior. La clave está desbloqueada, pero aún no se usa.",
+                "readyAction": "Usar la clave desbloqueada"
             },
             "restoreAction": "Restaurar desde el servidor",
             "restoreDialogTitle": "Restaurar tu clave OpenPGP desde la copia de seguridad",

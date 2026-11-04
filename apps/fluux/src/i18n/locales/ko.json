@@ -828,7 +828,9 @@
                 "busy": "macOS를 기다리는 중…",
                 "refusedAgain": "macOS가 다시 접근을 거부했습니다. 키가 여전히 잠겨 있습니다.",
                 "failed": "키 잠금을 해제하지 못했습니다.",
-                "success": "키 잠금 해제됨"
+                "success": "키 잠금 해제됨",
+                "readyBody": "이전 요청의 시간이 초과된 후 macOS가 접근을 허용했습니다. 키 잠금은 해제되었지만 아직 사용되지 않고 있습니다.",
+                "readyAction": "잠금 해제된 키 사용"
             },
             "restoreAction": "서버에서 복원",
             "restoreDialogTitle": "백업에서 OpenPGP 키 복원",

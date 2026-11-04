@@ -23,19 +23,19 @@
     }
     const note = label => window.__TAURI_INTERNALS__.invoke('recovery_note', { label })
     const account = { accountJid: 'you@fluux.chat' }
-    // FLM-408 R4: the native answer is 'held', 'not-held' or 'pending'.
-    const retryOffered = async () => (await window.__TAURI_INTERNALS__.invoke('openpgp_keychain_retry_available', account)) === 'held'
+    // FLM-408 R4 and R5: the native answer is 'held', 'not-held', 'pending' or 'unlocked'.
+    const availability = () => window.__TAURI_INTERNALS__.invoke('openpgp_keychain_retry_available', account)
+    const retryOffered = async () => (await availability()) === 'held'
+    const unlock = { ...account, userId: 'xmpp:you@fluux.chat' }
     const heading = text => [...document.querySelectorAll('h1,h2,h3')].some(el => el.textContent === text)
     const plugin = () => window.__demoClient.e2ee.getPlugin('openpgp')
-    // FLM-408 R4: after a refusal, a press outlives its two-minute limit while
-    // macOS's prompt stays open. The store answers that a read is under way,
-    // the panel keeps the failure and its action, and once the user refuses
-    // that prompt the refusal is held again. Only this press's limit is
+    // FLM-408 R4: a press outlives its two-minute limit while macOS's prompt
+    // stays open. The store answers that a read is under way and the panel
+    // keeps the failure and its action. Only this press's limit is
     // shortened, so the journey does not wait two minutes.
-    const timedOutPress = async ask => {
-      const refusal = () => window.__TAURI_INTERNALS__.invoke('openpgp_keychain_retry_available', account)
+    const pressPastLimit = async (ask, label) => {
       await window.__TAURI_INTERNALS__.invoke('recovery_hold_keychain')
-      await note('timeout-1')
+      await note(label)
       const setTimer = window.setTimeout
       window.setTimeout = (run, ms, ...rest) => setTimer(run, ms === 120000 ? 1000 : ms, ...rest)
       try {
@@ -45,14 +45,31 @@
       } finally {
         window.setTimeout = setTimer
       }
-      if (await refusal() !== 'pending') throw new Error('a read on an open prompt was not reported as under way')
+      if (await availability() !== 'pending') throw new Error('a read on an open prompt was not reported as under way')
+    }
+    // FLM-408 R4: after a refusal, the user refuses the timed-out press's
+    // prompt too, and the refusal is held again.
+    const timedOutPress = async ask => {
+      await pressPastLimit(ask, 'timeout-1')
       await note('answered-1')
       await window.__TAURI_INTERNALS__.invoke('recovery_answer_keychain')
       // The normal unlock waits for the retry's turn, then keeps the refusal.
-      await window.__TAURI_INTERNALS__.invoke('openpgp_ensure_key', { ...account, userId: 'xmpp:you@fluux.chat' })
+      await window.__TAURI_INTERNALS__.invoke('openpgp_ensure_key', unlock)
         .then(() => { throw new Error('the key unlocked although the user refused the prompt') }, () => {})
-      if (await refusal() !== 'held') throw new Error('the refused prompt left no refusal to retry')
+      if (await availability() !== 'held') throw new Error('the refused prompt left no refusal to retry')
       if (!ask()) throw new Error('the keychain retry action is gone after the refused prompt')
+    }
+    // FLM-408 R5: the user allows the timed-out press's prompt. The key is
+    // then unlocked natively while the App still has it locked.
+    const lateGrantPress = async ask => {
+      await window.__TAURI_INTERNALS__.invoke('recovery_grant_keychain')
+      await pressPastLimit(ask, 'timeout-2')
+      await window.__TAURI_INTERNALS__.invoke('recovery_answer_keychain')
+      // The normal unlock waits for the retry's turn, then finds the key it unlocked.
+      const unlocked = await window.__TAURI_INTERNALS__.invoke('openpgp_ensure_key', unlock)
+      if (unlocked.fingerprint !== window.__FLUUX_RECOVERY_META__.aliceFingerprint) throw new Error('the late answer unlocked another key')
+      if (await availability() !== 'unlocked') throw new Error('the key the late answer unlocked was not reported as unlocked')
+      if (!plugin().isKeyRecoveryNeeded() || plugin().getOwnFingerprint()) throw new Error('the App used the key without a press')
     }
     // FLM-304 and FLM-408 R3: what may happen around the retry without a
     // press, each step marked in the host's operations log so it counts that
@@ -60,7 +77,6 @@
     // own registration of a new plugin, a reconnect, then the panel shown
     // again (`panel`, given by the journey). None may read a refused item.
     const transitions = async (n, afterRegistration, panel) => {
-      const unlock = { ...account, userId: 'xmpp:you@fluux.chat' }
       await note('prewarm-' + n)
       await window.__TAURI_INTERNALS__.invoke('openpgp_prewarm', unlock)
       await note('unlock-' + n)
@@ -88,12 +104,12 @@
         await wait(() => !heading('Restore from backup'), 'restore declined again')
       }
       // Leave Settings and open its panel again.
-      const reopen = async () => {
+      const reopen = async (action = ask) => {
         location.hash = '/messages'
         await wait(() => !button('Advanced: ask the keychain again'), 'left Settings')
         location.hash = '/settings/encryption'
         ;(await wait(() => button('Advanced: ask the keychain again'), 'advanced keychain retry panel')).click()
-        return wait(ask, 'keychain retry action')
+        return wait(action, 'keychain retry action')
       }
       ;(await wait(() => button('Advanced: ask the keychain again'), 'advanced keychain retry panel')).click()
       await transitions(1, declineRestore, reopen)
@@ -102,9 +118,14 @@
       await wait(() => [...document.querySelectorAll('[role="alert"]')].some(el => el.textContent === 'macOS refused access again. The key is still locked.') && ask(), 'second refusal shown')
       await timedOutPress(ask)
       await transitions(2, declineRestore, reopen)
-      await window.__TAURI_INTERNALS__.invoke('recovery_grant_keychain')
+      await lateGrantPress(ask)
+      // Settings opened again offers to use that key instead of asking macOS.
+      await note('ready-2')
+      const use = () => button('Use the unlocked key')
+      await reopen(use)
+      if (ask()) throw new Error('the panel asks macOS again for a key that is unlocked')
       await note('click-2')
-      ask().click()
+      use().click()
       await wait(() => document.body.textContent.includes('Your key is ready and published.'), 'unlocked status')
       if (await retryOffered()) throw new Error('the keychain retry is still offered after the key unlocked')
       location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat')

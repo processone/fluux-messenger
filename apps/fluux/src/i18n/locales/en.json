@@ -828,7 +828,9 @@
                 "busy": "Waiting for macOS…",
                 "refusedAgain": "macOS refused access again. The key is still locked.",
                 "failed": "The key could not be unlocked.",
-                "success": "Key unlocked"
+                "success": "Key unlocked",
+                "readyBody": "macOS allowed access after the earlier request timed out. The key is unlocked but not in use yet.",
+                "readyAction": "Use the unlocked key"
             },
             "restoreAction": "Restore from server",
             "restoreDialogTitle": "Restore your OpenPGP key from backup",

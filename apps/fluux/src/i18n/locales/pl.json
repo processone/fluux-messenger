@@ -955,7 +955,9 @@
                 "busy": "Oczekiwanie na macOS…",
                 "refusedAgain": "macOS ponownie odmówił dostępu. Klucz nadal jest zablokowany.",
                 "failed": "Nie udało się odblokować klucza.",
-                "success": "Klucz odblokowany"
+                "success": "Klucz odblokowany",
+                "readyBody": "macOS zezwolił na dostęp po wygaśnięciu poprzedniej prośby. Klucz jest odblokowany, ale jeszcze nie jest używany.",
+                "readyAction": "Użyj odblokowanego klucza"
             },
             "restoreAction": "Przywróć z serwera",
             "restoreDialogTitle": "Przywróć swój klucz OpenPGP z kopii zapasowej",

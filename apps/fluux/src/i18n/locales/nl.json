@@ -949,7 +949,9 @@
                 "busy": "Wachten op macOS…",
                 "refusedAgain": "macOS heeft de toegang opnieuw geweigerd. De sleutel blijft vergrendeld.",
                 "failed": "De sleutel kon niet worden ontgrendeld.",
-                "success": "Sleutel ontgrendeld"
+                "success": "Sleutel ontgrendeld",
+                "readyBody": "macOS heeft toegang gegeven nadat het vorige verzoek was verlopen. De sleutel is ontgrendeld, maar nog niet in gebruik.",
+                "readyAction": "Ontgrendelde sleutel gebruiken"
             },
             "restoreAction": "Vanaf server herstellen",
             "restoreDialogTitle": "Je OpenPGP-sleutel uit back-up herstellen",

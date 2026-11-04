@@ -949,7 +949,9 @@
                 "busy": "Bíður eftir macOS…",
                 "refusedAgain": "macOS hafnaði aðgangi aftur. Lykillinn er enn læstur.",
                 "failed": "Ekki tókst að aflæsa lyklinum.",
-                "success": "Lykill aflæstur"
+                "success": "Lykill aflæstur",
+                "readyBody": "macOS leyfði aðgang eftir að fyrri beiðnin rann út. Lykillinn er aflæstur en ekki enn í notkun.",
+                "readyAction": "Nota aflæsta lykilinn"
             },
             "restoreAction": "Endurheimta frá þjóni",
             "restoreDialogTitle": "Endurheimta OpenPGP-lykilinn þinn úr öryggisafriti",

@@ -957,7 +957,9 @@
                 "busy": "Qed nistennew lil macOS…",
                 "refusedAgain": "macOS reġa’ ċaħad l-aċċess. Iċ-ċavetta għadha msakkra.",
                 "failed": "Iċ-ċavetta ma setgħetx tinfetaħ.",
-                "success": "Iċ-ċavetta nfetħet"
+                "success": "Iċ-ċavetta nfetħet",
+                "readyBody": "macOS ta l-aċċess wara li t-talba ta’ qabel skadiet. Iċ-ċavetta nfetħet iżda għadha mhix qed tintuża.",
+                "readyAction": "Uża ċ-ċavetta miftuħa"
             },
             "restoreAction": "Irripristina mis-server",
             "restoreDialogTitle": "Irripristina ċ-ċavetta OpenPGP tiegħek mill-backup",

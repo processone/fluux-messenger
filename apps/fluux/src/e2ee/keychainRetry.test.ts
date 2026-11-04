@@ -54,7 +54,7 @@ async function setup({ initError = REFUSAL, refused = true, backup = 'absent' as
     if (cmd === 'openpgp_has_persisted_key') return true as T
     if (cmd === 'openpgp_ensure_key') { if (unlocked) return unlocked as T; throw new Error(initError) }
     // The native probe inspects cached answers only; it never opens a prompt or waits.
-    if (cmd === 'openpgp_keychain_retry_available') return (promptOpen ? 'pending' : refused && !unlocked ? 'held' : 'not-held') as T
+    if (cmd === 'openpgp_keychain_retry_available') return (promptOpen ? 'pending' : unlocked ? 'unlocked' : refused ? 'held' : 'not-held') as T
     if (cmd === RETRY) {
       expect(args).toEqual({ accountJid })
       promptOpen = true
@@ -235,6 +235,38 @@ describe('FLM-304 explicit keychain retry', () => {
     f.answer('grant')
     await expect(f.plugin.retryKeychainAccess()).resolves.toEqual({ fingerprint: meta.aliceFingerprint })
     expect(f.calls.filter(c => c === RETRY)).toHaveLength(2)
+  })
+
+  // Intent FLM-408 R5: the user allows the prompt only after the request
+  // timed out. The native store then has the key unlocked while the plugin
+  // still has it locked: the state is ready, and the next request uses that
+  // key with no further keychain read.
+  it('keeps a key the user allowed after the request timed out ready to use, without another read', async () => {
+    const f = await setup({ retryLimitMs: 50 })
+    let answerPrompt!: () => void
+    f.setPause(() => new Promise<void>(done => { answerPrompt = done }))
+    f.answer('grant')
+    await expect(f.plugin.retryKeychainAccess()).rejects.toThrow(/openpgp_retry_keychain_access timeout/)
+    expect(await f.plugin.keychainRetryState()).toBe('unconfirmed')
+
+    f.setPause(undefined)
+    answerPrompt()
+    await vi.waitFor(async () => expect(await f.plugin.keychainRetryState()).toBe('ready'))
+    expect(f.plugin.isKeyRecoveryNeeded()).toBe(true)
+    expect(f.plugin.getOwnFingerprint()).toBeNull()
+    expect(f.ctx.notifyKeyUnlocked).not.toHaveBeenCalled()
+    expect(f.publications).toEqual([])
+
+    // No answer is queued: a second keychain read would fail as unavailable.
+    await expect(f.plugin.retryKeychainAccess()).resolves.toEqual({ fingerprint: meta.aliceFingerprint })
+    expect(f.plugin.getOwnFingerprint()).toBe(meta.aliceFingerprint)
+    expect(f.plugin.isKeyRecoveryNeeded()).toBe(false)
+    expect(f.ctx.notifyKeyUnlocked).toHaveBeenCalledOnce()
+    expect(f.publications).toContain('urn:xmpp:openpgp:0:public-keys')
+    expect(f.publications).not.toContain(SECRET_NODE)
+    expect(f.calls.filter(c => c === RETRY)).toHaveLength(2)
+    expect(f.calls).not.toContain('openpgp_backup_import_selected')
+    expect(await f.plugin.keychainRetryState()).toBe('none')
   })
 
   it('neither offers nor runs the retry while a restore awaits reconciliation', async () => {

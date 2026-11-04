@@ -955,7 +955,9 @@
                 "busy": "Čeká se na macOS…",
                 "refusedAgain": "macOS znovu odepřel přístup. Klíč zůstává zamčený.",
                 "failed": "Klíč se nepodařilo odemknout.",
-                "success": "Klíč odemčen"
+                "success": "Klíč odemčen",
+                "readyBody": "macOS povolil přístup až poté, co předchozí žádosti vypršel čas. Klíč je odemčený, ale zatím se nepoužívá.",
+                "readyAction": "Použít odemčený klíč"
             },
             "restoreAction": "Obnovit ze serveru",
             "restoreDialogTitle": "Obnovit váš klíč OpenPGP ze zálohy",

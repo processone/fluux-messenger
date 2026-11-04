@@ -949,7 +949,9 @@
                 "busy": "Odotetaan macOS:ää…",
                 "refusedAgain": "macOS esti pääsyn uudelleen. Avain on edelleen lukittu.",
                 "failed": "Avaimen lukitusta ei voitu avata.",
-                "success": "Avaimen lukitus avattu"
+                "success": "Avaimen lukitus avattu",
+                "readyBody": "macOS salli käytön sen jälkeen, kun edellinen pyyntö oli vanhentunut. Avaimen lukitus on avattu, mutta avainta ei vielä käytetä.",
+                "readyAction": "Käytä avattua avainta"
             },
             "restoreAction": "Palauta palvelimelta",
             "restoreDialogTitle": "Palauta OpenPGP-avaimesi varmuuskopiosta",

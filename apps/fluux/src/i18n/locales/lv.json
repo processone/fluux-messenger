@@ -952,7 +952,9 @@
                 "busy": "Gaida macOS…",
                 "refusedAgain": "macOS atkal liedza piekļuvi. Atslēga joprojām ir bloķēta.",
                 "failed": "Atslēgu nevarēja atbloķēt.",
-                "success": "Atslēga atbloķēta"
+                "success": "Atslēga atbloķēta",
+                "readyBody": "macOS atļāva piekļuvi pēc tam, kad iepriekšējā pieprasījuma laiks bija beidzies. Atslēga ir atbloķēta, bet vēl netiek izmantota.",
+                "readyAction": "Izmantot atbloķēto atslēgu"
             },
             "restoreAction": "Atjaunot no servera",
             "restoreDialogTitle": "Atjaunot OpenPGP atslēgu no rezerves kopijas",

@@ -157,14 +157,18 @@ mod host {
     fn get_credentials() -> Option<credentials::StoredCredentials> {
         None
     }
-    /// FLM-304: marks a step of the retry journey in the operations log. Until
-    /// the granted press, nothing may rewrite the locked key file; the first
-    /// successful unlock may re-save it once to clear an expiry (same key).
+    /// FLM-304: marks a step of the retry journey in the operations log. While
+    /// the key is locked, nothing may rewrite its file; the first successful
+    /// unlock may re-save it once to clear an expiry (same key).
     #[tauri::command]
     fn recovery_note(fixture: tauri::State<'_, Fixture>, label: String) -> Result<(), String> {
+        let unlocked = fixture.state.keychain_retry_available(JID)
+            == Ok(openpgp::KeychainRetryAvailability::Unlocked);
         let key = fs::read(fixture.root.join("keys/openpgp/you@fluux.chat.tsk.asc"))
             .map_err(|e| e.to_string())?;
-        if key != fs::read(fixture.root.join("initial-key.asc")).map_err(|e| e.to_string())? {
+        if !unlocked
+            && key != fs::read(fixture.root.join("initial-key.asc")).map_err(|e| e.to_string())?
+        {
             return Err(format!("the key file changed before {label}"));
         }
         fixture.raw.audit("note", &label);
@@ -300,24 +304,33 @@ mod host {
         // item; a desynced key asks only for its own old item. FLM-408 R4:
         // after the first refusal, a press that outlives its time limit on an
         // open prompt reads once, and nothing reads while it waits or after
-        // the user refuses that prompt.
+        // the user refuses that prompt. FLM-408 R5: from Settings, the user
+        // allows the last press's prompt only after it timed out; its reads
+        // unlock the key, and the press that then uses it reads nothing.
         if retry && !fixture.restart {
-            let (refused, granted) = if fixture.source == "retry-desync" {
+            let late_grant = fixture.source == "retry";
+            let (refused, granted) = if late_grant {
+                (vec!["last_user".to_string()], OLD_ITEMS.map(String::from).to_vec())
+            } else {
                 let own = vec![format!("openpgp_passphrase:{JID}")];
                 (own.clone(), own)
-            } else {
-                (vec!["last_user".to_string()], OLD_ITEMS.map(String::from).to_vec())
             };
             let mut expected = vec![("startup".to_string(), refused.clone())];
-            for (press, reads) in [(1, refused.clone()), (2, granted)] {
+            for press in [1, 2] {
                 expected.extend(
                     ["prewarm", "unlock", "reregister", "reconnect", "panel"]
                         .map(|step| (format!("{step}-{press}"), Vec::new())),
                 );
-                expected.push((format!("click-{press}"), reads));
                 if press == 1 {
+                    expected.push(("click-1".into(), refused.clone()));
                     expected.push(("timeout-1".into(), refused.clone()));
                     expected.push(("answered-1".into(), Vec::new()));
+                } else if late_grant {
+                    expected.push(("timeout-2".into(), granted.clone()));
+                    expected.push(("ready-2".into(), Vec::new()));
+                    expected.push(("click-2".into(), Vec::new()));
+                } else {
+                    expected.push(("click-2".into(), granted.clone()));
                 }
             }
             let steps = old_reads_by_step(&operations);

@@ -955,7 +955,9 @@
                 "busy": "Ag fanacht le macOS…",
                 "refusedAgain": "Dhiúltaigh macOS rochtain arís. Tá an eochair fós faoi ghlas.",
                 "failed": "Níorbh fhéidir an eochair a dhíghlasáil.",
-                "success": "Eochair díghlasáilte"
+                "success": "Eochair díghlasáilte",
+                "readyBody": "Thug macOS rochtain tar éis don iarratas roimhe sin dul in éag. Tá an eochair díghlasáilte ach níl sí in úsáid fós.",
+                "readyAction": "Úsáid an eochair dhíghlasáilte"
             },
             "restoreAction": "Aischur ó fhreastalaí",
             "restoreDialogTitle": "Aischur d'eochair OpenPGP ón gcúltaca",

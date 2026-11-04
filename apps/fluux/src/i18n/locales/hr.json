@@ -951,7 +951,9 @@
                 "busy": "Čeka se macOS…",
                 "refusedAgain": "macOS je ponovno odbio pristup. Ključ je i dalje zaključan.",
                 "failed": "Ključ nije moguće otključati.",
-                "success": "Ključ otključan"
+                "success": "Ključ otključan",
+                "readyBody": "macOS je dopustio pristup nakon što je prethodni zahtjev istekao. Ključ je otključan, ali se još ne koristi.",
+                "readyAction": "Koristi otključani ključ"
             },
             "restoreAction": "Obnovi s poslužitelja",
             "restoreDialogTitle": "Obnovi vaš OpenPGP ključ iz sigurnosne kopije",

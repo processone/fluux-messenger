@@ -62,8 +62,10 @@ export function createBackupRecoveryFixture() {
       if (desync) throw new Error('decrypt persisted TSK: decrypt primary secret key: unexpected EOF')
       throw new Error('openpgp-storage-unavailable: macOS keychain (-25293): authorization refused')
     }
-    // The refusal is held for the launch until the user's explicit retry.
-    if (cmd === 'openpgp_keychain_retry_available') return (promptOpen ? 'pending' : !installed && refusalHeld ? 'held' : 'not-held') as T
+    // The refusal is held for the launch until the user's explicit retry. A
+    // key unlocked here, also by a retry allowed after it timed out, is
+    // reported as such (FLM-408 R5).
+    if (cmd === 'openpgp_keychain_retry_available') return (promptOpen ? 'pending' : installed ? 'unlocked' : refusalHeld ? 'held' : 'not-held') as T
     if (cmd === 'openpgp_retry_keychain_access') {
       if (installed) return installed as T
       if (!refusalHeld) throw new Error(`openpgp-keychain-retry-unavailable: no refused keychain access to retry for ${args!.accountJid}`)

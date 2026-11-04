@@ -949,7 +949,9 @@
                 "busy": "正在等待 macOS…",
                 "refusedAgain": "macOS 再次拒绝了访问。密钥仍处于锁定状态。",
                 "failed": "无法解锁密钥。",
-                "success": "密钥已解锁"
+                "success": "密钥已解锁",
+                "readyBody": "上一次请求超时后，macOS 允许了访问。密钥已解锁，但尚未使用。",
+                "readyAction": "使用已解锁的密钥"
             },
             "restoreAction": "从服务器恢复",
             "restoreDialogTitle": "从备份恢复您的 OpenPGP 密钥",
