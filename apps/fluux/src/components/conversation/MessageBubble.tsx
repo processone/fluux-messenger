@@ -784,6 +784,7 @@ export const MessageBubble = memo(function MessageBubble({
             <UnsupportedEncryptionNotice method={message.unsupportedEncryption.name} />
           ) : (
             <MessageBody
+              messageId={messageRowId(message) ?? message.id}
               body={message.body}
               isEdited={message.isEdited}
               originalBody={message.originalBody}

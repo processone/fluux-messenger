@@ -570,6 +570,8 @@
         },
         "showMore": "Näytä lisää",
         "showLess": "Näytä vähemmän",
+        "wrapLines": "Rivitä rivit",
+        "unwrapLines": "Lopeta rivitys",
         "deliveryFailed": "Viestiä ei toimitettu",
         "viewError": "Näytä virhe",
         "retry": "Yritä uudelleen",

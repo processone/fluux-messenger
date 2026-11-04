@@ -574,6 +574,8 @@
         },
         "showMore": "Arată mai mult",
         "showLess": "Arată mai puțin",
+        "wrapLines": "Încadrează liniile",
+        "unwrapLines": "Oprește încadrarea liniilor",
         "deliveryFailed": "Mesaj nelivrat",
         "viewError": "Vezi eroarea",
         "retry": "Reîncearcă",

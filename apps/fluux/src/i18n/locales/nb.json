@@ -570,6 +570,8 @@
         },
         "showMore": "Vis mer",
         "showLess": "Vis mindre",
+        "wrapLines": "Bryt linjer",
+        "unwrapLines": "Slutt å bryte linjer",
         "deliveryFailed": "Melding ikke levert",
         "viewError": "Vis feil",
         "retry": "Prøv igjen",

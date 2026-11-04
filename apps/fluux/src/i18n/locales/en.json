@@ -570,6 +570,8 @@
         },
         "showMore": "Show more",
         "showLess": "Show less",
+        "wrapLines": "Wrap lines",
+        "unwrapLines": "Stop wrapping lines",
         "deliveryFailed": "Message not delivered",
         "viewError": "View error",
         "retry": "Retry",

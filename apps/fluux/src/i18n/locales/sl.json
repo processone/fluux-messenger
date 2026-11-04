@@ -576,6 +576,8 @@
         },
         "showMore": "Prikaži več",
         "showLess": "Prikaži manj",
+        "wrapLines": "Prelomi vrstice",
+        "unwrapLines": "Ne lomi več vrstic",
         "deliveryFailed": "Sporočilo ni bilo dostavljeno",
         "viewError": "Poglej napako",
         "retry": "Poskusi znova",

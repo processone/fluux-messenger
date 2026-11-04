@@ -572,6 +572,8 @@
         },
         "showMore": "Mehr anzeigen",
         "showLess": "Weniger anzeigen",
+        "wrapLines": "Zeilen umbrechen",
+        "unwrapLines": "Zeilenumbruch aufheben",
         "deliveryFailed": "Nachricht nicht zugestellt",
         "viewError": "Fehler anzeigen",
         "retry": "Erneut versuchen",

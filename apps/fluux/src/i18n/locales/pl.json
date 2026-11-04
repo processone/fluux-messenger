@@ -576,6 +576,8 @@
         },
         "showMore": "Pokaż więcej",
         "showLess": "Pokaż mniej",
+        "wrapLines": "Zawijaj wiersze",
+        "unwrapLines": "Przestań zawijać wiersze",
         "deliveryFailed": "Wiadomość niedostarczona",
         "viewError": "Zobacz błąd",
         "retry": "Ponów",

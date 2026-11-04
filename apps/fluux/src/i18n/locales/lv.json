@@ -573,6 +573,8 @@
         },
         "showMore": "Rādīt vairāk",
         "showLess": "Rādīt mazāk",
+        "wrapLines": "Lauzt rindas",
+        "unwrapLines": "Beigt lauzt rindas",
         "deliveryFailed": "Ziņojums nav piegādāts",
         "viewError": "Skatīt kļūdu",
         "retry": "Mēģināt vēlreiz",

@@ -578,6 +578,8 @@
         },
         "showMore": "Uri aktar",
         "showLess": "Uri inqas",
+        "wrapLines": "Qatta' il-linji",
+        "unwrapLines": "Waqqaf il-qtugħ tal-linji",
         "deliveryFailed": "Il-messaġġ ma wasalx",
         "viewError": "Ara l-errur",
         "retry": "Erġa' pprova",

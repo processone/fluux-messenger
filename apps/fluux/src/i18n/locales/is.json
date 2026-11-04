@@ -570,6 +570,8 @@
         },
         "showMore": "Sýna meira",
         "showLess": "Sýna minna",
+        "wrapLines": "Brjóta línur",
+        "unwrapLines": "Hætta að brjóta línur",
         "deliveryFailed": "Skilaboð ekki afhent",
         "viewError": "Skoða villu",
         "retry": "Reyna aftur",

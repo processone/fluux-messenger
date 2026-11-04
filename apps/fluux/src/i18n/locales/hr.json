@@ -572,6 +572,8 @@
         },
         "showMore": "Prikaži više",
         "showLess": "Prikaži manje",
+        "wrapLines": "Prelomi retke",
+        "unwrapLines": "Prestani prelamati retke",
         "deliveryFailed": "Poruka nije isporučena",
         "viewError": "Prikaži grešku",
         "retry": "Pokušaj ponovo",

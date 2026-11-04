@@ -574,6 +574,8 @@
         },
         "showMore": "Rodyti daugiau",
         "showLess": "Rodyti mažiau",
+        "wrapLines": "Laužyti eilutes",
+        "unwrapLines": "Nebelaužyti eilučių",
         "deliveryFailed": "Žinutė nepristatyta",
         "viewError": "Peržiūrėti klaidą",
         "retry": "Bandyti dar kartą",

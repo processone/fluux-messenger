@@ -10,6 +10,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react'
 import { useTranslation } from 'react-i18next'
 import { CollapsibleContent } from './CollapsibleContent'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
+import { useWrappedCodeBlocksStore } from '@/stores/wrappedCodeBlocksStore'
 
 // Mock i18n
 vi.mock('react-i18next', () => ({
@@ -49,12 +50,31 @@ describe('CollapsibleContent', () => {
   beforeEach(() => {
     // Reset store state before each test
     useExpandedMessagesStore.getState().clear()
+    useWrappedCodeBlocksStore.getState().clear()
     observeCount = 0
     mediaObservers = []
     vi.mocked(useTranslation).mockClear()
     // Deterministic baseline: short (0px). Tests that need tall content override
     // this within the test; this reset prevents an override leaking across tests.
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 0 })
+  })
+
+  // Source: FLM-399 — wrapping a code block makes a message taller without
+  // changing its children; the toggle must trigger the "Show more" re-check.
+  it('re-checks height when a code block of the message is wrapped', () => {
+    const heightRef = { value: 100 }
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => heightRef.value })
+    const children = <p>content</p>
+    render(<CollapsibleContent messageId="m-wrap">{children}</CollapsibleContent>)
+    expect(screen.queryByText('Show more')).toBeNull()
+
+    heightRef.value = 900 // the wrapped block now needs more lines
+    act(() => useWrappedCodeBlocksStore.getState().toggle('m-wrap', 0))
+    expect(screen.getByText('Show more')).toBeTruthy()
+
+    heightRef.value = 100 // unwrapped again
+    act(() => useWrappedCodeBlocksStore.getState().toggle('m-wrap', 0))
+    expect(screen.queryByText('Show more')).toBeNull()
   })
 
   it('does not render again when new children still need collapsing', () => {

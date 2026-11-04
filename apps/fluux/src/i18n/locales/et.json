@@ -572,6 +572,8 @@
         },
         "showMore": "Näita rohkem",
         "showLess": "Näita vähem",
+        "wrapLines": "Murra read",
+        "unwrapLines": "Lõpeta ridade murdmine",
         "deliveryFailed": "Sõnum ei ole kohale toimetatud",
         "viewError": "Vaata viga",
         "retry": "Proovi uuesti",

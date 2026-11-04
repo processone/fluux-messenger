@@ -576,6 +576,8 @@
         },
         "showMore": "Zobrazit více",
         "showLess": "Zobrazit méně",
+        "wrapLines": "Zalamovat řádky",
+        "unwrapLines": "Přestat zalamovat řádky",
         "deliveryFailed": "Zpráva nebyla doručena",
         "viewError": "Zobrazit chybu",
         "retry": "Zkusit znovu",

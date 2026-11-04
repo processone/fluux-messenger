@@ -570,6 +570,8 @@
         },
         "showMore": "展开",
         "showLess": "收起",
+        "wrapLines": "自动换行",
+        "unwrapLines": "取消自动换行",
         "deliveryFailed": "消息未送达",
         "viewError": "查看错误",
         "retry": "重试",

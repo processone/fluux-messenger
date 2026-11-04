@@ -570,6 +570,8 @@
         },
         "showMore": "Visa mer",
         "showLess": "Visa mindre",
+        "wrapLines": "Radbryt",
+        "unwrapLines": "Sluta radbryta",
         "deliveryFailed": "Meddelandet levererades inte",
         "viewError": "Visa fel",
         "retry": "Försök igen",

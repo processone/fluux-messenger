@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/react'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { render, fireEvent, screen } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { formatMessagePreview } from '@fluux/sdk'
+import { useWrappedCodeBlocksStore } from '@/stores/wrappedCodeBlocksStore'
 import { renderStyledMessage, renderQuotePreview } from './messageStyles'
 
 describe('renderStyledMessage', () => {
@@ -1208,5 +1209,74 @@ describe('preview / renderer parity for code spans', () => {
 
   it.each(cases)('preview matches rendered text for %j', (body) => {
     expect(formatMessagePreview({ body })).toBe(renderedText(body))
+  })
+})
+
+// Source: FLM-399 — "Wrap lines" button on every message code block.
+describe('code block wrap button', () => {
+  const longLine = 'I am Adrien from ProcessOne, following up on Jérôme email. We would be glad to have process'
+  const body = (n = 1) => Array.from({ length: n }, (_, i) => '```\n' + longLine + i + '\n```').join('\n')
+
+  beforeEach(() => useWrappedCodeBlocksStore.getState().clear())
+
+  it('shows the button left of Expand and starts unwrapped', () => {
+    const { container } = render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    const buttons = [...container.querySelectorAll('button')]
+    expect(buttons.map((b) => b.title)).toEqual(['chat.wrapLines', 'Expand code', 'Copy code'])
+    expect(buttons[0].getAttribute('aria-pressed')).toBe('false')
+    expect(container.querySelector('pre')?.className).not.toContain('whitespace-pre-wrap')
+  })
+
+  it('wraps on click without changing the text, and unwraps on a second click', () => {
+    const { container } = render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    fireEvent.click(screen.getByTitle('chat.wrapLines'))
+    expect(container.querySelector('pre')?.className).toContain('whitespace-pre-wrap')
+    expect(container.querySelector('pre code')?.textContent).toBe(longLine + '0')
+    expect(screen.getByTitle('chat.unwrapLines').getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByTitle('chat.unwrapLines'))
+    expect(container.querySelector('pre')?.className).not.toContain('whitespace-pre-wrap')
+  })
+
+  it('wraps only the clicked block when a message has two', () => {
+    const { container } = render(<div>{renderStyledMessage(body(2), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    fireEvent.click(screen.getAllByTitle('chat.wrapLines')[1])
+    const pres = container.querySelectorAll('pre')
+    expect(pres[0].className).not.toContain('whitespace-pre-wrap')
+    expect(pres[1].className).toContain('whitespace-pre-wrap')
+  })
+
+  it('keeps the state when the block is unmounted and rendered again', () => {
+    const first = render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    fireEvent.click(screen.getByTitle('chat.wrapLines'))
+    first.unmount()
+    const { container } = render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    expect(container.querySelector('pre')?.className).toContain('whitespace-pre-wrap')
+  })
+
+  it('copies the original text even while wrapped', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    fireEvent.click(screen.getByTitle('chat.wrapLines'))
+    fireEvent.click(screen.getByTitle('Copy code'))
+    expect(writeText).toHaveBeenCalledWith(longLine + '0')
+  })
+
+  it('opens the enlarged view in the block mode, with its own button', () => {
+    render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    fireEvent.click(screen.getByTitle('chat.wrapLines'))
+    fireEvent.click(screen.getByTitle('Expand code'))
+    const modalPre = [...document.querySelectorAll('pre')].find((p) => p.className.includes('min-h-full'))!
+    expect(modalPre.className).toContain('whitespace-pre-wrap')
+    // Unwrap from the enlarged view: both views follow
+    fireEvent.click(screen.getAllByTitle('chat.unwrapLines')[1])
+    expect(modalPre.className).not.toContain('whitespace-pre-wrap')
+    expect(useWrappedCodeBlocksStore.getState().isWrapped('m1', 0)).toBe(false)
+  })
+
+  it('works as local state when no message id is given', () => {
+    const { container } = render(<div>{renderStyledMessage(body())}</div>)
+    fireEvent.click(screen.getByTitle('chat.wrapLines'))
+    expect(container.querySelector('pre')?.className).toContain('whitespace-pre-wrap')
   })
 })

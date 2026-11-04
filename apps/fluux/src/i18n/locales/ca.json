@@ -574,6 +574,8 @@
         },
         "showMore": "Mostra més",
         "showLess": "Mostra menys",
+        "wrapLines": "Ajusta les línies",
+        "unwrapLines": "Desactiva l'ajust de línies",
         "deliveryFailed": "Missatge no lliurat",
         "viewError": "Veure error",
         "retry": "Reintentar",
