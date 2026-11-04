@@ -1928,7 +1928,11 @@ export class Connection extends BaseModule {
     // Keep the fallback for backwards compatibility with stored credentials
     const wsUrl = server.startsWith('ws') ? server : `wss://${server}/ws`
     const domain = getDomain(jid)
-    const username = getLocalPart(jid)
+    // RFC 7622: the localpart is case-insensitive and xmpp.js lowercases the stream
+    // header's from=. Send the authentication identity in the same form, otherwise
+    // SASL2 servers (ejabberd) refuse a correct password with not-authorized when the
+    // typed address contains capitals.
+    const username = getLocalPart(jid).toLowerCase()
     const authentication = new AuthenticationTracker(
       (message, category) => this.stores.console.addEvent(message, category),
       ({ method, mechanism }) => {
