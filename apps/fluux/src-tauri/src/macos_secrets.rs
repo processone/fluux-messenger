@@ -1,6 +1,6 @@
 //! macOS keychain access lists belong to items, not services. Share one cached
 //! item across desktop consumers, retaining legacy items for the 0.18.0 release.
-use crate::credentials::SecretStore;
+use crate::credentials::{RefusedRetry, SecretStore};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -119,6 +119,8 @@ pub struct Secrets<S> {
     store: S,
     // Denial/cancel and deterministic combined-item decode/version failures
     // are shared for this launch. Transient failures leave the cache empty.
+    // Only an explicit request reads a refused item again: erasing it, or the
+    // user's retry from the recovery panel (`retry_refused_access`).
     cache: Mutex<Option<StoreResult<Bundle>>>,
     // The fresh item is independent of the old one: a refusal of the old items
     // is cached above and never reaches it.
@@ -349,6 +351,20 @@ impl<S: Backend> Secrets<S> {
             tracing::error!("macOS secrets {operation} failed: {error}");
             error
         })?;
+        self.fill(&mut cache)?;
+        let result = match cache.as_mut().expect("initialized above") {
+            Ok(bundle) => f(bundle),
+            Err(error) => return Err(error.clone()),
+        };
+        if let Err(error) = &result {
+            tracing::error!("macOS secrets {operation} failed: {error}");
+        }
+        result
+    }
+
+    /// Load an empty cache once. A denial or an invalid item stays cached for
+    /// this launch; a transient failure leaves the cache empty.
+    fn fill(&self, cache: &mut Option<StoreResult<Bundle>>) -> StoreResult<()> {
         if cache.is_none() {
             match self.load() {
                 Ok(bundle) => *cache = Some(Ok(bundle)),
@@ -361,14 +377,7 @@ impl<S: Backend> Secrets<S> {
                 }
             }
         }
-        let result = match cache.as_mut().expect("initialized above") {
-            Ok(bundle) => f(bundle),
-            Err(error) => return Err(error.clone()),
-        };
-        if let Err(error) = &result {
-            tracing::error!("macOS secrets {operation} failed: {error}");
-        }
-        result
+        Ok(())
     }
 }
 impl<S: Backend> SecretStore for Secrets<S> {
@@ -434,6 +443,72 @@ impl<S: Backend> SecretStore for Secrets<S> {
             }
         }
         Ok(())
+    }
+    fn refused_access(&self, account: &str) -> Result<bool, String> {
+        if self.is_fresh(account).map_err(|e| e.to_string())? {
+            return Ok(false);
+        }
+        let cache = match self.cache.try_lock() {
+            Ok(cache) => cache,
+            // A read is under way, perhaps waiting on the user's answer.
+            Err(std::sync::TryLockError::WouldBlock) => return Ok(false),
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                return Err("macOS secrets lock poisoned".into())
+            }
+        };
+        Ok(match cache.as_ref() {
+            Some(Err(error)) => error.user_denial(),
+            Some(Ok(bundle)) => matches!(
+                bundle.legacy_reads.get(account),
+                Some(Err(error)) if error.user_denial()
+            ),
+            None => false,
+        })
+    }
+    fn retry_refused_access(&self, account: &str) -> Result<RefusedRetry, String> {
+        if self.is_fresh(account).map_err(|e| e.to_string())? {
+            return Err("A restored account never reads its old items again".into());
+        }
+        // The read happens under the cache lock, so no other reader can turn
+        // this one request into a second one.
+        let mut cache = self
+            .cache
+            .lock()
+            .map_err(|_| "macOS secrets lock poisoned".to_string())?;
+        match cache.as_mut() {
+            Some(Err(refusal)) if refusal.user_denial() => {
+                let refusal = refusal.clone();
+                *cache = None;
+                match self.fill(&mut cache) {
+                    Ok(()) => Ok(RefusedRetry::Read),
+                    Err(error) if error.user_denial() => Ok(RefusedRetry::RefusedAgain),
+                    Err(error) => {
+                        // Not the user's answer: keep the refusal, so nothing
+                        // reads again before the next explicit request.
+                        if cache.is_none() {
+                            *cache = Some(Err(refusal));
+                        }
+                        Err(error.to_string())
+                    }
+                }
+            }
+            Some(Ok(bundle)) if !bundle.legacy => match bundle.legacy_reads.get(account) {
+                Some(Err(refusal)) if refusal.user_denial() => match self.store.read(account) {
+                    Ok(value) => {
+                        bundle.legacy_reads.insert(account.into(), Ok(value));
+                        Ok(RefusedRetry::Read)
+                    }
+                    Err(error) if error.user_denial() => {
+                        bundle.legacy_reads.insert(account.into(), Err(error));
+                        Ok(RefusedRetry::RefusedAgain)
+                    }
+                    // The earlier refusal stays cached.
+                    Err(error) => Err(error.to_string()),
+                },
+                _ => Ok(RefusedRetry::NothingRefused),
+            },
+            _ => Ok(RefusedRetry::NothingRefused),
+        }
     }
     fn legacy_candidate(&self, account: &str) -> Result<Option<String>, String> {
         if self.is_fresh(account).map_err(|e| e.to_string())? {
@@ -1308,6 +1383,8 @@ mod tests {
         mark_failures_after_publish: Mutex<usize>,
         // After a failed mark, the record can no longer be read back.
         unreadable_after_failed_mark: Mutex<bool>,
+        // Failures of reads of one named old item, and how many remain.
+        item_read_errors: Mutex<BTreeMap<String, (StoreError, usize)>>,
     }
     impl SecretStore for FakeStore {
         fn get(&self, account: &str) -> Result<Option<String>, String> {
@@ -1373,6 +1450,12 @@ mod tests {
             // `reads` pins the old layout; the fresh item is a separate store.
             if account != FRESH_ACCOUNT {
                 self.reads.lock().unwrap().push(account.into());
+            }
+            if let Some((error, remaining)) = self.item_read_errors.lock().unwrap().get_mut(account) {
+                if *remaining > 0 {
+                    *remaining -= 1;
+                    return Err(error.clone());
+                }
             }
             if is_bundle(account) {
                 let failures = if account == FRESH_ACCOUNT {
@@ -1706,6 +1789,102 @@ mod tests {
         // A relaunch over the same storage still reads the restored secret.
         let relaunched = Secrets::new(store.store);
         assert_eq!(relaunched.get(alice).unwrap().as_deref(), Some("restored"));
+    }
+
+    // FLM-304, the captain on FLM-298 review R3: "Never, but maybe an explicit
+    // retry try could be proposed in a advanced panel, in case there is no
+    // other way to recover the key". A refusal stays cached until the user
+    // asks; each request reads once; offering the retry never reads or waits.
+    #[test]
+    fn flm304_explicit_retry_reads_a_refused_item_once_per_request() {
+        let account = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        *store.store.read_error.lock().unwrap() = Some((StoreError::denied(), 2));
+        assert!(store.get(account).is_err());
+        assert!(store.get(account).is_err());
+        assert!(store.refused_access(account).unwrap());
+        {
+            // A read under way, perhaps on a prompt: no refusal yet, no wait.
+            let _reading = store.cache.lock().unwrap();
+            assert!(!store.refused_access(account).unwrap());
+        }
+        assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT]);
+
+        assert_eq!(store.retry_refused_access(account), Ok(RefusedRetry::RefusedAgain));
+        assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT, ACCOUNT]);
+        assert!(store.get(account).is_err());
+        assert!(store.refused_access(account).unwrap());
+        assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT, ACCOUNT]);
+
+        assert_eq!(store.retry_refused_access(account), Ok(RefusedRetry::Read));
+        assert_eq!(store.get(account).unwrap().as_deref(), Some("dGVzdC1wYXNz"));
+        assert!(!store.refused_access(account).unwrap());
+        assert_eq!(store.retry_refused_access(account), Ok(RefusedRetry::NothingRefused));
+        assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT, ACCOUNT, ACCOUNT]);
+    }
+
+    // FLM-304: a retry that fails for another reason than the user's answer
+    // keeps the refusal, so nothing reads again before the next request.
+    #[test]
+    fn flm304_a_failed_retry_keeps_the_refusal() {
+        let account = "openpgp_passphrase:alice@example.com";
+        let store = combined();
+        *store.store.read_error.lock().unwrap() = Some((StoreError::denied(), 1));
+        assert!(store.get(account).is_err());
+        *store.store.read_error.lock().unwrap() =
+            Some((StoreError::native(-25308, "interaction not allowed"), 1));
+        assert!(store.retry_refused_access(account).is_err());
+        assert!(store.get(account).is_err());
+        assert!(store.refused_access(account).unwrap());
+        assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT, ACCOUNT]);
+        assert_eq!(store.retry_refused_access(account), Ok(RefusedRetry::Read));
+    }
+
+    // FLM-304: a refused old item of one account is retried for that account
+    // only, and only on request.
+    #[test]
+    fn flm304_retry_rereads_only_this_accounts_refused_old_item() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let bob = "openpgp_passphrase:bob@example.org";
+        let store = combined();
+        store
+            .store
+            .item_read_errors
+            .lock()
+            .unwrap()
+            .insert(alice.into(), (StoreError::denied(), 2));
+        let alice_reads = || store.store.reads.lock().unwrap().iter().filter(|a| *a == alice).count();
+        assert!(store.legacy_candidate(alice).is_err());
+        assert!(store.legacy_candidate(alice).is_err());
+        assert_eq!(alice_reads(), 1);
+        assert!(store.refused_access(alice).unwrap());
+        assert!(!store.refused_access(bob).unwrap());
+        assert_eq!(store.retry_refused_access(bob), Ok(RefusedRetry::NothingRefused));
+
+        assert_eq!(store.retry_refused_access(alice), Ok(RefusedRetry::RefusedAgain));
+        assert!(store.legacy_candidate(alice).is_err());
+        assert_eq!(alice_reads(), 2);
+        assert_eq!(store.retry_refused_access(alice), Ok(RefusedRetry::Read));
+        assert_eq!(store.legacy_candidate(alice).unwrap().as_deref(), Some("dGVzdC1wYXNz"));
+        assert_eq!(alice_reads(), 3);
+        assert!(store.store.reads.lock().unwrap().iter().all(|a| a != bob));
+    }
+
+    // FLM-304 with FLM-343: a restored account never reads its old items, so
+    // it is never offered the retry, and a request reads nothing.
+    #[test]
+    fn flm304_a_restored_account_never_retries_its_old_items() {
+        let alice = "openpgp_passphrase:alice@example.com";
+        let store = Secrets::new(legacy());
+        *store.store.read_error.lock().unwrap() = Some((StoreError::denied(), usize::MAX));
+        store.fresh_write(alice, "restored").unwrap();
+        store.commit_fresh(alice).unwrap();
+        assert!(store.get("mcp-token").is_err());
+        let reads = store.store.reads.lock().unwrap().len();
+        assert!(!store.refused_access(alice).unwrap());
+        assert!(store.retry_refused_access(alice).is_err());
+        assert_eq!(store.store.reads.lock().unwrap().len(), reads);
+        assert!(store.refused_access("openpgp_passphrase:bob@example.org").unwrap());
     }
 
     // FLM-298 review R5: forgetting a restored account erases both storages,

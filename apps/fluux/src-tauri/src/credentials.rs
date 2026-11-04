@@ -16,6 +16,18 @@ pub struct StoredCredentials {
     pub server: Option<String>,
 }
 
+/// What one explicit retry of a refused keychain read found.
+#[cfg(any(target_os = "macos", test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefusedRetry {
+    /// This launch held no refusal for the account, so nothing was read.
+    NothingRefused,
+    /// The OS was asked again and the items were read.
+    Read,
+    /// The user refused again. That answer is kept like the first one.
+    RefusedAgain,
+}
+
 /// A keychain, reduced to the generic password items this module uses.
 pub trait SecretStore {
     fn get(&self, account: &str) -> Result<Option<String>, String>;
@@ -47,6 +59,20 @@ pub trait SecretStore {
     /// Explicit erase may retry a startup denial once; ordinary logout must not.
     #[cfg(any(target_os = "macos", test))]
     fn retry_denied_access(&self) -> Result<(), String> { Ok(()) }
+    /// Whether this launch holds the user's refusal of the old items that
+    /// `account` reads. It inspects only what this launch already cached and
+    /// never asks the OS: offering a retry must not cause one.
+    #[cfg(any(target_os = "macos", test))]
+    fn refused_access(&self, _account: &str) -> Result<bool, String> {
+        Ok(false)
+    }
+    /// The user's explicit request to read the old items refused for
+    /// `account` once more: one attempt, and only for a refusal this launch
+    /// holds. A restored account never reads its old items again.
+    #[cfg(any(target_os = "macos", test))]
+    fn retry_refused_access(&self, _account: &str) -> Result<RefusedRetry, String> {
+        Ok(RefusedRetry::NothingRefused)
+    }
     /// Optional old-layout read for a caller that validates a recovery candidate.
     #[cfg(any(target_os = "macos", test))]
     fn legacy_candidate(&self, _account: &str) -> Result<Option<String>, String> {

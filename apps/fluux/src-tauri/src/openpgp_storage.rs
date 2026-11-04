@@ -254,6 +254,47 @@ impl KeyStorage {
         }
     }
 
+    /// Whether this launch holds the user's refusal of the protected items
+    /// that unlock `jid`'s key. It inspects only answers already given in this
+    /// launch and never asks the OS, so offering a retry cannot cause one.
+    pub fn refused_access(&self, jid: &str) -> Result<bool> {
+        #[cfg(any(target_os = "macos", test))]
+        if self.use_keychain {
+            if let Some(store) = self.secret_store() {
+                return store
+                    .refused_access(&keyring_account(jid))
+                    .map_err(|error| anyhow!(error));
+            }
+        }
+        let _ = jid;
+        Ok(false)
+    }
+
+    /// The user's explicit request to read the items refused for `jid` once
+    /// more. `Ok(true)` when the OS answered with the items, `Ok(false)` when
+    /// this launch holds no such refusal and nothing was read. A new refusal
+    /// is an `openpgp-keychain-refused:` error and stays cached like the first.
+    pub fn retry_refused_access(&self, jid: &str) -> Result<bool> {
+        #[cfg(any(target_os = "macos", test))]
+        if self.use_keychain {
+            if let Some(store) = self.secret_store() {
+                use crate::credentials::RefusedRetry;
+                return match store
+                    .retry_refused_access(&keyring_account(jid))
+                    .map_err(|error| anyhow!(error))?
+                {
+                    RefusedRetry::Read => Ok(true),
+                    RefusedRetry::NothingRefused => Ok(false),
+                    RefusedRetry::RefusedAgain => Err(anyhow!(
+                        "openpgp-keychain-refused: access to the protected items was refused again"
+                    )),
+                };
+            }
+        }
+        let _ = jid;
+        Ok(false)
+    }
+
     /// Load the persisted key for `jid`, if one exists.
     ///
     /// Returns `Ok(None)` only when neither the key file nor its restore backup
