@@ -11,8 +11,8 @@ const TOKEN = { mechanism: 'HT-SHA-256-NONE', token: 'fixture-token', expiry: '2
 
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers() })
 
-async function negotiate({ token, acceptToken, password, sasl2 = true }: {
-  token: boolean; acceptToken: boolean; password?: string; sasl2?: boolean
+async function negotiate({ token, acceptToken, password, sasl2 = true, typedJid = JID }: {
+  token: boolean; acceptToken: boolean; password?: string; sasl2?: boolean; typedJid?: string
 }) {
   vi.useFakeTimers()
   const storage = createInMemoryFastTokenStorage()
@@ -22,13 +22,14 @@ async function negotiate({ token, acceptToken, password, sasl2 = true }: {
   bindStoresForTesting(sdk, stores)
   // Drive the real credentials callback and xmpp.js negotiation without opening a socket.
   const entity = (sdk as any).connection.createXmppClient({
-    jid: JID, password, server: 'wss://example.invalid/xmpp', rememberSession: true,
+    jid: typedJid, password, server: 'wss://example.invalid/xmpp', rememberSession: true,
   })
   entity.isSecure = () => true // Model the established WSS transport without opening a socket.
   const attempts: string[] = []
   const errors: any[] = []
   let accepted = false
   const sentPasswords: string[] = []
+  const sentUsernames: string[] = []
   entity.on('error', (error: unknown) => errors.push(error))
   entity.send = async (stanza: any) => {
     if (!['authenticate', 'auth'].includes(stanza.name)) return
@@ -38,7 +39,7 @@ async function negotiate({ token, acceptToken, password, sasl2 = true }: {
     if (stanza.attrs.mechanism === 'PLAIN') {
       const raw = sasl2 ? stanza.getChildText('initial-response') : stanza.text()
       const fields = new TextDecoder().decode(Uint8Array.from(atob(raw), c => c.charCodeAt(0))).split('\0')
-      expect(fields[1]).toBe('fixture')
+      sentUsernames.push(fields[1])
       sentPasswords.push(fields[2])
       valid = fields[2] === GOOD
     }
@@ -59,7 +60,7 @@ async function negotiate({ token, acceptToken, password, sasl2 = true }: {
       ...(sasl2 ? [xml('inline', {}, xml('fast', { xmlns: 'urn:xmpp:fast:0' }, xml('mechanism', {}, TOKEN.mechanism)))] : []))))
   await vi.waitFor(() => expect(accepted || errors.length > 0).toBe(true))
   for (let i = 0; i < 20; i++) await Promise.resolve()
-  const result = { attempts, accepted, sentPasswords, errors, remainingToken: fetchFastToken(JID, storage), authMethod: stores.connection.setAuthMethod.mock.calls.at(-1)?.[0], authMechanism: stores.connection.setAuthMechanism.mock.calls.at(-1)?.[0], logs: stores.console.addEvent.mock.calls.map(call => call[0]) }
+  const result = { attempts, accepted, sentPasswords, sentUsernames, streamUser: entity.jid?.local, errors, remainingToken: fetchFastToken(JID, storage), authMethod: stores.connection.setAuthMethod.mock.calls.at(-1)?.[0], authMechanism: stores.connection.setAuthMechanism.mock.calls.at(-1)?.[0], logs: stores.console.addEvent.mock.calls.map(call => call[0]) }
   sdk.cancelReconnect()
   return result
 }
@@ -105,5 +106,13 @@ describe('local socketless iOS/web authentication counterfactuals', () => {
     expect(r.attempts).toEqual(['PLAIN'])
     expect(r.accepted).toBe(true)
     expect(r.sentPasswords).toEqual([GOOD])
+  })
+  // Bug: FLM-397 — Adrien's sign-in refused with valid credentials. ejabberd SASL2 compares the
+  // lowercased stream from= with the authenticated identity, so both must be lowercase.
+  it.each([true, false])('a typed address with capitals authenticates as the lowercase stream user (sasl2=%s)', async (sasl2) => {
+    const r = await negotiate({ token: false, acceptToken: false, password: GOOD, sasl2, typedJid: 'Fixture@example.invalid' })
+    expect(r.streamUser).toBe('fixture')
+    expect(r.sentUsernames).toEqual(['fixture'])
+    expect(r.accepted).toBe(true)
   })
 })

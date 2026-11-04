@@ -182,6 +182,30 @@ describe('invalidateFastTokenOnServer', () => {
     expect(mockClientFactory).not.toHaveBeenCalled()
   })
 
+  // FLM-405 R1: a remembered capital-letter address must invalidate with the lowercase identity.
+  it('authenticates the invalidation with the lowercase localpart', async () => {
+    const inst = createMockInstance()
+    mockClientFactory.mockImplementation(() => inst)
+
+    const p = invalidateFastTokenOnServer({
+      jid: 'Alice@example.com',
+      server: 'wss://example.com/ws',
+      token: TOKEN,
+    })
+    await Promise.resolve()
+    inst._emit('online')
+    await p
+
+    const opts = mockClientFactory.mock.calls[0][0] as {
+      username: string
+      credentials: (auth: (c: { username: string }) => Promise<void>, m: string[], fast: unknown) => Promise<void>
+    }
+    expect(opts.username).toBe('alice')
+    let sent: { username: string } | undefined
+    await opts.credentials(async (c) => { sent = c }, ['HT-SHA-256-NONE'], {})
+    expect(sent?.username).toBe('alice')
+  })
+
   it('accepts a bare host for `server` and derives the WebSocket URL', async () => {
     mockFetchFastToken.mockReturnValue(TOKEN)
     const inst = createMockInstance()
