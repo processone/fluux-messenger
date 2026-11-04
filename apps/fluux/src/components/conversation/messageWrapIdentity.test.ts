@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { messageWrapIdentity } from './messageRowIdentity'
-import { wrapIdentityMatches } from '@/stores/wrappedCodeBlocksStore'
+import { sameWrapIdentity, isWrapIdentityEnrichment } from '@/stores/wrappedCodeBlocksStore'
 
 // Source: review FLM-404 R2/R3/R6 — per-message UI state (wrapped code blocks) is scoped to the
 // conversation, separates twins, and survives archive-id enrichment.
 describe('messageWrapIdentity', () => {
   const chat = { type: 'chat' as const, id: 'm1', conversationId: 'a@x.org', from: 'a@x.org' }
   const room = { type: 'groupchat' as const, id: 'm1', roomJid: 'r@muc.x.org', from: 'r@muc.x.org/Alice', timestamp: new Date(2026, 0, 1, 10), receivedAt: new Date(2026, 0, 1, 10, 0, 5) }
-  const same = (a: object, b: object) => wrapIdentityMatches(messageWrapIdentity(a)!, messageWrapIdentity(b)!)
+  const same = (a: object, b: object) => sameWrapIdentity(messageWrapIdentity(a)!, messageWrapIdentity(b)!)
+  const enrichment = (a: object, b: object) => isWrapIdentityEnrichment(messageWrapIdentity(a)!, messageWrapIdentity(b)!)
 
   it('separates legacy messages sharing an id across conversations', () => {
     expect(same(chat, { ...chat, conversationId: 'b@x.org' })).toBe(false)
@@ -26,10 +27,12 @@ describe('messageWrapIdentity', () => {
     expect(same({ ...room, occupantId: 'a' }, { ...room, occupantId: 'b' })).toBe(false)
   })
 
-  it('stays the same message when backfill supplies archive and origin ids', () => {
-    expect(same(chat, { ...chat, stanzaId: 's1', originId: 'o1' })).toBe(true)
-    expect(same({ ...chat, originId: 'o1' }, { ...chat, originId: 'o1', stanzaId: 's1' })).toBe(true)
-    expect(same(room, { ...room, stanzaId: 's2', timestamp: new Date(2026, 0, 1, 9, 59) })).toBe(true)
+  it('recognises backfill as an enrichment of the same occurrence, not as a different message', () => {
+    expect(enrichment(chat, { ...chat, stanzaId: 's1', originId: 'o1' })).toBe(true)
+    expect(enrichment({ ...chat, originId: 'o1' }, { ...chat, originId: 'o1', stanzaId: 's1' })).toBe(true)
+    expect(enrichment(room, { ...room, stanzaId: 's2', timestamp: new Date(2026, 0, 1, 9, 59) })).toBe(true)
+    expect(enrichment({ ...chat, stanzaId: 's1' }, { ...chat, stanzaId: 's2' })).toBe(false)
+    expect(enrichment(chat, { ...chat, id: 'm2', stanzaId: 's1' })).toBe(false)
   })
 
   it('has no identity for an id-less message', () => {

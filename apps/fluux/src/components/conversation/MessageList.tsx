@@ -618,6 +618,7 @@ export function MessageList<T extends BaseMessage>({
     handleMediaLoad,
     handleVirtualRowMeasuredGrowth,
     scrollToBottom,
+    holdLiveEdgePin,
     requestMessageTarget,
     showScrollToBottom,
     markerAboveViewport,
@@ -667,11 +668,12 @@ export function MessageList<T extends BaseMessage>({
   const runKeepingLiveEdge = useCallback<RunKeepingLiveEdge>((grow) => {
     const el = scrollContainerRef.current
     const atLiveEdge = !staticMode && !!el && el.scrollHeight - el.scrollTop - el.clientHeight <= AT_BOTTOM_THRESHOLD
+    const pin = atLiveEdge ? holdLiveEdgePin() : null
     grow()
-    if (!atLiveEdge) return
-    // Two frames: React commits the change, then the virtualizer measures the grown row.
-    requestAnimationFrame(() => requestAnimationFrame(() => scrollToBottom()))
-  }, [staticMode, scrollToBottom])
+    // Two frames: React commits the change, then the virtualizer measures the grown row. The pin
+    // gives way if the reader or the list took control in between.
+    if (pin) requestAnimationFrame(() => requestAnimationFrame(pin))
+  }, [staticMode, holdLiveEdgePin])
   handleVirtualRowMeasuredGrowthRef.current = handleVirtualRowMeasuredGrowth
 
   // Combined ref setter for scroll container

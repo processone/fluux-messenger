@@ -1,9 +1,9 @@
 import { create } from 'zustand'
 
 /**
- * Identity of a message for session UI state that must survive archive
- * enrichment (see {@link wrapIdentityMatches}). `scope`, `id`, `from` and
- * `instant` are fixed from the first render; the other three may be learned later.
+ * Identity of a message for session UI state. `scope`, `id`, `from` and
+ * `instant` are fixed from the first render; the other three may be learned
+ * later, which a mounted message reports through `promote`.
  */
 export interface WrapIdentity {
   scope: string | null
@@ -18,24 +18,19 @@ export interface WrapIdentity {
 
 const LATE_FIELDS = ['originId', 'occupantId', 'stanzaId'] as const
 
-/**
- * Two identities are the same message when the fixed fields are equal and every
- * late field known to both agrees. A field known to one side only is treated as
- * not yet learned, so archive backfill (which supplies stanzaId or originId
- * later) keeps the choice, while two messages whose known ids differ stay apart.
- */
-export function wrapIdentityMatches(a: WrapIdentity, b: WrapIdentity): boolean {
-  if (a.scope !== b.scope || a.id !== b.id || a.from !== b.from || a.instant !== b.instant) return false
-  return LATE_FIELDS.every((f) => a[f] === undefined || b[f] === undefined || a[f] === b[f])
+/** Strict equality: every field, late ones included, must be the same. */
+export function sameWrapIdentity(a: WrapIdentity, b: WrapIdentity): boolean {
+  return a.scope === b.scope && a.id === b.id && a.from === b.from && a.instant === b.instant &&
+    LATE_FIELDS.every((f) => a[f] === b[f])
 }
 
-/** The same identity with any late field it lacked taken from `other`. */
-function learn(known: WrapIdentity, other: WrapIdentity): WrapIdentity {
-  let learned = known
-  for (const f of LATE_FIELDS) {
-    if (known[f] === undefined && other[f] !== undefined) learned = { ...learned, [f]: other[f] }
-  }
-  return learned
+/**
+ * Whether `to` is `from` after archive backfill: same fixed fields, and every late
+ * id `from` already had is unchanged (ids may only be added, never changed).
+ */
+export function isWrapIdentityEnrichment(from: WrapIdentity, to: WrapIdentity): boolean {
+  return from.scope === to.scope && from.id === to.id && from.from === to.from && from.instant === to.instant &&
+    LATE_FIELDS.every((f) => from[f] === undefined || from[f] === to[f])
 }
 
 interface WrapEntry {
@@ -64,8 +59,12 @@ interface WrappedCodeBlocksState {
   /** Number of wrapped blocks in a message (changes whenever one is toggled) */
   countFor: (identity: WrapIdentity) => number
 
-  /** Record ids the message has learned since a choice was stored, so twins are told apart from then on */
-  claim: (identity: WrapIdentity) => void
+  /**
+   * A mounted message learned ids from archive backfill: its stored choice follows it.
+   * Only that exact identity moves, and only through an enrichment of the same
+   * occurrence, so a twin that merely looks like it is never handed the choice.
+   */
+  promote: (from: WrapIdentity, to: WrapIdentity) => void
 
   /** Clear all wrapped states */
   clear: () => void
@@ -76,34 +75,37 @@ export const useWrappedCodeBlocksStore = create<WrappedCodeBlocksState>((set, ge
 
   toggle: (identity, blockIndex) => {
     set(({ entries }) => {
-      const at = entries.findIndex((e) => wrapIdentityMatches(e.identity, identity))
+      const at = entries.findIndex((e) => sameWrapIdentity(e.identity, identity))
       if (at === -1) return { entries: [...entries, { identity, blocks: new Set([blockIndex]) }] }
       const blocks = new Set(entries[at].blocks)
       if (!blocks.delete(blockIndex)) blocks.add(blockIndex)
       const next = entries.slice()
       if (blocks.size === 0) next.splice(at, 1)
-      else next[at] = { identity: learn(entries[at].identity, identity), blocks }
+      else next[at] = { identity, blocks }
       return { entries: next }
     })
   },
 
   isWrapped: (identity, blockIndex) =>
-    get().entries.some((e) => e.blocks.has(blockIndex) && wrapIdentityMatches(e.identity, identity)),
+    get().entries.some((e) => e.blocks.has(blockIndex) && sameWrapIdentity(e.identity, identity)),
 
   countFor: (identity) =>
-    get().entries.reduce((n, e) => n + (wrapIdentityMatches(e.identity, identity) ? e.blocks.size : 0), 0),
+    get().entries.reduce((n, e) => n + (sameWrapIdentity(e.identity, identity) ? e.blocks.size : 0), 0),
 
-  claim: (identity) => {
-    const { entries } = get()
-    let changed = false
-    const next = entries.map((e) => {
-      if (!wrapIdentityMatches(e.identity, identity)) return e
-      const learned = learn(e.identity, identity)
-      if (learned === e.identity) return e
-      changed = true
-      return { ...e, identity: learned }
+  promote: (from, to) => {
+    if (!isWrapIdentityEnrichment(from, to) || sameWrapIdentity(from, to)) return
+    set(({ entries }) => {
+      const at = entries.findIndex((e) => sameWrapIdentity(e.identity, from))
+      if (at === -1) return { entries }
+      const existing = entries.findIndex((e) => sameWrapIdentity(e.identity, to))
+      const next = entries.slice()
+      if (existing === -1) next[at] = { identity: to, blocks: entries[at].blocks }
+      else {
+        next[existing] = { identity: to, blocks: new Set([...entries[existing].blocks, ...entries[at].blocks]) }
+        next.splice(at, 1)
+      }
+      return { entries: next }
     })
-    if (changed) set({ entries: next })
   },
 
   clear: () => set({ entries: [] }),

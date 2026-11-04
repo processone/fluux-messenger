@@ -9,6 +9,7 @@ import { render, screen, fireEvent, act, within } from '@testing-library/react'
 import { MessageBubble, buildReplyContext, type MessageBubbleProps } from './MessageBubble'
 import type { BaseMessage } from '@fluux/sdk'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
+import { useWrappedCodeBlocksStore } from '@/stores/wrappedCodeBlocksStore'
 import { setPeerVerified, clearPeerVerified } from '@/stores/verifiedPeerKeysStore'
 import type { DensityMode } from '@/stores/settingsStore'
 import { useRef, type ReactNode } from 'react'
@@ -1449,4 +1450,31 @@ it('FLM-245 updates only old/new held rows and preserves the toolbar handler ide
     expect(secondCounts).toEqual([1, 1, 0])
     console.info('FLM-245 actual row renders', JSON.stringify({ firstCounts, secondCounts }))
   } finally { renders.mockRestore(); vi.unstubAllGlobals() }
+})
+
+// Source: review FLM-404 R6/R3 — a wrap choice follows its own row through archive backfill and is
+// never handed to a look-alike twin that mounts while the original is unmounted.
+describe('MessageBubble wrap choice and archive backfill', () => {
+  const codeBody = '```\nlong line of code\n```'
+  const twinBase = { id: 'dup', type: 'chat' as const, conversationId: 'alice@example.com', body: codeBody }
+
+  beforeEach(() => useWrappedCodeBlocksStore.getState().clear())
+
+  it('keeps the choice when the mounted row gains an archive id, and does not give it to a twin', () => {
+    const original = createTestMessage(twinBase)
+    const { container, rerender, unmount } = render(<MessageBubble {...createDefaultProps({ message: original })} />)
+    fireEvent.click(screen.getByTitle('chat.wrapLines'))
+    expect(container.querySelector('pre')?.className).toContain('whitespace-pre-wrap')
+    // backfill supplies the archive id to the same mounted row: the choice follows
+    rerender(<MessageBubble {...createDefaultProps({ message: { ...original, stanzaId: 'archive-A' } })} />)
+    expect(container.querySelector('pre')?.className).toContain('whitespace-pre-wrap')
+    unmount()
+    // the original is virtualized out; an archive-only twin mounts first and must not inherit it
+    const twin = render(<MessageBubble {...createDefaultProps({ message: createTestMessage({ ...twinBase, stanzaId: 'archive-B' }) })} />)
+    expect(twin.container.querySelector('pre')?.className).not.toContain('whitespace-pre-wrap')
+    twin.unmount()
+    // the enriched original returns and still has its choice
+    const back = render(<MessageBubble {...createDefaultProps({ message: { ...original, stanzaId: 'archive-A' } })} />)
+    expect(back.container.querySelector('pre')?.className).toContain('whitespace-pre-wrap')
+  })
 })

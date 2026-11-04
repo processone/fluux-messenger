@@ -391,8 +391,14 @@ export const MessageBubble = memo(function MessageBubble({
     () => messageWrapIdentity({ id: msgId, type: msgType, conversationId, roomJid, from: msgFrom, originId, occupantId, stanzaId, timestamp, receivedAt }),
     [msgId, msgType, conversationId, roomJid, msgFrom, originId, occupantId, stanzaId, timestamp, receivedAt],
   )
-  // Once backfill supplies ids, record them against any stored choice so twins are told apart from then on.
-  useEffect(() => { if (wrapIdentity) useWrappedCodeBlocksStore.getState().claim(wrapIdentity) }, [wrapIdentity])
+  // This row's own backfill (same mounted occurrence gaining archive/origin ids) carries its stored
+  // wrap choice along; an unmounted row or a look-alike twin never inherits one.
+  const previousWrapIdentity = useRef(wrapIdentity)
+  useEffect(() => {
+    const previous = previousWrapIdentity.current
+    previousWrapIdentity.current = wrapIdentity
+    if (previous && wrapIdentity) useWrappedCodeBlocksStore.getState().promote(previous, wrapIdentity)
+  }, [wrapIdentity])
   const interactionHeld = useMessageInteractionHeld(bubbleRef)
   const openMenusRef = useRef({ more: false, reaction: false })
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false)

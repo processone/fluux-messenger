@@ -144,4 +144,31 @@ test.describe('Wrap lines in the message list', () => {
     }
 
   })
+  // Review FLM-404 R7: the re-pin after a wrap is queued two frames ahead. A reader's newer wheel
+  // input in between takes control, so the list must not be dragged back to the bottom.
+  test('a wheel gesture right after a wrap wins over the queued bottom pin', async ({ page }) => {
+    await loadDemo(page)
+    await seedRoom(page, ROOM, 10)
+    await openRoom(page, ROOM)
+    await scrollToBottom(page)
+    expect(await distanceFromBottom(page)).toBeLessThanOrEqual(AT_BOTTOM_OK_PX)
+
+    const last = wrapButtons(page).last()
+    await last.hover()
+    await page.evaluate(() => {
+      const buttons = document.querySelectorAll<HTMLButtonElement>('[data-message-list] button[aria-pressed]')
+      const list = document.querySelector('[data-message-list]') as HTMLElement
+      buttons[buttons.length - 1].click()
+      // The reader scrolls up after the click but before the queued pin's second frame: the
+      // wheel and the scroll it causes land in the first frame, the pin fires in the second.
+      requestAnimationFrame(() => {
+        list.dispatchEvent(new WheelEvent('wheel', { deltaY: -240, bubbles: true, cancelable: true }))
+        list.scrollTop -= 240
+      })
+    })
+    await settle(page)
+    await page.waitForTimeout(300)
+    expect(await isWrapped(wrapButtons(page).last())).toEqual({ wrapped: true, overflows: false })
+    expect(await distanceFromBottom(page)).toBeGreaterThan(AT_BOTTOM_OK_PX)
+  })
 })
