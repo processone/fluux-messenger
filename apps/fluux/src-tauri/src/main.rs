@@ -13,6 +13,8 @@ mod share_inbox_tests;
 // Shared credential operations; macOS stores their logical accounts in one item.
 #[cfg(any(target_os = "macos", test))]
 mod credentials;
+// Refusals of keychain items, answered on every platform for the OpenPGP key storage.
+mod keychain_refusal;
 #[cfg(any(target_os = "macos", test))]
 mod macos_secrets;
 

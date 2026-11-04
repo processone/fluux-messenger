@@ -75,6 +75,8 @@ use std::sync::OnceLock;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 
+use crate::keychain_refusal::RefusalState;
+
 /// Legacy desktop service. macOS uses a single shared secrets item; iOS
 /// uses the app's own keychain items. Service sharing alone does not share ACLs.
 #[cfg(not(any(target_os = "ios", target_os = "macos")))]
@@ -257,7 +259,7 @@ impl KeyStorage {
     /// Whether this launch holds the user's refusal of the protected items
     /// that unlock `jid`'s key. It inspects only answers already given in this
     /// launch and never asks the OS, so offering a retry cannot cause one.
-    pub fn refused_access(&self, jid: &str) -> Result<crate::credentials::RefusalState> {
+    pub fn refused_access(&self, jid: &str) -> Result<RefusalState> {
         #[cfg(any(target_os = "macos", test))]
         if self.use_keychain {
             if let Some(store) = self.secret_store() {
@@ -267,7 +269,7 @@ impl KeyStorage {
             }
         }
         let _ = jid;
-        Ok(crate::credentials::RefusalState::NotHeld)
+        Ok(RefusalState::NotHeld)
     }
 
     /// The user's explicit request to read the items refused for `jid` once
@@ -278,7 +280,7 @@ impl KeyStorage {
         #[cfg(any(target_os = "macos", test))]
         if self.use_keychain {
             if let Some(store) = self.secret_store() {
-                use crate::credentials::RefusedRetry;
+                use crate::keychain_refusal::RefusedRetry;
                 return match store
                     .retry_refused_access(&keyring_account(jid))
                     .map_err(|error| anyhow!(error))?

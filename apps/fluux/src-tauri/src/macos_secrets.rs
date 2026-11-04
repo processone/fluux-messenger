@@ -1,6 +1,7 @@
 //! macOS keychain access lists belong to items, not services. Share one cached
 //! item across desktop consumers, retaining legacy items for the 0.18.0 release.
-use crate::credentials::{RefusalState, RefusedRetry, SecretStore};
+use crate::credentials::SecretStore;
+use crate::keychain_refusal::{RefusalState, RefusedRetry};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},

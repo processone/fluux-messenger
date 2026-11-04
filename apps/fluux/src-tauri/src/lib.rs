@@ -13,6 +13,8 @@ mod ios_keychain;
 #[path = "ios/notification_previews.rs"]
 mod ios_notification_previews;
 #[cfg(target_os = "ios")]
+mod keychain_refusal;
+#[cfg(target_os = "ios")]
 mod link_preview;
 #[cfg(target_os = "ios")]
 mod native_storage;

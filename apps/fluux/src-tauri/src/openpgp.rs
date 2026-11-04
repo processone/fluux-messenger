@@ -35,7 +35,7 @@ use std::sync::{Arc, Mutex};
 use tauri::State;
 use tokio::sync::{Mutex as AsyncMutex, OnceCell as AsyncOnceCell, OwnedMutexGuard};
 
-use crate::credentials::RefusalState;
+use crate::keychain_refusal::RefusalState;
 use crate::openpgp_storage::{KeyStorage, PassphraseBacking, PersistedKey};
 
 use openpgp::{
