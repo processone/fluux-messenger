@@ -371,7 +371,7 @@ mod host {
         tauri::Builder::default().manage(state).manage(fixture)
             .invoke_handler(tauri::generate_handler![get_credentials, recovery_checkpoint, recovery_ciphertext, recovery_failure,
                 recovery_note, recovery_grant_keychain,
-                openpgp::openpgp_ensure_key, openpgp::openpgp_has_persisted_key,
+                openpgp::openpgp_ensure_key, openpgp::openpgp_prewarm, openpgp::openpgp_has_persisted_key,
                 openpgp::openpgp_keychain_retry_available, openpgp::openpgp_retry_keychain_access,
                 openpgp::openpgp_backup_import_all, openpgp::openpgp_backup_import_selected,
                 openpgp::openpgp_validate_cert, openpgp::openpgp_encrypt, openpgp::openpgp_decrypt])

@@ -357,15 +357,22 @@ test('the advanced keychain retry asks macOS only on request and unlocks the sam
 test('the keychain retry stays hidden on desktop Windows', async ({ page }) => {
   await bootDemo(page, '/demo.html?tutorial=false&e2ee=recovery&recoveryBackup=absent&recoveryOs=windows')
   expect(await audit(page)).toMatchObject({ build: expectedBuild })
+  const encryption = JSON.parse(readFileSync(new URL('../apps/fluux/src/i18n/locales/en.json', import.meta.url), 'utf8')).settings.encryption
+  // Off macOS the refusal opens the identity choice; its server probe found no backup.
+  const noBackup = page.getByRole('button', { name: encryption.identityChoice.restoreFromServerUnavailable, exact: false })
+  await expect(noBackup).toBeDisabled()
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   await page.evaluate(() => { location.hash = '/settings/encryption' })
-  await expect(page.getByText('The local key could not be unlocked.', { exact: false })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Restore from backup', exact: true })).toBeEnabled()
-  // On macOS the panel asks the native probe as soon as this view renders.
-  expect((await audit(page)).commands).not.toContain('openpgp_keychain_retry_available')
+  await expect(page.getByText(encryption.statusRecoveryNeeded, { exact: true })).toBeVisible()
+  await expect(noBackup).toBeDisabled()
   await expect(page.getByRole('button', { name: keychainRetryTitle, exact: true })).toBeHidden()
-  expect(await retryReads(page)).toBe(0)
   await capture(page, 'keychain-retry-hidden-windows.png')
+  // On macOS this view's panel asks the native probe when it mounts. Leaving
+  // Settings renders again, and React first runs every pending mount effect.
+  await page.evaluate(() => { location.hash = '/messages' })
+  await expect(page.getByText(encryption.statusRecoveryNeeded, { exact: true })).toBeHidden()
+  expect((await audit(page)).commands).not.toContain('openpgp_keychain_retry_available')
+  expect(await retryReads(page)).toBe(0)
 })
 
 for (const backup of ['present', 'unknown']) {
