@@ -82,6 +82,24 @@ describe('useWrapIdentityAliases', () => {
     expect(wrapped(returned!)).toBe(false)
   })
 
+  it('equal-length replacement [A, X] to [B, Y] does not give A\'s choice to its twin B', () => {
+    renderHook(() => useWrapIdentityAliases())
+    const original = dm()
+    act(() => { chatStore.setState({ messages: new Map([['bob@x.org', [original, dm({ id: 'x' })]]]) }) })
+    toggle(original)
+    act(() => { chatStore.setState({ messages: new Map([['bob@x.org', [dm({ stanzaId: 'B' }), dm({ id: 'y' })]]]) }) })
+    expect(wrapped(dm({ stanzaId: 'B' }))).toBe(false)
+  })
+
+  it('room: equal-length replacement does not give the choice to a twin', () => {
+    renderHook(() => useWrapIdentityAliases())
+    const original = roomMsg()
+    act(() => { roomStore.setState({ messages: new Map([['room@conf.x.org', [original, roomMsg({ id: 'x' })]]]) }) })
+    toggle(original)
+    act(() => { roomStore.setState({ messages: new Map([['room@conf.x.org', [roomMsg({ stanzaId: 'B' }), roomMsg({ id: 'y' })]]]) }) })
+    expect(wrapped(roomMsg({ stanzaId: 'B' }))).toBe(false)
+  })
+
   it('a remembered twin that later gains an origin id, returning alone, does not inherit the choice (R10)', () => {
     renderHook(() => useWrapIdentityAliases())
     const original = dm()

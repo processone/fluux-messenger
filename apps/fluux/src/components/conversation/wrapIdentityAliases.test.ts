@@ -21,12 +21,18 @@ describe('inPlaceEnrichments', () => {
     expect(inPlaceEnrichments([dm()], [other('c')], wanted)).toEqual([])
   })
 
+  it('proves nothing when an unwrapped slot turns into a different message (A, X) to (B, Y)', () => {
+    const x = other('x')
+    expect(inPlaceEnrichments([dm(), x], [dm({ stanzaId: 'B' }), other('y')], wanted)).toEqual([])
+  })
+
   it('does not follow a look-alike whose ids contradict the stored ones', () => {
     expect(inPlaceEnrichments([dm({ stanzaId: 'A' })], [dm({ stanzaId: 'B' })], wanted)).toEqual([])
   })
 
-  it('ignores slots that changed without touching a wrapped message', () => {
+  it('accepts a rebuilt slot of an unchanged message', () => {
     expect(inPlaceEnrichments([other('a')], [other('a')], wanted)).toEqual([])
     expect(inPlaceEnrichments([other('a'), dm()], [{ ...other('a') }, dm()], wanted)).toEqual([])
+    expect(inPlaceEnrichments([other('a'), dm()], [{ ...other('a') }, dm({ stanzaId: 'A' })], wanted)).toHaveLength(1)
   })
 })
