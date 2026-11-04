@@ -6,6 +6,7 @@ import { SettingsDisclosure } from '@/components/ui/SettingsDisclosure'
 import { backupRecoveryError } from '@/components/backupRecoveryError'
 import { BackupRecoveryFailure } from '@/components/BackupRecoveryFailure'
 import { platform } from '@/platform'
+import type { KeychainRetryState } from '@/e2ee/OpenPGPPluginBase'
 
 type RetryFailure = ReturnType<typeof backupRecoveryError>
 
@@ -20,13 +21,18 @@ function retryFailure(error: unknown, t: TFunction): RetryFailure {
 
 /** What the panel needs from the OpenPGP plugin. */
 export interface KeychainRetryPlugin {
-  isKeychainRetryOffered(): Promise<boolean>
+  keychainRetryState(): Promise<KeychainRetryState>
   retryKeychainAccess(): Promise<{ fingerprint: string }>
+}
+
+/** A failed probe decides nothing, like a request still on macOS's prompt. */
+function readRetryState(plugin: KeychainRetryPlugin): Promise<KeychainRetryState> {
+  return plugin.keychainRetryState().catch((): KeychainRetryState => 'unconfirmed')
 }
 
 function supportsKeychainRetry(plugin: unknown): plugin is KeychainRetryPlugin {
   const candidate = plugin as Partial<KeychainRetryPlugin> | null | undefined
-  return typeof candidate?.isKeychainRetryOffered === 'function' && typeof candidate.retryKeychainAccess === 'function'
+  return typeof candidate?.keychainRetryState === 'function' && typeof candidate.retryKeychainAccess === 'function'
 }
 
 interface KeychainRetryPanelProps {
@@ -80,10 +86,7 @@ function KeychainRetryPanel({ plugin, onUnlocked, hintAction, onBusyChange }: Ke
   useEffect(() => {
     let cancelled = false
     setOffered(false)
-    plugin.isKeychainRetryOffered().then(
-      (next) => { if (!cancelled) setOffered(next) },
-      () => { if (!cancelled) setOffered(false) },
-    )
+    void readRetryState(plugin).then((next) => { if (!cancelled) setOffered(next === 'offered') })
     return () => { cancelled = true }
   }, [plugin])
 
@@ -102,12 +105,14 @@ function KeychainRetryPanel({ plugin, onUnlocked, hintAction, onBusyChange }: Ke
         setRefusedAgain(true)
       } else if (isE2EEPluginError(error) && error.code === 'keychain-retry-unavailable') {
         // Nothing is refused any more, for example after a restore elsewhere.
-        setOffered(await plugin.isKeychainRetryOffered().catch(() => false))
+        setOffered((await readRetryState(plugin)) === 'offered')
       } else {
         setFailure(retryFailure(error, t))
         // A granted read that still cannot unlock the key consumes the
-        // refusal; ask the native store whether anything is left to retry.
-        setSpent(!(await plugin.isKeychainRetryOffered().catch(() => false)))
+        // refusal, and only that confirmed answer retires the action. A
+        // request that outlived its time limit may still be on macOS's
+        // prompt; its answer comes later, so the action stays (FLM-408 R4).
+        setSpent((await readRetryState(plugin)) === 'none')
       }
     } finally {
       setBusy(false)

@@ -39,23 +39,26 @@ async function aliceBundle(): Promise<KeyBundle> {
   return { fingerprint: key.getFingerprint().toUpperCase(), publicArmored: key.toPublic().armor(), keychainBacked: true, createdAt: key.getCreationTime().toISOString() }
 }
 
-async function setup({ initError = REFUSAL, refused = true, backup = 'absent' as 'absent' | 'present' | 'error' } = {}) {
+async function setup({ initError = REFUSAL, refused = true, backup = 'absent' as 'absent' | 'present' | 'error', retryLimitMs = undefined as number | undefined } = {}) {
   const calls: string[] = []
   const publications: string[] = []
   const answers: Answer[] = []
   const alice = await aliceBundle()
   let unlocked: KeyBundle | null = null
   let pause: (() => Promise<void>) | undefined
+  // While a retry waits on its prompt, the native cache is locked by that read.
+  let promptOpen = false
   let publishPause: (() => Promise<void>) | undefined
   const invoke: InvokeFn = async <T>(cmd: string, args?: Record<string, unknown>) => {
     calls.push(cmd)
     if (cmd === 'openpgp_has_persisted_key') return true as T
     if (cmd === 'openpgp_ensure_key') { if (unlocked) return unlocked as T; throw new Error(initError) }
-    // The native probe inspects cached answers only; it never opens a prompt.
-    if (cmd === 'openpgp_keychain_retry_available') return (refused && !unlocked) as T
+    // The native probe inspects cached answers only; it never opens a prompt or waits.
+    if (cmd === 'openpgp_keychain_retry_available') return (promptOpen ? 'pending' : refused && !unlocked ? 'held' : 'not-held') as T
     if (cmd === RETRY) {
       expect(args).toEqual({ accountJid })
-      await pause?.()
+      promptOpen = true
+      try { await pause?.() } finally { promptOpen = false }
       if (unlocked) return unlocked as T
       const answer = answers.shift()
       if (answer === 'refuse') throw new Error('openpgp-keychain-refused: access to the protected items was refused again')
@@ -89,7 +92,7 @@ async function setup({ initError = REFUSAL, refused = true, backup = 'absent' as
       subscribePEP: () => ({ unsubscribe: () => {} }),
     },
   }
-  const plugin = new SequoiaPgpPlugin({ invoke }); plugins.push(plugin)
+  const plugin = new SequoiaPgpPlugin({ invoke, timeouts: retryLimitMs ? { keyMaterialMs: retryLimitMs } : undefined }); plugins.push(plugin)
   await plugin.init(ctx)
   return { plugin, ctx, calls, publications, alice, answer: (...next: Answer[]) => answers.push(...next),
     setPause: (value?: () => Promise<void>) => { pause = value },
@@ -105,22 +108,22 @@ async function setup({ initError = REFUSAL, refused = true, backup = 'absent' as
 
 describe('FLM-304 explicit keychain retry', () => {
   it.each([
-    ['a refused keychain read and no server backup', {}, true],
-    ['a desynced key whose old item read was refused', { initError: DESYNC }, true],
-    ['a server backup that can restore the key', { backup: 'present' as const }, false],
-    ['a backup probe that could not reach the server', { backup: 'error' as const }, false],
-    ['a locked key with no refusal held this launch', { refused: false }, false],
-  ])('offers the retry for %s: %s, without reading the keychain', async (_name, options, offered) => {
+    ['a refused keychain read and no server backup', {}, 'offered'],
+    ['a desynced key whose old item read was refused', { initError: DESYNC }, 'offered'],
+    ['a server backup that can restore the key', { backup: 'present' as const }, 'none'],
+    ['a backup probe that could not reach the server', { backup: 'error' as const }, 'unconfirmed'],
+    ['a locked key with no refusal held this launch', { refused: false }, 'none'],
+  ])('answers the retry state for %s: %s, without reading the keychain', async (_name, options, state) => {
     const f = await setup(options)
     expect(f.plugin.isKeyRecoveryNeeded()).toBe(true)
-    expect(await f.plugin.isKeychainRetryOffered()).toBe(offered)
+    expect(await f.plugin.keychainRetryState()).toBe(state)
     expect(f.calls).not.toContain(RETRY)
     expect(f.publications).toEqual([])
   })
 
   it('reads the keychain once per request and unlocks the same key after a second refusal', async () => {
     const f = await setup()
-    expect(await f.plugin.isKeychainRetryOffered()).toBe(true)
+    expect(await f.plugin.keychainRetryState()).toBe('offered')
 
     f.answer('refuse')
     await expect(f.plugin.retryKeychainAccess()).rejects.toMatchObject({ code: 'keychain-refused' })
@@ -129,7 +132,7 @@ describe('FLM-304 explicit keychain retry', () => {
     expect(f.plugin.getOwnFingerprint()).toBeNull()
     expect(f.ctx.notifyKeyUnlocked).not.toHaveBeenCalled()
     expect(f.publications).toEqual([])
-    expect(await f.plugin.isKeychainRetryOffered()).toBe(true)
+    expect(await f.plugin.keychainRetryState()).toBe('offered')
 
     f.answer('grant')
     await expect(f.plugin.retryKeychainAccess()).resolves.toEqual({ fingerprint: meta.aliceFingerprint })
@@ -142,7 +145,7 @@ describe('FLM-304 explicit keychain retry', () => {
     expect(f.calls.filter(c => c === RETRY)).toHaveLength(2)
     expect(f.calls.filter(c => c === 'openpgp_ensure_key')).toHaveLength(1)
     expect(f.calls).not.toContain('openpgp_backup_import_selected')
-    expect(await f.plugin.isKeychainRetryOffered()).toBe(false)
+    expect(await f.plugin.keychainRetryState()).toBe('none')
   })
 
   it('keeps a second click from starting another read while the prompt is open', async () => {
@@ -165,7 +168,7 @@ describe('FLM-304 explicit keychain retry', () => {
     expect(f.plugin.isKeyRecoveryNeeded()).toBe(true)
     expect(f.plugin.isKeyStorageUnavailable()).toBe(false)
     expect(f.ctx.notifyKeyUnlocked).not.toHaveBeenCalled()
-    expect(await f.plugin.isKeychainRetryOffered()).toBe(false)
+    expect(await f.plugin.keychainRetryState()).toBe('none')
   })
 
   it('does not unlock a plugin that logged out while the prompt was open', async () => {
@@ -214,12 +217,32 @@ describe('FLM-304 explicit keychain retry', () => {
     expect(f.ctx.notifyKeyUnlocked).not.toHaveBeenCalled()
   })
 
+  // Intent FLM-408 R4: a retry that outlives its time limit while macOS's
+  // prompt stays open is unfinished, not a consumed refusal. The state stays
+  // unconfirmed until the user answers, and a refusal offers the retry again.
+  it('keeps a retry still on its prompt unconfirmed, then offers it again once the user refuses', async () => {
+    const f = await setup({ retryLimitMs: 50 })
+    let answerPrompt!: () => void
+    f.setPause(() => new Promise<void>(done => { answerPrompt = done }))
+    f.answer('refuse')
+    await expect(f.plugin.retryKeychainAccess()).rejects.toThrow(/openpgp_retry_keychain_access timeout/)
+    expect(await f.plugin.keychainRetryState()).toBe('unconfirmed')
+    expect(f.plugin.isKeyRecoveryNeeded()).toBe(true)
+
+    f.setPause(undefined)
+    answerPrompt()
+    await vi.waitFor(async () => expect(await f.plugin.keychainRetryState()).toBe('offered'))
+    f.answer('grant')
+    await expect(f.plugin.retryKeychainAccess()).resolves.toEqual({ fingerprint: meta.aliceFingerprint })
+    expect(f.calls.filter(c => c === RETRY)).toHaveLength(2)
+  })
+
   it('neither offers nor runs the retry while a restore awaits reconciliation', async () => {
     const f = await setup()
     await expect(f.plugin.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid }))
       .rejects.toThrow(/restore-outcome-uncertain/)
     expect(f.plugin.isBackupRestoreUncertain()).toBe(true)
-    expect(await f.plugin.isKeychainRetryOffered()).toBe(false)
+    expect(await f.plugin.keychainRetryState()).toBe('none')
     f.answer('grant')
     await expect(f.plugin.retryKeychainAccess()).rejects.toMatchObject({ code: 'restore-outcome-uncertain' })
     expect(f.calls).not.toContain(RETRY)

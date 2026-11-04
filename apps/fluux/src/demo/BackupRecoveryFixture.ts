@@ -33,6 +33,9 @@ export function createBackupRecoveryFixture() {
   // prompt the user has not answered yet.
   let promptAnswered: Promise<void> | null = null
   let answerPrompt = () => {}
+  // FLM-408 R4: while a retried read waits on that prompt, the native store
+  // answers that a read is under way, not whether the refusal is still held.
+  let promptOpen = false
   ;(window as any).__recoveryPrompt = {
     hold: () => { promptAnswered = new Promise<void>(done => { answerPrompt = done }) },
     answer: () => { promptAnswered = null; answerPrompt() },
@@ -60,11 +63,14 @@ export function createBackupRecoveryFixture() {
       throw new Error('openpgp-storage-unavailable: macOS keychain (-25293): authorization refused')
     }
     // The refusal is held for the launch until the user's explicit retry.
-    if (cmd === 'openpgp_keychain_retry_available') return (!installed && refusalHeld) as T
+    if (cmd === 'openpgp_keychain_retry_available') return (promptOpen ? 'pending' : !installed && refusalHeld ? 'held' : 'not-held') as T
     if (cmd === 'openpgp_retry_keychain_access') {
       if (installed) return installed as T
       if (!refusalHeld) throw new Error(`openpgp-keychain-retry-unavailable: no refused keychain access to retry for ${args!.accountJid}`)
-      if (promptAnswered) await promptAnswered
+      if (promptAnswered) {
+        promptOpen = true
+        try { await promptAnswered } finally { promptOpen = false }
+      }
       retryReads++
       if (retryReads === 1) throw new Error('openpgp-keychain-refused: access to the protected items was refused again')
       if (unlockFails) {

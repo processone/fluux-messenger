@@ -22,6 +22,7 @@ import {
   type CertValidation,
   type DecryptOutput,
   type KeyBundle,
+  type KeychainRefusal,
   classifyBoundaryError,
 } from './OpenPGPPluginBase'
 import { accountUserId } from './openpgpUserId'
@@ -292,8 +293,8 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     }
   }
 
-  protected override async hasRefusedKeychainAccess(accountJid: string): Promise<boolean> {
-    return this.invoke<boolean>('openpgp_keychain_retry_available', { accountJid })
+  protected override async keychainRefusal(accountJid: string): Promise<KeychainRefusal> {
+    return this.invoke<KeychainRefusal>('openpgp_keychain_retry_available', { accountJid })
   }
 
   protected override async retryRefusedKeychainAccess(accountJid: string): Promise<KeyBundle> {

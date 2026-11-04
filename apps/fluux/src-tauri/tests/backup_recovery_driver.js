@@ -23,7 +23,8 @@
     }
     const note = label => window.__TAURI_INTERNALS__.invoke('recovery_note', { label })
     const account = { accountJid: 'you@fluux.chat' }
-    const retryOffered = () => window.__TAURI_INTERNALS__.invoke('openpgp_keychain_retry_available', account)
+    // FLM-408 R4: the native answer is 'held', 'not-held' or 'pending'.
+    const retryOffered = async () => (await window.__TAURI_INTERNALS__.invoke('openpgp_keychain_retry_available', account)) === 'held'
     const heading = text => [...document.querySelectorAll('h1,h2,h3')].some(el => el.textContent === text)
     const plugin = () => window.__demoClient.e2ee.getPlugin('openpgp')
     // FLM-304 and FLM-408 R3: what may happen around the retry without a

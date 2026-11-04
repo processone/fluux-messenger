@@ -521,9 +521,54 @@ for (const placement of ['Settings', 'identity choice']) {
     await expect(ask).toBeDisabled()
     await expect(advanced).toHaveAttribute('aria-expanded', 'true')
     expect(await retryReads(page)).toBe(2)
-    expect(await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').isKeychainRetryOffered())).toBe(false)
+    expect(await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').keychainRetryState())).toBe('none')
     if (desync) await expect(scope.getByRole('button', { name: new RegExp(encryptionCopy.identityChoice.importFromFileTitle) })).toBeEnabled()
     else await expect(page.getByRole('button', { name: 'Restore from backup', exact: true })).toBeEnabled()
+  })
+}
+
+// Intent FLM-408 R4: a press that outlives its time limit while macOS's
+// prompt stays open has not spent the refusal. Both placements keep the
+// failure and an enabled button; once the user refuses that prompt, the next
+// press asks macOS again.
+for (const placement of ['Settings', 'identity choice']) {
+  test(`a retry that times out on an open prompt stays available in the ${placement}`, async ({ page }) => {
+    const desync = placement === 'identity choice'
+    await bootDemo(page, `/demo.html?tutorial=false&e2ee=recovery&recoveryBackup=absent${desync ? '&recoveryFailure=desync-refused' : ''}`)
+    expect(await audit(page)).toMatchObject({ build: expectedBuild })
+    const scope = desync ? page.locator('[data-modal="true"]') : page.locator('body')
+    if (!desync) {
+      await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await page.evaluate(() => { location.hash = '/settings/encryption' })
+    }
+    const advanced = scope.getByRole('button', { name: keychainRetryTitle, exact: true })
+    await advanced.click()
+    const ask = scope.getByRole('button', { name: keychainRetry.action, exact: true })
+    // The page's clock decides when the native call's two-minute limit expires.
+    await page.clock.install()
+    await page.evaluate(() => (window as any).__recoveryPrompt.hold())
+    await ask.click()
+    await expect(scope.getByRole('button', { name: keychainRetry.busy, exact: true })).toBeDisabled()
+    await page.clock.fastForward(121_000)
+    await expect(scope.getByRole('alert')).toHaveText(keychainRetry.failed)
+    await scope.getByText(encryptionCopy.recoveryErrorDetails, { exact: true }).click()
+    await expect(scope.getByText(/openpgp_retry_keychain_access timeout after 120000 ms/)).toBeVisible()
+    await expect(ask).toBeVisible()
+    await capture(page, `after-${desync ? 'desync-' : ''}keychain-retry-timed-out.png`)
+    await expect(ask).toBeEnabled()
+    expect(await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').keychainRetryState())).toBe('unconfirmed')
+    // The user refuses the prompt the timed-out press opened.
+    await page.evaluate(() => (window as any).__recoveryPrompt.answer())
+    await expect.poll(() => page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').keychainRetryState())).toBe('offered')
+    await expect(ask).toBeEnabled()
+    expect(await retryReads(page)).toBe(1)
+    await ask.click()
+    await expect(page.getByText(keychainRetry.success, { exact: true })).toBeVisible()
+    if (desync) await expect(scope).toBeHidden()
+    else await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()
+    expect(await retryReads(page)).toBe(2)
+    expect(await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').getOwnFingerprint())).toBe(fingerprint)
   })
 }
 
@@ -536,15 +581,15 @@ for (const backup of ['present', 'unknown']) {
       const w = window as any, plugin = w.__demoClient.e2ee.getPlugin('openpgp')
       if (backup === 'unknown') plugin.fetchSecretKeyBackup = async () => { throw new Error('remote-server-timeout') }
       // Record the plugin's answer so the hidden panel is a settled decision, not a pending one.
-      const offered = plugin.isKeychainRetryOffered.bind(plugin)
+      const state = plugin.keychainRetryState.bind(plugin)
       w.__retryOffers = []
-      plugin.isKeychainRetryOffered = async () => { const answer = await offered(); w.__retryOffers.push(answer); return answer }
+      plugin.keychainRetryState = async () => { const answer = await state(); w.__retryOffers.push(answer); return answer }
     }, backup)
     await page.evaluate(() => { location.hash = '/settings/encryption' })
     await expect(page.getByText('The local key could not be unlocked.', { exact: false })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Restore from backup', exact: true })).toBeEnabled()
     await expect.poll(() => page.evaluate(() => (window as any).__retryOffers.length)).toBeGreaterThan(0)
-    expect(await page.evaluate(() => (window as any).__retryOffers)).not.toContain(true)
+    expect(await page.evaluate(() => (window as any).__retryOffers)).not.toContain('offered')
     expect((await audit(page)).commands).toContain('openpgp_keychain_retry_available')
     await expect(page.getByRole('button', { name: keychainRetryTitle, exact: true })).toBeHidden()
     expect(await retryReads(page)).toBe(0)

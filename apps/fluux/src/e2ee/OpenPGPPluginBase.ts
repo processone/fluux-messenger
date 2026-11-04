@@ -478,6 +478,21 @@ export const OPENPGP_DESCRIPTOR: E2EEProtocolDescriptor = {
  */
 export type BackupProbeResult = 'present' | 'absent' | 'unknown'
 
+/**
+ * What the native store's cached answers say about the user's refusal of the
+ * keychain items that unlock our key: `pending` while a keychain read is under
+ * way, such as an earlier retry still waiting on the user's answer.
+ */
+export type KeychainRefusal = 'held' | 'not-held' | 'pending'
+
+/**
+ * Whether the keychain retry is offered (FLM-304). `unconfirmed` while no
+ * answer holds yet: a keychain read is under way, such as a retry whose
+ * prompt outlived its time limit, or a probe failed. Only `none` confirms
+ * that nothing is left to retry.
+ */
+export type KeychainRetryState = 'offered' | 'unconfirmed' | 'none'
+
 /** What a check of our published key found, or `outdated` when our key changed meanwhile. */
 type OwnKeyCheckVerdict = 'consistent' | 'conflict' | 'outdated'
 
@@ -607,20 +622,25 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * other way to recover the key". The retry is offered only while this
    * account's key is locked by a keychain refusal the native store still
    * holds, no restore awaits reconciliation, and the server confirms it has
-   * no backup. Asking never retries anything.
+   * no backup. Asking never retries anything, and a request still waiting on
+   * the user's answer is `unconfirmed`, never `none` (FLM-408 R4).
    */
-  async isKeychainRetryOffered(): Promise<boolean> {
+  async keychainRetryState(): Promise<KeychainRetryState> {
     const ctx = this.ctx
-    if (!ctx || !this.isKeyRecoveryNeeded() || this.isBackupRestoreUncertain()) return false
-    let refused: boolean
+    if (!ctx || !this.isKeyRecoveryNeeded() || this.isBackupRestoreUncertain()) return 'none'
+    let refusal: KeychainRefusal
     try {
-      refused = await this.hasRefusedKeychainAccess(ctx.account.jid)
+      refusal = await this.keychainRefusal(ctx.account.jid)
     } catch (err) {
       ctx.logger.debug(`${this.pluginName()}: keychain retry probe failed: ${formatError(err)}`)
-      return false
+      return 'unconfirmed'
     }
-    if (!refused || this.ctx !== ctx) return false
-    return (await this.probeSecretKeyBackup()) === 'absent' && this.ctx === ctx
+    if (this.ctx !== ctx) return 'none'
+    if (refusal !== 'held') return refusal === 'pending' ? 'unconfirmed' : 'none'
+    const backup = await this.probeSecretKeyBackup()
+    if (this.ctx !== ctx) return 'none'
+    // A backup that exists recovers the key instead; an unknown answer decides nothing.
+    return backup === 'absent' ? 'offered' : backup === 'present' ? 'none' : 'unconfirmed'
   }
 
   /**
@@ -673,8 +693,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   /** Native adapters report a keychain refusal held this launch; never a new read. */
-  protected async hasRefusedKeychainAccess(_accountJid: string): Promise<boolean> {
-    return false
+  protected async keychainRefusal(_accountJid: string): Promise<KeychainRefusal> {
+    return 'not-held'
   }
 
   /** Native adapters ask the OS once more for the refused items and unlock the existing key. */

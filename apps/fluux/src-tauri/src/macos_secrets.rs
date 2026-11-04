@@ -1,6 +1,6 @@
 //! macOS keychain access lists belong to items, not services. Share one cached
 //! item across desktop consumers, retaining legacy items for the 0.18.0 release.
-use crate::credentials::{RefusedRetry, SecretStore};
+use crate::credentials::{RefusalState, RefusedRetry, SecretStore};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -444,26 +444,28 @@ impl<S: Backend> SecretStore for Secrets<S> {
         }
         Ok(())
     }
-    fn refused_access(&self, account: &str) -> Result<bool, String> {
+    fn refused_access(&self, account: &str) -> Result<RefusalState, String> {
         if self.is_fresh(account).map_err(|e| e.to_string())? {
-            return Ok(false);
+            return Ok(RefusalState::NotHeld);
         }
         let cache = match self.cache.try_lock() {
             Ok(cache) => cache,
-            // A read is under way, perhaps waiting on the user's answer.
-            Err(std::sync::TryLockError::WouldBlock) => return Ok(false),
+            // A read is under way, perhaps a retry waiting on the user's
+            // answer. Never wait for it, and never call it consumed.
+            Err(std::sync::TryLockError::WouldBlock) => return Ok(RefusalState::Pending),
             Err(std::sync::TryLockError::Poisoned(_)) => {
                 return Err("macOS secrets lock poisoned".into())
             }
         };
-        Ok(match cache.as_ref() {
+        let held = match cache.as_ref() {
             Some(Err(error)) => error.user_denial(),
             Some(Ok(bundle)) => matches!(
                 bundle.legacy_reads.get(account),
                 Some(Err(error)) if error.user_denial()
             ),
             None => false,
-        })
+        };
+        Ok(if held { RefusalState::Held } else { RefusalState::NotHeld })
     }
     fn retry_refused_access(&self, account: &str) -> Result<RefusedRetry, String> {
         if self.is_fresh(account).map_err(|e| e.to_string())? {
@@ -1802,23 +1804,24 @@ mod tests {
         *store.store.read_error.lock().unwrap() = Some((StoreError::denied(), 2));
         assert!(store.get(account).is_err());
         assert!(store.get(account).is_err());
-        assert!(store.refused_access(account).unwrap());
+        assert_eq!(store.refused_access(account), Ok(RefusalState::Held));
         {
-            // A read under way, perhaps on a prompt: no refusal yet, no wait.
+            // FLM-408 R4: a read under way, perhaps a retry on a prompt, is
+            // neither a refusal nor a consumed one, and asking never waits.
             let _reading = store.cache.lock().unwrap();
-            assert!(!store.refused_access(account).unwrap());
+            assert_eq!(store.refused_access(account), Ok(RefusalState::Pending));
         }
         assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT]);
 
         assert_eq!(store.retry_refused_access(account), Ok(RefusedRetry::RefusedAgain));
         assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT, ACCOUNT]);
         assert!(store.get(account).is_err());
-        assert!(store.refused_access(account).unwrap());
+        assert_eq!(store.refused_access(account), Ok(RefusalState::Held));
         assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT, ACCOUNT]);
 
         assert_eq!(store.retry_refused_access(account), Ok(RefusedRetry::Read));
         assert_eq!(store.get(account).unwrap().as_deref(), Some("dGVzdC1wYXNz"));
-        assert!(!store.refused_access(account).unwrap());
+        assert_eq!(store.refused_access(account), Ok(RefusalState::NotHeld));
         assert_eq!(store.retry_refused_access(account), Ok(RefusedRetry::NothingRefused));
         assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT, ACCOUNT, ACCOUNT]);
     }
@@ -1835,7 +1838,7 @@ mod tests {
             Some((StoreError::native(-25308, "interaction not allowed"), 1));
         assert!(store.retry_refused_access(account).is_err());
         assert!(store.get(account).is_err());
-        assert!(store.refused_access(account).unwrap());
+        assert_eq!(store.refused_access(account), Ok(RefusalState::Held));
         assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT, ACCOUNT]);
         assert_eq!(store.retry_refused_access(account), Ok(RefusedRetry::Read));
     }
@@ -1857,8 +1860,8 @@ mod tests {
         assert!(store.legacy_candidate(alice).is_err());
         assert!(store.legacy_candidate(alice).is_err());
         assert_eq!(alice_reads(), 1);
-        assert!(store.refused_access(alice).unwrap());
-        assert!(!store.refused_access(bob).unwrap());
+        assert_eq!(store.refused_access(alice), Ok(RefusalState::Held));
+        assert_eq!(store.refused_access(bob), Ok(RefusalState::NotHeld));
         assert_eq!(store.retry_refused_access(bob), Ok(RefusedRetry::NothingRefused));
 
         assert_eq!(store.retry_refused_access(alice), Ok(RefusedRetry::RefusedAgain));
@@ -1881,10 +1884,10 @@ mod tests {
         store.commit_fresh(alice).unwrap();
         assert!(store.get("mcp-token").is_err());
         let reads = store.store.reads.lock().unwrap().len();
-        assert!(!store.refused_access(alice).unwrap());
+        assert_eq!(store.refused_access(alice), Ok(RefusalState::NotHeld));
         assert!(store.retry_refused_access(alice).is_err());
         assert_eq!(store.store.reads.lock().unwrap().len(), reads);
-        assert!(store.refused_access("openpgp_passphrase:bob@example.org").unwrap());
+        assert_eq!(store.refused_access("openpgp_passphrase:bob@example.org"), Ok(RefusalState::Held));
     }
 
     // FLM-298 review R5: forgetting a restored account erases both storages,

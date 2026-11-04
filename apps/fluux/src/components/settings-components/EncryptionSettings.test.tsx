@@ -890,6 +890,8 @@ describe('macOS keychain retry panel', () => {
   let unlockedFingerprint: string | null
   // The native store still holds this launch's refusal; a granted read consumes it.
   let refusalHeld: boolean
+  // A request still on macOS's prompt locks the native cache, so nothing is confirmed.
+  let promptOpen: boolean
   let retryKeychainAccess: ReturnType<typeof vi.fn>
   beforeEach(() => {
     vi.clearAllMocks()
@@ -900,12 +902,14 @@ describe('macOS keychain retry panel', () => {
     useToastStore.setState({ toasts: [] })
     unlockedFingerprint = null
     refusalHeld = true
+    promptOpen = false
     retryKeychainAccess = vi.fn()
     mockPlugin = {
       getOwnFingerprint: () => unlockedFingerprint,
       isKeyRecoveryNeeded: () => unlockedFingerprint === null,
       isKeyStorageUnavailable: () => unlockedFingerprint === null,
-      isKeychainRetryOffered: vi.fn(async () => unlockedFingerprint === null && refusalHeld),
+      keychainRetryState: vi.fn(async () =>
+        unlockedFingerprint !== null ? 'none' : promptOpen ? 'unconfirmed' : refusalHeld ? 'offered' : 'none'),
       retryKeychainAccess,
     }
     useEncryptionSettingsStore.setState({ openpgpEnabled: true, pluginRegisteredAt: 0, registrationError: null })
@@ -1003,11 +1007,41 @@ describe('macOS keychain retry panel', () => {
     expect(useToastStore.getState().toasts.map(t => [t.type, t.message])).toEqual([['success', 'settings.encryption.keychainRetry.success']])
   })
 
+  // Intent FLM-408 R4: a retry that outlived its time limit may still be on
+  // macOS's prompt. That is unfinished, not a consumed refusal: the action
+  // stays in either placement, and asks again once the user has refused.
+  it.each([
+    ['under the restore entry', true],
+    ['inside the identity choice', false],
+  ])('keeps the action %s while a timed-out retry is still on its prompt', async (_placement, storageUnavailable) => {
+    mockPlugin!.isKeyStorageUnavailable = () => unlockedFingerprint === null && storageUnavailable
+    retryKeychainAccess.mockImplementationOnce(async () => {
+      promptOpen = true
+      throw new E2EEPluginError('transient', 'unknown',
+        'SequoiaPgpPlugin: retryKeychainAccess: SequoiaPgpPlugin: native call openpgp_retry_keychain_access timeout after 120000 ms')
+    })
+    render(<EncryptionSettings />)
+    fireEvent.click(await screen.findByRole('button', { name: panelTitle }))
+    fireEvent.click(retryButton())
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.encryption.keychainRetry.failed')
+    // The press ends only after the panel has asked whether anything is left.
+    await waitFor(() => expect(retryButton()).toHaveTextContent('settings.encryption.keychainRetry.action'))
+    expect(retryButton()).toBeEnabled()
+
+    // The user refuses on the prompt that stayed open; the next press asks again.
+    promptOpen = false
+    retryKeychainAccess.mockRejectedValueOnce(new E2EEPluginError('permanent', 'keychain-refused', 'openpgp-keychain-refused: refused again'))
+    fireEvent.click(retryButton())
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.encryption.keychainRetry.refusedAgain')
+    expect(retryButton()).toBeEnabled()
+    expect(retryKeychainAccess).toHaveBeenCalledTimes(2)
+  })
+
   it('is absent when the plugin does not offer the retry', async () => {
-    mockPlugin!.isKeychainRetryOffered = vi.fn(async () => false)
+    mockPlugin!.keychainRetryState = vi.fn(async () => 'none')
     render(<EncryptionSettings />)
     expect(await screen.findByText('settings.encryption.statusRecoveryNeeded')).toBeInTheDocument()
-    await waitFor(() => expect(mockPlugin!.isKeychainRetryOffered).toHaveBeenCalled())
+    await waitFor(() => expect(mockPlugin!.keychainRetryState).toHaveBeenCalled())
     expect(screen.queryByRole('button', { name: panelTitle })).not.toBeInTheDocument()
   })
 
@@ -1016,6 +1050,6 @@ describe('macOS keychain retry panel', () => {
     render(<EncryptionSettings />)
     expect(await screen.findByText('settings.encryption.statusRecoveryNeeded')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: panelTitle })).not.toBeInTheDocument()
-    expect(mockPlugin!.isKeychainRetryOffered).not.toHaveBeenCalled()
+    expect(mockPlugin!.keychainRetryState).not.toHaveBeenCalled()
   })
 })

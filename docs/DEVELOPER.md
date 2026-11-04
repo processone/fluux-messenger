@@ -463,10 +463,11 @@ Restart first to load the durable outcome.
 
 When macOS refused the keychain read this launch and the server reports no backup, Settings →
 Encryption also shows a folded **Advanced: ask the keychain again** panel. It never runs on its own.
-Deciding whether to show it (`openpgp_keychain_retry_available`) inspects only cached answers, and
-returns false while a read is under way. Each press of its button (`openpgp_retry_keychain_access`)
-makes one OS request under the `secrets-v1` cache lock: a refused combined load is loaded again, and
-a refused old item of a desynced account is read again for that account only. A new refusal is cached
+Deciding whether to show it (`openpgp_keychain_retry_available`) inspects only cached answers: it
+answers `held`, `not-held`, or `pending` while a read is under way, without waiting for that read.
+Each press of its button (`openpgp_retry_keychain_access`) makes one OS request under the
+`secrets-v1` cache lock: a refused combined load is loaded again, and a refused old item of a
+desynced account is read again for that account only. A new refusal is cached
 like the first; any other failure keeps the earlier refusal, so nothing reads again before the next
 press. A granted read unlocks the existing key in place, and the App then publishes it and decrypts
 waiting messages as after a normal start. The retry never generates, restores or deletes a key, and an
@@ -476,7 +477,10 @@ and a log out or another key during that time rejects the retry's result. While 
 macOS, the restore entry beside the panel, or the identity choice's options and Cancel around it,
 are disabled, and only the choice that asked closes when the key unlocks. When macOS allows the read
 but the key still does not unlock, the refusal is spent: the panel keeps the failure and its details
-and disables its button. A newly registered plugin gets a new, folded panel. The panel stays hidden while a
+and disables its button. A press that outlives its time limit while the prompt stays open has not
+spent it: the store answers `pending`, so the panel keeps the failure and its button. Once the user
+answers that prompt, the next press reads again after a refusal, or uses the key a granted read
+unlocked. A newly registered plugin gets a new, folded panel. The panel stays hidden while a
 server backup exists or its probe fails, while a restore awaits restart, once the key is unlocked,
 and outside desktop macOS. A desynced key, whose refused item is its own old passphrase item, opens the
 identity choice instead (at startup and in Settings), so the same folded panel sits inside that

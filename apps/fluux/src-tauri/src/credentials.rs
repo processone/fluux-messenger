@@ -28,6 +28,20 @@ pub enum RefusedRetry {
     RefusedAgain,
 }
 
+/// What this launch's cached answers say about the user's refusal of the old
+/// items that unlock an account's key. Asking never reads the keychain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RefusalState {
+    /// No refusal is held, so nothing is left to ask again.
+    NotHeld,
+    /// The user refused the items this launch, and nothing has read them since.
+    Held,
+    /// A keychain read is under way, perhaps an earlier retry still waiting on
+    /// the user's answer. Its outcome decides, so neither answer holds yet.
+    Pending,
+}
+
 /// A keychain, reduced to the generic password items this module uses.
 pub trait SecretStore {
     fn get(&self, account: &str) -> Result<Option<String>, String>;
@@ -63,8 +77,8 @@ pub trait SecretStore {
     /// `account` reads. It inspects only what this launch already cached and
     /// never asks the OS: offering a retry must not cause one.
     #[cfg(any(target_os = "macos", test))]
-    fn refused_access(&self, _account: &str) -> Result<bool, String> {
-        Ok(false)
+    fn refused_access(&self, _account: &str) -> Result<RefusalState, String> {
+        Ok(RefusalState::NotHeld)
     }
     /// The user's explicit request to read the old items refused for
     /// `account` once more: one attempt, and only for a refusal this launch

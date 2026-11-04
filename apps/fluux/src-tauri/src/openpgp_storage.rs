@@ -257,7 +257,7 @@ impl KeyStorage {
     /// Whether this launch holds the user's refusal of the protected items
     /// that unlock `jid`'s key. It inspects only answers already given in this
     /// launch and never asks the OS, so offering a retry cannot cause one.
-    pub fn refused_access(&self, jid: &str) -> Result<bool> {
+    pub fn refused_access(&self, jid: &str) -> Result<crate::credentials::RefusalState> {
         #[cfg(any(target_os = "macos", test))]
         if self.use_keychain {
             if let Some(store) = self.secret_store() {
@@ -267,7 +267,7 @@ impl KeyStorage {
             }
         }
         let _ = jid;
-        Ok(false)
+        Ok(crate::credentials::RefusalState::NotHeld)
     }
 
     /// The user's explicit request to read the items refused for `jid` once
