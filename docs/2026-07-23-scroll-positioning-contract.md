@@ -57,6 +57,16 @@ does so only while the reader still reads where the last restore put them: the c
 that from whether their own input, or any accepted request other than layout, media or history
 preservation, has come since that restore's generation. Once the reader moved on, the shift is
 left to ambient handling.
+Under the resident bound an interior arrival keeps the first resident ID, yet it moves every row
+below it, and the pending directional request makes the controller refuse the ambient layout
+request that would otherwise hold them. The directional window therefore also carries the store's
+interior placement version: while the load is pending, a new interior placement counts as a window
+shift, so the load restores its own anchor at the arrival exactly as it does after an eviction at
+the bound, and restores again when its batch lands under the same reader-held rule. Ambient
+insertion handling stands aside for any shift the load restores. A load whose request the controller
+refused, as it does under a hover interaction hold, or has superseded since, holds nothing: the
+coordinator drops it at its first shift, and ambient insertion handling keeps that shift and the
+batch's.
 All authoritative slices share the same controller-owned
 `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
 measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
@@ -142,11 +152,21 @@ departed conversation's snapshot, and delayed settlement or window observation f
 cannot mutate the active conversation. A dedicated `DirectionalHistoryBrowserAdapter` owns visual
 anchor capture, the one-frame settlement scheduler, reachability probes, WebKit kinetic-scroll
 cancellation, and anchor/fallback pixel writes under the controller lease. Between capture and the
-batch landing it follows the captured anchor on every scroll event, so the restore's first frame
-places the anchor where the reader last saw it rather than at its capture-time `offsetPx` (an iOS
-bounce past the top keeps moving the rows after capture, and the landing commit clamps `scrollTop`
-to 0). The load's snapshot records that placement, and a restart of the same load requests it
-instead of the capture offset, so the rows stay where the first restore put them. From its first
+batch landing it follows the reader on every scroll event, so the restore's first frame places the
+anchor where the reader last saw it rather than at its capture-time `offsetPx` (an iOS bounce past
+the top keeps moving the rows after capture, and the landing commit clamps `scrollTop` to 0).
+While rendered rows cover the top of the view, the followed anchor becomes the row the reader now
+sees there, chosen as at capture: a reader who scrolled on while the load waited no longer reads
+the capture row, which an arrival between it and the view would move without moving theirs. Only a
+row in view qualifies, so an arrival outside the view moves no row the reader reads. A row mostly
+scrolled past the top gives way to the next row only when that row starts in the top half of the
+view: a message taller than the view that fills it stays the anchor, rather than the row below the
+view. With virtualization off the adapter captures and follows the rendered message rows the same
+way. Past the top, or with a stale window, the anchor stays and only its offset follows. The
+followed anchor stops changing once rows land before it, since only the restore may place it from
+then on. The load's snapshot records the row the restore held and its placement, and a restart of
+the same load requests them instead of the capture row and offset, so the rows stay where the first
+restore put them. From its first
 write until its execution ends, the restore holds that anchor in the virtualizer: every row before
 the anchor that resizes is compensated, including rows between the viewport top and the anchor,
 which the library alone leaves to move it.
@@ -614,7 +634,7 @@ deep growth and media-settle runs.
 | Media at live edge | Current or geometry-rearmed live edge | Debounced measurement stimulus; recovery uses the pre-growth eligibility captured by the caller |
 | Media while reading history | Selected target or fixed bottom-relative fractional anchor | See explicit-target maintenance and pending-batch cancellation above |
 | Unread divider moves while reading history | Selected target or fixed bottom-relative fractional anchor | Preserve the current position under the explicit-target and ambient precedence rules above |
-| Load older/newer | Fixed top-relative offset anchor | Subject to ambient request precedence above; wait for the directional window change and release if the load settles without one; restore again on each later window change until the load settles while the reader has not moved on; if the anchor disappears after a shift, preserve captured distance from bottom and clamp |
+| Load older/newer | Fixed top-relative offset anchor | Subject to ambient request precedence above; wait for the directional window change (a new first resident ID, or a new interior placement under the resident bound) and release if the load settles without one; restore again on each later window change until the load settles while the reader has not moved on; if the anchor disappears after a shift, preserve captured distance from bottom and clamp |
 | Home / resident-top command | Resident top | Does not itself trigger load-older; later genuine user travel can re-arm ordinary boundary loading |
 | Reaction, typing, resize, MAM completion | Reconcile current position | See selected-target maintenance and stimulus-specific live-edge eligibility above |
 

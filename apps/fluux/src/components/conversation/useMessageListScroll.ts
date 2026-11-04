@@ -43,7 +43,10 @@ import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
 import { ViewportSession, type ViewportGeometry } from './viewportSession'
 import { ScrollPersistenceAdapter } from './scrollPersistenceAdapter'
-import { DirectionalHistoryWindowCoordinator } from './directionalHistoryWindowCoordinator'
+import {
+  DirectionalHistoryWindowCoordinator,
+  type DirectionalHistoryRequestFacts,
+} from './directionalHistoryWindowCoordinator'
 import { TARGET_HIGHLIGHT_MS } from './explicitTargetBrowserAdapter'
 import { decideOnNewMessage } from './newMessageDecision'
 import { createArrivalBaseline } from './arrivalBaseline'
@@ -133,6 +136,19 @@ function useStableCallback<Args extends unknown[]>(
   const latest = useRef(callback)
   latest.current = callback
   return useCallback((...args: Args) => latest.current(...args), [])
+}
+
+/** What the positioning controller answers about a directional load's restore request. */
+function directionalRequestFacts(
+  controllerRef: { readonly current: PositioningController | null | undefined },
+  conversationId: string,
+): DirectionalHistoryRequestFacts {
+  return {
+    pending: (generation) =>
+      controllerRef.current?.isDirectionalHistoryPending(conversationId, generation) ?? false,
+    readingHeld: (generation) =>
+      controllerRef.current?.holdsDirectionalReading(conversationId, generation) ?? false,
+  }
 }
 
 // ============================================================================
@@ -870,12 +886,11 @@ export function useMessageListScroll({
         viewportSessionRef.current?.snapshotFor(id)?.bottomAnchor,
       recordBottomAnchor: (id, anchor) =>
         viewportSessionRef.current?.recordBottomAnchor(id, anchor),
-      isDirectionalLoadLanding: (id, first) =>
+      isDirectionalLoadLanding: (id, window) =>
         directionalWindowRef.current?.isPendingWindowShift(
           id,
-          first,
-          (generation) =>
-            positioningControllerRef.current?.holdsDirectionalReading(id, generation) ?? false,
+          window,
+          directionalRequestFacts(positioningControllerRef, id),
         ) ?? false,
       beginLayoutPreservation: (input) => {
         if (!reconcileMessageTargetAfterResize()) positioningControllerRef.current?.beginLayoutPreservation(input)
@@ -1068,6 +1083,7 @@ export function useMessageListScroll({
     conversationId,
     firstMessageId,
     messageCount,
+    interiorPlacementVersion,
     windowAtLiveEdge,
     isLoadingOlder,
     isLoadingNewer,
@@ -2097,8 +2113,8 @@ export function useMessageListScroll({
     const decision = directionalWindowRef.current?.observeWindow({
       conversationId,
       firstMessageId: firstMessageId ?? '',
-      readingHeld: (generation) =>
-        positioningControllerRef.current?.holdsDirectionalReading(conversationId, generation) ?? false,
+      interiorPlacementVersion,
+      request: directionalRequestFacts(positioningControllerRef, conversationId),
     }) ?? { kind: 'none' as const }
     if (decision.kind === 'none') return
     const saved = decision.snapshot
@@ -2111,12 +2127,20 @@ export function useMessageListScroll({
     // direction-agnostic (it repositions the top-visible anchor, which survives either eviction —
     // the evicted rows are at the far, off-screen end). Under the cap, load-older still changes
     // firstId AND grows the count, so this is unchanged for the common case.
+    //
+    // The one shift that keeps the first id is a delayed arrival placed between resident rows under
+    // the cap. It still moves every row below it, and the load's pending request makes the
+    // controller refuse ambient insertion preservation, so the load restores its anchor for it now
+    // and again when its batch lands (FLM-210). The coordinator reads it from the store's interior
+    // placement version. A load whose request the controller refused, under a hover hold for one,
+    // holds nothing: the coordinator drops it and ambient insertion preservation keeps the shift.
     if (decision.kind === 'waiting') {
       debugLog('PREPEND WAITING', {
         messageCount,
         oldMessageCount: saved.oldMessageCount,
         firstMessageId,
         oldFirstId: saved.oldFirstId,
+        interiorPlacementVersion,
         loadSettled: Boolean(saved.loadSettled),
         firstIdChanged: false,
       })
@@ -2127,7 +2151,7 @@ export function useMessageListScroll({
       debugLog(
         saved.restored
           ? 'DIRECTIONAL HISTORY DROPPED (reader moved on before the load settled)'
-          : 'DIRECTIONAL HISTORY DROPPED (controller unavailable)',
+          : 'DIRECTIONAL HISTORY DROPPED (no pending request: ambient handling holds the reader)',
         {
           oldFirstId: saved.oldFirstId,
           firstMessageId,
@@ -2136,16 +2160,17 @@ export function useMessageListScroll({
       return
     }
 
-    // At the resident bound an interior arrival evicts the oldest row, which shifts the window
-    // before the load's own batch lands and spends the first restore on that eviction. The batch
-    // then lands as a second shift while the load is still in flight: hold the same anchor across
-    // it with a fresh request, in this same pre-paint pass (FLM-204).
+    // An interior arrival shifts the window before the load's own batch lands and spends the first
+    // restore on it: at the resident bound by evicting the oldest row (FLM-204), under it by its
+    // interior placement (FLM-210). The batch then lands as a second shift while the load is still
+    // in flight: hold the same anchor across it with a fresh request, in this same pre-paint pass.
     let generation: number | null
     if (decision.kind === 'restart') {
       generation = restartDirectionalRestore(saved)
       debugLog('DIRECTIONAL HISTORY RESTART (window shifted again before the load settled)', {
         oldFirstId: saved.oldFirstId,
         firstMessageId,
+        interiorPlacementVersion,
         generation,
       })
       if (generation === null) return
@@ -2166,6 +2191,7 @@ export function useMessageListScroll({
     buildDirectionalHistoryExecutor,
     conversationId,
     firstMessageId,
+    interiorPlacementVersion,
     messageCount,
     restartDirectionalRestore,
     staticMode,

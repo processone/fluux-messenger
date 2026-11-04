@@ -56,6 +56,8 @@ export interface UseDirectionalHistoryLoadsInput {
   conversationId: string
   firstMessageId: string | undefined
   messageCount: number
+  /** The store's interior placement version for this window; see `DirectionalHistoryWindow`. */
+  interiorPlacementVersion: number
   windowAtLiveEdge: boolean | undefined
   isLoadingOlder: boolean | undefined
   isLoadingNewer: boolean | undefined
@@ -98,9 +100,10 @@ function beginRestoreRequest(
       conversationId: saved.conversationId,
       desired: {
         kind: 'anchor',
-        messageId: saved.anchorMessageId,
-        // A restart keeps the place the load's first restore gave the anchor, which follows the
-        // reader's scroll after capture; the capture offset is only where the reader started.
+        // A restart keeps the row the load's first restore held and its place, which follow the
+        // reader's scroll after capture; the capture row and offset are only where the reader
+        // started.
+        messageId: saved.placementAnchorId ?? saved.anchorMessageId,
         placement: {
           kind: 'top-offset',
           offsetPx: pixelOffset(
@@ -122,6 +125,7 @@ export function useDirectionalHistoryLoads({
   conversationId,
   firstMessageId,
   messageCount,
+  interiorPlacementVersion,
   windowAtLiveEdge,
   isLoadingOlder,
   isLoadingNewer,
@@ -193,6 +197,7 @@ export function useDirectionalHistoryLoads({
       historyComplete: Boolean(isHistoryComplete),
       windowAtLiveEdge: windowAtLiveEdge !== false,
       travelledAway: ports.hasTravelledAway(conversationId, edge),
+      interiorPlacementVersion,
       capture: () => {
         capture = browser.capture(firstMessageId ?? '', messageCount)
         return capture?.facts ?? {

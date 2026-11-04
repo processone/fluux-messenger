@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.18.3',
+    date: 'Unreleased',
+    sections: [{
+      type: 'fixed',
+      items: [
+        'When a delayed message arrives while older messages are still loading, the messages you are reading no longer move, whether it lands above them or, after you scrolled during the load, below them, including when you are partway through a long expanded message',
+      ],
+    }],
+  },
+  {
     version: '0.18.2',
     date: '2026-11-05',
     sections: [

@@ -406,10 +406,10 @@ export function useScrollExecutors({
     (saved: DirectionalHistorySnapshot): DirectionalHistoryExecutor =>
       getDirectionalHistoryBrowser().createExecutor(
         createDirectionalHistoryCompletion(saved),
-        (offsetFromTop) =>
+        (placement) =>
           portsRef.current.getDirectionalWindow()?.recordPlacement(
             saved.requestId,
-            offsetFromTop,
+            placement,
           ),
       ),
     [createDirectionalHistoryCompletion, getDirectionalHistoryBrowser],
