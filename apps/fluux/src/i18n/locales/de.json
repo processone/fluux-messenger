@@ -943,6 +943,16 @@
             "recoveryPreviewInvalid": "Die Backup-Vorschau konnte nicht geprüft werden. Kein Schlüssel wurde bestätigt.",
             "recoveryErrorDetails": "Technische Details",
             "recoveryFailed": "Das Backup konnte nicht wiederhergestellt werden.",
+            "keychainRetry": {
+                "title": "Erweitert: Schlüsselbund erneut fragen",
+                "body": "macOS hat den Zugriff auf diesen Schlüssel im Schlüsselbund verweigert, daher bleibt er gesperrt. Wenn du kein Backup hast, kannst du macOS noch einmal fragen. macOS fragt eventuell nach dem Passwort deines Anmelde-Schlüsselbunds; das kann ein früheres Passwort dieses Macs sein.",
+                "backupHint": "Wenn du einen Backup-Code oder eine Backup-Datei hast, verwende stattdessen „{{action}}“.",
+                "action": "macOS erneut fragen",
+                "busy": "Warte auf macOS…",
+                "refusedAgain": "macOS hat den Zugriff erneut verweigert. Der Schlüssel bleibt gesperrt.",
+                "failed": "Der Schlüssel konnte nicht entsperrt werden.",
+                "success": "Schlüssel entsperrt"
+            },
             "restoreAction": "Vom Server wiederherstellen",
             "restoreDialogTitle": "Deinen OpenPGP-Schlüssel aus dem Backup wiederherstellen",
             "restoreDialogBody": "Gib die Passphrase ein, die du beim Erstellen dieses Backups gespeichert hast. Der wiederhergestellte Schlüssel ersetzt den derzeit auf diesem Gerät gespeicherten.",

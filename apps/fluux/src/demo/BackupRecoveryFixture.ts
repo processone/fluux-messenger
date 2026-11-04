@@ -18,6 +18,8 @@ export function createBackupRecoveryFixture() {
   const params = new URLSearchParams(location.search)
   const desync = params.get('recoveryFailure') === 'desync'
   const backupAbsent = params.get('recoveryBackup') === 'absent'
+  // FLM-304: the user refuses the first macOS prompt the explicit retry opens.
+  let retryReads = 0
   const native = platform().nativeOpenpgp
   if (!native) {
     mockWindows('main')
@@ -38,6 +40,18 @@ export function createBackupRecoveryFixture() {
       if (installed) return installed as T
       if (desync) throw new Error('decrypt persisted TSK: decrypt primary secret key: unexpected EOF')
       throw new Error('openpgp-storage-unavailable: macOS keychain (-25293): authorization refused')
+    }
+    // The refusal is held for the launch until the user's explicit retry.
+    if (cmd === 'openpgp_keychain_retry_available') return (!installed && !desync) as T
+    if (cmd === 'openpgp_retry_keychain_access') {
+      if (installed) return installed as T
+      if (desync) throw new Error(`openpgp-keychain-retry-unavailable: no refused keychain access to retry for ${args!.accountJid}`)
+      retryReads++
+      if (retryReads === 1) throw new Error('openpgp-keychain-refused: access to the protected items was refused again')
+      const key = await privateKey()
+      installed = { fingerprint: key.getFingerprint().toUpperCase(), publicArmored: key.toPublic().armor(), keychainBacked: true, createdAt: key.getCreationTime().toISOString() }
+      localStorage.setItem('__test_recovery_bundle', JSON.stringify(installed))
+      return installed as T
     }
     if (cmd === 'openpgp_backup_import_all' || cmd === 'openpgp_backup_import_selected') {
       const result = await decrypt({ message: await readMessage({ armoredMessage: args!.backupMessage as string }), passwords: [args!.passphrase as string], format: 'binary' })

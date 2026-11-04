@@ -945,6 +945,16 @@
             "recoveryPreviewInvalid": "No s’ha pogut verificar la previsualització de la còpia. No s’ha confirmat cap clau.",
             "recoveryErrorDetails": "Detalls tècnics",
             "recoveryFailed": "No s’ha pogut restaurar la còpia de seguretat.",
+            "keychainRetry": {
+                "title": "Avançat: tornar a preguntar al clauer",
+                "body": "El macOS ha denegat l’accés a aquesta clau al clauer, així que la clau continua bloquejada. Si no tens cap còpia de seguretat, pots tornar a preguntar al macOS una vegada més. El macOS pot demanar la contrasenya del clauer d’inici de sessió, que pot ser una contrasenya anterior d’aquest Mac.",
+                "backupHint": "Si tens un codi o un fitxer de còpia de seguretat, fes servir «{{action}}» en lloc d’això.",
+                "action": "Torna a preguntar al macOS",
+                "busy": "Esperant el macOS…",
+                "refusedAgain": "El macOS ha tornat a denegar l’accés. La clau continua bloquejada.",
+                "failed": "No s’ha pogut desbloquejar la clau.",
+                "success": "Clau desbloquejada"
+            },
             "restoreAction": "Restaura des del servidor",
             "restoreDialogTitle": "Restaura la teva clau OpenPGP des de la còpia de seguretat",
             "restoreDialogBody": "Introdueix la frase de pas que vas desar quan vas crear aquesta còpia. La clau restaurada substituirà la que actualment està desada en aquest dispositiu.",

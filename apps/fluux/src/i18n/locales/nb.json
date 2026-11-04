@@ -941,6 +941,16 @@
             "recoveryPreviewInvalid": "Forhåndsvisningen av sikkerhetskopien kunne ikke bekreftes. Ingen nøkkel ble bekreftet.",
             "recoveryErrorDetails": "Tekniske detaljer",
             "recoveryFailed": "Sikkerhetskopien kunne ikke gjenopprettes.",
+            "keychainRetry": {
+                "title": "Avansert: spør nøkkelringen på nytt",
+                "body": "macOS nektet tilgang til denne nøkkelen i nøkkelringen, så nøkkelen forblir låst. Hvis du ikke har noen sikkerhetskopi, kan du spørre macOS én gang til. macOS kan be om passordet til påloggingsnøkkelringen, som kan være et tidligere passord for denne Macen.",
+                "backupHint": "Hvis du har en sikkerhetskopikode eller en sikkerhetskopifil, bruk «{{action}}» i stedet.",
+                "action": "Spør macOS på nytt",
+                "busy": "Venter på macOS …",
+                "refusedAgain": "macOS nektet tilgang igjen. Nøkkelen er fortsatt låst.",
+                "failed": "Nøkkelen kunne ikke låses opp.",
+                "success": "Nøkkel låst opp"
+            },
             "restoreAction": "Gjenopprett fra server",
             "restoreDialogTitle": "Gjenopprett OpenPGP-nøkkelen din fra sikkerhetskopi",
             "restoreDialogBody": "Skriv inn passordsetningen du lagret da du opprettet denne sikkerhetskopien. Den gjenopprettede nøkkelen erstatter den som for øyeblikket er lagret på denne enheten.",

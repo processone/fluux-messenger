@@ -21,6 +21,7 @@ import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
 import { TrustStateCompromisedBanner } from '@/components/TrustStateCompromisedBanner'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { KeyPickerDialog } from '@/components/KeyPickerDialog'
+import { KeychainRetryPanel, supportsKeychainRetry } from './KeychainRetryPanel'
 import type { KeyBundle, BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
 import {
   probeRemoteIdentityState,
@@ -386,6 +387,15 @@ export function EncryptionSettings() {
       | null
     setKeychainBacked(plugin?.isKeychainBacked?.() ?? null)
   }, [fingerprint, client])
+
+  // The retried keychain read unlocked the existing key: same follow-up as a restore.
+  const handleKeychainUnlocked = useCallback((unlockedFingerprint: string) => {
+    setFingerprint(unlockedFingerprint)
+    setRecoveryNeeded(false)
+    setGenerationFailed(false)
+    useEncryptionSettingsStore.getState().notifyPluginRegistered()
+    addToast('success', t('settings.encryption.keychainRetry.success'))
+  }, [addToast, t])
 
   const handleToggle = useCallback(async () => {
     const manager = client.e2ee
@@ -1145,6 +1155,15 @@ export function EncryptionSettings() {
             {t('settings.encryption.recoveryTitle')}
           </button>
         )}
+
+        {/* FLM-304: last-resort retry of a refused keychain read, folded under
+            the restore entry and offered only when no backup can recover it. */}
+        {platform().shell === 'desktop' && platform().os === 'macos' && pluginStatus === 'recovery-needed' && (() => {
+          const plugin = client.e2ee?.getPlugin('openpgp')
+          return supportsKeychainRetry(plugin)
+            ? <KeychainRetryPanel plugin={plugin} onUnlocked={handleKeychainUnlocked} />
+            : null
+        })()}
 
         {/* Backup to server — only when a key actually exists to back up. */}
         {pluginStatus === 'ready' && (

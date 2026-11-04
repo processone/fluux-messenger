@@ -945,6 +945,16 @@
             "recoveryPreviewInvalid": "No se ha podido verificar la vista previa de la copia. No se ha confirmado ninguna clave.",
             "recoveryErrorDetails": "Detalles técnicos",
             "recoveryFailed": "No se ha podido restaurar la copia de seguridad.",
+            "keychainRetry": {
+                "title": "Avanzado: volver a preguntar al llavero",
+                "body": "macOS ha denegado el acceso a esta clave en el llavero, así que la clave sigue bloqueada. Si no tienes ninguna copia de seguridad, puedes preguntar a macOS una vez más. macOS puede pedir la contraseña de tu llavero de inicio de sesión, que puede ser una contraseña anterior de este Mac.",
+                "backupHint": "Si tienes un código o un archivo de copia de seguridad, usa «{{action}}» en su lugar.",
+                "action": "Volver a preguntar a macOS",
+                "busy": "Esperando a macOS…",
+                "refusedAgain": "macOS ha vuelto a denegar el acceso. La clave sigue bloqueada.",
+                "failed": "No se ha podido desbloquear la clave.",
+                "success": "Clave desbloqueada"
+            },
             "restoreAction": "Restaurar desde el servidor",
             "restoreDialogTitle": "Restaurar tu clave OpenPGP desde la copia de seguridad",
             "restoreDialogBody": "Introduce la frase de contraseña que guardaste al crear esta copia. La clave restaurada reemplazará a la que actualmente está en este dispositivo.",

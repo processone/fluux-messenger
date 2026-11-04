@@ -820,6 +820,16 @@
             "recoveryPreviewInvalid": "The backup preview could not be verified. No key was confirmed.",
             "recoveryErrorDetails": "Technical details",
             "recoveryFailed": "The backup could not be restored.",
+            "keychainRetry": {
+                "title": "Advanced: ask the keychain again",
+                "body": "macOS refused access to this key in the keychain, so the key stays locked. If you have no backup, you can ask macOS once more. macOS may ask for your login keychain password, which can be an earlier password of this Mac.",
+                "backupHint": "If you have a backup code or a backup file, use {{action}} instead.",
+                "action": "Ask macOS again",
+                "busy": "Waiting for macOS…",
+                "refusedAgain": "macOS refused access again. The key is still locked.",
+                "failed": "The key could not be unlocked.",
+                "success": "Key unlocked"
+            },
             "restoreAction": "Restore from server",
             "restoreDialogTitle": "Restore your OpenPGP key from backup",
             "restoreDialogBody": "Enter the passphrase you saved when you created this backup. The restored key will replace the one currently stored on this device.",

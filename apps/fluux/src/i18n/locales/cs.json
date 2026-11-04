@@ -947,6 +947,16 @@
             "recoveryPreviewInvalid": "Náhled zálohy se nepodařilo ověřit. Nebyl potvrzen žádný klíč.",
             "recoveryErrorDetails": "Technické podrobnosti",
             "recoveryFailed": "Zálohu se nepodařilo obnovit.",
+            "keychainRetry": {
+                "title": "Pokročilé: znovu se zeptat klíčenky",
+                "body": "macOS odepřel přístup k tomuto klíči v klíčence, takže klíč zůstává zamčený. Pokud nemáte žádnou zálohu, můžete se macOS zeptat ještě jednou. macOS si může vyžádat heslo přihlašovací klíčenky, což může být dřívější heslo tohoto Macu.",
+                "backupHint": "Pokud máte kód zálohy nebo soubor zálohy, použijte raději „{{action}}“.",
+                "action": "Znovu se zeptat macOS",
+                "busy": "Čeká se na macOS…",
+                "refusedAgain": "macOS znovu odepřel přístup. Klíč zůstává zamčený.",
+                "failed": "Klíč se nepodařilo odemknout.",
+                "success": "Klíč odemčen"
+            },
             "restoreAction": "Obnovit ze serveru",
             "restoreDialogTitle": "Obnovit váš klíč OpenPGP ze zálohy",
             "restoreDialogBody": "Zadejte heslo, které jste si uložili při vytvoření této zálohy. Obnovený klíč nahradí ten, který je nyní uložen na tomto zařízení.",

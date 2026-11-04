@@ -941,6 +941,16 @@
             "recoveryPreviewInvalid": "Ekki tókst að staðfesta forskoðun afritsins. Enginn lykill var staðfestur.",
             "recoveryErrorDetails": "Tæknilegar upplýsingar",
             "recoveryFailed": "Ekki tókst að endurheimta öryggisafritið.",
+            "keychainRetry": {
+                "title": "Ítarlegt: spyrja lyklakippuna aftur",
+                "body": "macOS hafnaði aðgangi að þessum lykli í lyklakippunni, svo lykillinn er enn læstur. Ef þú átt ekkert öryggisafrit geturðu spurt macOS einu sinni enn. macOS gæti beðið um lykilorð innskráningarlyklakippunnar, sem getur verið eldra lykilorð þessarar Mac-tölvu.",
+                "backupHint": "Ef þú átt öryggisafritskóða eða öryggisafritsskrá skaltu frekar nota „{{action}}“.",
+                "action": "Spyrja macOS aftur",
+                "busy": "Bíður eftir macOS…",
+                "refusedAgain": "macOS hafnaði aðgangi aftur. Lykillinn er enn læstur.",
+                "failed": "Ekki tókst að aflæsa lyklinum.",
+                "success": "Lykill aflæstur"
+            },
             "restoreAction": "Endurheimta frá þjóni",
             "restoreDialogTitle": "Endurheimta OpenPGP-lykilinn þinn úr öryggisafriti",
             "restoreDialogBody": "Sláðu inn aðgangsorðið sem þú geymdir þegar þú bjóst til þetta öryggisafrit. Endurheimti lykillinn kemur í stað þess sem nú er geymdur á þessu tæki.",

@@ -941,6 +941,16 @@
             "recoveryPreviewInvalid": "Het back-upvoorbeeld kon niet worden gecontroleerd. Er is geen sleutel bevestigd.",
             "recoveryErrorDetails": "Technische details",
             "recoveryFailed": "De back-up kon niet worden hersteld.",
+            "keychainRetry": {
+                "title": "Geavanceerd: sleutelhanger opnieuw vragen",
+                "body": "macOS heeft de toegang tot deze sleutel in de sleutelhanger geweigerd, dus de sleutel blijft vergrendeld. Als je geen back-up hebt, kun je macOS nog één keer vragen. macOS kan om het wachtwoord van je inlogsleutelhanger vragen; dat kan een eerder wachtwoord van deze Mac zijn.",
+                "backupHint": "Heb je een back-upcode of een back-upbestand, gebruik dan ‘{{action}}’.",
+                "action": "macOS opnieuw vragen",
+                "busy": "Wachten op macOS…",
+                "refusedAgain": "macOS heeft de toegang opnieuw geweigerd. De sleutel blijft vergrendeld.",
+                "failed": "De sleutel kon niet worden ontgrendeld.",
+                "success": "Sleutel ontgrendeld"
+            },
             "restoreAction": "Vanaf server herstellen",
             "restoreDialogTitle": "Je OpenPGP-sleutel uit back-up herstellen",
             "restoreDialogBody": "Voer de wachtwoordzin in die je hebt opgeslagen toen je deze back-up maakte. De herstelde sleutel vervangt de sleutel die nu op dit apparaat staat.",

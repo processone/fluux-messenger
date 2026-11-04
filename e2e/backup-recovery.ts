@@ -18,6 +18,9 @@ const expectedBuild = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { en
 const fingerprint = meta.aliceFingerprint
 const code = meta.backupPassphrase
 const audit = (page: import('@playwright/test').Page) => page.evaluate(() => (window as any).__recoveryFixture)
+const keychainRetry = JSON.parse(readFileSync(new URL('../apps/fluux/src/i18n/locales/en.json', import.meta.url), 'utf8')).settings.encryption.keychainRetry as Record<string, string>
+const keychainRetryTitle = keychainRetry.title
+const retryReads = async (page: Page) => (await audit(page)).commands.filter((cmd: string) => cmd === 'openpgp_retry_keychain_access').length
 
 async function openRecovery(page: Page) {
   await bootDemo(page, '/demo.html?tutorial=false&e2ee=recovery')
@@ -263,6 +266,8 @@ for (const backup of ['present', 'absent']) {
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
     await page.evaluate(() => { location.hash = '/settings/encryption' })
     await expectDecision()
+    // FLM-304: no keychain refusal is held for a desynced key here, so no retry is offered.
+    await expect(page.getByRole('button', { name: keychainRetryTitle, exact: true })).toBeHidden()
     await capture(page, `desync-${backup}-settings.png`)
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
     const toggle = page.getByRole('switch', { name: 'OpenPGP end-to-end encryption', exact: true })
@@ -292,3 +297,82 @@ test('French recovery displays restart guidance immediately in French after an u
   await expect(page.getByText(/not confirmed durable/)).toBeVisible()
   await capture(page, 'french-uncertain-save-details.png')
 })
+
+// Intent FLM-304, the captain's words on FLM-298: "Never, but maybe an explicit
+// retry try could be proposed in a advanced panel, in case there is no other way
+// to recover the key". The fixture's native side refuses the first retried read
+// and grants the second; the App, panel and plugin run as shipped.
+test('the advanced keychain retry asks macOS only on request and unlocks the same key', async ({ page }) => {
+  await bootDemo(page, '/demo.html?tutorial=false&e2ee=recovery&recoveryBackup=absent')
+  expect(await audit(page)).toMatchObject({ build: expectedBuild })
+  await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await page.evaluate(() => { location.hash = '/settings/encryption' })
+  await expect(page.getByText('The local key could not be unlocked.', { exact: false })).toBeVisible()
+  const advanced = page.getByRole('button', { name: keychainRetryTitle, exact: true })
+  await expect(advanced).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByRole('button', { name: 'Restore from backup', exact: true })).toBeEnabled()
+  await capture(page, 'after-settings-keychain-retry-folded.png')
+  await advanced.click()
+  const ask = page.getByRole('button', { name: keychainRetry.action, exact: true })
+  await expect(ask).toBeVisible()
+  expect(await retryReads(page), 'Showing or opening the panel must not read the keychain').toBe(0)
+  await capture(page, 'after-settings-keychain-retry-open.png')
+
+  await ask.click()
+  await expect(page.getByRole('alert')).toHaveText(keychainRetry.refusedAgain)
+  await expect(page.getByText('The local key could not be unlocked.', { exact: false })).toBeVisible()
+  await expect(ask).toBeEnabled()
+  expect(await retryReads(page)).toBe(1)
+  await capture(page, 'after-keychain-refused-again.png')
+
+  await ask.click()
+  await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()
+  await expect(page.getByText(keychainRetry.success, { exact: true })).toBeVisible()
+  await expect(advanced).toBeHidden()
+  await capture(page, 'after-keychain-unlocked-ready.png')
+  const unlocked = await audit(page)
+  expect(await retryReads(page)).toBe(2)
+  for (const effect of ['openpgp_backup_import_all', 'openpgp_backup_import_selected', 'openpgp_forget_account', 'openpgp_rotate_encryption_subkey']) {
+    expect(unlocked.commands).not.toContain(effect)
+  }
+  expect(unlocked.publications).toContain('urn:xmpp:openpgp:0:public-keys')
+  expect(unlocked.publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
+  expect(await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').getOwnFingerprint())).toBe(fingerprint)
+
+  await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
+  await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
+  await capture(page, 'after-keychain-decrypted-message.png')
+
+  await page.reload()
+  await expect(page.locator('[data-nav="messages"]')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeHidden()
+  await page.evaluate(() => { location.hash = '/settings/encryption' })
+  await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()
+  expect(await retryReads(page)).toBe(0)
+})
+
+for (const backup of ['present', 'unknown']) {
+  test(`the keychain retry stays hidden when a ${backup} server backup may recover the key`, async ({ page }) => {
+    await bootDemo(page, '/demo.html?tutorial=false&e2ee=recovery')
+    expect(await audit(page)).toMatchObject({ build: expectedBuild })
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await page.evaluate(backup => {
+      const w = window as any, plugin = w.__demoClient.e2ee.getPlugin('openpgp')
+      if (backup === 'unknown') plugin.fetchSecretKeyBackup = async () => { throw new Error('remote-server-timeout') }
+      // Record the plugin's answer so the hidden panel is a settled decision, not a pending one.
+      const offered = plugin.isKeychainRetryOffered.bind(plugin)
+      w.__retryOffers = []
+      plugin.isKeychainRetryOffered = async () => { const answer = await offered(); w.__retryOffers.push(answer); return answer }
+    }, backup)
+    await page.evaluate(() => { location.hash = '/settings/encryption' })
+    await expect(page.getByText('The local key could not be unlocked.', { exact: false })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Restore from backup', exact: true })).toBeEnabled()
+    await expect.poll(() => page.evaluate(() => (window as any).__retryOffers.length)).toBeGreaterThan(0)
+    expect(await page.evaluate(() => (window as any).__retryOffers)).not.toContain(true)
+    expect((await audit(page)).commands).toContain('openpgp_keychain_retry_available')
+    await expect(page.getByRole('button', { name: keychainRetryTitle, exact: true })).toBeHidden()
+    expect(await retryReads(page)).toBe(0)
+    await capture(page, `keychain-retry-hidden-${backup}-backup.png`)
+  })
+}

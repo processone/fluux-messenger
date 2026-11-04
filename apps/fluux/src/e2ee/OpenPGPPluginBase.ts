@@ -371,6 +371,14 @@ export function classifyBoundaryError(err: unknown): { kind: E2EEErrorKind; code
   if (msg.includes('openpgp-storage-unavailable:')) {
     return { kind: 'permanent', code: 'key-storage-unavailable' }
   }
+  // FLM-304: answers of the explicit keychain retry. A new refusal keeps
+  // the earlier recovery state; "unavailable" means there is nothing to retry.
+  if (msg.includes('openpgp-keychain-refused:')) {
+    return { kind: 'permanent', code: 'keychain-refused' }
+  }
+  if (msg.includes('openpgp-keychain-retry-unavailable:')) {
+    return { kind: 'permanent', code: 'keychain-retry-unavailable' }
+  }
 
   if (msg.includes('no skesk matched') || msg.includes('session key decryption failed') || msg.includes('incorrect key passphrase')) {
     return { kind: 'permanent', code: 'wrong-passphrase' }
@@ -591,6 +599,81 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   /** Native adapters override this when a restore must be reconciled on restart. */
   isBackupRestoreUncertain(): boolean {
     return false
+  }
+
+  /**
+   * FLM-304, the captain's words on FLM-298: "Never, but maybe an explicit
+   * retry try could be proposed in a advanced panel, in case there is no
+   * other way to recover the key". The retry is offered only while this
+   * account's key is locked by a keychain refusal the native store still
+   * holds, no restore awaits reconciliation, and the server confirms it has
+   * no backup. Asking never retries anything.
+   */
+  async isKeychainRetryOffered(): Promise<boolean> {
+    const ctx = this.ctx
+    if (!ctx || !this.isKeyRecoveryNeeded() || this.isBackupRestoreUncertain()) return false
+    let refused: boolean
+    try {
+      refused = await this.hasRefusedKeychainAccess(ctx.account.jid)
+    } catch (err) {
+      ctx.logger.debug(`${this.pluginName()}: keychain retry probe failed: ${formatError(err)}`)
+      return false
+    }
+    if (!refused || this.ctx !== ctx) return false
+    return (await this.probeSecretKeyBackup()) === 'absent' && this.ctx === ctx
+  }
+
+  /**
+   * The user's explicit request to read the refused keychain items once more.
+   * On success the same key is in use again, as after a normal start; it never
+   * generates, restores or deletes a key. A new refusal throws
+   * `keychain-refused` and leaves the recovery state as it was.
+   */
+  async retryKeychainAccess(): Promise<IdentityInfo> {
+    const ctx = this.requireCtx()
+    if (!this.isKeyRecoveryNeeded()) {
+      throw new E2EEPluginError('permanent', 'keychain-retry-unavailable', `${this.pluginName()}: the key is not locked`)
+    }
+    // A restore that may have written fresh items is reconciled on restart first.
+    if (this.isBackupRestoreUncertain()) throw new E2EEPluginError('permanent', 'restore-outcome-uncertain', '')
+    if (this.runningOwnKeyOperations) throw new E2EEPluginError('transient', 'identity-change-pending', 'An identity change is already in progress')
+    const bundle = await this.ownKeyOperation(async () => {
+      let unlocked: KeyBundle
+      try {
+        unlocked = await this.retryRefusedKeychainAccess(ctx.account.jid)
+      } catch (err) {
+        const error = this.toPluginError('retryKeychainAccess', err)
+        // A read that now succeeds can still fail to unlock the key.
+        if (this.ctx === ctx && (error.code === 'key-unrecoverable' || error.code === 'key-storage-unavailable')) {
+          this._keyRecoveryReason = error.code
+        }
+        throw error
+      }
+      if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Keychain retry account changed')
+      this.ownBundle = unlocked
+      this._keyRecoveryReason = null
+      notifyPeerKeysetChanged(ctx.account.jid)
+      // Messages that waited for the key decrypt now.
+      ctx.notifyKeyUnlocked?.()
+      return unlocked
+    })
+    // What a normal start does with an unlocked key, after the operation ends
+    // so its freshness guard accepts it. Publication stays best effort.
+    await this.publishOwnIdentity(bundle).catch((err: unknown) => {
+      ctx.logger.warn(`${this.pluginName()}: public key publish after keychain retry failed: ${formatError(err)}`)
+    })
+    this.reverifyTrustStateAfterKeyChange()
+    return { fingerprint: bundle.fingerprint }
+  }
+
+  /** Native adapters report a keychain refusal held this launch; never a new read. */
+  protected async hasRefusedKeychainAccess(_accountJid: string): Promise<boolean> {
+    return false
+  }
+
+  /** Native adapters ask the OS once more for the refused items and unlock the existing key. */
+  protected async retryRefusedKeychainAccess(_accountJid: string): Promise<KeyBundle> {
+    throw new E2EEPluginError('permanent', 'keychain-retry-unavailable', `${this.pluginName()}: no keychain retry on this platform`)
   }
 
   // ---------------------------------------------------------------------------

@@ -1,6 +1,8 @@
 //! FLM-343: opt-in, unsigned native app journey. This executable includes the
 //! production OpenPGP commands with test-only storage constructors. There is no
 //! OS credential store, signing or installed application access.
+//! FLM-304 adds the `retry` journey: the user's explicit retry of a refused
+//! keychain read from the Settings Advanced panel.
 #![allow(dead_code)]
 #[cfg(not(test))]
 compile_error!("the recovery host requires test-only storage constructors");
@@ -39,6 +41,11 @@ mod host {
         lock: Arc<Mutex<()>>,
     }
     impl Files {
+        /// FLM-304: set by the journey between its two retries; stands in for
+        /// the user allowing the macOS prompt. Without it every old item is refused.
+        fn granted(&self) -> bool {
+            self.root.join("keychain-granted").is_file()
+        }
         fn read_items(&self) -> BTreeMap<String, String> {
             serde_json::from_slice(&fs::read(self.root.join("fixture-items.json")).unwrap())
                 .unwrap()
@@ -79,7 +86,13 @@ mod host {
     impl Backend for Files {
         fn read(&self, a: &str) -> Result<Option<String>, StoreError> {
             self.audit("read", a);
-            if a != "secrets-fresh-v1" && self.read_items().contains_key(a) {
+            // Items written before the app ran are refused; the app's own
+            // bundle item is not.
+            if a != "secrets-fresh-v1"
+                && a != "secrets-v1"
+                && !self.granted()
+                && self.read_items().contains_key(a)
+            {
                 return Err(StoreError::denied());
             }
             self.get(a).map_err(Into::into)
@@ -112,7 +125,13 @@ mod host {
         state: Arc<openpgp::OpenpgpState>,
         raw: Files,
         restart: bool,
+        source: String,
     }
+    const OLD_ITEMS: [&str; 3] = [
+        "last_user",
+        "openpgp_passphrase:bob@example.com",
+        "openpgp_passphrase:you@fluux.chat",
+    ];
 
     #[tauri::command]
     fn recovery_ciphertext(fixture: tauri::State<'_, Fixture>) -> String {
@@ -126,6 +145,40 @@ mod host {
     #[tauri::command]
     fn get_credentials() -> Option<credentials::StoredCredentials> {
         None
+    }
+    /// FLM-304: marks a step of the retry journey in the operations log. Until
+    /// the granted press, nothing may rewrite the locked key file; the first
+    /// successful unlock may re-save it once to clear an expiry (same key).
+    #[tauri::command]
+    fn recovery_note(fixture: tauri::State<'_, Fixture>, label: String) -> Result<(), String> {
+        let key = fs::read(fixture.root.join("keys/openpgp/you@fluux.chat.tsk.asc"))
+            .map_err(|e| e.to_string())?;
+        if key != fs::read(fixture.root.join("initial-key.asc")).map_err(|e| e.to_string())? {
+            return Err(format!("the key file changed before {label}"));
+        }
+        fixture.raw.audit("note", &label);
+        Ok(())
+    }
+    /// FLM-304: the user allows the next macOS prompt.
+    #[tauri::command]
+    fn recovery_grant_keychain(fixture: tauri::State<'_, Fixture>) -> Result<(), String> {
+        fixture.raw.audit("grant", "keychain");
+        fs::write(fixture.root.join("keychain-granted"), b"granted").map_err(|e| e.to_string())
+    }
+
+    /// Old items read in each part of the retry journey, split at its notes.
+    fn old_reads_by_step(operations: &str) -> Vec<(String, Vec<String>)> {
+        let mut steps = vec![("startup".to_string(), Vec::new())];
+        for line in operations.split("phase restart\n").next().unwrap().lines() {
+            if let Some(label) = line.strip_prefix("note ") {
+                steps.push((label.into(), Vec::new()));
+            } else if let Some(item) = line.strip_prefix("read ") {
+                if OLD_ITEMS.contains(&item) {
+                    steps.last_mut().unwrap().1.push(item.into());
+                }
+            }
+        }
+        steps
     }
 
     #[tauri::command]
@@ -156,20 +209,26 @@ mod host {
         {
             return Err("decrypt mismatch".into());
         }
+        let retry = fixture.source == "retry";
         let fresh = fixture.raw.fresh_accounts().map_err(|e| e.to_string())?;
-        if fresh != ["openpgp_passphrase:you@fluux.chat"] {
+        // The retry unlocks the existing key; it never restores into fresh items.
+        let expected_fresh: &[&str] = if retry {
+            &[]
+        } else {
+            &["openpgp_passphrase:you@fluux.chat"]
+        };
+        if fresh != expected_fresh {
             return Err("wrong fresh account route".into());
         }
         let old = fixture.raw.read_items();
-        if old
-            .get("openpgp_passphrase:bob@example.com")
-            .map(String::as_str)
-            != Some("b3RoZXI=")
+        let initial: BTreeMap<String, String> = serde_json::from_slice(
+            &fs::read(fixture.root.join("initial-items.json")).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        if OLD_ITEMS
+            .iter()
+            .any(|item| old.get(*item) != initial.get(*item))
             || old.get("last_user").map(String::as_str) != Some("fixture-only")
-            || old
-                .get("openpgp_passphrase:you@fluux.chat")
-                .map(String::as_str)
-                != Some("b2xk")
         {
             return Err("another account or credential changed".into());
         }
@@ -188,9 +247,27 @@ mod host {
                 .last()
                 .unwrap()
                 .lines()
-                .any(|line| line.starts_with("read ") && line != "read secrets-fresh-v1")
+                .any(|line| {
+                    line.strip_prefix("read ")
+                        .is_some_and(|item| item != "secrets-fresh-v1" && (!retry || item != "secrets-v1"))
+                })
         {
             return Err("restart read an old item".into());
+        }
+        // FLM-304: one refused read at startup, then one OS request per click;
+        // showing and opening the panel, or a normal unlock, reads nothing.
+        // recovery_note proved the key file unchanged up to each press.
+        if retry && !fixture.restart {
+            let refused = vec!["last_user".to_string()];
+            let expected = vec![
+                ("startup".to_string(), refused.clone()),
+                ("click-1".to_string(), refused),
+                ("click-2".to_string(), OLD_ITEMS.map(String::from).to_vec()),
+            ];
+            let steps = old_reads_by_step(&operations);
+            if steps != expected {
+                return Err(format!("old items read outside an explicit retry: {steps:?}"));
+            }
         }
         fs::write(fixture.root.join(format!("{phase}-passed")), b"passed")
             .map_err(|e| e.to_string())?;
@@ -216,6 +293,8 @@ mod host {
         let root = home.join("recovery");
         fs::create_dir_all(&root).unwrap();
         let restart = root.join("restore-passed").exists();
+        let source = std::env::var("FLUUX_RECOVERY_SOURCE").unwrap_or_else(|_| "server".into());
+        assert!(["server", "file", "retry"].contains(&source.as_str()));
         let raw = Files {
             root: root.clone(),
             lock: Arc::new(Mutex::new(())),
@@ -239,6 +318,24 @@ mod host {
                 .encrypt(JID, &[original.public_armored], &envelope)
                 .unwrap();
             fs::write(root.join("original-ciphertext.asc"), ciphertext).unwrap();
+            if source == "retry" {
+                // FLM-304: the old keychain item holds this key's real
+                // passphrase, so only a granted read of it unlocks the key.
+                let pass = root.join("keys").join("openpgp").join(format!("{JID}.pass"));
+                let mut items = raw.read_items();
+                items.insert(
+                    format!("openpgp_passphrase:{JID}"),
+                    fs::read_to_string(&pass).unwrap().trim().into(),
+                );
+                fs::write(root.join("fixture-items.json"), serde_json::to_vec(&items).unwrap()).unwrap();
+                fs::remove_file(pass).unwrap();
+            }
+            fs::copy(root.join("fixture-items.json"), root.join("initial-items.json")).unwrap();
+            fs::copy(
+                root.join("keys/openpgp/you@fluux.chat.tsk.asc"),
+                root.join("initial-key.asc"),
+            )
+            .unwrap();
         }
         let storage = openpgp_storage::KeyStorage::for_testing_with_store(
             root.join("keys"),
@@ -251,6 +348,7 @@ mod host {
             state: state.clone(),
             raw,
             restart,
+            source: source.clone(),
         };
         let mut context = tauri::generate_context!();
         context.config_mut().identifier = "net.processone.fluux.recovery-test".into();
@@ -258,12 +356,16 @@ mod host {
         context.config_mut().app.windows.clear();
         tauri::Builder::default().manage(state).manage(fixture)
             .invoke_handler(tauri::generate_handler![get_credentials, recovery_checkpoint, recovery_ciphertext, recovery_failure,
+                recovery_note, recovery_grant_keychain,
                 openpgp::openpgp_ensure_key, openpgp::openpgp_has_persisted_key,
+                openpgp::openpgp_keychain_retry_available, openpgp::openpgp_retry_keychain_access,
                 openpgp::openpgp_backup_import_all, openpgp::openpgp_backup_import_selected,
                 openpgp::openpgp_validate_cert, openpgp::openpgp_encrypt, openpgp::openpgp_decrypt])
             .setup(move |app| {
-                tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::External("http://127.0.0.1:5197/demo.html?tutorial=false&e2ee=recovery".parse().unwrap()))
-                    .initialization_script(format!("window.__FLUUX_RECOVERY_RESTART__ = {}; window.__FLUUX_RECOVERY_META__ = {}; window.__FLUUX_RECOVERY_SOURCE__ = {};", restart, metadata(), serde_json::to_string(&std::env::var("FLUUX_RECOVERY_SOURCE").unwrap_or_else(|_| "server".into())).unwrap()))
+                // The retry is offered only when the server has no backup.
+                let url = format!("http://127.0.0.1:5197/demo.html?tutorial=false&e2ee=recovery{}", if source == "retry" { "&recoveryBackup=absent" } else { "" });
+                tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::External(url.parse().unwrap()))
+                    .initialization_script(format!("window.__FLUUX_RECOVERY_RESTART__ = {}; window.__FLUUX_RECOVERY_META__ = {}; window.__FLUUX_RECOVERY_SOURCE__ = {};", restart, metadata(), serde_json::to_string(&source).unwrap()))
                     .initialization_script(format!("window.__FLUUX_RECOVERY_EXPECTED_BUILD__ = {};", serde_json::to_string(&std::env::var("FLUUX_RECOVERY_BUILD").expect("run the recovery launcher to identify its app build")).unwrap()))
                      .initialization_script(include_str!("backup_recovery_driver.js"))
                     .title("Fluux isolated recovery fixture").inner_size(1280.0, 800.0)

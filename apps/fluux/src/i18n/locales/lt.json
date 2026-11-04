@@ -945,6 +945,16 @@
             "recoveryPreviewInvalid": "Nepavyko patikrinti atsarginės kopijos peržiūros. Joks raktas nebuvo patvirtintas.",
             "recoveryErrorDetails": "Techninė informacija",
             "recoveryFailed": "Nepavyko atkurti atsarginės kopijos.",
+            "keychainRetry": {
+                "title": "Išplėstinės: dar kartą paklausti raktinės",
+                "body": "macOS neleido pasiekti šio rakto raktinėje, todėl raktas lieka užrakintas. Jei neturite atsarginės kopijos, galite dar kartą paklausti macOS. macOS gali paprašyti prisijungimo raktinės slaptažodžio, kuris gali būti ankstesnis šio Mac slaptažodis.",
+                "backupHint": "Jei turite atsarginės kopijos kodą arba failą, verčiau naudokite „{{action}}“.",
+                "action": "Dar kartą paklausti macOS",
+                "busy": "Laukiama macOS…",
+                "refusedAgain": "macOS vėl neleido prieigos. Raktas vis dar užrakintas.",
+                "failed": "Rakto atrakinti nepavyko.",
+                "success": "Raktas atrakintas"
+            },
             "restoreAction": "Atkurti iš serverio",
             "restoreDialogTitle": "Atkurti OpenPGP raktą iš atsarginės kopijos",
             "restoreDialogBody": "Įveskite slaptažodinę frazę, kurią išsaugojote kurdami šią atsarginę kopiją. Atkurtas raktas pakeis tą, kuris šiuo metu saugomas šiame įrenginyje.",

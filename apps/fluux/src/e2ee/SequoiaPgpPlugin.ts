@@ -74,6 +74,8 @@ const KEY_MATERIAL_COMMANDS = new Set([
   'openpgp_backup_import',
   'openpgp_backup_import_all',
   'openpgp_backup_import_selected',
+  // Waits on the keychain prompt the user's retry opens, then the KDF.
+  'openpgp_retry_keychain_access',
 ])
 
 class NativeCallTimeoutError extends Error {
@@ -288,6 +290,14 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
       // An unreadable guard cannot establish that dispatch is safe.
       return true
     }
+  }
+
+  protected override async hasRefusedKeychainAccess(accountJid: string): Promise<boolean> {
+    return this.invoke<boolean>('openpgp_keychain_retry_available', { accountJid })
+  }
+
+  protected override async retryRefusedKeychainAccess(accountJid: string): Promise<KeyBundle> {
+    return this.invoke<KeyBundle>('openpgp_retry_keychain_access', { accountJid })
   }
 
   protected async forgetAccount(accountJid: string): Promise<void> {

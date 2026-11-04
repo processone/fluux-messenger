@@ -976,6 +976,16 @@
             "recoveryPreviewInvalid": "L’aperçu de la sauvegarde n’a pas pu être vérifié. Aucune clé n’a été confirmée.",
             "recoveryErrorDetails": "Détails techniques",
             "recoveryFailed": "La sauvegarde n’a pas pu être restaurée.",
+            "keychainRetry": {
+                "title": "Avancé : redemander au trousseau",
+                "body": "macOS a refusé l’accès à cette clé dans le trousseau, elle reste donc verrouillée. Si vous n’avez aucune sauvegarde, vous pouvez redemander à macOS. macOS peut demander le mot de passe de votre trousseau de session, qui peut être un ancien mot de passe de ce Mac.",
+                "backupHint": "Si vous avez un code ou un fichier de sauvegarde, utilisez plutôt « {{action}} ».",
+                "action": "Redemander à macOS",
+                "busy": "En attente de macOS…",
+                "refusedAgain": "macOS a de nouveau refusé l’accès. La clé reste verrouillée.",
+                "failed": "La clé n’a pas pu être déverrouillée.",
+                "success": "Clé déverrouillée"
+            },
             "restoreAction": "Restaurer depuis le serveur",
             "restoreDialogTitle": "Restaurer votre clé OpenPGP depuis la sauvegarde",
             "restoreDialogBody": "Saisissez la phrase secrète que vous avez enregistrée lors de la création de cette sauvegarde. La clé restaurée remplacera celle actuellement stockée sur cet appareil.",

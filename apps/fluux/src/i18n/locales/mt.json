@@ -949,6 +949,16 @@
             "recoveryPreviewInvalid": "Il-previżjoni tal-backup ma setgħetx tiġi vverifikata. Ma ġiet ikkonfermata ebda ċavetta.",
             "recoveryErrorDetails": "Dettalji tekniċi",
             "recoveryFailed": "Il-backup ma setax jiġi rrestawrat.",
+            "keychainRetry": {
+                "title": "Avvanzat: erġa’ staqsi lill-keychain",
+                "body": "macOS ċaħad l-aċċess għal din iċ-ċavetta fil-keychain, għalhekk iċ-ċavetta tibqa’ msakkra. Jekk m’għandekx backup, tista’ terġa’ tistaqsi lil macOS darba oħra. macOS jista’ jitlob il-password tal-keychain tal-login, li tista’ tkun password preċedenti ta’ dan il-Mac.",
+                "backupHint": "Jekk għandek kodiċi jew fajl ta’ backup, uża “{{action}}” minflok.",
+                "action": "Erġa’ staqsi lil macOS",
+                "busy": "Qed nistennew lil macOS…",
+                "refusedAgain": "macOS reġa’ ċaħad l-aċċess. Iċ-ċavetta għadha msakkra.",
+                "failed": "Iċ-ċavetta ma setgħetx tinfetaħ.",
+                "success": "Iċ-ċavetta nfetħet"
+            },
             "restoreAction": "Irripristina mis-server",
             "restoreDialogTitle": "Irripristina ċ-ċavetta OpenPGP tiegħek mill-backup",
             "restoreDialogBody": "Daħħal il-frażi sigrieta li sejvjajt meta ħloqt dan il-backup. Iċ-ċavetta rripristinata se tieħu l-post ta' dik bħalissa maħżuna fuq dan it-tagħmir.",

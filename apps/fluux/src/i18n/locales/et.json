@@ -943,6 +943,16 @@
             "recoveryPreviewInvalid": "Varukoopia eelvaadet ei saanud kinnitada. Ühtegi võtit ei kinnitatud.",
             "recoveryErrorDetails": "Tehnilised üksikasjad",
             "recoveryFailed": "Varukoopiat ei saanud taastada.",
+            "keychainRetry": {
+                "title": "Täpsem: küsi võtmehoidjalt uuesti",
+                "body": "macOS keelas juurdepääsu sellele võtmele võtmehoidjas, seega jääb võti lukku. Kui sul pole varukoopiat, võid macOS-ilt veel korra küsida. macOS võib küsida sisselogimise võtmehoidja parooli, mis võib olla selle Maci varasem parool.",
+                "backupHint": "Kui sul on varukoopia kood või varukoopiafail, kasuta selle asemel valikut „{{action}}“.",
+                "action": "Küsi macOS-ilt uuesti",
+                "busy": "Ootan macOS-i…",
+                "refusedAgain": "macOS keelas juurdepääsu uuesti. Võti on endiselt lukus.",
+                "failed": "Võtit ei õnnestunud avada.",
+                "success": "Võti avatud"
+            },
             "restoreAction": "Taasta serverist",
             "restoreDialogTitle": "Taasta oma OpenPGP võti varukoopiast",
             "restoreDialogBody": "Sisesta paroolifraas, mille salvestasid selle varukoopia loomisel. Taastatud võti asendab selles seadmes praegu salvestatud võtme.",
