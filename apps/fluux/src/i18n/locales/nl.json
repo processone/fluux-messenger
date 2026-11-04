@@ -570,6 +570,8 @@
         },
         "showMore": "Meer weergeven",
         "showLess": "Minder weergeven",
+        "wrapLines": "Regels afbreken",
+        "unwrapLines": "Regels niet meer afbreken",
         "deliveryFailed": "Bericht niet bezorgd",
         "viewError": "Fout bekijken",
         "retry": "Opnieuw proberen",

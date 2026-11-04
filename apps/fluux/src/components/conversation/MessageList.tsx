@@ -31,6 +31,8 @@ import { TypingIndicator } from './TypingIndicator'
 import { groupMessagesByDate, shouldShowAvatar } from './messageGrouping'
 import { useMessageListScroll } from './useMessageListScroll'
 import { MessageInteractionContext, useMessageInteractionHold } from './useMessageInteractionHold'
+import { LiveEdgeGrowthContext, type RunKeepingLiveEdge } from './liveEdgeGrowthContext'
+import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
 import { formatUnreadCount } from '@/utils/formatUnreadCount'
 import { MessageWidthProvider } from './messageWidthContext'
 import { OwnGroupWidthProvider } from './messageGroupWidth'
@@ -616,6 +618,7 @@ export function MessageList<T extends BaseMessage>({
     handleMediaLoad,
     handleVirtualRowMeasuredGrowth,
     scrollToBottom,
+    holdLiveEdgePin,
     requestMessageTarget,
     showScrollToBottom,
     markerAboveViewport,
@@ -660,6 +663,17 @@ export function MessageList<T extends BaseMessage>({
     menuChanged: setInteractionMenuOpen,
   })
   cancelInteractionRef.current = interaction.cancel
+  // A reader at the live edge who makes a row taller (Wrap lines) stays at the edge. The hover
+  // hold would otherwise keep the clicked control in place and leave the reader above the grown row.
+  const runKeepingLiveEdge = useCallback<RunKeepingLiveEdge>((grow) => {
+    const el = scrollContainerRef.current
+    const atLiveEdge = !staticMode && !!el && el.scrollHeight - el.scrollTop - el.clientHeight <= AT_BOTTOM_THRESHOLD
+    const pin = atLiveEdge ? holdLiveEdgePin() : null
+    grow()
+    // Two frames: React commits the change, then the virtualizer measures the grown row. The pin
+    // gives way if the reader or the list took control in between.
+    if (pin) requestAnimationFrame(() => requestAnimationFrame(pin))
+  }, [staticMode, holdLiveEdgePin])
   handleVirtualRowMeasuredGrowthRef.current = handleVirtualRowMeasuredGrowth
 
   // Combined ref setter for scroll container
@@ -885,6 +899,7 @@ export function MessageList<T extends BaseMessage>({
   }
 
   return (
+    <LiveEdgeGrowthContext.Provider value={runKeepingLiveEdge}>
     <MessageInteractionContext.Provider value={interaction.context}>
     <MessageTargetProvider value={requestMessageTarget}>
     <MessageWidthProvider containerRef={scrollContainerRef}>
@@ -1098,5 +1113,6 @@ export function MessageList<T extends BaseMessage>({
     </MessageWidthProvider>
     </MessageTargetProvider>
     </MessageInteractionContext.Provider>
+    </LiveEdgeGrowthContext.Provider>
   )
 }

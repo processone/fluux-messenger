@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
+import { useWrappedCodeBlocksStore, type WrapIdentity } from '@/stores/wrappedCodeBlocksStore'
 import { useRemeasureOnWidthChange } from './messageWidthContext'
 import { MAX_COLLAPSED_HEIGHT } from './collapsedContentHeight'
 
@@ -12,6 +13,8 @@ interface CollapsibleContentProps {
   children: ReactNode
   /** Optional className for the wrapper */
   className?: string
+  /** Identity of the message's wrapped code blocks (see messageWrapIdentity) */
+  wrapIdentity?: WrapIdentity
   /**
    * Whether the content contains media (image/video/audio/link preview) whose
    * async load changes height. Only such messages keep a per-message
@@ -34,6 +37,7 @@ export function CollapsibleContent({
   messageId,
   children,
   className = '',
+  wrapIdentity,
   hasMedia = false,
 }: CollapsibleContentProps) {
   const { t } = useTranslation()
@@ -42,6 +46,9 @@ export function CollapsibleContent({
   const needsCollapsingRef = useRef(false)
   const isExpanded = useExpandedMessagesStore((state) => state.isExpanded(messageId))
   const toggle = useExpandedMessagesStore((state) => state.toggle)
+  // Wrapping a code block changes this message's height without changing its
+  // children, so its toggles must trigger a re-measure.
+  const wrappedBlocks = useWrappedCodeBlocksStore((state) => wrapIdentity === undefined ? 0 : state.countFor(wrapIdentity))
 
   // Re-evaluate whether the content needs collapsing. Reads layout
   // (scrollHeight) so it runs after render/paint. Stable identity (live ref).
@@ -65,35 +72,27 @@ export function CollapsibleContent({
     const observer = new ResizeObserver(measure)
     observer.observe(contentRef.current)
     return () => observer.disconnect()
-  }, [children, hasMedia, measure])
+  }, [children, hasMedia, measure, wrappedBlocks])
 
   // Re-measure on resize (text rewrap) via the list's single shared, debounced
   // width observer — no per-message resize observer.
   useRemeasureOnWidthChange(measure)
 
-  // If content doesn't need collapsing, render normally
-  if (!needsCollapsing) {
-    return (
-      <div ref={contentRef} className={className}>
-        {children}
-      </div>
-    )
-  }
-
-  // Content needs collapsing
+  // One stable tree whether or not the content is collapsed: switching the
+  // hierarchy would remount the children (e.g. close an open enlarged code view).
   return (
     <div className={className}>
       {/* Content container with conditional max-height */}
       <div
         ref={contentRef}
-        className={`relative overflow-hidden transition-[max-height] duration-200 ${
-          !isExpanded ? 'max-h-[500px]' : ''
-        }`}
+        className={needsCollapsing
+          ? `relative overflow-hidden transition-[max-height] duration-200 ${!isExpanded ? 'max-h-[500px]' : ''}`
+          : undefined}
       >
         {children}
 
         {/* Gradient fade overlay when collapsed */}
-        {!isExpanded && (
+        {needsCollapsing && !isExpanded && (
           <div
             className="absolute bottom-0 inset-x-0 h-20 pointer-events-none"
             style={{
@@ -104,23 +103,25 @@ export function CollapsibleContent({
       </div>
 
       {/* Show more / Show less button - select-none prevents copying button text */}
-      <button
-        type="button"
-        onClick={() => toggle(messageId)}
-        className="flex items-center gap-1 mt-1 text-sm text-fluux-muted hover:text-fluux-text transition-colors select-none"
-      >
-        {isExpanded ? (
-          <>
-            <ChevronUp className="size-4" />
-            {t('chat.showLess')}
-          </>
-        ) : (
-          <>
-            <ChevronDown className="size-4" />
-            {t('chat.showMore')}
-          </>
-        )}
-      </button>
+      {needsCollapsing && (
+        <button
+          type="button"
+          onClick={() => toggle(messageId)}
+          className="flex items-center gap-1 mt-1 text-sm text-fluux-muted hover:text-fluux-text transition-colors select-none"
+        >
+          {isExpanded ? (
+            <>
+              <ChevronUp className="size-4" />
+              {t('chat.showLess')}
+            </>
+          ) : (
+            <>
+              <ChevronDown className="size-4" />
+              {t('chat.showMore')}
+            </>
+          )}
+        </button>
+      )}
     </div>
   )
 }

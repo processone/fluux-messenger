@@ -576,6 +576,8 @@
         },
         "showMore": "Taispeáin níos mó",
         "showLess": "Taispeáin níos lú",
+        "wrapLines": "Fillte líne",
+        "unwrapLines": "Stop de línte a fhilleadh",
         "deliveryFailed": "Níor seachadadh an teachtaireacht",
         "viewError": "Féach ar earráid",
         "retry": "Bain triail arís",

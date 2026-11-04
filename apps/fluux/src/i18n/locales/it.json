@@ -574,6 +574,8 @@
         },
         "showMore": "Mostra di più",
         "showLess": "Mostra meno",
+        "wrapLines": "A capo automatico",
+        "unwrapLines": "Disattiva a capo automatico",
         "deliveryFailed": "Messaggio non consegnato",
         "viewError": "Vedi errore",
         "retry": "Riprova",

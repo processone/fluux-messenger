@@ -572,6 +572,8 @@
         },
         "showMore": "הצג עוד",
         "showLess": "הצג פחות",
+        "wrapLines": "גלישת שורות",
+        "unwrapLines": "ביטול גלישת שורות",
         "deliveryFailed": "ההודעה לא נמסרה",
         "viewError": "הצג שגיאה",
         "retry": "נסה שוב",

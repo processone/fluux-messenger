@@ -1,4 +1,5 @@
 import { messageRowRef, matchesMessageRowAlias, type MessageRowRef } from '@fluux/sdk'
+import type { WrapIdentity } from '@/stores/wrappedCodeBlocksStore'
 
 const OCCUPANT_ROW_PREFIX = 'occupant-row:'
 const CLIENT_ROW_PREFIX = 'client-row:'
@@ -52,6 +53,30 @@ export function messageRowKey(message: Parameters<typeof messageRowId>[0] & { ti
   if (!rowId || message.type !== 'groupchat' || message.stanzaId) return rowId
   const instant = message.receivedAt ?? message.timestamp
   return instant ? `${rowId}@${instant.getTime()}` : rowId
+}
+
+/**
+ * The identity of a message for per-message session UI state (such as a wrapped
+ * code block): scoped to the conversation or room, and matched with
+ * `wrapIdentityMatches` so it survives archive/origin enrichment.
+ *
+ * {@link messageRowId} is unsuitable: it is unscoped and changes when an archive
+ * id qualifies the handle. This keeps the discriminators that separate messages
+ * (conversation, client id, author, receipt instant for rooms, and the origin,
+ * occupant and archive ids once known) without letting a later-learned id make
+ * a message look different from itself.
+ */
+export function messageWrapIdentity(message: { id?: string; type?: 'chat' | 'groupchat'; conversationId?: string; roomJid?: string; from?: string; originId?: string; occupantId?: string; stanzaId?: string; timestamp?: Date; receivedAt?: Date }): WrapIdentity | undefined {
+  if (!message.id) return undefined
+  return {
+    scope: message.roomJid ?? message.conversationId ?? null,
+    id: message.id,
+    from: message.from ?? null,
+    instant: message.type === 'groupchat' ? (message.receivedAt ?? message.timestamp)?.getTime() ?? null : null,
+    ...(message.originId ? { originId: message.originId } : {}),
+    ...(message.occupantId ? { occupantId: message.occupantId } : {}),
+    ...(message.stanzaId ? { stanzaId: message.stanzaId } : {}),
+  }
 }
 
 /**

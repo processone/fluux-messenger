@@ -575,6 +575,8 @@
         },
         "showMore": "Zobraziť viac",
         "showLess": "Zobraziť menej",
+        "wrapLines": "Zalamovať riadky",
+        "unwrapLines": "Prestať zalamovať riadky",
         "deliveryFailed": "Správa nebola doručená",
         "viewError": "Zobraziť chybu",
         "retry": "Skúsiť znova",

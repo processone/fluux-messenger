@@ -570,6 +570,8 @@
         },
         "showMore": "Több megjelenítése",
         "showLess": "Kevesebb megjelenítése",
+        "wrapLines": "Sortörés",
+        "unwrapLines": "Sortörés kikapcsolása",
         "deliveryFailed": "Üzenet nem kézbesítve",
         "viewError": "Hiba megtekintése",
         "retry": "Újrapróbálás",

@@ -574,6 +574,8 @@
         },
         "showMore": "Mostrar más",
         "showLess": "Mostrar menos",
+        "wrapLines": "Ajustar líneas",
+        "unwrapLines": "Dejar de ajustar líneas",
         "deliveryFailed": "Mensaje no entregado",
         "viewError": "Ver error",
         "retry": "Reintentar",

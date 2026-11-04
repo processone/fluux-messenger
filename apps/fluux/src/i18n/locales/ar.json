@@ -578,6 +578,8 @@
         },
         "showMore": "عرض المزيد",
         "showLess": "عرض أقل",
+        "wrapLines": "التفاف الأسطر",
+        "unwrapLines": "إيقاف التفاف الأسطر",
         "deliveryFailed": "لم يتم تسليم الرسالة",
         "viewError": "عرض الخطأ",
         "retry": "إعادة المحاولة",

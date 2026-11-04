@@ -570,6 +570,8 @@
         },
         "showMore": "더 보기",
         "showLess": "덜 보기",
+        "wrapLines": "줄 바꿈",
+        "unwrapLines": "줄 바꿈 해제",
         "deliveryFailed": "메시지가 전달되지 않았습니다",
         "viewError": "오류 보기",
         "retry": "다시 시도",

@@ -573,6 +573,8 @@
         },
         "showMore": "Afficher plus",
         "showLess": "Afficher moins",
+        "wrapLines": "Retour à la ligne",
+        "unwrapLines": "Désactiver le retour à la ligne",
         "deliveryFailed": "Message non délivré",
         "viewError": "Voir l'erreur",
         "retry": "Réessayer",

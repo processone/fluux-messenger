@@ -16,10 +16,13 @@
  * - Escape sequences (\* \_ \~ \` \> \#)
  */
 
-import React, { useState } from 'react'
+import React, { useContext, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { findMentionRanges, findIrcPrefixRange, type MentionReference } from '@fluux/sdk'
-import { Maximize2 } from 'lucide-react'
+import { Maximize2, WrapText } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { useWrappedCodeBlocksStore, type WrapIdentity } from '../stores/wrappedCodeBlocksStore'
+import { LiveEdgeGrowthContext } from '../components/conversation/liveEdgeGrowthContext'
 import { ModalShell } from '../components/ModalShell'
 import { useHighlighter } from './codeHighlight'
 import { getConsistentTextColor } from '../components/Avatar'
@@ -400,19 +403,55 @@ function CodeContent({ code, highlightedHtml }: { code: string; highlightedHtml:
   )
 }
 
+/** Classes making a code block wrap long lines instead of scrolling sideways */
+const WRAP_CLASSES = 'whitespace-pre-wrap [overflow-wrap:anywhere]'
+
+/**
+ * Code controls must not trigger the enclosing row's click (e.g. a search
+ * preview closing and navigating away); ordinary row clicks are untouched.
+ */
+const stopRowClick = (e: React.SyntheticEvent) => e.stopPropagation()
+
+/** Toggle button shown in the code block header (and the enlarged view) */
+function WrapButton({ wrapped, onToggle }: { wrapped: boolean; onToggle: () => void }) {
+  const { t } = useTranslation()
+  const label = wrapped ? t('chat.unwrapLines') : t('chat.wrapLines')
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={wrapped}
+      aria-label={label}
+      className={`p-1 rounded hover:bg-fluux-hover transition-colors ${
+        wrapped ? 'text-fluux-text bg-fluux-hover' : 'text-fluux-muted hover:text-fluux-text'
+      }`}
+      title={label}
+    >
+      <WrapText className="size-3.5" />
+    </button>
+  )
+}
+
 /** Expanded code modal — fullscreen on mobile, large centered panel on desktop */
 function CodeExpandModal({
   code,
   language,
   highlightedHtml,
+  wrapped,
+  onToggleWrap,
   onClose,
 }: {
   code: string
   language?: string
   highlightedHtml: string | null
+  wrapped: boolean
+  onToggleWrap: () => void
   onClose: () => void
 }) {
+  // React events bubble through portals to the React ancestors, so the modal
+  // is isolated from row navigation the same way the inline controls are.
   return createPortal(
+    <div style={{ display: 'contents' }} onClick={stopRowClick}>
     <ModalShell
       title={language || 'Code'}
       onClose={onClose}
@@ -420,14 +459,16 @@ function CodeExpandModal({
       panelClassName="max-h-dvh md:max-h-[90vh] h-dvh md:h-auto !mx-0 !rounded-none md:!mx-4 md:!rounded-lg flex flex-col"
     >
       <div className="flex-1 overflow-auto min-h-0">
-        <pre className="bg-fluux-bg/50 text-fluux-text px-4 py-3 overflow-x-auto font-mono text-sm min-h-full">
+        <pre className={`bg-fluux-bg/50 text-fluux-text px-4 py-3 overflow-x-auto font-mono text-sm min-h-full ${wrapped ? WRAP_CLASSES : ''}`}>
           <CodeContent code={code} highlightedHtml={highlightedHtml} />
         </pre>
       </div>
-      <div className="flex justify-end px-3 py-2 border-t border-fluux-hover flex-shrink-0">
+      <div className="flex justify-end items-center gap-0.5 px-3 py-2 border-t border-fluux-hover flex-shrink-0">
+        <WrapButton wrapped={wrapped} onToggle={onToggleWrap} />
         <CopyButton text={code} />
       </div>
-    </ModalShell>,
+    </ModalShell>
+    </div>,
     document.body,
   )
 }
@@ -435,8 +476,20 @@ function CodeExpandModal({
 /**
  * Code block component with copy button, expand button, and syntax highlighting
  */
-function CodeBlock({ code, language, keyProp }: { code: string; language?: string; keyProp: string }): React.ReactElement {
+function CodeBlock({ code, language, keyProp, wrapIdentity, blockIndex }: { code: string; language?: string; keyProp: string; wrapIdentity?: WrapIdentity; blockIndex: number }): React.ReactElement {
   const [expanded, setExpanded] = useState(false)
+  // Wrapping is remembered per message block in the session store; without a
+  // message id (previews, console) it is plain local state.
+  const storedWrapped = useWrappedCodeBlocksStore((s) => wrapIdentity !== undefined && s.isWrapped(wrapIdentity, blockIndex))
+  const [localWrapped, setLocalWrapped] = useState(false)
+  const wrapped = wrapIdentity !== undefined ? storedWrapped : localWrapped
+  const runKeepingLiveEdge = useContext(LiveEdgeGrowthContext)
+  const toggleWrap = () => {
+    runKeepingLiveEdge(() => {
+      if (wrapIdentity !== undefined) useWrappedCodeBlocksStore.getState().toggle(wrapIdentity, blockIndex)
+      else setLocalWrapped((w) => !w)
+    })
+  }
   const { ready, highlight } = useHighlighter(language)
 
   const highlightedHtml = ready && language ? highlight(code, language) : null
@@ -445,13 +498,14 @@ function CodeBlock({ code, language, keyProp }: { code: string; language?: strin
     <>
       <div key={keyProp} className="my-1 rounded-lg overflow-hidden border border-fluux-border">
         {/* Header bar with language label, expand and copy buttons */}
-        <div className="flex items-center justify-between px-2 bg-fluux-sidebar border-b border-fluux-border">
+        <div onClick={stopRowClick} className="flex items-center justify-between px-2 bg-fluux-sidebar border-b border-fluux-border">
           {language ? (
             <span className="text-xs text-fluux-muted select-none py-1">{language}</span>
           ) : (
             <span />
           )}
           <div className="flex items-center gap-0.5">
+            <WrapButton wrapped={wrapped} onToggle={toggleWrap} />
             <button
               type="button"
               onClick={() => setExpanded(true)}
@@ -464,7 +518,7 @@ function CodeBlock({ code, language, keyProp }: { code: string; language?: strin
           </div>
         </div>
         {/* Code content */}
-        <pre className="bg-fluux-bg/50 text-fluux-text px-3 py-2 overflow-x-auto font-mono text-sm">
+        <pre className={`bg-fluux-bg/50 text-fluux-text px-3 py-2 overflow-x-auto font-mono text-sm ${wrapped ? WRAP_CLASSES : ''}`}>
           <CodeContent code={code} highlightedHtml={highlightedHtml} />
         </pre>
       </div>
@@ -473,6 +527,8 @@ function CodeBlock({ code, language, keyProp }: { code: string; language?: strin
           code={code}
           language={language}
           highlightedHtml={highlightedHtml}
+          wrapped={wrapped}
+          onToggleWrap={toggleWrap}
           onClose={() => setExpanded(false)}
         />
       )}
@@ -673,8 +729,9 @@ export function renderTextWithLinks(text: string): React.ReactNode {
  * @param text - The message body
  * @param mentions - Optional XEP-0372 mention references for precise highlighting
  * @param nickname - Optional user nickname for IRC-style mention detection fallback
+ * @param wrapIdentity - Optional message identity; lets code blocks remember their "Wrap lines" state
  */
-export function renderStyledMessage(text: string, mentions?: MentionReference[], nickname?: string, knownNicks?: ReadonlySet<string>, isDarkMode?: boolean, resolveMentionColor?: (identifier: string) => string | undefined): React.ReactNode {
+export function renderStyledMessage(text: string, mentions?: MentionReference[], nickname?: string, knownNicks?: ReadonlySet<string>, isDarkMode?: boolean, resolveMentionColor?: (identifier: string) => string | undefined, wrapIdentity?: WrapIdentity): React.ReactNode {
   // Normalize line endings: CRLF -> LF, CR -> LF
   const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
@@ -715,6 +772,7 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[],
   let lastIndex = 0
   let match
   let partIndex = 0
+  let blockIndex = 0
 
   while ((match = codeBlockRegex.exec(normalizedText)) !== null) {
     // Render text before code block
@@ -728,7 +786,7 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[],
     const lang = match[1] || undefined
     const codeContent = match[2].trim()
     parts.push(
-      <CodeBlock key={`code-${partIndex++}`} code={codeContent} language={lang} keyProp={`code-${partIndex}`} />
+      <CodeBlock key={`code-${partIndex++}`} code={codeContent} language={lang} keyProp={`code-${partIndex}`} wrapIdentity={wrapIdentity} blockIndex={blockIndex++} />
     )
 
     lastIndex = match.index + match[0].length

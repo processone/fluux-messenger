@@ -130,9 +130,9 @@ const LOAD_NEWER_THRESHOLD = 4 // px from the resident-window bottom to auto-loa
  * rebinds listeners on each append. Forwarding through a ref keeps behaviour identical (the newest
  * implementation still runs) while the published identity stays constant.
  */
-function useStableCallback<Args extends unknown[]>(
-  callback: (...args: Args) => void,
-): (...args: Args) => void {
+function useStableCallback<Args extends unknown[], Result = void>(
+  callback: (...args: Args) => Result,
+): (...args: Args) => Result {
   const latest = useRef(callback)
   latest.current = callback
   return useCallback((...args: Args) => latest.current(...args), [])
@@ -258,6 +258,8 @@ export interface UseMessageListScrollResult {
   /** Reconcile a positive, virtualizer-reported row-height delta against live scroll geometry. */
   handleVirtualRowMeasuredGrowth: (conversationId: string, heightDelta: number) => void
   scrollToBottom: () => void
+  /** Claims the live edge for a coming height change; the returned commit re-pins unless newer input took over */
+  holdLiveEdgePin: () => () => void
   scrollToTop: () => void
   /** Submit a reply/poll/find target to the generation-aware positioning controller. */
   requestMessageTarget: (messageReference: string | MessageRowRef) => void
@@ -1022,6 +1024,24 @@ export function useMessageListScroll({
   // is stabilised for the same reason as requestMessageTarget: an unstable identity re-registers the
   // list — and re-binds the ⌘/Ctrl+↓ listener — on every append.
   const scrollToBottom = useStableCallback(scrollToBottomImpl)
+
+  /**
+   * Take the live edge for a change that is about to make a row taller. The returned commit
+   * re-pins only while nothing newer has taken control: the same conversation is open, the
+   * positioning controller still holds the request it held now, and the reader has given no
+   * wheel, touch or key input since. Newer input always wins.
+   */
+  const holdLiveEdgePin = useStableCallback(() => {
+    const requestGeneration = () => positioningControllerRef.current?.snapshot().active?.request.generation ?? null
+    const intentAt = () => viewportSessionRef.current?.lastUserIntentAt(conversationId) ?? 0
+    const id = conversationId
+    const generation = requestGeneration()
+    const intent = intentAt()
+    return () => {
+      if (activeConversationIdRef.current !== id || requestGeneration() !== generation || intentAt() !== intent) return
+      scrollToBottomImpl()
+    }
+  })
 
   const scrollToTopImpl = useCallback(() => {
     directionalWindowRef.current?.suppressAutomaticLoads(Date.now())
@@ -2531,6 +2551,7 @@ export function useMessageListScroll({
     handleMediaLoad,
     handleVirtualRowMeasuredGrowth,
     scrollToBottom,
+    holdLiveEdgePin,
     scrollToTop,
     requestMessageTarget,
     showScrollToBottom,

@@ -24,7 +24,8 @@ import { UnsupportedEncryptionNotice } from './UnsupportedEncryptionNotice'
 import { MessageReactions } from './MessageReactions'
 import { MessageReactorsSheet, type ReactorDetails } from './MessageReactorsSheet'
 import { isActionMessage, type WhisperThreadPosition } from './messageGrouping'
-import { messageRowId } from './messageRowIdentity'
+import { messageRowId, messageWrapIdentity } from './messageRowIdentity'
+import { useWrappedCodeBlocksStore } from '@/stores/wrappedCodeBlocksStore'
 import { messageRowRef, type MessageRowRef } from '@fluux/sdk'
 import { useRequestMessageTarget } from './messageTargetContext'
 import { useOwnGroupWidth } from './messageGroupWidth'
@@ -382,6 +383,22 @@ export const MessageBubble = memo(function MessageBubble({
   const interaction = useContext(MessageInteractionContext)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const rowId = messageRowId(message)
+  // Stable between renders so the memoized body does not re-render; the late fields
+  // (archive/origin/occupant ids) only change when backfill supplies them.
+  const { id: msgId, type: msgType, from: msgFrom, originId, stanzaId, timestamp } = message
+  const { conversationId, roomJid, occupantId, receivedAt } = message as { conversationId?: string; roomJid?: string; occupantId?: string; receivedAt?: Date }
+  const wrapIdentity = useMemo(
+    () => messageWrapIdentity({ id: msgId, type: msgType, conversationId, roomJid, from: msgFrom, originId, occupantId, stanzaId, timestamp, receivedAt }),
+    [msgId, msgType, conversationId, roomJid, msgFrom, originId, occupantId, stanzaId, timestamp, receivedAt],
+  )
+  // This row's own backfill (same mounted occurrence gaining archive/origin ids) carries its stored
+  // wrap choice along; an unmounted row or a look-alike twin never inherits one.
+  const previousWrapIdentity = useRef(wrapIdentity)
+  useEffect(() => {
+    const previous = previousWrapIdentity.current
+    previousWrapIdentity.current = wrapIdentity
+    if (previous && wrapIdentity) useWrappedCodeBlocksStore.getState().promote(previous, wrapIdentity)
+  }, [wrapIdentity])
   const interactionHeld = useMessageInteractionHeld(bubbleRef)
   const openMenusRef = useRef({ more: false, reaction: false })
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false)
@@ -773,7 +790,7 @@ export const MessageBubble = memo(function MessageBubble({
         )}
 
         {/* Collapsible wrapper for long messages */}
-        <CollapsibleContent messageId={messageRowId(message) ?? message.id} hasMedia={!!(message.attachment || message.linkPreview)}>
+        <CollapsibleContent messageId={messageRowId(message) ?? message.id} wrapIdentity={wrapIdentity} hasMedia={!!(message.attachment || message.linkPreview)}>
           {/* Encryption placeholders take precedence over body text so the
               sender's plaintext fallback never reaches the UI. encryptedPayload:
               an E2EE stanza we couldn't decrypt. unsupportedEncryption: a
@@ -784,6 +801,7 @@ export const MessageBubble = memo(function MessageBubble({
             <UnsupportedEncryptionNotice method={message.unsupportedEncryption.name} />
           ) : (
             <MessageBody
+              wrapIdentity={wrapIdentity}
               body={message.body}
               isEdited={message.isEdited}
               originalBody={message.originalBody}

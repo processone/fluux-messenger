@@ -570,6 +570,8 @@
         },
         "showMore": "Vis mere",
         "showLess": "Vis mindre",
+        "wrapLines": "Ombryd linjer",
+        "unwrapLines": "Stop ombrydning af linjer",
         "deliveryFailed": "Besked ikke leveret",
         "viewError": "Vis fejl",
         "retry": "Prøv igen",
