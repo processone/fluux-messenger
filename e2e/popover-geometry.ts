@@ -198,13 +198,20 @@ test.describe('contact suggestion popover geometry', () => {
    * The dialog opens with a 200ms `scale(0.97)` enter animation, and a focused
    * field opens the list immediately — so the popover is placed against an anchor
    * whose box is still moving. Placing it once leaves it misaligned for the rest
-   * of the dialog's life. The animation is slowed to 2s so the mid-flight state
-   * can be observed rather than raced.
+   * of the dialog's life.
+   *
+   * Nothing here may depend on how fast the machine is. The animation is
+   * stretched to an hour, far past the test timeout, so it is still running
+   * however slowly the steps before the check execute; a 2s one ran out under
+   * parallel load. The test then moves it to its midpoint, which moves the field
+   * while the animation keeps running. Pausing it instead would not do: the list
+   * follows its anchor only while an ancestor animation is running. The check
+   * then waits for animation frames, not for time.
    */
   test('stays anchored while the dialog finishes opening', async ({ page }) => {
     await bootDemo(page, DEMO_URL)
     await page.addStyleTag({
-      content: '.modal-panel-in { animation-duration: 2000ms !important; }',
+      content: '.modal-panel-in { animation-duration: 3600s !important; }',
     })
     await page.getByRole('button', { name: NEW_MESSAGE, exact: true }).first().click()
     const panel = panelOf(page)
@@ -213,16 +220,33 @@ test.describe('contact suggestion popover geometry', () => {
     await expect(page.getByTestId('contact-suggestions')).toHaveCount(0)
     await openSuggestions(page)
 
-    expect(await panel.evaluate((el) =>
-      el.getAnimations().some(animation => animation.playState === 'running'),
-    )).toBe(true)
-    await page.waitForFunction(() => document.querySelector('.fluux-glass')?.getAnimations().some(
-      animation => animation.playState === 'running' && Number(animation.currentTime) >= 1000,
-    ))
+    const fieldShift = await panel.evaluate((el) => {
+      const opening = el.getAnimations().find(animation =>
+        animation instanceof CSSAnimation && animation.animationName === 'modal-panel-in')
+      const input = document.querySelector('[data-modal="true"] input[type="text"]')
+      if (!opening || opening.playState !== 'running' || !input) return null
+      const before = input.getBoundingClientRect()
+      opening.currentTime = Number(opening.effect?.getComputedTiming().duration) / 2
+      const after = input.getBoundingClientRect()
+      return Math.max(
+        Math.abs(after.left - before.left),
+        Math.abs(after.width - before.width),
+        Math.abs(after.bottom - before.bottom),
+      )
+    })
+    expect(fieldShift, 'the dialog must still be opening when the list opens').not.toBeNull()
+    // Without this the test cannot fail: a list placed once would still be aligned.
+    expect(fieldShift, 'moving the opening to its midpoint must move the field').toBeGreaterThan(EPSILON)
+
+    // The list follows its field on the next animation frame. Waiting two frames
+    // makes the check independent of callback order, and counting frames instead of
+    // polling for seconds keeps it independent of how fast a loaded machine renders.
+    await page.evaluate(() => new Promise<void>(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
 
     // The gap is passed in, not closed over: this body is serialized and evaluated
     // in the page, where module-scope constants do not exist.
-    await expect.poll(async () => page.evaluate((gap) => {
+    expect(await page.evaluate((gap) => {
       const menu = document.querySelector('[data-testid="contact-suggestions"]')
       const input = document.querySelector('[data-modal="true"] input[type="text"]')
       if (!menu || !input) return null
@@ -233,7 +257,7 @@ test.describe('contact suggestion popover geometry', () => {
         Math.abs(menuBox.width - inputBox.width),
         Math.abs(menuBox.top - inputBox.bottom - gap),
       )
-    }, TRIGGER_GAP_PX)).toBeLessThanOrEqual(EPSILON)
+    }, TRIGGER_GAP_PX), 'the list must follow its field').toBeLessThanOrEqual(EPSILON)
   })
 
   /**
