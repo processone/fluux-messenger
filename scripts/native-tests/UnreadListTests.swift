@@ -99,6 +99,35 @@ import UserNotifications
                                       account: account, total: index, root: root)
             }
             precondition(Set(UnreadList.load(root: root)!.rows.map(\.id)).count == 10, "No push may lose another's row")
+        case "latest-total-wins":
+            // FLM-418 R2: the badge is read under the list's lock, so the last writer leaves the newest total.
+            var list = fixture()
+            list.rows = []
+            try list.write(root: root)
+            let lock = NSLock()
+            var badge = 0
+            DispatchQueue.concurrentPerform(iterations: 10) { index in
+                lock.lock(); badge = max(badge, index + 1); lock.unlock()
+                UnreadList.recordPush(conversation: "c\(index)@example.com", kind: "chat", name: "C\(index)",
+                                      account: account, total: { lock.lock(); defer { lock.unlock() }; return badge }(), root: root)
+            }
+            precondition(UnreadList.load(root: root)!.total == 10, "The newest total must survive")
+        case "labels-follow-entry-date":
+            // FLM-418 R5: labels are relative to the entry's date, not the real clock.
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: "UTC")!
+            let locale = Locale(identifier: "en_US")
+            let message = Date(timeIntervalSince1970: 1_793_000_000) // 2026-10-26 07:33 UTC
+            let sameDay = message.addingTimeInterval(3600)
+            let nextDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: message))!
+            let inThree = calendar.date(byAdding: .day, value: 3, to: calendar.startOfDay(for: message))!
+            let inTen = calendar.date(byAdding: .day, value: 10, to: calendar.startOfDay(for: message))!
+            let today = UnreadList.when(message, now: sameDay, calendar: calendar, locale: locale)
+            precondition(today.contains(":"), "Today shows a time, got \(today)")
+            precondition(UnreadList.when(message, now: nextDay, calendar: calendar, locale: locale) == "Yesterday")
+            precondition(UnreadList.when(message, now: inThree, calendar: calendar, locale: locale) == "Mon")
+            precondition(!UnreadList.when(message, now: inTen, calendar: calendar, locale: locale).contains(":"))
+            precondition(UnreadList.when(message, now: nextDay, calendar: calendar, locale: Locale(identifier: "fr_FR")) == "Hier")
         case "clear-wins":
             try fixture().write(root: root)
             try UnreadList.clear(root: root)

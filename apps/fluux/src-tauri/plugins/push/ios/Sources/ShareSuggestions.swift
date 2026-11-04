@@ -1,5 +1,8 @@
 import Foundation
 import Intents
+#if os(iOS) && canImport(WidgetKit)
+import WidgetKit
+#endif
 
 /// Serializes donation and deletion so a late system callback cannot resurrect removed suggestions.
 enum ShareSuggestions {
@@ -25,6 +28,10 @@ enum ShareSuggestions {
         // App Group ownership must change before any potentially stalled system callback.
         do { try NotificationMirror.writeNames(input, root: root) }
         catch { completion(error); return }
+        // The home-screen widget shows its list only for the account these names confirm.
+        #if os(iOS) && canImport(WidgetKit)
+        if #available(iOS 14.0, *), old.account != input.account { WidgetCenter.shared.reloadAllTimelines() }
+        #endif
         enqueue { finished in
             let retained = input.preserveIfEmpty && old.account == input.account && input.contacts.isEmpty && input.rooms.isEmpty
                 ? old : input

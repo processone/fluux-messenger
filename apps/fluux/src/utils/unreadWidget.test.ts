@@ -137,6 +137,20 @@ describe('startUnreadWidgetPublisher', () => {
     expect(mockInvoke).toHaveBeenCalledTimes(1)
   })
 
+  it('publishes again when the same account signs back in after the publisher was unmounted (FLM-418 R1)', async () => {
+    const stop = startUnreadWidgetPublisher(() => 0)
+    await clearUnreadWidgetList()
+    // The sign-out ends and the layout unmounts before any debounced publication could reset the block.
+    stop()
+    asStore(connectionStore).set({ jid: null })
+    asStore(connectionStore).set({ jid: 'me@example.com/phone' })
+    mockInvoke.mockClear()
+    const next = startUnreadWidgetPublisher(() => 0)
+    await vi.advanceTimersByTimeAsync(600)
+    next()
+    expect(mockInvoke.mock.lastCall?.[1].list).toMatchObject({ account: 'me@example.com' })
+  })
+
   it('publishes for another account after a sign-out', async () => {
     startUnreadWidgetPublisher(() => 0)
     await clearUnreadWidgetList()

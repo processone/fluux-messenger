@@ -31,6 +31,12 @@ struct UnreadProvider: TimelineProvider {
         // The app asks for a redraw whenever the list changes. Between changes the labels still move
         // on: an entry at each midnight turns a time into "Yesterday" and then a weekday.
         let now = current()
+        // A list whose account the names do not yet confirm is the app mid-sign-in: the two files are
+        // written moments apart. Look again soon, so a signed-out entry is not kept for days.
+        if now.list == nil, let written = UnreadList.load(root: NotificationMirror.root), written.account != now.names.account {
+            completion(Timeline(entries: [now], policy: .after(now.date.addingTimeInterval(60))))
+            return
+        }
         let calendar = Calendar.current
         let midnights = (1...7).compactMap { calendar.date(byAdding: .day, value: $0, to: calendar.startOfDay(for: now.date)) }
         let entries = [now] + midnights.map { UnreadEntry(date: $0, list: now.list, names: now.names) }

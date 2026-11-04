@@ -48,10 +48,12 @@ final class NotificationService: UNNotificationServiceExtension {
         let words = wordValue.flatMap { JSONSerialization.isValidJSONObject($0) ? try? JSONSerialization.data(withJSONObject: $0) : nil }
             .flatMap { try? JSONDecoder().decode(PreviewWords.self, from: $0) } ?? PreviewWords.localized
         // The widget lists what the badge counts: a push that raises the badge adds its conversation.
-        let content = NotificationPresentation.content(for: request.content, names: names, activity: words.activity) { bare, isRoom, total in
+        let content = NotificationPresentation.content(for: request.content, names: names, activity: words.activity) { bare, isRoom, counted in
             UnreadList.recordPush(conversation: bare, kind: isRoom ? "groupchat" : "chat",
                                   name: (isRoom ? names.rooms[bare] : names.contacts[bare]) ?? bare,
-                                  account: names.account, total: total, root: NotificationMirror.root)
+                                  account: names.account,
+                                  // Read under the list's lock, so the newest push leaves the newest total.
+                                  total: SharedBadge.load()?.count ?? counted, root: NotificationMirror.root)
         }
         delivery.begin(content, completion: finish)
         let sender = (content.userInfo["from"] as? String).flatMap(NotificationPresentation.bareJid)

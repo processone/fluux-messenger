@@ -90,20 +90,52 @@ struct UnreadList: Codable, Equatable {
         return next
     }
 
-    /// The notification extension's side: adds a pushed conversation to the file the app last wrote
+    /// The notification extension's side: `total` is read once the lock is held, so a push that waited
+    /// for another reads the badge after that one, never a count taken before it. Adds a pushed conversation to the file the app last wrote
     /// and asks for a redraw. iOS may defer that redraw until the app next opens; the file is right either way.
     static func recordPush(conversation: String, kind: String, name: String, account: String?,
-                           total: Int, root: URL?) {
+                           total: @autoclosure () -> Int, root: URL?) {
         guard let root = root else { return }
         // Read and write under one lock: a clear or a newer list from the app lands before or after, never between.
         let added: Bool = locked(root: root) {
             guard let list = load(root: root),
-                  let next = list.adding(conversation, kind: kind, name: name, account: account, total: total) else { return false }
+                  let next = list.adding(conversation, kind: kind, name: name, account: account, total: total()) else { return false }
             return (try? next.writeUnlocked(root: root)) != nil
         }
         guard added else { return }
         #if os(iOS) && canImport(WidgetKit)
         if #available(iOS 14.0, *) { WidgetCenter.shared.reloadTimelines(ofKind: widgetKind) }
         #endif
+    }
+}
+
+extension UnreadList {
+    /// The time today, "Yesterday", the weekday within a week, then the date. Everything is measured
+    /// against `now`, never the clock, so a timeline entry drawn ahead of time labels its day correctly.
+    static func when(_ date: Date, now: Date = Date(), calendar: Calendar = .current, locale: Locale = .current) -> String {
+        let today = calendar.startOfDay(for: now)
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: today).day ?? 0
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        switch days {
+        case ..<1:
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
+        case 1:
+            let relative = RelativeDateTimeFormatter()
+            relative.locale = locale
+            relative.calendar = calendar
+            relative.dateTimeStyle = .named
+            let word = relative.localizedString(for: calendar.startOfDay(for: date), relativeTo: today)
+            return word.prefix(1).uppercased(with: locale) + word.dropFirst()
+        case 2..<7:
+            formatter.setLocalizedDateFormatFromTemplate("EEE")
+        default:
+            formatter.timeStyle = .none
+            formatter.dateStyle = .short
+        }
+        return formatter.string(from: date)
     }
 }

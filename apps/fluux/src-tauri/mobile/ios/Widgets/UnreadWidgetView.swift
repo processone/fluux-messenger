@@ -172,7 +172,7 @@ struct UnreadRowView: View {
             VStack(alignment: .trailing, spacing: 1) {
                 Text("\(row.unread)").font(.caption.bold())
                 if let date = row.date {
-                    Text(Self.when(date, now: now)).font(.caption2).foregroundStyle(.secondary)
+                    Text(UnreadList.when(date, now: now)).font(.caption2).foregroundStyle(.secondary)
                 }
             }
         }
@@ -192,27 +192,5 @@ struct UnreadRowView: View {
     static func initials(_ name: String) -> String {
         let letters = name.split(separator: " ").prefix(2).compactMap { $0.first }
         return String(letters).uppercased()
-    }
-
-    /// The time today, "Yesterday", the weekday within a week, then the date.
-    static func when(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = .current
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
-        switch days {
-        case ..<1:
-            formatter.timeStyle = .short
-            formatter.dateStyle = .none
-        case 1:
-            formatter.timeStyle = .none
-            formatter.dateStyle = .medium
-            formatter.doesRelativeDateFormatting = true
-        case 2..<7:
-            formatter.setLocalizedDateFormatFromTemplate("EEE")
-        default:
-            formatter.timeStyle = .none
-            formatter.dateStyle = .short
-        }
-        return formatter.string(from: date)
     }
 }

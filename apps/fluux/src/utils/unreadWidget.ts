@@ -64,6 +64,8 @@ let writes: Promise<void> = Promise.resolve()
 let active: { stop: () => void; cancel: () => void } | undefined
 // The account being signed out: nothing is published for it until the app has another one.
 let clearedAccount: string | null = null
+// Ends the block when the session itself ends, however the publisher was stopped by then.
+let releaseBlock: (() => void) | undefined
 
 async function write(list: UnreadWidgetList | null): Promise<void> {
   // `updated` moves on every build; only the content decides whether to write.
@@ -93,7 +95,18 @@ export function shareUnreadWidgetList(list: UnreadWidgetList | null): Promise<vo
  */
 export function clearUnreadWidgetList(): Promise<void> {
   active?.cancel()
-  clearedAccount = connectionStore.getState().jid?.split('/')[0] ?? null
+  const account = connectionStore.getState().jid?.split('/')[0] ?? null
+  releaseBlock?.()
+  clearedAccount = account
+  if (account) {
+    // The block belongs to this session: once the connection no longer is this account's, signing back in is allowed.
+    const unsubscribe = connectionStore.subscribe(() => {
+      if (connectionStore.getState().jid?.split('/')[0] === account) return
+      clearedAccount = null
+      releaseBlock?.()
+    })
+    releaseBlock = () => { releaseBlock = undefined; unsubscribe() }
+  }
   return shareUnreadWidgetList(null)
 }
 
@@ -102,6 +115,7 @@ export function resetSharedUnreadWidgetList(): void {
   shared = null
   writes = Promise.resolve()
   active = undefined
+  releaseBlock?.()
   clearedAccount = null
 }
 
