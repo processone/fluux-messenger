@@ -379,6 +379,12 @@ interface ResidentTopExecutionState {
 }
 
 interface LiveEdgeExecutionState {
+  /**
+   * `navigation` from the reader's return-to-latest until it first settles; `maintenance` for every
+   * other live-edge execution, follow-live re-pins included. The request source cannot tell them
+   * apart: a follow re-armed by the reader's own movement shares the navigation's source.
+   */
+  purpose: 'navigation' | 'maintenance'
   request: LiveEdgeRequest
   executor: LiveEdgeExecutor
   operation: number
@@ -717,11 +723,20 @@ export class PositioningController {
     return source?.kind === 'user-navigation' && source.reason === 'message-target'
   }
 
-  /** Initial message navigation only, not visibility maintenance of an already-settled target. */
-  hasPendingMessageNavigation(conversationId: string): boolean {
-    const execution = this.explicitTargetExecution
-    return execution !== null && execution.purpose === 'navigation' &&
-      execution.request.conversationId === conversationId && this.isExplicitTargetExecutionCurrent(execution)
+  /**
+   * The reader's own navigation has not landed yet: a message jump, return-to-latest or Home.
+   * Visibility maintenance of a settled target and follow-live maintenance are not navigation.
+   */
+  hasPendingNavigation(conversationId: string): boolean {
+    const target = this.explicitTargetExecution
+    if (target !== null && target.purpose === 'navigation' &&
+      target.request.conversationId === conversationId && this.isExplicitTargetExecutionCurrent(target)) return true
+    const liveEdge = this.liveEdgeExecution
+    if (liveEdge !== null && liveEdge.purpose === 'navigation' &&
+      liveEdge.request.conversationId === conversationId && this.isLiveEdgeExecutionCurrent(liveEdge)) return true
+    const residentTop = this.residentTopExecution
+    return residentTop !== null && residentTop.request.conversationId === conversationId &&
+      this.isResidentTopExecutionCurrent(residentTop)
   }
 
   hasInteractionHold(): boolean {
@@ -1002,6 +1017,7 @@ export class PositioningController {
             'conversationId' | 'generation'
           >).source,
           input.executor,
+          'navigation',
         )
       },
     })
@@ -2046,6 +2062,7 @@ export class PositioningController {
     conversationId: string,
     source: LiveEdgeRequest['source'],
     executor: LiveEdgeExecutor,
+    purpose: LiveEdgeExecutionState['purpose'] = 'maintenance',
   ): LiveEdgeRequest | null {
     const generation = mintPositionGeneration()
     const request = {
@@ -2073,7 +2090,7 @@ export class PositioningController {
       generation,
       resolveReachability(request, reachability),
     )
-    const execution = this.createLiveEdgeExecution(request, executor)
+    const execution = this.createLiveEdgeExecution(request, executor, purpose)
     this.liveEdgeExecution = execution
     this.driveLiveEdge(execution)
     return request
@@ -2082,8 +2099,10 @@ export class PositioningController {
   private createLiveEdgeExecution(
     request: LiveEdgeRequest,
     executor: LiveEdgeExecutor,
+    purpose: LiveEdgeExecutionState['purpose'] = 'maintenance',
   ): LiveEdgeExecutionState {
     return {
+      purpose,
       request,
       executor,
       operation: 0,
@@ -2271,6 +2290,8 @@ export class PositioningController {
     outcome: Extract<LiveEdgeCompletion, 'settled' | 'best-effort'>,
   ): void {
     if (!lease.isCurrent()) return
+    // From here on the edge is only maintained: a later re-pin does not own the reader's fling.
+    execution.purpose = 'maintenance'
     this.finishLiveEdgeLoop(execution)
     this.completeLiveEdge(execution, outcome)
     lease.settle()

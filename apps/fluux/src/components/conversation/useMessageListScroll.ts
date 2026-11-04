@@ -529,11 +529,12 @@ export function useMessageListScroll({
       placement: { kind: 'bottom-fraction', fraction: messageFraction(anchor.fraction) },
     })) virtualizerRef.current?.cancelPendingScroll?.()
   }
-  // Accepting a new target retires the old input, but its released fling can still move the DOM
-  // before the deferred writer runs. Attribute only that known tail to the current navigation;
-  // a new contact, input packet, settled target, or missing gesture state retains the reader veto.
+  // Accepting a new message jump, return-to-latest or Home retires the old input, but its released
+  // fling can still move the DOM before the held write runs. Attribute only that known tail to the
+  // current navigation; a new contact, input packet, settled target, follow-live re-pin, or missing
+  // gesture state retains the reader veto.
   const navigationOwnsFling = (id: string): boolean => {
-    return positioningControllerRef.current?.hasPendingMessageNavigation(id) === true &&
+    return positioningControllerRef.current?.hasPendingNavigation(id) === true &&
       virtualizerRef.current?.hasPendingFling?.() === true
   }
   const observeViewportGeometry = (id: string, input?: UserScrollInput, resetInput = false) => {
