@@ -2,6 +2,7 @@
 # FLM-343: actual Tauri/WKWebView recovery with injected stores only.
 # FLM-304: `retry` drives the Settings keychain retry instead of a restore;
 # `retry-desync` drives it inside the startup identity choice of a desynced key.
+# FLM-408 R4: both also press once while a held prompt outlives the time limit.
 # Start the bundled e2e preview on 127.0.0.1:5197 first. Nothing is signed or installed.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"

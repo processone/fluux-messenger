@@ -30,7 +30,7 @@ mod host {
         collections::BTreeMap,
         fs,
         path::PathBuf,
-        sync::{Arc, Mutex},
+        sync::{Arc, Condvar, Mutex},
     };
     const JID: &str = "you@fluux.chat";
     fn metadata() -> serde_json::Value {
@@ -41,8 +41,16 @@ mod host {
     struct Files {
         root: PathBuf,
         lock: Arc<Mutex<()>>,
+        /// FLM-408 R4: while set, a read waits like a macOS prompt the user
+        /// has not answered yet.
+        prompt: Arc<(Mutex<bool>, Condvar)>,
     }
     impl Files {
+        fn set_prompt_open(&self, open: bool) {
+            let (lock, answered) = &*self.prompt;
+            *lock.lock().unwrap() = open;
+            answered.notify_all();
+        }
         /// FLM-304: set by the journey between its two retries; stands in for
         /// the user allowing the macOS prompt. Without it every old item is refused.
         fn granted(&self) -> bool {
@@ -88,14 +96,15 @@ mod host {
     impl Backend for Files {
         fn read(&self, a: &str) -> Result<Option<String>, StoreError> {
             self.audit("read", a);
-            // Items written before the app ran are refused; the app's own
-            // bundle item is not.
-            if a != "secrets-fresh-v1"
-                && a != "secrets-v1"
-                && !self.granted()
-                && self.read_items().contains_key(a)
-            {
-                return Err(StoreError::denied());
+            // Items written before the app ran ask the user, who refuses
+            // unless the journey granted access; the app's own bundle item
+            // asks nothing.
+            if a != "secrets-fresh-v1" && a != "secrets-v1" && self.read_items().contains_key(a) {
+                let (lock, answered) = &*self.prompt;
+                drop(answered.wait_while(lock.lock().unwrap(), |open| *open).unwrap());
+                if !self.granted() {
+                    return Err(StoreError::denied());
+                }
             }
             self.get(a).map_err(Into::into)
         }
@@ -166,6 +175,19 @@ mod host {
     fn recovery_grant_keychain(fixture: tauri::State<'_, Fixture>) -> Result<(), String> {
         fixture.raw.audit("grant", "keychain");
         fs::write(fixture.root.join("keychain-granted"), b"granted").map_err(|e| e.to_string())
+    }
+
+    /// FLM-408 R4: the next macOS prompt stays open until the user answers.
+    #[tauri::command]
+    fn recovery_hold_keychain(fixture: tauri::State<'_, Fixture>) {
+        fixture.raw.audit("hold", "keychain");
+        fixture.raw.set_prompt_open(true);
+    }
+    /// FLM-408 R4: the user answers the open prompt; without a grant, a refusal.
+    #[tauri::command]
+    fn recovery_answer_keychain(fixture: tauri::State<'_, Fixture>) {
+        fixture.raw.audit("answer", "keychain");
+        fixture.raw.set_prompt_open(false);
     }
 
     /// Old items read in each part of the retry journey, split at its notes.
@@ -275,7 +297,10 @@ mod host {
         // registration of a new plugin, a reconnect and the panel shown again
         // (FLM-408 R3) each read nothing. recovery_note proved the key file
         // unchanged up to each step. A refused migration stops at its first
-        // item; a desynced key asks only for its own old item.
+        // item; a desynced key asks only for its own old item. FLM-408 R4:
+        // after the first refusal, a press that outlives its time limit on an
+        // open prompt reads once, and nothing reads while it waits or after
+        // the user refuses that prompt.
         if retry && !fixture.restart {
             let (refused, granted) = if fixture.source == "retry-desync" {
                 let own = vec![format!("openpgp_passphrase:{JID}")];
@@ -284,12 +309,16 @@ mod host {
                 (vec!["last_user".to_string()], OLD_ITEMS.map(String::from).to_vec())
             };
             let mut expected = vec![("startup".to_string(), refused.clone())];
-            for (press, reads) in [(1, refused), (2, granted)] {
+            for (press, reads) in [(1, refused.clone()), (2, granted)] {
                 expected.extend(
                     ["prewarm", "unlock", "reregister", "reconnect", "panel"]
                         .map(|step| (format!("{step}-{press}"), Vec::new())),
                 );
                 expected.push((format!("click-{press}"), reads));
+                if press == 1 {
+                    expected.push(("timeout-1".into(), refused.clone()));
+                    expected.push(("answered-1".into(), Vec::new()));
+                }
             }
             let steps = old_reads_by_step(&operations);
             if steps != expected {
@@ -325,6 +354,7 @@ mod host {
         let raw = Files {
             root: root.clone(),
             lock: Arc::new(Mutex::new(())),
+            prompt: Arc::new((Mutex::new(false), Condvar::new())),
         };
         if !root.join("fixture-items.json").exists() {
             fs::write(root.join("fixture-items.json"), br#"{"openpgp_passphrase:you@fluux.chat":"b2xk","openpgp_passphrase:bob@example.com":"b3RoZXI=","last_user":"fixture-only"}"#).unwrap();
@@ -391,7 +421,7 @@ mod host {
         context.config_mut().app.windows.clear();
         tauri::Builder::default().manage(state).manage(fixture)
             .invoke_handler(tauri::generate_handler![get_credentials, recovery_checkpoint, recovery_ciphertext, recovery_failure,
-                recovery_note, recovery_grant_keychain,
+                recovery_note, recovery_grant_keychain, recovery_hold_keychain, recovery_answer_keychain,
                 openpgp::openpgp_ensure_key, openpgp::openpgp_prewarm, openpgp::openpgp_has_persisted_key,
                 openpgp::openpgp_keychain_retry_available, openpgp::openpgp_retry_keychain_access,
                 openpgp::openpgp_backup_import_all, openpgp::openpgp_backup_import_selected,

@@ -511,12 +511,14 @@ owned processes and refuses to replay an existing lab. It substitutes `security`
 commands and rejects any attempted use. The host runs only with `--run-recovery-host` and a scratch
 HOME marker; normal `cargo test` compiles it but does not open a window. The `retry` journey keeps
 the key's real passphrase in its old fixture item, declines the startup restore, opens the Settings
-panel, refuses the first press and allows the second. Before each press it also calls the login
-prewarm and the normal unlock, unregisters the plugin and lets the App's registration hook register a
-new one (declining the restore the App offers again), reconnects, and reopens Settings. The driver
-marks each of these steps in the operation log, which must show no read in any of them, one refused
-old-item read at startup and one OS request per press, the key file unchanged until
-the granted press, no fresh-account route, and no old-item read after restart. The `retry-desync`
+panel, refuses the first press and allows the last. Between them, a press waits on a held prompt
+until its time limit (shortened for that press) expires: the store must answer `pending`, the panel
+must keep the failure and its button, and once the prompt is refused the store must answer `held`
+again. Before the first and last press it also calls the login prewarm and the normal unlock,
+unregisters the plugin and lets the App's registration hook register a new one (declining the restore the App offers again), reconnects, and reopens Settings. The driver
+marks each of these steps in the operation log, which must show no read in any of them or after the
+refused held prompt, one refused old-item read at startup and one OS request per press, the key file
+unchanged until the granted press, no fresh-account route, and no old-item read after restart. The `retry-desync`
 journey gives the combined item a stale passphrase, so nothing migrates and the key is desynced; it
 runs the same presses and steps from the panel inside the startup identity choice, and its log must show only
 that account's old item, once at startup and once per press, then only the combined item after

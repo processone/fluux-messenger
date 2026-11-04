@@ -27,6 +27,33 @@
     const retryOffered = async () => (await window.__TAURI_INTERNALS__.invoke('openpgp_keychain_retry_available', account)) === 'held'
     const heading = text => [...document.querySelectorAll('h1,h2,h3')].some(el => el.textContent === text)
     const plugin = () => window.__demoClient.e2ee.getPlugin('openpgp')
+    // FLM-408 R4: after a refusal, a press outlives its two-minute limit while
+    // macOS's prompt stays open. The store answers that a read is under way,
+    // the panel keeps the failure and its action, and once the user refuses
+    // that prompt the refusal is held again. Only this press's limit is
+    // shortened, so the journey does not wait two minutes.
+    const timedOutPress = async ask => {
+      const refusal = () => window.__TAURI_INTERNALS__.invoke('openpgp_keychain_retry_available', account)
+      await window.__TAURI_INTERNALS__.invoke('recovery_hold_keychain')
+      await note('timeout-1')
+      const setTimer = window.setTimeout
+      window.setTimeout = (run, ms, ...rest) => setTimer(run, ms === 120000 ? 1000 : ms, ...rest)
+      try {
+        ask().click()
+        await wait(() => [...document.querySelectorAll('[role="alert"]')].some(el => el.textContent === 'The key could not be unlocked.')
+          && document.body.textContent.includes('openpgp_retry_keychain_access timeout after 120000 ms') && ask(), 'timed-out press keeps its action')
+      } finally {
+        window.setTimeout = setTimer
+      }
+      if (await refusal() !== 'pending') throw new Error('a read on an open prompt was not reported as under way')
+      await note('answered-1')
+      await window.__TAURI_INTERNALS__.invoke('recovery_answer_keychain')
+      // The normal unlock waits for the retry's turn, then keeps the refusal.
+      await window.__TAURI_INTERNALS__.invoke('openpgp_ensure_key', { ...account, userId: 'xmpp:you@fluux.chat' })
+        .then(() => { throw new Error('the key unlocked although the user refused the prompt') }, () => {})
+      if (await refusal() !== 'held') throw new Error('the refused prompt left no refusal to retry')
+      if (!ask()) throw new Error('the keychain retry action is gone after the refused prompt')
+    }
     // FLM-304 and FLM-408 R3: what may happen around the retry without a
     // press, each step marked in the host's operations log so it counts that
     // step's reads: the prewarm a login starts, the normal unlock, the App's
@@ -73,6 +100,7 @@
       await note('click-1')
       ask().click()
       await wait(() => [...document.querySelectorAll('[role="alert"]')].some(el => el.textContent === 'macOS refused access again. The key is still locked.') && ask(), 'second refusal shown')
+      await timedOutPress(ask)
       await transitions(2, declineRestore, reopen)
       await window.__TAURI_INTERNALS__.invoke('recovery_grant_keychain')
       await note('click-2')
@@ -102,6 +130,7 @@
       await note('click-1')
       ask().click()
       await wait(() => [...document.querySelectorAll('[role="alert"]')].some(el => el.textContent === 'macOS refused access again. The key is still locked.') && ask(), 'second refusal shown')
+      await timedOutPress(ask)
       await transitions(2, folded, refold)
       await window.__TAURI_INTERNALS__.invoke('recovery_grant_keychain')
       await note('click-2')
