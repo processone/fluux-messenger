@@ -136,6 +136,9 @@ export function EncryptionSettings() {
   const addToast = useToastStore((s) => s.addToast)
 
   const [recoveryManager, setRecoveryManager] = useState<E2EEManager | null>(null)
+  // FLM-304: the standalone keychain retry is asking macOS; the restore entry
+  // waits until it reports which key is in use.
+  const [keychainRetryBusy, setKeychainRetryBusy] = useState(false)
   const [fingerprint, setFingerprint] = useState<string | null>(null)
   // Native engine only: false when the key's passphrase fell back to a cleartext
   // file on disk (no OS secret service), i.e. the key is not protected at
@@ -396,6 +399,16 @@ export function EncryptionSettings() {
     useEncryptionSettingsStore.getState().notifyPluginRegistered()
     addToast('success', t('settings.encryption.keychainRetry.success'))
   }, [addToast, t])
+
+  // The retry inside the identity choice unlocked the key. Only the choice
+  // that asked closes; a newer one opened meanwhile stays.
+  const handleIdentityChoiceKeychainUnlocked = useCallback((
+    choice: NonNullable<typeof pendingIdentityChoice>,
+    unlockedFingerprint: string,
+  ) => {
+    setPendingIdentityChoice(current => current === choice ? null : current)
+    handleKeychainUnlocked(unlockedFingerprint)
+  }, [handleKeychainUnlocked])
 
   const handleToggle = useCallback(async () => {
     const manager = client.e2ee
@@ -1150,7 +1163,7 @@ export function EncryptionSettings() {
 
         {platform().shell === 'desktop' && platform().os === 'macos' && (
           <button type="button" className="px-3 py-2 text-sm rounded-lg bg-fluux-hover text-fluux-text hover:bg-fluux-active"
-            disabled={!online || !client.e2ee?.getPlugin('openpgp')}
+            disabled={!online || !client.e2ee?.getPlugin('openpgp') || keychainRetryBusy}
             onClick={() => setRecoveryManager(client.e2ee ?? null)}>
             {t('settings.encryption.recoveryTitle')}
           </button>
@@ -1160,7 +1173,8 @@ export function EncryptionSettings() {
             the restore entry and offered only when no backup can recover it.
             While the identity choice is open, the retry sits inside it. */}
         {pluginStatus === 'recovery-needed' && !pendingIdentityChoice && (
-          <KeychainRetryOffer plugin={client.e2ee?.getPlugin('openpgp')} onUnlocked={handleKeychainUnlocked} />
+          <KeychainRetryOffer plugin={client.e2ee?.getPlugin('openpgp')} onUnlocked={handleKeychainUnlocked}
+            onBusyChange={setKeychainRetryBusy} />
         )}
 
         {/* Backup to server — only when a key actually exists to back up. */}
@@ -1493,16 +1507,14 @@ export function EncryptionSettings() {
           onImportFromFile={handleIdentityChoiceImportFile}
           onReplaceIdentity={handleIdentityChoiceReplace}
           onCancel={handleIdentityChoiceCancel}
-          advanced={pendingIdentityChoice.reason === 'local-key-unrecoverable' && (
+          advanced={pendingIdentityChoice.reason === 'local-key-unrecoverable' ? ({ onBusyChange }) => (
             <KeychainRetryOffer
               plugin={client.e2ee?.getPlugin('openpgp')}
               hintAction={t('settings.encryption.identityChoice.importFromFileTitle')}
-              onUnlocked={(unlockedFingerprint) => {
-                setPendingIdentityChoice(null)
-                handleKeychainUnlocked(unlockedFingerprint)
-              }}
+              onBusyChange={onBusyChange}
+              onUnlocked={(unlockedFingerprint) => handleIdentityChoiceKeychainUnlocked(pendingIdentityChoice, unlockedFingerprint)}
             />
-          )}
+          ) : undefined}
         />
       )}
 

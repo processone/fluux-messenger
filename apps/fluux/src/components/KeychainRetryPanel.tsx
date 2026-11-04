@@ -29,18 +29,36 @@ function supportsKeychainRetry(plugin: unknown): plugin is KeychainRetryPlugin {
   return typeof candidate?.isKeychainRetryOffered === 'function' && typeof candidate.retryKeychainAccess === 'function'
 }
 
+interface KeychainRetryPanelProps {
+  plugin: KeychainRetryPlugin
+  onUnlocked: (fingerprint: string) => void
+  /** The recovery action the backup hint names; Settings' restore entry by default. */
+  hintAction?: string
+  /**
+   * Told when a retry starts and ends, so the caller holds its other recovery
+   * actions until the retry reports which key is in use.
+   */
+  onBusyChange?: (busy: boolean) => void
+}
+
+// One panel per plugin instance: a newly registered plugin starts folded, with
+// no outcome of the previous plugin's retry.
+const panelKeys = new WeakMap<KeychainRetryPlugin, number>()
+let lastPanelKey = 0
+function panelKey(plugin: KeychainRetryPlugin): number {
+  let key = panelKeys.get(plugin)
+  if (key === undefined) panelKeys.set(plugin, key = ++lastPanelKey)
+  return key
+}
+
 /**
  * The retry asks the macOS keychain again, so only desktop macOS offers it.
  * Callers place it where a locked key's recovery is shown: under Settings'
  * restore entry, or inside the identity choice a desynced key opens.
  */
-export function KeychainRetryOffer({ plugin, onUnlocked, hintAction }: {
-  plugin: unknown
-  onUnlocked: (fingerprint: string) => void
-  hintAction?: string
-}) {
+export function KeychainRetryOffer({ plugin, ...props }: Omit<KeychainRetryPanelProps, 'plugin'> & { plugin: unknown }) {
   if (platform().shell !== 'desktop' || platform().os !== 'macos' || !supportsKeychainRetry(plugin)) return null
-  return <KeychainRetryPanel plugin={plugin} onUnlocked={onUnlocked} hintAction={hintAction} />
+  return <KeychainRetryPanel key={panelKey(plugin)} plugin={plugin} {...props} />
 }
 
 /**
@@ -50,12 +68,7 @@ export function KeychainRetryOffer({ plugin, onUnlocked, hintAction }: {
  * retry (a keychain refusal this launch, no server backup), stays folded
  * until opened, and reads the keychain only when the user presses its button.
  */
-function KeychainRetryPanel({ plugin, onUnlocked, hintAction }: {
-  plugin: KeychainRetryPlugin
-  onUnlocked: (fingerprint: string) => void
-  /** The recovery action the backup hint names; Settings' restore entry by default. */
-  hintAction?: string
-}) {
+function KeychainRetryPanel({ plugin, onUnlocked, hintAction, onBusyChange }: KeychainRetryPanelProps) {
   const { t } = useTranslation()
   const [offered, setOffered] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -76,6 +89,7 @@ function KeychainRetryPanel({ plugin, onUnlocked, hintAction }: {
 
   const retry = async () => {
     setBusy(true)
+    onBusyChange?.(true)
     setRefusedAgain(false)
     setFailure(null)
     try {
@@ -92,6 +106,7 @@ function KeychainRetryPanel({ plugin, onUnlocked, hintAction }: {
       }
     } finally {
       setBusy(false)
+      onBusyChange?.(false)
     }
   }
 

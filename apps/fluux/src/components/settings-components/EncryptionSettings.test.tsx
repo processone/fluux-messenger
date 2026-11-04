@@ -13,7 +13,7 @@
 import { StrictMode } from 'react'
 import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { E2EEPluginError } from '@fluux/sdk'
 import { EncryptionSettings } from './EncryptionSettings'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
@@ -949,6 +949,21 @@ describe('macOS keychain retry panel', () => {
     expect(screen.getByText('decrypt persisted TSK: unexpected EOF')).toBeInTheDocument()
   })
 
+  // Intent FLM-408 R1: a restore must not start while the retry asks macOS,
+  // or the retry would report a key the restore has since replaced.
+  it('holds the restore entry while the retry asks macOS', async () => {
+    let answer!: (refusal: Error) => void
+    retryKeychainAccess.mockImplementationOnce(() => new Promise((_resolve, reject) => { answer = reject }))
+    render(<EncryptionSettings />)
+    const restore = screen.getByRole('button', { name: 'settings.encryption.recoveryTitle' })
+    fireEvent.click(await screen.findByRole('button', { name: panelTitle }))
+    fireEvent.click(retryButton())
+    await waitFor(() => expect(restore).toBeDisabled())
+    await act(async () => { answer(new E2EEPluginError('permanent', 'keychain-refused', 'openpgp-keychain-refused: refused again')) })
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.encryption.keychainRetry.refusedAgain')
+    expect(restore).toBeEnabled()
+  })
+
   // A desynced key opens the identity choice over this view, and its Cancel
   // turns encryption off, so the retry must be reachable inside that choice.
   it('sits inside the identity choice for a desynced key, and unlocking closes it with encryption on', async () => {
@@ -961,11 +976,15 @@ describe('macOS keychain retry panel', () => {
     fireEvent.click(title)
     expect(retryKeychainAccess).not.toHaveBeenCalled()
 
-    retryKeychainAccess.mockImplementationOnce(async () => {
-      unlockedFingerprint = FINGERPRINT
-      return { fingerprint: FINGERPRINT }
-    })
+    // FLM-408 R1: while macOS is asked, the choice holds its other recoveries.
+    let grant!: () => void
+    retryKeychainAccess.mockImplementationOnce(() => new Promise(resolve => {
+      grant = () => { unlockedFingerprint = FINGERPRINT; resolve({ fingerprint: FINGERPRINT }) }
+    }))
     fireEvent.click(retryButton())
+    await waitFor(() => expect(replace).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'common.cancel' })).toBeDisabled()
+    await act(async () => { grant() })
     expect(await screen.findByText('settings.encryption.statusReady')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /settings.encryption.identityChoice.replaceTitle/ })).not.toBeInTheDocument()
     expect(useEncryptionSettingsStore.getState().openpgpEnabled).toBe(true)

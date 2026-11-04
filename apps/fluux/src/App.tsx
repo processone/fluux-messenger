@@ -442,9 +442,10 @@ function App() {
   }, [client, pendingIdentityChoice, t, addToast])
 
   // FLM-304: the macOS keychain retry inside the choice unlocked the existing key.
-  const handleIdentityKeychainUnlocked = useCallback((manager: E2EEManager) => {
-    if (client.e2ee !== manager) return
-    setPendingIdentityChoice(null)
+  // Only the choice that asked closes; a newer one opened meanwhile stays.
+  const handleIdentityKeychainUnlocked = useCallback((choice: NonNullable<typeof pendingIdentityChoice>) => {
+    if (client.e2ee !== choice.manager) return
+    setPendingIdentityChoice(current => current === choice ? null : current)
     addToast('success', t('settings.encryption.keychainRetry.success'))
   }, [client, t, addToast])
 
@@ -582,13 +583,14 @@ function App() {
           onImportFromFile={handleIdentityImportFromFile}
           onReplaceIdentity={handleIdentityReplaceIdentity}
           onCancel={() => setPendingIdentityChoice(null)}
-          advanced={pendingIdentityChoice.reason === 'local-key-unrecoverable' && (
+          advanced={pendingIdentityChoice.reason === 'local-key-unrecoverable' ? ({ onBusyChange }) => (
             <KeychainRetryOffer
               plugin={pendingIdentityChoice.manager.getPlugin('openpgp')}
               hintAction={t('settings.encryption.identityChoice.importFromFileTitle')}
-              onUnlocked={() => handleIdentityKeychainUnlocked(pendingIdentityChoice.manager)}
+              onBusyChange={onBusyChange}
+              onUnlocked={() => handleIdentityKeychainUnlocked(pendingIdentityChoice)}
             />
-          )}
+          ) : undefined}
         />
       )}
       {pendingImportFile && client.e2ee === pendingImportFile.manager && (
