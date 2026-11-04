@@ -4,6 +4,7 @@ import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { setWebAppBadge } from '@/utils/appBadge'
 import { pushBadgeState, sharePushBadge } from '@/utils/pushBadge'
+import { startUnreadWidgetPublisher } from '@/utils/unreadWidget'
 import { platform } from '@/platform'
 
 // Set Tauri dock/taskbar badge
@@ -104,7 +105,8 @@ class FaviconBadge {
 /**
  * Hook to manage notification badges for unread messages and inbox events.
  * - In Tauri: Sets the dock/taskbar badge count
- * - On iOS: Sets the app icon badge through the push plugin
+ * - On iOS: Sets the app icon badge through the push plugin and keeps the
+ *   widget's unread list current
  * - In Browser: Updates the favicon with a notification indicator
  *
  * Badge count is a simple sum of store-maintained unread counts.
@@ -125,6 +127,14 @@ export function useNotificationBadge(): void {
   })
 
   const faviconBadgeRef = useRef<FaviconBadge | null>(null)
+
+  // The home-screen widget lists the conversations this badge counts. It reads
+  // the stores itself, since a new message in a listed conversation changes the
+  // list without changing any count above.
+  useEffect(() => {
+    if (!platform().publishesUnreadWidget) return
+    return startUnreadWidgetPublisher(() => eventsPendingCount)
+  }, [eventsPendingCount])
 
   // Initialize favicon badge handler (browser only)
   useEffect(() => {

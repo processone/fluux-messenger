@@ -243,7 +243,7 @@ export function createPlan(changes, cwd = root) {
       npm('test:ios-diagnostic', reason, { requires: 'diagnostic' })
       notification(reason); platform(reason); continue
     }
-    if (path.startsWith(`${native}/plugins/push/`) || /Notification(Service|PreviewEngine)\.swift$|scripts\/ios-(notifications|notification-previews|notification-diagnostic|quick-wins|app-intents)\.test\.mjs$|scripts\/native-tests\/(Notification|Preview|IOSQuickWins|IOSAppIntents|preview-identity|sdk-ts-loader)/.test(path)) {
+    if (path.startsWith(`${native}/plugins/push/`) || path.startsWith(`${native}/plugins/widgets/ios/`) || /Notification(Service|PreviewEngine)\.swift$|scripts\/ios-(notifications|notification-previews|notification-diagnostic|quick-wins|app-intents)\.test\.mjs$|scripts\/native-tests\/(Notification|Preview|UnreadList|IOSQuickWins|IOSAppIntents|preview-identity|sdk-ts-loader)/.test(path)) {
       notification(reason); platform(reason); continue
     }
     if (/mobile-share-resources\.mjs$/.test(path)) {

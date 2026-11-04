@@ -232,6 +232,8 @@ export { isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions 
 // Notification state utilities (pure functions for badge computation, etc.)
 export { computeBadgeCount, shouldNotifyConversation, shouldNotifyRoom } from './stores/shared/notificationState'
 export type { EntityNotificationState, NotificationMessage, EntityContext, BadgeInput } from './stores/shared/notificationState'
+export { unreadConversations } from './stores/unreadConversations'
+export type { UnreadConversation } from './stores/unreadConversations'
 
 // Read pointer (canonical read position; supersedes lastSeenMessageId + lastReadAt, issue #1081).
 //

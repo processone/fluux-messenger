@@ -122,6 +122,8 @@ targets:
         embed: true
       - target: FluuxNotification
         embed: true
+      - target: FluuxWidgets
+        embed: true
       - framework: {{ lib-output-file-name }}
         embed: false
       {{~#each ios-libraries}}
@@ -262,6 +264,7 @@ targets:
       - path: ../../mobile/ios/AppResources
       - path: ../../plugins/push/ios/Sources/NotificationPreviews
       - path: ../../plugins/push/ios/Sources/NotificationAvatars
+      - path: ../../plugins/widgets/ios/Sources/UnreadList.swift
     preBuildScripts:
       - path: ../../mobile/ios/build-notification-preview.sh
         name: Build notification preview Rust library
@@ -297,3 +300,44 @@ targets:
         keychain-access-groups:
           - $(AppIdentifierPrefix){{app.identifier}}.notification
           - $(AppIdentifierPrefix){{app.identifier}}.notification-preview
+
+  # Lists the conversations with unread messages, from the file the app writes into the shared folder.
+  # Its own App ID (<identifier>.widgets) joins the same App Group; it needs no push or keychain access.
+  FluuxWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ../../mobile/ios/Widgets
+      - path: ../../plugins/push/ios/Sources/NotificationAvatars/ConversationDestination.swift
+      - path: ../../plugins/push/ios/Sources/NotificationAvatars/SharedNotificationStore.swift
+      - path: ../../plugins/widgets/ios/Sources/UnreadList.swift
+      - path: ../../mobile/ios/privacy/widgets/PrivacyInfo.xcprivacy
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: {{app.identifier}}.widgets
+        PRODUCT_NAME: FluuxWidgets
+        SWIFT_VERSION: "5.0"
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        {{#if apple.development-team}}
+        DEVELOPMENT_TEAM: {{apple.development-team}}
+        {{/if}}
+    info:
+      path: FluuxWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Fluux
+        CFBundleShortVersionString: {{apple.bundle-version-short}}
+        CFBundleVersion: "{{apple.bundle-version}}"
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, fr]
+        FluuxShareGroup: group.{{app.identifier}}.share
+        # A row opens its conversation through this scheme, which the app registers as a deep link.
+        FluuxAppScheme: {{app.identifier}}
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: FluuxWidgets/FluuxWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.{{app.identifier}}.share]

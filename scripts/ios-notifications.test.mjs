@@ -17,6 +17,7 @@ function compileNotificationTests(scratch, main, ios = false, realEngine = false
     ...['SharedNotificationStore.swift', 'SharedBadge.swift', 'NotificationPresentation.swift', 'ConversationDestination.swift', 'NotificationSoundSettings.swift'].map(name =>
       fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationAvatars/${name}`, import.meta.url))),
     fileURLToPath(new URL('../apps/fluux/src-tauri/plugins/push/ios/Sources/ShareSuggestions.swift', import.meta.url)),
+    fileURLToPath(new URL('../apps/fluux/src-tauri/plugins/widgets/ios/Sources/UnreadList.swift', import.meta.url)),
     ...['PreviewKeychain.swift', 'PreviewDelivery.swift', 'PreviewLedger.swift', 'PreviewResult.swift', 'PreviewTrace.swift'].map(name =>
       fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/${name}`, import.meta.url))),
     fileURLToPath(new URL(realEngine ? '../apps/fluux/src-tauri/mobile/ios/NotificationPreviewEngine.swift' : './native-tests/NotificationPreviewEngineStub.swift', import.meta.url)),
@@ -112,6 +113,20 @@ test('iOS notification conversation grouping', { skip: process.platform !== 'dar
     }
     // Type-check the iOS-only group-image assertions without launching a simulator or installed app.
     compileNotificationTests(scratch, 'NotificationServiceTests.swift', true)
+  } finally { rmSync(scratch, { recursive: true, force: true }) }
+})
+
+test('iOS unread widget list follows the badge and holds no message text', { skip: process.platform !== 'darwin' }, async (t) => {
+  // Intent: the widget lists the conversations the badge counts; a push adds its conversation by the
+  // badge's rule; signing out empties the list (FLM-414 accepted plan, piece 1).
+  const scratch = mkdtempSync(join(tmpdir(), 'fluux-unread-widget-'))
+  try {
+    const binary = compileNotificationTests(scratch, 'UnreadListTests.swift')
+    for (const scenario of ['round-trip', 'no-message-text', 'push-adds-row', 'room-rule', 'other-account', 'cap', 'clear']) {
+      await t.test(scenario, () => {
+        assert.match(execFileSync(binary, [scenario]).toString(), /passed/)
+      })
+    }
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
 

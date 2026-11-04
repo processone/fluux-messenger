@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 
 // The app extensions declared in src-tauri/mobile/ios/project.yml, by bundle identifier suffix.
-const EXTENSIONS = ['share', 'notification']
+const EXTENSIONS = ['share', 'notification', 'widgets']
 
 /** Moves the app extensions' bundle identifiers in an Xcode project from under `from` to under `to`. */
 export function retargetExtensions(pbxproj, from, to) {

@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.18.3',
+    date: 'Unreleased',
+    sections: [{
+      type: 'added',
+      items: [
+        'iOS: a widget lists the conversations with unread messages, on the home screen and, with only the unread total, on the lock screen. It shows names, counts and times, never message text, and tapping a row opens that conversation',
+      ],
+    }],
+  },
+  {
     version: '0.18.2',
     date: '2026-11-05',
     sections: [

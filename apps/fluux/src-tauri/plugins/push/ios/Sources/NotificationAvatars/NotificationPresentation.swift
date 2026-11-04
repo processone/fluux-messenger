@@ -142,8 +142,12 @@ enum NotificationPresentation {
         return intent(from: from, body: body, names: names)
     }
 
+    /// `badgeAdded` hears of a conversation a push adds to the badge: its bare JID, whether it is a room,
+    /// and the badge's new count.
     static func content(for original: UNNotificationContent, names: SharedNames = SharedNames.load(),
-                        activity: String = PreviewWords.localized.activity) -> UNNotificationContent {
+                        activity: String = PreviewWords.localized.activity,
+                        badge current: SharedBadge? = SharedBadge.load(),
+                        badgeAdded: ((String, Bool, Int) -> Void)? = nil) -> UNNotificationContent {
         guard let content = original.mutableCopy() as? UNMutableNotificationContent else { return original }
         content.body = NotificationContent.transportBody(content.body, encrypted: content.userInfo["encrypted"] as? Bool,
                                                         activity: activity)
@@ -156,7 +160,13 @@ enum NotificationPresentation {
         let sender = SenderTitle(from: from, names: names)
         content.title = sender.title
         if let subtitle = sender.subtitle { content.subtitle = subtitle }
-        if var badge = SharedBadge.load() { content.badge = NSNumber(value: badge.count(adding: from, rooms: names.rooms)) }
+        if var badge = current {
+            let counted = badge.unread.count
+            content.badge = NSNumber(value: badge.count(adding: from, rooms: names.rooms))
+            if badge.unread.count > counted, let bare = bareJid(from) {
+                badgeAdded?(bare, names.rooms[bare] != nil || badge.notifyAllRooms.contains(bare), badge.count)
+            }
+        }
         #if os(iOS)
         if #available(iOS 15.0, *), let intent = incomingIntent(from: from, body: content.body, names: names) {
             let interaction = INInteraction(intent: intent, response: nil)

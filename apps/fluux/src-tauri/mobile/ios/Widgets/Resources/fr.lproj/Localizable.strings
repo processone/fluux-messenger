@@ -1,0 +1,8 @@
+"widget.name" = "Conversations non lues";
+"widget.description" = "Les conversations qui ont des messages non lus.";
+"widget.signin" = "Connectez-vous à Fluux";
+"widget.empty" = "Aucune conversation non lue";
+"widget.unread.one" = "non lu";
+"widget.unread.other" = "non lus";
+"widget.count.one %lld" = "%lld non lu";
+"widget.count.other %lld" = "%lld non lus";

@@ -293,10 +293,15 @@ export async function endPushSession(push?: PushRegistrar): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     const revokeContent = async () => {
-      const [{ clearIOSNotificationMirror }, { purgeIOSNotificationPreviews }] = await Promise.all([
+      const [{ clearIOSNotificationMirror }, { purgeIOSNotificationPreviews }, { shareUnreadWidgetList }] = await Promise.all([
         import('@/platform/ios/notificationMirror'), import('@/platform/ios/notificationPreviews'),
+        import('@/utils/unreadWidget'),
       ])
-      await Promise.all([clearIOSNotificationMirror().catch(() => {}), purgeIOSNotificationPreviews().catch(() => {})])
+      await Promise.all([
+        clearIOSNotificationMirror().catch(() => {}),
+        purgeIOSNotificationPreviews().catch(() => {}),
+        shareUnreadWidgetList(null),
+      ])
     }
     await Promise.race([
       Promise.all([disabling, revokeContent().catch(() => console.debug('[NativePush] Logout notification cleanup unavailable'))]),

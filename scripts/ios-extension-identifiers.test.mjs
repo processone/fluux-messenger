@@ -9,6 +9,7 @@ const project = (app, extensions) => [
   `PRODUCT_BUNDLE_IDENTIFIER = ${app};`,
   `PRODUCT_BUNDLE_IDENTIFIER = ${extensions}.share;`,
   `PRODUCT_BUNDLE_IDENTIFIER = ${extensions}.notification;`,
+  `PRODUCT_BUNDLE_IDENTIFIER = ${extensions}.widgets;`,
 ].join('\n')
 
 function fixture(t, contents) {

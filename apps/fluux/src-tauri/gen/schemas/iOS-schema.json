@@ -6925,6 +6925,24 @@
           "type": "string",
           "const": "share-sheet:deny-share-file",
           "markdownDescription": "Denies the share_file command without any pre-configured scope."
+        },
+        {
+          "description": "Write the list of conversations with unread messages that the home-screen widget shows, and empty it on sign-out.\n#### This default permission set includes:\n\n- `allow-set-unread-list`",
+          "type": "string",
+          "const": "widgets:default",
+          "markdownDescription": "Write the list of conversations with unread messages that the home-screen widget shows, and empty it on sign-out.\n#### This default permission set includes:\n\n- `allow-set-unread-list`"
+        },
+        {
+          "description": "Enables the set_unread_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "widgets:allow-set-unread-list",
+          "markdownDescription": "Enables the set_unread_list command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_unread_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "widgets:deny-set-unread-list",
+          "markdownDescription": "Denies the set_unread_list command without any pre-configured scope."
         }
       ]
     },
