@@ -27,7 +27,7 @@ enum SuggestionLaunch {
         let original = class_getInstanceMethod(cls, selector).map { unsafeBitCast(method_getImplementation($0), to: Connect.self) }
         let block: @convention(block) (AnyObject, UIScene, UISceneSession, UIScene.ConnectionOptions) -> Void = { this, scene, session, options in
             original?(this, selector, scene, session, options)
-            options.userActivities.forEach { open($0, in: scene) }
+            options.userActivities.forEach { open($0) }
         }
         replace(cls, selector, imp_implementationWithBlock(block), "v@:@@@")
     }
@@ -38,7 +38,7 @@ enum SuggestionLaunch {
         let original = class_getInstanceMethod(cls, selector).map { unsafeBitCast(method_getImplementation($0), to: Continue.self) }
         let block: @convention(block) (AnyObject, UIScene, NSUserActivity) -> Void = { this, scene, activity in
             original?(this, selector, scene, activity)
-            open(activity, in: scene)
+            open(activity)
         }
         replace(cls, selector, imp_implementationWithBlock(block), "v@:@@")
     }
@@ -49,20 +49,11 @@ enum SuggestionLaunch {
         }
     }
 
-    private static func open(_ activity: NSUserActivity, in scene: UIScene) {
+    /// UIKit hands the link to the scene once it is in the foreground, including during a cold launch.
+    private static func open(_ activity: NSUserActivity) {
         guard let destination = ShareSuggestions.destination(of: activity.interaction?.intent),
               let scheme = Bundle.main.object(forInfoDictionaryKey: "FluuxAppScheme") as? String,
               let url = ShortcutConversation(destination).url(scheme: scheme) else { return }
-        whenActive(scene) { UIApplication.shared.open(url) }
-    }
-
-    /// UIKit drops a link opened while the scene is still connecting or activating.
-    private static func whenActive(_ scene: UIScene, _ work: @escaping () -> Void) {
-        if scene.activationState == .foregroundActive { work(); return }
-        var token: NSObjectProtocol?
-        token = NotificationCenter.default.addObserver(forName: UIScene.didActivateNotification, object: scene, queue: .main) { _ in
-            if let token = token { NotificationCenter.default.removeObserver(token) }
-            work()
-        }
+        UIApplication.shared.open(url)
     }
 }
