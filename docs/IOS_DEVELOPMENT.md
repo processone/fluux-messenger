@@ -636,10 +636,7 @@ requires remote pushes with fixture identities: direct and room avatars,
 missing-avatar fallback, avatar replacement/removal, logout, and delivery while
 locked after first unlock. Simulator builds and fixtures do not prove APNs
 extension execution or the rendered Notification Center appearance. The room
-picture in iOS system banners remains unverified. A separate simulator probe
-accepted the communication metadata but still displayed the app icon; awaiting
-the interaction donation failed before posting a banner. Neither result qualifies
-physical-device rendering. System-banner changes remain a separate follow-up.
+picture in iOS system banners remains unverified and is handed off to FLM-200.
 
 In-app room toasts on the web and iOS use the room picture (or the shared # fallback),
 with the sender first and the room name and message below. Browser combined-count
