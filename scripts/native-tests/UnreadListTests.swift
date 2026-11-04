@@ -140,6 +140,20 @@ import UserNotifications
             try UnreadList.clear(root: root)
             result = UnreadList.shown(root: root, account: nil)
             precondition(result.list == nil && !result.awaitingAccount, "A signed-out app with no list has nothing to wait for")
+        case "midnights":
+            // FLM-418 R5: one timeline entry per coming midnight, across a daylight-saving change.
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: "Europe/Paris")!
+            let evening = calendar.date(from: DateComponents(year: 2026, month: 10, day: 24, hour: 23, minute: 30))!
+            let dates = UnreadList.midnights(after: evening, count: 7, calendar: calendar)
+            precondition(dates.count == 7)
+            for (index, date) in dates.enumerated() {
+                let parts = calendar.dateComponents([.hour, .minute, .day], from: date)
+                precondition(parts.hour == 0 && parts.minute == 0, "Entry \(index) must fall on a midnight")
+                precondition(parts.day == 25 + index, "Entry \(index) is on day \(25 + index)")
+            }
+            precondition(dates[0] > evening && dates[0].timeIntervalSince(evening) == 1800, "The first midnight is the next one")
+            precondition(zip(dates, dates.dropFirst()).allSatisfy { calendar.isDate($1, inSameDayAs: calendar.date(byAdding: .day, value: 1, to: $0)!) })
         case "clear-wins":
             try fixture().write(root: root)
             try UnreadList.clear(root: root)

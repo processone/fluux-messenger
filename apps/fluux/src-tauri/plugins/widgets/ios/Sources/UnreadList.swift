@@ -117,6 +117,12 @@ struct UnreadList: Codable, Equatable {
 }
 
 extension UnreadList {
+    /// The next `count` midnights after `date`: the moments a time label turns into "Yesterday", then a weekday.
+    static func midnights(after date: Date, count: Int = 7, calendar: Calendar = .current) -> [Date] {
+        let start = calendar.startOfDay(for: date)
+        return (1...count).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
+    }
+
     /// The time today, "Yesterday", the weekday within a week, then the date. Everything is measured
     /// against `now`, never the clock, so a timeline entry drawn ahead of time labels its day correctly.
     static func when(_ date: Date, now: Date = Date(), calendar: Calendar = .current, locale: Locale = .current) -> String {

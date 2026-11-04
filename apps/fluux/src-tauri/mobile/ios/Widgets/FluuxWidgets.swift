@@ -37,8 +37,7 @@ struct UnreadProvider: TimelineProvider {
             completion(Timeline(entries: [now], policy: .after(now.date.addingTimeInterval(60))))
             return
         }
-        let calendar = Calendar.current
-        let midnights = (1...7).compactMap { calendar.date(byAdding: .day, value: $0, to: calendar.startOfDay(for: now.date)) }
+        let midnights = UnreadList.midnights(after: now.date)
         let entries = [now] + midnights.map { UnreadEntry(date: $0, list: now.list, names: now.names) }
         completion(Timeline(entries: entries, policy: .atEnd))
     }
