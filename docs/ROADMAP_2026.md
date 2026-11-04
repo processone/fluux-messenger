@@ -2,20 +2,26 @@
 
 Architectural direction and feature priorities for 2026.
 
+Last reviewed: 2026-11-04 (v0.18.2).
+
 ---
 
 ## E2EE Strategy
 
 ### Current: OpenPGP (shipped)
 
-OpenPGP (XEP-0373/0374) via Sequoia-PGP is the current E2EE layer on desktop. Forward secrecy
-is provided via scheduled encryption subkey rotation. See `docs/ENCRYPTION.md` for details.
+OpenPGP (XEP-0373/0374) via Sequoia-PGP is the current E2EE layer on desktop and iOS. Forward
+secrecy is provided via scheduled encryption subkey rotation. See `docs/ENCRYPTION.md` for
+details.
 
-### OMEMO (deferred)
+### OMEMO (in development, not released)
 
-OMEMO 2 (XEP-0384) (full Double Ratchet implementation) is on the backlog but not scheduled.
 The primary value of OMEMO is interoperability with third-party XMPP clients (Conversations,
-Dino, Gajim). This will be revisited based on user demand.
+Dino, Gajim, Monal). Work is on the `features/omemo` branch: a clean-room TypeScript
+implementation of X3DH and the Double Ratchet, built only on permissively licensed primitives
+so that no GPL or AGPL code we don't own enters the client. OMEMO 2 (`urn:xmpp:omemo:2`) comes
+first, followed by the legacy `eu.siacs.conversations.axolotl` envelope, which most clients
+still use. The branch has not been merged and is not scheduled for a release.
 
 ### MLS (future)
 
@@ -72,6 +78,16 @@ are unaffected. The split lives entirely in `apps/fluux`.
 
 ## Mobile
 
+### Status
+
+- **iOS**: experimental native support shipped in 0.18.0, distributed through TestFlight
+  (see [iOS development](IOS_DEVELOPMENT.md)). It includes APNs push notifications (XEP-0357
+  through a push app server), system sharing, native file transfers, OpenPGP with optional
+  notification previews, and Siri and Shortcuts. Native iOS requests a 24-hour stream
+  resumption window so it can resume after long periods in the background.
+- **Android**: experimental builds only (see [Android development](ANDROID_DEVELOPMENT.md)).
+  Native push (FCM or UnifiedPush) is not implemented yet.
+
 ### Platform: Tauri mobile
 
 Already on Tauri 2, which supports iOS and Android. The existing Rust backend (XMPP proxy,
@@ -112,13 +128,19 @@ An ejabberd management console: user management, room administration, server met
 ad-hoc commands. The "complete package" (ejabberd + Fluux + admin UI) is the main product
 differentiator for team and enterprise deployments.
 
-### 2: Mobile (Tauri, FCM path)
+Shipped in 0.17.0: server overview dashboard, user list and detail (search, online status,
+last login, ban), room administration, and a mobile admin launchpad. Remaining: `mod_push`
+configuration and invitation link generation.
+
+### 2: Mobile (Tauri)
 
 Sequence:
-1. Responsive layout, keyboard handling, safe areas, touch targets
-2. FCM + APNs token registration, ejabberd `mod_push` pipeline, push proxy
-3. UnifiedPush support
-4. App store submissions (iOS + Android)
+1. Responsive layout, keyboard handling, safe areas, touch targets (done)
+2. APNs token registration, ejabberd `mod_push` pipeline, push app server (done for iOS in
+   0.18.0); FCM for Android (not started)
+3. UnifiedPush support (not started)
+4. App store submissions: iOS through TestFlight first, then the App Store; Android on F-Droid
+   and possibly Google Play
 
 ### 3: Voice / video
 
@@ -160,3 +182,12 @@ Engage with the XMPP MLS XEP effort. Implement once the wire format stabilises.
 - Native notifications with click-to-focus (desktop)
 - Render performance optimisations (granular store selectors, render loop detection)
 - Demo mode (no XMPP server required)
+- SASL2 and FAST token authentication (XEP-0388, XEP-0484), 0.15.0
+- Reaction-based polls in rooms, 0.15.0
+- Local MCP server for AI assistants, desktop (see [MCP](MCP.md)), 0.17.1
+- Admin panel: dashboard, user and room administration, 0.17.0
+- Read markers synced across devices (XEP-0490), 0.17.0
+- Command palette, Aurora visual identity, 0.17.0
+- Spam removal by room moderators, 0.17.4
+- Experimental native iOS app with APNs push, sharing, and Siri and Shortcuts, 0.18.0
+- macOS Share menu integration, 0.18.0

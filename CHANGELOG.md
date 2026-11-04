@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Room history stays readable while you join a room: only the message box is replaced by a joining status. Reopening a room no longer shows the cached-history warning or asks you to join while it is already rejoining, and a failed join brings back the join button
 - On desktop, new messages no longer move the message, action buttons or menu you are using. Typing resumes following new messages if you were following before, unless a menu is open, and the jump-to-latest button stays hidden while a message menu is open
 - Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter, and private messages in rooms no longer make the messages around them jump as you scroll. On iOS, your reading position also holds when you pull past the top or bottom and when you lift your finger
+- iOS: the jump-to-latest button and the Home key now take you to the latest or oldest loaded message even while the list is still moving after a swipe
 - A Fluux window that is minimized or otherwise not visible no longer marks messages as read or holds back their notifications
 - Encrypted messages that arrive before Fluux has the sender's key now show their text once decrypted, instead of staying encrypted
 - Scrolling back now reaches older history even when the server archive holds long stretches without visible messages, and edits to older messages still appear once those messages load
