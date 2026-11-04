@@ -46,6 +46,7 @@ async function setup({ initError = REFUSAL, refused = true, backup = 'absent' as
   const alice = await aliceBundle()
   let unlocked: KeyBundle | null = null
   let pause: (() => Promise<void>) | undefined
+  let publishPause: (() => Promise<void>) | undefined
   const invoke: InvokeFn = async <T>(cmd: string, args?: Record<string, unknown>) => {
     calls.push(cmd)
     if (cmd === 'openpgp_has_persisted_key') return true as T
@@ -84,13 +85,22 @@ async function setup({ initError = REFUSAL, refused = true, backup = 'absent' as
           ? [{ id: 'current', payload: { name: 'secretkey', attrs: { xmlns: 'urn:xmpp:openpgp:0' }, children: [Buffer.from((await unarmor(sourceBackup)).data).toString('base64')] } }]
           : []
       },
-      publishPEP: async node => { publications.push(node) }, retractPEP: async () => {}, deletePEP: async () => {},
+      publishPEP: async node => { await publishPause?.(); publications.push(node) }, retractPEP: async () => {}, deletePEP: async () => {},
       subscribePEP: () => ({ unsubscribe: () => {} }),
     },
   }
   const plugin = new SequoiaPgpPlugin({ invoke }); plugins.push(plugin)
   await plugin.init(ctx)
-  return { plugin, ctx, calls, publications, alice, answer: (...next: Answer[]) => answers.push(...next), setPause: (value?: () => Promise<void>) => { pause = value } }
+  return { plugin, ctx, calls, publications, alice, answer: (...next: Answer[]) => answers.push(...next),
+    setPause: (value?: () => Promise<void>) => { pause = value },
+    /** Holds every publication until the returned release runs. */
+    holdPublication: () => {
+      let release!: () => void
+      const held = new Promise<void>(done => { release = done })
+      let reached = false
+      publishPause = () => { reached = true; return held }
+      return { reached: () => reached, release: () => { publishPause = undefined; release() } }
+    } }
 }
 
 describe('FLM-304 explicit keychain retry', () => {
@@ -170,6 +180,38 @@ describe('FLM-304 explicit keychain retry', () => {
     expect(f.plugin.getOwnFingerprint()).toBeNull()
     expect(f.ctx.notifyKeyUnlocked).not.toHaveBeenCalled()
     expect(f.publications).toEqual([])
+  })
+
+  // Intent FLM-408 R1: a restore or replacement must not start while the retry
+  // publishes the unlocked key, or the retry would report a key no longer in use.
+  it('refuses a restore or replacement until the unlocked key is published', async () => {
+    const f = await setup()
+    const publication = f.holdPublication()
+    f.answer('grant')
+    const retry = f.plugin.retryKeychainAccess()
+    await vi.waitFor(() => expect(publication.reached()).toBe(true))
+    await expect(f.plugin.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid }))
+      .rejects.toMatchObject({ code: 'identity-change-pending' })
+    await expect(f.plugin.retireAndGenerateIdentity()).rejects.toMatchObject({ code: 'identity-change-pending' })
+    expect(f.ctx.notifyKeyUnlocked).not.toHaveBeenCalled()
+    publication.release()
+    await expect(retry).resolves.toEqual({ fingerprint: meta.aliceFingerprint })
+    expect(f.plugin.getOwnFingerprint()).toBe(meta.aliceFingerprint)
+    expect(f.ctx.notifyKeyUnlocked).toHaveBeenCalledOnce()
+    expect(f.publications).toContain('urn:xmpp:openpgp:0:public-keys')
+    expect(f.calls).not.toContain('openpgp_backup_import_selected')
+  })
+
+  it('reports no unlocked key when the account logs out while the key is being published', async () => {
+    const f = await setup()
+    const publication = f.holdPublication()
+    f.answer('grant')
+    const retry = f.plugin.retryKeychainAccess()
+    const rejected = expect(retry).rejects.toMatchObject({ code: 'recovery-account-changed' })
+    await vi.waitFor(() => expect(publication.reached()).toBe(true))
+    await f.plugin.shutdown(); publication.release(); await rejected
+    expect(f.plugin.getOwnFingerprint()).toBeNull()
+    expect(f.ctx.notifyKeyUnlocked).not.toHaveBeenCalled()
   })
 
   it('neither offers nor runs the retry while a restore awaits reconciliation', async () => {

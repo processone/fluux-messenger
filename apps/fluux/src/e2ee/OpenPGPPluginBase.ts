@@ -637,7 +637,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // A restore that may have written fresh items is reconciled on restart first.
     if (this.isBackupRestoreUncertain()) throw new E2EEPluginError('permanent', 'restore-outcome-uncertain', '')
     if (this.runningOwnKeyOperations) throw new E2EEPluginError('transient', 'identity-change-pending', 'An identity change is already in progress')
-    const bundle = await this.ownKeyOperation(async () => {
+    // The operation lasts until the unlocked key is published, so no restore or
+    // replacement starts before the retry reports which key is in use.
+    const identity = await this.ownKeyOperation(async () => {
       let unlocked: KeyBundle
       try {
         unlocked = await this.retryRefusedKeychainAccess(ctx.account.jid)
@@ -653,17 +655,21 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       this.ownBundle = unlocked
       this._keyRecoveryReason = null
       notifyPeerKeysetChanged(ctx.account.jid)
+      // What a normal start does with an unlocked key. Publication stays best
+      // effort, and stops once a log out or another key outdates it.
+      const current = () => this.ctx === ctx && this.ownBundle === unlocked
+      await this.publishOwnIdentity(unlocked, current).catch((err: unknown) => {
+        ctx.logger.warn(`${this.pluginName()}: public key publish after keychain retry failed: ${formatError(err)}`)
+      })
+      if (!current()) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Keychain retry account changed')
       // Messages that waited for the key decrypt now.
       ctx.notifyKeyUnlocked?.()
-      return unlocked
+      return { fingerprint: unlocked.fingerprint }
     })
-    // What a normal start does with an unlocked key, after the operation ends
-    // so its freshness guard accepts it. Publication stays best effort.
-    await this.publishOwnIdentity(bundle).catch((err: unknown) => {
-      ctx.logger.warn(`${this.pluginName()}: public key publish after keychain retry failed: ${formatError(err)}`)
-    })
+    // Subscription activation fetches verified peers. Start it after the key
+    // operation ends so its own freshness guard accepts the unlocked identity.
     this.reverifyTrustStateAfterKeyChange()
-    return { fingerprint: bundle.fingerprint }
+    return identity
   }
 
   /** Native adapters report a keychain refusal held this launch; never a new read. */
@@ -1095,12 +1101,15 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * best effort: a failure is logged, and the next reconnect tries again
    * (see {@link onReconnected}).
    */
-  private async publishOwnIdentity(bundle: KeyBundle): Promise<void> {
-    const ctx = this.requireCtx()
+  private async publishOwnIdentity(
+    bundle: KeyBundle,
     // Every write below, the publication's healing retries included, stops
     // once a change of our key outdates this work; that change publishes
-    // what it needs.
-    const current = this.ownKeyFreshness(bundle)
+    // what it needs. An own-key operation that publishes its own key passes
+    // the check that it is still current instead.
+    current: OwnKeyFreshness = this.ownKeyFreshness(bundle),
+  ): Promise<void> {
+    const ctx = this.requireCtx()
     const verdict = await this.checkOwnPublishedKeyConsistency(bundle, current)
     if (verdict === 'outdated') return
     if (verdict === 'conflict') {
@@ -1236,6 +1245,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    */
   async retireAndGenerateIdentity(): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
+    // A restore, import or keychain retry under way decides which key is ours first.
+    if (this.runningOwnKeyOperations) throw new E2EEPluginError('transient', 'identity-change-pending', 'An identity change is already in progress')
     const identity = await this.ownKeyOperation(async () => {
       let publishedFingerprints: string[] = []
       try {
