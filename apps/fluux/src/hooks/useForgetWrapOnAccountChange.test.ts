@@ -7,8 +7,9 @@ import { useWrappedCodeBlocksStore } from '@/stores/wrappedCodeBlocksStore'
 // Source: captain's choice on review FLM-404 R2 — forget all wrap choices when the account changes.
 describe('useForgetWrapOnAccountChange', () => {
   beforeEach(() => useWrappedCodeBlocksStore.getState().clear())
-  const wrapOne = () => useWrappedCodeBlocksStore.getState().toggle('k', 0)
-  const isWrapped = () => useWrappedCodeBlocksStore.getState().isWrapped('k', 0)
+  const key = { scope: 'a@x.org', id: 'k', from: null, instant: null }
+  const wrapOne = () => useWrappedCodeBlocksStore.getState().toggle(key, 0)
+  const isWrapped = () => useWrappedCodeBlocksStore.getState().isWrapped(key, 0)
   const setup = (status: ConnectionStatus, jid: string | null) =>
     renderHook((p: { status: ConnectionStatus; jid: string | null }) => useForgetWrapOnAccountChange(p.status, p.jid), { initialProps: { status, jid } })
 

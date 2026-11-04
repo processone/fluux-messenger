@@ -75,7 +75,7 @@ const isWrapped = (button: ReturnType<Page['locator']>) => button.evaluate((b) =
 })
 
 test.describe('Wrap lines in the message list', () => {
-  test('wraps in place, holds position, survives remount and chat switch', async ({ page }) => {
+  test('wraps in place, pins at the bottom, holds position, survives remount and chat switch', async ({ page }) => {
     await loadDemo(page)
     await seedRoom(page, ROOM, 10)
     await seedRoom(page, OTHER_ROOM, 7)
@@ -87,16 +87,12 @@ test.describe('Wrap lines in the message list', () => {
     // The last message is a long code block: it starts unwrapped with a sideways scroll.
     const last = wrapButtons(page).last()
     expect(await isWrapped(last)).toEqual({ wrapped: false, overflows: true })
-    const buttonTop = () => wrapButtons(page).last().evaluate((b) => b.getBoundingClientRect().top)
-    const topBefore = await buttonTop()
     await last.click()
+    // Wrapped: no sideways scroll. The reader was at the live edge, so the list stays there by
+    // itself once the block has grown: no scrolling before the distance is measured.
+    await expect.poll(() => distanceFromBottom(page), { timeout: 5_000 }).toBeLessThanOrEqual(AT_BOTTOM_OK_PX)
     await settle(page)
-    // Wrapped: no sideways scroll. The click is an interaction, so (as for "Show more") the list
-    // holds the clicked control in place and the block grows downward instead of jumping.
     expect(await isWrapped(wrapButtons(page).last())).toEqual({ wrapped: true, overflows: false })
-    expect(Math.abs((await buttonTop()) - topBefore)).toBeLessThanOrEqual(2)
-    // Back at the live edge the grown block ends exactly at the bottom of the list.
-    await scrollToBottom(page)
     expect(await distanceFromBottom(page)).toBeLessThanOrEqual(AT_BOTTOM_OK_PX)
 
     // Reading position: scroll away from the live edge with real wheel input, as a reader does.

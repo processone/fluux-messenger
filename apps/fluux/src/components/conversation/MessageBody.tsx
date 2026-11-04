@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { renderStyledMessage } from '@/utils/messageStyles'
 import { auroraSenderColor } from '@/utils/senderColor'
 import type { MentionReference } from '@fluux/sdk'
+import type { WrapIdentity } from '@/stores/wrappedCodeBlocksStore'
 
 // Check if message is a /me action message
 function isActionMessage(body: string | undefined): boolean {
@@ -54,8 +55,8 @@ export interface MessageBodyProps {
   highlightTerms?: string[]
   /** Whether this message is the current find-on-page match */
   isCurrentMatch?: boolean
-  /** Stable message id, so code blocks can remember their "Wrap lines" state */
-  messageId?: string
+  /** Stable message identity, so code blocks can remember their "Wrap lines" state */
+  wrapIdentity?: WrapIdentity
 }
 
 /**
@@ -84,7 +85,7 @@ export const MessageBody = memo(function MessageBody({
   isDarkMode,
   highlightTerms,
   isCurrentMatch,
-  messageId,
+  wrapIdentity,
 }: MessageBodyProps) {
   const { t } = useTranslation()
   const mentionColor = mentionColors ? (nick: string) => mentionColors.get(nick)
@@ -122,7 +123,7 @@ export const MessageBody = memo(function MessageBody({
           {senderName}
         </span>
         {' '}
-        {wrap(noStyling ? getActionText(body) : renderStyledMessage(getActionText(body), mentions, nickname, knownNicks, isDarkMode, mentionColor, messageId))}
+        {wrap(noStyling ? getActionText(body) : renderStyledMessage(getActionText(body), mentions, nickname, knownNicks, isDarkMode, mentionColor, wrapIdentity))}
         {isEdited && (
           <EditedIndicator
             originalBody={originalBody}
@@ -136,7 +137,7 @@ export const MessageBody = memo(function MessageBody({
   // Regular message
   return (
     <div dir="auto" data-msg-text className="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]">
-      {wrap(noStyling ? body : renderStyledMessage(body, mentions, nickname, knownNicks, isDarkMode, mentionColor, messageId))}
+      {wrap(noStyling ? body : renderStyledMessage(body, mentions, nickname, knownNicks, isDarkMode, mentionColor, wrapIdentity))}
       {isEdited && <EditedIndicator originalBody={originalBody} />}
     </div>
   )

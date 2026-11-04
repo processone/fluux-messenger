@@ -47,6 +47,9 @@ class MockResizeObserver {
 
 vi.stubGlobal('ResizeObserver', MockResizeObserver)
 
+const KEY_WRAP = { scope: null, id: 'k-wrap', from: null, instant: null }
+const KEY_MOUNT = { scope: null, id: 'k-mount', from: null, instant: null }
+
 describe('CollapsibleContent', () => {
   beforeEach(() => {
     // Reset store state before each test
@@ -71,12 +74,12 @@ describe('CollapsibleContent', () => {
       return <p>probe</p>
     }
     const child = <Probe />
-    render(<CollapsibleContent messageId="m-mount" wrapKey="k-mount">{child}</CollapsibleContent>)
+    render(<CollapsibleContent messageId="m-mount" wrapIdentity={KEY_MOUNT}>{child}</CollapsibleContent>)
     heightRef.value = 900
-    act(() => useWrappedCodeBlocksStore.getState().toggle('k-mount', 0))
+    act(() => useWrappedCodeBlocksStore.getState().toggle(KEY_MOUNT, 0))
     expect(screen.getByText('Show more')).toBeTruthy()
     heightRef.value = 100
-    act(() => useWrappedCodeBlocksStore.getState().toggle('k-mount', 0))
+    act(() => useWrappedCodeBlocksStore.getState().toggle(KEY_MOUNT, 0))
     expect(screen.queryByText('Show more')).toBeNull()
     expect(mounts).toHaveBeenCalledTimes(1)
   })
@@ -87,15 +90,15 @@ describe('CollapsibleContent', () => {
     const heightRef = { value: 100 }
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => heightRef.value })
     const children = <p>content</p>
-    render(<CollapsibleContent messageId="m-wrap" wrapKey="k-wrap">{children}</CollapsibleContent>)
+    render(<CollapsibleContent messageId="m-wrap" wrapIdentity={KEY_WRAP}>{children}</CollapsibleContent>)
     expect(screen.queryByText('Show more')).toBeNull()
 
     heightRef.value = 900 // the wrapped block now needs more lines
-    act(() => useWrappedCodeBlocksStore.getState().toggle('k-wrap', 0))
+    act(() => useWrappedCodeBlocksStore.getState().toggle(KEY_WRAP, 0))
     expect(screen.getByText('Show more')).toBeTruthy()
 
     heightRef.value = 100 // unwrapped again
-    act(() => useWrappedCodeBlocksStore.getState().toggle('k-wrap', 0))
+    act(() => useWrappedCodeBlocksStore.getState().toggle(KEY_WRAP, 0))
     expect(screen.queryByText('Show more')).toBeNull()
   })
 

@@ -1,4 +1,5 @@
 import { messageRowRef, matchesMessageRowAlias, type MessageRowRef } from '@fluux/sdk'
+import type { WrapIdentity } from '@/stores/wrappedCodeBlocksStore'
 
 const OCCUPANT_ROW_PREFIX = 'occupant-row:'
 const CLIENT_ROW_PREFIX = 'client-row:'
@@ -55,25 +56,27 @@ export function messageRowKey(message: Parameters<typeof messageRowId>[0] & { ti
 }
 
 /**
- * A key for per-message session UI state (such as a wrapped code block) that
- * must be scoped to the conversation and survive archive-id enrichment.
+ * The identity of a message for per-message session UI state (such as a wrapped
+ * code block): scoped to the conversation or room, and matched with
+ * `wrapIdentityMatches` so it survives archive/origin enrichment.
  *
- * {@link messageRowId} is unsuitable: it is unscoped, and it changes when a
- * MAM/carbon archive id (`stanzaId`) qualifies the handle. The key therefore
- * leaves `stanzaId` out and keeps every discriminator that is already present
- * when the message first renders: the conversation or room JID, the client id,
- * the author (`from`, which also separates one's own twin from the peer's), the
- * sender-assigned origin id and occupant id, and for rooms the receipt instant,
- * which is stable across an archive-stamp merge. Twins that differ in any of
- * these keep separate state; twins that differ only by an archive id still
- * share it, since that is the one thing that cannot be told apart from
- * enrichment of a single message.
+ * {@link messageRowId} is unsuitable: it is unscoped and changes when an archive
+ * id qualifies the handle. This keeps the discriminators that separate messages
+ * (conversation, client id, author, receipt instant for rooms, and the origin,
+ * occupant and archive ids once known) without letting a later-learned id make
+ * a message look different from itself.
  */
-export function messageOccurrenceKey(message: { id?: string; type?: 'chat' | 'groupchat'; conversationId?: string; roomJid?: string; from?: string; originId?: string; occupantId?: string; timestamp?: Date; receivedAt?: Date }): string | undefined {
+export function messageWrapIdentity(message: { id?: string; type?: 'chat' | 'groupchat'; conversationId?: string; roomJid?: string; from?: string; originId?: string; occupantId?: string; stanzaId?: string; timestamp?: Date; receivedAt?: Date }): WrapIdentity | undefined {
   if (!message.id) return undefined
-  const instant = message.type === 'groupchat' ? (message.receivedAt ?? message.timestamp)?.getTime() ?? null : null
-  return JSON.stringify([message.roomJid ?? message.conversationId ?? null, message.id, message.from ?? null,
-    message.originId ?? null, message.occupantId ?? null, instant])
+  return {
+    scope: message.roomJid ?? message.conversationId ?? null,
+    id: message.id,
+    from: message.from ?? null,
+    instant: message.type === 'groupchat' ? (message.receivedAt ?? message.timestamp)?.getTime() ?? null : null,
+    ...(message.originId ? { originId: message.originId } : {}),
+    ...(message.occupantId ? { occupantId: message.occupantId } : {}),
+    ...(message.stanzaId ? { stanzaId: message.stanzaId } : {}),
+  }
 }
 
 /**

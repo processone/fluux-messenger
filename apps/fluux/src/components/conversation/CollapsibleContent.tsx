@@ -2,7 +2,7 @@ import { useRef, useEffect, useState, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
-import { useWrappedCodeBlocksStore } from '@/stores/wrappedCodeBlocksStore'
+import { useWrappedCodeBlocksStore, type WrapIdentity } from '@/stores/wrappedCodeBlocksStore'
 import { useRemeasureOnWidthChange } from './messageWidthContext'
 import { MAX_COLLAPSED_HEIGHT } from './collapsedContentHeight'
 
@@ -13,8 +13,8 @@ interface CollapsibleContentProps {
   children: ReactNode
   /** Optional className for the wrapper */
   className?: string
-  /** Scoped, enrichment-stable key of the message's wrapped code blocks (see messageOccurrenceKey) */
-  wrapKey?: string
+  /** Identity of the message's wrapped code blocks (see messageWrapIdentity) */
+  wrapIdentity?: WrapIdentity
   /**
    * Whether the content contains media (image/video/audio/link preview) whose
    * async load changes height. Only such messages keep a per-message
@@ -37,7 +37,7 @@ export function CollapsibleContent({
   messageId,
   children,
   className = '',
-  wrapKey,
+  wrapIdentity,
   hasMedia = false,
 }: CollapsibleContentProps) {
   const { t } = useTranslation()
@@ -48,7 +48,7 @@ export function CollapsibleContent({
   const toggle = useExpandedMessagesStore((state) => state.toggle)
   // Wrapping a code block changes this message's height without changing its
   // children, so its toggles must trigger a re-measure.
-  const wrappedBlocks = useWrappedCodeBlocksStore((state) => wrapKey === undefined ? 0 : state.countFor(wrapKey))
+  const wrappedBlocks = useWrappedCodeBlocksStore((state) => wrapIdentity === undefined ? 0 : state.countFor(wrapIdentity))
 
   // Re-evaluate whether the content needs collapsing. Reads layout
   // (scrollHeight) so it runs after render/paint. Stable identity (live ref).

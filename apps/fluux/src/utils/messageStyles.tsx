@@ -16,12 +16,13 @@
  * - Escape sequences (\* \_ \~ \` \> \#)
  */
 
-import React, { useState } from 'react'
+import React, { useContext, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { findMentionRanges, findIrcPrefixRange, type MentionReference } from '@fluux/sdk'
 import { Maximize2, WrapText } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useWrappedCodeBlocksStore } from '../stores/wrappedCodeBlocksStore'
+import { useWrappedCodeBlocksStore, type WrapIdentity } from '../stores/wrappedCodeBlocksStore'
+import { LiveEdgeGrowthContext } from '../components/conversation/liveEdgeGrowthContext'
 import { ModalShell } from '../components/ModalShell'
 import { useHighlighter } from './codeHighlight'
 import { getConsistentTextColor } from '../components/Avatar'
@@ -475,16 +476,19 @@ function CodeExpandModal({
 /**
  * Code block component with copy button, expand button, and syntax highlighting
  */
-function CodeBlock({ code, language, keyProp, messageId, blockIndex }: { code: string; language?: string; keyProp: string; messageId?: string; blockIndex: number }): React.ReactElement {
+function CodeBlock({ code, language, keyProp, wrapIdentity, blockIndex }: { code: string; language?: string; keyProp: string; wrapIdentity?: WrapIdentity; blockIndex: number }): React.ReactElement {
   const [expanded, setExpanded] = useState(false)
   // Wrapping is remembered per message block in the session store; without a
   // message id (previews, console) it is plain local state.
-  const storedWrapped = useWrappedCodeBlocksStore((s) => messageId !== undefined && s.isWrapped(messageId, blockIndex))
+  const storedWrapped = useWrappedCodeBlocksStore((s) => wrapIdentity !== undefined && s.isWrapped(wrapIdentity, blockIndex))
   const [localWrapped, setLocalWrapped] = useState(false)
-  const wrapped = messageId !== undefined ? storedWrapped : localWrapped
+  const wrapped = wrapIdentity !== undefined ? storedWrapped : localWrapped
+  const runKeepingLiveEdge = useContext(LiveEdgeGrowthContext)
   const toggleWrap = () => {
-    if (messageId !== undefined) useWrappedCodeBlocksStore.getState().toggle(messageId, blockIndex)
-    else setLocalWrapped((w) => !w)
+    runKeepingLiveEdge(() => {
+      if (wrapIdentity !== undefined) useWrappedCodeBlocksStore.getState().toggle(wrapIdentity, blockIndex)
+      else setLocalWrapped((w) => !w)
+    })
   }
   const { ready, highlight } = useHighlighter(language)
 
@@ -725,9 +729,9 @@ export function renderTextWithLinks(text: string): React.ReactNode {
  * @param text - The message body
  * @param mentions - Optional XEP-0372 mention references for precise highlighting
  * @param nickname - Optional user nickname for IRC-style mention detection fallback
- * @param messageId - Optional message id; lets code blocks remember their "Wrap lines" state
+ * @param wrapIdentity - Optional message identity; lets code blocks remember their "Wrap lines" state
  */
-export function renderStyledMessage(text: string, mentions?: MentionReference[], nickname?: string, knownNicks?: ReadonlySet<string>, isDarkMode?: boolean, resolveMentionColor?: (identifier: string) => string | undefined, messageId?: string): React.ReactNode {
+export function renderStyledMessage(text: string, mentions?: MentionReference[], nickname?: string, knownNicks?: ReadonlySet<string>, isDarkMode?: boolean, resolveMentionColor?: (identifier: string) => string | undefined, wrapIdentity?: WrapIdentity): React.ReactNode {
   // Normalize line endings: CRLF -> LF, CR -> LF
   const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
@@ -782,7 +786,7 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[],
     const lang = match[1] || undefined
     const codeContent = match[2].trim()
     parts.push(
-      <CodeBlock key={`code-${partIndex++}`} code={codeContent} language={lang} keyProp={`code-${partIndex}`} messageId={messageId} blockIndex={blockIndex++} />
+      <CodeBlock key={`code-${partIndex++}`} code={codeContent} language={lang} keyProp={`code-${partIndex}`} wrapIdentity={wrapIdentity} blockIndex={blockIndex++} />
     )
 
     lastIndex = match.index + match[0].length

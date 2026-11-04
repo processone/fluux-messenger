@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, fireEvent, screen } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { formatMessagePreview } from '@fluux/sdk'
+import { LiveEdgeGrowthContext } from '@/components/conversation/liveEdgeGrowthContext'
 import { useWrappedCodeBlocksStore } from '@/stores/wrappedCodeBlocksStore'
 import { renderStyledMessage, renderQuotePreview } from './messageStyles'
 
@@ -1212,6 +1213,9 @@ describe('preview / renderer parity for code spans', () => {
   })
 })
 
+const wrapKey = (id: string) => ({ scope: null, id, from: null, instant: null })
+const WRAP_M1 = wrapKey('m1')
+
 // Source: FLM-399 — "Wrap lines" button on every message code block.
 describe('code block wrap button', () => {
   const longLine = 'I am Adrien from ProcessOne, following up on Jérôme email. We would be glad to have process'
@@ -1220,7 +1224,7 @@ describe('code block wrap button', () => {
   beforeEach(() => useWrappedCodeBlocksStore.getState().clear())
 
   it('shows the button left of Expand and starts unwrapped', () => {
-    const { container } = render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    const { container } = render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, WRAP_M1)}</div>)
     const buttons = [...container.querySelectorAll('button')]
     expect(buttons.map((b) => b.title)).toEqual(['chat.wrapLines', 'Expand code', 'Copy code'])
     expect(buttons[0].getAttribute('aria-pressed')).toBe('false')
@@ -1228,7 +1232,7 @@ describe('code block wrap button', () => {
   })
 
   it('wraps on click without changing the text, and unwraps on a second click', () => {
-    const { container } = render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    const { container } = render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, WRAP_M1)}</div>)
     fireEvent.click(screen.getByTitle('chat.wrapLines'))
     expect(container.querySelector('pre')?.className).toContain('whitespace-pre-wrap')
     expect(container.querySelector('pre code')?.textContent).toBe(longLine + '0')
@@ -1238,7 +1242,7 @@ describe('code block wrap button', () => {
   })
 
   it('wraps only the clicked block when a message has two', () => {
-    const { container } = render(<div>{renderStyledMessage(body(2), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    const { container } = render(<div>{renderStyledMessage(body(2), undefined, undefined, undefined, undefined, undefined, WRAP_M1)}</div>)
     fireEvent.click(screen.getAllByTitle('chat.wrapLines')[1])
     const pres = container.querySelectorAll('pre')
     expect(pres[0].className).not.toContain('whitespace-pre-wrap')
@@ -1246,24 +1250,24 @@ describe('code block wrap button', () => {
   })
 
   it('keeps the state when the block is unmounted and rendered again', () => {
-    const first = render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    const first = render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, WRAP_M1)}</div>)
     fireEvent.click(screen.getByTitle('chat.wrapLines'))
     first.unmount()
-    const { container } = render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    const { container } = render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, WRAP_M1)}</div>)
     expect(container.querySelector('pre')?.className).toContain('whitespace-pre-wrap')
   })
 
   it('copies the original text even while wrapped', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
-    render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, WRAP_M1)}</div>)
     fireEvent.click(screen.getByTitle('chat.wrapLines'))
     fireEvent.click(screen.getByTitle('Copy code'))
     expect(writeText).toHaveBeenCalledWith(longLine + '0')
   })
 
   it('opens the enlarged view in the block mode, with its own button', () => {
-    render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, 'm1')}</div>)
+    render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, WRAP_M1)}</div>)
     fireEvent.click(screen.getByTitle('chat.wrapLines'))
     fireEvent.click(screen.getByTitle('Expand code'))
     const modalPre = [...document.querySelectorAll('pre')].find((p) => p.className.includes('min-h-full'))!
@@ -1271,7 +1275,7 @@ describe('code block wrap button', () => {
     // Unwrap from the enlarged view: both views follow
     fireEvent.click(screen.getAllByTitle('chat.unwrapLines')[1])
     expect(modalPre.className).not.toContain('whitespace-pre-wrap')
-    expect(useWrappedCodeBlocksStore.getState().isWrapped('m1', 0)).toBe(false)
+    expect(useWrappedCodeBlocksStore.getState().isWrapped(WRAP_M1, 0)).toBe(false)
   })
 
   it('works as local state when no message id is given', () => {
@@ -1289,7 +1293,7 @@ describe('code block controls inside a clickable row', () => {
     const onRowClick = vi.fn()
     render(
       <div onClick={onRowClick} data-testid="row">
-        {renderStyledMessage('```\nlong line\n```', undefined, undefined, undefined, undefined, undefined, 'k1')}
+        {renderStyledMessage('```\nlong line\n```', undefined, undefined, undefined, undefined, undefined, wrapKey('k1'))}
         <span>plain text</span>
       </div>,
     )
@@ -1312,5 +1316,27 @@ describe('code block controls inside a clickable row', () => {
     expect(onRowClick).not.toHaveBeenCalled()
     fireEvent.click(screen.getByText('plain text'))
     expect(onRowClick).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Source: FLM-399 spec (at the live edge the list stays there after a wrap) / review FLM-404 R5:
+// the block hands its change to the list's live-edge runner, from the block and the enlarged view.
+describe('code block wrap and the live edge', () => {
+  beforeEach(() => useWrappedCodeBlocksStore.getState().clear())
+
+  it('runs the wrap through the list runner, and the change still happens', () => {
+    const run = vi.fn((grow: () => void) => grow())
+    render(
+      <LiveEdgeGrowthContext.Provider value={run}>
+        {renderStyledMessage('```\nline\n```', undefined, undefined, undefined, undefined, undefined, wrapKey('k9'))}
+      </LiveEdgeGrowthContext.Provider>,
+    )
+    fireEvent.click(screen.getByTitle('chat.wrapLines'))
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(useWrappedCodeBlocksStore.getState().isWrapped(wrapKey('k9'), 0)).toBe(true)
+    fireEvent.click(screen.getByTitle('Expand code'))
+    fireEvent.click(screen.getAllByTitle('chat.unwrapLines')[1])
+    expect(run).toHaveBeenCalledTimes(2)
+    expect(useWrappedCodeBlocksStore.getState().isWrapped(wrapKey('k9'), 0)).toBe(false)
   })
 })
