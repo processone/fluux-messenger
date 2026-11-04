@@ -270,11 +270,12 @@ mod host {
                 return Err("an old item was read after the restore".into());
             }
         }
-        // FLM-304: one refused read at startup, then one OS request per click;
-        // showing and opening the panel, or a normal unlock, reads nothing.
-        // recovery_note proved the key file unchanged up to each press. A
-        // refused migration stops at its first item; a desynced key asks only
-        // for its own old item.
+        // FLM-304: one refused read at startup, then one OS request per click.
+        // Before each click, a prewarm, the normal unlock, the App's
+        // registration of a new plugin, a reconnect and the panel shown again
+        // (FLM-408 R3) each read nothing. recovery_note proved the key file
+        // unchanged up to each step. A refused migration stops at its first
+        // item; a desynced key asks only for its own old item.
         if retry && !fixture.restart {
             let (refused, granted) = if fixture.source == "retry-desync" {
                 let own = vec![format!("openpgp_passphrase:{JID}")];
@@ -282,11 +283,14 @@ mod host {
             } else {
                 (vec!["last_user".to_string()], OLD_ITEMS.map(String::from).to_vec())
             };
-            let expected = vec![
-                ("startup".to_string(), refused.clone()),
-                ("click-1".to_string(), refused),
-                ("click-2".to_string(), granted),
-            ];
+            let mut expected = vec![("startup".to_string(), refused.clone())];
+            for (press, reads) in [(1, refused), (2, granted)] {
+                expected.extend(
+                    ["prewarm", "unlock", "reregister", "reconnect", "panel"]
+                        .map(|step| (format!("{step}-{press}"), Vec::new())),
+                );
+                expected.push((format!("click-{press}"), reads));
+            }
             let steps = old_reads_by_step(&operations);
             if steps != expected {
                 return Err(format!("old items read outside an explicit retry: {steps:?}"));

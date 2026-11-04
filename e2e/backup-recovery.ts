@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { syncEngineGeometry } from './harness/compositorSync'
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
 
 const meta = JSON.parse(readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/sequoia_meta.json', import.meta.url), 'utf8')) as {
@@ -21,6 +21,38 @@ const audit = (page: import('@playwright/test').Page) => page.evaluate(() => (wi
 const keychainRetry = JSON.parse(readFileSync(new URL('../apps/fluux/src/i18n/locales/en.json', import.meta.url), 'utf8')).settings.encryption.keychainRetry as Record<string, string>
 const keychainRetryTitle = keychainRetry.title
 const retryReads = async (page: Page) => (await audit(page)).commands.filter((cmd: string) => cmd === 'openpgp_retry_keychain_access').length
+const encryptionCopy = JSON.parse(readFileSync(new URL('../apps/fluux/src/i18n/locales/en.json', import.meta.url), 'utf8')).settings.encryption
+
+/** FLM-408 R3: the plugin re-registration and the reconnect a session brings,
+ * run without pressing the retry. Neither may read the refused items. The
+ * App's own registration hook registers the new plugin and runs its follow-up. */
+async function reregisterAndReconnect(page: Page) {
+  const unlocks = async () => (await audit(page)).commands.filter((cmd: string) => cmd === 'openpgp_ensure_key').length
+  const [reads, before] = [await retryReads(page), await unlocks()]
+  const locked = await page.evaluate(async () => {
+    const w = window as any, previous = w.__demoClient.e2ee.getPlugin('openpgp')
+    await w.__recoveryTransitions.reregister()
+    const next = w.__demoClient.e2ee.getPlugin('openpgp')
+    await w.__recoveryTransitions.reconnect()
+    return next !== previous && next.isKeyRecoveryNeeded() && !next.getOwnFingerprint()
+  })
+  expect(locked, 'a new plugin registered and its key stayed locked').toBe(true)
+  expect(await unlocks(), 'the new plugin ran its normal unlock').toBeGreaterThan(before)
+  expect(await retryReads(page), 'neither transition read the refused items').toBe(reads)
+}
+
+/** FLM-408 R1: press the retry while macOS's prompt stays open; every other
+ * recovery action waits until the prompt is answered with a refusal. */
+async function pressWithPromptOpen(page: Page, ask: Locator, held: Locator[], picture?: string) {
+  await page.evaluate(() => (window as any).__recoveryPrompt.hold())
+  await ask.click()
+  await expect(page.getByRole('button', { name: keychainRetry.busy, exact: true })).toBeDisabled()
+  if (picture) await capture(page, picture)
+  for (const control of held) await expect(control).toBeDisabled()
+  await page.evaluate(() => (window as any).__recoveryPrompt.answer())
+  await expect(page.getByRole('alert')).toHaveText(keychainRetry.refusedAgain)
+  for (const control of held) await expect(control).toBeEnabled()
+}
 
 async function openRecovery(page: Page) {
   await bootDemo(page, '/demo.html?tutorial=false&e2ee=recovery')
@@ -318,14 +350,25 @@ test('the advanced keychain retry asks macOS only on request and unlocks the sam
   await expect(ask).toBeVisible()
   expect(await retryReads(page), 'Showing or opening the panel must not read the keychain').toBe(0)
   await capture(page, 'after-settings-keychain-retry-open.png')
+  // The App offers the guided restore again for the new plugin; the user
+  // declines it, and the retry is folded again. Opening it reads nothing.
+  const reregisterInSettings = async () => {
+    await reregisterAndReconnect(page)
+    await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(advanced).toHaveAttribute('aria-expanded', 'false')
+    await advanced.click()
+  }
+  await reregisterInSettings()
 
-  await ask.click()
-  await expect(page.getByRole('alert')).toHaveText(keychainRetry.refusedAgain)
+  const restore = page.getByRole('button', { name: 'Restore from backup', exact: true })
+  await pressWithPromptOpen(page, ask, [restore], 'after-settings-keychain-retry-busy.png')
   await expect(page.getByText('The local key could not be unlocked.', { exact: false })).toBeVisible()
   await expect(ask).toBeEnabled()
   expect(await retryReads(page)).toBe(1)
   await capture(page, 'after-keychain-refused-again.png')
 
+  await reregisterInSettings()
   await ask.click()
   await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()
   await expect(page.getByText(keychainRetry.success, { exact: true })).toBeVisible()
@@ -405,14 +448,27 @@ for (const entry of ['startup', 'Settings']) {
     await expect(dialog.getByText(keychainRetry.backupHint.replace('{{action}}', choice.importFromFileTitle), { exact: true })).toBeVisible()
     expect(await retryReads(page), 'Showing or opening the retry must not read the keychain').toBe(0)
     if (entry === 'startup') await capture(page, 'after-desync-keychain-retry-open.png')
+    // At startup, the App's follow-up for a new plugin replaces the choice's
+    // plugin and folds the retry again; opening it reads nothing.
+    const reregisterAtStartup = async () => {
+      if (entry !== 'startup') return
+      await reregisterAndReconnect(page)
+      await expect(advanced).toHaveAttribute('aria-expanded', 'false')
+      await advanced.click()
+    }
+    await reregisterAtStartup()
 
-    await ask.click()
-    await expect(dialog.getByRole('alert')).toHaveText(keychainRetry.refusedAgain)
-    await expect(replace).toBeEnabled()
+    const held = [
+      replace,
+      dialog.getByRole('button', { name: new RegExp(choice.importFromFileTitle) }),
+      dialog.getByRole('button', { name: 'Cancel', exact: true }),
+    ]
+    await pressWithPromptOpen(page, ask, held, entry === 'startup' ? 'after-desync-keychain-retry-busy.png' : undefined)
     await expect(ask).toBeEnabled()
     expect(await retryReads(page)).toBe(1)
     if (entry === 'startup') await capture(page, 'after-desync-keychain-refused-again.png')
 
+    await reregisterAtStartup()
     await ask.click()
     await expect(replace).toBeHidden()
     await expect(page.getByText(keychainRetry.success, { exact: true })).toBeVisible()
@@ -434,6 +490,40 @@ for (const entry of ['startup', 'Settings']) {
       await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
       await capture(page, 'after-desync-keychain-decrypted-message.png')
     }
+  })
+}
+
+// Intent FLM-408 R2: macOS allows the second prompt, but the secret it reads
+// still cannot unlock the key. That consumes the refusal, so both placements
+// keep the failure and its details and stop offering another retry.
+for (const placement of ['Settings', 'identity choice']) {
+  test(`a granted read that cannot unlock the key leaves no retry to press in the ${placement}`, async ({ page }) => {
+    const desync = placement === 'identity choice'
+    await bootDemo(page, `/demo.html?tutorial=false&e2ee=recovery&recoveryBackup=absent&recoveryRetry=unlock-fails${desync ? '&recoveryFailure=desync-refused' : ''}`)
+    expect(await audit(page)).toMatchObject({ build: expectedBuild })
+    const scope = desync ? page.locator('[data-modal="true"]') : page.locator('body')
+    if (!desync) {
+      await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await page.evaluate(() => { location.hash = '/settings/encryption' })
+    }
+    const advanced = scope.getByRole('button', { name: keychainRetryTitle, exact: true })
+    await advanced.click()
+    const ask = scope.getByRole('button', { name: keychainRetry.action, exact: true })
+    await ask.click()
+    await expect(scope.getByRole('alert')).toHaveText(keychainRetry.refusedAgain)
+    await ask.click()
+    await expect(scope.getByRole('alert')).toHaveText(keychainRetry.failed)
+    await scope.getByText(encryptionCopy.recoveryErrorDetails, { exact: true }).click()
+    await expect(scope.getByText(/decrypt persisted TSK/)).toBeVisible()
+    await expect(ask).toBeVisible()
+    await capture(page, `after-${desync ? 'desync-' : ''}keychain-unlock-failed.png`)
+    await expect(ask).toBeDisabled()
+    await expect(advanced).toHaveAttribute('aria-expanded', 'true')
+    expect(await retryReads(page)).toBe(2)
+    expect(await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').isKeychainRetryOffered())).toBe(false)
+    if (desync) await expect(scope.getByRole('button', { name: new RegExp(encryptionCopy.identityChoice.importFromFileTitle) })).toBeEnabled()
+    else await expect(page.getByRole('button', { name: 'Restore from backup', exact: true })).toBeEnabled()
   })
 }
 

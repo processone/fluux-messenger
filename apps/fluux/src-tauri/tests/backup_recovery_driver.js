@@ -24,32 +24,55 @@
     const note = label => window.__TAURI_INTERNALS__.invoke('recovery_note', { label })
     const account = { accountJid: 'you@fluux.chat' }
     const retryOffered = () => window.__TAURI_INTERNALS__.invoke('openpgp_keychain_retry_available', account)
+    const heading = text => [...document.querySelectorAll('h1,h2,h3')].some(el => el.textContent === text)
+    const plugin = () => window.__demoClient.e2ee.getPlugin('openpgp')
+    // FLM-304 and FLM-408 R3: what may happen around the retry without a
+    // press, each step marked in the host's operations log so it counts that
+    // step's reads: the prewarm a login starts, the normal unlock, the App's
+    // own registration of a new plugin, a reconnect, then the panel shown
+    // again (`panel`, given by the journey). None may read a refused item.
+    const transitions = async (n, afterRegistration, panel) => {
+      const unlock = { ...account, userId: 'xmpp:you@fluux.chat' }
+      await note('prewarm-' + n)
+      await window.__TAURI_INTERNALS__.invoke('openpgp_prewarm', unlock)
+      await note('unlock-' + n)
+      await window.__TAURI_INTERNALS__.invoke('openpgp_ensure_key', unlock)
+        .then(() => { throw new Error('the key unlocked without a press') }, () => {})
+      await note('reregister-' + n)
+      const previous = plugin()
+      await window.__recoveryTransitions.reregister()
+      if (plugin() === previous || !plugin().isKeyRecoveryNeeded()) throw new Error('the App did not register a new plugin with the key locked')
+      await afterRegistration()
+      await note('reconnect-' + n)
+      await window.__recoveryTransitions.reconnect()
+      await note('panel-' + n)
+      return panel()
+    }
     if (!window.__FLUUX_RECOVERY_RESTART__ && window.__FLUUX_RECOVERY_SOURCE__ === 'retry') {
       // FLM-304: decline the startup restore, then retry the keychain from Settings.
-      await wait(() => [...document.querySelectorAll('h1,h2,h3')].some(el => el.textContent === 'Restore from backup'), 'startup restore offer')
+      await wait(() => heading('Restore from backup'), 'startup restore offer')
       ;(await wait(() => button('Cancel'), 'startup restore cancel')).click()
       location.hash = '/settings/encryption'
       const ask = () => button('Ask macOS again')
-      // Triggers that must not read the refused items: the prewarm a login
-      // starts, the normal unlock a plugin registration runs, and Settings
-      // opened again with its panel.
-      const triggers = async label => {
-        const unlock = { ...account, userId: 'xmpp:you@fluux.chat' }
-        await window.__TAURI_INTERNALS__.invoke('openpgp_prewarm', unlock)
-        await window.__TAURI_INTERNALS__.invoke('openpgp_ensure_key', unlock)
-          .then(() => { throw new Error('the key unlocked without a press') }, () => {})
+      // The App offers the guided restore again for its new plugin; decline it.
+      const declineRestore = async () => {
+        ;(await wait(() => heading('Restore from backup') && button('Cancel'), 'restore offered for the new plugin')).click()
+        await wait(() => !heading('Restore from backup'), 'restore declined again')
+      }
+      // Leave Settings and open its panel again.
+      const reopen = async () => {
         location.hash = '/messages'
-        await wait(() => !button('Advanced: ask the keychain again'), label + ': left Settings')
+        await wait(() => !button('Advanced: ask the keychain again'), 'left Settings')
         location.hash = '/settings/encryption'
-        ;(await wait(() => button('Advanced: ask the keychain again'), label + ': advanced keychain retry panel')).click()
-        return wait(ask, label + ': keychain retry action')
+        ;(await wait(() => button('Advanced: ask the keychain again'), 'advanced keychain retry panel')).click()
+        return wait(ask, 'keychain retry action')
       }
       ;(await wait(() => button('Advanced: ask the keychain again'), 'advanced keychain retry panel')).click()
-      await triggers('before the first press')
+      await transitions(1, declineRestore, reopen)
       await note('click-1')
       ask().click()
       await wait(() => [...document.querySelectorAll('[role="alert"]')].some(el => el.textContent === 'macOS refused access again. The key is still locked.') && ask(), 'second refusal shown')
-      await triggers('after the second refusal')
+      await transitions(2, declineRestore, reopen)
       await window.__TAURI_INTERNALS__.invoke('recovery_grant_keychain')
       await note('click-2')
       ask().click()
@@ -61,25 +84,24 @@
       // folded retry asks macOS for the refused old item.
       const advanced = () => [...document.querySelectorAll('[data-modal] button')].find(b => b.textContent.trim() === 'Advanced: ask the keychain again' && !b.disabled)
       const ask = () => button('Ask macOS again')
-      // The prewarm and the normal unlock, then folding and opening the panel
-      // again, must not read the refused item.
-      const triggers = async label => {
-        const unlock = { ...account, userId: 'xmpp:you@fluux.chat' }
-        await window.__TAURI_INTERNALS__.invoke('openpgp_prewarm', unlock)
-        await window.__TAURI_INTERNALS__.invoke('openpgp_ensure_key', unlock)
-          .then(() => { throw new Error('the key unlocked without a press') }, () => {})
+      // The App's follow-up gives the choice the new plugin, whose retry starts folded.
+      const folded = () => wait(() => advanced()?.getAttribute('aria-expanded') === 'false', 'retry folded for the new plugin')
+      // Open the panel, fold it and open it again.
+      const refold = async () => {
         advanced().click()
-        await wait(() => advanced()?.getAttribute('aria-expanded') === 'false', label + ': folded keychain retry')
+        await wait(() => advanced()?.getAttribute('aria-expanded') === 'true' && ask(), 'keychain retry opened')
         advanced().click()
-        return wait(() => advanced()?.getAttribute('aria-expanded') === 'true' && ask(), label + ': keychain retry action')
+        await wait(() => advanced()?.getAttribute('aria-expanded') === 'false', 'keychain retry folded')
+        advanced().click()
+        return wait(() => advanced()?.getAttribute('aria-expanded') === 'true' && ask(), 'keychain retry action')
       }
       ;(await wait(advanced, 'keychain retry in the startup identity choice')).click()
       await wait(ask, 'keychain retry action')
-      await triggers('before the first press')
+      await transitions(1, folded, refold)
       await note('click-1')
       ask().click()
       await wait(() => [...document.querySelectorAll('[role="alert"]')].some(el => el.textContent === 'macOS refused access again. The key is still locked.') && ask(), 'second refusal shown')
-      await triggers('after the second refusal')
+      await transitions(2, folded, refold)
       await window.__TAURI_INTERNALS__.invoke('recovery_grant_keychain')
       await note('click-2')
       ask().click()

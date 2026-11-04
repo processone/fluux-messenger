@@ -156,6 +156,7 @@ const recoveryRequested = params.get('e2ee') === 'recovery'
 const demoRegistration = (async () => {
   const recoveryFixture = recoveryRequested ? (await import('./demo/BackupRecoveryFixture')).createBackupRecoveryFixture() : null
   recoveryFixture?.attachPepReader(demoClient)
+  recoveryFixture?.attachTransitions(demoClient)
   const demoOpenpgpPlugin = recoveryFixture?.plugin ?? new DemoOpenPGPPlugin({ forceConflict })
   const noopXmpp = { sendStanza: async () => {}, queryDisco: async () => ({ features: [], identities: [] }), publishPEP: async () => {}, retractPEP: async () => {}, deletePEP: async () => {}, queryPEP: async () => [] as any[], subscribePEP: () => ({ unsubscribe: () => {} }) }
   demoClient.e2ee = new E2EEManager({ storage: new InMemoryStorageBackend(), xmpp: recoveryFixture?.xmpp ?? noopXmpp, account: { jid: 'you@fluux.chat' } })

@@ -470,7 +470,13 @@ a refused old item of a desynced account is read again for that account only. A 
 like the first; any other failure keeps the earlier refusal, so nothing reads again before the next
 press. A granted read unlocks the existing key in place, and the App then publishes it and decrypts
 waiting messages as after a normal start. The retry never generates, restores or deletes a key, and an
-account restored into fresh storage never reads its old items again. The panel stays hidden while a
+account restored into fresh storage never reads its old items again. The plugin's key operation
+lasts until the unlocked key is published, so a restore or replacement started meanwhile is refused,
+and a log out or another key during that time rejects the retry's result. While a press waits for
+macOS, the restore entry beside the panel, or the identity choice's options and Cancel around it,
+are disabled, and only the choice that asked closes when the key unlocks. When macOS allows the read
+but the key still does not unlock, the refusal is spent: the panel keeps the failure and its details
+and disables its button. A newly registered plugin gets a new, folded panel. The panel stays hidden while a
 server backup exists or its probe fails, while a restore awaits restart, once the key is unlocked,
 and outside desktop macOS. A desynced key, whose refused item is its own old passphrase item, opens the
 identity choice instead (at startup and in Settings), so the same folded panel sits inside that
@@ -502,11 +508,13 @@ commands and rejects any attempted use. The host runs only with `--run-recovery-
 HOME marker; normal `cargo test` compiles it but does not open a window. The `retry` journey keeps
 the key's real passphrase in its old fixture item, declines the startup restore, opens the Settings
 panel, refuses the first press and allows the second. Before each press it also calls the login
-prewarm and the normal unlock and reopens Settings, which must read nothing. Its operation log must
-show one refused old-item read at startup and one OS request per press, the key file unchanged until
+prewarm and the normal unlock, unregisters the plugin and lets the App's registration hook register a
+new one (declining the restore the App offers again), reconnects, and reopens Settings. The driver
+marks each of these steps in the operation log, which must show no read in any of them, one refused
+old-item read at startup and one OS request per press, the key file unchanged until
 the granted press, no fresh-account route, and no old-item read after restart. The `retry-desync`
 journey gives the combined item a stale passphrase, so nothing migrates and the key is desynced; it
-runs the same presses from the panel inside the startup identity choice, and its log must show only
+runs the same presses and steps from the panel inside the startup identity choice, and its log must show only
 that account's old item, once at startup and once per press, then only the combined item after
 restart. After each restore,
 the `server` and `file` journeys check that the restored account is not offered the retry, that a
