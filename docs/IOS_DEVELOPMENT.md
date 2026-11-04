@@ -279,8 +279,9 @@ What runs natively:
 - **OpenPGP.** The same Sequoia engine as the desktop. The key is unlocked from
   the keychain at login, so no passphrase is asked per session, and key
   rotation is available.
-- **Notifications.** Local notifications go through the OS. Remote push uses
-  APNs and XEP-0357 (see [Remote push notifications](#remote-push-notifications)).
+- **Notifications.** Local notifications go through the OS. Room-picture rendering
+  in iOS system banners remains unverified; in-app room toasts are separate.
+  Remote push uses APNs and XEP-0357 (see [Remote push notifications](#remote-push-notifications)).
   Tapping a notification attributed to the signed-in account opens its conversation.
   See [badge snapshot semantics](../README.md#siri-and-shortcuts-on-ios) for what
   the icon counts. A conversation's notifications are removed once it is read. Pushes whose `from` names no conversation (neutral alerts, or a
@@ -634,10 +635,18 @@ content updates; simulator compilation covers those APIs. Real-device acceptance
 requires remote pushes with fixture identities: direct and room avatars,
 missing-avatar fallback, avatar replacement/removal, logout, and delivery while
 locked after first unlock. Simulator builds and fixtures do not prove APNs
-extension execution or the rendered Notification Center appearance. Local
-notifications posted while the app runs are a separate follow-up.
+extension execution or the rendered Notification Center appearance. The room
+picture in iOS system banners remains unverified and is handed off to FLM-200.
 
-On a signed iPhone build, check the room-avatar correction manually:
+In-app room toasts on the web and iOS use the room picture (or the shared # fallback),
+with the sender first and the room name and message below. Browser combined-count
+summaries name the room above the count instead of attributing several messages
+to the latest sender; they keep the picture, separate dismiss control and navigation.
+Generic status toasts and system-notification producers are unchanged.
+`useSoundNotification` remains the owner of local message audio and its
+enabled/disabled preference.
+
+To qualify room-picture presentation on a signed iPhone build:
 
 1. Join a fixture room with an avatar and at least three occupants, then suspend
    Fluux after the mirror settles and receive a message from a known occupant.

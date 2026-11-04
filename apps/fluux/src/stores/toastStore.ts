@@ -2,17 +2,26 @@ import { create } from 'zustand'
 
 export type ToastType = 'success' | 'error' | 'info'
 
+/** Room summaries name the room; individual message banners name their sender. */
+export type RoomBanner = {
+  roomJid: string
+  roomName: string
+  avatarUrl?: string
+  body: string
+} & ({ kind: 'message'; sender: string } | { kind: 'summary' })
+
 export interface Toast {
   id: string
   type: ToastType
   message: string
   createdAt: number
   onClick?: () => void
+  roomBanner?: RoomBanner
 }
 
 interface ToastState {
   toasts: Toast[]
-  addToast: (type: ToastType, message: string, duration?: number, onClick?: () => void) => string
+  addToast: (type: ToastType, message: string, duration?: number, onClick?: () => void, roomBanner?: RoomBanner) => string
   removeToast: (id: string) => void
 }
 
@@ -25,9 +34,9 @@ const timeouts = new Map<string, ReturnType<typeof setTimeout>>()
 export const useToastStore = create<ToastState>((set, get) => ({
   toasts: [],
 
-  addToast: (type, message, duration = DEFAULT_DURATION_MS, onClick) => {
+  addToast: (type, message, duration = DEFAULT_DURATION_MS, onClick, roomBanner) => {
     const id = `toast-${++nextId}`
-    const toast: Toast = { id, type, message, createdAt: Date.now(), ...(onClick ? { onClick } : {}) }
+    const toast: Toast = { id, type, message, createdAt: Date.now(), ...(onClick ? { onClick } : {}), ...(roomBanner ? { roomBanner } : {}) }
 
     set((state) => {
       // Clear timeout for evicted toast

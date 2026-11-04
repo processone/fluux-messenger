@@ -27,7 +27,7 @@ import { postPluginNotification } from '@/utils/postPluginNotification'
 import { currentAccountId, postNativeDesktopNotification } from '@/utils/nativeNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
 import { requestAttention } from '@/utils/attention'
-import { useToastStore } from '@/stores/toastStore'
+import { useToastStore, type RoomBanner } from '@/stores/toastStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { iosHaptic } from '@/platform/ios/haptics'
 import { platform } from '@/platform'
@@ -272,18 +272,24 @@ export function useDesktopNotifications(): void {
   // With Fluux in front, its own banner replaces the system one. It is in-app, so it needs
   // neither notification permission nor an avatar file, and an older arrival never replaces a newer one.
   const showInAppBanner = (
-    { title, body, navType, navTarget, messageId }: NonNullable<ReturnType<typeof buildLocalMessageNotification>>,
+    { title, body, navType, navTarget, messageId, isSummary }: NonNullable<ReturnType<typeof buildLocalMessageNotification>>,
     arrival: number,
     accountId: string | null,
+    target: LocalMessageNotification,
   ) => {
     if (!useSettingsStore.getState().inAppBannerEnabled || arrival < bannerSeqRef.current) return
     bannerSeqRef.current = arrival
     hideBanner()
+    // The WebView draws its own blob or data picture, so the banner needs no prepared file.
+    const roomBanner: RoomBanner | undefined = target.kind === 'room'
+      ? { roomJid: target.entity.jid, roomName: target.entity.name, avatarUrl: target.entity.avatar, body,
+        ...(isSummary ? { kind: 'summary' } : { kind: 'message', sender: target.message.nick }) }
+      : undefined
     const toastId = useToastStore.getState().addToast('info', `${title}: ${body}`, IN_APP_BANNER_MS, () => {
       if (currentAccountId() !== accountId) return
       if (navType === 'conversation') navigateToConversationRef.current(navTarget, messageId)
       else navigateToRoomRef.current(navTarget, messageId)
-    })
+    }, roomBanner)
     bannerRef.current = { toastId, navType, navTarget }
     iosHaptic('selection')
   }
@@ -300,7 +306,7 @@ export function useDesktopNotifications(): void {
     if (!notification) return false
     requestAttention()
     if (connectionStore.getState().windowVisible) {
-      showInAppBanner(notification, arrival, accountId)
+      showInAppBanner(notification, arrival, accountId, target)
       return true
     }
     if (!getNotificationPermissionGranted()) {
@@ -328,11 +334,11 @@ export function useDesktopNotifications(): void {
       if (isDnd() || currentAccountId() !== accountId || accountGenerationRef.current !== generation) return true
       const current = latest && buildLocalMessageNotification(latest, t, i18n?.language ?? 'en', !desktop)
       if (!connectionStore.getState().windowVisible) return false
-      if (current) showInAppBanner(current, arrival, accountId)
+      if (current) showInAppBanner(current, arrival, accountId, latest)
       return true
     }
     if (connectionStore.getState().windowVisible) {
-      showInAppBanner(notification, arrival, accountId)
+      showInAppBanner(notification, arrival, accountId, target)
       return true
     }
     if (!getNotificationPermissionGranted()) return true

@@ -1,7 +1,8 @@
 import { chatNotificationFixture, roomNotificationFixture, resetNotificationFixtures } from './notification.testHelpers'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useArrivalJumpStore } from '@/stores/arrivalJumpStore'
-import { renderHook, waitFor } from '@testing-library/react'
+import { render, screen, renderHook, waitFor } from '@testing-library/react'
+import { ToastContainer } from '@/components/ToastContainer'
 import { useToastStore } from '@/stores/toastStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { setPlatformForTesting } from '@/platform'
@@ -185,6 +186,59 @@ describe('useDesktopNotifications posting + guard', () => {
       await arrive('alice@example.com', 'Alice')
       expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(['Alice: body text'])
       expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
+    })
+
+    // FLM-201's sender-first choice and FLM-337 R2: a missing room picture keeps the shared fallback.
+    it.each([true, false])('shows the sender first, then room and message (picture available: %s)', async (hasPicture) => {
+      restorePlatform()
+      restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+      isMobileTauri.mockResolvedValue(true)
+      const avatar = hasPicture ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' : undefined
+      renderHook(() => useDesktopNotifications())
+      await handlers.onRoomMessage?.(
+        { jid: 'xsf@muc.xmpp.org', name: 'XSF', nickname: 'Receiver', avatar, avatarHash: 'hash', notifyAll: true },
+        { id: 'avatar-diagnostic', nick: 'Sender', body: 'Avatar diagnostic', from: 'xsf@muc.xmpp.org/Sender' },
+      )
+      render(<ToastContainer />)
+      const toast = screen.getByRole('button', { name: /Sender/ })
+      if (hasPicture) {
+        expect(toast.querySelector('img')?.getAttribute('src')).toBe(avatar)
+      } else {
+        expect(toast.querySelector('img')).toBeNull()
+        expect(toast.querySelector('.lucide-hash')).not.toBeNull()
+      }
+      expect(toast.textContent).toBe('SenderXSF: body text')
+      expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
+    })
+
+    // Captain's FLM-370 F2 choice: combined browser counts belong to the room,
+    // while an individual preview still names its sender, including on native iOS.
+    it.each([
+      { shell: 'web' as const, os: 'macos' as const, count: 3, summary: true },
+      { shell: 'web' as const, os: 'ios' as const, count: 3, summary: true },
+      { shell: 'web' as const, os: 'macos' as const, count: 1, summary: false },
+      { shell: 'web' as const, os: 'ios' as const, count: 1, summary: false },
+      { shell: 'mobile' as const, os: 'ios' as const, count: 3, summary: false },
+    ])('attributes $shell/$os count=$count to the room only for a summary', async ({ shell, os, count, summary }) => {
+      restorePlatform()
+      restorePlatform = setPlatformForTesting({ shell, os })
+      if (shell === 'web') delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+      isMobileTauri.mockResolvedValue(shell === 'mobile')
+      renderHook(() => useDesktopNotifications())
+      await handlers.onRoomMessage?.(
+        { jid: 'team@conf.example.com', name: 'Team', nickname: 'Receiver', unreadCount: count, notifyAll: true },
+        { id: 'summary-room-message', nick: 'Emma', body: 'Room message', from: 'team@conf.example.com/Emma' },
+      )
+      render(<ToastContainer />)
+      const toast = screen.getByRole('button', { name: summary ? /3 new messages/ : /Emma/ })
+      expect(toast.querySelector('.font-semibold')?.textContent).toBe(summary ? 'Team' : 'Emma')
+      expect(toast.textContent).toBe(summary ? 'Team3 new messages' : 'EmmaTeam: body text')
+      expect(toast.querySelector('.lucide-hash')).not.toBeNull()
+      expect(useToastStore.getState().toasts[0].message).toBe(summary ? 'Team: 3 new messages' : 'Emma @ Team: body text')
+      useToastStore.getState().toasts[0].onClick?.()
+      expect(navigateToRoom).toHaveBeenCalledWith('team@conf.example.com', 'summary-room-message')
+      expect(showWebNotification).not.toHaveBeenCalled()
+      expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
     })
 
     it('opens the conversation at the message when tapped', async () => {
