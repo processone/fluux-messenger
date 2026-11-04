@@ -36,17 +36,7 @@ export function isWrapIdentityEnrichment(from: WrapIdentity, to: WrapIdentity): 
 interface WrapEntry {
   identity: WrapIdentity
   blocks: ReadonlySet<number>
-  /**
-   * Look-alike twins seen next to this message while it was in a list: same fixed fields,
-   * different late ids. They are never this message's enriched self, whatever they learn later.
-   */
-  siblings?: readonly WrapIdentity[]
 }
-
-const sameFixedFields = (a: WrapIdentity, b: WrapIdentity) =>
-  a.scope === b.scope && a.id === b.id && a.from === b.from && a.instant === b.instant
-const includesIdentity = (list: readonly WrapIdentity[], identity: WrapIdentity) =>
-  list.some((candidate) => sameWrapIdentity(candidate, identity))
 
 /**
  * Tracks which code blocks the user switched to "Wrap lines" (display only).
@@ -76,18 +66,6 @@ interface WrappedCodeBlocksState {
    */
   promote: (from: WrapIdentity, to: WrapIdentity) => void
 
-  /**
-   * A conversation's list became resident (or changed) carrying the given identities, which are
-   * only those sharing a fixed-field key with a stored choice. For each stored choice of `scope`:
-   *  - if the message is in the list as stored, its look-alike twins are remembered as siblings;
-   *  - if it is absent, the choice follows the one identity in the list that is an enrichment of
-   *    it and is neither a remembered sibling nor claimed by another choice. Zero or several such
-   *    identities leave the choice where it is: the list cannot say which copy is the original.
-   * This is how a choice survives a chat switch that evicts the list and an enrichment that
-   * arrives while the message is off screen.
-   */
-  reconcile: (scope: string, identities: readonly WrapIdentity[]) => void
-
   /** Clear all wrapped states */
   clear: () => void
 }
@@ -103,7 +81,7 @@ export const useWrappedCodeBlocksStore = create<WrappedCodeBlocksState>((set, ge
       if (!blocks.delete(blockIndex)) blocks.add(blockIndex)
       const next = entries.slice()
       if (blocks.size === 0) next.splice(at, 1)
-      else next[at] = { ...entries[at], blocks }
+      else next[at] = { identity, blocks }
       return { entries: next }
     })
   },
@@ -121,45 +99,12 @@ export const useWrappedCodeBlocksStore = create<WrappedCodeBlocksState>((set, ge
       if (at === -1) return { entries }
       const existing = entries.findIndex((e) => sameWrapIdentity(e.identity, to))
       const next = entries.slice()
-      if (existing === -1) next[at] = { ...entries[at], identity: to }
+      if (existing === -1) next[at] = { identity: to, blocks: entries[at].blocks }
       else {
-        next[existing] = { ...entries[existing], identity: to, blocks: new Set([...entries[existing].blocks, ...entries[at].blocks]) }
+        next[existing] = { identity: to, blocks: new Set([...entries[existing].blocks, ...entries[at].blocks]) }
         next.splice(at, 1)
       }
       return { entries: next }
-    })
-  },
-
-  reconcile: (scope, identities) => {
-    set(({ entries }) => {
-      const claims = new Map<WrapIdentity, number>()
-      const present = (e: WrapEntry) => identities.some((i) => sameWrapIdentity(i, e.identity))
-      const successor = (e: WrapEntry): WrapIdentity | null => {
-        if (e.identity.scope !== scope || present(e)) return null
-        const fresh = identities.filter((i) =>
-          isWrapIdentityEnrichment(e.identity, i) && !includesIdentity(e.siblings ?? [], i) &&
-          !entries.some((other) => sameWrapIdentity(other.identity, i)))
-        if (fresh.length !== 1) return null
-        claims.set(fresh[0], (claims.get(fresh[0]) ?? 0) + 1)
-        return fresh[0]
-      }
-      const successors = entries.map(successor)
-      let changed = false
-      const next = entries.map((e, index): WrapEntry => {
-        if (e.identity.scope !== scope) return e
-        const to = successors[index]
-        if (to && claims.get(to) === 1) {
-          changed = true
-          return { ...e, identity: to, siblings: (e.siblings ?? []).filter((s) => !sameWrapIdentity(s, to)) }
-        }
-        if (!present(e)) return e
-        const known = e.siblings ?? []
-        const learned = identities.filter((i) => sameFixedFields(i, e.identity) && !sameWrapIdentity(i, e.identity) && !includesIdentity(known, i))
-        if (learned.length === 0) return e
-        changed = true
-        return { ...e, siblings: [...known, ...learned] }
-      })
-      return changed ? { entries: next } : { entries }
     })
   },
 
