@@ -217,19 +217,13 @@ for (const kind of ['single-key', 'multi-key']) {
   })
 }
 
-/** A real restore followed by the accepted marker reset, not a scripted
- * Settings status. Both policy and legacy-file journeys use this state. */
+/** A real restore followed by demo reload clearing the markers, not a
+ * scripted Settings status. Policy and legacy-file journeys share this state. */
 async function openUnconfirmedSettings(page: Page) {
   await openRecovery(page)
   await previewServer(page)
   await page.getByRole('button', { name: 'Use this key', exact: true }).click()
   await page.getByRole('heading', { name: 'Confirm restored key', exact: true }).waitFor({ state: 'hidden' })
-  await page.evaluate(fingerprint => {
-    for (const [key, value] of Object.entries(localStorage)) {
-      if (key.startsWith('fluux:openpgp:backedUpFingerprint:') && value === fingerprint) localStorage.removeItem(key)
-    }
-    localStorage.setItem('fluux:openpgp:backedUpFingerprint:you@fluux.chat', fingerprint)
-  }, fingerprint)
   await reloadDemo(page)
   await page.evaluate(() => { location.hash = '/settings/encryption' })
   await expect(page.getByText(encryptionCopy.backupStatusUnconfirmed, { exact: true })).toBeVisible()
