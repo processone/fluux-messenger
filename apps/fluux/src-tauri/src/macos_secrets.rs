@@ -760,6 +760,16 @@ impl<S: Backend> Secrets<S> {
                     .filter(|key| key.starts_with(&prefix))
                     .cloned(),
             );
+            // Unread copies have no value in items, but their cached errors
+            // still protect this account. Erase their cache outcomes too.
+            copies.extend(
+                bundle
+                    .legacy_accounts
+                    .iter()
+                    .chain(bundle.legacy_reads.keys())
+                    .filter(|name| legacy_owner(name) == Some(account))
+                    .cloned(),
+            );
             let mut updated = bundle.clone();
             let mut changed = false;
             for name in &copies {
@@ -1933,6 +1943,79 @@ mod tests {
         assert_eq!(*store.store.scans.lock().unwrap(), 1);
         assert!(!store.store.items.lock().unwrap().contains_key(account));
         assert!(!store.store.items.lock().unwrap().contains_key(ACCOUNT));
+    }
+
+    // FLM-440 F5: successful erase must clear failed recovery-copy outcomes,
+    // not just readable values, so key retirement can save a replacement now.
+    #[test]
+    fn partial_migration_erase_clears_failed_recovery_copy_results() {
+        let account = "openpgp_passphrase:alice@example.com";
+        let other = "openpgp_passphrase:bob@example.org";
+        for code in [-25293, -128, -25291] {
+            for live_present in [false, true] {
+                for clear_denials_first in [false, true] {
+                    let raw = legacy();
+                    let value = raw.items.lock().unwrap()[account].clone();
+                    let copy = format!("{}fixture", recovery_prefix(account));
+                    raw.set(&copy, &value).unwrap();
+                    if !live_present {
+                        raw.items.lock().unwrap().remove(account);
+                    }
+                    raw.item_read_errors.lock().unwrap().insert(
+                        copy.clone(),
+                        (StoreError::native(code, "copy unavailable"), 1),
+                    );
+                    // Keep an unrelated failure: erasing Alice must not hide it.
+                    raw.item_read_errors.lock().unwrap().insert(
+                        other.into(),
+                        (StoreError::native(-25291, "other unavailable"), 1),
+                    );
+                    let store = Secrets::new(raw);
+                    assert!(store.get(&copy).is_err());
+                    let other_error = store.get(other).unwrap_err();
+                    if clear_denials_first {
+                        store.retry_denied_access().unwrap();
+                    }
+                    let reads = store.store.reads.lock().unwrap().clone();
+                    store.delete(account).unwrap();
+                    assert!(store.get(account).unwrap().is_none());
+                    assert!(store.get(&copy).unwrap().is_none());
+                    assert!(store.recovery_candidates(account).unwrap().is_empty());
+                    assert_eq!(
+                        store.refused_access(account).unwrap(),
+                        RefusalState::NotHeld
+                    );
+                    assert_eq!(
+                        store.retry_refused_access(account).unwrap(),
+                        RefusedRetry::NothingRefused
+                    );
+                    assert_eq!(store.get(other).unwrap_err(), other_error);
+                    assert_eq!(
+                        store.get("mcp-token").unwrap().as_deref(),
+                        Some("test-token")
+                    );
+                    assert_eq!(
+                        *store.store.reads.lock().unwrap(),
+                        reads,
+                        "erase never decrypts the failed copy again"
+                    );
+                    assert!(!store.store.items.lock().unwrap().contains_key(account));
+                    assert!(!store.store.items.lock().unwrap().contains_key(&copy));
+                    // Retirement's next key save need not wait for a restart.
+                    store.set(account, "cmVwbGFjZW1lbnQ=").unwrap();
+                    assert_eq!(
+                        store.get(account).unwrap().as_deref(),
+                        Some("cmVwbGFjZW1lbnQ=")
+                    );
+                    let restarted = Secrets::new(store.store);
+                    assert_eq!(
+                        restarted.get(account).unwrap().as_deref(),
+                        Some("cmVwbGFjZW1lbnQ=")
+                    );
+                    assert!(restarted.recovery_candidates(account).unwrap().is_empty());
+                }
+            }
+        }
     }
 
     // FLM-440 F1: clearing an alias denial for explicit erase/retry must not

@@ -353,7 +353,9 @@ exists, ordinary startup does not import later changes made by 0.18.0; the valid
 path below is an explicit exception. New-version saves and token resets update the combined item only.
 Explicit logout removes the
 matching JID and `last_user` from the combined item, the old layout, and their migration backups;
-OpenPGP forget does the same for its passphrase. Forget runs its locks, disk work and keychain
+OpenPGP forget does the same for its passphrase. Erasure also clears cached outcomes for matching
+backup/recovery names whose reads failed, so a successful erase cannot leave the account blocked
+by a deleted copy's error when saving its next key. Forget runs its locks, disk work and keychain
 authorization on the blocking pool, so the command does not freeze the window. Each account's unlock,
 backup import, subkey rotation and forget take turns, in request order: an unlock requested after a
 forget's deadline passes waits until forget ends, so a replacement key is never saved under the
