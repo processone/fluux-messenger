@@ -7,6 +7,12 @@
 
 set -e
 
+# Refuse unrelated directories before installing dependencies or deleting files.
+if [ ! -f packaging/debian/control ]; then
+    echo "Error: Run this script from the Fluux Messenger repository root." >&2
+    exit 1
+fi
+
 echo "=== Debian Package Build Test ==="
 echo
 
