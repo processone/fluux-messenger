@@ -742,6 +742,30 @@ NO_COLOR=1 ./fluux --verbose=xmpp 2> xmpp-debug.log
 
 You can build `.deb` packages locally using standard Debian tooling.
 
+> **Warning:** The helper is intended for fresh machines or Codespaces. It replaces
+> the root-level `debian/` directory on every run. On an existing working copy, the
+> build's clean step deletes `node_modules`, the Cargo target directory,
+> `packages/fluux-sdk/dist` and `*.orig`/`*.rej`/`*.bak`/`*~` files.
+
+The validated source-to-package boundary is ARM64 Ubuntu 24.04 and Debian 13.
+Package installation, desktop runtime and other architectures are not covered by
+that validation.
+
+On a fresh Debian/Ubuntu host with sudo access, run the helper from the repository
+root to install the prerequisites, build from source and inspect the package:
+
+```bash
+bash scripts/test-deb-build.sh
+```
+
+The helper replaces the root-level `debian/` directory with a fresh copy of
+`packaging/debian/`, as required by `dpkg-buildpackage`. It skips dpkg's package-based
+build dependency check because
+Rust installed by rustup is not registered as Debian `rustc`/`cargo` packages.
+The compiler and packaging steps still run and must succeed.
+
+For a manual build, follow the steps below.
+
 ### Prerequisites
 
 Install Node.js 22 (Ubuntu 22.04 LTS version is too old):
@@ -771,7 +795,8 @@ sudo apt-get install -y \
   librsvg2-dev \
   libssl-dev \
   pkg-config \
-  patchelf
+  patchelf \
+  desktop-file-utils
 ```
 
 ### Build from Source
@@ -779,7 +804,10 @@ sudo apt-get install -y \
 To build the `.deb` package from scratch (compiles everything):
 
 ```bash
-# From repository root (-d skips dpkg's dependency check for rustup-installed Rust)
+# From repository root, replace the staged packaging files
+rm -rf debian
+cp -a packaging/debian debian
+# -d skips dpkg's dependency check for rustup-installed Rust
 dpkg-buildpackage -d -uc -us -b
 ```
 
@@ -800,14 +828,16 @@ If you've already built the binary with Tauri, you can skip the build step:
 npm run build:sdk
 npm run tauri -w @xmpp/fluux -- build
 
-# Then package (auto-detects existing binary)
-dpkg-buildpackage -d -uc -us -b
+# Then replace the staged packaging files and package without cleaning the binary
+rm -rf debian
+cp -a packaging/debian debian
+dpkg-buildpackage -d -uc -us -b -nc
 ```
 
-Or explicitly specify the binary path:
+After staging the packaging files, you can also explicitly specify the binary path:
 
 ```bash
-FLUUX_BINARY=apps/fluux/src-tauri/target/release/fluux dpkg-buildpackage -d -uc -us -b
+FLUUX_BINARY=apps/fluux/src-tauri/target/release/fluux dpkg-buildpackage -d -uc -us -b -nc
 ```
 
 ### Install the Package

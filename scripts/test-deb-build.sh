@@ -1,8 +1,17 @@
 #!/bin/bash
 # Test script for validating Debian package build
-# Run this in a Codespace or Ubuntu environment
+# Intended for fresh machines or Codespaces.
+# WARNING: This replaces the root debian/ directory. On an existing working copy,
+# the build's clean step deletes node_modules, the Cargo target directory,
+# packages/fluux-sdk/dist and *.orig/*.rej/*.bak/*~ files.
 
 set -e
+
+# Refuse unrelated directories before installing dependencies or deleting files.
+if [ ! -f packaging/debian/control ]; then
+    echo "Error: Run this script from the Fluux Messenger repository root." >&2
+    exit 1
+fi
 
 echo "=== Debian Package Build Test ==="
 echo
@@ -57,8 +66,14 @@ echo ">>> Building .deb package..."
 echo "This will take several minutes on first build..."
 echo
 
-# Build the package
-dpkg-buildpackage -uc -us -b
+# dpkg-buildpackage requires debian/ at the repository root. Replace the staged
+# copy on every run so removed packaging files cannot survive from an earlier run.
+rm -rf debian
+cp -a packaging/debian debian
+
+# Dependencies are installed above. Rust from rustup is not registered as
+# Debian rustc/cargo packages, so skip dpkg's package-based dependency check.
+dpkg-buildpackage -d -uc -us -b
 
 echo
 echo "=== Build Complete ==="
