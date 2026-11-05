@@ -234,6 +234,21 @@ bool fluux_startup_request_matches(bool pending, uint64_t active_generation, uin
         self.buttons.hidden = NO;
         self.cover.recoveryControlsVisible = YES;
         // Keep the cover opaque and the buttons native. No more auto attempts.
+#if FLUUX_STARTUP_LAB
+        // Lab fault: lock the page's script thread once the controls are up, so
+        // the buttons are pressed against a page that answers nothing. The probe
+        // a second later must never answer; an answer is logged if it comes.
+        if (NSProcessInfo.processInfo.environment[@"FLUUX_STARTUP_LAB_HANG_PAGE"]) {
+            [self.web evaluateJavaScript:@"setTimeout(function () { for (;;) {} }, 0)" completionHandler:nil];
+            NSLog(@"startup-lab-page-hung");
+            __weak FluuxStartupAdapter *weak = self;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                [weak.web evaluateJavaScript:@"1" completionHandler:^(id result, NSError *error) {
+                    NSLog(@"startup-lab-page-answered result=%@ error=%@", result, error);
+                }];
+            });
+        }
+#endif
     }
 }
 - (void)restart:(id)sender { [self send:Restart generation:0 sample:0 value:0]; }
@@ -317,8 +332,17 @@ void fluux_startup_page_started(uint64_t generation) {
 }
 void fluux_startup_copy(const char *diagnostics) {
     NSString *text = [NSString stringWithUTF8String:diagnostics];
-    if (text) {
-        [NSPasteboard.generalPasteboard clearContents];
-        [NSPasteboard.generalPasteboard setString:text forType:NSPasteboardTypeString];
+    if (!text) return;
+    NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
+#if FLUUX_STARTUP_LAB
+    // Lab stand-in: a private named pasteboard instead of the clipboard, so a
+    // test reads the diagnostics back without touching what the user copied.
+    NSString *name = NSProcessInfo.processInfo.environment[@"FLUUX_STARTUP_LAB_PASTEBOARD"];
+    if (name.length) {
+        pasteboard = [NSPasteboard pasteboardWithName:name];
+        NSLog(@"startup-lab-copy pasteboard=%@ bytes=%lu", name, (unsigned long)strlen(diagnostics));
     }
+#endif
+    [pasteboard clearContents];
+    [pasteboard setString:text forType:NSPasteboardTypeString];
 }

@@ -4,7 +4,8 @@
 //! insists on an explicitly provisioned scratch HOME, so it can never touch a
 //! real profile. The lab's fault switches live where the faults happen: the
 //! in-memory secret store reads FLUUX_STARTUP_LAB_CREDENTIAL_DELAY_MS and the
-//! AppKit adapter reads FLUUX_STARTUP_LAB_STALL.
+//! AppKit adapter reads FLUUX_STARTUP_LAB_STALL, FLUUX_STARTUP_LAB_HANG_PAGE and
+//! FLUUX_STARTUP_LAB_PASTEBOARD.
 pub fn assert_identity(identifier: &str) {
     assert_eq!(
         identifier, "net.processone.fluux.startup-lab",
