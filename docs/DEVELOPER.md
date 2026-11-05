@@ -1062,6 +1062,6 @@ remains available independently of communication support.
 
 See [macOS communication notifications](MACOS_COMMUNICATION_PROTOTYPE.md) for
 unsigned contracts, privacy inventory and cleanup. Follow the
-[local signed build before tagging](RELEASE.md#local-signed-macos-test-before-tagging-0182)
+[local signed build before tagging](RELEASE.md#local-signed-macos-test-before-tagging)
 for the production-identity test, not the Dev build/install wrappers. Configuration
 and native contract checks do not qualify signed-app appearance, clicks or Focus.

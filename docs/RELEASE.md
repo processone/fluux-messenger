@@ -42,21 +42,25 @@ fails the macOS job; `rename-assets` cannot update `latest.json` because it need
 all build jobs to succeed. Uploaded downloads can already exist before this check;
 this gate protects updater metadata, not release-page visibility.
 
-The captain changed rollout from beta-first to **stable 0.18.2 directly**, testing
-locally before deciding to publish. **Signed 0.18.2 release proof** remains an
-explicit accepted implementation gap, not a pass. Close it with actual signed
-archives for both architectures and the captain's local test before publication.
-The Dev app cannot prove this feature. Existing prerelease filtering remains
-unchanged, but no beta is required for this rollout. Keep `Refs #1386` until the
-captain's local result is recorded. See [macOS communication notifications](MACOS_COMMUNICATION_PROTOTYPE.md).
+The feature is marked **Unreleased** until the next release is cut. Perform the
+local signed test before tagging the first release that carries the communication
+profile. No beta is required. Actual signed/stapled archive qualification for both
+architectures remains separate from profile reading and unsigned configuration
+checks. Keep `Refs #1386` until the local result is recorded. See
+[macOS communication notifications](MACOS_COMMUNICATION_PROTOTYPE.md).
 
-## Local signed macOS test before tagging 0.18.2
+## Local signed macOS test before tagging
 
-The captain chose a **local signed build before the tag**, not a beta and not an
-approval gate in the tag workflow. Do this on the candidate release commit before
-step 7 below. Once the tag is pushed, the existing workflow creates the public
-release and publishes stable updater metadata automatically after its checks pass.
-Do not tag until the local test succeeds; the workflow does not wait for that test.
+Run this test on the candidate commit before step 7 for the first release carrying
+the communication profile. Once its tag is pushed, the existing workflow creates
+the public release and publishes stable updater metadata automatically after its
+checks pass. Do not tag until the local test succeeds; the workflow does not wait
+for that test.
+
+When cutting that release, replace the authoritative `Unreleased` entry's version
+and date with the chosen release version and date, then regenerate the release
+notes through the normal release-preparation process. Do not attribute this
+feature to an already published release or replace an existing release tag.
 
 This is a captain-run signing step. It requires the existing **Developer ID
 Application: ProcessOne (8L55BDM864)** identity and matching private key to be
@@ -292,8 +296,9 @@ git commit -m "chore: release v0.9.0"
 
 ### 7. Create and Push the Tag
 
-For 0.18.2, complete the [local signed macOS test](#local-signed-macos-test-before-tagging-0182)
-on the candidate commit first. The tag workflow publishes automatically; it does
+For the first release carrying the communication profile, complete the
+[local signed macOS test](#local-signed-macos-test-before-tagging) on its candidate
+commit first. The tag workflow publishes automatically; it does
 not wait for a later manual test.
 
 Push the release branch first so the tag has somewhere to live, then the tag:

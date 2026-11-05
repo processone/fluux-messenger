@@ -14,9 +14,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: '0.18.3',
+    version: 'Unreleased',
     date: 'Unreleased',
     sections: [{
+      type: 'added',
+      items: [
+        'macOS: message notifications can use the system’s communication presentation with sender and room information',
+      ],
+    }, {
       type: 'fixed',
       items: [
         'Importing an OpenPGP key file checks that the server backup contains the same identity, including separately encrypted and older exports. Earlier backup-status markers are reset because file imports could record an incorrect claim. An unconfirmed backup now has a neutral status and a replacement warning. Rotating a key refreshes an unconfirmed backup and replaces its code, even if another device created it',
@@ -30,7 +35,6 @@ export const changelog: ChangelogEntry[] = [
       {
         type: 'added',
         items: [
-          'macOS: message notifications can use the system’s communication presentation with sender and room information',
           'macOS: when your OpenPGP key can no longer be unlocked, Fluux offers to restore it from your server backup or a backup file. The same recovery is available from Encryption settings. You confirm the account and the full key fingerprint before anything is saved, your existing keychain items and backup files are kept, and messages waiting to be decrypted show their text once the restore is done',
           'macOS: if your OpenPGP key stays locked because the keychain refused access and you have no backup, Fluux offers an advanced option to ask macOS again, in Encryption settings or in the recovery choice it shows. Fluux asks only when you press its button, and it unlocks the same key without creating a new one',
           'iOS and iPadOS: drag down on a conversation to hide the keyboard, in the app and in Safari',

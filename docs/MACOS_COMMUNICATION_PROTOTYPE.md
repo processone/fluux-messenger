@@ -29,18 +29,18 @@ Keychain storage, shared release/Dev access and app data paths are unchanged.
 
 ## Rollout and proof boundary
 
-The captain chose **stable 0.18.2 directly**, replacing the earlier beta-first plan.
-They will test the correctly signed production-identity build locally and publish
-only if it works. A Dev build or an ad-hoc/self-signed build cannot prove this path.
-The existing release signing and notarization process stays in place.
+The feature is **Unreleased** until its release is cut; no fixed version is assigned.
+Test the correctly signed production-identity build locally before tagging the
+first release carrying the communication profile. A Dev or ad-hoc/self-signed
+build cannot prove this path. Existing release signing and notarization stay in
+place, and no beta is required.
 
-**Signed 0.18.2 release proof remains a named gap**, accepted for implementation.
-Reading the supplied profile proves its declarations, not a signed app launching.
-The gap closes with real per-architecture signed/stapled update verification and
-the captain's local test before publication. Automated contracts do not establish
-installed appearance, Focus behavior, older-system behavior or absence of a new
-permission/keychain prompt. Keep `Refs #1386` until the local test result is recorded;
-do not claim `Closes #1386` based on compilation or mocks alone.
+**Signed release proof remains missing**: reading the supplied profile proves its
+declarations, not a signed app launching. Real per-architecture signed/stapled
+update verification and local testing are still required. Automated contracts do
+not establish installed appearance, Focus, older-system behavior or absence of a
+new permission/keychain prompt. Keep `Refs #1386` until the local result is
+recorded; compilation or mocks do not justify `Closes #1386`.
 
 ## Checks without signing or installing
 
@@ -63,7 +63,7 @@ The probe runs the verifier's actual signature-display commands, parses XML and
 the legacy requirement, and extracts a public DER certificate. It never signs,
 looks up private identities, accesses keychains, launches or installs an app.
 A missing local fixture is missing evidence, not a pass. This proves command
-compatibility only; it does not close the signed 0.18.2 release proof gap.
+compatibility only; it does not close the signed release proof gap.
 The disposable-runner launch environment contains only explicit system paths,
 locale and scratch storage locations; it inherits no release credentials.
 
@@ -176,8 +176,8 @@ groups are deleted, never all Siri interactions or another application's data.
 
 ## Local test before publication
 
-Follow the [local signed production-build recipe](RELEASE.md#local-signed-macos-test-before-tagging-0182)
-on the candidate commit before tagging 0.18.2. RELEASE.md is the single source for
+Follow the [local signed production-build recipe](RELEASE.md#local-signed-macos-test-before-tagging)
+on the candidate commit before tagging the first release carrying the profile. RELEASE.md is the single source for
 its prerequisites, command and output path. Use the direct Tauri entrypoint with
 the release overlay, not the Dev build/install wrappers. The local build uses
 normal Fluux data and its shared keychain item; it is not an isolated Dev test.

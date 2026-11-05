@@ -5,11 +5,16 @@ All notable changes to Fluux Messenger are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.18.2] - 2026-11-05
+## [Unreleased]
 
 ### Added
 
 - macOS: message notifications can use the system’s communication presentation with sender and room information
+
+## [0.18.2] - 2026-11-05
+
+### Added
+
 - macOS: when your OpenPGP key can no longer be unlocked, Fluux offers to restore it from your server backup or a backup file. The same recovery is available from Encryption settings. You confirm the account and the full key fingerprint before anything is saved, your existing keychain items and backup files are kept, and messages waiting to be decrypted show their text once the restore is done
 - macOS: if your OpenPGP key stays locked because the keychain refused access and you have no backup, Fluux offers an advanced option to ask macOS again, in Encryption settings or in the recovery choice it shows. Fluux asks only when you press its button, and it unlocks the same key without creating a new one
 - iOS and iPadOS: drag down on a conversation to hide the keyboard, in the app and in Safari
