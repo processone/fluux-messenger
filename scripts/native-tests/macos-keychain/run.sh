@@ -46,7 +46,10 @@ codesign -s - -i net.processone.fluux "$LAB/owner"
 codesign -s - -i net.processone.fluux.dev "$LAB/reader"
 export FLUUX_PROBE_KEYCHAIN="$HOME/fixture.keychain-db" FLUUX_PROBE_READER="$LAB/reader"
 probe() {
-  FLUUX_PROBE_ACTION="$2" "$LAB/$1" macos_secrets::native::native_keychain_probe --exact --ignored --nocapture
+  FLUUX_PROBE_ACTION="$2" python3 - "$LAB/$1" <<'PYPROBE'
+import subprocess, sys
+subprocess.run([sys.argv[1], "macos_secrets::native::native_keychain_probe", "--exact", "--ignored", "--nocapture"], check=True, timeout=30)
+PYPROBE
 }
 {
   "$LAB/fixture" create "$FLUUX_PROBE_KEYCHAIN" "$HOME/password"
@@ -100,10 +103,17 @@ PY
     "$LAB/fixture" create "$FLUUX_PROBE_KEYCHAIN" "$HOME/password"
     probe owner "$invalid"
   done
+  # A fresh fixture must not inherit the later restored-account marker.
+  # A current-version cache can be left in legacy mode by a failed read-back.
+  export FLUUX_PROBE_KEYCHAIN="$HOME/cleanup-legacy-mode.keychain-db"
+  "$LAB/fixture" create "$FLUUX_PROBE_KEYCHAIN" "$HOME/password"
+  probe owner seed
+  probe owner cleanup-legacy-mode
   # Deferred cleanup runs in a separate process with its own no-dialog policy.
   export FLUUX_PROBE_KEYCHAIN="$HOME/cleanup-trusted.keychain-db"
   "$LAB/fixture" legacy-approved "$FLUUX_PROBE_KEYCHAIN" "$HOME/password" "$LAB/owner" "$LAB/reader"
   probe owner cleanup-prepare
+  probe owner cleanup-busy
   probe owner cleanup-trusted
   # The untrusted identity can read the shared combined item, but cannot
   # authorize reads or deletes of the owner's retained old items.

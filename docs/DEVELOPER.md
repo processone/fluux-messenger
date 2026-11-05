@@ -389,14 +389,15 @@ storage and their aliases. An unreadable fresh-start record stops cleanup. A ref
 invalid bundle or unavailable revision lock stops cleanup without erasing anything.
 
 Deletion matches the exact native reference returned with the secret snapshot, never just its account
-name. The helper has no in-process writers that could refresh that reference. A separate old-layout
-writer invalidates the helper's old reference; deletion then refuses it instead of deleting the new
-value. The native regression uses a real second writer and a fresh reader to verify that persisted
-replacement survives. Password-data predicates are ignored by the file-based keychain, and date
+name. The helper has no in-process writers that could refresh that reference. In the native probe,
+a separate old-layout writer changed the item, the stale deletion was refused, and a fresh reader
+confirmed the persisted replacement survived. The stale process also could not find the changed item
+by name, so this check does not distinguish reference-based rejection from a stale keychain view.
+Password-data predicates are ignored by the file-based keychain, and date
 predicates fail to match even unchanged items; neither is used as a safeguard. Each deletion stands
 on its own verified copy; interrupted or failed cleanup is safe to repeat on a later launch, without
 a completion marker. Logs retain native failure
-statuses and explain reopening the current app or using explicit logout/forget for remaining copies,
+statuses and, only when copies remain, explain reopening the current app or using explicit logout/forget,
 without logging account names or secret contents. Cleanup never adds authorization dialogs.
 
 During migration, when an original differs from an `identity-migration-backup:*` copy, the live
@@ -404,6 +405,15 @@ original wins; both copies initially remain in the old layout and are preserved 
 missing original. A failed combined write or verification serves the already-read legacy snapshot for
 that launch and retries migration on the next launch; explicit changes then use the legacy layout.
 An unverified replacement is discarded before such a legacy mutation, with stale-writer checks.
+Before its first native deletion attempt, cleanup durably advances the shared revision once under
+its exclusive lock. This invalidates a running instance's legacy fallback even if an older writer
+recreates the retired item names with different values. The helper reports its old and new revisions;
+the scheduling app updates only matching observations, since cleanup never changes its bundled data.
+The worker holds the observation mutex until it installs that report, so a queued app write cannot
+see the new file revision before its own observations are synchronized. The child's file-lock attempt
+is nonblocking, including when an app operation already holds that lock. Other running instances
+retain their stale-writer rejection and must quit and reopen before changing secrets. A completed
+cleanup with no deletion attempt does not advance the revision.
 Failure never authorizes deleting an original. Load/write errors are logged centrally; OpenPGP returns
 the full backend error, including restart instructions, rather than hiding it behind a generic error.
 

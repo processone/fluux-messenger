@@ -1,5 +1,5 @@
 //! Retire only verified duplicates. Never import an old value over a current
-//! secret, and never delete an item whose value or generation is unknown.
+//! secret, and never delete an item whose value or native reference is unknown.
 use super::{is_bundle, legacy_owner, Bundle, StoreResult, ACCOUNT};
 
 pub(super) struct Snapshot<T> {
@@ -12,7 +12,7 @@ trait Store {
     fn restored(&self) -> StoreResult<Vec<String>>;
     fn accounts(&self) -> StoreResult<Vec<String>>;
     fn snapshot(&self, account: &str) -> StoreResult<Option<Snapshot<Self::Item>>>;
-    /// Delete only this exact generation; false means it changed or disappeared.
+    /// Request deletion by this exact reference; false means it no longer matched.
     fn remove(&self, snapshot: Snapshot<Self::Item>) -> StoreResult<bool>;
 }
 #[derive(Default, Debug)]
@@ -25,13 +25,18 @@ struct Summary {
 }
 impl Summary {
     fn diagnostic(&self) -> String {
-        format!(
-            "Legacy keychain cleanup: {} removed, {} retained, {} unavailable, {} changed. \
-             Retained copies were not erased. Quit older Fluux copies and reopen the current app to retry; \
-             use explicit logout or OpenPGP forget to authorize erasing remaining copies. {}",
+        let mut message = format!(
+            "Legacy keychain cleanup: {} removed, {} retained, {} unavailable, {} changed.",
             self.removed, self.retained, self.unavailable, self.changed,
-            self.problems.iter().cloned().collect::<Vec<_>>().join("; ")
-        )
+        );
+        if self.retained > 0 || self.unavailable > 0 || self.changed > 0 {
+            message.push_str(" Retained copies were not erased. Quit older Fluux copies and reopen the current app to retry; use explicit logout or OpenPGP forget to authorize erasing remaining copies.");
+        }
+        if !self.problems.is_empty() {
+            message.push(' ');
+            message.push_str(&self.problems.iter().cloned().collect::<Vec<_>>().join("; "));
+        }
+        message
     }
 }
 fn owned(name: &str, value: &str) -> bool {
@@ -116,11 +121,6 @@ mod native {
     };
     use security_framework::{item::SearchResult, os::macos::keychain::SecKeychain};
     use security_framework_sys::{item::*, keychain_item::SecItemDelete};
-    // Public Security.framework constants not exposed by the current sys crate.
-    // Their types and availability come from the platform's SecItem.h header.
-    unsafe extern "C" {
-        static kSecMatchItemList: core_foundation::string::CFStringRef;
-    }
 
     pub(super) const FLAG: &str = "--cleanup-legacy-keychain";
     struct Generation {
@@ -128,14 +128,78 @@ mod native {
     }
     // All calls use this exact-item backend under one exclusive revision lock.
     // The helper never writes either combined item or the fresh-start record.
-    struct Locked<'a>(&'a Keychain);
+    struct Locked<'a> {
+        keychain: &'a Keychain,
+        path: std::path::PathBuf,
+        before: u64,
+        after: std::cell::Cell<Option<u64>>,
+    }
+    impl<'a> Locked<'a> {
+        fn new(keychain: &'a Keychain, path: std::path::PathBuf, before: u64) -> Self {
+            Self {
+                keychain,
+                path,
+                before,
+                after: std::cell::Cell::new(None),
+            }
+        }
+    }
+    #[derive(Debug, serde::Serialize, serde::Deserialize)]
+    pub(crate) struct Report {
+        diagnostic: String,
+        advance: Option<(u64, u64)>,
+    }
+    const REPORT_PREFIX: &str = "FLUUX_KEYCHAIN_CLEANUP\t";
+    type Observed = std::sync::Mutex<std::collections::BTreeMap<String, u64>>;
+    pub(crate) fn print_report(report: &Report) {
+        println!(
+            "{REPORT_PREFIX}{}",
+            serde_json::to_string(report).expect("cleanup report serialization")
+        );
+    }
+    pub(crate) fn invoke(
+        observed: &Observed,
+        mut command: std::process::Command,
+    ) -> Result<String, String> {
+        // Install the helper's advance before a queued write can inspect its
+        // observations. A child only tries its file lock, so an app operation
+        // already holding that lock cannot deadlock against this mutex.
+        let mut observed = observed.lock().map_err(|_| "Revision lock poisoned")?;
+        let output = command.output().map_err(|e| e.to_string())?;
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        }
+        let invalid = "Unrecognized cleanup report; quit and reopen this app before saving";
+        let stdout = std::str::from_utf8(&output.stdout).map_err(|_| invalid)?;
+        let report: Report = serde_json::from_str(
+            stdout
+                .lines()
+                .find_map(|line| line.strip_prefix(REPORT_PREFIX))
+                .ok_or(invalid)?,
+        )
+        .map_err(|_| invalid)?;
+        if let Some((before, after)) = report.advance {
+            if before.checked_add(1) != Some(after) {
+                return Err(invalid.into());
+            }
+            // A different observation belongs to a stale bundle, not to this
+            // unchanged snapshot. Never make it appear current.
+            for revision in observed
+                .values_mut()
+                .filter(|revision| **revision == before)
+            {
+                *revision = after;
+            }
+        }
+        Ok(report.diagnostic)
+    }
     fn field(
         dict: &CFDictionary,
         key: core_foundation::string::CFStringRef,
     ) -> StoreResult<CFType> {
         let value = dict
             .find(key.cast())
-            .ok_or("Missing keychain generation attribute; copy retained")?;
+            .ok_or("Missing keychain item reference; copy retained")?;
         // SAFETY: the dictionary owns a Core Foundation value. Retain it before
         // the search results are dropped; typed fields are checked below.
         Ok(unsafe { CFType::wrap_under_get_rule(*value) })
@@ -143,17 +207,17 @@ mod native {
     impl Store for Locked<'_> {
         type Item = Generation;
         fn combined(&self) -> StoreResult<Option<String>> {
-            self.0.read_item(ACCOUNT)
+            self.keychain.read_item(ACCOUNT)
         }
         fn restored(&self) -> StoreResult<Vec<String>> {
-            self.0.fresh_accounts()
+            self.keychain.fresh_accounts()
         }
         fn accounts(&self) -> StoreResult<Vec<String>> {
-            self.0.accounts()
+            self.keychain.accounts()
         }
         fn snapshot(&self, account: &str) -> StoreResult<Option<Snapshot<Generation>>> {
             let items = match self
-                .0
+                .keychain
                 .query(Some(account))
                 .load_attributes(true)
                 .load_data(true)
@@ -188,22 +252,24 @@ mod native {
         }
         fn remove(&self, snapshot: Snapshot<Generation>) -> StoreResult<bool> {
             let generation = snapshot.item;
-            let references = CFArray::from_CFTypes(&[generation.reference]);
+            if self.after.get().is_none() {
+                // Fence every cached legacy-mode writer before retiring even
+                // one original, including a subsequently recreated old item.
+                self.after
+                    .set(Some(Keychain::advance_revision(&self.path, self.before)?));
+            }
             // A password-data predicate is ignored by the file-based keychain.
-            // Match this exact native reference. A separate writer invalidates
-            // this process's old reference; never fall back to an account-only
-            // delete that might erase its replacement.
+            // Request this exact reference, as exercised by the separate-writer
+            // probe. Never fall back to an account-only deletion.
             let query = unsafe {
                 let key = |value| CFString::wrap_under_get_rule(value).as_CFType();
                 let mut pairs = vec![
                     (key(kSecClass), key(kSecClassGenericPassword)),
                     (key(kSecAttrService), CFString::new(SERVICE).as_CFType()),
-                    (key(kSecMatchItemList), references.as_CFType()),
+                    (key(kSecValueRef), generation.reference),
                 ];
-                // Match the same search scope that supplied the reference.
-                // kSecMatchItemList filters a search; it does not select the
-                // explicit disposable keychain instead of the default list.
-                if let Some(keychain) = &self.0.keychain {
+                // Keep the explicit disposable-keychain search scope.
+                if let Some(keychain) = &self.keychain.keychain {
                     pairs.push((
                         key(kSecMatchSearchList),
                         CFArray::from_CFTypes(std::slice::from_ref(keychain)).as_CFType(),
@@ -217,11 +283,11 @@ mod native {
             match status {
                 0 => Ok(true),
                 -25300 => Ok(false),
-                code => Err(format!("Delete legacy generation ({code}); copy retained").into()),
+                code => Err(format!("Delete legacy item reference ({code}); copy retained").into()),
             }
         }
     }
-    pub(crate) fn perform(keychain: &Keychain) -> StoreResult<String> {
+    pub(crate) fn perform(keychain: &Keychain) -> StoreResult<Report> {
         // Qualification builds replace native secrets with an in-memory store.
         // Even an explicit helper flag must not bypass that isolation.
         if cfg!(feature = "startup-recovery-lab") {
@@ -235,28 +301,25 @@ mod native {
                 error.code()
             )
         })?;
-        let _revision = keychain.cleanup_revision()?;
-        clean(&Locked(keychain)).map(|result| result.diagnostic())
+        let (_revision, path, before) = keychain.cleanup_revision()?;
+        let locked = Locked::new(keychain, path, before);
+        let summary = clean(&locked)?;
+        Ok(Report {
+            diagnostic: summary.diagnostic(),
+            advance: locked.after.get().map(|after| (before, after)),
+        })
     }
     // Deferred cleanup must exercise the actual conditional deletion after an uncoordinated
     // legacy write, not a source-text or simulated-status assertion.
     #[cfg(test)]
     pub(crate) fn changed_generation(keychain: &Keychain) {
-        let locked = Locked(keychain);
+        let (_revision, path, before) = keychain.cleanup_revision().unwrap();
+        let locked = Locked::new(keychain, path, before);
         let snapshot = locked.snapshot("mcp-token").unwrap().unwrap();
         // The helper is a separate process, so its snapshots cannot be refreshed
         // by an in-process writer. Exercise the real older-app process boundary.
         let invoke = |action| {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .args([
-                    "macos_secrets::native::native_keychain_probe",
-                    "--exact",
-                    "--ignored",
-                    "--nocapture",
-                ])
-                .env("FLUUX_PROBE_ACTION", action)
-                .output()
-                .unwrap();
+            let output = crate::macos_secrets::native::probe_child(action);
             assert!(
                 output.status.success(),
                 "{}",
@@ -274,8 +337,8 @@ mod native {
             return;
         }
         match perform(&Keychain::default()) {
-            Ok(summary) => {
-                println!("{summary}");
+            Ok(report) => {
+                print_report(&report);
                 std::process::exit(0);
             }
             Err(error) => {
@@ -285,20 +348,19 @@ mod native {
         }
     }
     #[cfg(not(test))]
-    pub(crate) fn schedule() {
+    pub(crate) fn schedule(observed: &std::sync::Arc<Observed>) {
         static STARTED: std::sync::Once = std::sync::Once::new();
         STARTED.call_once(|| {
-            if let Err(error) = std::thread::Builder::new().name("keychain-cleanup".into()).spawn(|| {
-                let result = std::env::current_exe().and_then(|path| {
-                    std::process::Command::new(path).arg(FLAG)
-                        .stdin(std::process::Stdio::null()).output()
+            let observed = std::sync::Arc::clone(observed);
+            if let Err(error) = std::thread::Builder::new().name("keychain-cleanup".into()).spawn(move || {
+                let result = std::env::current_exe().map_err(|e| e.to_string()).and_then(|path| {
+                    let mut command = std::process::Command::new(path);
+                    command.arg(FLAG).stdin(std::process::Stdio::null());
+                    invoke(&observed, command)
                 });
                 match result {
-                    Ok(output) if output.status.success() => {
-                        tracing::info!("{}", String::from_utf8_lossy(&output.stdout).trim());
-                    }
-                    Ok(output) => tracing::warn!("{}", String::from_utf8_lossy(&output.stderr).trim()),
-                    Err(error) => tracing::warn!("Legacy keychain cleanup did not start; copies retained: {error}. Reopen the current app to retry."),
+                    Ok(diagnostic) => tracing::info!("{diagnostic}"),
+                    Err(error) => tracing::warn!("Legacy keychain cleanup deferred: {error}. Reopen the current app to retry."),
                 }
             }) {
                 tracing::warn!("Legacy keychain cleanup did not start; copies retained: {error}. Reopen the current app to retry.");
@@ -311,7 +373,7 @@ pub(crate) use native::run_worker;
 #[cfg(all(target_os = "macos", not(test)))]
 pub(super) use native::schedule;
 #[cfg(all(target_os = "macos", test))]
-pub(super) use native::{changed_generation, perform};
+pub(super) use native::{changed_generation, invoke, perform, print_report};
 
 #[cfg(test)]
 mod tests {
@@ -429,7 +491,16 @@ mod tests {
         assert_eq!(result.removed, count);
         assert!(store.items.borrow().is_empty());
         assert_eq!(*store.bundle.borrow(), before);
-        assert_eq!(clean(&store).unwrap().removed, 0);
+        let complete = clean(&store).unwrap();
+        assert_eq!(complete.removed, 0);
+        for summary in [result, complete] {
+            let diagnostic = summary.diagnostic();
+            assert!(
+                !diagnostic.contains("reopen")
+                    && !diagnostic.contains("logout")
+                    && !diagnostic.contains("forget")
+            );
+        }
     }
     #[test]
     fn conflicting_unknown_and_restored_values_are_not_deleted_or_imported() {
@@ -464,6 +535,7 @@ mod tests {
         let before = store.bundle.borrow().clone();
         let result = clean(&store).unwrap();
         assert_eq!(result.retained, 3 + aliases.len());
+        assert!(result.diagnostic().contains("reopen"));
         let mut names = BTreeMap::from([
             ("mcp-token".to_string(), ()),
             (owner.to_string(), ()),
@@ -534,6 +606,7 @@ mod tests {
         store.race = Some("mcp-token".into());
         let result = clean(&store).unwrap();
         assert_eq!(result.changed, 1);
+        assert!(result.diagnostic().contains("reopen"));
         assert_eq!(store.items.borrow()["mcp-token"].0, "older-app-raced-token");
         let mut store = fixture();
         let bundle = store.bundle.borrow().clone();

@@ -922,7 +922,7 @@ mod native {
         pub(super) keychain: Option<SecKeychain>,
         // Per item: a revision observed while reading one item says nothing
         // about the cached contents of the other.
-        observed_revision: Mutex<BTreeMap<String, u64>>,
+        observed_revision: std::sync::Arc<Mutex<BTreeMap<String, u64>>>,
         #[cfg(test)]
         revision_dir: Option<std::path::PathBuf>,
     }
@@ -964,8 +964,10 @@ mod native {
         ) -> Result<(std::fs::File, std::path::PathBuf, u64), String> {
             self.revision_lock(exclusive, true)
         }
-        pub(super) fn cleanup_revision(&self) -> Result<std::fs::File, String> {
-            self.revision_lock(true, false).map(|(lock, _, _)| lock)
+        pub(super) fn cleanup_revision(
+            &self,
+        ) -> Result<(std::fs::File, std::path::PathBuf, u64), String> {
+            self.revision_lock(true, false)
         }
         fn revision_lock(
             &self,
@@ -1012,7 +1014,6 @@ mod native {
         // `verify` is None only for the fresh-start transition, which must
         // advance the revision even when this process never observed one.
         fn bump_revision(&self, verify: Option<&str>) -> Result<std::fs::File, String> {
-            use std::{fs::OpenOptions, io::Write, os::unix::fs::OpenOptionsExt};
             let (lock, path, revision) = self.revision(true)?;
             let mut observed = self
                 .observed_revision
@@ -1021,6 +1022,20 @@ mod native {
             if verify.is_some_and(|account| observed.get(account) != Some(&revision)) {
                 return Err("Secrets changed or revision tracking was unavailable; quit and reopen this app before saving".into());
             }
+            let next = Self::advance_revision(&path, revision)?;
+            // Items this process had in sync stay in sync after its own write.
+            for value in observed.values_mut().filter(|value| **value == revision) {
+                *value = next;
+            }
+            if let Some(account) = verify {
+                observed.insert(account.into(), next);
+            }
+            Ok(lock)
+        }
+
+        // Caller holds the exclusive revision lock across this durable write.
+        pub(super) fn advance_revision(path: &std::path::Path, revision: u64) -> Result<u64, String> {
+            use std::{fs::OpenOptions, io::Write, os::unix::fs::OpenOptionsExt};
             let next = revision.checked_add(1).ok_or("Secrets revision overflow")?;
             let temporary = path.with_extension(format!("revision-{}.tmp", std::process::id()));
             let mut file = OpenOptions::new()
@@ -1032,20 +1047,12 @@ mod native {
                 .map_err(|e| e.to_string())?;
             writeln!(file, "{next}").map_err(|e| e.to_string())?;
             file.sync_all().map_err(|e| e.to_string())?;
-            std::fs::rename(&temporary, &path).map_err(|e| e.to_string())?;
+            std::fs::rename(&temporary, path).map_err(|e| e.to_string())?;
             std::fs::File::open(path.parent().ok_or("Missing revision directory")?)
                 .and_then(|dir| dir.sync_all())
                 .map_err(|e| e.to_string())?;
-            // Items this process had in sync stay in sync after its own write.
-            for value in observed.values_mut().filter(|value| **value == revision) {
-                *value = next;
-            }
-            if let Some(account) = verify {
-                observed.insert(account.into(), next);
-            }
-            Ok(lock)
+            Ok(next)
         }
-
         pub(super) fn query(&self, account: Option<&str>) -> ItemSearchOptions {
             let mut query = ItemSearchOptions::new();
             query.class(ItemClass::generic_password()).service(SERVICE);
@@ -1131,7 +1138,7 @@ mod native {
     impl Backend for Keychain {
         #[cfg(not(test))]
         fn schedule_cleanup(&self) {
-            cleanup::schedule();
+            cleanup::schedule(&self.observed_revision);
         }
         fn fresh_accounts(&self) -> StoreResult<Vec<String>> {
             match std::fs::read_to_string(self.fresh_marker_path()?) {
@@ -1324,6 +1331,24 @@ mod native {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    #[cfg(test)]
+    pub(super) fn probe_command(action: &str) -> std::process::Command {
+        let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "macos_secrets::native::native_keychain_probe",
+                "--exact",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("FLUUX_PROBE_ACTION", action);
+        command
+    }
+    #[cfg(test)]
+    pub(super) fn probe_child(action: &str) -> std::process::Output {
+        probe_command(action).output().unwrap()
+    }
+
     // FLM-66 / FLM-79: production backend, explicit disposable keychains only.
     #[cfg(test)]
     #[test]
@@ -1344,42 +1369,67 @@ mod native {
         // Deferred cleanup disables interaction only in its child process. The parent must keep its
         // normal authorization policy, including explicit logout and forget.
         if action == "cleanup-worker" {
-            println!("{}", cleanup::perform(&raw).unwrap());
+            match cleanup::perform(&raw) {
+                Ok(report) => cleanup::print_report(&report),
+                Err(error) => {
+                    eprintln!("Legacy keychain cleanup deferred: {error}");
+                    std::process::exit(1);
+                }
+            }
             return;
         }
-        if matches!(action.as_str(), "cleanup-trusted" | "cleanup-untrusted") {
+        if matches!(
+            action.as_str(),
+            "cleanup-trusted" | "cleanup-untrusted" | "cleanup-busy"
+        ) {
             assert!(SecKeychain::user_interaction_allowed().unwrap());
+            let logical = Secrets::new(raw);
+            assert!(crate::credentials::load(&logical).unwrap().is_some());
+            let raw = &logical.store;
             let combined = raw.get(ACCOUNT).unwrap();
             let fresh = raw.get(FRESH_ACCOUNT).unwrap();
             let names = raw.accounts().unwrap();
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .args([
-                    "macos_secrets::native::native_keychain_probe",
-                    "--exact",
-                    "--ignored",
-                    "--nocapture",
-                ])
-                .env("FLUUX_PROBE_ACTION", "cleanup-worker")
-                .output()
-                .unwrap();
-            assert!(
-                output.status.success(),
-                "{}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-            print!("{}", String::from_utf8_lossy(&output.stdout));
+            let busy = action == "cleanup-busy";
+            let held = busy.then(|| raw.revision(false).unwrap().0);
+            let stale_fresh = if action == "cleanup-trusted" {
+                let stale = raw.revision(false).unwrap().2 - 1;
+                raw.observed_revision
+                    .lock()
+                    .unwrap()
+                    .insert(FRESH_ACCOUNT.into(), stale);
+                Some(stale)
+            } else {
+                None
+            };
+            let result = cleanup::invoke(&raw.observed_revision, probe_command("cleanup-worker"));
+            drop(held);
+            if busy {
+                assert!(result.unwrap_err().contains("busy"));
+            } else {
+                println!("{}", result.unwrap());
+            }
+            if let Some(stale) = stale_fresh {
+                assert_eq!(
+                    raw.observed_revision.lock().unwrap().get(FRESH_ACCOUNT),
+                    Some(&stale)
+                );
+            }
             assert!(SecKeychain::user_interaction_allowed().unwrap());
-            assert_eq!(raw.get(ACCOUNT).unwrap(), combined);
-            assert_eq!(raw.get(FRESH_ACCOUNT).unwrap(), fresh);
+            assert_eq!(raw.read_item(ACCOUNT).unwrap(), combined);
+            assert_eq!(raw.read_item(FRESH_ACCOUNT).unwrap(), fresh);
             let remaining = raw.accounts().unwrap();
-            if action == "cleanup-untrusted" {
+            if action == "cleanup-untrusted" || busy {
                 assert_eq!(
                     remaining.into_iter().collect::<BTreeSet<_>>(),
                     names.into_iter().collect::<BTreeSet<_>>()
                 );
-                println!(
-                    "untrusted old copies retained silently; parent interaction policy unchanged"
-                );
+                if busy {
+                    println!("busy revision lock deferred cleanup without waiting; every copy and parent interaction policy preserved");
+                } else {
+                    println!(
+                        "untrusted old copies retained silently; parent interaction policy unchanged"
+                    );
+                }
             } else {
                 assert_eq!(
                     remaining.into_iter().collect::<BTreeSet<_>>(),
@@ -1390,7 +1440,6 @@ mod native {
                         "foreign-entry".into(),
                     ])
                 );
-                let logical = Secrets::new(raw);
                 assert_eq!(
                     crate::credentials::load(&logical)
                         .unwrap()
@@ -1410,10 +1459,53 @@ mod native {
                     Some("ZnJlc2gtcGFzcw==")
                 );
                 println!("verified originals and migration backup retired; login/token/fresh passphrase survive restart; foreign and restored copies untouched");
+                logical
+                    .set("mcp-token", "normal-save-after-cleanup")
+                    .unwrap();
+                let reader = probe_child("cleanup-normal-read");
+                assert!(
+                    reader.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&reader.stderr)
+                );
+                println!("normal cached combined save after cleanup persists in a fresh process");
             }
             return;
         }
         let _no_dialogs = SecKeychain::disable_user_interaction().unwrap();
+        if action == "cleanup-normal-read" {
+            let logical = Secrets::new(raw);
+            assert_eq!(
+                logical.get("mcp-token").unwrap().as_deref(),
+                Some("normal-save-after-cleanup")
+            );
+            assert_eq!(
+                logical
+                    .get("openpgp_passphrase:alice@example.com")
+                    .unwrap()
+                    .as_deref(),
+                Some("ZnJlc2gtcGFzcw==")
+            );
+            return;
+        }
+        if action == "cleanup-recreate-originals" {
+            crate::credentials::save(
+                &raw,
+                &crate::credentials::StoredCredentials {
+                    jid: "alice@example.com".into(),
+                    password: "older-recreated-password".into(),
+                    server: None,
+                },
+            )
+            .unwrap();
+            raw.set("mcp-token", "older-recreated-token").unwrap();
+            raw.set(
+                "openpgp_passphrase:alice@example.com",
+                "older-recreated-passphrase",
+            )
+            .unwrap();
+            return;
+        }
         if action == "cleanup-race-write" {
             raw.set("mcp-token", "older-app-raced-token").unwrap();
             return;
@@ -1427,7 +1519,7 @@ mod native {
         }
         if action == "cleanup-race" {
             cleanup::changed_generation(&raw);
-            println!("an uncoordinated old write changed the native generation; conditional deletion refused and preserved its value");
+            println!("a separate older-style write survives a stale-reference deletion attempt, confirmed by a fresh reader");
             return;
         }
         if action == "cleanup-prepare" {
@@ -1557,6 +1649,8 @@ mod native {
         struct Traced {
             raw: Keychain,
             fail_new: bool,
+            fail_verification: bool,
+            verification_pending: Mutex<bool>,
             reads: Mutex<Vec<String>>,
             scans: Mutex<usize>,
         }
@@ -1569,7 +1663,11 @@ mod native {
                 if a == ACCOUNT && self.fail_new {
                     return Err("injected new-item write failure".into());
                 }
-                self.raw.set(a, s)
+                self.raw.set(a, s)?;
+                if a == ACCOUNT && self.fail_verification {
+                    *self.verification_pending.lock().unwrap() = true;
+                }
+                Ok(())
             }
             fn delete(&self, a: &str) -> Result<(), String> {
                 self.raw.delete(a)
@@ -1578,6 +1676,9 @@ mod native {
         impl Backend for Traced {
             fn read(&self, a: &str) -> StoreResult<Option<String>> {
                 self.reads.lock().unwrap().push(a.into());
+                if a == ACCOUNT && std::mem::take(&mut *self.verification_pending.lock().unwrap()) {
+                    return Err(StoreError::native(-36, "injected verification read failure"));
+                }
                 self.raw.read(a)
             }
             fn accounts(&self) -> StoreResult<Vec<String>> {
@@ -1588,9 +1689,115 @@ mod native {
         let store = Secrets::new(Traced {
             raw,
             fail_new: action == "write-failed",
+            fail_verification: action == "cleanup-legacy-mode",
+            verification_pending: Mutex::new(false),
             reads: Mutex::new(Vec::new()),
             scans: Mutex::new(0),
         });
+        // Current-version legacy fallback must not discard the only surviving
+        // combined copy after another instance retires its originals.
+        if action == "cleanup-legacy-mode" {
+            assert_eq!(
+                store.get("mcp-token").unwrap().as_deref(),
+                Some("test-token")
+            );
+            assert!(matches!(store.cache.lock().unwrap().as_ref(), Some(Ok(bundle)) if bundle.legacy));
+            let before = store.store.raw.revision(false).unwrap().2;
+            let child = probe_child("cleanup-worker");
+            assert!(
+                child.status.success(),
+                "{}",
+                String::from_utf8_lossy(&child.stderr)
+            );
+            print!("{}", String::from_utf8_lossy(&child.stdout));
+            assert_eq!(store.store.raw.revision(false).unwrap().2, before + 1);
+            let saved = store.set("mcp-token", "legacy-new-token");
+            let preserved = store.store.raw.read_item(ACCOUNT).unwrap().is_some();
+            println!(
+                "legacy-mode save refused: {}; combined copy retained: {}",
+                saved.is_err(),
+                preserved
+            );
+            assert!(saved.unwrap_err().contains("reopen"));
+            assert!(preserved);
+            let complete = probe_child("cleanup-worker");
+            assert!(
+                complete.status.success(),
+                "{}",
+                String::from_utf8_lossy(&complete.stderr)
+            );
+            assert!(!String::from_utf8_lossy(&complete.stdout).contains("reopen"));
+            assert_eq!(store.store.raw.revision(false).unwrap().2, before + 1);
+            println!("cleanup advanced the revision once; a completed retry leaves it unchanged without retry advice");
+            let recreated = probe_child("cleanup-recreate-originals");
+            assert!(
+                recreated.status.success(),
+                "{}",
+                String::from_utf8_lossy(&recreated.stderr)
+            );
+            assert_eq!(store.store.raw.revision(false).unwrap().2, before + 1);
+            assert!(store
+                .set("mcp-token", "legacy-new-token")
+                .unwrap_err()
+                .contains("reopen"));
+            assert!(store
+                .adopt_legacy(
+                    "openpgp_passphrase:alice@example.com",
+                    "replacement-passphrase"
+                )
+                .unwrap_err()
+                .contains("reopen"));
+            assert!(crate::credentials::delete_macos(&store)
+                .unwrap_err()
+                .contains("reopen"));
+            let verifier = probe_child("cleanup-legacy-verify");
+            assert!(
+                verifier.status.success(),
+                "{}",
+                String::from_utf8_lossy(&verifier.stderr)
+            );
+            println!("legacy-mode save, adoption and logout refused after cleanup; fresh process reads every secret and can explicitly logout and forget, preserving the token");
+            return;
+        }
+        if action == "cleanup-legacy-verify" {
+            assert_eq!(
+                store.store.raw.get("mcp-token").unwrap().as_deref(),
+                Some("older-recreated-token")
+            );
+            assert_eq!(
+                crate::credentials::load(&store).unwrap().unwrap().password,
+                "test-password"
+            );
+            assert_eq!(
+                store.get("mcp-token").unwrap().as_deref(),
+                Some("test-token")
+            );
+            assert_eq!(
+                store
+                    .get("openpgp_passphrase:alice@example.com")
+                    .unwrap()
+                    .as_deref(),
+                Some("dGVzdC1wYXNz")
+            );
+            crate::credentials::delete_macos(&store).unwrap();
+            assert!(crate::credentials::load(&store).unwrap().is_none());
+            store
+                .delete("openpgp_passphrase:alice@example.com")
+                .unwrap();
+            assert!(store
+                .get("openpgp_passphrase:alice@example.com")
+                .unwrap()
+                .is_none());
+            assert_eq!(
+                store.get("mcp-token").unwrap().as_deref(),
+                Some("test-token")
+            );
+            assert_eq!(
+                store.store.raw.get("mcp-token").unwrap().as_deref(),
+                Some("older-recreated-token")
+            );
+            return;
+        }
         if action == "recovery-copy-startup" {
             let account = "openpgp_passphrase:alice@example.com";
             assert!(store.get(account).unwrap().is_none());
