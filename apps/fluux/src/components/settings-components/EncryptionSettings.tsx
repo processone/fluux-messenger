@@ -602,7 +602,7 @@ export function EncryptionSettings() {
         return
       }
       setFingerprint(result.fingerprint)
-      setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? result.fingerprint)
+      setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? null)
       setPendingIdentityChoice(null)
       addToast('success', t('settings.encryption.restoreSuccess'))
     },
@@ -789,7 +789,7 @@ export function EncryptionSettings() {
       }
       setFingerprint(result.fingerprint)
       setShowRestoreDialog(false)
-      setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? result.fingerprint)
+      setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? null)
       // A successful restore is proof the server backup exists — bump the
       // nonce so the effect re-probes instead of leaving a stale
       // `unknown`/`checking` status line telling the user we still can't
@@ -821,7 +821,7 @@ export function EncryptionSettings() {
       setFingerprint(info.fingerprint)
       setPendingKeyPicker(null)
       setPendingImportFileArmored(null)
-      setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? info.fingerprint)
+      setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? null)
       setBackupProbeNonce((n) => n + 1)
       addToast('success', t('settings.encryption.restoreSuccess'))
     },

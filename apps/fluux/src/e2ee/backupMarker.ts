@@ -5,8 +5,9 @@
  * The backup itself is an OpenPGP SKESK-encrypted blob — without the
  * passphrase we can't peek inside to see which key it contains. So to
  * tell the UI "your local key is already on the server" without asking
- * for the passphrase, we record the fingerprint *at the moment of
- * backup* locally and compare it against the current local fingerprint.
+ * for the passphrase, we record the fingerprint after publishing a backup or
+ * installing a key from the same encrypted blob currently on the server,
+ * then compare it against the current local fingerprint.
  *
  * Stored in localStorage because the SDK's `PluginStorage` backend is
  * currently in-memory; a marker that evaporates on app restart would
@@ -48,8 +49,9 @@ export function readBackedUpFingerprint(bareJid: string): string | null {
 
 /**
  * Persist `fingerprint` as the latest backup marker for `bareJid`.
- * Called after a successful `backupSecretKey` or `restoreSecretKey` —
- * both leave the server backup and the local key in sync.
+ * Called after a successful `backupSecretKey`, or a successful key install
+ * whose source encrypted blob matches a current server backup read.
+ * File installation alone is not evidence of a server backup.
  */
 export function writeBackedUpFingerprint(bareJid: string, fingerprint: string): void {
   if (!bareJid || !fingerprint) return

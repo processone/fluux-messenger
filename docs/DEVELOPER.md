@@ -503,6 +503,18 @@ To replay the migration, quit the app, delete `.identity-migrated` and the
 `net.processone.fluux*` directories (including their per-copy completion files), and
 restore the `com.processone.fluux*` ones.
 
+### Server backup status after key import
+
+The account-scoped backup marker records a fingerprint after a successful secret-key
+publication, or after installing a key from the same encrypted OpenPGP packet stream
+currently read from the server. The shared install path compares packet bytes, not
+armor headers or advertised public-key metadata. This applies to automatic imports,
+picker choices and guided confirmation. A different file or an inconclusive server
+read leaves the previous marker alone; file import never publishes a secret backup.
+A separately encrypted file can contain the same key without proving that the server
+contains it, so it does not establish a new marker. Settings reads the confirmed
+marker rather than treating an install result as backup evidence.
+
 ### Guided macOS backup recovery
 
 If native secret storage fails while loading an existing OpenPGP key, registration retains a

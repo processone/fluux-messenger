@@ -36,6 +36,7 @@ export const changelog: ChangelogEntry[] = [
       {
         type: 'fixed',
         items: [
+          'Importing an OpenPGP key file no longer reports that key as backed up when the server still holds a backup for a different identity',
           'Room history stays readable while you join a room: only the message box is replaced by a joining status. Reopening a room no longer shows the cached-history warning or asks you to join while it is already rejoining, and a failed join brings back the join button',
           'On desktop, new messages no longer move the message, action buttons or menu you are using. Typing resumes following new messages if you were following before, unless a menu is open, and the jump-to-latest button stays hidden while a message menu is open',
           'Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter, and private messages in rooms no longer make the messages around them jump as you scroll. On iOS, your reading position also holds when you pull past the top or bottom and when you lift your finger',

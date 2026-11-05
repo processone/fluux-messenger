@@ -1740,7 +1740,19 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       this.ownBundle = bundle
       this._keyRecoveryReason = null
       if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
-      writeBackedUpFingerprint(ctx.account.jid, bundle.fingerprint)
+
+      // Installing a file (including a picker/recovery selection) does not
+      // publish a secret-key backup. Only the same encrypted packet stream on
+      // the server proves that this imported identity is backed up there.
+      // Keep any previously known marker when the blobs differ or a read fails.
+      const serverBackup = await this.fetchSecretKeyBackup().catch((err) => {
+        ctx.logger.debug(`${this.pluginName()}: could not confirm installed key's server backup: ${formatError(err)}`)
+        return null
+      })
+      if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
+      if (serverBackup && openPgpBlocksEqual(serverBackup, backupMessage)) {
+        writeBackedUpFingerprint(ctx.account.jid, bundle.fingerprint)
+      }
 
       const current = () => this.ctx === ctx && this.ownBundle === bundle
       try {
