@@ -32,7 +32,17 @@ final class RoomAlertUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         print("COLLAPSED NOTIFICATION: \(banner.debugDescription)")
-        banner.press(forDuration: 1)
+        XCUIDevice.shared.press(.home)
+        springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.01)).press(forDuration: 0.1,
+            thenDragTo: springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.8)))
+        let card = springboard.descendants(matching: .any).matching(identifier: "NotificationShortLookView").firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        print("NOTIFICATION CENTER: \(springboard.debugDescription)")
+        let listed = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        listed.name = "Room notification in Notification Center"
+        listed.lifetime = .keepAlways
+        add(listed)
+        card.press(forDuration: 1)
         print("EXPANDED NOTIFICATION: \(springboard.debugDescription)")
         let expanded = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         expanded.name = "Expanded room notification"
