@@ -785,7 +785,8 @@ sudo apt-get install -y \
   librsvg2-dev \
   libssl-dev \
   pkg-config \
-  patchelf
+  patchelf \
+  desktop-file-utils
 ```
 
 ### Build from Source
@@ -817,16 +818,16 @@ If you've already built the binary with Tauri, you can skip the build step:
 npm run build:sdk
 npm run tauri -w @xmpp/fluux -- build
 
-# Then stage the packaging files and package
+# Then stage the packaging files and package without cleaning the binary
 mkdir -p debian
 cp -a packaging/debian/. debian/
-dpkg-buildpackage -d -uc -us -b
+dpkg-buildpackage -d -uc -us -b -nc
 ```
 
 After staging the packaging files, you can also explicitly specify the binary path:
 
 ```bash
-FLUUX_BINARY=apps/fluux/src-tauri/target/release/fluux dpkg-buildpackage -d -uc -us -b
+FLUUX_BINARY=apps/fluux/src-tauri/target/release/fluux dpkg-buildpackage -d -uc -us -b -nc
 ```
 
 ### Install the Package
