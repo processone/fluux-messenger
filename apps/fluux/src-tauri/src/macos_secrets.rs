@@ -1330,7 +1330,9 @@ mod native {
             store.retry_denied_access().unwrap();
             assert_eq!(store.set("mcp-token", "replacement").unwrap_err(), error);
             assert_eq!(store.delete("mcp-token").unwrap_err(), error);
-            assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT]);
+            // Explicit erase also checks the independent fresh store for a
+            // staged/restored copy. Neither store may decrypt more than once.
+            assert_eq!(*store.store.reads.lock().unwrap(), [ACCOUNT, FRESH_ACCOUNT]);
             let (stored, _) = find_generic_password(
                 store.store.raw.keychain.as_ref().map(std::slice::from_ref),
                 SERVICE,
@@ -1338,7 +1340,7 @@ mod native {
             )
             .unwrap();
             assert_eq!(stored.to_vec(), bytes);
-            println!("{action}: one native read across startup consumers and explicit retry; original item unchanged");
+            println!("{action}: one old combined-item read across startup consumers and explicit retry; erase checks the fresh store once; original item unchanged");
             return;
         }
         if action == "denied" {

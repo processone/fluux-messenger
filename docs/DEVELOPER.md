@@ -437,8 +437,9 @@ passphrase or MCP token using real disposable ACLs, and corrupt one old item's U
 consumers still work; three repeated calls produce one enumeration and no partial combined write.
 A new owner process then migrates all readable originals. A second process reads while another reader holds the
 shared revision lock; exclusive writes still exclude readers and writers. Native invalid UTF-8,
-malformed JSON and future-version fixtures each produce one read across startup consumers and explicit
-retry, with no item replacement. It runs the focused secrets, credentials, OpenPGP storage
+malformed JSON and future-version fixtures each produce one old combined-item read across startup
+consumers and explicit retry, with no item replacement; explicit erase also checks the independent
+fresh store once. It runs the focused secrets, credentials, OpenPGP storage
 and asynchronous forget Rust tests under the same scratch HOME, including the reviewed migration
 states, transient retries, denial/decode caching, explicit erase retry, memory-only recovery across
 Release/Dev relaunches, and error propagation/logging. Dialogs
