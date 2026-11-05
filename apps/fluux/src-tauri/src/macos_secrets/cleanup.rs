@@ -167,7 +167,11 @@ mod native {
         let mut observed = observed.lock().map_err(|_| "Revision lock poisoned")?;
         let output = command.output().map_err(|e| e.to_string())?;
         if !output.status.success() {
-            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+            return Err(format!(
+                "Cleanup helper exited with {}: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
         }
         let invalid = "Unrecognized cleanup report; quit and reopen this app before saving";
         let stdout = std::str::from_utf8(&output.stdout).map_err(|_| invalid)?;
@@ -345,6 +349,58 @@ mod native {
                 eprintln!("Legacy keychain cleanup stopped; copies retained: {error}. Reopen the current app to retry.");
                 std::process::exit(1);
             }
+        }
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        fn command(payload: &str) -> std::process::Command {
+            let mut command = std::process::Command::new("/usr/bin/printf");
+            command.args(["%s", payload]);
+            command
+        }
+        #[test]
+        fn worker_report_updates_only_matching_observations() {
+            let observed = Observed::new(std::collections::BTreeMap::from([
+                (ACCOUNT.into(), 5),
+                (super::super::super::FRESH_ACCOUNT.into(), 4),
+            ]));
+            let report = Report {
+                diagnostic: "complete".into(),
+                advance: Some((5, 6)),
+            };
+            let payload = format!("{REPORT_PREFIX}{}", serde_json::to_string(&report).unwrap());
+            assert_eq!(invoke(&observed, command(&payload)).unwrap(), "complete");
+            let actual = observed.lock().unwrap();
+            assert_eq!(actual.get(ACCOUNT), Some(&6));
+            assert_eq!(actual.get(super::super::super::FRESH_ACCOUNT), Some(&4));
+        }
+        #[test]
+        fn malformed_or_failed_worker_preserves_observations() {
+            let before = std::collections::BTreeMap::from([(ACCOUNT.into(), 5)]);
+            let observed = Observed::new(before.clone());
+            for payload in [
+                "not a report".to_string(),
+                format!("{REPORT_PREFIX}not JSON"),
+                format!(
+                    "{REPORT_PREFIX}{}",
+                    serde_json::to_string(&Report {
+                        diagnostic: "invalid advance".into(),
+                        advance: Some((5, 7))
+                    })
+                    .unwrap()
+                ),
+            ] {
+                assert!(invoke(&observed, command(&payload))
+                    .unwrap_err()
+                    .contains("reopen"));
+                assert_eq!(*observed.lock().unwrap(), before);
+            }
+            let failed = std::process::Command::new("/usr/bin/false");
+            assert!(invoke(&observed, failed)
+                .unwrap_err()
+                .contains("exit status"));
+            assert_eq!(*observed.lock().unwrap(), before);
         }
     }
     #[cfg(not(test))]

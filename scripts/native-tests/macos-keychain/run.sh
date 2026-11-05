@@ -130,7 +130,7 @@ PY
   probe owner cleanup-race
   # Pure failure/recovery tests also execute under the scratch HOME.
   "$LAB/owner" macos_secrets::tests:: --nocapture
-  "$LAB/owner" macos_secrets::cleanup::tests:: --nocapture
+  "$LAB/owner" macos_secrets::cleanup:: --nocapture
   "$LAB/owner" credentials::tests:: --nocapture
   "$LAB/owner" openpgp_storage::tests:: --nocapture
   "$LAB/owner" openpgp::tests::forget --nocapture
