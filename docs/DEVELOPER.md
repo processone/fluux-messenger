@@ -188,11 +188,13 @@ before a reset.
 
 A failed or unanswered drawing check resets once: the page is asked to
 disconnect within the SDK's bounded cleanup time (derived in `build.rs`), then
-reloaded. If the page never acknowledges, the native proxy retires its own
-connections before the reload, so no second server client can appear. An
-explicit cleanup failure, a second failed attempt or missing readiness ends on
-the native controls (Restart Fluux, Copy diagnostics, Quit) without clearing
-data. Credential access pauses the clock and shows its own status.
+reloaded. Only a reset that followed an unanswered check (a snapshot timeout)
+reloads when the page never acknowledges; the native proxy then retires its own
+connections first, so no second server client can appear. After a check that
+completed with the wrong pixels, a missing acknowledgement is a cleanup failure.
+A cleanup failure, a second failed attempt or missing readiness ends on the
+native controls (Restart Fluux, Copy diagnostics, Quit) without clearing data.
+Credential access pauses the clock and shows its own status.
 Page-initiated reloads stay allowed and renew neither the budget nor the retry.
 The vendored Wry feature `fluux-startup-recovery` routes a WebContent
 termination during startup through the same budget; once the app is usable the
