@@ -14,7 +14,7 @@ import {
   getNotificationPermissionGranted,
 } from './useNotificationPermission'
 import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
-import { buildLocalMessageNotification, communicationMetadata, type LocalMessageNotification } from '@/utils/localMessageNotification'
+import { buildLocalMessageNotification, systemMessageNotificationTitle, communicationMetadata, type LocalMessageNotification } from '@/utils/localMessageNotification'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { showWebNotification } from '@/utils/webNotification'
 import { webTag } from '@/utils/notificationNavigation'
@@ -348,7 +348,8 @@ export function useDesktopNotifications(): void {
     if (desktop) {
       if (!mobile) {
         const communication = communicationMetadata(target)
-        await postNativeDesktopNotification({ title, body, navType, navTarget, messageId, accountId,
+        const systemTitle = systemMessageNotificationTitle(target, title, platform().os, !!communication)
+        await postNativeDesktopNotification({ title: systemTitle, body, navType, navTarget, messageId, accountId,
           avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
           communication }, async () => {
           const latest = await resolveTarget(original)
@@ -370,7 +371,7 @@ export function useDesktopNotifications(): void {
           return true
         }, frontNow)
       } else {
-        await postPluginNotification({ title, body,
+        await postPluginNotification({ title: systemMessageNotificationTitle(target, title, platform().os), body,
           attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
           extra: { navType, navTarget, messageId, accountId } }, messageRowRef(target.message), frontNow)
       }

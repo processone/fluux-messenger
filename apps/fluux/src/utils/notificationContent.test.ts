@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import fixtures from '../../../../tests/fixtures/notification-content.json'
 import en from '@/i18n/locales/en.json'
-import { buildLocalMessageNotification } from './localMessageNotification'
+import { buildLocalMessageNotification, systemMessageNotificationTitle } from './localMessageNotification'
 import { buildPushNotification, type PushPayloadData } from './pushNotificationCoalesce'
 
 function translate(key: string, options?: Record<string, unknown>): string {
@@ -33,6 +33,14 @@ describe('shared notification content contract v1', () => {
         const built = buildLocalMessageNotification(target, translate, 'en', web)
         const expected = web ? input.web : input.expected
         expect(built ? { title: built.title, body: built.body } : null).toEqual(expected)
+        // FLM-431: ordinary iOS/macOS titles change, never the shared web/other-native policy.
+        if (!web && built) {
+          for (const os of ['ios', 'macos', 'android', 'windows', 'linux', 'unknown']) {
+            const title = systemMessageNotificationTitle(target, built.title, os)
+            expect(title).toBe((os === 'ios' || os === 'macos') && 'systemTitle' in input ? input.systemTitle : built.title)
+          }
+          expect(systemMessageNotificationTitle(target, built.title, 'macos', true)).toBe(built.title)
+        }
       })
     }
     if ('push' in fixture && fixture.push) it(`${fixture.id}: service worker push`, () => {

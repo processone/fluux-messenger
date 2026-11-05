@@ -581,16 +581,24 @@ nick as subtitle. The nick comes from the push's `muc_nick` attribute when the a
 part of its JID. Enable the App Group `group.net.processone.fluux.share` for the App ID
 `net.processone.fluux.notification` as well, and regenerate its provisioning profile.
 
-Remote pushes use iOS Communication Notifications. The main app declares
+Direct-message remote pushes use iOS Communication Notifications. Known-room
+pushes instead use ordinary notifications, with the room name above the sender's
+nick. They bypass incoming intent construction, donation and content enrichment:
+iOS communication presentation would put the sender first. Room alerts therefore
+use the app icon, without a prominent communication avatar, person-based Focus
+treatment or communication-specific Siri behavior. Outgoing share suggestions
+remain unchanged. Local iOS system room alerts use `room — nick` (room alone when
+the nick is missing), because the notification plugin has no subtitle field;
+existing local attachments remain.
+
+The main app declares
 `INSendMessageIntent` in `NSUserActivityTypes` and the
 `com.apple.developer.usernotifications.communication` entitlement. Enable
 **Communication Notifications** on the main App ID in Apple Developer, then
 refresh its provisioning profiles (automatic signing refreshes them at the next
-device build). The notification extension constructs and donates an incoming
-message intent and applies it to the notification. A direct message uses the
-contact's image; a group message uses the room name and room image, with the
-occupant's nick as the sender. Missing or invalid images fall back to ordinary
-notification presentation.
+device build). For direct messages, the notification extension constructs and
+donates an incoming message intent and applies it to the notification using the
+contact's image. Missing or invalid images retain the existing fallback behavior.
 
 The dedicated iOS module lives under
 `plugins/push/ios/Sources/NotificationAvatars`; the push plugin compiles it through
@@ -620,23 +628,22 @@ The mirror also carries `roomParticipants`, keyed by the same room bare JID as
 `rooms` and `avatars`. Each entry contains the current user's room nickname and
 the last-known occupant nicknames, without real member JIDs. Joined rooms publish
 their occupancy after self-presence is available. Suspension retains that snapshot;
-room removal, logout and account changes clear it. The incoming communication
-intent supplies the other occupants as recipients, excluding the sender and
-current user as required by Apple's
-[communication notification contract](https://developer.apple.com/documentation/usernotifications/implementing-communication-notifications).
-The room image stays on `speakableGroupName`, never on the occupant sender.
-Legacy mirrors, unknown senders and unavailable occupancy retain the existing
-presentation fallback; a two-person snapshot does not invent a third participant.
+room removal, logout and account changes clear it. The extension still uses the
+own nick to suppress self-sent room messages. Ordinary incoming room presentation
+does not depend on recipients or occupancy: two-person rooms and unavailable
+occupancy use the same room-first title/subtitle rule. Generic intent construction
+fixtures still cover Apple's recipient and group-image contracts, but incoming
+known-room alerts no longer use that path.
 
 `npm run test:ios-notifications` uses synthetic native fixtures for lookup,
 resizing, pruning, account isolation, missing images and intent construction.
 The macOS harness cannot exercise iOS-only group-image assignment or system
 content updates; simulator compilation covers those APIs. Real-device acceptance
-requires remote pushes with fixture identities: direct and room avatars,
-missing-avatar fallback, avatar replacement/removal, logout, and delivery while
+requires remote pushes with fixture identities: room above nick, missing nick,
+two-person/unknown occupancy, direct-message avatars, logout, and delivery while
 locked after first unlock. Simulator builds and fixtures do not prove APNs
-extension execution or the rendered Notification Center appearance. The room
-picture in iOS system banners remains unverified and is handed off to FLM-200.
+extension execution or the rendered Notification Center appearance. Room avatars
+are not part of ordinary remote room alerts; local attachments are unchanged.
 
 In-app room toasts on the web and iOS use the room picture (or the shared # fallback),
 with the sender first and the room name and message below. Browser combined-count
@@ -646,15 +653,18 @@ Generic status toasts and system-notification producers are unchanged.
 `useSoundNotification` remains the owner of local message audio and its
 enabled/disabled preference.
 
-To qualify room-picture presentation on a signed iPhone build:
+To qualify room-first presentation on a signed iPhone build:
 
 1. Join a fixture room with an avatar and at least three occupants, then suspend
    Fluux after the mirror settles and receive a message from a known occupant.
-   Verify the room avatar, room name and sender nickname in Notification Center.
-2. Repeat without a room avatar, then in a two-person room; confirm the existing
-   fallback remains readable. Receive a direct message and verify its contact avatar.
-3. Change the room avatar and repeat; remove the room or switch/logout the account
-   and confirm stale room metadata is not shown for the previous account.
+   Verify the room name above the sender nickname and the unchanged message body
+   in Notification Center, with the app icon rather than a communication avatar.
+2. Repeat without a nick, without a room avatar, then in a two-person room;
+   confirm the room-only or room-first presentation. Receive a direct message and
+   verify its existing communication treatment and contact avatar.
+3. Receive a local room alert and verify `room — nick` and existing attachments.
+   Check taps, grouping, sound and badge. Remove the room or switch/logout the
+   account and confirm stale room metadata is not shown for the previous account.
 
 For grouping in Notification Center, the extension preserves an existing APNs `thread-id`
 (`UNNotificationContent.threadIdentifier`). When it is empty, the extension uses the bare JID from `from`:

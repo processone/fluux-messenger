@@ -36,6 +36,17 @@ export function buildLocalMessageNotification(target: LocalMessageNotification, 
   }
 }
 
+/** FLM-431: room-first titles only at the selected ordinary system-alert boundaries.
+ * The notification plugin has no iOS subtitle field. In-app banners and the macOS
+ * communication experiment retain their existing presentation.
+ */
+export function systemMessageNotificationTitle(
+  target: LocalMessageNotification, fallback: string, os: string, communication = false,
+): string {
+  if (target.kind !== 'room' || (os !== 'ios' && (os !== 'macos' || communication))) return fallback
+  return target.message.nick ? `${target.entity.name} — ${target.message.nick}` : target.entity.name
+}
+
 /** Issue #1386: structured native metadata, never parsed from the composed title. */
 export function communicationMetadata(target: LocalMessageNotification): CommunicationMetadata | undefined {
   if (!communicationTestAvailable()) return undefined
