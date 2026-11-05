@@ -8,6 +8,27 @@ use std::{
     sync::Mutex,
 };
 
+// The backend reports access lifetime without depending on any UI or startup
+// policy. The desktop composition root may register an observer once.
+type AccessObserver = fn(bool);
+static ACCESS_OBSERVER: std::sync::OnceLock<AccessObserver> = std::sync::OnceLock::new();
+pub fn register_access_observer(observer: AccessObserver) {
+    let _ = ACCESS_OBSERVER.set(observer);
+}
+struct AccessScope(Option<AccessObserver>);
+impl AccessScope {
+    fn new(observer: Option<AccessObserver>) -> Self {
+        if let Some(observer) = observer { observer(true); }
+        Self(observer)
+    }
+    fn begin() -> Self { Self::new(ACCESS_OBSERVER.get().copied()) }
+}
+impl Drop for AccessScope {
+    fn drop(&mut self) {
+        if let Some(observer) = self.0 { observer(false); }
+    }
+}
+
 const ACCOUNT: &str = "secrets-v1";
 // Combined item of a user who restored from a backup instead of migrating. It
 // never coexists with the old items' access lists, so a refused or inaccessible
@@ -1017,6 +1038,7 @@ mod native {
             self.read(account).map_err(|error| error.to_string())
         }
         fn set(&self, account: &str, secret: &str) -> Result<(), String> {
+            let _access = super::AccessScope::begin();
             let _revision = if is_bundle(account) {
                 Some(self.begin_write(account)?)
             } else {
@@ -1046,6 +1068,7 @@ mod native {
         }
 
         fn delete(&self, account: &str) -> Result<(), String> {
+            let _access = super::AccessScope::begin();
             let _revision = if is_bundle(account) {
                 Some(self.begin_write(account)?)
             } else {
@@ -1084,6 +1107,7 @@ mod native {
         }
 
         fn read(&self, account: &str) -> StoreResult<Option<String>> {
+            let _access = super::AccessScope::begin();
             let revision = if is_bundle(account) {
                 self.revision(false).ok()
             } else {
@@ -1120,6 +1144,9 @@ mod native {
         }
 
         fn accounts(&self) -> StoreResult<Vec<String>> {
+            // Enumeration is a native keychain operation too; retry/migration
+            // may reach it before startup has qualified (FLM-403 F4 and F31).
+            let _access = super::AccessScope::begin();
             match self
                 .query(None)
                 .load_attributes(true)
@@ -1650,12 +1677,32 @@ mod native {
         SECRETS.get_or_init(|| Secrets::new(Keychain::default()))
     }
 }
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(feature = "startup-recovery-lab")))]
 pub use native::secrets;
+#[cfg(all(target_os = "macos", feature = "startup-recovery-lab"))]
+#[path = "macos_secrets/lab.rs"]
+mod lab;
+#[cfg(all(target_os = "macos", feature = "startup-recovery-lab"))]
+pub use lab::secrets;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    // FLM-403 F10: backend observation stays balanced on error, with no UI dependency.
+    #[test]
+    fn access_observer_reports_scope_end_on_early_error() {
+        thread_local! { static EVENTS: std::cell::RefCell<Vec<bool>> = const { std::cell::RefCell::new(Vec::new()) }; }
+        fn observe(pending: bool) { EVENTS.with(|events| events.borrow_mut().push(pending)); }
+        EVENTS.with(|events| events.borrow_mut().clear());
+        let result: Result<(), &str> = (|| {
+            let _access = AccessScope::new(Some(observe));
+            EVENTS.with(|events| assert_eq!(*events.borrow(), vec![true]));
+            Err("disposable backend failure")
+        })();
+        assert!(result.is_err());
+        EVENTS.with(|events| assert_eq!(*events.borrow(), vec![true, false]));
+    }
+
     #[derive(Default)]
     struct FakeStore {
         items: Mutex<BTreeMap<String, String>>,
@@ -1678,6 +1725,7 @@ mod tests {
         unreadable_after_failed_mark: Mutex<bool>,
         // Failures of reads of one named old item, and how many remain.
         item_read_errors: Mutex<BTreeMap<String, (StoreError, usize)>>,
+        access_observer: Option<AccessObserver>,
     }
     impl SecretStore for FakeStore {
         fn get(&self, account: &str) -> Result<Option<String>, String> {
@@ -1740,6 +1788,7 @@ mod tests {
             Ok(())
         }
         fn read(&self, account: &str) -> StoreResult<Option<String>> {
+            let _access = AccessScope::new(self.access_observer);
             // `reads` pins the old layout; the fresh item is a separate store.
             if account != FRESH_ACCOUNT {
                 self.reads.lock().unwrap().push(account.into());
@@ -2752,6 +2801,24 @@ mod tests {
         // A relaunch over the same storage still reads the restored secret.
         let relaunched = Secrets::new(store.store);
         assert_eq!(relaunched.get(alice).unwrap().as_deref(), Some("restored"));
+    }
+
+    // FLM-403 F31: newly merged explicit retry still goes through the observed
+    // backend; cached denial/offer paths must not manufacture another access.
+    #[test]
+    fn explicit_keychain_retry_keeps_balanced_backend_access_observation() {
+        thread_local! { static EVENTS: std::cell::RefCell<Vec<bool>> = const { std::cell::RefCell::new(Vec::new()) }; }
+        fn observe(pending: bool) { EVENTS.with(|e| e.borrow_mut().push(pending)); }
+        let mut store = combined();
+        store.store.access_observer = Some(observe);
+        EVENTS.with(|e| e.borrow_mut().clear());
+        *store.store.read_error.lock().unwrap() = Some((StoreError::denied(), 1));
+        let account = "openpgp_passphrase:alice@example.com";
+        assert!(store.get(account).is_err());
+        assert_eq!(store.refused_access(account), Ok(RefusalState::Held));
+        EVENTS.with(|e| assert_eq!(*e.borrow(), [true, false]));
+        assert_eq!(store.retry_refused_access(account), Ok(RefusedRetry::Read));
+        EVENTS.with(|e| assert_eq!(*e.borrow(), [true, false, true, false]));
     }
 
     // FLM-304, the captain on FLM-298 review R3: "Never, but maybe an explicit

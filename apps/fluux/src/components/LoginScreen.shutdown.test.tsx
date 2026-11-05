@@ -1,10 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, waitFor } from '@testing-library/react'
+import { act, render, waitFor } from '@testing-library/react'
 import { LoginScreen } from './LoginScreen'
 import { markConnectActive } from '@/utils/reconnectIntent'
 import { markShuttingDown, resetShutdownStateForTests } from '@/utils/appShutdown'
+import { installStartupCleanup } from '@/utils/startupRecovery'
+import { getCredentials } from '@/utils/keychain'
+
+const native = vi.hoisted(() => ({ listen: vi.fn(), invoke: vi.fn(), remove: vi.fn() }))
+vi.mock('@tauri-apps/api/event', () => ({ listen: native.listen }))
 
 const mockConnect = vi.fn().mockResolvedValue(undefined)
+const savedCredentials = vi.hoisted(() => ({ jid: 'user@example.com', password: 'secret', server: 'wss://example.com/ws' }))
 
 // Tauri + saved keychain credentials => the keychain auto-connect effect arms.
 vi.mock('@fluux/sdk', async (importOriginal) => ({
@@ -17,6 +23,8 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'en' } }),
 }))
 vi.mock('@/hooks', () => ({ useWindowDrag: () => ({ dragRegionProps: {} }) }))
+// This suite owns relogin effects, not native deep-link startup.
+vi.mock('@/utils/deepLinkRouter', () => ({ ensureDeepLinkRouter: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@/utils/sessionStorage', () => ({ saveSession: vi.fn() }))
 vi.mock('@/utils/xmppResource', () => ({ getResource: () => 'test-resource' }))
 import { setPlatformForTesting } from '@/platform'
@@ -29,14 +37,11 @@ beforeEach(() => {
 })
 afterEach(() => {
   restorePlatform?.()
+  vi.unstubAllGlobals()
 })
 vi.mock('@/utils/keychain', () => ({
   hasSavedCredentials: () => true,
-  getCredentials: vi.fn().mockResolvedValue({
-    jid: 'user@example.com',
-    password: 'secret',
-    server: 'wss://example.com/ws',
-  }),
+  getCredentials: vi.fn().mockResolvedValue(savedCredentials),
   saveCredentials: vi.fn(),
   deleteCredentials: vi.fn(),
 }))
@@ -62,6 +67,12 @@ describe('LoginScreen — start-up effects during app shutdown', () => {
     localStorage.clear()
     sessionStorage.clear()
     mockConnect.mockClear()
+    vi.mocked(getCredentials).mockClear()
+    native.listen.mockReset().mockResolvedValue(native.remove)
+    native.invoke.mockReset().mockImplementation(async (command: string) => command === 'startup_attempt' ? 1 : undefined)
+    // Dynamic imports inside the event callback can use the real core module.
+    // Stub the actual IPC boundary, as the native push lifecycle tests do.
+    vi.stubGlobal('__TAURI_INTERNALS__', { invoke: native.invoke, transformCallback: () => 1, unregisterCallback: vi.fn() })
     resetShutdownStateForTests()
 
     // jsdom's window.location.reload is not writable; replace the accessor.
@@ -88,9 +99,45 @@ describe('LoginScreen — start-up effects during app shutdown', () => {
     markConnectActive()
     sessionStorage.setItem('__wry_was_online', '1')
 
-    render(<LoginScreen />)
+    const view = render(<LoginScreen />)
 
     await waitFor(() => expect(reloadSpy).toHaveBeenCalled())
+    // The mocked reload does not unload this component. Await its remaining
+    // credential work so it cannot leak into the next scenario's mocks.
+    await waitFor(() => expect(view.getByDisplayValue(savedCredentials.jid)).toBeInTheDocument())
+  })
+
+  // FLM-403 F2: the real LoginScreen effects must not race the native reset
+  // acknowledgement when startup recovery retires an already-online client.
+  it('keeps LoginScreen from reloading or reconnecting before the startup cleanup ack', async () => {
+    markConnectActive()
+    sessionStorage.setItem('__wry_was_online', '1')
+    let finish!: () => void
+    const disconnect = vi.fn(() => {
+      render(<LoginScreen />) // Same fresh mount caused by App's disconnected route.
+      return new Promise<void>((resolve) => { finish = resolve })
+    })
+    const dispose = installStartupCleanup(disconnect)
+    try {
+      await waitFor(() => expect(native.listen).toHaveBeenCalledWith('startup-recovery-cleanup', expect.any(Function)))
+      const listener = native.listen.mock.calls.find(([name]) => name === 'startup-recovery-cleanup')![1] as (event: { payload: number }) => Promise<void>
+      let acknowledgement!: Promise<void>
+      act(() => { acknowledgement = listener({ payload: 2 }) })
+      expect(disconnect).toHaveBeenCalledOnce()
+      expect(sessionStorage.getItem('__wry_was_online')).toBeNull()
+      expect(reloadSpy).not.toHaveBeenCalled()
+      expect(mockConnect).not.toHaveBeenCalled()
+      expect(getCredentials).not.toHaveBeenCalled()
+      expect(native.invoke.mock.calls.some(([command]) => command === 'startup_cleanup_complete')).toBe(false)
+      finish()
+      await act(async () => { await acknowledgement })
+      // The real core forwards an optional third IPC-options argument; this
+      // boundary owns the command payload, not that unused argument's arity.
+      expect(native.invoke.mock.calls.find(([command]) => command === 'startup_cleanup_complete')?.[1])
+        .toEqual({ generation: 2, succeeded: true })
+      expect(reloadSpy).not.toHaveBeenCalled()
+      expect(mockConnect).not.toHaveBeenCalled()
+    } finally { dispose() }
   })
 
   // ── The regression ─────────────────────────────────────────────────────────
@@ -101,11 +148,9 @@ describe('LoginScreen — start-up effects during app shutdown', () => {
     markConnectActive()
     markShuttingDown()
 
-    render(<LoginScreen />)
+    const view = render(<LoginScreen />)
 
-    // Give the credential-load + auto-connect effects time to run.
-    await new Promise((r) => setTimeout(r, 50))
-
+    await waitFor(() => expect(view.getByDisplayValue(savedCredentials.jid)).toBeInTheDocument())
     expect(mockConnect).not.toHaveBeenCalled()
   })
 
@@ -117,10 +162,9 @@ describe('LoginScreen — start-up effects during app shutdown', () => {
     sessionStorage.setItem('__wry_was_online', '1')
     markShuttingDown()
 
-    render(<LoginScreen />)
+    const view = render(<LoginScreen />)
 
-    await new Promise((r) => setTimeout(r, 50))
-
+    await waitFor(() => expect(view.getByDisplayValue(savedCredentials.jid)).toBeInTheDocument())
     expect(reloadSpy).not.toHaveBeenCalled()
   })
 })

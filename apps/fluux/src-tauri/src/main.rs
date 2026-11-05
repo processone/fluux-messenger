@@ -22,6 +22,10 @@ mod macos_secrets;
 #[cfg(test)]
 mod native_storage;
 
+// Native startup policy is independent of React, XMPP and storage.
+#[cfg(any(target_os = "macos", test))]
+mod startup_recovery;
+
 // Linux: Apply WebKitGTK GPU workaround env vars BEFORE main() runs.
 // This uses ctor to run a static constructor before any other code,
 // ensuring the env vars are set before WebKitGTK initializes.
@@ -1286,6 +1290,8 @@ fn main() {
 
     let context = tauri::generate_context!();
     let identifier = context.config().identifier.clone();
+    #[cfg(all(target_os = "macos", feature = "startup-recovery-lab"))]
+    startup_recovery::lab::assert_identity(&identifier);
     // Must run before anything opens the app's directories: the log file
     // below, the plugins, and the webview's storage.
     let identity_migration = identity_migration::migrate_platform_dirs(&identifier);
@@ -1508,7 +1514,10 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init());
-    let app = if communication_test_available(&identifier) {
+    let app = if cfg!(feature = "startup-recovery-lab") {
+        // The disposable lab never checks or installs updates.
+        app
+    } else if communication_test_available(&identifier) {
         // One immutable startup marker drives both communication and updater capabilities.
         // The updater plugin is absent too, so direct calls cannot check or install.
         app.append_invoke_initialization_script(include_str!("communication-test-init.js"))
@@ -1572,9 +1581,19 @@ fn main() {
             notifications::request_notification_permission,
             notifications::take_pending_notification_target,
             notifications::set_notification_listener_ready,
-            notifications::dismiss_notifications
+            notifications::dismiss_notifications,
+            #[cfg(target_os = "macos")]
+            startup_recovery::macos::startup_attempt,
+            #[cfg(target_os = "macos")]
+            startup_recovery::macos::startup_shell_ready,
+            #[cfg(target_os = "macos")]
+            startup_recovery::macos::startup_cleanup_complete
         ])
         .on_page_load(move |webview, payload| {
+            #[cfg(target_os = "macos")]
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+                startup_recovery::macos::page_started(webview.label());
+            }
             // Always inject console-forwarding script so SDK diagnostic logs
             // (prefixed with [Fluux]) reach the Rust file log for troubleshooting.
             // When --verbose is not active, this is the only way JS logs reach the file.
@@ -1661,6 +1680,11 @@ fn main() {
             }
         })
         .setup(move |app| {
+            // Install the native cover before notification/credential setup.
+            #[cfg(target_os = "macos")]
+            startup_recovery::macos::install(app.handle())?;
+            #[cfg(target_os = "macos")]
+            macos_secrets::register_access_observer(startup_recovery::macos::credential_access_changed);
             #[cfg(target_os = "macos")]
             app.handle().plugin(tauri_plugin_share_inbox::init())?;
             // Wire up native notification backends (macOS: request auth now;

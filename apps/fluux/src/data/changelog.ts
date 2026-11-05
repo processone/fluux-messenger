@@ -49,6 +49,7 @@ export const changelog: ChangelogEntry[] = [
           'iOS: notifications keep the message text when the preview cannot be prepared in time, and the generic wording follows the app language',
           'macOS: if Fluux stopped in the middle of restoring an encryption backup, it puts your previous key back at the next launch instead of leaving encryption locked',
           'macOS: refusing or failing one old keychain item during the first migration no longer blocks your other saved secrets. Fluux keeps the readable items available and does not repeat the full migration on every call',
+          'macOS: a startup display check now offers native Restart Fluux, Copy diagnostics and Quit controls if Fluux cannot display, with at most one automatic recovery attempt and no clearing of saved data',
           'Forgetting your OpenPGP key while Fluux is still unlocking, importing or rotating it now waits for that work to finish, so a key can no longer be saved with the passphrase being deleted',
         ],
       },

@@ -1,4 +1,28 @@
 fn main() {
+    // Native recovery waits longer than the SDK's bounded disconnect cleanup,
+    // including a small IPC/scheduling margin. Derive the shared value at build
+    // time instead of pinning a second copy in the desktop adapter.
+    let timeouts_path = "../../../packages/fluux-sdk/src/core/modules/connectionTimeouts.ts";
+    println!("cargo:rerun-if-changed={timeouts_path}");
+    let timeouts = std::fs::read_to_string(timeouts_path).expect("SDK timeout source");
+    let sdk_cleanup_ms: u64 = timeouts
+        .lines()
+        .find_map(|line| {
+            line.trim()
+                .strip_prefix("export const DISCONNECT_CLEANUP_TIMEOUT_MS = ")
+        })
+        .expect("SDK disconnect cleanup timeout")
+        .trim()
+        .trim_end_matches(';')
+        .replace('_', "")
+        .parse()
+        .expect("numeric SDK disconnect cleanup timeout");
+    let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+    std::fs::write(
+        out.join("startup_cleanup_timeout.rs"),
+        format!("pub const SDK_DISCONNECT_CLEANUP_MS: u64 = {sdk_cleanup_ms};\n"),
+    )
+    .expect("write derived startup cleanup timeout");
     // Expose git short hash as GIT_HASH env var for compile-time embedding
     let output = std::process::Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
@@ -25,6 +49,47 @@ fn main() {
     }
 
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        // Small public-AppKit/WebKit adapter; no Swift runtime or signing access.
+        let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+        let arch = match std::env::var("CARGO_CFG_TARGET_ARCH").unwrap().as_str() {
+            "aarch64" => "arm64",
+            "x86_64" => "x86_64",
+            _ => panic!("unsupported macOS architecture"),
+        };
+        for path in ["macos/StartupRecovery.m", "macos/StartupRecovery.h"] {
+            println!("cargo:rerun-if-changed={path}");
+        }
+        assert!(std::process::Command::new("xcrun")
+            .args([
+                "clang",
+                "-fobjc-arc",
+                "-fblocks",
+                "-arch",
+                arch,
+                "-mmacosx-version-min=10.13",
+                "-c",
+                "macos/StartupRecovery.m",
+                "-o",
+            ])
+            .arg(out.join("startup-recovery.o"))
+            .arg(format!(
+                "-DFLUUX_STARTUP_LAB={}",
+                u8::from(std::env::var_os("CARGO_FEATURE_STARTUP_RECOVERY_LAB").is_some())
+            ))
+            .status()
+            .unwrap()
+            .success());
+        assert!(std::process::Command::new("xcrun")
+            .args(["ar", "crs"])
+            .arg(out.join("libfluux_startup.a"))
+            .arg(out.join("startup-recovery.o"))
+            .status()
+            .unwrap()
+            .success());
+        println!("cargo:rustc-link-search=native={}", out.display());
+        println!("cargo:rustc-link-lib=static=fluux_startup");
+        println!("cargo:rustc-link-lib=framework=AppKit");
+        println!("cargo:rustc-link-lib=framework=WebKit");
         for variable in ["TAURI_CONFIG", "APPLE_TEAM_ID", "APPLE_SIGNING_IDENTITY"] {
             println!("cargo:rerun-if-env-changed={variable}");
         }

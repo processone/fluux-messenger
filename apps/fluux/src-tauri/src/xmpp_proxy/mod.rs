@@ -22,7 +22,7 @@ use tauri::Emitter;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Mutex, RwLock};
-use tokio::task::JoinHandle;
+use tokio::task::{JoinHandle, JoinSet};
 use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::rustls::ClientConfig;
 #[cfg(not(target_os = "ios"))]
@@ -525,9 +525,11 @@ impl XmppProxy {
         // Spawn background task to handle connections.
         // Each connection independently resolves DNS/SRV using the server string.
         let server_for_task = Arc::new(server);
+        let mut shutdown_rx = shutdown_tx.subscribe();
         let task = tokio::spawn(async move {
-            let mut shutdown_rx = shutdown_tx.subscribe();
-
+            // The listener owns every document connection, including setup.
+            // stop() must not return while a retired page still owns a socket.
+            let mut connections = JoinSet::new();
             loop {
                 tokio::select! {
                     Ok((stream, addr)) = listener.accept() => {
@@ -537,18 +539,21 @@ impl XmppProxy {
                         let conn_counter = active_connections.clone();
                         let handle = app_handle.clone();
 
-                        tokio::spawn(async move {
+                        connections.spawn(async move {
                             if let Err(e) = handle_connection(stream, &server_str, shutdown, conn_counter, handle).await {
                                 error!(error = %e, "Connection error");
                             }
                         });
                     }
+                    _ = connections.join_next(), if !connections.is_empty() => {}
                     _ = shutdown_rx.recv() => {
                         info!("Shutting down");
                         break;
                     }
                 }
             }
+            connections.abort_all();
+            while connections.join_next().await.is_some() {}
         });
 
         self.task = Some(task);
@@ -562,10 +567,21 @@ impl XmppProxy {
             let _ = shutdown_tx.send(());
         }
 
-        if let Some(task) = self.task.take() {
-            task.abort();
+        if let Some(mut task) = self.task.take() {
+            match tokio::time::timeout(std::time::Duration::from_secs(2), &mut task).await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    self.local_addr = None;
+                    return Err(format!("Proxy retirement failed: {error}"));
+                }
+                Err(_) => {
+                    task.abort();
+                    let _ = task.await;
+                    self.local_addr = None;
+                    return Err("Proxy retirement timed out".to_owned());
+                }
+            }
         }
-
         self.local_addr = None;
         Ok(())
     }
@@ -1159,14 +1175,17 @@ async fn perform_starttls(
 /// Bidirectionally bridges:
 /// - WebSocket → TLS: translates RFC 7395 framing (`<open/>`) to TCP framing (`<stream:stream>`)
 /// - TLS → WebSocket: translates TCP framing back to RFC 7395 and extracts stanza boundaries
-async fn bridge_websocket_tls(
+async fn bridge_websocket_tls<S>(
     ws: tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
-    tls_stream: tokio_rustls::client::TlsStream<TcpStream>,
+    tls_stream: S,
     mut shutdown: tokio::sync::broadcast::Receiver<()>,
     app_handle: Option<tauri::AppHandle>,
     pending_ws_texts: Vec<String>,
     conn_id: u64,
-) -> Result<(), String> {
+) -> Result<(), String>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send,
+{
     #[derive(Debug, Clone, Serialize)]
     struct ProxyConnectionClosedEvent {
         conn_id: u64,
@@ -1197,7 +1216,7 @@ async fn bridge_websocket_tls(
     let (mut tls_read, mut tls_write) = tokio::io::split(tls_stream);
 
     // Wrap ws_write in Arc<Mutex<>> so the cleanup code can send a close frame
-    // after aborting the tls_to_ws task that normally holds ws_write.
+    // after dropping the TLS-to-WS future that normally holds ws_write.
     let ws_write = Arc::new(Mutex::new(ws_write));
 
     // Shared activity timestamp for inactivity watchdog (epoch millis)
@@ -1220,7 +1239,7 @@ async fn bridge_websocket_tls(
 
     // Task 1: WebSocket -> TLS (translate RFC 7395 WebSocket framing to traditional XMPP)
     let activity_ws = last_activity.clone();
-    let mut ws_to_tls = tokio::spawn(async move {
+    let ws_to_tls = async move {
         while let Some(msg) = ws_read.next().await {
             match msg {
                 Ok(Message::Text(text)) => {
@@ -1249,13 +1268,13 @@ async fn bridge_websocket_tls(
             }
         }
         BridgeEndReason::WebSocketClosedByClient
-    });
+    };
 
     // Task 2: TLS -> WebSocket (requires stanza boundary detection)
     let activity_tls = last_activity.clone();
     let stream_error_capture = last_stream_error.clone();
     let ws_write_for_tls = ws_write.clone();
-    let mut tls_to_ws = tokio::spawn(async move {
+    let tls_to_ws = async move {
         let mut buffer = Vec::new();
         let mut read_buf = [0u8; 8192];
 
@@ -1317,7 +1336,7 @@ async fn bridge_websocket_tls(
                 }
             }
         }
-    });
+    };
 
     // Watchdog: periodically check for inactivity to detect zombie connections
     let watchdog_activity = last_activity.clone();
@@ -1337,39 +1356,18 @@ async fn bridge_websocket_tls(
         }
     };
 
-    // Wait for any task to complete, watchdog to trigger, or shutdown signal
-    let end_reason = tokio::select! {
-        result = &mut ws_to_tls => {
-            match result {
-                Ok(reason) => reason,
-                Err(e) => {
-                    error!(error = %e, "WS->TLS task join error");
-                    BridgeEndReason::WebSocketReadError
-                }
-            }
-        }
-        result = &mut tls_to_ws => {
-            match result {
-                Ok(reason) => reason,
-                Err(e) => {
-                    error!(error = %e, "TLS->WS task join error");
-                    BridgeEndReason::TlsReadError
-                }
-            }
-        }
-        _ = watchdog => {
-            info!("Connection closed by inactivity watchdog");
-            BridgeEndReason::WatchdogTimeout
-        }
-        _ = shutdown.recv() => {
-            info!("Connection closed by shutdown");
-            BridgeEndReason::Shutdown
+    // Both directions are futures owned by this bridge, not detached tasks.
+    // Leaving this scope (including parent cancellation) drops BOTH upstream
+    // halves before closing the loopback writer or returning to its owner.
+    let end_reason = {
+        tokio::pin!(ws_to_tls, tls_to_ws);
+        tokio::select! {
+            reason = &mut ws_to_tls => reason,
+            reason = &mut tls_to_ws => reason,
+            _ = watchdog => BridgeEndReason::WatchdogTimeout,
+            _ = shutdown.recv() => BridgeEndReason::Shutdown,
         }
     };
-
-    // Abort both bridge tasks so they don't linger holding resources
-    ws_to_tls.abort();
-    tls_to_ws.abort();
 
     let end_reason_label = format!("{:?}", end_reason);
     // The TLS→WS task has stopped writing by now; read any captured upstream
@@ -1449,6 +1447,46 @@ async fn bridge_websocket_tls(
 
 /// Global proxy singleton
 static PROXY: RwLock<Option<XmppProxy>> = RwLock::const_new(None);
+#[cfg(any(target_os = "macos", test))]
+#[derive(Default)]
+struct PageRetirement {
+    pending: bool,
+    document_started: bool,
+    transports_closed: bool,
+}
+#[cfg(any(target_os = "macos", test))]
+impl PageRetirement {
+    fn begin(&mut self) {
+        *self = Self {
+            pending: true,
+            ..Self::default()
+        };
+    }
+    fn document_started(&mut self) {
+        self.document_started = true;
+        if self.transports_closed {
+            self.pending = false;
+        }
+    }
+    fn transports_closed(&mut self) {
+        self.transports_closed = true;
+        if self.document_started {
+            self.pending = false;
+        }
+    }
+}
+#[cfg(any(target_os = "macos", test))]
+static PAGE_RETIRING: std::sync::Mutex<PageRetirement> = std::sync::Mutex::new(PageRetirement {
+    pending: false,
+    document_started: false,
+    transports_closed: false,
+});
+
+/// Only a new document AND joined transport retirement release reconnects.
+#[cfg(any(target_os = "macos", test))]
+pub fn page_started() {
+    PAGE_RETIRING.lock().unwrap().document_started();
+}
 
 /// Start the XMPP proxy (exposed to Tauri commands).
 ///
@@ -1465,6 +1503,10 @@ pub async fn start_proxy(
     crate::tls::init_crypto_provider();
 
     let mut proxy_guard = PROXY.write().await;
+    #[cfg(any(target_os = "macos", test))]
+    if PAGE_RETIRING.lock().unwrap().pending {
+        return Err("Page connection is retiring for startup recovery".to_owned());
+    }
 
     // If proxy is already running for the same server, reuse it
     if let Some(ref existing) = *proxy_guard {
@@ -1492,6 +1534,21 @@ pub async fn start_proxy(
     *proxy_guard = Some(proxy);
 
     Ok(result)
+}
+
+/// Retire all document-owned connections before a startup fallback reload.
+/// This uses the same stop owner as normal shutdown, with no JS dependency.
+#[cfg(any(target_os = "macos", test))]
+pub async fn retire_for_page_reload() -> Result<(), String> {
+    let mut proxy_guard = PROXY.write().await;
+    // Under the same lock as start_proxy: no old-page reconnect may race the
+    // retirement barrier before the new document starts.
+    PAGE_RETIRING.lock().unwrap().begin();
+    if let Some(mut proxy) = proxy_guard.take() {
+        proxy.stop().await?;
+    }
+    PAGE_RETIRING.lock().unwrap().transports_closed();
+    Ok(())
 }
 
 /// Stop the XMPP proxy (exposed to Tauri commands)
@@ -1762,6 +1819,141 @@ mod tests {
             0,
             "connection guard should decrement active connection count on early exit"
         );
+    }
+
+    // FLM-403 F12/F29: an allowed external reload during native retirement cannot
+    // release reconnects before the old transport owner finishes its join.
+    #[test]
+    fn new_document_before_transport_join_does_not_release_reconnects() {
+        let mut retirement = PageRetirement::default();
+        retirement.begin();
+        retirement.document_started();
+        assert!(retirement.pending);
+        retirement.transports_closed();
+        assert!(!retirement.pending);
+        retirement.begin();
+        retirement.transports_closed();
+        assert!(retirement.pending);
+        retirement.document_started();
+        assert!(!retirement.pending);
+    }
+
+    // FLM-403 F29: the fallback blocks old-page reconnects until a new document exists.
+    #[tokio::test]
+    async fn page_retirement_blocks_old_page_proxy_starts_until_document_start() {
+        retire_for_page_reload().await.unwrap();
+        assert!(start_proxy("tcp://127.0.0.1:9".into(), None)
+            .await
+            .unwrap_err()
+            .contains("retiring"));
+        page_started();
+        let started = start_proxy("tcp://127.0.0.1:9".into(), None).await.unwrap();
+        assert!(started.url.starts_with("ws://127.0.0.1:"));
+        stop_proxy().await.unwrap();
+    }
+
+    // FLM-403 F29: document-owned loopback closure must drop BOTH server
+    // stream halves. Exercise the exact relay with real loopback sockets; TLS
+    // negotiation is deliberately outside this ownership test.
+    #[tokio::test]
+    async fn document_socket_drop_closes_established_server_before_next_client() {
+        for graceful in [false, true] {
+            let server = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let local = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let upstream = TcpStream::connect(server.local_addr().unwrap())
+                .await
+                .unwrap();
+            let (mut server_peer, _) = server.accept().await.unwrap();
+            let (stop, _) = tokio::sync::broadcast::channel(1);
+            let receiver = stop.subscribe();
+            let address = local.local_addr().unwrap();
+            let bridge = tokio::spawn(async move {
+                let (socket, _) = local.accept().await.unwrap();
+                let ws = tokio_tungstenite::accept_async(socket).await.unwrap();
+                bridge_websocket_tls(ws, upstream, receiver, None,
+                    vec!["<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='example.org' version='1.0'/>".into()], 1).await
+            });
+            let (mut document, _) = tokio_tungstenite::connect_async(format!("ws://{address}"))
+                .await
+                .unwrap();
+            let mut data = [0; 2048];
+            assert!(
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(2),
+                    server_peer.read(&mut data)
+                )
+                .await
+                .unwrap()
+                .unwrap()
+                    > 0
+            );
+            if graceful {
+                document.close(None).await.unwrap();
+            }
+            drop(document); // The transport owner disappears with its document.
+            let mut tail = Vec::new();
+            tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                server_peer.read_to_end(&mut tail),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            tokio::time::timeout(std::time::Duration::from_secs(3), bridge)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            // Only now may the reload create its replacement server socket.
+            let replacement = TcpStream::connect(server.local_addr().unwrap())
+                .await
+                .unwrap();
+            let (_replacement_peer, _) = server.accept().await.unwrap();
+            drop(replacement);
+        }
+    }
+
+    // FLM-403 F29: the fallback must not wait on page scripts, even during STARTTLS setup.
+    // Its native stop owner joins old connections before allowing reload.
+    #[tokio::test]
+    async fn native_proxy_retirement_joins_old_server_before_replacement() {
+        let server = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut proxy = XmppProxy::new();
+        let started = proxy
+            .start(format!("tcp://{}", server.local_addr().unwrap()))
+            .await
+            .unwrap();
+        let (mut document, _) = tokio_tungstenite::connect_async(started.url).await.unwrap();
+        document.send(Message::Text("<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='example.org' version='1.0'/>".into())).await.unwrap();
+        let (mut peer, _) =
+            tokio::time::timeout(std::time::Duration::from_secs(2), server.accept())
+                .await
+                .unwrap()
+                .unwrap();
+        let mut data = [0; 2048];
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), peer.read(&mut data))
+                .await
+                .unwrap()
+                .unwrap()
+                > 0
+        );
+        proxy.stop().await.unwrap();
+        assert_eq!(proxy.active_connections.load(Ordering::SeqCst), 0);
+        let mut tail = Vec::new();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            peer.read_to_end(&mut tail),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let replacement = proxy
+            .start(format!("tcp://{}", server.local_addr().unwrap()))
+            .await
+            .unwrap();
+        assert!(!replacement.url.is_empty());
+        proxy.stop().await.unwrap();
     }
 
     /// Spin up a fake upstream TCP server + the proxy `handle_connection`, send
