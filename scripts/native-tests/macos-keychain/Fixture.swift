@@ -22,7 +22,7 @@ check(SecKeychainSetUserInteractionAllowed(false))
 let password = try String(contentsOfFile: args[3], encoding: .utf8)
 var keychain: SecKeychain?
 check(SecKeychainCreate(args[2], UInt32(password.utf8.count), password, false, nil, &keychain))
-if args[1] == "approved" || args[1] == "legacy-approved" {
+if args[1] == "approved" || args[1] == "legacy-approved" || args[1].hasPrefix("partial-") {
     guard args.count == 6 else { die("two test identities required") }
     let service = "com.processone.fluux"
     let items: [(String, Data)]
@@ -33,7 +33,15 @@ if args[1] == "approved" || args[1] == "legacy-approved" {
             ("last_user", Data("alice@example.com".utf8)),
             ("alice@example.com", Data(#"{"jid":"alice@example.com","password":"test-password","server":null}"#.utf8)),
             ("openpgp_passphrase:alice@example.com", Data("dGVzdC1wYXNz".utf8)),
-            ("mcp-token", Data("test-token".utf8))]
+            ("mcp-token", Data("test-token".utf8))].map { account, data in
+                if args[1] == "partial-backup-mcp" && account == "mcp-token" {
+                    return ("identity-migration-backup:" + account, data)
+                }
+                if args[1] == "partial-recovery-pgp" && account == "openpgp_passphrase:alice@example.com" {
+                    return ("keychain-recovery:\(account.utf8.count):\(account):fixture", data)
+                }
+                return (account, data)
+            }
     }
     var trusted: [SecTrustedApplication] = []
     for path in [args[4], args[5]] {
@@ -42,7 +50,20 @@ if args[1] == "approved" || args[1] == "legacy-approved" {
     }
     var access: SecAccess?
     check(SecAccessCreate(service as CFString, trusted as CFArray, &access))
-    for (account, data) in items {
+    // FLM-86: only one old item's ACL excludes the reader. These are real
+    // disposable-keychain access failures, with dialogs disabled throughout.
+    let pgpAccount = "openpgp_passphrase:alice@example.com"
+    let blocked = ["partial-login": "alice@example.com",
+                   "partial-pgp": pgpAccount,
+                   "partial-mcp": "mcp-token",
+                   "partial-backup-mcp": "identity-migration-backup:mcp-token",
+                   "partial-recovery-pgp": "keychain-recovery:\(pgpAccount.utf8.count):\(pgpAccount):fixture"][args[1]]
+    for (account, original) in items {
+    var itemAccess = access
+    if account == blocked {
+        check(SecAccessCreate(service as CFString, [trusted[0]] as CFArray, &itemAccess))
+    }
+    let data = args[1] == "partial-invalid" && account == "mcp-token" ? Data([0xff]) : original
     let status = service.withCString { s in account.withCString { a in
         var attributes = [
             SecKeychainAttribute(tag: SecItemAttr.serviceItemAttr.rawValue, length: UInt32(service.utf8.count), data: UnsafeMutableRawPointer(mutating: s)),
@@ -51,13 +72,13 @@ if args[1] == "approved" || args[1] == "legacy-approved" {
             var list = SecKeychainAttributeList(count: UInt32(buffer.count), attr: buffer.baseAddress)
             return data.withUnsafeBytes { bytes in
                 SecKeychainItemCreateFromContent(SecItemClass.genericPasswordItemClass, &list,
-                    UInt32(data.count), bytes.baseAddress, keychain, access, nil)
+                    UInt32(data.count), bytes.baseAddress, keychain, itemAccess, nil)
             }
         }
     } }
     check(status)
     }
-    print("created \(items.count) item(s) trusting both test identities (simulated Always Allow)")
+    print("created \(items.count) disposable item(s) for fixture \(args[1])")
 } else {
     guard args[1] == "create" else { die("unknown fixture action") }
     print("created disposable keychain")
