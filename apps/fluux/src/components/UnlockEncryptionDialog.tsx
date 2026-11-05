@@ -5,7 +5,7 @@ import type { XMPPClient } from '@fluux/sdk/core'
 import { getBareJid } from '@fluux/sdk'
 import { KeyPickerDialog } from './KeyPickerDialog'
 import { KeyPickerRequiredError, NoRecoveryAvailableError } from '@/e2ee/recoveryErrors'
-import type { KeyBundle, BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
+import type { KeyBundle, BackupProbeResult, BackupContext, KeyInstallOptions } from '@/e2ee/OpenPGPPluginBase'
 import { platform } from '@/platform'
 import { ModalOverlay } from './ModalOverlay'
 import {
@@ -48,7 +48,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
   const [noRecovery, setNoRecovery] = useState<{ hadLocalKey: boolean } | null>(null)
   const [picker, setPicker] = useState<{
     candidates: KeyBundle[]
-    backupContext: { message: string; passphrase: string }
+    backupContext: BackupContext
   } | null>(null)
   const [isWorking, setIsWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -163,7 +163,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
           pickKeyFile?: () => Promise<string | null>
           importKeyFromFile?: (armored: string, pp: string) => Promise<
             | { fingerprint: string }
-            | { needsPicker: true; candidates: KeyBundle[]; backupContext: { message: string; passphrase: string } }
+            | { needsPicker: true; candidates: KeyBundle[]; backupContext: BackupContext }
           >
         }
       | null
@@ -346,7 +346,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
           candidates={picker.candidates}
           onConfirm={async (selectedFingerprint) => {
             const plugin = client.e2ee?.getPlugin('openpgp') as
-              | { installSelectedKey?: (msg: string, pp: string, fp: string) => Promise<{ fingerprint: string }> }
+              | { installSelectedKey?: (msg: string, pp: string, fp: string, options?: KeyInstallOptions) => Promise<{ fingerprint: string }> }
               | null
               | undefined
             if (!plugin?.installSelectedKey) return
@@ -354,6 +354,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
               picker.backupContext.message,
               picker.backupContext.passphrase,
               selectedFingerprint,
+              { typedPassphrase: picker.backupContext.typedPassphrase },
             )
             setPicker(null)
             onClose(true)

@@ -12,12 +12,20 @@
  */
 import { StrictMode } from 'react'
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { E2EEPluginError } from '@fluux/sdk'
 import { EncryptionSettings } from './EncryptionSettings'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useToastStore } from '@/stores/toastStore'
+import fixtureMeta from '@/e2ee/fixtures/sequoia_meta.json'
+import migrationMeta from '@/e2ee/fixtures/migration_meta.json'
+import { withPassphraseFormatHeader } from '@/e2ee/passphraseFormatHeader'
+
+const ALICE_FP = fixtureMeta.aliceFingerprint
+const BOB_FP = fixtureMeta.bobFingerprint
+const fixtureFile = (name: string) => readFileSync(resolve(__dirname, '../../e2ee/fixtures', name), 'utf8')
 
 const mockCheckPepSupport = vi.fn<() => Promise<boolean>>()
 
@@ -205,12 +213,12 @@ describe('EncryptionSettings PEP support', () => {
       localStorage.clear()
       mockStatus = 'online'
       mockCheckPepSupport.mockResolvedValue(true)
-      mockGetOwnFingerprint.mockReturnValue('AAAABBBBCCCCDDDDEEEEFFFF0000111122223333')
+      mockGetOwnFingerprint.mockReturnValue(ALICE_FP)
       mockPickKeyFile.mockResolvedValue(
-        '-----BEGIN PGP PRIVATE KEY BLOCK-----\n\nfake\n-----END PGP PRIVATE KEY BLOCK-----',
+        fixtureFile('openkeychain_numeric9x4_backup.asc'),
       )
       mockImportKeyFromFile.mockResolvedValue({
-        fingerprint: 'AAAABBBBCCCCDDDDEEEEFFFF0000111122223333',
+        fingerprint: migrationMeta.openkeychain.fingerprint,
       })
       mockPlugin = {
         getOwnFingerprint: mockGetOwnFingerprint,
@@ -226,7 +234,7 @@ describe('EncryptionSettings PEP support', () => {
 
     it('passes an arbitrary passphrase (with "0" and >24 chars) through verbatim', async () => {
       // An OpenKeychain numeric9x4 backup code: 9 groups of 4 digits, with zeros.
-      const externalPassphrase = '1000-2000-3000-4000-5000-6000-7000-8000-9000'
+      const externalPassphrase = migrationMeta.openkeychain.passphrase
 
       render(<EncryptionSettings />)
 
@@ -259,7 +267,7 @@ describe('EncryptionSettings PEP support', () => {
 
     it('shows the masked backup-code field when the file is a Fluux xep0373 backup', async () => {
       mockPickKeyFile.mockResolvedValue(
-        '-----BEGIN PGP MESSAGE-----\nPassphrase-Format: xep0373\n\nwcDMfakebody\n-----END PGP MESSAGE-----\n',
+        withPassphraseFormatHeader(fixtureFile('sequoia_alice_backup.asc')),
       )
 
       render(<EncryptionSettings />)
@@ -285,7 +293,7 @@ describe('EncryptionSettings PEP support', () => {
   // to re-publish it. The row now always renders, and because publishing
   // mints a FRESH passphrase, replacing an existing backup is confirmed.
   describe('re-publishing an in-sync backup', () => {
-    const FP = 'AAAABBBBCCCCDDDDEEEEFFFF0000111122223333'
+    const FP = ALICE_FP
     const mockBackupSecretKey = vi.fn<(pp: string) => Promise<void>>()
 
     beforeEach(() => {
@@ -442,8 +450,8 @@ describe('EncryptionSettings PEP support', () => {
     })
 
     it('uses the foreign-backup copy when the marker does not match', async () => {
-      // Server holds a backup this device did not publish.
-      mockPlugin!.getBackedUpFingerprint = () => null
+      // A confirmed different identity is still a mismatch, not uncertainty.
+      mockPlugin!.getBackedUpFingerprint = () => BOB_FP
 
       render(<EncryptionSettings />)
 
@@ -466,7 +474,7 @@ describe('EncryptionSettings PEP support', () => {
   // could overwrite a real server backup with no warning. `unknown` now
   // fails toward "a backup might exist" at every consumer.
   describe('inconclusive backup probe', () => {
-    const FP = 'AAAABBBBCCCCDDDDEEEEFFFF0000111122223333'
+    const FP = ALICE_FP
     const mockBackupSecretKey = vi.fn<(pp: string) => Promise<void>>()
     const mockProbe = vi.fn<() => Promise<'present' | 'absent' | 'unknown'>>()
     const mockRotateEncryptionKey = vi.fn<(pp?: string) => Promise<{ fingerprint: string }>>()
@@ -491,6 +499,43 @@ describe('EncryptionSettings PEP support', () => {
         pluginRegisteredAt: 1,
         registrationError: null,
       })
+    })
+
+    it('R1 treats a present backup without a marker as neutral and uses the unknown replacement warning', async () => {
+      mockProbe.mockResolvedValue('present')
+      mockPlugin!.getBackedUpFingerprint = () => null
+      render(<EncryptionSettings />)
+      await screen.findByText('settings.encryption.backupStatusUnconfirmed')
+      expect(screen.queryByRole('button', { name: 'settings.encryption.backupStatusRetry' })).not.toBeInTheDocument()
+      expect(screen.queryByText('settings.encryption.backupStatusMismatch')).not.toBeInTheDocument()
+      expect(screen.queryByText('settings.encryption.backupStatusInSync')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupAction' }))
+      await screen.findByText('settings.encryption.backupReplaceUnknownTitle')
+      expect(screen.getByText('settings.encryption.backupReplaceUnconfirmedMessage')).toBeInTheDocument()
+      expect(screen.queryByText('settings.encryption.backupReplaceUnknownMessage')).not.toBeInTheDocument()
+      expect(screen.queryByText('settings.encryption.backupConflictTitle')).not.toBeInTheDocument()
+      expect(mockBackupSecretKey).not.toHaveBeenCalled()
+    })
+
+    it('R1 warns and acknowledges a new code before rotating an unconfirmed backup', async () => {
+      usePlatform('desktop')
+      mockProbe.mockResolvedValue('present')
+      mockPlugin!.getBackedUpFingerprint = () => null
+      render(<EncryptionSettings />)
+      await screen.findByText('settings.encryption.backupStatusUnconfirmed')
+      await openKeyManagement()
+      fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.rotateAction' }))
+      await screen.findByText('settings.encryption.rotateConfirmMessageWithBackup')
+      fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.rotateConfirmAction' }))
+      const publish = await screen.findByRole('button', { name: 'settings.encryption.backupPublish' })
+      await waitFor(() => expect((document.querySelector('input[name="passphrase"]') as HTMLInputElement).value).not.toBe(''))
+      const code = (document.querySelector('input[name="passphrase"]') as HTMLInputElement).value
+      expect(mockRotateEncryptionKey).not.toHaveBeenCalled()
+      expect(publish).toBeDisabled()
+      fireEvent.click(document.querySelector('input[type="checkbox"]')!)
+      await waitFor(() => expect(publish).not.toBeDisabled())
+      fireEvent.click(publish)
+      await waitFor(() => expect(mockRotateEncryptionKey).toHaveBeenCalledExactlyOnceWith(code))
     })
 
     it('shows the inconclusive status line instead of claiming no backup', async () => {
@@ -710,7 +755,7 @@ describe('EncryptionSettings PEP support', () => {
    * guarding a backup that does not exist.
    */
   describe('rotation whose backup re-publish fails', () => {
-    const FP = 'AAAABBBBCCCCDDDDEEEEFFFF0000111122223333'
+    const FP = ALICE_FP
     const mockRotate = vi.fn<(pp?: string) => Promise<{ fingerprint: string }>>()
     const mockProbe = vi.fn<() => Promise<'present' | 'absent' | 'unknown'>>()
 
@@ -886,7 +931,7 @@ describe('macOS guided recovery entry', () => {
 // (keychainRetry.test.ts); this view keeps it folded, macOS-only, and reads the
 // keychain only on the button press.
 describe('macOS keychain retry panel', () => {
-  const FINGERPRINT = 'ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234'
+  const FINGERPRINT = ALICE_FP
   let unlockedFingerprint: string | null
   // The native store still holds this launch's refusal; a granted read consumes it.
   let refusalHeld: boolean

@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.18.3',
+    date: 'Unreleased',
+    sections: [{
+      type: 'fixed',
+      items: [
+        'Importing an OpenPGP key file checks that the server backup contains the same identity, including separately encrypted and older exports. Earlier backup-status markers are reset because file imports could record an incorrect claim. An unconfirmed backup now has a neutral status and a replacement warning. Rotating a key refreshes an unconfirmed backup and replaces its code, even if another device created it',
+      ],
+    }],
+  },
+  {
     version: '0.18.2',
     date: '2026-11-05',
     sections: [

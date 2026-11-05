@@ -571,7 +571,8 @@ function App() {
           const { manager, result } = startupPicker
           if (client.e2ee !== manager) return
           const plugin = manager.getPlugin('openpgp') as OpenPGPPluginBase
-          await plugin.installSelectedKey(result.backupContext.message, result.backupContext.passphrase, fingerprint)
+          await plugin.installSelectedKey(result.backupContext.message, result.backupContext.passphrase, fingerprint,
+            { typedPassphrase: result.backupContext.typedPassphrase })
           if (client.e2ee !== manager) return
           setStartupPicker(null)
           addToast('success', t('settings.encryption.restoreSuccess'))
