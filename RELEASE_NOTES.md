@@ -19,6 +19,7 @@
 - On desktop, new messages no longer move the message, action buttons or menu you are using. Typing resumes following new messages if you were following before, unless a menu is open, and the jump-to-latest button stays hidden while a message menu is open
 - Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter, and private messages in rooms no longer make the messages around them jump as you scroll. On iOS, your reading position also holds when you pull past the top or bottom and when you lift your finger
 - When a delayed message arrives while older messages are still loading, the messages you are reading no longer move, whether it lands above them or, after you scrolled during the load, below them, including when you are partway through a long expanded message
+- iOS: the jump-to-latest button and the Home key now take you to the latest or oldest loaded message even while the list is still moving after a swipe
 - A Fluux window that is minimized or otherwise not visible no longer marks messages as read or holds back their notifications
 - Encrypted messages that arrive before Fluux has the sender's key now show their text once decrypted, instead of staying encrypted
 - Scrolling back now reaches older history even when the server archive holds long stretches without visible messages, and edits to older messages still appear once those messages load

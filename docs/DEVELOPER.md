@@ -80,7 +80,8 @@ script `scripts/test-affected.sh` uses this same implementation, not another rul
 | SDK entry points, shared core/stores/cache, authentication, connection, E2EE | Full SDK + app; platform and compiled Node/package consumer checks |
 | Locale JSON | Language tests and the existing native wording-generation contract |
 | Rust application | Whole application crate, locked dependencies; platform contracts |
-| macOS communication test sources/fixtures | Unsigned `macos-communication.test.mjs`, test-feature native crate and platform contracts |
+| macOS communication sources/fixtures | Unsigned `macos-communication.test.mjs`, `macos-communication` native crate and platform contracts |
+| Release verifier or public-signature probe | `macos-signature-read.test.mjs` with the public reference app, plus communication/release contracts |
 | Rust plugin | Plugin package through the main locked manifest, plus application consumer and platform tests |
 | `nse-openpgp` | Its own locked manifest, application consumer and notification contracts |
 | `PhotoPreparation.swift`, `ShareInboxPlugin.swift`, photo fixture | `test:ios-photos` and platform contracts |
@@ -100,7 +101,10 @@ Tests for the selector run before any selected code checks and as part of
 constant timings. The photo change also touches permissions, build scripts and
 `package.json`, so it deliberately selects broad checks, not just five fast files.
 
-Native evidence has explicit prerequisites. `test:ios-photos` needs macOS/Xcode
+Native evidence has explicit prerequisites. Signature-reader changes need macOS and
+`FLUUX_MACOS_REFERENCE_APP` as an absolute path to the extracted public 0.18.1 app;
+see [the read-only signature probe](MACOS_COMMUNICATION_PROTOTYPE.md#checks-without-signing-or-installing).
+`test:ios-photos` needs macOS/Xcode
 and `FLUUX_PHOTO_FIXTURES` pointing to real JPEG/HEIC images, including location
 and rotated portrait cases. `test:ios-share` needs the existing Xcode/XcodeGen
 setup and `FLUUX_SHARE_RESULTS` as an absolute output directory **outside** the

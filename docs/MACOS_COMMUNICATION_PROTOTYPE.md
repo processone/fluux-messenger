@@ -56,7 +56,10 @@ The separate read-only signature probe uses an extracted public 0.18.1 archive:
 FLUUX_MACOS_REFERENCE_APP="/absolute/path/Fluux Messenger.app" node --test scripts/macos-signature-read.test.mjs
 ```
 
-The macOS native workflow downloads that public reference into temporary storage.
+When the verifier or public-signature probe changes, the macOS native workflow
+downloads that public reference into temporary storage and verifies its pinned
+SHA-256 before extraction. Unrelated changes and weekly runs do not download it.
+The local selector checks `FLUUX_MACOS_REFERENCE_APP` before starting any work.
 The probe runs the verifier's actual signature-display commands, parses XML and
 the legacy requirement, and extracts a public DER certificate. It never signs,
 looks up private identities, accesses keychains, launches or installs an app.

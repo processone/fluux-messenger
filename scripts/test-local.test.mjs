@@ -278,7 +278,20 @@ test('macOS release profile and verifier changes select executable release tests
     const plan = planFor([path])
     assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-release.test.mjs')))
     if (path === 'scripts/verify-macos-release.mjs') {
-      assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-signature-read.test.mjs')))
+      assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-signature-read.test.mjs') && step.requires === 'macos-reference'))
     }
   }
+})
+
+// FLM-439 G3: fail before any work when the explicit public-signature fixture is missing.
+test('public signature fixture requirement fails before children and accepts an extracted app', t => {
+  const { cwd, write } = fixture(t)
+  const plan = planFor(['scripts/verify-macos-release.mjs'])
+  assert.throws(() => executePlan(plan, { cwd, env: {}, host: 'darwin', invoke() { assert.fail('work started before public fixture preflight') } }), /FLUUX_MACOS_REFERENCE_APP/)
+  assert.throws(() => checkRequirement('macos-reference', cwd, { FLUUX_MACOS_REFERENCE_APP: 'relative.app' }, 'darwin'), /absolute/)
+  assert.throws(() => checkRequirement('macos-reference', cwd, { FLUUX_MACOS_REFERENCE_APP: cwd }, 'darwin'), /FLUUX_MACOS_REFERENCE_APP/)
+  write('Reference.app/Contents/Info.plist', readFileSync(resolve(root, 'apps/fluux/src-tauri/Info.plist')))
+  let children = 0
+  executePlan(plan, { cwd, env: { FLUUX_MACOS_REFERENCE_APP: join(cwd, 'Reference.app') }, host: 'darwin', invoke() { children++ }, write() {} })
+  assert.ok(children > 0)
 })

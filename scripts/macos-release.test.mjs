@@ -245,3 +245,58 @@ test('FLM-134 stable publication keeps existing prerelease exclusion; macOS over
     }
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
+
+// FLM-439 G2: execute the actual native-workflow change detector, not a copied path predicate.
+test('public signature probe runs only for changed signature-reader paths', () => {
+  const native = parse(readFileSync('.github/workflows/platform-native.yml', 'utf8'))
+  const detector = native.jobs.macos.steps.find(step => step.id === 'signature-changes')
+  const probe = native.jobs.macos.steps.find(step => step.name === 'Read the public reference release signature without signing')
+  assert.equal(probe.if, `steps.${detector.id}.outputs.changed == 'true'`)
+  const scratch = mkdtempSync(join(tmpdir(), 'fluux-signature-paths-'))
+  const git = (...args) => execFileSync('git', ['-C', scratch, ...args], { encoding: 'utf8' }).trim()
+  try {
+    git('init', '-q'); git('config', 'user.name', 'Signature probe fixture'); git('config', 'user.email', 'fixture@example.invalid')
+    git('config', 'commit.gpgsign', 'false'); git('config', 'core.hooksPath', join(scratch, 'no-hooks'))
+    mkdirSync(join(scratch, 'scripts'))
+    for (const name of ['scripts/verify-macos-release.mjs', 'scripts/macos-signature-read.test.mjs', 'README.md']) writeFileSync(join(scratch, name), readFileSync(name))
+    git('add', '.'); git('commit', '-qm', 'test: initialize signature probe fixture')
+    const base = git('rev-parse', 'HEAD')
+    const output = join(scratch, 'changed-output')
+    const detect = before => {
+      rmSync(output, { force: true })
+      const { spawnSync } = require('node:child_process')
+      const result = spawnSync('/bin/bash', ['-e', '-c', detector.run], { cwd: scratch, env: { PATH: process.env.PATH, BEFORE: before, GITHUB_OUTPUT: output }, encoding: 'utf8' })
+      assert.equal(result.status, 0, result.stderr)
+      return readFileSync(output, 'utf8').trim()
+    }
+    assert.equal(detect(base), 'changed=false')
+    writeFileSync(join(scratch, 'README.md'), `${readFileSync('README.md')}\n`)
+    git('add', 'README.md'); git('commit', '-qm', 'test: change unrelated documentation')
+    assert.equal(detect(base), 'changed=false')
+    let before = git('rev-parse', 'HEAD')
+    for (const name of ['scripts/verify-macos-release.mjs', 'scripts/macos-signature-read.test.mjs']) {
+      writeFileSync(join(scratch, name), `${readFileSync(name)}\n`)
+      git('add', name); git('commit', '-qm', 'test: change signature reader path')
+      assert.equal(detect(before), 'changed=true')
+      before = git('rev-parse', 'HEAD')
+    }
+    assert.equal(detect(''), 'changed=false', 'a weekly/manual run has no changed paths')
+  } finally { rmSync(scratch, { recursive: true, force: true }) }
+})
+
+test('public reference archive checksum rejects different bytes before extraction or signature reads', () => {
+  const native = parse(readFileSync('.github/workflows/platform-native.yml', 'utf8'))
+  const probe = native.jobs.macos.steps.find(step => step.name === 'Read the public reference release signature without signing')
+  const scratch = mkdtempSync(join(tmpdir(), 'fluux-signature-checksum-'))
+  try {
+    const marker = join(scratch, 'node-called')
+    // A real plist in place of the expected archive models a successful but wrong download.
+    writeFileSync(join(scratch, 'curl'), `#!${process.execPath}\nconst fs=require('node:fs');const a=process.argv.slice(2);fs.copyFileSync(process.env.WRONG_DOWNLOAD,a[a.indexOf('--output')+1]);`, { mode: 0o755 })
+    writeFileSync(join(scratch, 'node'), `#!${process.execPath}\nrequire('node:fs').writeFileSync(process.env.CALLED,'unexpected extraction');`, { mode: 0o755 })
+    const { spawnSync } = require('node:child_process')
+    const result = spawnSync('/bin/bash', ['-e', '-c', probe.run], { env: { PATH: `${scratch}:/usr/bin:/bin`, WRONG_DOWNLOAD: resolve('apps/fluux/src-tauri/Info.plist'), CALLED: marker }, encoding: 'utf8' })
+    assert.notEqual(result.status, 0)
+    assert.equal(require('node:fs').existsSync(marker), false)
+    assert.match(result.stderr, /checksum.*(match|FAILED)|computed checksum/i)
+  } finally { rmSync(scratch, { recursive: true, force: true }) }
+})
