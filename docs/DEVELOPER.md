@@ -886,7 +886,9 @@ A tapped Siri suggestion reaches the scene delegate as the donated
 `SuggestionLaunch.swift` in the push plugin turns the suggestion's conversation
 into the same `shortcut` link the open action uses. A cold launch is online
 before the account's roster has loaded, so `useDeepLink` holds a `shortcut`
-link in the deep link router's queue until it has, then checks it.
+link in the deep link router's queue until it has, then checks it. A room
+arrives later, with the bookmarks, so a room suggestion tapped while Fluux is
+closed still opens the conversation list.
 
 `npm run test:ios-notifications` includes synthetic mirror/cleanup tests and
 an iOS 15 simulator-target compile/link check for the availability gates.
@@ -897,8 +899,8 @@ On a signed test build, manual device verification must additionally confirm:
 2. Open a chat and a room from cold and warm app states. Repeat a saved action
    after logout, account removal/switch, and destination deletion; it must not
    open the old account's destination.
-3. Tap a Siri suggestion “Send a message to …” from cold and warm app states;
-   it opens that chat or room.
+3. Tap a Siri suggestion “Send a message to …” for a chat from cold and warm
+   app states, and for a room from a warm state; it opens that chat or room.
 4. Run the unread action with Fluux closed and confirm its returned value
    matches the last icon badge snapshot without showing the app.
 5. Launch an iOS 15 build and verify normal login/navigation still work.
