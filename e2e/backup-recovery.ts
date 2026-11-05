@@ -196,9 +196,19 @@ for (const kind of ['single-key', 'multi-key']) {
     expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
     await reloadDemo(page)
     await page.evaluate(() => { location.hash = '/settings/encryption' })
-    await expect(page.getByText(expectedStatus, { exact: true })).toBeVisible()
-    expect(await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').getOwnFingerprint())).toBe(bobFingerprint)
-    await test.info().attach('backup-identity-observation', { contentType: 'application/json', body: JSON.stringify({ kind, local: observation.local, marker: observation.marker, serverFingerprints: [fingerprint], serverUnchanged: observation.server === serverBefore, afterReload: kind === 'multi-key' ? 'mismatch' : 'unconfirmed', build: expectedBuild }) })
+    // demo.tsx deliberately clears every fluux:* key on reload. It keeps the
+    // fixture's installed key, not its confirmed marker. R1 makes this neutral,
+    // unlike the confirmed Alice/Bob mismatch already asserted before reload.
+    await expect(page.getByText(encryptionCopy.backupStatusUnconfirmed, { exact: true })).toBeVisible()
+    const afterReload = await page.evaluate(async () => {
+      const plugin = (window as any).__demoClient.e2ee.getPlugin('openpgp')
+      return { local: plugin.getOwnFingerprint(), marker: plugin.getBackedUpFingerprint(), server: await plugin.fetchSecretKeyBackup() }
+    })
+    expect(afterReload.local).toBe(bobFingerprint)
+    expect(afterReload.marker).toBeNull()
+    expect(afterReload.server).toBe(serverBefore)
+    expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
+    await test.info().attach('backup-identity-observation', { contentType: 'application/json', body: JSON.stringify({ kind, local: observation.local, marker: observation.marker, serverFingerprints: [fingerprint], serverUnchanged: observation.server === serverBefore, afterReload: 'unconfirmed', afterReloadMarker: afterReload.marker, afterReloadServerUnchanged: afterReload.server === serverBefore, build: expectedBuild }) })
   })
 }
 
