@@ -14,7 +14,7 @@ struct SenderTitle {
         let resource = parts.count > 1 && !parts[1].isEmpty ? parts[1] : nil
         if let room = names.rooms[bare] {
             title = room
-            subtitle = resource
+            subtitle = resource ?? ""
         } else if let contact = names.contacts[bare] {
             title = contact
             subtitle = nil
@@ -135,6 +135,13 @@ enum NotificationPresentation {
         return intent
     }
 
+    /// Known rooms use ordinary alerts: iOS communication presentation always puts the sender first.
+    /// Select this before constructing or donating an incoming intent; outgoing suggestions are separate.
+    static func incomingIntent(from: String, body: String, names: SharedNames) -> INSendMessageIntent? {
+        guard let bare = bareJid(from), names.rooms[bare] == nil else { return nil }
+        return intent(from: from, body: body, names: names)
+    }
+
     static func content(for original: UNNotificationContent, names: SharedNames = SharedNames.load(),
                         activity: String = PreviewWords.localized.activity) -> UNNotificationContent {
         guard let content = original.mutableCopy() as? UNMutableNotificationContent else { return original }
@@ -151,7 +158,7 @@ enum NotificationPresentation {
         if let subtitle = sender.subtitle { content.subtitle = subtitle }
         if var badge = SharedBadge.load() { content.badge = NSNumber(value: badge.count(adding: from, rooms: names.rooms)) }
         #if os(iOS)
-        if #available(iOS 15.0, *), let intent = intent(from: from, body: content.body, names: names) {
+        if #available(iOS 15.0, *), let intent = incomingIntent(from: from, body: content.body, names: names) {
             let interaction = INInteraction(intent: intent, response: nil)
             interaction.direction = .incoming
             if let id = intent.conversationIdentifier {

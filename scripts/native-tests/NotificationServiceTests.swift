@@ -382,8 +382,39 @@ import UniformTypeIdentifiers
         print("muc_nick passed")
     }
 
+    /// FLM-431: ordinary incoming rooms retain room-before-nick order, independent of occupancy.
+    static func roomFirst() {
+        let room = "xsf@muc.xmpp.org"
+        for participants in [[:], [room: SharedRoomParticipants(ownNick: "Me", nicks: ["Seve", "Me"])]] {
+            var names = SharedNames(contacts: ["seve@example.com": "Seve"], rooms: [room: "XSF"], account: "me@example.com")
+            names.roomParticipants = participants
+            for nick in ["Seve", ""] {
+                let original = UNMutableNotificationContent()
+                original.subtitle = "Stale server subtitle"
+                original.body = "> finally, XSF funding!"
+                original.threadIdentifier = "server-room-thread"
+                original.sound = .default
+                original.userInfo = ["from": room, "muc_nick": nick, "to": "me@example.com"]
+                let from = NotificationPresentation.sender(of: original.userInfo, names: names)!
+                precondition(NotificationPresentation.incomingIntent(from: from, body: original.body, names: names) == nil,
+                             "Known rooms must bypass incoming intent creation and donation")
+                let result = NotificationPresentation.content(for: original, names: names)
+                precondition(result.title == "XSF" && result.subtitle == nick)
+                precondition(result.body == original.body && result.threadIdentifier == original.threadIdentifier)
+                precondition(result.sound != nil && result.userInfo["to"] as? String == "me@example.com")
+                precondition(original.subtitle == "Stale server subtitle", "Do not mutate the request")
+                print("Room alert: title=\(result.title), subtitle=\(result.subtitle), body=\(result.body)")
+            }
+            let direct = NotificationPresentation.incomingIntent(from: "seve@example.com", body: "Hello", names: names)
+            precondition(direct?.sender?.displayName == "Seve" && direct?.content == "Hello")
+        }
+        print("room-first passed")
+    }
+
     static func main() {
         switch CommandLine.arguments[1] {
+        case "room-first":
+            roomFirst()
         case "muc-nick":
             mucNick()
         case "room-participants":

@@ -142,8 +142,30 @@ describe('useDesktopNotifications posting + guard', () => {
       ['prepare_communication_notification', 'finish_communication_notification', 'post_notification'].includes(command),
     )).toEqual(['post_notification'])
     expect(invoke).toHaveBeenCalledWith('post_notification', expect.objectContaining({
-      title: 'bob @ Team', body: 'body text', navTarget: 'team@conf.example.com', messageId: 'ordinary-room-alert',
+      title: os === 'macos' ? 'Team — bob' : 'bob @ Team', body: 'body text', navTarget: 'team@conf.example.com', messageId: 'ordinary-room-alert',
     }))
+  })
+
+  // FLM-431 accepted ordinary iOS room alerts; the plugin exposes no subtitle.
+  it.each([
+    ['ios', 'Seve'], ['ios', ''], ['macos', 'Seve'], ['macos', ''],
+  ] as const)('posts an ordinary %s room-first title (nick: %s)', async (os, nick) => {
+    vi.unstubAllGlobals()
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: os === 'ios' ? 'mobile' : 'desktop', os })
+    isMobileTauri.mockResolvedValue(os === 'ios')
+    renderHook(() => useDesktopNotifications())
+    await handlers.onRoomMessage?.(
+      { jid: 'xsf@muc.xmpp.org', name: 'XSF', nickname: 'Receiver', notifyAll: true },
+      { id: 'room-first', nick, from: `xsf@muc.xmpp.org/${nick}` })
+    const expected = { title: nick ? 'XSF — Seve' : 'XSF', body: 'body text' }
+    if (os === 'ios') expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', { options: expect.objectContaining({
+      ...expected, extra: expect.objectContaining({ navType: 'room', navTarget: 'xsf@muc.xmpp.org', messageId: 'room-first', accountId: mockJid }),
+    }) })
+    else expect(invoke).toHaveBeenCalledWith('post_notification', expect.objectContaining({
+      ...expected, navType: 'room', navTarget: 'xsf@muc.xmpp.org', messageId: 'room-first', accountId: mockJid,
+    }))
+    expect(invoke).not.toHaveBeenCalledWith('prepare_communication_notification', expect.anything())
   })
 
   it('posts a conversation with its client id even when a stanza id exists', async () => {
@@ -433,7 +455,7 @@ describe('useDesktopNotifications posting + guard', () => {
         ? { token: 'rename-token', commit: false }
         : { token: 'rename-token', commit: true, names: change === 'contact'
           ? { title: 'Alicia', senderName: 'Alicia' }
-          : { title: 'bob @ Projects', senderName: 'bob', roomName: 'Projects' } })
+          : { title: 'Projects — bob', senderName: 'bob', roomName: 'Projects' } })
       expect(invoke.mock.calls.filter(([command]) => command === 'finish_communication_notification')).toHaveLength(1)
       expect(invoke.mock.calls.some(([command]) => command === 'post_notification')).toBe(false)
     } finally { invoke.mockResolvedValue(null) }
@@ -507,14 +529,15 @@ describe('useDesktopNotifications posting + guard', () => {
     }) })
   })
 
-  it('posts a room via the native desktop command', async () => {
+  // Captain's FLM-434 F7 choice: ordinary fallbacks in experiment builds are room-first too.
+  it('posts a room-first ordinary fallback when experiment preparation returns null', async () => {
     renderHook(() => useDesktopNotifications())
     await handlers.onRoomMessage?.(
       { jid: 'team@conf.example.com', name: 'Team' },
       { id: 'room-message-1', nick: 'bob' },
     )
     expect(invoke).toHaveBeenCalledWith('post_notification', {
-      title: 'bob @ Team',
+      title: 'Team — bob',
       body: 'body text',
       navType: 'room',
       navTarget: 'team@conf.example.com',

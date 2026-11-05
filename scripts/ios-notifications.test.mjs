@@ -103,9 +103,11 @@ test('iOS notification conversation grouping', { skip: process.platform !== 'dar
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-notification-test-'))
   try {
     const binary = compileNotificationTests(scratch, 'NotificationServiceTests.swift')
-    for (const scenario of ['room-participants', 'signed-out', 'account-guard', 'stalled-mirror-cleanup', 'uncovered-body', 'server-plaintext', 'direct', 'room', 'existing', 'missing', 'mirror', 'intents', 'suggestion-launch', 'conversations', 'muc-nick']) {
+    for (const scenario of ['room-first', 'room-participants', 'signed-out', 'account-guard', 'stalled-mirror-cleanup', 'uncovered-body', 'server-plaintext', 'direct', 'room', 'existing', 'missing', 'mirror', 'intents', 'suggestion-launch', 'conversations', 'muc-nick']) {
       await t.test(scenario, () => {
-        assert.match(execFileSync(binary, [scenario]).toString(), /passed/)
+        const output = execFileSync(binary, [scenario]).toString()
+        assert.match(output, /passed/)
+        if (scenario === 'room-first') console.log(output.trim())
       })
     }
     // Type-check the iOS-only group-image assertions without launching a simulator or installed app.

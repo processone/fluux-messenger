@@ -134,13 +134,13 @@
     },
     {
       "id": "room",
-      "app": {"message": {"body": "Hi"}, "room": true, "expected": {"title": "Alice @ Team", "body": "Hi"}, "web": {"title": "Alice @ Team", "body": "Hi"}},
+      "app": {"message": {"body": "Hi"}, "room": true, "systemTitle": "Team — Alice", "expected": {"title": "Alice @ Team", "body": "Hi"}, "web": {"title": "Alice @ Team", "body": "Hi"}},
       "push": {"payload": {"body": "Hi", "title": "Team", "from": "team@conference.example.test", "type": "room"}, "expected": {"title": "Team", "body": "Hi"}},
       "ios": {"body": "Hi", "room": true, "expected": {"title": "Team", "body": "Hi", "subtitle": "Alice"}}
     },
     {
       "id": "room-count",
-      "app": {"message": {"body": "Latest"}, "room": true, "count": 2, "expected": {"title": "Alice @ Team", "body": "Latest"}, "web": {"title": "Team", "body": "2 new messages"}},
+      "app": {"message": {"body": "Latest"}, "room": true, "count": 2, "systemTitle": "Team — Alice", "expected": {"title": "Alice @ Team", "body": "Latest"}, "web": {"title": "Team", "body": "2 new messages"}},
       "push": {"payload": {"body": "Latest", "title": "Team", "from": "team@conference.example.test", "type": "room"}, "existingCount": 1, "expected": {"title": "Team", "body": "2 new messages"}},
       "ios": {"body": "Latest", "room": true, "expected": {"title": "Team", "body": "Latest", "subtitle": "Alice"}}
     },
