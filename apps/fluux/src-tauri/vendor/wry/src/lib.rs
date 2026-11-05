@@ -1609,6 +1609,18 @@ impl Default for PlatformSpecificWebViewAttributes {
   }
 }
 
+// Optional Fluux startup integration. Registering instead of requiring a host
+// extern symbol keeps standalone Tauri test hosts on their normal runtime path.
+#[cfg(all(target_os = "macos", feature = "fluux-startup-recovery"))]
+static FLUUX_STARTUP_TERMINATION_GATE: std::sync::OnceLock<extern "C" fn(*mut std::ffi::c_void) -> bool> = std::sync::OnceLock::new();
+
+/// Register Fluux's startup-only termination filter. With no registration,
+/// the runtime's original termination handler remains unchanged.
+#[cfg(all(target_os = "macos", feature = "fluux-startup-recovery"))]
+pub fn set_fluux_startup_termination_gate(gate: extern "C" fn(*mut std::ffi::c_void) -> bool) {
+  let _ = FLUUX_STARTUP_TERMINATION_GATE.set(gate);
+}
+
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub trait WebViewBuilderExtDarwin {
   /// Initialize the WebView with a custom data store identifier.

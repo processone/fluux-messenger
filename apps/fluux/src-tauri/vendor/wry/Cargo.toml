@@ -44,6 +44,10 @@ targets = [
 ]
 
 [features]
+# Fluux-only macOS startup gate. The host supplies the C callback; all other
+# Wry users keep their existing termination behavior. Remove with an upstream
+# Tauri runtime API for overriding the termination reload at window creation.
+fluux-startup-recovery = []
 default = [
     "os-webview",
     "x11",

@@ -8,6 +8,7 @@ pub mod backend;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
+#[cfg_attr(feature = "startup-recovery-lab", path = "startup_lab.rs")]
 mod macos;
 pub mod settings_pane;
 #[cfg(target_os = "windows")]

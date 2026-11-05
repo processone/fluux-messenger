@@ -1,4 +1,5 @@
 import { prepareNativePushAccount } from '@/hooks/useNativePush'
+import { reportStartupShell, isStartupRecoveryDisconnect } from '@/utils/startupRecovery'
 import React, { useState, useEffect, useRef } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
@@ -46,6 +47,7 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ claimConnection }: LoginScreenProps) {
+  useEffect(() => { void reportStartupShell() }, [])
   detectRenderLoop('LoginScreen')
   const { t, i18n } = useTranslation()
   const { status, error, discoveryFailure } = useConnectionStatus()
@@ -69,7 +71,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     // disconnect the user has to keep interacting with. Reloading here destroys
     // the JS context that still owes the shutdown handler its `stop_xmpp_proxy`
     // / `exit_app` calls, downgrading a clean quit to Rust's 2s force-exit.
-    if (isShuttingDown()) return
+    if (isShuttingDown() || isStartupRecoveryDisconnect()) return
     const flag = sessionStorage.getItem('__wry_was_online')
     if (!flag) return
 
@@ -125,6 +127,10 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     hasLoadedCredentials.current = true
 
     const loadCredentials = async () => {
+      if (isStartupRecoveryDisconnect()) {
+        setIsLoadingCredentials(false)
+        return
+      }
       const usesKeychain = platform().nativeKeychain
       setUsesKeychain(usesKeychain)
 
@@ -285,7 +291,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     // a connection opened now is killed by the exit seconds later, leaving a
     // ghost session on the server until it times out. `hasAutoConnected` cannot
     // catch this: shutdown routes here as a *fresh mount*, so the ref is reset.
-    if (isShuttingDown()) return
+    if (isShuttingDown() || isStartupRecoveryDisconnect()) return
 
     // Mark as auto-connected to prevent loops
     hasAutoConnected.current = true

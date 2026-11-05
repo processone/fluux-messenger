@@ -43,6 +43,7 @@ import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
 import { useSDKErrorToasts } from '@/hooks/useSDKErrorToasts'
 import { useReactionNotifications } from '@/hooks/useReactionNotifications'
+import { reportStartupShell } from '@/utils/startupRecovery'
 import { useEasterEggNotifications } from '@/hooks/useEasterEggNotifications'
 import { useFocusZones, useViewNavigation, isMobileWeb, isSmallScreen, useWindowVisibility, useRouteSync, useDayBoundaryWatcher, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -57,6 +58,7 @@ import { Server, ShieldOff, MessageCircle, Hash, Users, Search, Settings, Plus, 
  * now lives in the global modalStore, so no context provider is needed.
  */
 export function ChatLayout() {
+  useEffect(() => { void reportStartupShell() }, [])
   return <ChatLayoutContent />
 }
 

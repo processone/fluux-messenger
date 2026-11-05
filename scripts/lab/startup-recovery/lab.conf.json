@@ -1,0 +1,24 @@
+{
+  "identifier": "net.processone.fluux.startup-lab",
+  "productName": "Fluux Startup Lab",
+  "build": {
+    "beforeBuildCommand": "",
+    "features": ["production-tls", "startup-recovery-lab"]
+  },
+  "app": {
+    "windows": [{
+      "label": "main",
+      "title": "Fluux Startup Lab",
+      "width": 1000,
+      "height": 700,
+      "minWidth": 360,
+      "minHeight": 600,
+      "backgroundColor": "#313338",
+      "backgroundThrottling": "disabled"
+    }]
+  },
+  "bundle": {
+    "active": false,
+    "createUpdaterArtifacts": false
+  }
+}

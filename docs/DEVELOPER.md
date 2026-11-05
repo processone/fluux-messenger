@@ -175,6 +175,33 @@ npm run test:e2e -- --project="*-chromium" --workers=2
 npm run test:e2e -- --project=scroll-reading-webkit
 ```
 
+### macOS native startup recovery
+
+On macOS a native cover sits above the webview until the page proves it is
+usable: the login or chat shell reports that it mounted, and a snapshot of a
+small known-color pattern confirms that the page actually draws.
+`startup_recovery.rs` owns the policy (a 20 s budget of visible, awake time per
+attempt and a single retry); `startup_recovery/macos.rs` bridges it to the
+AppKit/WebKit adapter in `macos/StartupRecovery.m`. The frontend only reports
+shell readiness (`src/utils/startupRecovery.ts`) and disconnects its client
+before a reset.
+
+A failed or unanswered drawing check resets once: the page is asked to
+disconnect within the SDK's bounded cleanup time (derived in `build.rs`), then
+reloaded. If the page never acknowledges, the native proxy retires its own
+connections before the reload, so no second server client can appear. An
+explicit cleanup failure, a second failed attempt or missing readiness ends on
+the native controls (Restart Fluux, Copy diagnostics, Quit) without clearing
+data. Credential access pauses the clock and shows its own status.
+Page-initiated reloads stay allowed and renew neither the budget nor the retry.
+The vendored Wry feature `fluux-startup-recovery` routes a WebContent
+termination during startup through the same budget; once the app is usable the
+runtime keeps its default behavior.
+
+The disposable lab app that exercises the recovery against a real window is
+documented in
+[`scripts/lab/startup-recovery`](../scripts/lab/startup-recovery/README.md).
+
 ### Local Rust build caching
 
 Use Cargo's normal local build cache and incremental compilation. The

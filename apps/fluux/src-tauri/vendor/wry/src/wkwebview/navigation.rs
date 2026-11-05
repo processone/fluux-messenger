@@ -108,6 +108,13 @@ pub(crate) fn web_content_process_did_terminate(
   this: &WryNavigationDelegate,
   _webview: &WKWebView,
 ) {
+  // A startup-only host gate must run before Tauri's default termination reload.
+  // Do not replace the navigation delegate or alter any other callback.
+  #[cfg(all(target_os = "macos", feature = "fluux-startup-recovery"))]
+  {
+    let ptr = _webview as *const WKWebView as *mut std::ffi::c_void;
+    if crate::FLUUX_STARTUP_TERMINATION_GATE.get().is_some_and(|gate| gate(ptr)) { return; }
+  }
   if let Some(on_web_content_process_terminate) =
     &this.ivars().on_web_content_process_terminate_handler
   {

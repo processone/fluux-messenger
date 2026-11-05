@@ -2066,6 +2066,7 @@ dependencies = [
  "uuid",
  "webkit2gtk",
  "webpki-roots",
+ "wry",
  "x11",
  "zbus 5.19.0",
 ]

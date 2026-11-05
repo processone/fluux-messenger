@@ -48,6 +48,7 @@ import { startSystemNotificationEffect } from '@/effects/systemNotificationEffec
 import { markConnectActive } from './utils/reconnectIntent'
 import { platform } from './platform'
 import { useCustomWindowChrome } from './platform/windowChrome'
+import { installStartupCleanup } from './utils/startupRecovery'
 
 // Fixed title bar height for macOS traffic lights (only used in Tauri on macOS)
 const TITLEBAR_HEIGHT = 28
@@ -93,6 +94,7 @@ function App() {
   useForgetWrapOnAccountChange(status, accountJid)
   useWrapIdentityAliases()
   const { client } = useXMPPContext()
+  useEffect(() => installStartupCleanup(() => client.disconnect()), [client])
   useMcpBridge(client)
   const { t } = useTranslation()
   const addToast = useToastStore((s) => s.addToast)
