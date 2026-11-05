@@ -148,11 +148,11 @@ interface Jump { writes: string[]; st: number[]; phase: string; frame: number; j
 
 function analyse(frames: any[]) {
   const jumps: Jump[] = []
-  const byPhase: Record<string, { frames: number; jumps1: number; jumps4: number; max: number; sumAbs: number; userPx: number; longFrames: number; intervals: number[] }> = {}
+  const byPhase: Record<string, { frames: number; jumps1: number; jumps4: number; max: number; sumAbs: number; userPx: number; longFrames: number; intervals: number[]; tracked: number; decodesAbove: number; scrolled: number }> = {}
   for (let k = 1; k < frames.length; k++) {
     const a = frames[k - 1], b = frames[k]
     if (a.phase !== b.phase) continue
-    const ph = (byPhase[b.phase] ??= { frames: 0, jumps1: 0, jumps4: 0, max: 0, sumAbs: 0, userPx: 0, longFrames: 0, intervals: [] })
+    const ph = (byPhase[b.phase] ??= { frames: 0, jumps1: 0, jumps4: 0, max: 0, sumAbs: 0, userPx: 0, longFrames: 0, intervals: [], tracked: 0, decodesAbove: 0, scrolled: 0 })
     ph.frames++
     const dt = b.ts - a.ts
     ph.intervals.push(dt)
@@ -169,7 +169,14 @@ function analyse(frames: any[]) {
       if (d < bestDist) { bestDist = d; best = r }
     }
     ph.userPx += Math.abs(b.st - a.st - b.comp)
+    ph.scrolled += Math.abs(b.st - a.st)
+    // A row above the viewport that went from loading to decoded in this frame.
+    for (const r of b.rows) {
+      const q = prev.get(r[0])
+      if (q && q[3] !== 'decoded' && r[3] === 'decoded' && r[1] + r[2] < b.st) ph.decodesAbove++
+    }
     if (!best) continue
+    ph.tracked++
     const p = prev.get(best[0])!
     const jump = (best[1] - p[1]) - b.comp
     if (Math.abs(jump) >= 1) {
@@ -192,7 +199,7 @@ function analyse(frames: any[]) {
     const sorted = [...v.intervals].sort((x, y) => x - y)
     return [k, {
       frames: v.frames, jumpFrames: v.jumps1, jumpFramesOver4px: v.jumps4,
-      maxJumpPx: +v.max.toFixed(2), totalJumpPx: +v.sumAbs.toFixed(1), readerScrollPx: Math.round(v.userPx),
+      maxJumpPx: +v.max.toFixed(2), totalJumpPx: +v.sumAbs.toFixed(1), readerScrollPx: Math.round(v.userPx), scrolledPx: Math.round(v.scrolled), trackedFrames: v.tracked, decodesAbove: v.decodesAbove,
       longFrames: v.longFrames, p95FrameMs: +(sorted[Math.floor(sorted.length * 0.95)] ?? 0).toFixed(1),
     }]
   }))
@@ -219,8 +226,16 @@ for (const mode of ['images-with-size', 'images-without-size', 'text-only'] as M
       [p, Math.round(data.wheel.filter((w: any) => w.phase === p).reduce((s: number, w: any) => s + Math.abs(w.dy), 0))]))
     const report = { browserName, mode, summary, wheelPx, writes: data.writes.length, jumps: jumps.slice(0, 80) }
     await testInfo.attach('media-report', { body: JSON.stringify(report, null, 1), contentType: 'application/json' })
-    // The reader must have actually scrolled, or a still page would pass.
-    for (const p of ['up-cold', 'up-warm']) expect(wheelPx[p]).toBeGreaterThan(5000)
+    // The list must actually have moved and been tracked, or a still page would pass.
+    for (const phase of ['up-cold', 'down-warm', 'up-warm']) {
+      expect(summary[phase].scrolledPx, `${phase}: list did not move`).toBeGreaterThan(3000)
+      expect(summary[phase].trackedFrames, `${phase}: no frames tracked`).toBeGreaterThan(50)
+    }
+    // Image modes must really exercise the bug: images decode above the viewport while the
+    // reader scrolls up for the first time.
+    if (mode !== 'text-only') {
+      expect(summary['up-cold'].decodesAbove, 'no image decoded above the viewport during up-cold').toBeGreaterThan(0)
+    }
     // No frame moves the content the reader is looking at by 1px or more other than through
     // their own scroll.
     for (const phase of Object.keys(summary)) {

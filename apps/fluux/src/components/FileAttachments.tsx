@@ -69,8 +69,9 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   // Check if this URL previously failed - initialize state from cache
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(originalImageSrc))
   // An unsized image has no box until it decodes; reserveBox holds the default 4:3 box open
-  // until then so a lazy or late decode above the reader does not resize the row.
-  const [decoded, setDecoded] = useState(false)
+  // until then so a lazy or late decode above the reader does not resize the row. Keyed by
+  // source so a corrected attachment (new URL, same component) is reserved again.
+  const [decodedSrc, setDecodedSrc] = useState<string | null>(null)
 
   // Media-autoload gating: defer fetch unless policy allows or user tapped
   const { shouldLoad, approve } = useDeferredMedia(originalImageSrc, isOwnMessage)
@@ -106,7 +107,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   const width = attachment.width ?? attachment.thumbnail?.width
   const height = attachment.height ?? attachment.thumbnail?.height
   const hasKnownDimensions = width !== undefined && height !== undefined
-  const reserveBox = !hasKnownDimensions && !decoded
+  const reserveBox = !hasKnownDimensions && decodedSrc !== originalImageSrc
 
   // Calculate aspect ratio to reserve space and prevent layout shift
   // Use 4:3 as default for unknown dimensions (common photo ratio)
@@ -256,7 +257,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
             // re-opens (cached <img>s re-fire onLoad on every re-mount). Unsized images fall
             // back to a default box that the real decode CAN resize, so those still notify.
             onLoad={hasKnownDimensions ? undefined : () => {
-              setDecoded(true)
+              setDecodedSrc(originalImageSrc)
               onLoad?.()
             }}
             onError={() => {
