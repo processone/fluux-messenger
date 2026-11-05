@@ -23,8 +23,7 @@ struct ShortcutConversation: Codable, Equatable {
             if let entry = current.first(where: { $0.destination.identifier == identifier }) { return entry }
             // A saved shortcut must still open the app after logout or removal.
             // Only the live WebView session can authorize navigation to its target.
-            guard let destination = ConversationDestination.decode(identifier) else { return nil }
-            return Self(id: destination.jid, name: destination.jid, kind: destination.type, account: destination.account)
+            return ConversationDestination.decode(identifier).map(Self.init)
         }
     }
 
@@ -38,6 +37,13 @@ struct ShortcutConversation: Codable, Equatable {
         // URLSearchParams in the WebView treats a raw plus as a form-encoded space.
         url.percentEncodedQuery = url.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         return url.url
+    }
+}
+
+extension ShortcutConversation {
+    /// An entry known only by its destination, named by its address.
+    init(_ destination: ConversationDestination) {
+        self.init(id: destination.jid, name: destination.jid, kind: destination.type, account: destination.account)
     }
 }
 

@@ -250,6 +250,36 @@ import UniformTypeIdentifiers
         precondition(NotificationPresentation.intent(from: "invalid", body: "Fixture", names: names) == nil)
     }
 
+    /// Captain's report: tapping the Siri suggestion "Envoyer un message à Babette"
+    /// opened the app on its current screen instead of Babette's conversation.
+    static func suggestionLaunch() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let names = SharedNames(contacts: ["babette@example.com": "Babette"], rooms: ["team@muc.example.com": "Team"], account: "me+work@example.com")
+        for destination in [ConversationDestination(account: "me+work@example.com", jid: "babette@example.com", type: "chat"),
+                            ConversationDestination(account: "me+work@example.com", jid: "team@muc.example.com", type: "groupchat")] {
+            let donated = INInteraction(intent: ShareSuggestions.intent(for: destination, names: names, root: root)!, response: nil)
+            // iOS keeps the donation archived and hands a decoded copy back with the tap.
+            let archive = try NSKeyedArchiver.archivedData(withRootObject: donated, requiringSecureCoding: true)
+            let tapped = try NSKeyedUnarchiver.unarchivedObject(ofClass: INInteraction.self, from: archive)!
+            let opened = ShareSuggestions.destination(of: tapped.intent)
+            precondition(opened == destination, "A tapped suggestion must name its own conversation")
+            let link = URLComponents(url: ShortcutConversation(opened!).url(scheme: "net.processone.fluux")!, resolvingAgainstBaseURL: false)!
+            precondition(link.scheme == "net.processone.fluux" && link.host == "shortcut")
+            precondition(Set(link.queryItems!) == [URLQueryItem(name: "account", value: destination.account),
+                                                   URLQueryItem(name: "kind", value: destination.type),
+                                                   URLQueryItem(name: "id", value: destination.jid)])
+        }
+        precondition(ShareSuggestions.intent(for: ConversationDestination(account: "other@example.com", jid: "babette@example.com", type: "chat"), names: names, root: root) == nil,
+                     "Only the signed-in account's conversations are suggested")
+        let other = INSendMessageIntent(recipients: nil, outgoingMessageType: .outgoingMessageText, content: nil, speakableGroupName: nil,
+                                        conversationIdentifier: "babette@example.com", serviceName: nil, sender: nil, attachments: nil)
+        precondition(ShareSuggestions.destination(of: other) == nil, "A conversation id Fluux did not donate opens nothing")
+        precondition(ShareSuggestions.destination(of: INIntent()) == nil, "Only a message suggestion names a conversation")
+        precondition(ShareSuggestions.destination(of: nil) == nil)
+    }
+
     static func roomParticipants() throws {
         let json = #"{"account":"me@example.com","rooms":{"team@muc.example.com":"Team"},"roomParticipants":{"team@muc.example.com":{"ownNick":"Me","nicks":["Alice","Bob","Me"]}}}"#
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -388,6 +418,8 @@ import UniformTypeIdentifiers
             try! mirror()
         case "intents":
             intents()
+        case "suggestion-launch":
+            try! suggestionLaunch()
         case "conversations":
             conversations()
         case "direct":

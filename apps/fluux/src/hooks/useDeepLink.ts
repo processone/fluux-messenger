@@ -8,15 +8,23 @@
  */
 import { useEffect, useRef, useCallback } from 'react'
 import { useChat, useRoom, useRoster, chatStore, roomStore, connectionStore, rosterStore, type Conversation, parseXmppUri, isMucJid, getBareJid, getLocalPart } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { useConnectionStore, useRosterStore } from '@fluux/sdk/react'
 import { useNavigateToTarget } from './useNavigateToTarget'
 import { useTranslation } from 'react-i18next'
 import { useToastStore } from '@/stores/toastStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 import { platform } from '@/platform'
-import { resolveShortcutURL } from '@/utils/shortcutConversation'
-import { ensureDeepLinkRouter, setNavigationHandler, takeQueuedDeepLinks } from '@/utils/deepLinkRouter'
+import { isShortcutURL, resolveShortcutURL } from '@/utils/shortcutConversation'
+import { deferDeepLink, ensureDeepLinkRouter, setNavigationHandler, takeQueuedDeepLinks } from '@/utils/deepLinkRouter'
 import { useNavigate } from 'react-router'
+
+/**
+ * Whether the stores hold the live account's conversations: its roster has
+ * loaded. A cold launch is online before that, while the roster is fetched.
+ */
+function rosterLoadedFor(liveJid: string | null, roster: { isLoaded: boolean; accountJid: string | null }): boolean {
+  return !!liveJid && roster.isLoaded && roster.accountJid === liveJid.split('/')[0]
+}
 
 /**
  * Hook that listens for XMPP deep links and navigates accordingly.
@@ -35,6 +43,7 @@ export function useDeepLink() {
   // Use focused selectors to only subscribe to jid and status
   const jid = useConnectionStore((s) => s.jid)
   const status = useConnectionStore((s) => s.status)
+  const rosterReady = useRosterStore((s) => rosterLoadedFor(jid, s))
   const contactsRef = useRef(contacts)
   const jidRef = useRef(jid)
 
@@ -46,18 +55,19 @@ export function useDeepLink() {
 
   // Handle an XMPP URI
   const handleXmppUri = async (uri: string) => {
-    if (uri.includes('://shortcut')) {
+    if (isShortcutURL(uri)) {
       const liveAccount = connectionStore.getState().jid ?? null
-      const roster = rosterStore.getState()
-      const shortcut = resolveShortcutURL(uri,
-        roster.isLoaded && roster.accountJid === liveAccount?.split('/')[0] ? liveAccount : null,
-        chatStore.getState().conversations, roomStore.getState().rooms)
-      if (shortcut !== undefined) {
-        if (!shortcut) void navigate('/messages')
-        else if (shortcut.kind === 'chat') navigateToConversation(shortcut.id)
-        else navigateToRoom(shortcut.id)
+      // A shortcut is checked against the live account's conversations, so it
+      // waits for that account's roster (replayed below once it has loaded).
+      if (!rosterLoadedFor(liveAccount, rosterStore.getState())) {
+        deferDeepLink(uri)
         return
       }
+      const shortcut = resolveShortcutURL(uri, liveAccount, chatStore.getState().conversations, roomStore.getState().rooms)
+      if (!shortcut) void navigate('/messages')
+      else if (shortcut.kind === 'chat') navigateToConversation(shortcut.id)
+      else navigateToRoom(shortcut.id)
+      return
     }
     // Other app-scheme links only bring the app to the foreground.
     if (!uri.startsWith('xmpp:')) return
@@ -168,9 +178,10 @@ export function useDeepLink() {
   }, [handleXmppUriSafely])
 
   // Links that arrived before the app was online (during the startup reconnect
-  // or on the login form) are replayed once, now that they can be acted on.
+  // or on the login form) are replayed once it is, and again once the
+  // account's roster has loaded, for the shortcuts that wait for it.
   useEffect(() => {
     if (!platform().hasDeepLinkEvents || status !== 'online') return
     for (const uri of takeQueuedDeepLinks()) handleXmppUriSafely(uri)
-  }, [status, handleXmppUriSafely])
+  }, [status, rosterReady, handleXmppUriSafely])
 }
