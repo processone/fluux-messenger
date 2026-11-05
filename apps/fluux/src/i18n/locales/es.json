@@ -980,6 +980,7 @@
             "backupReplaceOwnMessage": "Se generará una nueva frase de contraseña y tu copia de seguridad del servidor se volverá a cifrar con ella. La frase de contraseña que guardaste para la copia actual dejará de funcionar, incluso en cualquier otro cliente donde la hayas configurado. Tu clave en sí no cambia.",
             "backupReplaceOwnAction": "Reemplazar copia",
             "backupReplaceUnknownTitle": "¿Reemplazar la copia de seguridad de este servidor?",
+            "backupReplaceUnconfirmedMessage": "Ya hay una copia de seguridad almacenada en este servidor. La publicación la reemplaza y la frase de contraseña guardada para esa copia dejará de funcionar. La clave en sí no cambia.",
             "backupReplaceUnknownMessage": "No pudimos comprobar si ya existe una copia de seguridad en este servidor. La publicación la reemplazará si existe, y la frase de contraseña guardada para esa copia dejará de funcionar. Tu clave en sí no cambia.",
             "backupReplaceUnknownAction": "Publicar de todos modos",
             "rotateLabel": "Rotar la clave de cifrado",

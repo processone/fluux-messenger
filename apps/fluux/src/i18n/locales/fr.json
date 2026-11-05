@@ -1011,6 +1011,7 @@
             "backupReplaceOwnMessage": "Une nouvelle phrase secrète sera générée et votre sauvegarde serveur sera rechiffrée avec elle. La phrase secrète que vous avez enregistrée pour la sauvegarde actuelle cessera de fonctionner, y compris dans tout autre client où vous l'avez configurée. Votre clé elle-même reste inchangée.",
             "backupReplaceOwnAction": "Remplacer la sauvegarde",
             "backupReplaceUnknownTitle": "Remplacer la sauvegarde sur ce serveur ?",
+            "backupReplaceUnconfirmedMessage": "Une sauvegarde est déjà stockée sur ce serveur. La publication la remplace et la phrase secrète enregistrée pour cette sauvegarde cessera de fonctionner. Votre clé elle-même reste inchangée.",
             "backupReplaceUnknownMessage": "Nous n'avons pas pu vérifier si une sauvegarde existe déjà sur ce serveur. La publication la remplacera si c'est le cas, et la phrase secrète enregistrée pour cette sauvegarde cessera de fonctionner. Votre clé elle-même reste inchangée.",
             "backupReplaceUnknownAction": "Publier quand même",
             "rotateLabel": "Rotation de la clé de chiffrement",

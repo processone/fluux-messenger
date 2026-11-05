@@ -981,6 +981,7 @@
             "backupReplaceOwnMessage": "Vygeneruje sa nové heslo a vaša záloha na serveri sa ním znova zašifruje. Heslo, ktoré ste uložili pre aktuálnu zálohu, prestane fungovať, a to aj v akomkoľvek inom klientovi, kde ste ho nastavili. Samotný kľúč zostáva nezmenený.",
             "backupReplaceOwnAction": "Nahradiť zálohu",
             "backupReplaceUnknownTitle": "Nahradiť zálohu na tomto serveri?",
+            "backupReplaceUnconfirmedMessage": "Na tomto serveri je už uložená záloha. Zverejnenie ju nahradí a uložená prístupová fráza pre túto zálohu prestane fungovať. Samotný kľúč sa nezmení.",
             "backupReplaceUnknownMessage": "Nepodarilo sa nám overiť, či na tomto serveri záloha už existuje. Zverejnenie ju nahradí, ak existuje, a heslo uložené pre túto zálohu prestane fungovať. Samotný kľúč zostáva nezmenený.",
             "backupReplaceUnknownAction": "Napriek tomu zverejniť",
             "rotateLabel": "Rotovať šifrovací kľúč",

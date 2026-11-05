@@ -23,6 +23,11 @@ const jid = 'alice@example.com'
 const secretNode = 'urn:xmpp:openpgp:0:secret-key'
 const publicNode = 'urn:xmpp:openpgp:0:public-keys'
 class InspectableWebPlugin extends WebOpenPGPPlugin {
+  readonly serverInspections: string[] = []
+  protected override backupImportAll(account: string, message: string, passphrase: string, stageForInstall = true) {
+    if (!stageForInstall) this.serverInspections.push(passphrase)
+    return super.backupImportAll(account, message, passphrase, stageForInstall)
+  }
   exportBackup(passphrase: string) { return this.buildExportArmor(passphrase) }
   inspectBackup(message: string, passphrase: string) { return this.backupImportAll(jid, message, passphrase, false) }
 }
@@ -187,6 +192,20 @@ describe('server backup identity after file installation', () => {
     expect(f.plugin.getOwnFingerprint()).toBe(webMeta.aliceFingerprint)
     expect(f.plugin.getBackedUpFingerprint()).toBe(webMeta.aliceFingerprint)
     expect(await f.plugin.fetchSecretKeyBackup()).toBe(serverBefore)
+    expect(f.publications).not.toContain(secretNode)
+  })
+
+  it('S3 tries each distinct server code once when an old file cannot open that backup', async () => {
+    const workingCode = legacyNormalizeBackupPassphrase(meta.backupPassphrase)
+    const [alice] = await decode(fixture('web_alice_backup.asc'), workingCode)
+    const otherCode = JSON.parse(fixture('migration_meta.json')).openkeychain.passphrase
+    const server = await encrypt({ message: await createMessage({ binary: alice.write() }), passwords: [otherCode], format: 'armored' })
+    const f = await setup()
+    f.nodes.set(secretNode, [{ id: 'current', payload: { name: 'secretkey', attrs: { xmlns: 'urn:xmpp:openpgp:0' }, children: [Buffer.from((await unarmor(server)).data).toString('base64')] } }])
+    await f.plugin.importKeyFromFile(fixture('web_alice_backup.asc'), meta.backupPassphrase)
+    expect(f.plugin.getOwnFingerprint()).toBe(webMeta.aliceFingerprint)
+    expect(f.plugin.getBackedUpFingerprint()).toBeNull()
+    expect(f.plugin.serverInspections).toEqual([workingCode, meta.backupPassphrase])
     expect(f.publications).not.toContain(secretNode)
   })
 

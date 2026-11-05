@@ -976,6 +976,7 @@
             "backupReplaceOwnMessage": "Új jelmondat jön létre, és a kiszolgálón lévő biztonsági mentése újra titkosításra kerül vele. A jelenlegi mentéshez elmentett jelmondat megszűnik működni, bármely más alkalmazásban is, ahol beállította azt. Maga a kulcs változatlan marad.",
             "backupReplaceOwnAction": "Mentés lecserélése",
             "backupReplaceUnknownTitle": "Lecseréli a biztonsági mentést ezen a kiszolgálón?",
+            "backupReplaceUnconfirmedMessage": "Ezen a kiszolgálón már van mentett biztonsági másolat. A közzététel lecseréli, és a hozzá mentett jelmondat többé nem fog működni. Maga a kulcs változatlan marad.",
             "backupReplaceUnknownMessage": "Nem sikerült ellenőriznünk, hogy létezik-e már biztonsági mentés ezen a kiszolgálón. A közzététel lecseréli, ha van ilyen, és az ahhoz a mentéshez elmentett jelmondat megszűnik működni. Maga a kulcs változatlan marad.",
             "backupReplaceUnknownAction": "Közzététel mindenképp",
             "rotateLabel": "Titkosítási kulcs cseréje",

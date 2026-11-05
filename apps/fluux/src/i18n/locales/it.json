@@ -980,6 +980,7 @@
             "backupReplaceOwnMessage": "Verrà generata una nuova passphrase e il tuo backup sul server sarà ri-cifrato con essa. La passphrase salvata per il backup attuale smetterà di funzionare, anche in qualsiasi altro client in cui l'hai configurata. La tua chiave in sé resta invariata.",
             "backupReplaceOwnAction": "Sostituisci backup",
             "backupReplaceUnknownTitle": "Sostituire il backup su questo server?",
+            "backupReplaceUnconfirmedMessage": "Su questo server è già archiviato un backup. La pubblicazione lo sostituisce e la passphrase salvata per quel backup smetterà di funzionare. La chiave stessa non cambia.",
             "backupReplaceUnknownMessage": "Non siamo riusciti a verificare se esiste già un backup su questo server. La pubblicazione lo sostituirà se presente, e la passphrase salvata per quel backup smetterà di funzionare. La tua chiave in sé resta invariata.",
             "backupReplaceUnknownAction": "Pubblica comunque",
             "rotateLabel": "Ruota la chiave di cifratura",

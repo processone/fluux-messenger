@@ -506,10 +506,13 @@ describe('EncryptionSettings PEP support', () => {
       mockPlugin!.getBackedUpFingerprint = () => null
       render(<EncryptionSettings />)
       await screen.findByText('settings.encryption.backupStatusUnconfirmed')
+      expect(screen.queryByRole('button', { name: 'settings.encryption.backupStatusRetry' })).not.toBeInTheDocument()
       expect(screen.queryByText('settings.encryption.backupStatusMismatch')).not.toBeInTheDocument()
       expect(screen.queryByText('settings.encryption.backupStatusInSync')).not.toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupAction' }))
       await screen.findByText('settings.encryption.backupReplaceUnknownTitle')
+      expect(screen.getByText('settings.encryption.backupReplaceUnconfirmedMessage')).toBeInTheDocument()
+      expect(screen.queryByText('settings.encryption.backupReplaceUnknownMessage')).not.toBeInTheDocument()
       expect(screen.queryByText('settings.encryption.backupConflictTitle')).not.toBeInTheDocument()
       expect(mockBackupSecretKey).not.toHaveBeenCalled()
     })

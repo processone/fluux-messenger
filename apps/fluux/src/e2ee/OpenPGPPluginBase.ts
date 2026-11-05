@@ -1777,11 +1777,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
               const inspect = (code: string) => this.backupImportAllWithLegacyFallback(
                 ctx.account.jid, serverBackup, code, 'confirmInstalledKeyBackup', false,
               )
-              const { bundles } = await inspect(passphrase).catch(error => {
-                // A legacy file may need its normalized code, while the same
-                // key's healed server backup needs the code the user typed.
+              const bundles = await inspect(passphrase).then(result => result.bundles).catch(error => {
+                // The working form already exhausted the legacy candidate.
+                // Try the distinct typed code once, without repeating it.
                 if (typedPassphrase === passphrase) throw error
-                return inspect(typedPassphrase)
+                return this.backupImportAll(ctx.account.jid, serverBackup, typedPassphrase, false)
               })
               backedUp = bundles.some(key => fingerprintsEqual(key.fingerprint, bundle.fingerprint))
             }

@@ -53,12 +53,12 @@ const GENERATION_TIMEOUT_MS = 60_000
 
 /**
  * Copy for the pre-publish confirmation. Publishing always overwrites the
- * server blob AND always mints a fresh passphrase, so both variants are
- * destructive; they differ only in what the user is losing.
- *   own     — this device published the current backup. The passphrase the
- *             user saved (and may have configured in other clients) dies.
- *   foreign — the server copy came from somewhere else. Whoever holds ITS
- *             passphrase loses access.
+ * server blob AND always mints a fresh passphrase. Every variant names the
+ * consequence without claiming facts the probe/marker did not establish.
+ *   own         — the marker confirms this key; its saved code stops working.
+ *   foreign     — a confirmed different marker; its saved code stops working.
+ *   unknown     — presence could not be checked; warn about possible replacement.
+ *   unconfirmed — presence is known, but the backup's identity is not.
  */
 const BACKUP_CONFIRM_KEYS = {
   own: {
@@ -74,6 +74,11 @@ const BACKUP_CONFIRM_KEYS = {
   unknown: {
     title: 'settings.encryption.backupReplaceUnknownTitle',
     message: 'settings.encryption.backupReplaceUnknownMessage',
+    action: 'settings.encryption.backupReplaceUnknownAction',
+  },
+  unconfirmed: {
+    title: 'settings.encryption.backupReplaceUnknownTitle',
+    message: 'settings.encryption.backupReplaceUnconfirmedMessage',
     action: 'settings.encryption.backupReplaceUnknownAction',
   },
 } as const
@@ -748,9 +753,9 @@ export function EncryptionSettings() {
    * existing backup gets a confirmation first — the user is about to
    * invalidate a code they may have written down or configured in another
    * client. Which copy we show depends on whose backup it is: `own` when
-   * our local marker says this device published the current one,
+   * our local marker confirms the current key,
    * `foreign` only for a confirmed different marker; unconfirmed identity
-   * uses `unknown`. With nothing on the server there is nothing to lose, we go
+   * uses factual known-presence copy. With no backup there is nothing to lose; go
    * straight to the passphrase dialog.
    */
   const handleBackupRequest = useCallback(() => {
@@ -762,12 +767,12 @@ export function EncryptionSettings() {
     if (backupState === 'unknown') {
       // Neither an inconclusive probe nor an unconfirmed identity tells us
       // whose backup this is. Use the warning that makes no ownership claim.
-      setBackupConfirmVariant('unknown')
+      setBackupConfirmVariant(backupUnconfirmed ? 'unconfirmed' : 'unknown')
       return
     }
     const isOwnBackup = isBackupInSync(backupState, backedUpFingerprint, fingerprint)
     setBackupConfirmVariant(isOwnBackup ? 'own' : 'foreign')
-  }, [backupState, backedUpFingerprint, fingerprint])
+  }, [backupState, backupUnconfirmed, backedUpFingerprint, fingerprint])
 
   const handleRestoreConfirm = useCallback(
     async (passphrase: string) => {
@@ -1259,7 +1264,8 @@ export function EncryptionSettings() {
                   </p>
                   {!checking && (
                     <div className="flex flex-wrap gap-2">
-                      {backupState === 'unknown' && (
+                      {/* Only a failed presence probe can be retried here; confirming identity needs its code. */}
+                      {backupProbe === 'unknown' && (
                         <button
                           type="button"
                           onClick={() => setBackupProbeNonce((n) => n + 1)}

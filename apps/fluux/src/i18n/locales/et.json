@@ -978,6 +978,7 @@
             "backupReplaceOwnMessage": "Luuakse uus paroolifraas ja teie serveris olev varukoopia krüpteeritakse sellega uuesti. Paroolifraas, mille salvestasite praeguse varukoopia jaoks, lakkab töötamast, sealhulgas mis tahes teises kliendis, kus selle seadistasite. Teie võti ise jääb muutumatuks.",
             "backupReplaceOwnAction": "Asenda varukoopia",
             "backupReplaceUnknownTitle": "Kas asendada selle serveri varukoopia?",
+            "backupReplaceUnconfirmedMessage": "Selles serveris on varukoopia juba salvestatud. Avaldamine asendab selle ja selle varukoopia jaoks salvestatud paroolifraas ei tööta enam. Võti ise ei muutu.",
             "backupReplaceUnknownMessage": "Meil ei õnnestunud kontrollida, kas selles serveris on juba varukoopia olemas. Avaldamine asendab selle, kui see on olemas, ning selle varukoopia jaoks salvestatud paroolifraas lakkab töötamast. Teie võti ise jääb muutumatuks.",
             "backupReplaceUnknownAction": "Avalda ikkagi",
             "rotateLabel": "Roteeri krüpteerimisvõti",

@@ -976,6 +976,7 @@
             "backupReplaceOwnMessage": "Er wordt een nieuwe wachtwoordzin gegenereerd en je serverback-up wordt daarmee opnieuw versleuteld. De wachtwoordzin die je voor de huidige back-up hebt opgeslagen, werkt niet meer, ook niet in een andere client waarin je hem had ingesteld. Je sleutel zelf blijft ongewijzigd.",
             "backupReplaceOwnAction": "Back-up vervangen",
             "backupReplaceUnknownTitle": "Back-up op deze server vervangen?",
+            "backupReplaceUnconfirmedMessage": "Er is al een back-up opgeslagen op deze server. Publiceren vervangt deze en de wachtwoordzin die voor die back-up is opgeslagen, werkt daarna niet meer. Uw sleutel zelf blijft ongewijzigd.",
             "backupReplaceUnknownMessage": "We konden niet controleren of er al een back-up bestaat op deze server. Publiceren vervangt die als hij bestaat, en de wachtwoordzin die voor die back-up is opgeslagen, werkt dan niet meer. Je sleutel zelf blijft ongewijzigd.",
             "backupReplaceUnknownAction": "Toch publiceren",
             "rotateLabel": "Versleutelingssleutel roteren",

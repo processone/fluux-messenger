@@ -976,6 +976,7 @@
             "backupReplaceOwnMessage": "Uusi tunnuslause luodaan, ja palvelimella oleva varmuuskopiosi salataan sillä uudelleen. Nykyistä varmuuskopiota varten tallentamasi tunnuslause lakkaa toimimasta, myös missä tahansa muussa asiakasohjelmassa, johon olet sen asettanut. Itse avaimesi pysyy muuttumattomana.",
             "backupReplaceOwnAction": "Korvaa varmuuskopio",
             "backupReplaceUnknownTitle": "Korvataanko tämän palvelimen varmuuskopio?",
+            "backupReplaceUnconfirmedMessage": "Tälle palvelimelle on jo tallennettu varmuuskopio. Julkaiseminen korvaa sen, eikä kyseiselle varmuuskopiolle tallennettu tunnuslause enää toimi. Itse avain ei muutu.",
             "backupReplaceUnknownMessage": "Emme voineet tarkistaa, onko tällä palvelimella jo varmuuskopio. Julkaiseminen korvaa sen, jos sellainen on, ja kyseiselle varmuuskopiolle tallennettu tunnuslause lakkaa toimimasta. Itse avaimesi pysyy muuttumattomana.",
             "backupReplaceUnknownAction": "Julkaise silti",
             "rotateLabel": "Vaihda salausavain",

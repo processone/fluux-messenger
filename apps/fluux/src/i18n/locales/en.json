@@ -855,6 +855,7 @@
             "backupReplaceOwnMessage": "A new passphrase will be generated and your server backup re-encrypted with it. The passphrase you saved for the current backup will stop working, including in any other client you set it up in. Your key itself is unchanged.",
             "backupReplaceOwnAction": "Replace backup",
             "backupReplaceUnknownTitle": "Replace the backup on this server?",
+            "backupReplaceUnconfirmedMessage": "A backup is already stored on this server. Publishing replaces it, and the passphrase saved for that backup will stop working. Your key itself is unchanged.",
             "backupReplaceUnknownMessage": "We couldn't check whether a backup already exists on this server. Publishing will replace it if there is one, and the passphrase saved for that backup will stop working. Your key itself is unchanged.",
             "backupReplaceUnknownAction": "Publish anyway",
             "rotateLabel": "Rotate encryption key",

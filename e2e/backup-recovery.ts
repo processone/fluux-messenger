@@ -222,9 +222,11 @@ async function openUnconfirmedSettings(page: Page) {
 
 test('unconfirmed backup uses neutral decisions and acknowledged rotation re-publishes the current key', async ({ page }) => {
   await openUnconfirmedSettings(page)
+  await expect(page.getByRole('button', { name: encryptionCopy.backupStatusRetry, exact: true })).toBeHidden()
   await expect(page.getByText(encryptionCopy.backupStatusMismatch, { exact: true })).toBeHidden()
   await page.getByRole('button', { name: encryptionCopy.backupAction, exact: true }).click()
-  await expect(page.getByText(encryptionCopy.backupReplaceUnknownMessage, { exact: true })).toBeVisible()
+  await expect(page.getByText(encryptionCopy.backupReplaceUnconfirmedMessage, { exact: true })).toBeVisible()
+  await expect(page.getByText(encryptionCopy.backupReplaceUnknownMessage, { exact: true })).toBeHidden()
   await expect(page.getByText(encryptionCopy.backupConflictTitle, { exact: true })).toBeHidden()
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   await page.getByRole('button', { name: encryptionCopy.keyManagement, exact: true }).click()

@@ -978,6 +978,7 @@
             "backupReplaceOwnMessage": "Generirat će se nova lozinka i vaša sigurnosna kopija na poslužitelju bit će ponovo šifrirana njome. Lozinka koju ste spremili za trenutnu sigurnosnu kopiju prestat će raditi, uključujući u bilo kojem drugom klijentu u kojem ste je postavili. Sam vaš ključ ostaje nepromijenjen.",
             "backupReplaceOwnAction": "Zamijeni kopiju",
             "backupReplaceUnknownTitle": "Zamijeniti sigurnosnu kopiju na ovom poslužitelju?",
+            "backupReplaceUnconfirmedMessage": "Na ovom je poslužitelju već spremljena sigurnosna kopija. Objavljivanje je zamjenjuje, a spremljena pristupna fraza za tu kopiju prestat će raditi. Sam ključ ostaje nepromijenjen.",
             "backupReplaceUnknownMessage": "Nismo mogli provjeriti postoji li već sigurnosna kopija na ovom poslužitelju. Objava će je zamijeniti ako postoji, a lozinka spremljena za tu sigurnosnu kopiju prestat će raditi. Sam vaš ključ ostaje nepromijenjen.",
             "backupReplaceUnknownAction": "Ipak objavi",
             "rotateLabel": "Rotiraj ključ za šifriranje",

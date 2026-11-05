@@ -976,6 +976,7 @@
             "backupReplaceOwnMessage": "En ny passordsetning blir generert, og sikkerhetskopien din på serveren blir kryptert på nytt med den. Passordsetningen du lagret for den nåværende sikkerhetskopien, slutter å fungere, også i enhver annen klient der du satte den opp. Selve nøkkelen din er uendret.",
             "backupReplaceOwnAction": "Erstatt sikkerhetskopi",
             "backupReplaceUnknownTitle": "Erstatte sikkerhetskopien på denne serveren?",
+            "backupReplaceUnconfirmedMessage": "Det er allerede lagret en sikkerhetskopi på denne serveren. Publisering erstatter den, og den lagrede passordfrasen for sikkerhetskopien slutter å virke. Selve nøkkelen endres ikke.",
             "backupReplaceUnknownMessage": "Vi kunne ikke sjekke om det allerede finnes en sikkerhetskopi på denne serveren. Publisering erstatter den hvis den finnes, og passordsetningen som er lagret for den sikkerhetskopien, slutter å fungere. Selve nøkkelen din er uendret.",
             "backupReplaceUnknownAction": "Publiser likevel",
             "rotateLabel": "Rotér krypteringsnøkkelen",

@@ -984,6 +984,7 @@
             "backupReplaceOwnMessage": "Se tiġi ġġenerata frażi sigrieta ġdida u l-backup tiegħek fuq is-server jiġi kkriptat mill-ġdid biha. Il-frażi sigrieta li ssejvjajt għall-backup attwali ma tibqax taħdem, inkluż fi kwalunkwe klijent ieħor fejn issettjajtha. Iċ-ċavetta tiegħek innifisha ma tinbidilx.",
             "backupReplaceOwnAction": "Ibdel il-backup",
             "backupReplaceUnknownTitle": "Tibdel il-backup fuq dan is-server?",
+            "backupReplaceUnconfirmedMessage": "Diġà hemm backup maħżun fuq dan is-server. Il-pubblikazzjoni tissostitwih, u l-passphrase salvata għal dak il-backup ma tibqax taħdem. Iċ-ċavetta nnifisha ma tinbidilx.",
             "backupReplaceUnknownMessage": "Ma stajniex nivverifikaw jekk diġà hemmx backup fuq dan is-server. Il-pubblikazzjoni tibdlu jekk ikun hemm wieħed, u l-frażi sigrieta ssejvjata għal dak il-backup ma tibqax taħdem. Iċ-ċavetta tiegħek innifisha ma tinbidilx.",
             "backupReplaceUnknownAction": "Ippubblika xorta waħda",
             "rotateLabel": "Irrota ċ-ċavetta tal-kriptaġġ",

@@ -978,6 +978,7 @@
             "backupReplaceOwnMessage": "Eine neue Passphrase wird erzeugt und dein Server-Backup damit neu verschlüsselt. Die Passphrase, die du für das aktuelle Backup gespeichert hast, funktioniert danach nicht mehr, auch nicht in einem anderen Client, in dem du sie eingerichtet hast. Dein Schlüssel selbst bleibt unverändert.",
             "backupReplaceOwnAction": "Backup ersetzen",
             "backupReplaceUnknownTitle": "Backup auf diesem Server ersetzen?",
+            "backupReplaceUnconfirmedMessage": "Auf diesem Server ist bereits eine Sicherung gespeichert. Die Veröffentlichung ersetzt sie, und die für diese Sicherung gespeicherte Passphrase funktioniert danach nicht mehr. Ihr Schlüssel selbst bleibt unverändert.",
             "backupReplaceUnknownMessage": "Wir konnten nicht prüfen, ob auf diesem Server bereits ein Backup existiert. Das Veröffentlichen ersetzt es, falls vorhanden, und die für dieses Backup gespeicherte Passphrase funktioniert danach nicht mehr. Dein Schlüssel selbst bleibt unverändert.",
             "backupReplaceUnknownAction": "Trotzdem veröffentlichen",
             "rotateLabel": "Verschlüsselungsschlüssel rotieren",

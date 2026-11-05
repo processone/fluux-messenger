@@ -980,6 +980,7 @@
             "backupReplaceOwnMessage": "Se va genera o nouă frază de acces, iar copia dumneavoastră de rezervă de pe server va fi recriptată cu aceasta. Fraza de acces salvată pentru copia curentă nu va mai funcționa, inclusiv în orice alt client în care ați configurat-o. Cheia dumneavoastră rămâne neschimbată.",
             "backupReplaceOwnAction": "Înlocuiește copia",
             "backupReplaceUnknownTitle": "Înlocuiți copia de rezervă de pe acest server?",
+            "backupReplaceUnconfirmedMessage": "Există deja o copie de siguranță stocată pe acest server. Publicarea o înlocuiește, iar fraza de acces salvată pentru acea copie nu va mai funcționa. Cheia în sine rămâne neschimbată.",
             "backupReplaceUnknownMessage": "Nu am putut verifica dacă există deja o copie de rezervă pe acest server. Publicarea o va înlocui dacă există, iar fraza de acces salvată pentru acea copie nu va mai funcționa. Cheia dumneavoastră rămâne neschimbată.",
             "backupReplaceUnknownAction": "Publică oricum",
             "rotateLabel": "Rotește cheia de criptare",

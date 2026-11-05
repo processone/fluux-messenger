@@ -513,7 +513,8 @@ encrypted packet bytes prove the source regardless
 of armor headers; otherwise the backend decrypts it with the install passphrase
 (including the established legacy-code fallback) and checks for the installed
 fingerprint. If a legacy file required a normalized working code, its original typed
-code is preserved through every picker and also tried against a healed server copy.
+code is preserved through every picker and also tried once against a healed server
+copy, without repeating the already-failed normalized candidate.
 This inspection does not replace a pending web picker selection.
 A failed read/decryption or a different identity leaves prior confirmed state alone;
 file import never publishes or heals a secret backup. Settings reads the confirmed
@@ -525,10 +526,12 @@ This also resets previously correct status until fresh evidence establishes it;
 explicit clearing removes both layouts for that account without touching others.
 Settings treats a present backup without a confirmed marker as unknown identity,
 not a mismatch or proof of another device's ownership. One certainty reading drives
-the neutral status, unknown replacement warning, rotation warning and rotation's
-backup-code acknowledgement. Rotation re-publishes in this state, deliberately
+the neutral status, factual known-presence replacement warning, rotation warning
+and rotation's backup-code acknowledgement. Rotation re-publishes in this state, deliberately
 replacing any existing backup and code, even when another device created them.
 A confirmed different marker remains a mismatch and retains its separate policy.
+Only a failed raw presence probe offers Check again; unconfirmed identity needs
+its code or fresh backup evidence, not another presence probe.
 
 ### Guided macOS backup recovery
 

@@ -979,6 +979,7 @@
             "backupReplaceOwnMessage": "Tiks izveidota jauna paroles frāze, un jūsu servera dublējums tiks ar to atkārtoti šifrēts. Paroles frāze, ko saglabājāt pašreizējai kopijai, pārstās darboties, arī jebkurā citā klientā, kurā to iestatījāt. Jūsu atslēga pati nemainās.",
             "backupReplaceOwnAction": "Aizstāt kopiju",
             "backupReplaceUnknownTitle": "Aizstāt rezerves kopiju šajā serverī?",
+            "backupReplaceUnconfirmedMessage": "Šajā serverī jau ir saglabāta rezerves kopija. Publicēšana to aizstāj, un šai kopijai saglabātā paroles frāze vairs nedarbosies. Pati atslēga nemainās.",
             "backupReplaceUnknownMessage": "Mums neizdevās pārbaudīt, vai šajā serverī jau ir rezerves kopija. Publicēšana to aizstās, ja tāda ir, un šai kopijai saglabātā paroles frāze pārstās darboties. Jūsu atslēga pati nemainās.",
             "backupReplaceUnknownAction": "Tomēr publicēt",
             "rotateLabel": "Rotēt šifrēšanas atslēgu",

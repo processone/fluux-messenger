@@ -976,6 +976,7 @@
             "backupReplaceOwnMessage": "系统将生成新的密码短语，并用它重新加密您在服务器上的备份。您为当前备份保存的密码短语将失效，包括在您设置过该密码短语的任何其他客户端中。您的密钥本身保持不变。",
             "backupReplaceOwnAction": "替换备份",
             "backupReplaceUnknownTitle": "替换此服务器上的备份?",
+            "backupReplaceUnconfirmedMessage": "此服务器上已存储备份。发布将替换它，为该备份保存的密码短语将不再有效。密钥本身保持不变。",
             "backupReplaceUnknownMessage": "我们无法确认此服务器上是否已经存在备份。发布将替换已有的备份，并且为该备份保存的密码短语将会失效。您的密钥本身保持不变。",
             "backupReplaceUnknownAction": "仍然发布",
             "rotateLabel": "轮换加密密钥",
