@@ -16,6 +16,17 @@ export function shortcutConversations(
   ]
 }
 
+function shortcutURL(uri: string): URL | null {
+  let url: URL
+  try { url = new URL(uri) } catch { return null }
+  return ['net.processone.fluux:', 'net.processone.fluux.demo:', 'net.processone.fluux.dev:'].includes(url.protocol) && url.hostname === 'shortcut' ? url : null
+}
+
+/** Whether a link is one of the app's conversation shortcuts (a Siri suggestion or a Shortcuts conversation). */
+export function isShortcutURL(uri: string): boolean {
+  return shortcutURL(uri) !== null
+}
+
 /** Undefined leaves other schemes alone; null requests the conversation list. */
 export function resolveShortcutURL(
   uri: string,
@@ -23,9 +34,8 @@ export function resolveShortcutURL(
   conversations: ReadonlyMap<string, unknown>,
   rooms: ReadonlyMap<string, unknown>,
 ): ShortcutConversation | null | undefined {
-  let url: URL
-  try { url = new URL(uri) } catch { return undefined }
-  if (!['net.processone.fluux:', 'net.processone.fluux.demo:', 'net.processone.fluux.dev:'].includes(url.protocol) || url.hostname !== 'shortcut') return undefined
+  const url = shortcutURL(uri)
+  if (!url) return undefined
   const owner = url.searchParams.get('account')
   const id = url.searchParams.get('id')
   const kind = url.searchParams.get('kind')

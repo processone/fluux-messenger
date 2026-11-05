@@ -884,7 +884,9 @@ A tapped Siri suggestion reaches the scene delegate as the donated
 `INSendMessageIntent` activity: in the connection options on a cold launch, in
 `scene(_:continue:)` otherwise. Tao's scene delegate keeps only web links, so
 `SuggestionLaunch.swift` in the push plugin turns the suggestion's conversation
-into the same `shortcut` link the open action uses.
+into the same `shortcut` link the open action uses. A cold launch is online
+before the account's roster has loaded, so `useDeepLink` holds a `shortcut`
+link in the deep link router's queue until it has, then checks it.
 
 `npm run test:ios-notifications` includes synthetic mirror/cleanup tests and
 an iOS 15 simulator-target compile/link check for the availability gates.

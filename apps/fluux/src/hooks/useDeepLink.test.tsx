@@ -128,8 +128,11 @@ vi.mock('@fluux/sdk/react', () => ({
     }
     return selector(state)
   },
-  useConnectionStore: (selector: (state: { jid: string; status: string }) => string) => {
-    return selector({ jid: 'testuser@example.org', status: connectionState.status })
+  useConnectionStore: (selector: (state: { jid: string | null; status: string }) => string) => {
+    return selector({ jid: shortcutState.jid, status: connectionState.status })
+  },
+  useRosterStore: (selector: (state: { accountJid: string; isLoaded: boolean }) => unknown) => {
+    return selector({ accountJid: shortcutState.rosterAccount, isLoaded: shortcutState.loaded })
   },
   useContactTime: () => null, useLastActivity: vi.fn(),
 }))
@@ -243,13 +246,44 @@ describe('useDeepLink', () => {
     })
 
     test('revalidates the live account for a warm shortcut event', async () => {
-      renderHook(() => useDeepLink(), { wrapper: createWrapper('/contacts') })
+      const { rerender } = renderHook(() => useDeepLink(), { wrapper: createWrapper('/contacts') })
       await waitFor(() => expect(mockOnOpenUrl).toHaveBeenCalled())
       shortcutState.jid = 'other@example.org/phone'
+      rerender()
       await act(async () => mockOnOpenUrl.mock.calls[0][0](['net.processone.fluux://shortcut?account=testuser@example.org&kind=chat&id=alice@example.org']))
-      expect(currentLocation.current.pathname).toBe('/messages')
+      // The stores still hold the previous account's roster: the link waits for the live one.
+      expect(currentLocation.current.pathname).toBe('/contacts')
+
+      shortcutState.rosterAccount = 'other@example.org'
+      rerender()
+      await waitFor(() => expect(currentLocation.current.pathname).toBe('/messages'))
       expect(mockActivateConversation).not.toHaveBeenCalled()
       expect(mockJoinRoom).not.toHaveBeenCalled()
+    })
+
+    test('opens a suggestion tapped at launch once the account roster loads after the session is online', async () => {
+      // Source: FLM-379. Tapping the Siri suggestion "Envoyer un message à Babette"
+      // on a closed app showed the conversation list: the startup reconnect was
+      // online before the account's roster loaded, so the shortcut was refused.
+      const { routeDeepLink, setStartupLoginHandler } = await import('@/utils/deepLinkRouter')
+      connectionState.status = 'connecting'
+      shortcutState.rosterAccount = 'testuser@example.org'
+      shortcutState.loaded = false
+      setStartupLoginHandler(() => {})
+      const { rerender } = renderHook(() => useDeepLink(), { wrapper: createWrapper('/messages/bob%40example.org') })
+      await waitFor(() => expect(mockOnOpenUrl).toHaveBeenCalled())
+      routeDeepLink('net.processone.fluux://shortcut?account=testuser@example.org&kind=chat&id=alice@example.org')
+
+      setStartupLoginHandler(null)
+      connectionState.status = 'online'
+      rerender()
+      await act(async () => {})
+      expect(currentLocation.current.pathname).toBe('/messages/bob%40example.org')
+
+      shortcutState.loaded = true
+      rerender()
+      await waitFor(() => expect(currentLocation.current.pathname).toBe('/messages/alice%40example.org'))
+      expect(mockActivateConversation).toHaveBeenCalledWith('alice@example.org')
     })
 
     test('sets up deep link listener on mount', async () => {
