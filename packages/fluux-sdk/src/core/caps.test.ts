@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
 import {
   CLIENT_FEATURES,
@@ -87,6 +88,51 @@ describe('caps (XEP-0115)', () => {
       expect(features.filter((f) => f === NS_OPENPGP_IM)).toHaveLength(1)
       expect(features.filter((f) => f === NS_MDS_NOTIFY)).toHaveLength(1)
       expect(features).toEqual([...features].sort())
+    })
+  })
+
+  describe('feature order and fingerprint regression (XEP-0115 §5.1)', () => {
+    // i;octet puts UTF-8 EF A4 80 (U+F900) before F0 90 80 80 (U+10000).
+    // JavaScript's default UTF-16 sort reverses this equal-prefix pair.
+    const unicodeFeatures = [
+      'urn:test:',
+      'urn:test:A',
+      'urn:test:a',
+      'urn:test:\uF900',
+      'urn:test:\u{10000}',
+    ]
+
+    it.each([
+      {
+        name: 'Unicode extensions use explicit byte order',
+        extras: unicodeFeatures,
+        expectedFeatures: [
+          ...CLIENT_FEATURES.filter(f => f < 'urn:test:').sort(),
+          ...unicodeFeatures,
+          ...CLIENT_FEATURES.filter(f => f > 'urn:test:').sort(),
+        ],
+      },
+      {
+        name: 'current ASCII features retain their order and fingerprint',
+        extras: [],
+        expectedFeatures: [...CLIENT_FEATURES].sort(),
+      },
+      {
+        name: 'ASCII OpenPGP features retain their order and fingerprint',
+        extras: [NS_OPENPGP_IM],
+        expectedFeatures: [...new Set([...CLIENT_FEATURES, NS_OPENPGP_IM])].sort(),
+      },
+    ])('$name', async ({ extras, expectedFeatures }) => {
+      // Build the expectation without calling the capability implementation;
+      // Node's SHA-1 provides an independent check of the Web Crypto result.
+      const expectedVerification = `client/web//Fluux Web<${expectedFeatures.join('<')}<`
+      const expectedHash = createHash('sha1').update(expectedVerification, 'utf8').digest('base64')
+
+      for (const input of [extras, [...extras].reverse(), [...extras, ...extras, CLIENT_FEATURES[0]]]) {
+        expect.soft(getClientFeatures(input)).toEqual(expectedFeatures)
+        expect.soft(calculateVerificationString(input)).toBe(expectedVerification)
+        expect.soft(await calculateCapsHash(input)).toBe(expectedHash)
+      }
     })
   })
 
