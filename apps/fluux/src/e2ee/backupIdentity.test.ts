@@ -22,6 +22,10 @@ const bobBackup = fixture('web_bob_backup.asc')
 const jid = 'alice@example.com'
 const secretNode = 'urn:xmpp:openpgp:0:secret-key'
 const publicNode = 'urn:xmpp:openpgp:0:public-keys'
+class InspectableWebPlugin extends WebOpenPGPPlugin {
+  exportBackup(passphrase: string) { return this.buildExportArmor(passphrase) }
+  inspectBackup(message: string, passphrase: string) { return this.backupImportAll(jid, message, passphrase, false) }
+}
 const plugins: WebOpenPGPPlugin[] = []
 vi.setConfig({ testTimeout: 30_000 })
 beforeEach(() => { localStorage.clear(); clearSessionPassphrase() })
@@ -53,7 +57,7 @@ async function setup() {
       subscribePEP: () => ({ unsubscribe: () => {} }),
     },
   }
-  const plugin = new WebOpenPGPPlugin(); plugins.push(plugin)
+  const plugin = new InspectableWebPlugin(); plugins.push(plugin)
   await plugin.init(ctx)
   return { plugin, ctx, nodes, publications }
 }
@@ -133,15 +137,60 @@ describe('server backup identity after file installation', () => {
     expect(f.publications).not.toContain(secretNode)
   })
 
-  it('recognizes an identical encrypted file despite armor differences, but not a separately encrypted file', async () => {
+  it('F1 confirms a real re-encrypted same-key export on a device without a marker', async () => {
+    const source = await setup()
+    await source.plugin.restoreSecretKey(meta.backupPassphrase)
+    const exported = await source.plugin.exportBackup(meta.backupPassphrase)
+    expect((await unarmor(exported)).data).not.toEqual((await unarmor(aliceBackup)).data)
+    clearBackedUpFingerprint(jid); clearSessionPassphrase()
+    const device = await setup()
+    await device.plugin.importKeyFromFile(exported, meta.backupPassphrase)
+    expect(device.plugin.getBackedUpFingerprint()).toBe(aliceFingerprint)
+    expect(device.publications).not.toContain(secretNode)
+    expect((await decode((await device.plugin.fetchSecretKeyBackup())!))[0].getFingerprint()).toBe(aliceFingerprint)
+  })
+
+  it('F1 retains no claim when the file code cannot open the same-key server backup', async () => {
+    const source = await setup()
+    await source.plugin.restoreSecretKey(meta.backupPassphrase)
+    const fileCode = JSON.parse(fixture('migration_meta.json')).openkeychain.passphrase
+    const exported = await source.plugin.exportBackup(fileCode)
+    clearBackedUpFingerprint(jid); clearSessionPassphrase()
+    const device = await setup()
+    await device.plugin.importKeyFromFile(exported, fileCode)
+    expect(device.plugin.getOwnFingerprint()).toBe(aliceFingerprint)
+    expect(device.plugin.getBackedUpFingerprint()).toBeNull()
+    expect(device.publications).not.toContain(secretNode)
+  })
+
+  it('F1 read-only server inspection does not replace a staged file selection', async () => {
     const f = await setup()
-    await f.plugin.importKeyFromFile(aliceBackup.replaceAll('\n', '\r\n'), meta.backupPassphrase)
-    expect(f.plugin.getBackedUpFingerprint()).toBe(aliceFingerprint)
-    clearBackedUpFingerprint(jid)
-    const [key] = await decode(aliceBackup)
-    const separatelyEncrypted = await encrypt({ message: await createMessage({ binary: key.write() }), passwords: [meta.backupPassphrase], format: 'armored' })
-    await f.plugin.importKeyFromFile(separatelyEncrypted, meta.backupPassphrase)
+    const preview = await f.plugin.importKeyFromFile(bobBackup, meta.backupPassphrase, { accountJid: jid })
+    if (!('needsPicker' in preview)) throw new Error('Expected confirmation')
+    expect((await f.plugin.inspectBackup(aliceBackup, meta.backupPassphrase)).map(key => key.fingerprint)).toEqual([aliceFingerprint])
+    await f.plugin.installSelectedKey(preview.backupContext.message, preview.backupContext.passphrase, webMeta.bobFingerprint)
+    expect(f.plugin.getOwnFingerprint()).toBe(webMeta.bobFingerprint)
     expect(f.plugin.getBackedUpFingerprint()).toBeNull()
+  })
+
+  it.each(['automatic', 'conflict-selection'] as const)('F2 reuses the fetched backup for %s server restore when another read would fail', async mode => {
+    const f = await setup()
+    if (mode === 'conflict-selection') {
+      const backup = await multiKeyBackup()
+      f.nodes.set(secretNode, [{ id: 'current', payload: { name: 'secretkey', attrs: { xmlns: 'urn:xmpp:openpgp:0' }, children: [Buffer.from((await unarmor(backup)).data).toString('base64')] } }])
+    }
+    let secretReads = 0
+    const query = f.ctx.xmpp.queryPEP
+    f.ctx.xmpp.queryPEP = (account, node, ...rest) => {
+      if (node === secretNode && ++secretReads > 1) return Promise.reject(new Error('remote-server-timeout'))
+      return query(account, node, ...rest)
+    }
+    const restored = mode === 'automatic' ? await f.plugin.restoreSecretKey(meta.backupPassphrase)
+      : await f.plugin.resolveOwnKeyConflict_importFromServer(meta.backupPassphrase)
+    if ('needsPicker' in restored) throw new Error('Expected direct server install')
+    expect(secretReads).toBe(1)
+    expect(f.plugin.getBackedUpFingerprint()).toBe(restored.fingerprint)
+    expect(f.publications).not.toContain(secretNode)
   })
 
   it('records the selected identity when a real multi-key server backup contains it', async () => {

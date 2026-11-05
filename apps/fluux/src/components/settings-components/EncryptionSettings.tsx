@@ -97,9 +97,10 @@ type BackupProbeState = 'checking' | BackupProbeResult
  *   - `backupProbe` — server-probe tri-state (plus `checking`); only
  *     `present` can possibly be in sync (callers show a "Checking…"
  *     state while pending, and `unknown`/`absent` are never in sync).
- *   - `backedUpFingerprint` — local marker recorded at the last
- *     successful backup/restore. `null` means this device never
- *     published, so whatever sits on PEP belongs to someone else.
+ *   - `backedUpFingerprint` — local marker recorded after a successful
+ *     backup or an install whose identity was proven in the server backup.
+ *     `null` means this device has no confirmed identity for that backup;
+ *     the backup may still contain this key.
  *   - `fingerprint` — this device's current key. A missing key can
  *     never be in sync, hence the explicit truthiness guard: without
  *     it a null/null pair would compare equal and report in-sync.

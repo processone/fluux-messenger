@@ -506,14 +506,20 @@ restore the `com.processone.fluux*` ones.
 ### Server backup status after key import
 
 The account-scoped backup marker records a fingerprint after a successful secret-key
-publication, or after installing a key from the same encrypted OpenPGP packet stream
-currently read from the server. The shared install path compares packet bytes, not
-armor headers or advertised public-key metadata. This applies to automatic imports,
-picker choices and guided confirmation. A different file or an inconclusive server
-read leaves the previous marker alone; file import never publishes a secret backup.
-A separately encrypted file can contain the same key without proving that the server
-contains it, so it does not establish a new marker. Settings reads the confirmed
+publication, or after an install proven to exist in the server backup. Direct server
+restores reuse the backup they already fetched. File and generic picker installs
+read the server backup: identical encrypted packet bytes prove the source regardless
+of armor headers; otherwise the backend decrypts it with the install passphrase
+(including the established legacy-code fallback) and checks for the installed
+fingerprint. This inspection does not replace a pending web picker selection.
+A failed read/decryption or a different identity leaves prior confirmed state alone;
+file import never publishes or heals a secret backup. Settings reads the confirmed
 marker rather than treating an install result as backup evidence.
+
+Markers from the earlier namespace are ignored because file imports could write
+false claims. Only a newly confirmed backup/install establishes the versioned marker.
+This also resets previously correct status until fresh evidence establishes it;
+explicit clearing removes both layouts for that account without touching others.
 
 ### Guided macOS backup recovery
 

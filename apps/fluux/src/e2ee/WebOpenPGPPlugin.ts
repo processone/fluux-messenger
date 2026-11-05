@@ -480,6 +480,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     _accountJid: string,
     backupMessage: string,
     passphrase: string,
+    stageForInstall = true,
   ): Promise<KeyBundle[]> {
     const kind = detectArmorKind(backupMessage)
     let keys: PrivateKey[]
@@ -495,7 +496,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       )
     }
 
-    this.pendingImportKeys.clear()
+    if (stageForInstall) this.pendingImportKeys.clear()
     const bundles: KeyBundle[] = []
     for (const key of keys) {
       try {
@@ -511,7 +512,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
           err,
         )
       }
-      this.pendingImportKeys.set(key.getFingerprint(), key)
+      if (stageForInstall) this.pendingImportKeys.set(key.getFingerprint(), key)
       bundles.push({
         fingerprint: key.getFingerprint(),
         publicArmored: key.toPublic().armor(),

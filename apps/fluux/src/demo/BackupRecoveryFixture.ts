@@ -11,6 +11,7 @@ import { chatStore } from '@fluux/sdk/stores'
 import { SequoiaPgpPlugin, type InvokeFn } from '@/e2ee/SequoiaPgpPlugin'
 import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
 import { parseSecretKeysFromBackupPayload } from '@/e2ee/backupKeyMaterial'
+import { withPassphraseFormatHeader } from '@/e2ee/passphraseFormatHeader'
 import { platform, setPlatformForTesting } from '@/platform'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import backup from '@/e2ee/fixtures/sequoia_alice_backup.asc?raw'
@@ -115,7 +116,14 @@ export function createBackupRecoveryFixture() {
     return (native ? nativeInvoke : browserInvoke)(cmd, args)
   }
   class FixturePlugin extends SequoiaPgpPlugin {
-    override async pickKeyFile() { return backup }
+    override async pickKeyFile() {
+      // A real export freshly encrypts the key; it is not the server blob.
+      const key = await privateKey()
+      return withPassphraseFormatHeader(await encrypt({
+        message: await createMessage({ binary: key.write() }),
+        passwords: [meta.backupPassphrase], format: 'armored',
+      }))
+    }
   }
   const xmpp: XMPPPrimitives = {
     sendStanza: async () => {},

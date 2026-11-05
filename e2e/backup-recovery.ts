@@ -80,6 +80,21 @@ async function previewServer(page: Page) {
 for (const source of ['server', 'file']) {
   test(`guided ${source} restore previews, confirms and refreshes Settings without replacing its backup`, async ({ page }) => {
     await openRecovery(page)
+    if (source === 'file') {
+      // F1/F3: a real export has fresh packet bytes, and an old correct marker
+      // must not supply the proof on this device before the import is checked.
+      const exported = await page.evaluate(async fingerprint => {
+        const plugin = (window as any).__demoClient.e2ee.getPlugin('openpgp')
+        localStorage.setItem('fluux:openpgp:backedUpFingerprint:you@fluux.chat', fingerprint)
+        const legacyMarker = plugin.getBackedUpFingerprint()
+        const file = await plugin.pickKeyFile(), server = await plugin.fetchSecretKeyBackup()
+        plugin.pickKeyFile = async () => file
+        return { file, server, legacyMarker }
+      }, fingerprint)
+      expect(exported.legacyMarker).toBeNull()
+      const { unarmor } = await import('openpgp')
+      expect((await unarmor(exported.file)).data).not.toEqual((await unarmor(exported.server)).data)
+    }
     if (source === 'server') {
       await capture(page, 'after-startup-recovery.png')
       await page.getByRole('button', { name: 'Cancel', exact: true }).click()
@@ -131,6 +146,14 @@ for (const kind of ['single-key', 'multi-key']) {
     const bobFingerprint = webMeta.bobFingerprint.toUpperCase()
     const file = readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/web_bob_backup.asc', import.meta.url), 'utf8')
     await openRecovery(page)
+    if (kind === 'single-key') {
+      // F3: reproduce the historical false claim from importing Bob over Alice.
+      const marker = await page.evaluate(fingerprint => {
+        localStorage.setItem('fluux:openpgp:backedUpFingerprint:you@fluux.chat', fingerprint)
+        return (window as any).__demoClient.e2ee.getPlugin('openpgp').getBackedUpFingerprint()
+      }, bobFingerprint)
+      expect(marker).toBeNull()
+    }
     const serverBefore = await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').fetchSecretKeyBackup())
     const serverKeys = await decrypt({ message: await readMessage({ armoredMessage: serverBefore }), passwords: [code], format: 'binary' })
     const aliceKeys = await parseSecretKeysFromBackupPayload(serverKeys.data)
