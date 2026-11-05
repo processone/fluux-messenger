@@ -46,7 +46,7 @@ set +e
 xcodebuild -project "$LAB/RoomAvatarLab.xcodeproj" -scheme RoomAvatarLab \
   -destination "platform=iOS Simulator,id=$SIM" -derivedDataPath "$LAB/Build" \
   -jobs 2 -parallel-testing-enabled NO -collect-test-diagnostics never \
-  -resultBundlePath "$RESULTS/room-avatar.xcresult" "${args[@]}" CODE_SIGNING_ALLOWED=NO test \
+  -resultBundlePath "$RESULTS/room-avatar.xcresult" ${args[@]+"${args[@]}"} CODE_SIGNING_ALLOWED=NO test \
   > "$RESULTS/build.log" 2>&1
 STATUS=$?
 set -e

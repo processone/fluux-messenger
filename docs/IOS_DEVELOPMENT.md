@@ -644,6 +644,8 @@ from the project root. It uses production presentation sources, a real project i
 and a sandbox-only mirror adapter, and captures the system banner. It proves the
 native producer and simulator rendering, not APNs delivery or physical-device behavior.
 Use `FLUUX_ROOM_AVATAR_ITERATIONS=10` for consecutive native and visual runs.
+Set `FLUUX_ROOM_AVATAR_NATIVE_ONLY=1` for screen-free metadata checks; these do not
+replace settled compact and expanded image acceptance.
 
 The dedicated iOS module lives under
 `plugins/push/ios/Sources/NotificationAvatars`; the push plugin compiles it through
@@ -687,8 +689,11 @@ content updates; simulator compilation covers those APIs. Real-device acceptance
 requires remote pushes with fixture identities: room above nick, missing nick,
 two-person/unknown occupancy, direct-message avatars, logout, and delivery while
 locked after first unlock. Simulator builds and fixtures do not prove APNs
-extension execution or the rendered Notification Center appearance. Room avatars
-are not part of ordinary remote room alerts; local attachments are unchanged.
+extension execution or the rendered Notification Center appearance. Ordinary
+remote room alerts attach the room's valid cached image while keeping room-first
+text and the app icon; missing or corrupt room images never select a sender image.
+Local attachments are unchanged. Inspect settled compact and expanded captures;
+attachment metadata and animation frames are not rendered-image acceptance.
 
 In-app room toasts on the web and iOS use the room picture (or the shared # fallback),
 with the sender first and the room name and message below. Browser combined-count
@@ -703,10 +708,13 @@ To qualify room-first presentation on a signed iPhone build:
 1. Join a fixture room with an avatar and at least three occupants, then suspend
    Fluux after the mirror settles and receive a message from a known occupant.
    Verify the room name above the sender nickname and the unchanged message body
-   in Notification Center, with the app icon rather than a communication avatar.
+   in Notification Center. Verify the room's own image in the settled compact card
+   and expanded alert, with the app icon unchanged rather than a sender image.
 2. Repeat without a nick, without a room avatar, then in a two-person room;
-   confirm the room-only or room-first presentation. Receive a direct message and
-   verify its existing communication treatment and contact avatar.
+   confirm the room-only or room-first presentation. Without a room avatar, verify
+   that neither view substitutes a sender image or shows a stale room image.
+   Receive a direct message and verify its existing communication treatment and
+   contact avatar.
 3. Receive a local room alert and verify `room — nick` and existing attachments.
    Check taps, grouping, sound and badge. Remove the room or switch/logout the
    account and confirm stale room metadata is not shown for the previous account.

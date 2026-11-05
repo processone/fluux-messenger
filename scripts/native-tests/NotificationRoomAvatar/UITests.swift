@@ -1,6 +1,44 @@
 import XCTest
 
 final class RoomAlertUITests: XCTestCase {
+    // Review regression: element existence and gesture completion precede the
+    // system's rendering transition. Every capture waits for unchanged pixels
+    // and geometry, then keeps that exact settled frame instead of sampling again.
+    private func captureSettled(_ view: XCUIElement, named name: String) throws {
+        XCTAssertTrue(view.waitForExistence(timeout: 10))
+        var previousPixels: Data?
+        var previousFrame: CGRect?
+        var settled: XCUIScreenshot?
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard view.exists, view.isHittable, !view.frame.isEmpty else { return false }
+            let frame = view.frame
+            let screenshot = XCUIScreen.main.screenshot()
+            let pixels = screenshot.pngRepresentation
+            let unchanged = previousFrame == frame && previousPixels == pixels
+            previousFrame = frame
+            previousPixels = pixels
+            if unchanged { settled = screenshot }
+            return unchanged
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 10)
+        let screenshot = try XCTUnwrap(result == .completed ? settled : nil,
+                                      "The notification did not reach a settled rendered state")
+        // The retained simulator trees expose no attachment image. If a system
+        // version exposes the attachment identifier, verify that image is visible.
+        // Otherwise the kept settled picture still needs visual inspection.
+        let image = view.images["room-avatar"]
+        if image.exists {
+            XCTAssertTrue(image.isHittable, "The exposed room image must be visible")
+            XCTAssertFalse(image.frame.isEmpty)
+        } else {
+            print("ROOM IMAGE: not individually exposed to accessibility; inspect the settled capture")
+        }
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     // Regression source: the room image must coexist with room-before-nickname text.
     // Grant permission before posting so an unrelated app tap cannot consume the banner.
     func testObserveNativeRoomAlert() throws {
@@ -27,10 +65,7 @@ final class RoomAlertUITests: XCTestCase {
         let nick = try XCTUnwrap(label.range(of: "Seve"))
         XCTAssertLessThan(room.lowerBound, nick.lowerBound, "The system banner must keep the room before the nickname")
         print("SYSTEM BANNER: \(label)")
-        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = "Room notification with room-first text"
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        try captureSettled(banner, named: "Room notification with room-first text")
         print("COLLAPSED NOTIFICATION: \(banner.debugDescription)")
         XCUIDevice.shared.press(.home)
         springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.01)).press(forDuration: 0.1,
@@ -38,15 +73,10 @@ final class RoomAlertUITests: XCTestCase {
         let card = springboard.descendants(matching: .any).matching(identifier: "NotificationShortLookView").firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 10))
         print("NOTIFICATION CENTER: \(springboard.debugDescription)")
-        let listed = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        listed.name = "Room notification in Notification Center"
-        listed.lifetime = .keepAlways
-        add(listed)
+        try captureSettled(card, named: "Room notification in Notification Center")
         card.press(forDuration: 1)
+        let expanded = springboard.descendants(matching: .any).matching(identifier: "notification-expanded-view").firstMatch
+        try captureSettled(expanded, named: "Expanded room notification")
         print("EXPANDED NOTIFICATION: \(springboard.debugDescription)")
-        let expanded = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        expanded.name = "Expanded room notification"
-        expanded.lifetime = .keepAlways
-        add(expanded)
     }
 }
