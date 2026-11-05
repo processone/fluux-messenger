@@ -22,7 +22,7 @@ check(SecKeychainSetUserInteractionAllowed(false))
 let password = try String(contentsOfFile: args[3], encoding: .utf8)
 var keychain: SecKeychain?
 check(SecKeychainCreate(args[2], UInt32(password.utf8.count), password, false, nil, &keychain))
-if args[1] == "approved" || args[1] == "legacy-approved" {
+if args[1] == "approved" || args[1] == "legacy-approved" || args[1].hasPrefix("partial-") {
     guard args.count == 6 else { die("two test identities required") }
     let service = "com.processone.fluux"
     let items: [(String, Data)]
@@ -42,7 +42,17 @@ if args[1] == "approved" || args[1] == "legacy-approved" {
     }
     var access: SecAccess?
     check(SecAccessCreate(service as CFString, trusted as CFArray, &access))
-    for (account, data) in items {
+    // FLM-86: only one old item's ACL excludes the reader. These are real
+    // disposable-keychain access failures, with dialogs disabled throughout.
+    let blocked = ["partial-login": "alice@example.com",
+                   "partial-pgp": "openpgp_passphrase:alice@example.com",
+                   "partial-mcp": "mcp-token"][args[1]]
+    for (account, original) in items {
+    var itemAccess = access
+    if account == blocked {
+        check(SecAccessCreate(service as CFString, [trusted[0]] as CFArray, &itemAccess))
+    }
+    let data = args[1] == "partial-invalid" && account == "mcp-token" ? Data([0xff]) : original
     let status = service.withCString { s in account.withCString { a in
         var attributes = [
             SecKeychainAttribute(tag: SecItemAttr.serviceItemAttr.rawValue, length: UInt32(service.utf8.count), data: UnsafeMutableRawPointer(mutating: s)),
@@ -51,13 +61,13 @@ if args[1] == "approved" || args[1] == "legacy-approved" {
             var list = SecKeychainAttributeList(count: UInt32(buffer.count), attr: buffer.baseAddress)
             return data.withUnsafeBytes { bytes in
                 SecKeychainItemCreateFromContent(SecItemClass.genericPasswordItemClass, &list,
-                    UInt32(data.count), bytes.baseAddress, keychain, access, nil)
+                    UInt32(data.count), bytes.baseAddress, keychain, itemAccess, nil)
             }
         }
     } }
     check(status)
     }
-    print("created \(items.count) item(s) trusting both test identities (simulated Always Allow)")
+    print("created \(items.count) disposable item(s) for fixture \(args[1])")
 } else {
     guard args[1] == "create" else { die("unknown fixture action") }
     print("created disposable keychain")

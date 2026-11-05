@@ -302,8 +302,9 @@ mutex-protected cache. A normal migrated launch decrypts one item, so a changed 
 one keychain access approval. A user denial/cancel (`-25293`, `-128`), carried as a numeric
 typed backend error, is cached as a failure for the launch. Deterministic combined-item failures
 (invalid UTF-8, malformed JSON/schema or an unsupported version) are also cached, without overwriting
-the item or repeating its access approval. Transient errors retry on the next call. Normal reads,
-saves and keep-data logout require a restart after denial. Explicit full wipe (`force: true`, including
+the item or repeating its access approval. Transient **combined-item** errors retry on the next call.
+First-migration old-item failures instead stay in that launch's per-item snapshot, as described below.
+Normal reads, saves and keep-data logout require a restart after denial. Explicit full wipe (`force: true`, including
 `--clear-storage`) and OpenPGP forget clear cached denials in both the migrated `secrets-v1`
 and restored-account `secrets-fresh-v1` caches, allowing one new authorization per item.
 A second denial remains cached and is returned rather than retried in a loop.
@@ -311,8 +312,21 @@ This explicit retry does not clear a deterministic decode/version failure; resta
 the item or opening it with a compatible version. The Settings keychain retry described under backup
 recovery below is the only other path that asks again after a denial, one request per press.
 
-The first launch reads every legacy service entry and recovery copy, writes the combined item, then
-reads it back to verify it. **This release does not delete or rewrite any originals during migration.**
+The first launch reads every legacy service entry and recovery copy once. If one read fails, only
+that item returns its error: other secrets remain available from the in-memory legacy snapshot.
+This includes Deny, Cancel, transient errors and invalid legacy UTF-8. These old-item failures stay
+cached for the launch, so later consumers never restart the whole scan. A failed live read is not
+absence and cannot be replaced by an unvalidated migration backup. An error enumerating the service
+or reading the shared combined item still affects the whole old-layout store.
+
+A partial snapshot is never written as a combined item: restart retries all originals, including
+previously unreadable ones, instead of permanently abandoning them. Normal saves/adoption/erase use
+the legacy layout during that launch and update only the affected item's cached result after success.
+Explicit wipe/forget clears only denial outcomes; reads then retry only the needed items, without
+repeating enumeration. Settings' explicit OpenPGP retry reads only that account's refused item and
+keeps its previous refusal if a transient error prevents an answer. Transient old-item failures and
+invalid bytes require a restart. When every source is readable, migration writes the combined item,
+then reads it back to verify it. **This release does not delete or rewrite any originals during migration.**
 Keep them for at least one release so a Dev build cannot break the installed 0.18.0 release's
 remembered login, MCP token or OpenPGP passphrase. Automatic cleanup is deferred and is not scheduled
 by a marker. Any `pending_cleanup` field from an earlier development build is ignored: an existing
@@ -418,7 +432,10 @@ explicit keychains under a scratch `HOME` with `FM3000_LOCAL_CODESIGN_DIR`. It t
 cleanup, one denial, simulated Always Allow (equivalent items trusting both identities), Dev
 consolidation followed by the old identity reading its unchanged originals, a pending-cleanup bundle
 with a changed original, failed-write fallback/retry, no-op writes, atomic revisions, unavailable
-revision tracking, token rotation and logout. A second process reads while another reader holds the
+revision tracking, token rotation and logout. FLM-86 fixtures refuse just a credential, OpenPGP
+passphrase or MCP token using real disposable ACLs, and corrupt one old item's UTF-8. The other
+consumers still work; three repeated calls produce one enumeration and no partial combined write.
+A new owner process then migrates all readable originals. A second process reads while another reader holds the
 shared revision lock; exclusive writes still exclude readers and writers. Native invalid UTF-8,
 malformed JSON and future-version fixtures each produce one read across startup consumers and explicit
 retry, with no item replacement. It runs the focused secrets, credentials, OpenPGP storage
@@ -508,7 +525,16 @@ bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-server serv
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-file file
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-retry retry
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-retry-desync retry-desync
+bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-migration-login migration-login
+bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-migration-mcp migration-mcp
+bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-migration-transient migration-transient
 ```
+
+The FLM-86 `migration-*` journeys inject one old credential/token read failure while the actual
+Tauri App unlocks its existing key and decrypts the waiting message. Native credential/token reads
+share that same cache; repeated calls read nothing further. The next process grants every item and
+completes migration without changing originals. In `retry`, the first launch now reads all old items
+once, explicit presses read only its OpenPGP item, and restart finishes the previously partial scan.
 
 Each native invocation runs restore and process restart with the same scratch storage, bounds its
 owned processes and refuses to replay an existing lab. It substitutes `security` and `codesign`
@@ -524,9 +550,9 @@ offer **Use the unlocked key**, whose press reads nothing. Before the first and 
 calls the login prewarm and the normal unlock,
 unregisters the plugin and lets the App's registration hook register a new one (declining the restore the App offers again), reconnects, and reopens Settings. The driver
 marks each of these steps in the operation log, which must show no read in any of them or after the
-refused held prompt, one refused old-item read at startup and one OS request per press, none when
-the unlocked key is used, the key file unchanged while the key is locked, no fresh-account route,
-and no old-item read after restart. The `retry-desync`
+refused held prompt, one read per old item at startup and one request for this key's item per press,
+none when the unlocked key is used, the key file unchanged while the key is locked, no fresh-account
+route, and one complete migration on restart after all old items become readable. The `retry-desync`
 journey gives the combined item a stale passphrase, so nothing migrates and the key is desynced; it
 runs the same presses and steps from the panel inside the startup identity choice, and its log must show only
 that account's old item, once at startup and once per press, then only the combined item after

@@ -102,6 +102,8 @@ struct Bundle {
     #[serde(skip)]
     legacy: bool,
     items: BTreeMap<String, String>,
+    // First-migration snapshot (including per-item errors), or on-demand
+    // recovery reads after migration. Never serialize failures as missing data.
     #[serde(skip)]
     legacy_reads: BTreeMap<String, StoreResult<Option<String>>>,
 }
@@ -216,19 +218,36 @@ impl<S: Backend> Secrets<S> {
             if is_bundle(&account) || is_restored_copy(&account) {
                 continue;
             }
-            if let Some(secret) = self.store.read(&account)? {
-                bundle.items.insert(account, secret);
+            let result = self.store.read(&account);
+            match &result {
+                Ok(Some(secret)) => {
+                    bundle.items.insert(account.clone(), secret.clone());
+                }
+                Err(error) => {
+                    tracing::error!("macOS secrets legacy item read failed: {error}");
+                    bundle.legacy = true;
+                }
+                Ok(None) => {}
             }
+            bundle.legacy_reads.insert(account, result);
         }
         // Live originals win over conflicting recovery copies. Preserve both
         // copies, including the backup's original account name, without writing
         // or deleting either legacy item.
         for (account, secret) in bundle.items.clone() {
             if let Some(target) = account.strip_prefix(BACKUP_PREFIX) {
-                bundle.items.entry(target.into()).or_insert(secret);
+                // A failed live read is not absence: do not substitute an
+                // unvalidated, possibly stale backup for that secret.
+                if !matches!(bundle.legacy_reads.get(target), Some(Err(_))) {
+                    bundle.items.entry(target.into()).or_insert(secret);
+                }
             }
         }
-        if !bundle.items.is_empty() {
+        // A partial snapshot remains usable in memory, never as a durable
+        // bundle: otherwise the next launch would silently abandon the unread
+        // originals. Cache even transient old-item failures for this launch so
+        // ordinary consumers do not repeat the full scan (or its approvals).
+        if !bundle.legacy && !bundle.items.is_empty() {
             let json = Self::encode(&bundle)?;
             let migrated = self
                 .store
@@ -264,10 +283,26 @@ impl<S: Backend> Secrets<S> {
         // not remove the password, MCP token or passphrase still read by 0.18.0.
         Ok(bundle)
     }
+    fn legacy_value(&self, bundle: &mut Bundle, account: &str) -> StoreResult<Option<String>> {
+        if let Some(Err(error)) = bundle.legacy_reads.get(account) {
+            return Err(error.clone());
+        }
+        // An explicit erase may clear a cached denial. Read only that item on
+        // demand, not the complete migration again. Cache any new outcome.
+        if !bundle.items.contains_key(account) && !bundle.legacy_reads.contains_key(account) {
+            let result = self.store.read(account);
+            if let Ok(Some(secret)) = &result {
+                bundle.items.insert(account.into(), secret.clone());
+            }
+            bundle.legacy_reads.insert(account.into(), result.clone());
+            return result;
+        }
+        Ok(bundle.items.get(account).cloned())
+    }
     pub fn legacy_candidate(&self, account: &str) -> Result<Option<String>, String> {
         self.access("legacy recovery", |bundle| {
             if bundle.legacy {
-                return Ok(bundle.items.get(account).cloned());
+                return self.legacy_value(bundle, account);
             }
             if let Some(result) = bundle.legacy_reads.get(account) {
                 return result.clone();
@@ -333,6 +368,9 @@ impl<S: Backend> Secrets<S> {
             adopted.items.insert(account.into(), secret.into());
             if bundle.legacy {
                 self.store.set(account, secret)?;
+                adopted
+                    .legacy_reads
+                    .insert(account.into(), Ok(Some(secret.into())));
             } else {
                 self.store.set(ACCOUNT, &Self::encode(&adopted)?)?;
             }
@@ -441,6 +479,12 @@ impl<S: Backend> SecretStore for Secrets<S> {
                 .map_err(|_| "macOS secrets lock poisoned".to_string())?;
             if matches!(cache.as_ref(), Some(Err(error)) if error.user_denial()) {
                 *cache = None;
+            } else if let Some(Ok(bundle)) = cache.as_mut() {
+                if bundle.legacy {
+                    bundle
+                        .legacy_reads
+                        .retain(|_, result| !matches!(result, Err(error) if error.user_denial()));
+                }
             }
         }
         Ok(())
@@ -495,9 +539,19 @@ impl<S: Backend> SecretStore for Secrets<S> {
                     }
                 }
             }
-            Some(Ok(bundle)) if !bundle.legacy => match bundle.legacy_reads.get(account) {
+            Some(Ok(bundle)) => match bundle.legacy_reads.get(account) {
                 Some(Err(refusal)) if refusal.user_denial() => match self.store.read(account) {
                     Ok(value) => {
+                        if bundle.legacy {
+                            match &value {
+                                Some(secret) => {
+                                    bundle.items.insert(account.into(), secret.clone());
+                                }
+                                None => {
+                                    bundle.items.remove(account);
+                                }
+                            }
+                        }
                         bundle.legacy_reads.insert(account.into(), Ok(value));
                         Ok(RefusedRetry::Read)
                     }
@@ -537,8 +591,14 @@ impl<S: Backend> SecretStore for Secrets<S> {
                 .fresh_access(|bundle| Ok(bundle.items.get(account).cloned()))
                 .map_err(|error| error.to_string());
         }
-        self.access("read", |bundle| Ok(bundle.items.get(account).cloned()))
-            .map_err(|error| error.to_string())
+        self.access("read", |bundle| {
+            if bundle.legacy {
+                self.legacy_value(bundle, account)
+            } else {
+                Ok(bundle.items.get(account).cloned())
+            }
+        })
+        .map_err(|error| error.to_string())
     }
     fn set(&self, account: &str, secret: &str) -> Result<(), String> {
         if self.is_fresh(account).map_err(|e| e.to_string())? {
@@ -561,6 +621,9 @@ impl<S: Backend> SecretStore for Secrets<S> {
                 // migration, never an original or another process's newer item.
                 self.store.delete(ACCOUNT)?;
                 self.store.set(account, secret)?;
+                updated
+                    .legacy_reads
+                    .insert(account.into(), Ok(Some(secret.into())));
             } else {
                 self.store.set(ACCOUNT, &Self::encode(&updated)?)?;
             }
@@ -1189,6 +1252,7 @@ mod native {
             raw: Keychain,
             fail_new: bool,
             reads: Mutex<Vec<String>>,
+            scans: Mutex<usize>,
         }
         impl SecretStore for Traced {
             fn get(&self, a: &str) -> Result<Option<String>, String> {
@@ -1211,6 +1275,7 @@ mod native {
                 self.raw.read(a)
             }
             fn accounts(&self) -> StoreResult<Vec<String>> {
+                *self.scans.lock().unwrap() += 1;
                 self.raw.accounts()
             }
         }
@@ -1218,7 +1283,41 @@ mod native {
             raw,
             fail_new: action == "write-failed",
             reads: Mutex::new(Vec::new()),
+            scans: Mutex::new(0),
         });
+        if action.starts_with("partial-") {
+            let blocked = match action.as_str() {
+                "partial-login" => "alice@example.com",
+                "partial-pgp" => "openpgp_passphrase:alice@example.com",
+                "partial-mcp" | "partial-invalid" => "mcp-token",
+                _ => panic!("unknown partial migration fixture"),
+            };
+            let error = store.get(blocked).unwrap_err();
+            for _ in 0..3 {
+                if blocked == "alice@example.com" {
+                    assert_eq!(crate::credentials::load(&store).unwrap_err(), error);
+                } else {
+                    assert_eq!(
+                        crate::credentials::load(&store).unwrap().unwrap().password,
+                        "test-password"
+                    );
+                }
+                for other in ["mcp-token", "openpgp_passphrase:alice@example.com"] {
+                    if other == blocked {
+                        assert_eq!(store.get(other).unwrap_err(), error);
+                    } else {
+                        assert!(store.get(other).unwrap().is_some());
+                    }
+                }
+                assert_eq!(store.get(blocked).unwrap_err(), error);
+            }
+            assert_eq!(*store.store.scans.lock().unwrap(), 1);
+            assert_eq!(store.store.reads.lock().unwrap().len(), 5);
+            assert!(store.store.raw.read(ACCOUNT).unwrap().is_none());
+            assert_eq!(store.store.raw.accounts().unwrap().len(), 4);
+            println!("{action}: native error {error}; other consumers succeeded; one scan/five reads across repeated calls; four originals retained; no partial bundle");
+            return;
+        }
         if let Some(bytes) = invalid {
             let error = crate::credentials::load(&store).unwrap_err();
             assert_eq!(store.get("mcp-token").unwrap_err(), error);
@@ -1371,6 +1470,7 @@ mod tests {
     struct FakeStore {
         items: Mutex<BTreeMap<String, String>>,
         reads: Mutex<Vec<String>>,
+        scans: Mutex<usize>,
         writes: Mutex<Vec<String>>,
         snapshots: Mutex<Vec<BTreeMap<String, String>>>,
         deletes: Mutex<Vec<String>>,
@@ -1477,6 +1577,7 @@ mod tests {
         }
 
         fn accounts(&self) -> StoreResult<Vec<String>> {
+            *self.scans.lock().unwrap() += 1;
             Ok(self.items.lock().unwrap().keys().cloned().collect())
         }
     }
@@ -1505,6 +1606,207 @@ mod tests {
         store.store.writes.lock().unwrap().clear();
         Secrets::new(store.store)
     }
+    // FLM-86: a refused/failed old item disables only that secret, and even a
+    // transient failure must not restart the whole migration on each call.
+    #[test]
+    fn partial_migration_isolates_each_error_and_scans_once_until_restart() {
+        for account in [
+            "last_user",
+            "alice@example.com",
+            "openpgp_passphrase:alice@example.com",
+            "mcp-token",
+        ] {
+            for error in [
+                StoreError::denied(),
+                StoreError::native(-128, "canceled"),
+                StoreError::native(-25291, "unavailable"),
+                StoreError::invalid_item("invalid UTF-8"),
+            ] {
+                let raw = legacy();
+                let originals = raw.items.lock().unwrap().clone();
+                raw.item_read_errors
+                    .lock()
+                    .unwrap()
+                    .insert(account.into(), (error.clone(), 1));
+                raw.writes.lock().unwrap().clear();
+                let store = Secrets::new(raw);
+                for _ in 0..3 {
+                    assert_eq!(store.get(account).unwrap_err(), error.to_string());
+                    assert_eq!(
+                        store.legacy_candidate(account).unwrap_err(),
+                        error.to_string()
+                    );
+                    for (other, secret) in &originals {
+                        if other != account {
+                            assert_eq!(store.get(other).unwrap().as_ref(), Some(secret));
+                        }
+                    }
+                    let login = crate::credentials::load(&store);
+                    if ["last_user", "alice@example.com"].contains(&account) {
+                        assert_eq!(login.unwrap_err(), error.to_string());
+                    } else {
+                        assert_eq!(login.unwrap().unwrap().password, "test-password");
+                    }
+                }
+                assert_eq!(*store.store.scans.lock().unwrap(), 1);
+                assert_eq!(store.store.reads.lock().unwrap().len(), originals.len() + 1);
+                assert_eq!(*store.store.items.lock().unwrap(), originals);
+                assert!(store.store.writes.lock().unwrap().is_empty());
+                // No partial bundle may make the next launch abandon the item.
+                let restarted = Secrets::new(store.store);
+                assert_eq!(
+                    restarted.get(account).unwrap().as_ref(),
+                    originals.get(account)
+                );
+                let items = restarted.store.items.lock().unwrap();
+                let bundle: Bundle = serde_json::from_str(items.get(ACCOUNT).unwrap()).unwrap();
+                assert_eq!(bundle.items, originals);
+                println!("partial migration: {account} error isolated; one scan, originals unchanged, restart migrated all items");
+            }
+        }
+    }
+
+    // FLM-86: unknown live data must not become a stale backup or genuine absence.
+    #[test]
+    fn partial_migration_does_not_substitute_backup_for_failed_live_item() {
+        let raw = legacy();
+        let account = "openpgp_passphrase:alice@example.com";
+        raw.set(&format!("{BACKUP_PREFIX}{account}"), "stale-backup")
+            .unwrap();
+        raw.item_read_errors
+            .lock()
+            .unwrap()
+            .insert(account.into(), (StoreError::denied(), 1));
+        let store = Secrets::new(raw);
+        assert!(store.get(account).is_err());
+        assert!(store.legacy_candidate(account).is_err());
+        assert_eq!(store.refused_access(account).unwrap(), RefusalState::Held);
+        assert_eq!(
+            store.retry_refused_access(account).unwrap(),
+            RefusedRetry::Read
+        );
+        assert_eq!(store.get(account).unwrap().as_deref(), Some("dGVzdC1wYXNz"));
+        assert_eq!(
+            store
+                .store
+                .reads
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|a| a.as_str() == account)
+                .count(),
+            2
+        );
+        assert_eq!(*store.store.scans.lock().unwrap(), 1);
+    }
+
+    // FLM-86: explicit retries keep their existing one-request semantics, but
+    // no longer ask about unrelated failed migration items.
+    #[test]
+    fn partial_migration_explicit_retry_is_targeted_and_preserves_refusal_on_error() {
+        let raw = legacy();
+        let account = "openpgp_passphrase:alice@example.com";
+        for name in [account, "mcp-token"] {
+            raw.item_read_errors
+                .lock()
+                .unwrap()
+                .insert(name.into(), (StoreError::denied(), 1));
+        }
+        let store = Secrets::new(raw);
+        assert!(store.get(account).is_err());
+        store.store.reads.lock().unwrap().clear();
+        for error in [
+            StoreError::native(-25291, "unavailable"),
+            StoreError::denied(),
+        ] {
+            store
+                .store
+                .item_read_errors
+                .lock()
+                .unwrap()
+                .insert(account.into(), (error.clone(), 1));
+            let retried = store.retry_refused_access(account);
+            if error.user_denial() {
+                assert_eq!(retried.unwrap(), RefusedRetry::RefusedAgain);
+            } else {
+                assert!(retried.is_err());
+            }
+            assert_eq!(store.refused_access(account).unwrap(), RefusalState::Held);
+            assert!(store.get(account).is_err());
+        }
+        assert_eq!(
+            store.retry_refused_access(account).unwrap(),
+            RefusedRetry::Read
+        );
+        assert!(store.get(account).unwrap().is_some());
+        assert!(store.get("mcp-token").is_err());
+        assert_eq!(
+            *store.store.reads.lock().unwrap(),
+            [account, account, account]
+        );
+        assert_eq!(*store.store.scans.lock().unwrap(), 1);
+    }
+
+    // FLM-86: writes, adoption and explicit erase must replace their cached
+    // per-item failure, including when every source initially failed.
+    #[test]
+    fn partial_migration_mutations_clear_only_their_own_error_after_success() {
+        for operation in ["save", "adopt", "erase"] {
+            let raw = legacy();
+            let originals = raw.items.lock().unwrap().clone();
+            for name in originals.keys() {
+                raw.item_read_errors
+                    .lock()
+                    .unwrap()
+                    .insert(name.clone(), (StoreError::denied(), 1));
+            }
+            let store = Secrets::new(raw);
+            let account = "openpgp_passphrase:alice@example.com";
+            assert!(store.get(account).is_err());
+            if operation == "erase" {
+                store.retry_denied_access().unwrap();
+                // Clearing refusals reads nothing until the explicit caller
+                // needs a particular item (credentials erasure needs last_user).
+                let count = store.store.reads.lock().unwrap().len();
+                assert!(store.get("last_user").unwrap().is_some());
+                assert_eq!(store.store.reads.lock().unwrap().len(), count + 1);
+                store.delete(account).unwrap();
+                assert!(store.get(account).unwrap().is_none());
+            } else {
+                *store.store.fail_write.lock().unwrap() = true;
+                assert!(if operation == "save" {
+                    store.set(account, "new-pass")
+                } else {
+                    store.adopt_legacy(account, "new-pass")
+                }
+                .is_err());
+                assert!(store.get(account).is_err());
+                *store.store.fail_write.lock().unwrap() = false;
+                if operation == "save" {
+                    store.set(account, "new-pass").unwrap();
+                } else {
+                    store.adopt_legacy(account, "new-pass").unwrap();
+                }
+                assert_eq!(store.get(account).unwrap().as_deref(), Some("new-pass"));
+                assert!(store.get("mcp-token").is_err());
+            }
+            assert!(!store.store.items.lock().unwrap().contains_key(ACCOUNT));
+            let restarted = Secrets::new(store.store);
+            assert_eq!(
+                restarted.get(account).unwrap().as_deref(),
+                if operation == "erase" {
+                    None
+                } else {
+                    Some("new-pass")
+                }
+            );
+            assert_eq!(
+                restarted.get("mcp-token").unwrap().as_deref(),
+                Some("test-token")
+            );
+        }
+    }
+
     #[test]
     fn migration_preserves_concurrent_changes_during_read_back() {
         let raw = legacy();
