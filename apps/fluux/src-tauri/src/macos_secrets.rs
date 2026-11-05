@@ -1308,6 +1308,21 @@ mod native {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    // Disposable startup qualification must never reach native secret storage,
+    // even through the new maintenance entry point. The invalid revision sentinel
+    // also prevents a broken guard from reaching any keychain data in this test.
+    #[cfg(feature = "startup-recovery-lab")]
+    #[test]
+    fn cleanup_respects_disposable_startup_isolation() {
+        let dir = std::env::temp_dir().join(format!("fluux-cleanup-lab-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(dir.join(".secrets-revision")).unwrap();
+        let keychain = Keychain { revision_dir: Some(dir.clone()), ..Keychain::default() };
+        let error = cleanup::perform(&keychain).unwrap_err().to_string();
+        assert!(error.contains("disabled") && error.contains("startup lab"), "{error}");
+        assert!(!dir.join(".secrets-revision.lock").exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     // FLM-66 / FLM-79: production backend, explicit disposable keychains only.
     #[cfg(test)]
     #[test]
