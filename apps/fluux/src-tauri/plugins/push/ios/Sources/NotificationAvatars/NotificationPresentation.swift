@@ -14,7 +14,7 @@ struct SenderTitle {
         let resource = parts.count > 1 && !parts[1].isEmpty ? parts[1] : nil
         if let room = names.rooms[bare] {
             title = room
-            subtitle = resource
+            subtitle = resource ?? ""
         } else if let contact = names.contacts[bare] {
             title = contact
             subtitle = nil
@@ -61,7 +61,6 @@ enum NotificationPresentation {
             let sender = SenderTitle(from: from, names: names)
             content.title = sender.title
             if let subtitle = sender.subtitle { content.subtitle = subtitle }
-            else if let bare = bareJid(from), names.rooms[bare] != nil { content.subtitle = "" }
             if content.threadIdentifier.isEmpty, let bare = bareJid(from) { content.threadIdentifier = bare }
         }
         content.sound = nil
@@ -157,7 +156,6 @@ enum NotificationPresentation {
         let sender = SenderTitle(from: from, names: names)
         content.title = sender.title
         if let subtitle = sender.subtitle { content.subtitle = subtitle }
-        else if let bare = bareJid(from), names.rooms[bare] != nil { content.subtitle = "" }
         if var badge = SharedBadge.load() { content.badge = NSNumber(value: badge.count(adding: from, rooms: names.rooms)) }
         #if os(iOS)
         if #available(iOS 15.0, *), let intent = incomingIntent(from: from, body: content.body, names: names) {

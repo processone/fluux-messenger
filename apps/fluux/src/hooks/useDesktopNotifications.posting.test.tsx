@@ -166,8 +166,6 @@ describe('useDesktopNotifications posting + guard', () => {
       ...expected, navType: 'room', navTarget: 'xsf@muc.xmpp.org', messageId: 'room-first', accountId: mockJid,
     }))
     expect(invoke).not.toHaveBeenCalledWith('prepare_communication_notification', expect.anything())
-    console.info('Room system post:', os, JSON.stringify(invoke.mock.calls.find(([command]) =>
-      command === (os === 'ios' ? 'plugin:notification|notify' : 'post_notification'))?.[1]))
   })
 
   it('posts a conversation with its client id even when a stanza id exists', async () => {
