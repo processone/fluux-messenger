@@ -24,6 +24,15 @@ const RECOVERY_PREFIX: &str = "keychain-recovery:";
 fn recovery_prefix(account: &str) -> String {
     format!("{RECOVERY_PREFIX}{}:{account}:", account.len())
 }
+fn legacy_owner(name: &str) -> Option<&str> {
+    if let Some(account) = name.strip_prefix(BACKUP_PREFIX) {
+        return Some(account);
+    }
+    let (length, rest) = name.strip_prefix(RECOVERY_PREFIX)?.split_once(':')?;
+    let length = length.parse::<usize>().ok()?;
+    let account = rest.get(..length)?;
+    rest.get(length..)?.starts_with(':').then_some(account)
+}
 
 /// Preserve platform status independently of localized/display error text.
 #[derive(Debug, Clone)]
@@ -102,10 +111,38 @@ struct Bundle {
     #[serde(skip)]
     legacy: bool,
     items: BTreeMap<String, String>,
+    // Keep physical names even when an explicit erase clears a denial result,
+    // so a protecting copy cannot silently become absence on the next read.
+    #[serde(skip)]
+    legacy_accounts: BTreeSet<String>,
     // First-migration snapshot (including per-item errors), or on-demand
     // recovery reads after migration. Never serialize failures as missing data.
     #[serde(skip)]
     legacy_reads: BTreeMap<String, StoreResult<Option<String>>>,
+}
+impl Bundle {
+    /// Physical reads that protect this logical secret. A readable live value
+    /// wins over failed copies; without one, a failed copy is not absence.
+    /// Keep the physical name so an explicit retry asks only that source.
+    fn failed_read(
+        &self,
+        account: &str,
+        accepts: impl Fn(&StoreError) -> bool,
+    ) -> Option<(&str, &StoreError)> {
+        if let Some((name, Err(error))) = self.legacy_reads.get_key_value(account) {
+            if accepts(error) {
+                return Some((name, error));
+            }
+        }
+        if !self.legacy || matches!(self.legacy_reads.get(account), Some(Ok(Some(_)))) {
+            return None;
+        }
+        self.legacy_reads.iter().find_map(|(name, result)| {
+            let error = result.as_ref().err()?;
+            (legacy_owner(name) == Some(account) && accepts(error))
+                .then_some((name.as_str(), error))
+        })
+    }
 }
 impl Default for Bundle {
     fn default() -> Self {
@@ -113,6 +150,7 @@ impl Default for Bundle {
             version: 1,
             legacy: false,
             items: BTreeMap::new(),
+            legacy_accounts: BTreeSet::new(),
             legacy_reads: BTreeMap::new(),
         }
     }
@@ -218,6 +256,7 @@ impl<S: Backend> Secrets<S> {
             if is_bundle(&account) || is_restored_copy(&account) {
                 continue;
             }
+            bundle.legacy_accounts.insert(account.clone());
             let result = self.store.read(&account);
             match &result {
                 Ok(Some(secret)) => {
@@ -228,6 +267,12 @@ impl<S: Backend> Secrets<S> {
                     bundle.legacy = true;
                 }
                 Ok(None) => {}
+            }
+            if let Some(owner) = legacy_owner(&account) {
+                // Enumeration did not find a live value yet. A later live
+                // read replaces this absence; otherwise retrying a copy must
+                // not trigger an extra on-demand read of its missing owner.
+                bundle.legacy_reads.entry(owner.into()).or_insert(Ok(None));
             }
             bundle.legacy_reads.insert(account, result);
         }
@@ -283,19 +328,47 @@ impl<S: Backend> Secrets<S> {
         // not remove the password, MCP token or passphrase still read by 0.18.0.
         Ok(bundle)
     }
+    fn read_legacy_source(&self, bundle: &mut Bundle, source: &str) -> StoreResult<Option<String>> {
+        let result = self.store.read(source);
+        match &result {
+            Ok(Some(secret)) => {
+                bundle.items.insert(source.into(), secret.clone());
+            }
+            Ok(None) => {
+                bundle.items.remove(source);
+            }
+            Err(_) => {}
+        }
+        bundle.legacy_reads.insert(source.into(), result.clone());
+        result
+    }
     fn legacy_value(&self, bundle: &mut Bundle, account: &str) -> StoreResult<Option<String>> {
-        if let Some(Err(error)) = bundle.legacy_reads.get(account) {
+        // An explicit erase may clear a cached denial. Retry a known live
+        // source before considering its copies, without repeating enumeration.
+        if bundle.legacy_accounts.contains(account) && !bundle.legacy_reads.contains_key(account) {
+            self.read_legacy_source(bundle, account)?;
+        }
+        if let Some((_, error)) = bundle.failed_read(account, |_| true) {
             return Err(error.clone());
         }
-        // An explicit erase may clear a cached denial. Read only that item on
-        // demand, not the complete migration again. Cache any new outcome.
-        if !bundle.items.contains_key(account) && !bundle.legacy_reads.contains_key(account) {
-            let result = self.store.read(account);
-            if let Ok(Some(secret)) = &result {
-                bundle.items.insert(account.into(), secret.clone());
+        if !matches!(bundle.legacy_reads.get(account), Some(Ok(Some(_)))) {
+            let pending: Vec<_> = bundle
+                .legacy_accounts
+                .iter()
+                .filter(|name| {
+                    legacy_owner(name) == Some(account) && !bundle.legacy_reads.contains_key(*name)
+                })
+                .cloned()
+                .collect();
+            for source in pending {
+                self.read_legacy_source(bundle, &source)?;
             }
-            bundle.legacy_reads.insert(account.into(), result.clone());
-            return result;
+            if let Some(secret) = bundle.items.get(&format!("{BACKUP_PREFIX}{account}")) {
+                return Ok(Some(secret.clone()));
+            }
+        }
+        if !bundle.items.contains_key(account) && !bundle.legacy_reads.contains_key(account) {
+            return self.read_legacy_source(bundle, account);
         }
         Ok(bundle.items.get(account).cloned())
     }
@@ -324,6 +397,11 @@ impl<S: Backend> Secrets<S> {
 
     pub fn recovery_candidates(&self, account: &str) -> Result<Vec<String>, String> {
         self.access("recovery copies", |bundle| {
+            if bundle.legacy {
+                if let Some((_, error)) = bundle.failed_read(account, |_| true) {
+                    return Err(error.clone());
+                }
+            }
             let prefix = recovery_prefix(account);
             Ok(bundle
                 .items
@@ -504,10 +582,9 @@ impl<S: Backend> SecretStore for Secrets<S> {
         };
         let held = match cache.as_ref() {
             Some(Err(error)) => error.user_denial(),
-            Some(Ok(bundle)) => matches!(
-                bundle.legacy_reads.get(account),
-                Some(Err(error)) if error.user_denial()
-            ),
+            Some(Ok(bundle)) => bundle
+                .failed_read(account, StoreError::user_denial)
+                .is_some(),
             None => false,
         };
         Ok(if held { RefusalState::Held } else { RefusalState::NotHeld })
@@ -539,31 +616,34 @@ impl<S: Backend> SecretStore for Secrets<S> {
                     }
                 }
             }
-            Some(Ok(bundle)) => match bundle.legacy_reads.get(account) {
-                Some(Err(refusal)) if refusal.user_denial() => match self.store.read(account) {
+            Some(Ok(bundle)) => {
+                let Some((source, _)) = bundle.failed_read(account, StoreError::user_denial) else {
+                    return Ok(RefusedRetry::NothingRefused);
+                };
+                let source = source.to_string();
+                match self.store.read(&source) {
                     Ok(value) => {
                         if bundle.legacy {
                             match &value {
                                 Some(secret) => {
-                                    bundle.items.insert(account.into(), secret.clone());
+                                    bundle.items.insert(source.clone(), secret.clone());
                                 }
                                 None => {
-                                    bundle.items.remove(account);
+                                    bundle.items.remove(&source);
                                 }
                             }
                         }
-                        bundle.legacy_reads.insert(account.into(), Ok(value));
+                        bundle.legacy_reads.insert(source, Ok(value));
                         Ok(RefusedRetry::Read)
                     }
                     Err(error) if error.user_denial() => {
-                        bundle.legacy_reads.insert(account.into(), Err(error));
+                        bundle.legacy_reads.insert(source, Err(error));
                         Ok(RefusedRetry::RefusedAgain)
                     }
-                    // The earlier refusal stays cached.
+                    // The earlier refusal stays cached, including for a copy.
                     Err(error) => Err(error.to_string()),
-                },
-                _ => Ok(RefusedRetry::NothingRefused),
-            },
+                }
+            }
             _ => Ok(RefusedRetry::NothingRefused),
         }
     }
@@ -1285,11 +1365,26 @@ mod native {
             reads: Mutex::new(Vec::new()),
             scans: Mutex::new(0),
         });
+        if action == "recovery-copy-startup" {
+            let account = "openpgp_passphrase:alice@example.com";
+            assert!(store.get(account).unwrap().is_none());
+            assert_eq!(
+                store.recovery_candidates(account).unwrap(),
+                ["dGVzdC1wYXNz"]
+            );
+            assert!(crate::credentials::load(&store).unwrap().is_some());
+            assert_eq!(
+                store.get("mcp-token").unwrap().as_deref(),
+                Some("test-token")
+            );
+            println!("readable recovery-only source remains a candidate after restart/migration, without becoming an unvalidated live passphrase");
+            return;
+        }
         if action.starts_with("partial-") {
             let blocked = match action.as_str() {
                 "partial-login" => "alice@example.com",
-                "partial-pgp" => "openpgp_passphrase:alice@example.com",
-                "partial-mcp" | "partial-invalid" => "mcp-token",
+                "partial-pgp" | "partial-recovery-pgp" => "openpgp_passphrase:alice@example.com",
+                "partial-mcp" | "partial-invalid" | "partial-backup-mcp" => "mcp-token",
                 _ => panic!("unknown partial migration fixture"),
             };
             let error = store.get(blocked).unwrap_err();
@@ -1315,6 +1410,25 @@ mod native {
             assert_eq!(store.store.reads.lock().unwrap().len(), 5);
             assert!(store.store.raw.read(ACCOUNT).unwrap().is_none());
             assert_eq!(store.store.raw.accounts().unwrap().len(), 4);
+            if matches!(
+                action.as_str(),
+                "partial-backup-mcp" | "partial-recovery-pgp"
+            ) {
+                assert_eq!(store.refused_access(blocked).unwrap(), RefusalState::Held);
+                assert_eq!(
+                    store.retry_refused_access(blocked).unwrap(),
+                    RefusedRetry::RefusedAgain
+                );
+                let source = if action == "partial-backup-mcp" {
+                    format!("{BACKUP_PREFIX}{blocked}")
+                } else {
+                    format!("{}fixture", recovery_prefix(blocked))
+                };
+                assert_eq!(store.store.reads.lock().unwrap().last(), Some(&source));
+                assert_eq!(store.store.reads.lock().unwrap().len(), 6);
+                assert_eq!(store.refused_access(blocked).unwrap(), RefusalState::Held);
+                println!("{action}: logical refusal held; explicit retry read only its physical copy and retained the refusal");
+            }
             println!("{action}: native error {error}; other consumers succeeded; one scan/five reads across repeated calls; four originals retained; no partial bundle");
             return;
         }
@@ -1665,6 +1779,223 @@ mod tests {
                 assert_eq!(bundle.items, originals);
                 println!("partial migration: {account} error isolated; one scan, originals unchanged, restart migrated all items");
             }
+        }
+    }
+
+    // FLM-440 F1: a failed protecting copy is not a missing logical secret.
+    // In particular, MCP must receive an error instead of minting a new token.
+    #[test]
+    fn partial_migration_failed_copies_belong_to_their_logical_secret() {
+        for account in [
+            "last_user",
+            "alice@example.com",
+            "openpgp_passphrase:alice@example.com",
+            "mcp-token",
+        ] {
+            for copy in [
+                format!("{BACKUP_PREFIX}{account}"),
+                format!("{}fixture", recovery_prefix(account)),
+            ] {
+                for code in [-25293, -128, -25291] {
+                    for live_present in [false, true] {
+                        let raw = legacy();
+                        let value = raw.items.lock().unwrap()[account].clone();
+                        raw.set(&copy, &value).unwrap();
+                        if !live_present {
+                            raw.items.lock().unwrap().remove(account);
+                        }
+                        raw.item_read_errors.lock().unwrap().insert(
+                            copy.clone(),
+                            (StoreError::native(code, "copy read failed"), 1),
+                        );
+                        let original = raw.items.lock().unwrap().clone();
+                        raw.writes.lock().unwrap().clear();
+                        let store = Secrets::new(raw);
+                        let first = store.get(account);
+                        let count = store.store.reads.lock().unwrap().len();
+                        for _ in 0..3 {
+                            if live_present {
+                                assert_eq!(first.as_ref().unwrap().as_ref(), Some(&value));
+                                assert_eq!(store.get(account).unwrap().as_ref(), Some(&value));
+                                assert_eq!(
+                                    store.refused_access(account).unwrap(),
+                                    RefusalState::NotHeld
+                                );
+                                assert_eq!(
+                                    store.retry_refused_access(account).unwrap(),
+                                    RefusedRetry::NothingRefused
+                                );
+                            } else {
+                                let error = first.as_ref().unwrap_err();
+                                assert_eq!(&store.get(account).unwrap_err(), error);
+                                assert_eq!(&store.legacy_candidate(account).unwrap_err(), error);
+                                assert_eq!(&store.recovery_candidates(account).unwrap_err(), error);
+                                assert_eq!(
+                                    store.refused_access(account).unwrap(),
+                                    if code == -25291 {
+                                        RefusalState::NotHeld
+                                    } else {
+                                        RefusalState::Held
+                                    }
+                                );
+                            }
+                            for other in original
+                                .keys()
+                                .filter(|name| name.as_str() != account && **name != copy)
+                            {
+                                assert!(store.get(other).unwrap().is_some());
+                            }
+                        }
+                        assert_eq!(store.store.reads.lock().unwrap().len(), count);
+                        assert_eq!(*store.store.scans.lock().unwrap(), 1);
+                        assert!(store.store.writes.lock().unwrap().is_empty());
+                        assert_eq!(*store.store.items.lock().unwrap(), original);
+                    }
+                }
+            }
+        }
+    }
+
+    // FLM-440 F1: one explicit request reads one failed physical source, not
+    // its absent logical name or another account's refused source.
+    #[test]
+    fn partial_migration_copy_retry_uses_the_physical_source() {
+        let account = "mcp-token";
+        let raw = legacy();
+        let value = raw.items.lock().unwrap().remove(account).unwrap();
+        let copies = [
+            format!("{BACKUP_PREFIX}{account}"),
+            format!("{}fixture", recovery_prefix(account)),
+        ];
+        for copy in &copies {
+            raw.set(copy, &value).unwrap();
+            raw.item_read_errors
+                .lock()
+                .unwrap()
+                .insert(copy.clone(), (StoreError::denied(), 1));
+        }
+        let other = "openpgp_passphrase:alice@example.com";
+        raw.item_read_errors
+            .lock()
+            .unwrap()
+            .insert(other.into(), (StoreError::denied(), 1));
+        let store = Secrets::new(raw);
+        assert!(store.get(account).is_err());
+        store.store.reads.lock().unwrap().clear();
+        for copy in &copies {
+            for error in [
+                StoreError::native(-25291, "transient"),
+                StoreError::denied(),
+            ] {
+                store
+                    .store
+                    .item_read_errors
+                    .lock()
+                    .unwrap()
+                    .insert(copy.clone(), (error.clone(), 1));
+                let result = store.retry_refused_access(account);
+                if error.user_denial() {
+                    assert_eq!(result.unwrap(), RefusedRetry::RefusedAgain);
+                } else {
+                    assert!(result.is_err());
+                }
+                assert_eq!(store.refused_access(account).unwrap(), RefusalState::Held);
+                assert!(store.get(account).is_err());
+            }
+            assert_eq!(
+                store.retry_refused_access(account).unwrap(),
+                RefusedRetry::Read
+            );
+        }
+        assert_eq!(store.get(account).unwrap().as_deref(), Some(value.as_str()));
+        assert_eq!(
+            store.refused_access(account).unwrap(),
+            RefusalState::NotHeld
+        );
+        assert_eq!(
+            store.retry_refused_access(account).unwrap(),
+            RefusedRetry::NothingRefused
+        );
+        assert_eq!(store.recovery_candidates(account).unwrap(), [value]);
+        assert_eq!(
+            *store.store.reads.lock().unwrap(),
+            [
+                copies[0].clone(),
+                copies[0].clone(),
+                copies[0].clone(),
+                copies[1].clone(),
+                copies[1].clone(),
+                copies[1].clone()
+            ]
+        );
+        assert!(store.get(other).is_err());
+        assert_eq!(store.refused_access(other).unwrap(), RefusalState::Held);
+        assert_eq!(*store.store.scans.lock().unwrap(), 1);
+        assert!(!store.store.items.lock().unwrap().contains_key(account));
+        assert!(!store.store.items.lock().unwrap().contains_key(ACCOUNT));
+    }
+
+    // FLM-440 F1: clearing an alias denial for explicit erase/retry must not
+    // turn its unread value into absence and let MCP replace the configured token.
+    #[test]
+    fn partial_migration_cleared_copy_result_keeps_its_physical_source() {
+        let raw = legacy();
+        let account = "mcp-token";
+        let value = raw.items.lock().unwrap().remove(account).unwrap();
+        let copy = format!("{BACKUP_PREFIX}{account}");
+        raw.set(&copy, &value).unwrap();
+        raw.item_read_errors
+            .lock()
+            .unwrap()
+            .insert(copy.clone(), (StoreError::denied(), 1));
+        let store = Secrets::new(raw);
+        assert!(store.get(account).is_err());
+        store.store.reads.lock().unwrap().clear();
+        store.retry_denied_access().unwrap();
+        assert_eq!(store.get(account).unwrap().as_deref(), Some(value.as_str()));
+        assert_eq!(*store.store.reads.lock().unwrap(), [copy]);
+        assert!(!store.store.items.lock().unwrap().contains_key(account));
+    }
+
+    // FLM-440 F1: a granted recovery copy stays a candidate for real key
+    // validation; it must not become an unvalidated live passphrase.
+    #[test]
+    fn partial_migration_retry_recovers_candidates_without_promoting_them() {
+        let account = "openpgp_passphrase:alice@example.com";
+        for absent_after_retry in [false, true] {
+            let raw = legacy();
+            let value = raw.items.lock().unwrap().remove(account).unwrap();
+            let copy = format!("{}fixture", recovery_prefix(account));
+            raw.set(&copy, &value).unwrap();
+            raw.item_read_errors
+                .lock()
+                .unwrap()
+                .insert(copy.clone(), (StoreError::denied(), 1));
+            let store = Secrets::new(raw);
+            assert!(store.get(account).is_err());
+            store.store.reads.lock().unwrap().clear();
+            if absent_after_retry {
+                store.store.items.lock().unwrap().remove(&copy);
+            }
+            assert_eq!(
+                store.retry_refused_access(account).unwrap(),
+                RefusedRetry::Read
+            );
+            assert!(store.get(account).unwrap().is_none());
+            assert_eq!(
+                store.recovery_candidates(account).unwrap(),
+                if absent_after_retry {
+                    vec![]
+                } else {
+                    vec![value]
+                }
+            );
+            assert_eq!(*store.store.reads.lock().unwrap(), [copy]);
+            assert!(!store.store.items.lock().unwrap().contains_key(account));
+            assert_eq!(
+                store.refused_access(account).unwrap(),
+                RefusalState::NotHeld
+            );
         }
     }
 
@@ -2161,7 +2492,16 @@ mod tests {
             .lock()
             .unwrap()
             .insert(alice.into(), (StoreError::denied(), 2));
-        let alice_reads = || store.store.reads.lock().unwrap().iter().filter(|a| *a == alice).count();
+        let alice_reads = || {
+            store
+                .store
+                .reads
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|a| *a == alice)
+                .count()
+        };
         assert!(store.legacy_candidate(alice).is_err());
         assert!(store.legacy_candidate(alice).is_err());
         assert_eq!(alice_reads(), 1);

@@ -104,10 +104,10 @@ mod host {
             // asks nothing.
             if a != "secrets-fresh-v1" && a != "secrets-v1" && self.read_items().contains_key(a) {
                 if self.source.starts_with("migration-") {
-                    let failed = if self.source == "migration-login" {
-                        JID
-                    } else {
-                        "mcp-token"
+                    let failed = match self.source.as_str() {
+                        "migration-login" => JID,
+                        "migration-backup" => "identity-migration-backup:mcp-token",
+                        _ => "mcp-token",
                     };
                     if a != failed || self.granted() {
                         return self.get(a).map_err(Into::into);
@@ -457,7 +457,8 @@ mod host {
             "retry-desync",
             "migration-login",
             "migration-mcp",
-            "migration-transient"
+            "migration-transient",
+            "migration-backup"
         ]
         .contains(&source.as_str()));
         let raw = Files {
@@ -505,7 +506,12 @@ mod host {
                         })
                         .unwrap(),
                     );
-                    items.insert("mcp-token".into(), "fixture-token".into());
+                    let token_account = if source == "migration-backup" {
+                        "identity-migration-backup:mcp-token"
+                    } else {
+                        "mcp-token"
+                    };
+                    items.insert(token_account.into(), "fixture-token".into());
                 }
                 if source == "retry-desync" {
                     // The combined item exists, so nothing migrates, and its

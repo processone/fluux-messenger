@@ -316,7 +316,14 @@ The first launch reads every legacy service entry and recovery copy once. If one
 that item returns its error: other secrets remain available from the in-memory legacy snapshot.
 This includes Deny, Cancel, transient errors and invalid legacy UTF-8. These old-item failures stay
 cached for the launch, so later consumers never restart the whole scan. A failed live read is not
-absence and cannot be replaced by an unvalidated migration backup. An error enumerating the service
+absence and cannot be replaced by an unvalidated migration backup. When no readable live value
+exists, a failed `identity-migration-backup:*` or `keychain-recovery:*` read also belongs to its
+logical secret: it returns that copy's error, never a missing value that could create a new token.
+A readable live value still wins over failed copies. The logical secret's refusal/retry uses the
+failed physical source, one per explicit request. A granted migration backup supplies its logical
+value; a granted recovery copy remains a candidate for real key validation, never an unvalidated
+live replacement. Physical source names survive clearing a cached refusal, so a later allowed
+read cannot silently drop its protecting copy. An error enumerating the service
 or reading the shared combined item still affects the whole old-layout store.
 
 A partial snapshot is never written as a combined item: restart retries all originals, including
@@ -435,6 +442,8 @@ with a changed original, failed-write fallback/retry, no-op writes, atomic revis
 revision tracking, token rotation and logout. FLM-86 fixtures refuse just a credential, OpenPGP
 passphrase or MCP token using real disposable ACLs, and corrupt one old item's UTF-8. The other
 consumers still work; three repeated calls produce one enumeration and no partial combined write.
+Copy-only MCP backups and OpenPGP recovery items also hold the logical secret's refusal and retry
+the refused physical source, without replacing the token or promoting an unvalidated passphrase.
 A new owner process then migrates all readable originals. A second process reads while another reader holds the
 shared revision lock; exclusive writes still exclude readers and writers. Native invalid UTF-8,
 malformed JSON and future-version fixtures each produce one old combined-item read across startup
@@ -529,12 +538,15 @@ bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-recovery-retry-desyn
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-migration-login migration-login
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-migration-mcp migration-mcp
 bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-migration-transient migration-transient
+bash scripts/native-tests/backup-recovery/run.sh /tmp/fluux-migration-backup migration-backup
 ```
 
 The FLM-86 `migration-*` journeys inject one old credential/token read failure while the actual
 Tauri App unlocks its existing key and decrypts the waiting message. Native credential/token reads
 share that same cache; repeated calls read nothing further. The next process grants every item and
-completes migration without changing originals. In `retry`, the first launch now reads all old items
+completes migration without changing originals. `migration-backup` keeps the configured MCP token
+only in a refused migration backup: native token reads must fail, not create a new token, until
+restart makes the backup readable and migrates the same value. In `retry`, the first launch now reads all old items
 once, explicit presses read only its OpenPGP item, and restart finishes the previously partial scan.
 
 Each native invocation runs restore and process restart with the same scratch storage, bounds its
