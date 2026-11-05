@@ -142,6 +142,23 @@ enum NotificationPresentation {
         return intent(from: from, body: body, names: names)
     }
 
+    /// Ordinary room alerts keep their room-first text. Carry the room image as an
+    /// attachment instead of restoring iOS's sender-first communication presentation.
+    /// The system takes ownership of attachment files, so never hand it the mirror itself.
+    static func roomAvatar(for jid: String, names: SharedNames) -> UNNotificationAttachment? {
+        guard names.rooms[jid] != nil,
+              let source = NotificationMirror.imageURL(for: jid, names: names),
+              let data = try? Data(contentsOf: source), NotificationMirror.thumbnail(data) != nil else { return nil }
+        let copy = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
+        defer { try? FileManager.default.removeItem(at: copy) }
+        do {
+            try data.write(to: copy, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            return try UNNotificationAttachment(identifier: "room-avatar", url: copy, options: nil)
+        } catch {
+            return nil
+        }
+    }
+
     /// `badgeAdded` hears of a conversation a push adds to the badge: its bare JID, whether it is a room,
     /// and the badge's new count.
     static func content(for original: UNNotificationContent, names: SharedNames = SharedNames.load(),
@@ -168,6 +185,9 @@ enum NotificationPresentation {
             }
         }
         #if os(iOS)
+        if let bare = bareJid(from), let image = roomAvatar(for: bare, names: names) {
+            content.attachments.insert(image, at: 0)
+        }
         if #available(iOS 15.0, *), let intent = incomingIntent(from: from, body: content.body, names: names) {
             let interaction = INInteraction(intent: intent, response: nil)
             interaction.direction = .incoming

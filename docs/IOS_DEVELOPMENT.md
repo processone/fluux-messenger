@@ -618,10 +618,13 @@ part of its JID. Enable the App Group `group.net.processone.fluux.share` for the
 
 Direct-message remote pushes use iOS Communication Notifications. Known-room
 pushes instead use ordinary notifications, with the room name above the sender's
-nick. They bypass incoming intent construction, donation and content enrichment:
-iOS communication presentation would put the sender first. Room alerts therefore
-use the app icon, without a prominent communication avatar, person-based Focus
-treatment or communication-specific Siri behavior. Outgoing share suggestions
+nick. They bypass incoming intent construction, donation and communication content
+enrichment: iOS communication presentation would put the sender first. A valid cached
+room image is attached to the ordinary alert, so iOS shows it beside the room-first
+text. The attachment uses a disposable copy; the shared avatar mirror stays intact.
+Missing or corrupt room images do not fall back to a sender image. Room alerts retain
+the app icon, without person-based Focus treatment or communication-specific Siri
+behavior. Outgoing share suggestions
 remain unchanged. Local iOS system room alerts use `room — nick` (room alone when
 the nick is missing), because the notification plugin has no subtitle field;
 existing local attachments remain.
@@ -634,6 +637,13 @@ refresh its provisioning profiles (automatic signing refreshes them at the next
 device build). For direct messages, the notification extension constructs and
 donates an incoming message intent and applies it to the notification using the
 contact's image. Missing or invalid images retain the existing fallback behavior.
+
+The unsigned native room-image regression runs with
+`FLUUX_ROOM_AVATAR_RESULTS=/absolute/output bash scripts/native-tests/NotificationRoomAvatar/run.sh`
+from the project root. It uses production presentation sources, a real project image
+and a sandbox-only mirror adapter, and captures the system banner. It proves the
+native producer and simulator rendering, not APNs delivery or physical-device behavior.
+Use `FLUUX_ROOM_AVATAR_ITERATIONS=10` for consecutive native and visual runs.
 
 The dedicated iOS module lives under
 `plugins/push/ios/Sources/NotificationAvatars`; the push plugin compiles it through
