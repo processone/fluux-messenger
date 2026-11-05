@@ -198,6 +198,10 @@ webkit2gtk = { version = "=2.0.2", features = ["v2_32"] }
 wry = { version = "=0.57.0", default-features = false, features = ["fluux-startup-recovery"] }
 # Same Security framework wrapper used by iOS; macOS retains file-based items.
 security-framework = "3"
+# Exact native references for interruption-safe retirement of legacy copies.
+# Both packages already occur in the Security framework dependency graph.
+security-framework-sys = "2"
+core-foundation = "0.10"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSBundle", "NSNotification", "NSString", "NSThread", "NSProcessInfo", "NSDictionary", "NSArray", "NSError", "NSURL"] }
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }

@@ -1,5 +1,7 @@
 //! macOS keychain access lists belong to items, not services. Share one cached
-//! item across desktop consumers, retaining legacy items for the 0.18.0 release.
+//! item across desktop consumers. Verified legacy copies are retired silently
+//! after the compatibility release; unavailable or conflicting copies remain.
+mod cleanup;
 use crate::credentials::SecretStore;
 use crate::keychain_refusal::{RefusalState, RefusedRetry};
 use serde::{Deserialize, Serialize};
@@ -113,6 +115,9 @@ pub trait Backend: SecretStore {
     fn read(&self, account: &str) -> StoreResult<Option<String>>;
     /// Account attributes only; this must not decrypt secrets.
     fn accounts(&self) -> StoreResult<Vec<String>>;
+    /// Queue best-effort maintenance only after a usable combined item loads.
+    /// Never block a normal read or change its authorization policy.
+    fn schedule_cleanup(&self) {}
     /// Accounts whose secret the user restored from a backup instead of
     /// migrating. Their secrets live only in the fresh item.
     /// An unreadable record is an error, never an empty list: silently
@@ -272,8 +277,9 @@ impl<S: Backend> Secrets<S> {
                     "Unsupported macOS secrets version",
                 ));
             }
-            // No legacy reads or cleanup once the bundle exists. In particular,
-            // ignore pending_cleanup from an earlier development build.
+            // Normal consumers never re-read originals once the bundle exists.
+            // Ignore old pending_cleanup fields; maintenance is a separate,
+            // silent process after this snapshot loads successfully.
             return Ok(bundle);
         }
         let mut bundle = Bundle::default();
@@ -359,8 +365,8 @@ impl<S: Backend> Secrets<S> {
                 }
             }
         }
-        // Cleanup is deliberately deferred for at least one release. Dev must
-        // not remove the password, MCP token or passphrase still read by 0.18.0.
+        // Migration never erases originals. Post-load maintenance verifies its
+        // own snapshot before retiring duplicates, after the compatibility release.
         Ok(bundle)
     }
     fn read_legacy_source(&self, bundle: &mut Bundle, source: &str) -> StoreResult<Option<String>> {
@@ -537,7 +543,12 @@ impl<S: Backend> Secrets<S> {
     fn fill(&self, cache: &mut Option<StoreResult<Bundle>>) -> StoreResult<()> {
         if cache.is_none() {
             match self.load() {
-                Ok(bundle) => *cache = Some(Ok(bundle)),
+                Ok(bundle) => {
+                    if !bundle.legacy && !bundle.items.is_empty() {
+                        self.store.schedule_cleanup();
+                    }
+                    *cache = Some(Ok(bundle));
+                }
                 Err(error) => {
                     tracing::error!("macOS secrets load failed: {error}");
                     if error.user_denial() || error.invalid_item {
@@ -902,12 +913,12 @@ mod native {
 
     // Sharing between release and Dev is retained; separate Dev storage was not
     // selected. Neither identity re-creates the other's items anymore.
-    const SERVICE: &str = "com.processone.fluux";
+    pub(super) const SERVICE: &str = "com.processone.fluux";
     #[derive(Default)]
     pub struct Keychain {
         // None in the app; the native regression supplies an explicit scratch
         // keychain, never changing the user's default or search list.
-        keychain: Option<SecKeychain>,
+        pub(super) keychain: Option<SecKeychain>,
         // Per item: a revision observed while reading one item says nothing
         // about the cached contents of the other.
         observed_revision: Mutex<BTreeMap<String, u64>>,
@@ -950,6 +961,16 @@ mod native {
             &self,
             exclusive: bool,
         ) -> Result<(std::fs::File, std::path::PathBuf, u64), String> {
+            self.revision_lock(exclusive, true)
+        }
+        pub(super) fn cleanup_revision(&self) -> Result<std::fs::File, String> {
+            self.revision_lock(true, false).map(|(lock, _, _)| lock)
+        }
+        fn revision_lock(
+            &self,
+            exclusive: bool,
+            wait: bool,
+        ) -> Result<(std::fs::File, std::path::PathBuf, u64), String> {
             use std::{fs::OpenOptions, os::unix::fs::OpenOptionsExt};
             let path = self.revision_path()?;
             std::fs::create_dir_all(path.parent().ok_or("Missing revision directory")?)
@@ -965,12 +986,15 @@ mod native {
                 .map_err(|e| e.to_string())?;
             // Readers may wait for authorization while holding this lock. Let
             // other readers proceed, but keep writes exclusive through mutation.
-            if exclusive {
-                file.lock()
+            if !wait {
+                file.try_lock().map_err(|error| {
+                    format!("Secrets are busy or unavailable; cleanup deferred: {error}")
+                })?;
+            } else if exclusive {
+                file.lock().map_err(|e| e.to_string())?;
             } else {
-                file.lock_shared()
+                file.lock_shared().map_err(|e| e.to_string())?;
             }
-            .map_err(|e| e.to_string())?;
             let revision = match std::fs::read_to_string(&path) {
                 Ok(value) => value
                     .trim()
@@ -1021,7 +1045,7 @@ mod native {
             Ok(lock)
         }
 
-        fn query(&self, account: Option<&str>) -> ItemSearchOptions {
+        pub(super) fn query(&self, account: Option<&str>) -> ItemSearchOptions {
             let mut query = ItemSearchOptions::new();
             query.class(ItemClass::generic_password()).service(SERVICE);
             if let Some(keychain) = &self.keychain {
@@ -1031,6 +1055,28 @@ mod native {
                 query.account(account);
             }
             query
+        }
+        // Cleanup already holds the exclusive revision lock. Its verified
+        // snapshot must not reacquire a shared lock or change cache revisions.
+        pub(super) fn read_item(&self, account: &str) -> StoreResult<Option<String>> {
+            match find_generic_password(
+                self.keychain.as_ref().map(std::slice::from_ref),
+                SERVICE,
+                account,
+            ) {
+                Ok((bytes, _)) => String::from_utf8(bytes.to_vec()).map(Some).map_err(|_| {
+                    if is_bundle(account) {
+                        StoreError::invalid_item("Invalid keychain text")
+                    } else {
+                        "Invalid keychain text".into()
+                    }
+                }),
+                Err(e) if e.code() == -25300 => Ok(None),
+                Err(e) => Err(StoreError::native(
+                    e.code(),
+                    format!("Read macOS keychain: {e}"),
+                )),
+            }
         }
     }
     impl SecretStore for Keychain {
@@ -1082,6 +1128,10 @@ mod native {
         }
     }
     impl Backend for Keychain {
+        #[cfg(not(test))]
+        fn schedule_cleanup(&self) {
+            cleanup::schedule();
+        }
         fn fresh_accounts(&self) -> StoreResult<Vec<String>> {
             match std::fs::read_to_string(self.fresh_marker_path()?) {
                 Ok(text) => Ok(text.lines().map(str::to_string).collect()),
@@ -1123,24 +1173,7 @@ mod native {
                     None => observed.remove(account),
                 };
             }
-            match find_generic_password(
-                self.keychain.as_ref().map(std::slice::from_ref),
-                SERVICE,
-                account,
-            ) {
-                Ok((bytes, _)) => String::from_utf8(bytes.to_vec()).map(Some).map_err(|_| {
-                    if is_bundle(account) {
-                        StoreError::invalid_item("Invalid keychain text")
-                    } else {
-                        "Invalid keychain text".into()
-                    }
-                }),
-                Err(e) if e.code() == -25300 => Ok(None),
-                Err(e) => Err(StoreError::native(
-                    e.code(),
-                    format!("Read macOS keychain: {e}"),
-                )),
-            }
+            self.read_item(account)
         }
 
         fn accounts(&self) -> StoreResult<Vec<String>> {
@@ -1287,12 +1320,118 @@ mod native {
         assert!(home.join(".fluux-keychain-test-home").is_file());
         assert!(path.is_absolute() && path.starts_with(home.canonicalize().unwrap()));
         assert!(std::env::var_os("FM3000_LOCAL_CODESIGN_DIR").is_some());
-        let _no_dialogs = SecKeychain::disable_user_interaction().unwrap();
         let action = std::env::var("FLUUX_PROBE_ACTION").unwrap();
         let raw = Keychain {
             keychain: Some(SecKeychain::open(&path).unwrap()),
             ..Keychain::default()
         };
+        // Deferred cleanup disables interaction only in its child process. The parent must keep its
+        // normal authorization policy, including explicit logout and forget.
+        if action == "cleanup-worker" {
+            println!("{}", cleanup::perform(&raw).unwrap());
+            return;
+        }
+        if matches!(action.as_str(), "cleanup-trusted" | "cleanup-untrusted") {
+            assert!(SecKeychain::user_interaction_allowed().unwrap());
+            let combined = raw.get(ACCOUNT).unwrap();
+            let fresh = raw.get(FRESH_ACCOUNT).unwrap();
+            let names = raw.accounts().unwrap();
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "macos_secrets::native::native_keychain_probe",
+                    "--exact",
+                    "--ignored",
+                    "--nocapture",
+                ])
+                .env("FLUUX_PROBE_ACTION", "cleanup-worker")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            print!("{}", String::from_utf8_lossy(&output.stdout));
+            assert!(SecKeychain::user_interaction_allowed().unwrap());
+            assert_eq!(raw.get(ACCOUNT).unwrap(), combined);
+            assert_eq!(raw.get(FRESH_ACCOUNT).unwrap(), fresh);
+            let remaining = raw.accounts().unwrap();
+            if action == "cleanup-untrusted" {
+                assert_eq!(
+                    remaining.into_iter().collect::<BTreeSet<_>>(),
+                    names.into_iter().collect::<BTreeSet<_>>()
+                );
+                println!(
+                    "untrusted old copies retained silently; parent interaction policy unchanged"
+                );
+            } else {
+                assert_eq!(
+                    remaining.into_iter().collect::<BTreeSet<_>>(),
+                    BTreeSet::from([
+                        ACCOUNT.to_string(),
+                        FRESH_ACCOUNT.to_string(),
+                        "openpgp_passphrase:alice@example.com".into(),
+                        "foreign-entry".into(),
+                    ])
+                );
+                let logical = Secrets::new(raw);
+                assert_eq!(
+                    crate::credentials::load(&logical)
+                        .unwrap()
+                        .unwrap()
+                        .password,
+                    "test-password"
+                );
+                assert_eq!(
+                    logical.get("mcp-token").unwrap().as_deref(),
+                    Some("test-token")
+                );
+                assert_eq!(
+                    logical
+                        .get("openpgp_passphrase:alice@example.com")
+                        .unwrap()
+                        .as_deref(),
+                    Some("ZnJlc2gtcGFzcw==")
+                );
+                println!("verified originals and migration backup retired; login/token/fresh passphrase survive restart; foreign and restored copies untouched");
+            }
+            return;
+        }
+        let _no_dialogs = SecKeychain::disable_user_interaction().unwrap();
+        if action == "cleanup-race-write" {
+            raw.set("mcp-token", "older-app-raced-token").unwrap();
+            return;
+        }
+        if action == "cleanup-race-read" {
+            assert_eq!(
+                raw.get("mcp-token").unwrap().as_deref(),
+                Some("older-app-raced-token")
+            );
+            return;
+        }
+        if action == "cleanup-race" {
+            cleanup::changed_generation(&raw);
+            println!("an uncoordinated old write changed the native generation; conditional deletion refused and preserved its value");
+            return;
+        }
+        if action == "cleanup-prepare" {
+            raw.set("identity-migration-backup:mcp-token", "previous-token")
+                .unwrap();
+            raw.set("foreign-entry", "opaque").unwrap();
+            let logical = Secrets::new(raw);
+            assert_eq!(
+                logical.get("mcp-token").unwrap().as_deref(),
+                Some("test-token")
+            );
+            let raw = logical.store;
+            assert!(raw.get(FRESH_ACCOUNT).unwrap().is_none());
+            let fresh = serde_json::json!({"version":1,"items":{"openpgp_passphrase:alice@example.com":"ZnJlc2gtcGFzcw=="}});
+            raw.set(FRESH_ACCOUNT, &fresh.to_string()).unwrap();
+            raw.mark_fresh_account("openpgp_passphrase:alice@example.com")
+                .unwrap();
+            println!("prepared verified originals, migration backup, a foreign item and independent restored storage");
+            return;
+        }
         // FLM-104 I1: the launcher holds a shared revision lock in a separate
         // process. A pending reader must not serialize another identity's read.
         if action == "shared-read" {
@@ -1684,6 +1823,8 @@ pub use native::secrets;
 mod lab;
 #[cfg(all(target_os = "macos", feature = "startup-recovery-lab"))]
 pub use lab::secrets;
+#[cfg(target_os = "macos")]
+pub(crate) use cleanup::run_worker as run_cleanup_worker;
 
 #[cfg(test)]
 mod tests {
@@ -1723,6 +1864,7 @@ mod tests {
         mark_failures_after_publish: Mutex<usize>,
         // After a failed mark, the record can no longer be read back.
         unreadable_after_failed_mark: Mutex<bool>,
+        scheduled_cleanup: Mutex<usize>,
         // Failures of reads of one named old item, and how many remain.
         item_read_errors: Mutex<BTreeMap<String, (StoreError, usize)>>,
         access_observer: Option<AccessObserver>,
@@ -1769,6 +1911,9 @@ mod tests {
         }
     }
     impl Backend for FakeStore {
+        fn schedule_cleanup(&self) {
+            *self.scheduled_cleanup.lock().unwrap() += 1;
+        }
         fn fresh_accounts(&self) -> StoreResult<Vec<String>> {
             if *self.fresh_unreadable.lock().unwrap() {
                 return Err("marker unreadable".into());
@@ -3453,6 +3598,33 @@ mod tests {
                 Some("recovered-passphrase")
             );
         }
+    }
+
+    // Deferred cleanup must be scheduled once only after a verified load, never
+    // after a partial migration or a malformed combined item.
+    #[test]
+    fn cleanup_is_scheduled_only_for_a_usable_combined_snapshot() {
+        let store = Secrets::new(legacy());
+        assert!(store.get("mcp-token").unwrap().is_some());
+        assert!(store.get("last_user").unwrap().is_some());
+        assert_eq!(*store.store.scheduled_cleanup.lock().unwrap(), 1);
+        let restarted = Secrets::new(store.store);
+        assert!(restarted.get("mcp-token").unwrap().is_some());
+        assert_eq!(*restarted.store.scheduled_cleanup.lock().unwrap(), 2);
+
+        let raw = legacy();
+        raw.item_read_errors
+            .lock()
+            .unwrap()
+            .insert("mcp-token".into(), (StoreError::denied(), 1));
+        let store = Secrets::new(raw);
+        assert!(store.get("last_user").unwrap().is_some());
+        assert_eq!(*store.store.scheduled_cleanup.lock().unwrap(), 0);
+        let raw = legacy();
+        raw.set(ACCOUNT, "invalid bundle").unwrap();
+        let store = Secrets::new(raw);
+        assert!(store.get("mcp-token").is_err());
+        assert_eq!(*store.store.scheduled_cleanup.lock().unwrap(), 0);
     }
 
     #[test]
