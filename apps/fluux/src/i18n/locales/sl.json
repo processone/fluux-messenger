@@ -930,6 +930,7 @@
             "backupStatusExists": "Na tem strežniku obstaja varnostna kopija.",
             "backupStatusInSync": "Ta ključ je shranjen na strežniku.",
             "backupStatusMismatch": "Na strežniku obstaja varnostna kopija, vendar se ne ujema s ključem te naprave.",
+            "backupStatusUnconfirmed": "Na tem strežniku obstaja varnostna kopija, vendar ni potrjeno, da vsebuje ta ključ.",
             "backupStatusUnknown": "Ni bilo mogoče preveriti, ali na tem strežniku obstaja varnostna kopija.",
             "backupStatusRetry": "Preveri znova",
             "statusRecoveryNeeded": "Lokalnega ključa ni bilo mogoče odkleniti. Obnovite varnostno kopijo, da obnovite šifrirno identiteto tega računa.",

@@ -928,6 +928,7 @@
             "backupStatusExists": "Hi ha una còpia de seguretat en aquest servidor.",
             "backupStatusInSync": "Aquesta clau està desada al servidor.",
             "backupStatusMismatch": "Hi ha una còpia de seguretat al servidor, però no coincideix amb la clau d'aquest dispositiu.",
+            "backupStatusUnconfirmed": "Hi ha una còpia de seguretat en aquest servidor, però no s’ha confirmat que contingui aquesta clau.",
             "backupStatusUnknown": "No s'ha pogut comprovar si hi ha una còpia de seguretat en aquest servidor.",
             "backupStatusRetry": "Torna-ho a comprovar",
             "statusRecoveryNeeded": "No s’ha pogut desbloquejar la clau local. Restaura una còpia de seguretat per recuperar la identitat de xifratge d’aquest compte.",

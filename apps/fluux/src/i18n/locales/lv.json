@@ -927,6 +927,7 @@
             "backupStatusExists": "Šajā serverī ir rezerves kopija.",
             "backupStatusInSync": "Šī atslēga ir saglabāta serverī.",
             "backupStatusMismatch": "Serverī ir rezerves kopija, bet tā neatbilst šīs ierīces atslēgai.",
+            "backupStatusUnconfirmed": "Šajā serverī ir rezerves kopija, taču nav apstiprināts, ka tā satur šo atslēgu.",
             "backupStatusUnknown": "Neizdevās pārbaudīt, vai šajā serverī ir rezerves kopija.",
             "backupStatusRetry": "Pārbaudīt vēlreiz",
             "statusRecoveryNeeded": "Vietējo atslēgu neizdevās atbloķēt. Atjaunojiet rezerves kopiju, lai atgūtu šī konta šifrēšanas identitāti.",

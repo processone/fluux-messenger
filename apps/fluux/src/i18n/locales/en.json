@@ -803,6 +803,7 @@
             "backupStatusExists": "Backed up on this server.",
             "backupStatusInSync": "This key is backed up on the server.",
             "backupStatusMismatch": "A backup exists on the server, but it doesn't match this device's key.",
+            "backupStatusUnconfirmed": "A backup exists on this server, but this key's backup status is unconfirmed.",
             "backupStatusUnknown": "Couldn't check whether a backup exists on this server.",
             "backupStatusRetry": "Check again",
             "statusRecoveryNeeded": "The local key could not be unlocked. Restore from backup to recover this account’s encryption identity.",

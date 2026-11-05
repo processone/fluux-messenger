@@ -926,6 +926,7 @@
             "backupStatusExists": "יש גיבוי בשרת זה.",
             "backupStatusInSync": "מפתח זה מגובה בשרת.",
             "backupStatusMismatch": "יש גיבוי בשרת, אך הוא אינו תואם את המפתח של המכשיר הזה.",
+            "backupStatusUnconfirmed": "קיים גיבוי בשרת הזה, אך לא אושר שהוא מכיל את המפתח הזה.",
             "backupStatusUnknown": "לא ניתן היה לבדוק אם קיים גיבוי בשרת זה.",
             "backupStatusRetry": "בדוק שוב",
             "statusRecoveryNeeded": "לא ניתן לבטל את נעילת המפתח המקומי. יש לשחזר גיבוי כדי לשחזר את זהות ההצפנה של החשבון הזה.",

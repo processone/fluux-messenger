@@ -928,6 +928,7 @@
             "backupStatusExists": "Atsarginė kopija šiame serveryje.",
             "backupStatusInSync": "Šis raktas išsaugotas serveryje.",
             "backupStatusMismatch": "Serveryje yra atsarginė kopija, bet ji neatitinka šio įrenginio rakto.",
+            "backupStatusUnconfirmed": "Šiame serveryje yra atsarginė kopija, tačiau nepatvirtinta, kad joje yra šis raktas.",
             "backupStatusUnknown": "Nepavyko patikrinti, ar šiame serveryje yra atsarginė kopija.",
             "backupStatusRetry": "Tikrinti iš naujo",
             "statusRecoveryNeeded": "Nepavyko atrakinti vietinio rakto. Atkurkite atsarginę kopiją, kad susigrąžintumėte šios paskyros šifravimo tapatybę.",

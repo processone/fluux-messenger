@@ -932,6 +932,7 @@
             "backupStatusExists": "Hemm backup fuq dan is-server.",
             "backupStatusInSync": "Din iċ-ċavetta hi ssejvjata fuq is-server.",
             "backupStatusMismatch": "Hemm backup fuq is-server, iżda ma jaqbilx maċ-ċavetta ta' dan it-tagħmir.",
+            "backupStatusUnconfirmed": "Jeżisti backup fuq dan is-server, iżda mhux ikkonfermat li fih din iċ-ċavetta.",
             "backupStatusUnknown": "Ma stajniex nivverifikaw jekk hemmx backup fuq dan is-server.",
             "backupStatusRetry": "Ivverifika mill-ġdid",
             "statusRecoveryNeeded": "Iċ-ċavetta lokali ma setgħetx tinfetaħ. Irrestawra backup biex tirkupra l-identità tal-kriptaġġ ta’ dan il-kont.",

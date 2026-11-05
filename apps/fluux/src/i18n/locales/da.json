@@ -924,6 +924,7 @@
             "backupStatusExists": "Sikkerhedskopieret på denne server.",
             "backupStatusInSync": "Denne nøgle er sikkerhedskopieret på serveren.",
             "backupStatusMismatch": "Der findes en sikkerhedskopi på serveren, men den matcher ikke enhedens nøgle.",
+            "backupStatusUnconfirmed": "Der findes en sikkerhedskopi på denne server, men det er ikke bekræftet, at den indeholder denne nøgle.",
             "backupStatusUnknown": "Kunne ikke kontrollere, om der findes en sikkerhedskopi på denne server.",
             "backupStatusRetry": "Kontrollér igen",
             "statusRecoveryNeeded": "Den lokale nøgle kunne ikke låses op. Gendan en sikkerhedskopi for at gendanne denne kontos krypteringsidentitet.",

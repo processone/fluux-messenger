@@ -928,6 +928,7 @@
             "backupStatusExists": "Cópia de segurança presente neste servidor.",
             "backupStatusInSync": "Esta chave está guardada no servidor.",
             "backupStatusMismatch": "Existe uma cópia de segurança no servidor, mas não corresponde à chave deste dispositivo.",
+            "backupStatusUnconfirmed": "Existe uma cópia de segurança neste servidor, mas não foi confirmado que contém esta chave.",
             "backupStatusUnknown": "Não foi possível verificar se existe uma cópia de segurança neste servidor.",
             "backupStatusRetry": "Verificar novamente",
             "statusRecoveryNeeded": "Não foi possível desbloquear a chave local. Restaura uma cópia de segurança para recuperar a identidade de encriptação desta conta.",

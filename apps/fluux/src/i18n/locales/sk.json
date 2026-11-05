@@ -929,6 +929,7 @@
             "backupStatusExists": "Na tomto serveri existuje záloha.",
             "backupStatusInSync": "Tento kľúč je zálohovaný na serveri.",
             "backupStatusMismatch": "Na serveri existuje záloha, ale nezodpovedá kľúču tohto zariadenia.",
+            "backupStatusUnconfirmed": "Na tomto serveri existuje záloha, ale nie je potvrdené, že obsahuje tento kľúč.",
             "backupStatusUnknown": "Nepodarilo sa overiť, či na tomto serveri existuje záloha.",
             "backupStatusRetry": "Overiť znova",
             "statusRecoveryNeeded": "Miestny kľúč sa nepodarilo odomknúť. Obnovte zálohu a získajte späť šifrovaciu identitu tohto účtu.",

@@ -924,6 +924,7 @@
             "backupStatusExists": "Geback-upt op deze server.",
             "backupStatusInSync": "Deze sleutel staat op de server geback-upt.",
             "backupStatusMismatch": "Er staat een back-up op de server, maar die komt niet overeen met de sleutel van dit apparaat.",
+            "backupStatusUnconfirmed": "Er is een back-up op deze server, maar het is niet bevestigd dat de back-up deze sleutel bevat.",
             "backupStatusUnknown": "Kon niet controleren of er een back-up bestaat op deze server.",
             "backupStatusRetry": "Opnieuw controleren",
             "statusRecoveryNeeded": "De lokale sleutel kon niet worden ontgrendeld. Herstel een back-up om de versleutelingsidentiteit van dit account te herstellen.",

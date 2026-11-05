@@ -928,6 +928,7 @@
             "backupStatusExists": "Backup presente su questo server.",
             "backupStatusInSync": "Questa chiave è salvata sul server.",
             "backupStatusMismatch": "Esiste un backup sul server, ma non corrisponde alla chiave di questo dispositivo.",
+            "backupStatusUnconfirmed": "Su questo server esiste un backup, ma non è confermato che contenga questa chiave.",
             "backupStatusUnknown": "Impossibile verificare se esiste un backup su questo server.",
             "backupStatusRetry": "Verifica di nuovo",
             "statusRecoveryNeeded": "Impossibile sbloccare la chiave locale. Ripristina un backup per recuperare l’identità di crittografia di questo account.",

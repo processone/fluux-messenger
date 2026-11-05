@@ -928,6 +928,7 @@
             "backupStatusExists": "Hay una copia de seguridad en este servidor.",
             "backupStatusInSync": "Esta clave está respaldada en el servidor.",
             "backupStatusMismatch": "Existe una copia de seguridad en el servidor, pero no coincide con la clave de este dispositivo.",
+            "backupStatusUnconfirmed": "Existe una copia de seguridad en este servidor, pero no se ha confirmado que contenga esta clave.",
             "backupStatusUnknown": "No se pudo comprobar si existe una copia de seguridad en este servidor.",
             "backupStatusRetry": "Comprobar de nuevo",
             "statusRecoveryNeeded": "No se ha podido desbloquear la clave local. Restaura una copia de seguridad para recuperar la identidad de cifrado de esta cuenta.",

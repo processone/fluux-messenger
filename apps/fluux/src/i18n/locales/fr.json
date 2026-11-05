@@ -959,6 +959,7 @@
             "backupStatusExists": "Sauvegardée sur ce serveur.",
             "backupStatusInSync": "Cette clé est sauvegardée sur le serveur.",
             "backupStatusMismatch": "Une sauvegarde existe sur le serveur, mais elle ne correspond pas à la clé de cet appareil.",
+            "backupStatusUnconfirmed": "Une sauvegarde existe sur ce serveur, mais rien ne confirme qu’elle contient cette clé.",
             "backupStatusUnknown": "Impossible de vérifier si une sauvegarde existe sur ce serveur.",
             "backupStatusRetry": "Vérifier à nouveau",
             "statusRecoveryNeeded": "La clé locale n’a pas pu être déverrouillée. Restaurez une sauvegarde pour récupérer l’identité de chiffrement de ce compte.",

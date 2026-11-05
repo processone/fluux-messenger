@@ -926,6 +926,7 @@
             "backupStatusExists": "Selles serveris on varukoopia.",
             "backupStatusInSync": "See võti on serveris varundatud.",
             "backupStatusMismatch": "Serveris on varukoopia, kuid see ei vasta selle seadme võtmele.",
+            "backupStatusUnconfirmed": "Selles serveris on varukoopia, kuid pole kinnitatud, et see sisaldab seda võtit.",
             "backupStatusUnknown": "Ei õnnestunud kontrollida, kas selles serveris on varukoopia.",
             "backupStatusRetry": "Kontrolli uuesti",
             "statusRecoveryNeeded": "Kohalikku võtit ei saanud avada. Taasta varukoopia, et taastada selle konto krüptimisidentiteet.",

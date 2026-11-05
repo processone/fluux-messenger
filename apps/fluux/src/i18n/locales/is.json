@@ -924,6 +924,7 @@
             "backupStatusExists": "Öryggisafrit á þessum þjóni.",
             "backupStatusInSync": "Þessi lykill er afritaður á þjóninum.",
             "backupStatusMismatch": "Öryggisafrit er til á þjóninum, en samsvarar ekki lyklinum á þessu tæki.",
+            "backupStatusUnconfirmed": "Öryggisafrit er til á þessum þjóni, en ekki hefur verið staðfest að það innihaldi þennan lykil.",
             "backupStatusUnknown": "Ekki var hægt að athuga hvort öryggisafrit er til á þessum þjóni.",
             "backupStatusRetry": "Athuga aftur",
             "statusRecoveryNeeded": "Ekki tókst að aflæsa staðbundna lyklinum. Endurheimtu öryggisafrit til að endurheimta dulritunarauðkenni þessa reiknings.",

@@ -924,6 +924,7 @@
             "backupStatusExists": "Biztonsági mentés van ezen a kiszolgálón.",
             "backupStatusInSync": "Ennek a kulcsnak biztonsági mentése van a kiszolgálón.",
             "backupStatusMismatch": "A kiszolgálón van biztonsági mentés, de nem egyezik az eszköz kulcsával.",
+            "backupStatusUnconfirmed": "Ezen a kiszolgálón van biztonsági másolat, de nem megerősített, hogy tartalmazza ezt a kulcsot.",
             "backupStatusUnknown": "Nem sikerült ellenőrizni, hogy létezik-e biztonsági mentés ezen a kiszolgálón.",
             "backupStatusRetry": "Ellenőrzés újra",
             "statusRecoveryNeeded": "A helyi kulcs zárolását nem sikerült feloldani. Állíts vissza egy biztonsági mentést a fiók titkosítási identitásának helyreállításához.",

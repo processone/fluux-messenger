@@ -240,6 +240,20 @@ export interface BackupRecoveryMode {
   accountJid: string
 }
 
+/** Selected-key installs carry the typed code independently of its working form.
+ * Supplying accountJid explicitly opts into account-bound recovery. */
+export interface KeyInstallOptions {
+  accountJid?: string
+  typedPassphrase?: string
+}
+
+export interface BackupContext {
+  message: string
+  /** Code form that decrypted this source, possibly the legacy encoding. */
+  passphrase: string
+  typedPassphrase?: string
+}
+
 /**
  * Discriminated union returned by {@link restoreSecretKey} /
  * {@link importKeyFromFile}. When the backup contains a single key
@@ -253,7 +267,7 @@ export type RestoreResult =
       needsPicker: true
       recommendedFingerprint?: string
       candidates: KeyBundle[]
-      backupContext: { message: string; passphrase: string }
+      backupContext: BackupContext
     }
 
 /** Decryption result returned by the crypto backend. */
@@ -1554,8 +1568,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         armoredMessage,
         workingPassphrase,
         selection.selected.fingerprint,
-        undefined,
-        armoredMessage,
+        { fromServer: true },
       )
       if (usedLegacyPassphrase) {
         await this.healLegacyBackupEncoding(passphrase)
@@ -1567,7 +1580,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       needsPicker: true,
       ...(recovery ? { recommendedFingerprint: selection.selected.fingerprint } : {}),
       candidates: bundles,
-      backupContext: { message: armoredMessage, passphrase: workingPassphrase },
+      backupContext: { message: armoredMessage, passphrase: workingPassphrase,
+        ...(workingPassphrase !== passphrase ? { typedPassphrase: passphrase } : {}) },
     }
   }
 
@@ -1666,14 +1680,15 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
     this.assertRecoveryAccount(recovery)
     if (!selection.needsPicker && !recovery) {
-      return this.doInstallKey(armoredMessage, workingPassphrase, selection.selected.fingerprint)
+      return this.doInstallKey(armoredMessage, workingPassphrase, selection.selected.fingerprint, { typedPassphrase: passphrase })
     }
 
     return {
       needsPicker: true,
       ...(recovery ? { recommendedFingerprint: selection.selected.fingerprint } : {}),
       candidates: bundles,
-      backupContext: { message: armoredMessage, passphrase: workingPassphrase },
+      backupContext: { message: armoredMessage, passphrase: workingPassphrase,
+        ...(workingPassphrase !== passphrase ? { typedPassphrase: passphrase } : {}) },
     }
   }
 
@@ -1681,9 +1696,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     backupMessage: string,
     passphrase: string,
     fingerprint: string,
-    recovery?: BackupRecoveryMode,
+    options?: KeyInstallOptions,
   ): Promise<IdentityInfo> {
-    return this.doInstallKey(backupMessage, passphrase, fingerprint, recovery)
+    const recovery = options?.accountJid !== undefined ? { accountJid: options.accountJid } : undefined
+    return this.doInstallKey(backupMessage, passphrase, fingerprint, { recovery, typedPassphrase: options?.typedPassphrase })
   }
 
   protected async selectKeyFromBackup(
@@ -1722,9 +1738,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     backupMessage: string,
     passphrase: string,
     fingerprint: string,
-    recovery?: BackupRecoveryMode,
-    knownServerBackup?: string,
+    options: { recovery?: BackupRecoveryMode; fromServer?: boolean; typedPassphrase?: string } = {},
   ): Promise<IdentityInfo> {
+    const { recovery, fromServer = false, typedPassphrase = passphrase } = options
     const ctx = this.requireCtx()
     this.assertRecoveryAccount(recovery)
     if (this.runningOwnKeyOperations) throw new E2EEPluginError('transient', 'identity-change-pending', 'An identity change is already in progress')
@@ -1751,22 +1767,30 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // picker installs must check the server, without publishing a backup.
       // An export re-encrypts the key, so different packet bytes need a
       // read-only decryption/fingerprint check, not an assumption of mismatch.
-      let backedUp = false
-      try {
-        const serverBackup = knownServerBackup ?? await this.fetchSecretKeyBackup()
-        if (serverBackup) {
-          backedUp = openPgpBlocksEqual(serverBackup, backupMessage)
-          if (!backedUp) {
-            const { bundles } = await this.backupImportAllWithLegacyFallback(
-              ctx.account.jid, serverBackup, passphrase, 'confirmInstalledKeyBackup', false,
-            )
-            backedUp = bundles.some(key => fingerprintsEqual(key.fingerprint, bundle.fingerprint))
+      let backedUp = fromServer
+      if (!fromServer) {
+        try {
+          const serverBackup = await this.fetchSecretKeyBackup()
+          if (serverBackup) {
+            backedUp = openPgpBlocksEqual(serverBackup, backupMessage)
+            if (!backedUp) {
+              const inspect = (code: string) => this.backupImportAllWithLegacyFallback(
+                ctx.account.jid, serverBackup, code, 'confirmInstalledKeyBackup', false,
+              )
+              const { bundles } = await inspect(passphrase).catch(error => {
+                // A legacy file may need its normalized code, while the same
+                // key's healed server backup needs the code the user typed.
+                if (typedPassphrase === passphrase) throw error
+                return inspect(typedPassphrase)
+              })
+              backedUp = bundles.some(key => fingerprintsEqual(key.fingerprint, bundle.fingerprint))
+            }
           }
+        } catch (err) {
+          // A missing code, failed read or unreadable backup cannot prove a new
+          // marker. The local install succeeded; retain prior confirmed state.
+          ctx.logger.debug(`${this.pluginName()}: could not confirm installed key's server backup: ${formatError(err)}`)
         }
-      } catch (err) {
-        // A missing code, failed read or unreadable backup cannot prove a new
-        // marker. The local install succeeded; retain prior confirmed state.
-        ctx.logger.debug(`${this.pluginName()}: could not confirm installed key's server backup: ${formatError(err)}`)
       }
       if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
       if (backedUp) writeBackedUpFingerprint(ctx.account.jid, bundle.fingerprint)
@@ -1836,8 +1860,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         result.backupContext.message,
         result.backupContext.passphrase,
         sorted[0].fingerprint,
-        undefined,
-        result.backupContext.message,
+        { fromServer: true },
       )
       clearOwnKeyConflict()
       return info

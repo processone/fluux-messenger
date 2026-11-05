@@ -507,11 +507,13 @@ restore the `com.processone.fluux*` ones.
 
 The account-scoped backup marker records a fingerprint after a successful secret-key
 publication, or after an install proven to exist in the server backup. Direct server
-restores reuse the backup they already fetched. File and generic picker installs
-read the server backup: identical encrypted packet bytes prove the source regardless
+restores explicitly identify their already-verified server source and need no
+second read. File and generic picker installs read the server backup: identical encrypted packet bytes prove the source regardless
 of armor headers; otherwise the backend decrypts it with the install passphrase
 (including the established legacy-code fallback) and checks for the installed
-fingerprint. This inspection does not replace a pending web picker selection.
+fingerprint. If a legacy file required a normalized working code, its original typed
+code is preserved through every picker and also tried against a healed server copy.
+This inspection does not replace a pending web picker selection.
 A failed read/decryption or a different identity leaves prior confirmed state alone;
 file import never publishes or heals a secret backup. Settings reads the confirmed
 marker rather than treating an install result as backup evidence.
@@ -520,6 +522,12 @@ Markers from the earlier namespace are ignored because file imports could write
 false claims. Only a newly confirmed backup/install establishes the versioned marker.
 This also resets previously correct status until fresh evidence establishes it;
 explicit clearing removes both layouts for that account without touching others.
+Settings treats a present backup without a confirmed marker as unknown identity,
+not a mismatch or proof of another device's ownership. One certainty reading drives
+the neutral status, unknown replacement warning, rotation warning and rotation's
+backup-code acknowledgement. Rotation re-publishes in this state, deliberately
+replacing any existing backup and code, even when another device created them.
+A confirmed different marker remains a mismatch and retains its separate policy.
 
 ### Guided macOS backup recovery
 

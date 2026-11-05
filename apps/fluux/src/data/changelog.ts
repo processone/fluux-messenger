@@ -36,7 +36,7 @@ export const changelog: ChangelogEntry[] = [
       {
         type: 'fixed',
         items: [
-          'Importing an OpenPGP key file now checks that the server backup contains the same identity before reporting it as backed up, including when the file was encrypted separately. Earlier backup-status markers are reset because file imports could record an incorrect claim; backing up or restoring again confirms the status',
+          'Importing an OpenPGP key file checks that the server backup contains the same identity, including separately encrypted and older exports. Earlier backup-status markers are reset because file imports could record an incorrect claim. An unconfirmed backup now has a neutral status and a replacement warning. Rotating a key refreshes an unconfirmed backup and replaces its code, even if another device created it',
           'Room history stays readable while you join a room: only the message box is replaced by a joining status. Reopening a room no longer shows the cached-history warning or asks you to join while it is already rejoining, and a failed join brings back the join button',
           'On desktop, new messages no longer move the message, action buttons or menu you are using. Typing resumes following new messages if you were following before, unless a menu is open, and the jump-to-latest button stays hidden while a message menu is open',
           'Scrolling up in conversations and rooms no longer jumps backward when messages above the view become shorter, and private messages in rooms no longer make the messages around them jump as you scroll. On iOS, your reading position also holds when you pull past the top or bottom and when you lift your finger',

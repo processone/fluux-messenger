@@ -66,7 +66,8 @@ export function BackupRecoveryDialog({ client, manager, onClose, onRestored }: {
     try {
       assertCurrent()
       const result = await plugin!.installSelectedKey(preview.backupContext.message,
-        preview.backupContext.passphrase, fingerprint, { accountJid: accountJid! })
+        preview.backupContext.passphrase, fingerprint, { accountJid: accountJid!,
+          ...(preview.backupContext.typedPassphrase !== undefined ? { typedPassphrase: preview.backupContext.typedPassphrase } : {}) })
       assertCurrent()
       onRestored(result.fingerprint)
     } finally { running.current = false }

@@ -924,6 +924,7 @@
             "backupStatusExists": "Varmuuskopio tällä palvelimella.",
             "backupStatusInSync": "Tämä avain on varmuuskopioitu palvelimelle.",
             "backupStatusMismatch": "Palvelimella on varmuuskopio, mutta se ei vastaa tämän laitteen avainta.",
+            "backupStatusUnconfirmed": "Tällä palvelimella on varmuuskopio, mutta sen ei ole vahvistettu sisältävän tätä avainta.",
             "backupStatusUnknown": "Ei voitu tarkistaa, onko tällä palvelimella varmuuskopiota.",
             "backupStatusRetry": "Tarkista uudelleen",
             "statusRecoveryNeeded": "Paikallisen avaimen lukitusta ei voitu avata. Palauta varmuuskopio palauttaaksesi tämän tilin salausidentiteetin.",

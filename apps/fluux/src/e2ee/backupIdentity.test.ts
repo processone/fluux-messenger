@@ -163,6 +163,33 @@ describe('server backup identity after file installation', () => {
     expect(device.publications).not.toContain(secretNode)
   })
 
+  it.each(['automatic', 'picker', 'guided'] as const)('R2 keeps the typed code for a legacy same-key file through %s install', async mode => {
+    const workingCode = legacyNormalizeBackupPassphrase(meta.backupPassphrase)
+    const [alice] = await decode(fixture('web_alice_backup.asc'), workingCode)
+    const keys = [alice]
+    if (mode === 'picker') keys.push(...await decode(bobBackup, workingCode))
+    const legacyFile = mode === 'picker' ? await encrypt({
+      message: await createMessage({ binary: new Uint8Array(keys.flatMap(key => [...key.write()])) }),
+      passwords: [workingCode], format: 'armored',
+    }) : fixture('web_alice_backup.asc')
+    const healed = await encrypt({ message: await createMessage({ binary: alice.write() }), passwords: [meta.backupPassphrase], format: 'armored' })
+    const f = await setup()
+    f.nodes.set(secretNode, [{ id: 'current', payload: { name: 'secretkey', attrs: { xmlns: 'urn:xmpp:openpgp:0' }, children: [Buffer.from((await unarmor(healed)).data).toString('base64')] } }])
+    const serverBefore = await f.plugin.fetchSecretKeyBackup()
+    const preview = await f.plugin.importKeyFromFile(legacyFile, meta.backupPassphrase, mode === 'guided' ? { accountJid: jid } : undefined)
+    if (mode !== 'automatic') {
+      if (!('needsPicker' in preview)) throw new Error('Expected key choice')
+      expect(preview.backupContext.passphrase).toBe(workingCode)
+      expect(preview.backupContext.typedPassphrase).toBe(meta.backupPassphrase)
+      await f.plugin.installSelectedKey(preview.backupContext.message, preview.backupContext.passphrase, webMeta.aliceFingerprint,
+        { ...(mode === 'guided' ? { accountJid: jid } : {}), typedPassphrase: preview.backupContext.typedPassphrase })
+    }
+    expect(f.plugin.getOwnFingerprint()).toBe(webMeta.aliceFingerprint)
+    expect(f.plugin.getBackedUpFingerprint()).toBe(webMeta.aliceFingerprint)
+    expect(await f.plugin.fetchSecretKeyBackup()).toBe(serverBefore)
+    expect(f.publications).not.toContain(secretNode)
+  })
+
   it('F1 read-only server inspection does not replace a staged file selection', async () => {
     const f = await setup()
     const preview = await f.plugin.importKeyFromFile(bobBackup, meta.backupPassphrase, { accountJid: jid })

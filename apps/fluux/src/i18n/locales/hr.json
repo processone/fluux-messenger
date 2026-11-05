@@ -926,6 +926,7 @@
             "backupStatusExists": "Sigurnosna kopija postoji na ovom poslužitelju.",
             "backupStatusInSync": "Ovaj ključ je sigurnosno kopiran na poslužitelju.",
             "backupStatusMismatch": "Na poslužitelju postoji sigurnosna kopija, ali ne odgovara ključu ovog uređaja.",
+            "backupStatusUnconfirmed": "Na ovom poslužitelju postoji sigurnosna kopija, ali nije potvrđeno da sadrži ovaj ključ.",
             "backupStatusUnknown": "Nije bilo moguće provjeriti postoji li sigurnosna kopija na ovom poslužitelju.",
             "backupStatusRetry": "Provjeri ponovno",
             "statusRecoveryNeeded": "Lokalni ključ nije moguće otključati. Vratite sigurnosnu kopiju kako biste obnovili identitet šifriranja ovog računa.",

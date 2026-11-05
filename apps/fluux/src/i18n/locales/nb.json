@@ -924,6 +924,7 @@
             "backupStatusExists": "Sikkerhetskopiert på denne serveren.",
             "backupStatusInSync": "Denne nøkkelen er sikkerhetskopiert på serveren.",
             "backupStatusMismatch": "En sikkerhetskopi finnes på serveren, men matcher ikke nøkkelen til denne enheten.",
+            "backupStatusUnconfirmed": "Det finnes en sikkerhetskopi på denne serveren, men det er ikke bekreftet at den inneholder denne nøkkelen.",
             "backupStatusUnknown": "Kunne ikke sjekke om det finnes en sikkerhetskopi på denne serveren.",
             "backupStatusRetry": "Sjekk igjen",
             "statusRecoveryNeeded": "Den lokale nøkkelen kunne ikke låses opp. Gjenopprett en sikkerhetskopi for å få tilbake krypteringsidentiteten til denne kontoen.",

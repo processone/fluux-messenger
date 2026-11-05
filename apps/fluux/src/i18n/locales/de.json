@@ -926,6 +926,7 @@
             "backupStatusExists": "Auf diesem Server gesichert.",
             "backupStatusInSync": "Dieser Schlüssel ist auf dem Server gesichert.",
             "backupStatusMismatch": "Auf dem Server existiert ein Backup, das aber nicht zum Schlüssel dieses Geräts passt.",
+            "backupStatusUnconfirmed": "Auf diesem Server gibt es eine Sicherung, aber es ist nicht bestätigt, dass sie diesen Schlüssel enthält.",
             "backupStatusUnknown": "Es konnte nicht geprüft werden, ob auf diesem Server ein Backup existiert.",
             "backupStatusRetry": "Erneut prüfen",
             "statusRecoveryNeeded": "Der lokale Schlüssel konnte nicht entsperrt werden. Stelle ein Backup wieder her, um die Verschlüsselungsidentität dieses Kontos wiederherzustellen.",

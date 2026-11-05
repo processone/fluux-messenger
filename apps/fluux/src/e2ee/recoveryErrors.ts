@@ -4,14 +4,14 @@
  * Kept in the app (not the SDK): they carry UI-routing payloads and are
  * only consumed by the dialog.
  */
-import type { KeyBundle } from './OpenPGPPluginBase'
+import type { KeyBundle, BackupContext } from './OpenPGPPluginBase'
 
 /** Server backup holds more than one key — the UI must let the user pick. */
 export class KeyPickerRequiredError extends Error {
   readonly code = 'needs-picker' as const
   constructor(
     readonly candidates: KeyBundle[],
-    readonly backupContext: { message: string; passphrase: string },
+    readonly backupContext: BackupContext,
   ) {
     super('Multiple keys found in backup; selection required')
     this.name = 'KeyPickerRequiredError'

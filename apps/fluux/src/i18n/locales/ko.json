@@ -803,6 +803,7 @@
             "backupStatusExists": "이 서버에 백업되었습니다.",
             "backupStatusInSync": "이 키가 서버에 백업되었습니다.",
             "backupStatusMismatch": "서버에 백업이 있지만 이 기기의 키와 일치하지 않습니다.",
+            "backupStatusUnconfirmed": "이 서버에 백업이 있지만 이 키가 포함되어 있는지는 확인되지 않았습니다.",
             "backupStatusUnknown": "이 서버에 백업이 있는지 확인할 수 없습니다.",
             "backupStatusRetry": "다시 확인",
             "statusRecoveryNeeded": "로컬 키의 잠금을 해제할 수 없습니다. 백업을 복원하여 이 계정의 암호화 신원을 복구하세요.",
