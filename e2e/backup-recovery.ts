@@ -324,7 +324,7 @@ for (const mode of ['guided', 'ordinary-picker']) {
       await page.getByRole('button', { name: encryptionCopy.importFileAction, exact: true }).click()
     }
     await backupInput(page).fill(code)
-    await page.getByRole('button', { name: mode === 'guided' ? 'Preview backup' : encryptionCopy.importFileAction, exact: true }).click()
+    await page.locator('form').getByRole('button', { name: mode === 'guided' ? 'Preview backup' : encryptionCopy.importFileAction, exact: true }).click()
     await page.locator(`input[name="key-picker"][value="${fingerprint}"]`).check()
     await page.getByRole('button', { name: encryptionCopy.keyPicker.confirm, exact: true }).click()
     await expect(page.locator('input[name="key-picker"]')).toHaveCount(0)
