@@ -243,7 +243,7 @@ test('CLI propagates Git errors rather than claiming no tests are needed', () =>
   assert.doesNotMatch(result.stdout, /No tests selected/)
 })
 
-test('issue #1386 native prototype selects its executable contract tests', () => {
+test('issue #1386 native communication changes select executable contract tests', () => {
   for (const path of ['apps/fluux/src-tauri/macos/CommunicationNotification.m', 'apps/fluux/src-tauri/macos/CommunicationNotification.h', 'scripts/native-tests/MacCommunicationTests.m',
     'apps/fluux/src-tauri/src/notifications/macos.rs', 'apps/fluux/src-tauri/src/notifications/mod.rs', 'apps/fluux/src-tauri/src/notifications/backend.rs']) {
     const plan = planFor([path])
@@ -254,7 +254,7 @@ test('issue #1386 native prototype selects its executable contract tests', () =>
 })
 
 
-test('FLM-99 R1: platform-specific notification edits do not require the macOS prototype', () => {
+test('FLM-99 R1: platform-specific notification edits do not require macOS communication contracts', () => {
   for (const name of ['linux.rs', 'windows.rs', 'settings_pane.rs']) {
     const plan = planFor([`apps/fluux/src-tauri/src/notifications/${name}`])
     assert.ok(plan.steps.some(step => step.command === 'cargo'))
