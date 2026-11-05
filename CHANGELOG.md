@@ -5,17 +5,6 @@ All notable changes to Fluux Messenger are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.18.3] - Unreleased
-
-### Added
-
-- macOS: if your OpenPGP key stays locked because the keychain refused access and you have no backup, Fluux offers an advanced option to ask macOS again, in Encryption settings or in the recovery choice it shows. Fluux asks only when you press its button, and it unlocks the same key without creating a new one
-
-### Fixed
-
-- When a delayed message arrives while older messages are still loading, the messages you are reading no longer move, whether it lands above them or, after you scrolled during the load, below them, including when you are partway through a long expanded message
-- In-app room banners on the web and iOS show the room picture or # fallback, with the sender above the room name and message. Combined browser message counts show the room name instead of the latest sender
-
 ## [0.18.2] - 2026-11-05
 
 ### Added
