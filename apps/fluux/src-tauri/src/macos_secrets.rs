@@ -1,6 +1,7 @@
 //! macOS keychain access lists belong to items, not services. Share one cached
 //! item across desktop consumers. Verified legacy copies are retired silently
 //! after the compatibility release; unavailable or conflicting copies remain.
+#[path = "macos_secrets/cleanup.rs"]
 mod cleanup;
 use crate::credentials::SecretStore;
 use crate::keychain_refusal::{RefusalState, RefusedRetry};
