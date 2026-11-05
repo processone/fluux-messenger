@@ -239,6 +239,7 @@ test('unconfirmed backup uses neutral decisions and acknowledged rotation re-pub
   expect((await audit(page)).commands).not.toContain('openpgp_rotate_encryption_subkey')
   const before = await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').fetchSecretKeyBackup())
   await page.getByRole('checkbox').check()
+  const acknowledged = await page.getByRole('checkbox').isChecked()
   await publish.click()
   await expect(page.getByText(encryptionCopy.backupStatusInSync, { exact: true })).toBeVisible()
   const actual = await page.evaluate(async () => {
@@ -260,13 +261,15 @@ test('unconfirmed backup uses neutral decisions and acknowledged rotation re-pub
   expect(actual.marker).toBe(fingerprint)
   expect(actual.fingerprint).toBe(fingerprint)
   expect(actual.backup).not.toBe(before)
-  expect((await audit(page)).publications.filter((node: string) => node === 'urn:xmpp:openpgp:0:secret-key')).toHaveLength(1)
+  const secretPublications = (await audit(page)).publications.filter((node: string) => node === 'urn:xmpp:openpgp:0:secret-key').length
+  expect(secretPublications).toBe(1)
   await reloadDemo(page)
   await page.evaluate(() => { location.hash = '/settings/encryption' })
   await expect(page.getByText(encryptionCopy.backupStatusInSync, { exact: true })).toBeVisible()
   await test.info().attach('unconfirmed-rotation-observation', { contentType: 'application/json', body: JSON.stringify({
-    fingerprint: actual.fingerprint, marker: actual.marker, acknowledged: true, secretPublications: 1,
-    backupChanged: actual.backup !== before, backupMatchesCurrentSubkeys: true, subkeyCount: subkeys.length, afterReload: 'confirmed',
+    fingerprint: actual.fingerprint, marker: actual.marker, acknowledged, secretPublications,
+    backupChanged: actual.backup !== before, previousSubkeys: oldKeys[0].getSubkeys().map(k => k.getFingerprint()),
+    backupSubkeys: subkeys, publishedSubkeys: published.getSubkeys().map(k => k.getFingerprint()).sort(), afterReload: 'confirmed',
     boundary: 'Actual App and shared publication; native rotation readings use real fixture crypto, not native runtime proof',
   }) })
 })
@@ -287,7 +290,16 @@ for (const mode of ['guided', 'ordinary-picker']) {
     const legacy = await encrypt({ message: await createMessage({ binary: new Uint8Array(keys.flatMap(k => [...k.write()])) }), passwords: [legacyNormalizeBackupPassphrase(code)], format: 'armored' })
     if (mode === 'guided') await openRecovery(page)
     else await openUnconfirmedSettings(page)
-    await page.evaluate(file => { (window as any).__demoClient.e2ee.getPlugin('openpgp').pickKeyFile = async () => file }, legacy)
+    const serverBefore = await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').fetchSecretKeyBackup())
+    await page.evaluate(({ file, typedCode }) => {
+      const w = window as any, plugin = w.__demoClient.e2ee.getPlugin('openpgp')
+      plugin.pickKeyFile = async () => file
+      const install = plugin.installSelectedKey.bind(plugin)
+      plugin.installSelectedKey = (message: string, working: string, fingerprint: string, options: any) => {
+        w.__legacyCodeObservation = { workingCodeDiffers: working !== typedCode, typedCodeSupplied: options?.typedPassphrase === typedCode }
+        return install(message, working, fingerprint, options)
+      }
+    }, { file: legacy, typedCode: code })
     if (mode === 'guided') await page.getByRole('button', { name: 'Import from a file', exact: true }).click()
     else {
       await page.getByRole('button', { name: encryptionCopy.keyManagement, exact: true }).click()
@@ -301,6 +313,18 @@ for (const mode of ['guided', 'ordinary-picker']) {
     await page.evaluate(() => { location.hash = '/settings/encryption' })
     await expect(page.getByText(encryptionCopy.backupStatusInSync, { exact: true })).toBeVisible()
     expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
+    const observed = await page.evaluate(async () => {
+      const w = window as any, plugin = w.__demoClient.e2ee.getPlugin('openpgp')
+      return { ...w.__legacyCodeObservation, fingerprint: plugin.getOwnFingerprint(), marker: plugin.getBackedUpFingerprint(), server: await plugin.fetchSecretKeyBackup() }
+    })
+    expect(observed.workingCodeDiffers).toBe(true)
+    expect(observed.typedCodeSupplied).toBe(true)
+    expect(observed.server).toBe(serverBefore)
+    await capture(page, `after-legacy-${mode}-confirmed.png`)
+    await test.info().attach('legacy-code-observation', { contentType: 'application/json', body: JSON.stringify({
+      mode, workingCodeDiffers: observed.workingCodeDiffers, typedCodeSupplied: observed.typedCodeSupplied,
+      fingerprint: observed.fingerprint, marker: observed.marker, serverUnchanged: observed.server === serverBefore,
+    }) })
   })
 }
 

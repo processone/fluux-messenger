@@ -508,7 +508,8 @@ restore the `com.processone.fluux*` ones.
 The account-scoped backup marker records a fingerprint after a successful secret-key
 publication, or after an install proven to exist in the server backup. Direct server
 restores explicitly identify their already-verified server source and need no
-second read. File and generic picker installs read the server backup: identical encrypted packet bytes prove the source regardless
+second read. File and generic picker installs read the server backup: identical
+encrypted packet bytes prove the source regardless
 of armor headers; otherwise the backend decrypts it with the install passphrase
 (including the established legacy-code fallback) and checks for the installed
 fingerprint. If a legacy file required a normalized working code, its original typed
