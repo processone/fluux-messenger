@@ -35,6 +35,22 @@ mod host {
         sync::{Arc, Condvar, Mutex},
     };
     const JID: &str = "you@fluux.chat";
+    fn retry_item(source: &str) -> String {
+        let account = openpgp_storage::keyring_account(JID);
+        if source == "retry-copy" {
+            format!("{}fixture", macos_secrets::recovery_prefix(&account))
+        } else {
+            account
+        }
+    }
+    fn old_items(source: &str) -> Vec<String> {
+        let mut names = OLD_ITEMS.map(String::from).to_vec();
+        if source == "retry-copy" {
+            names.push(retry_item(source));
+        }
+        names.sort();
+        names
+    }
     fn metadata() -> serde_json::Value {
         serde_json::from_str(include_str!("../../src/e2ee/fixtures/sequoia_meta.json")).unwrap()
     }
@@ -117,6 +133,9 @@ mod host {
                     } else {
                         StoreError::denied()
                     });
+                }
+                if self.source == "retry-copy" && a != retry_item(&self.source) {
+                    return self.get(a).map_err(Into::into);
                 }
                 let (lock, answered) = &*self.prompt;
                 drop(answered.wait_while(lock.lock().unwrap(), |open| *open).unwrap());
@@ -214,13 +233,13 @@ mod host {
     }
 
     /// Old items read in each part of the retry journey, split at its notes.
-    fn old_reads_by_step(operations: &str) -> Vec<(String, Vec<String>)> {
+    fn old_reads_by_step(operations: &str, names: &[String]) -> Vec<(String, Vec<String>)> {
         let mut steps = vec![("startup".to_string(), Vec::new())];
         for line in operations.split("phase restart\n").next().unwrap().lines() {
             if let Some(label) = line.strip_prefix("note ") {
                 steps.push((label.into(), Vec::new()));
             } else if let Some(item) = line.strip_prefix("read ") {
-                if OLD_ITEMS.contains(&item) {
+                if names.iter().any(|name| name.as_str() == item) {
                     steps.last_mut().unwrap().1.push(item.into());
                 }
             }
@@ -257,6 +276,16 @@ mod host {
             return Err("decrypt mismatch".into());
         }
         if fixture.source.starts_with("migration-") {
+            let transient = !fixture.restart && fixture.source == "migration-transient";
+            if transient {
+                assert!(fixture.secrets.get("mcp-token").is_err());
+                fixture.raw.audit("note", "transient source available");
+                fs::write(
+                    fixture.root.join("keychain-granted"),
+                    b"source available now",
+                )
+                .unwrap();
+            }
             let count = fs::read_to_string(fixture.root.join("operations.log"))
                 .unwrap()
                 .lines()
@@ -270,7 +299,7 @@ mod host {
                     assert_eq!(login.unwrap().unwrap().jid, JID);
                 }
                 let token = fixture.secrets.get("mcp-token");
-                if !fixture.restart && fixture.source != "migration-login" {
+                if !fixture.restart && fixture.source != "migration-login" && !transient {
                     assert!(token.is_err());
                 } else {
                     assert_eq!(token.unwrap().as_deref(), Some("fixture-token"));
@@ -290,7 +319,20 @@ mod host {
                     .lines()
                     .filter(|line| line.starts_with("read "))
                     .count(),
-                count
+                count + usize::from(transient)
+            );
+            let new_reads: Vec<_> = after
+                .lines()
+                .filter(|line| line.starts_with("read "))
+                .skip(count)
+                .collect();
+            assert_eq!(
+                new_reads,
+                if transient {
+                    vec!["read mcp-token"]
+                } else {
+                    vec![]
+                }
             );
             let current = fixture.raw.read_items();
             let initial: BTreeMap<String, String> =
@@ -311,11 +353,12 @@ mod host {
                 "restore"
             };
             fs::write(fixture.root.join(format!("{phase}-passed")), b"passed").unwrap();
-            println!("{} {phase}: actual App unlocked the existing key and decrypted the waiting message; native credential/token consumers isolate the failed secret, repeated calls read nothing; originals unchanged", fixture.source);
+            println!("{} {phase}: actual App unlocked the existing key and decrypted the waiting message; native credential/token consumers isolate the failed secret; later non-denial retry reads only its source, cached calls read nothing; originals unchanged", fixture.source);
             app.exit(0);
             return Ok(phase.into());
         }
         let retry = fixture.source.starts_with("retry");
+        let old_names = old_items(&fixture.source);
         let fresh = fixture.raw.fresh_accounts().map_err(|e| e.to_string())?;
         // The retry unlocks the existing key; it never restores into fresh items.
         let expected_fresh: &[&str] = if retry {
@@ -331,9 +374,9 @@ mod host {
             &fs::read(fixture.root.join("initial-items.json")).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
-        if OLD_ITEMS
+        if old_names
             .iter()
-            .any(|item| old.get(*item) != initial.get(*item))
+            .any(|item| old.get(item) != initial.get(item))
             || old.get("last_user").map(String::as_str) != Some("fixture-only")
         {
             return Err("another account or credential changed".into());
@@ -348,19 +391,21 @@ mod host {
             return Err("recovery attempted a deletion".into());
         }
         if fixture.restart {
-            let restarted_old: Vec<_> = operations
+            let restarted_old: Vec<String> = operations
                 .split("phase restart\n")
                 .last()
                 .unwrap()
                 .lines()
                 .filter_map(|line| line.strip_prefix("read "))
-                .filter(|item| OLD_ITEMS.contains(item))
+                .filter(|item| old_names.iter().any(|name| name.as_str() == *item))
+                .map(str::to_string)
                 .collect();
             // FLM-86: the first launch retained a partial legacy snapshot.
             // Restart can now migrate all originals; restored/desynced layouts
             // already have a durable bundle and still read no originals.
-            let expected: &[&str] = if fixture.source == "retry" {
-                &OLD_ITEMS
+            let expected: &[String] = if fixture.source == "retry" || fixture.source == "retry-copy"
+            {
+                &old_names
             } else {
                 &[]
             };
@@ -377,7 +422,7 @@ mod host {
             };
             if after_route.lines().any(|line| {
                 line.strip_prefix("read ")
-                    .is_some_and(|item| OLD_ITEMS.contains(&item))
+                    .is_some_and(|item| old_names.iter().any(|name| name.as_str() == item))
             }) {
                 return Err("an old item was read after the restore".into());
             }
@@ -395,10 +440,10 @@ mod host {
         // unlock the key, and the press that then uses it reads nothing.
         if retry && !fixture.restart {
             let late_grant = fixture.source == "retry";
-            let refused = vec![format!("openpgp_passphrase:{JID}")];
+            let refused = vec![retry_item(&fixture.source)];
             let granted = refused.clone();
-            let startup = if late_grant {
-                OLD_ITEMS.map(String::from).to_vec()
+            let startup = if late_grant || fixture.source == "retry-copy" {
+                old_names.clone()
             } else {
                 refused.clone()
             };
@@ -420,7 +465,7 @@ mod host {
                     expected.push(("click-2".into(), granted.clone()));
                 }
             }
-            let steps = old_reads_by_step(&operations);
+            let steps = old_reads_by_step(&operations, &old_names);
             if steps != expected {
                 return Err(format!("old items read outside an explicit retry: {steps:?}"));
             }
@@ -455,6 +500,7 @@ mod host {
             "file",
             "retry",
             "retry-desync",
+            "retry-copy",
             "migration-login",
             "migration-mcp",
             "migration-transient",
@@ -495,6 +541,12 @@ mod host {
                     format!("openpgp_passphrase:{JID}"),
                     fs::read_to_string(&pass).unwrap().trim().into(),
                 );
+                if source == "retry-copy" {
+                    let working = items
+                        .insert(openpgp_storage::keyring_account(JID), "c3RhbGU=".into())
+                        .unwrap();
+                    items.insert(retry_item(&source), working);
+                }
                 if source.starts_with("migration-") {
                     items.insert("last_user".into(), JID.into());
                     items.insert(
@@ -559,7 +611,7 @@ mod host {
                 // The retry is offered only when the server has no backup.
                 let url = format!("http://127.0.0.1:5197/demo.html?tutorial=false&e2ee=recovery{}", if source.starts_with("retry") { "&recoveryBackup=absent" } else { "" });
                 tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::External(url.parse().unwrap()))
-                    .initialization_script(format!("window.__FLUUX_RECOVERY_RESTART__ = {}; window.__FLUUX_RECOVERY_META__ = {}; window.__FLUUX_RECOVERY_SOURCE__ = {};", restart, metadata(), serde_json::to_string(&source).unwrap()))
+                    .initialization_script(format!("window.__FLUUX_RECOVERY_RESTART__ = {}; window.__FLUUX_RECOVERY_META__ = {}; window.__FLUUX_RECOVERY_SOURCE__ = {};", restart, metadata(), serde_json::to_string(if source == "retry-copy" { "retry-desync" } else { &source }).unwrap()))
                     .initialization_script(format!("window.__FLUUX_RECOVERY_EXPECTED_BUILD__ = {};", serde_json::to_string(&std::env::var("FLUUX_RECOVERY_BUILD").expect("run the recovery launcher to identify its app build")).unwrap()))
                      .initialization_script(include_str!("backup_recovery_driver.js"))
                     .title("Fluux isolated recovery fixture").inner_size(1280.0, 800.0)

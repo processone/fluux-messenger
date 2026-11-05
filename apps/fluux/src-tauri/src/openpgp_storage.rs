@@ -789,8 +789,9 @@ fn unlock_persisted_key(
     } else {
         anyhow!("passphrase for account '{jid}' is not in the keychain or on disk — key material cannot be decrypted")
     };
-    // These copies came from the already-loaded bundle: trying them cannot
-    // request another keychain approval or discard the original failure.
+    // Loaded candidates never discard the original failure. During partial
+    // migration macOS may retry a copy's non-denial read error; held refusals
+    // still need the user's explicit request.
     match recovery() {
         Ok(candidates) => {
             for passphrase in candidates {
@@ -912,7 +913,7 @@ fn remove_keychain_passphrase(
 ) -> Result<()> {
     #[cfg(any(target_os = "macos", test))]
     store
-        .retry_denied_access()
+        .retry_denied_access(&keyring_account(jid))
         .map_err(|error| anyhow!(error))?;
     store
         .delete(&keyring_account(jid))
@@ -2871,6 +2872,7 @@ mod tests {
     // FLM-93 F4: save/load/forget must use the same injected logical store.
     #[test]
     fn injected_store_owns_new_passphrase_and_explicit_forget() {
+        const JID: &str = "alice@example.com";
         use crate::credentials::SecretStore;
         use std::sync::Mutex;
         #[derive(Default)]
@@ -2879,7 +2881,9 @@ mod tests {
             std::sync::atomic::AtomicUsize,
         );
         impl SecretStore for Memory {
-            fn retry_denied_access(&self) -> std::result::Result<(), String> {
+            fn retry_denied_access(&self, account: &str) -> std::result::Result<(), String> {
+                // Captain's F2 choice: forget can retry only this key's secret.
+                assert_eq!(account, keyring_account(JID));
                 self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 Ok(())
             }
@@ -2900,7 +2904,7 @@ mod tests {
         storage.use_keychain = true;
         storage.allow_file_fallback = false;
         storage.store_override = Some(raw.clone());
-        let jid = "alice@example.com";
+        let jid = JID;
         let cert = generate_cert(jid);
         storage.save(jid, &cert).unwrap();
         assert!(raw.get(&keyring_account(jid)).unwrap().is_some());

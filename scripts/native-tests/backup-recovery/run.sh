@@ -10,7 +10,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 LAB="${1:?Provide an absolute disposable lab directory}"
 SOURCE="${2:-server}"
-[[ "$LAB" = /* && "$LAB" != / && "$SOURCE" =~ ^(server|file|retry|retry-desync|migration-login|migration-mcp|migration-transient|migration-backup)$ ]] || exit 2
+[[ "$LAB" = /* && "$LAB" != / && "$SOURCE" =~ ^(server|file|retry|retry-desync|retry-copy|migration-login|migration-mcp|migration-transient|migration-backup)$ ]] || exit 2
 if [[ -e "$LAB" ]]; then
   echo 'Use a new disposable directory for each journey; existing results are never replayed' >&2
   exit 2

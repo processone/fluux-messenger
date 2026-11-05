@@ -48,9 +48,12 @@ pub trait SecretStore {
     fn commit_fresh(&self, _account: &str) -> Result<(), String> {
         Err("Fresh start is unavailable for this store".into())
     }
-    /// Explicit erase may retry a startup denial once; ordinary logout must not.
+    /// Explicit erase may retry this account and its copies once, never
+    /// unrelated old items; ordinary logout must not clear any denial.
     #[cfg(any(target_os = "macos", test))]
-    fn retry_denied_access(&self) -> Result<(), String> { Ok(()) }
+    fn retry_denied_access(&self, _account: &str) -> Result<(), String> {
+        Ok(())
+    }
     /// Whether this launch holds the user's refusal of the old items that
     /// `account` reads. It inspects only what this launch already cached and
     /// never asks the OS: offering a retry must not cause one.
@@ -134,7 +137,10 @@ pub fn delete_macos(store: &impl SecretStore) -> Result<(), String> {
 /// Full wipe is an explicit erase, unlike keep-data logout.
 #[cfg(any(target_os = "macos", test))]
 pub fn delete_macos_explicit(store: &impl SecretStore) -> Result<(), String> {
-    store.retry_denied_access()?;
+    store.retry_denied_access(LAST_USER)?;
+    if let Some(jid) = store.get(LAST_USER)? {
+        store.retry_denied_access(&jid)?;
+    }
     delete_macos(store)
 }
 
