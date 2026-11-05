@@ -130,6 +130,25 @@ macTest('FLM-134 launch guard rejects a real process that exits early without la
   try { await assert.rejects(launchForTenSeconds('/usr/bin/true', scratch), /before ten seconds/) }
   finally { rmSync(scratch, { recursive: true, force: true }) }
 })
+macTest('FLM-134 ten-second guard observes a real disposable process and stops it', async () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'fluux-survival-test-'))
+  try {
+    const executable = join(scratch, 'survival-fixture')
+    // A stand-in process proves the guard's timing, home isolation and cleanup, not signed Fluux launch.
+    writeFileSync(executable, '#!/bin/sh\nprintf "%s" "$HOME" > "$HOME/observed-home"\nprintf "%s" "$$" > "$HOME/pid"\nexec /bin/sleep 60\n', { mode: 0o755 })
+    const start = performance.now()
+    await launchForTenSeconds(executable, scratch)
+    assert.ok(performance.now() - start >= 10_000)
+    assert.equal(readFileSync(join(scratch, 'observed-home'), 'utf8'), scratch)
+    const pid = Number(readFileSync(join(scratch, 'pid'), 'utf8'))
+    assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' })
+  } finally { rmSync(scratch, { recursive: true, force: true }) }
+})
+macTest('FLM-134 launch guard rejects a missing executable', async () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'fluux-missing-executable-'))
+  try { await assert.rejects(launchForTenSeconds(join(scratch, 'missing'), scratch), /ENOENT/) }
+  finally { rmSync(scratch, { recursive: true, force: true }) }
+})
 macTest('FLM-134 archive extraction preserves the app and rejects path traversal', () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-archive-test-'))
   try {
