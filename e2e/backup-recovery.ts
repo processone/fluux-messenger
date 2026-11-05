@@ -160,7 +160,7 @@ for (const kind of ['single-key', 'multi-key']) {
     await expect(page.getByText(encryptionCopy.backupStatusMismatch, { exact: true })).toBeVisible()
     await expect(page.getByText(encryptionCopy.backupStatusInSync, { exact: true })).toBeHidden()
     await page.getByRole('button', { name: 'Key details', exact: true }).click()
-    await page.getByText('Key restored from server', { exact: true }).waitFor({ state: 'hidden' })
+    await expect(page.getByText('Key restored from server', { exact: true })).toHaveCount(0)
     await capture(page, `after-${kind}-backup-status.png`)
     const observation = await page.evaluate(async () => {
       const plugin = (window as any).__demoClient.e2ee.getPlugin('openpgp')
