@@ -272,7 +272,7 @@ API_AVAILABLE(macos(12.0))
         self.schedule(request, ^(NSError *error) {
             if (directory) [NSFileManager.defaultManager removeItemAtURL:directory error:nil];
             // Even an attachment-import error may accompany delivery. Never resend.
-            if (error) NSLog(@"Fluux prototype notification scheduling reported an error (%ld)", (long)error.code);
+            if (error) NSLog(@"Fluux communication notification scheduling reported an error (%ld)", (long)error.code);
         });
     }
 }
@@ -287,7 +287,7 @@ API_AVAILABLE(macos(12.0))
             }
         }
         if (target[@"navTarget"]) self.deleteGroup(group(target));
-        // Persisted opaque group IDs let account cleanup find this prototype's donations after restart.
+        // Persisted opaque group IDs let account cleanup find communication donations after restart.
         if (!target[@"navTarget"]) {
             NSString *account = opaque(@[target[@"accountId"] ?: @""]);
             for (NSString *g in _donationGroups[account]) self.deleteGroup(g);

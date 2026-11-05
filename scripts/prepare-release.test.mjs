@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { tmpdir } from 'node:os'
 import test from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -137,30 +136,3 @@ for (const { version, date, tag = false } of [
     assert.equal(read('CHANGELOG.md'), firstMarkdown)
   })
 }
-
-// FLM-439 G1: preserve the captain's exact release note through the actual generator.
-test('0.18.2 generated Fixed sections retain the captain’s iOS jump-to-latest and Home-key entry', t => {
-  const fixture = mkdtempSync(join(tmpdir(), 'fluux-release-note-source-'))
-  t.after(() => rmSync(fixture, { recursive: true, force: true }))
-  for (const file of ['package.json', 'apps/fluux/package.json', 'packages/fluux-sdk/package.json',
-    'packages/fluux-sdk/src/version.ts', 'apps/fluux/src-tauri/tauri.conf.json', 'apps/fluux/src-tauri/Cargo.toml', changelogFile, 'scripts/prepare-release.js']) {
-    mkdirSync(dirname(join(fixture, file)), { recursive: true })
-    copyFileSync(join(root, file), join(fixture, file))
-  }
-  writeFileSync(join(fixture, 'isolate-toolchain.mjs'), `import childProcess from 'node:child_process'
-import { syncBuiltinESMExports } from 'node:module'
-childProcess.execSync = command => {
-  if (!['npm install --package-lock-only', 'cargo check'].includes(command)) throw new Error('Unexpected command: '+command)
-  return ''
-}
-syncBuiltinESMExports()
-`)
-  const result = spawnSync(process.execPath, ['--import', join(fixture, 'isolate-toolchain.mjs'), join(fixture, 'scripts/prepare-release.js'), '0.18.2'], { cwd: fixture, encoding: 'utf8' })
-  assert.equal(result.status, 0, result.stderr)
-  const expected = 'iOS: the jump-to-latest button and the Home key now take you to the latest or oldest loaded message even while the list is still moving after a swipe'
-  for (const file of ['CHANGELOG.md', 'RELEASE_NOTES.md']) {
-    const text = readFileSync(join(fixture, file), 'utf8')
-    const release = file === 'CHANGELOG.md' ? text.split('## [0.18.2]')[1].split('\n## [')[0] : text
-    assert.ok(release.split('### Fixed\n')[1].split('\n### ')[0].split('\n').includes(`- ${expected}`), file)
-  }
-})

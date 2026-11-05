@@ -56,9 +56,8 @@ The separate read-only signature probe uses an extracted public 0.18.1 archive:
 FLUUX_MACOS_REFERENCE_APP="/absolute/path/Fluux Messenger.app" node --test scripts/macos-signature-read.test.mjs
 ```
 
-When the verifier or public-signature probe changes, the macOS native workflow
-downloads that public reference into temporary storage and verifies its pinned
-SHA-256 before extraction. Unrelated changes and weekly runs do not download it.
+Every macOS native workflow run downloads that public reference into temporary
+storage and verifies its pinned SHA-256 before extraction, including weekly runs.
 The local selector checks `FLUUX_MACOS_REFERENCE_APP` before starting any work.
 The probe runs the verifier's actual signature-display commands, parses XML and
 the legacy requirement, and extracts a public DER certificate. It never signs,
@@ -119,7 +118,7 @@ because an attachment error can accompany successful delivery. Repeated and
 concurrent copies of a reserved/attempted message are suppressed. Delivered
 history prevents replacing that same notification after relaunch. This is not a
 permanent replay ledger after a notification has been removed; the live unread
-policy still owns that case. At 4096 entries, the development-session ledger
+policy still owns that case. At 4096 entries, the session ledger
 returns new identities to the legacy path instead of dropping all later alerts.
 Already attempted or pending identities remain suppressed, including at capacity.
 New legacy-path messages no longer receive the communication path's deduplication guarantee;
@@ -177,37 +176,16 @@ groups are deleted, never all Siri interactions or another application's data.
 
 ## Local test before publication
 
-The captain chose a **local signed production build before tagging 0.18.2**.
-Follow the [complete local-build recipe](RELEASE.md#local-signed-macos-test-before-tagging-0182)
-on the candidate commit, including dependency/SDK setup and the existing Developer
-ID identity/key prerequisites. The direct build invocation is:
+Follow the [local signed production-build recipe](RELEASE.md#local-signed-macos-test-before-tagging-0182)
+on the candidate commit before tagging 0.18.2. RELEASE.md is the single source for
+its prerequisites, command and output path. Use the direct Tauri entrypoint with
+the release overlay, not the Dev build/install wrappers. The local build uses
+normal Fluux data and its shared keychain item; it is not an isolated Dev test.
 
-```sh
-env -u APPLE_CERTIFICATE -u APPLE_CERTIFICATE_PASSWORD \
-  APPLE_TEAM_ID=8L55BDM864 \
-  APPLE_SIGNING_IDENTITY='Developer ID Application: ProcessOne (8L55BDM864)' \
-  npm run tauri --workspace=@xmpp/fluux -- build \
-    --target aarch64-apple-darwin \
-    --config src-tauri/tauri.release-macos.conf.json \
-    --config '{"bundle":{"createUpdaterArtifacts":false}}' \
-    --bundles app
-```
-
-Do not use `tauri:build`, `tauri:install` or the Dev override. The local wrapper
-always selects Dev, which cannot exercise communication notifications. This
-command uses the release overlay and the existing Developer ID key, with no CI
-certificate import. It disables updater artifact generation only; it does not
-remove the updater plugin. Quit the installed Fluux and open the signed app in
-`apps/fluux/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/` without
-installing it over the everyday app. It uses normal Fluux data and the shared
-keychain item; it is not an isolated Dev test.
-
-Record the local result before the captain tags the tested source. The existing
-tag workflow stays unchanged and publishes automatically after its checks; it
-will not wait for a manual test afterward. This document is not a claim that the
-local signed build has run or that the signed/notarized archive gap is closed.
-This implementation task does not authorize the worker to sign, inspect keychains,
-install or publish. Never send private keys or passwords
+Record the local result before tagging. The tag workflow publishes automatically
+after its checks and does not wait for a manual test afterward. A configuration
+probe does not establish signed-app launch or notarized archive qualification.
+Never include private keys or passwords
 in evidence. Use disposable XMPP data for test recordings. Releases no longer
 require the prototype's separate-user rule; any use of personal data or accounts
 still needs the owner's deliberate approval. A changed app name or scratch HOME

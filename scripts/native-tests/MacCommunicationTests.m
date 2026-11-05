@@ -1,4 +1,4 @@
-// Source intent: issue #1386, development-only local communication prototype.
+// Source intent: issue #1386, macOS communication notification delivery and cleanup.
 #import "../../apps/fluux/src-tauri/macos/CommunicationNotification.h"
 #import <AppKit/AppKit.h>
 

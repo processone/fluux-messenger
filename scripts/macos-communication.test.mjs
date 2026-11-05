@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-test('issue #1386 macOS communication prototype contracts (no signing or installed application)', { skip: process.platform !== 'darwin' }, () => {
+test('issue #1386 macOS communication contracts (no signing or installed application)', { skip: process.platform !== 'darwin' }, () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-communication-'))
   try {
     const source = resolve('apps/fluux/src-tauri/macos/CommunicationNotification.m')

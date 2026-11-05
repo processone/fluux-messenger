@@ -1052,12 +1052,16 @@ On a signed test build, manual device verification must additionally confirm:
    matches the last icon badge snapshot without showing the app.
 5. Launch an iOS 15 build and verify normal login/navigation still work.
 
-### macOS communication notification test mode
+### macOS communication notifications
 
-Issue #1386 has an explicit, disabled-by-default test mode on the ordinary
-`net.processone.fluux` identity; no third identity or Dev capability change is
-required. See [macOS communication test mode](MACOS_COMMUNICATION_PROTOTYPE.md)
-for its inline build override, unsigned checks, privacy inventory and required
-signed, isolated installed verification. Ordinary release and Dev builds retain
-the current path. Do not replace the everyday installation or use personal
-signing material. Automated contracts do not qualify appearance, clicks or Focus.
+Released macOS builds enable communication notifications for the standard
+`net.processone.fluux` identity through `tauri.release-macos.conf.json`. The
+`macos-communication` feature and generated plist flag retain the native gates;
+Dev and ordinary local builds keep the legacy notification path. The updater
+remains available independently of communication support.
+
+See [macOS communication notifications](MACOS_COMMUNICATION_PROTOTYPE.md) for
+unsigned contracts, privacy inventory and cleanup. Follow the
+[local signed build before tagging](RELEASE.md#local-signed-macos-test-before-tagging-0182)
+for the production-identity test, not the Dev build/install wrappers. Configuration
+and native contract checks do not qualify signed-app appearance, clicks or Focus.

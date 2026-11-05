@@ -201,7 +201,7 @@ index 13192db3..6fcc1d2e 100644
    title: string
 @@ -69,8 +70,9 @@ export async function postNativeDesktopNotification(
        }
-       // The captain chose prototype-only revalidation: null retains legacy desktop eligibility.
+       // Communication revalidation is separate from legacy eligibility: null retains the legacy path.
      }
 -    if (await superseded()) return
 +    if (await superseded()) { repro('post-superseded'); return }

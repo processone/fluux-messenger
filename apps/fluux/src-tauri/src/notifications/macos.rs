@@ -567,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn prototype_restart_dismissal_matches_conversation_and_account_not_message() {
+    fn communication_restart_dismissal_matches_conversation_and_account_not_message() {
         // #1386: OS-delivered identifiers must still be removable after the process index is lost.
         let target = NavTarget { nav_type: "room".into(), nav_target: "team@conference.example.com".into(),
             account_id: Some("tester@example.com".into()), message_id: None };

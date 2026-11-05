@@ -158,7 +158,7 @@ pub async fn dismiss_notifications(
     Ok(())
 }
 
-/// Two-phase development prototype: preparation never schedules an alert.
+/// Two-phase communication delivery: preparation never schedules an alert.
 #[tauri::command]
 pub async fn prepare_communication_notification(
     payload: serde_json::Value,

@@ -21,20 +21,6 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Detect public signature reader changes
-        id: signature-changes
-        env:
-          BEFORE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          CHANGED=false
-          if [[ "$BEFORE" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            if ! git diff --quiet "$BEFORE" HEAD -- scripts/verify-macos-release.mjs scripts/macos-signature-read.test.mjs; then
-              CHANGED=true
-            fi
-          fi
-          echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -52,7 +38,6 @@ jobs:
       - name: Guard production and Dev communication entitlements
         run: node --test scripts/macos-share.test.mjs scripts/macos-release.test.mjs
       - name: Read the public reference release signature without signing
-        if: steps.signature-changes.outputs.changed == 'true'
         run: |
           REFERENCE_DIR=$(mktemp -d)
           trap 'rm -rf "$REFERENCE_DIR"' EXIT

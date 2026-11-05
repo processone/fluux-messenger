@@ -67,7 +67,7 @@ export async function postNativeDesktopNotification(
         }
         return
       }
-      // The captain chose prototype-only revalidation: null retains legacy desktop eligibility.
+      // Communication revalidation is separate from legacy eligibility: null retains the legacy path.
     }
     if (await superseded()) return
     await invoke('post_notification', { ...legacyPayload, silent: osNotificationSilent() })

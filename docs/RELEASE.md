@@ -63,8 +63,7 @@ Application: ProcessOne (8L55BDM864)** identity and matching private key to be
 available on this Mac, plus the committed public production profile. The signing
 certificate must be listed in that profile. macOS may ask you to approve use of
 that key. If the identity/key is unavailable, stop: do not
-substitute Fluux Dev, ad-hoc signing or a new certificate. No signing, keychain
-inspection or installation is performed by the implementation worker.
+substitute Fluux Dev, ad-hoc signing or a new certificate.
 
 From the project root, build the SDK, then invoke the direct Tauri entrypoint:
 
