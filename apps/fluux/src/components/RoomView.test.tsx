@@ -707,6 +707,38 @@ describe('RoomView', () => {
     mockJoinResult.mockResolvedValue(undefined)
   })
 
+  // Regression: the room send-highlight timer must not survive RoomView teardown.
+  it.each([1, 2])('cancels the pending send-highlight timer on unmount after %i sends', async sends => {
+    vi.useFakeTimers()
+    const scheduled = vi.spyOn(globalThis, 'setTimeout')
+    const cancelled = vi.spyOn(globalThis, 'clearTimeout')
+    mockActiveRoom = createRoom()
+    mockSendMessage.mockResolvedValue('sent-message')
+    const { unmount } = render(<RoomView />)
+    try {
+      const handles: ReturnType<typeof setTimeout>[] = []
+      for (let i = 0; i < sends; i++) {
+        scheduled.mockClear()
+        await act(async () => { fireEvent.click(screen.getByTestId('send-button')) })
+        expect(mockSendMessage).toHaveBeenCalledWith(mockActiveRoom.jid, mockSendText, expect.any(Object))
+        const timerIndex = scheduled.mock.calls.findIndex(([, delay]) => delay === 400)
+        expect(timerIndex).toBeGreaterThanOrEqual(0)
+        const handle = scheduled.mock.results[timerIndex].value as ReturnType<typeof setTimeout>
+        expect(cancelled).not.toHaveBeenCalledWith(handle)
+        if (handles.length) expect(cancelled).toHaveBeenCalledWith(handles.at(-1))
+        handles.push(handle)
+      }
+      unmount()
+      expect(cancelled).toHaveBeenCalledWith(handles.at(-1))
+      act(() => { vi.advanceTimersByTime(400) })
+    } finally {
+      unmount()
+      scheduled.mockRestore()
+      cancelled.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
   it('confirms a reaction only after the send is accepted', async () => {
     mockActiveRoom = createRoom({ supportsReactions: true })
     mockActiveMessages = [createRoomMessage({ body: 'Accepted reaction', reactions: { '🔥': ['Alice'] } })]

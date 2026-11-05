@@ -534,6 +534,14 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     lastSentTimerRef.current = setTimeout(() => setLastSentMessageId(null), 400)
   }, [])
 
+  // Drop the pending send-animation timer before the view is torn down.
+  useEffect(() => () => {
+    if (lastSentTimerRef.current) {
+      clearTimeout(lastSentTimerRef.current)
+      lastSentTimerRef.current = null
+    }
+  }, [])
+
   // Stable callback to clear whisper target (name avoids clash with the
   // composer-internal handleClearWhisper defined inside RoomMessageInput).
   const handleClearWhisperTarget = useCallback(() => setWhisperTarget(null), [])
