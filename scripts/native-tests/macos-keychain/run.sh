@@ -60,6 +60,18 @@ PY
   probe reader startup
   probe reader forget
   probe owner legacy-erased
+  # FLM-86: one real legacy ACL/UTF-8 failure never disables other secrets.
+  for partial in partial-login partial-pgp partial-mcp partial-invalid partial-backup-mcp partial-recovery-pgp; do
+    export FLUUX_PROBE_KEYCHAIN="$HOME/$partial.keychain-db"
+    "$LAB/fixture" "$partial" "$FLUUX_PROBE_KEYCHAIN" "$HOME/password" "$LAB/owner" "$LAB/reader"
+    probe reader "$partial"
+    if [[ "$partial" == partial-recovery-pgp ]]; then
+      probe owner recovery-copy-startup
+    elif [[ "$partial" != partial-invalid ]]; then
+      # The owner can read the refused item: a new process finishes migration.
+      probe owner migrate
+    fi
+  done
   # An earlier development build's pending cleanup is harmless and ignored.
   export FLUUX_PROBE_KEYCHAIN="$HOME/interrupted.keychain-db"
   "$LAB/fixture" create "$FLUUX_PROBE_KEYCHAIN" "$HOME/password"

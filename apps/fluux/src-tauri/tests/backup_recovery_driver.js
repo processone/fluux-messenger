@@ -159,7 +159,7 @@
       await wait(() => !document.querySelector('[data-modal]'), 'identity choice closed by the unlock')
       if (await retryOffered()) throw new Error('the keychain retry is still offered after the key unlocked')
       location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat')
-    } else if (!window.__FLUUX_RECOVERY_RESTART__) {
+    } else if (!window.__FLUUX_RECOVERY_RESTART__ && !window.__FLUUX_RECOVERY_SOURCE__.startsWith('migration-')) {
       ;(await wait(() => button(window.__FLUUX_RECOVERY_SOURCE__ === 'file' ? 'Import from a file' : 'Restore from server backup'), 'backup source chooser')).click()
       const input = await wait(() => document.querySelector('input[name="backup-code"], input[name="passphrase"]'), 'backup code field')
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, meta.backupPassphrase)
@@ -170,7 +170,7 @@
     }
     await wait(() => window.__demoClient?.e2ee?.getPlugin('openpgp')?.getOwnFingerprint() === fp && !document.querySelector('[data-modal]'), 'restored identity and closed dialog')
     await wait(() => window.__chatStore?.getState().messages.get('ava@fluux.chat')?.some(m => m.id === 'recovery-waiting' && m.body === meta.plaintext && !m.encryptedPayload) && document.body.textContent.includes(meta.plaintext), 'decrypted waiting message')
-    if (!window.__FLUUX_RECOVERY_SOURCE__.startsWith('retry')) {
+    if (!window.__FLUUX_RECOVERY_SOURCE__.startsWith('retry') && !window.__FLUUX_RECOVERY_SOURCE__.startsWith('migration-')) {
       // FLM-304: a restored account is never offered the keychain retry, and a
       // direct request answers with the restored key; the host's operation log
       // rejects any old-item read after the restore.
