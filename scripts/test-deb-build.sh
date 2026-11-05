@@ -62,8 +62,8 @@ echo
 mkdir -p debian
 cp -a packaging/debian/. debian/
 
-# Dependencies are installed above. Rust from rustup (and npm bundled with
-# NodeSource's nodejs) does not satisfy dpkg's package-based dependency check.
+# Dependencies are installed above. Rust from rustup is not registered as
+# Debian rustc/cargo packages, so skip dpkg's package-based dependency check.
 dpkg-buildpackage -d -uc -us -b
 
 echo

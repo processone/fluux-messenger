@@ -751,8 +751,8 @@ bash scripts/test-deb-build.sh
 
 The helper copies `packaging/debian/` to the root-level `debian/` directory required
 by `dpkg-buildpackage`. It skips dpkg's package-based build dependency check because
-Rust installed by rustup and npm bundled with NodeSource's Node.js are not separate
-Debian packages. The compiler and packaging steps still run and must succeed.
+Rust installed by rustup is not registered as Debian `rustc`/`cargo` packages.
+The compiler and packaging steps still run and must succeed.
 
 For a manual build, follow the steps below.
 
@@ -796,7 +796,7 @@ To build the `.deb` package from scratch (compiles everything):
 # From repository root, stage the maintained packaging files
 mkdir -p debian
 cp -a packaging/debian/. debian/
-# -d skips dpkg's dependency check for rustup-installed Rust and bundled npm
+# -d skips dpkg's dependency check for rustup-installed Rust
 dpkg-buildpackage -d -uc -us -b
 ```
 
