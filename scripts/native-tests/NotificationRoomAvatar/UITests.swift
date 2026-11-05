@@ -31,5 +31,12 @@ final class RoomAlertUITests: XCTestCase {
         attachment.name = "Room notification with room-first text"
         attachment.lifetime = .keepAlways
         add(attachment)
+        print("COLLAPSED NOTIFICATION: \(banner.debugDescription)")
+        banner.press(forDuration: 1)
+        print("EXPANDED NOTIFICATION: \(springboard.debugDescription)")
+        let expanded = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        expanded.name = "Expanded room notification"
+        expanded.lifetime = .keepAlways
+        add(expanded)
     }
 }

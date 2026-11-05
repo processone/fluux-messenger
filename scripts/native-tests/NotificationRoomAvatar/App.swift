@@ -57,7 +57,14 @@ enum Fixture {
     // This displays the presentation output; it is not an APNs extension journey.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completion: @escaping (UNNotificationPresentationOptions) -> Void) {
-        Fixture.record("willPresent title=\(notification.request.content.title), subtitle=\(notification.request.content.subtitle)")
+        let content = notification.request.content
+        Fixture.record("willPresent title=\(content.title), subtitle=\(content.subtitle), attachments=\(content.attachments.count)")
+        for attachment in content.attachments {
+            let accessing = attachment.url.startAccessingSecurityScopedResource()
+            let bytes = (try? Data(contentsOf: attachment.url))?.count ?? 0
+            Fixture.record("delivered image type=\(attachment.type), bytes=\(bytes)")
+            if accessing { attachment.url.stopAccessingSecurityScopedResource() }
+        }
         completion([.banner, .list, .sound])
     }
 }
@@ -84,6 +91,7 @@ final class Controller: UIViewController {
                 do {
                     let names = try Fixture.prepare()
                     let content = NotificationPresentation.content(for: Fixture.original(), names: names)
+                    Fixture.record("producer attachments=\(content.attachments.count)")
                     UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "room-avatar-repro", content: content, trigger: nil)) { error in
                         Fixture.record("add accepted=\(error == nil); error=\(String(describing: error))")
                         DispatchQueue.main.async { label.text = error == nil ? "Posted room alert" : "Notification failed" }
