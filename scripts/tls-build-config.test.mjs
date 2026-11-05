@@ -90,7 +90,7 @@ test('production TLS can be tested without an optimized build', () => {
 })
 
 
-// FLM-134: exercise the installed Tauri merger and the real metadata generator,
+// #1386: exercise the installed Tauri merger and the real metadata generator,
 // not a hand-assembled configuration; stop before compilation, bundling or signing.
 test('macOS release overlay reaches Cargo and the real profile-checked generator without disabling updater artifacts', { skip: process.platform !== 'darwin' }, () => {
   const standardConfig = JSON.parse(readFileSync(join(root, 'apps/fluux/src-tauri/tauri.conf.json'), 'utf8'))
@@ -139,7 +139,7 @@ test('macOS release overlay reaches Cargo and the real profile-checked generator
   assert.equal(hasProductionTls(args), true)
 })
 
-// Captain's FLM-439 F3 choice: document a local signed production build before tagging.
+// Release policy: document a local signed production build before tagging.
 // Exercise its exact overlays through Tauri, stopping at the runner before signing or bundling.
 test('documented local pre-tag configuration keeps production communication and disables only updater artifacts', { skip: process.platform !== 'darwin' }, () => {
   const standard = JSON.parse(readFileSync(join(root, 'apps/fluux/src-tauri/tauri.conf.json'), 'utf8'))

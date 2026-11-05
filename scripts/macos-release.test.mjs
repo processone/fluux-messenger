@@ -16,15 +16,15 @@ const env = { APPLE_TEAM_ID: '8L55BDM864' }
 const macTest = (name, fn) => test(name, { skip: process.platform !== 'darwin' }, fn)
 const supplied = () => decodeProfile(profilePath)
 
-// Intent: accepted FLM-134 profile gate. All adverse cases mutate real profile readings.
-macTest('FLM-134 public production profile and mapped configuration pass without signing', () => {
+// Intent: accepted #1386 profile gate. All adverse cases mutate real profile readings.
+macTest('#1386 public production profile and mapped configuration pass without signing', () => {
   const config = { ...base, ...release }
   const profile = validateProfile(supplied())
   validateCommunicationConfig(config, shareSettings(config, env), root)
   console.log(JSON.stringify({ name: profile.Name, platform: profile.Platform, team: profile.TeamIdentifier,
     app: profile.Entitlements['com.apple.application-identifier'], expires: profile.ExpirationDate, allMacs: profile.ProvisionsAllDevices }))
 })
-macTest('FLM-134 generator rejects missing mapping/team; ordinary and Dev remain unaffected', () => {
+macTest('#1386 generator rejects missing mapping/team; ordinary and Dev remain unaffected', () => {
   const config = { ...base, ...release }
   assert.throws(() => validateCommunicationConfig({ ...config, bundle: {} }, shareSettings(config, env), root), /mapping/)
   assert.throws(() => validateCommunicationConfig(config, shareSettings(config, {}), root), /known Apple team/)
@@ -46,12 +46,12 @@ for (const [name, mutate, error] of [
   ['iOS profile', p => { p.Platform = ['iOS'] }, /Developer ID/],
   ['expired', p => { p.ExpirationDate = new Date().toISOString() }, /five years/],
   ['no certificates', p => { p.DeveloperCertificates = [] }, /certificates/],
-]) macTest(`FLM-134 profile rejects ${name}`, () => {
+]) macTest(`#1386 profile rejects ${name}`, () => {
   const profile = supplied(); mutate(profile)
   assert.throws(() => validateProfile(profile), error)
 })
 
-macTest('FLM-134 signed entitlements and signing certificate must be covered by actual profile', () => {
+macTest('#1386 signed entitlements and signing certificate must be covered by actual profile', () => {
   const p = supplied()
   const entitlements = structuredClone(p.Entitlements)
   const cert = Buffer.from(p.DeveloperCertificates[0], 'base64')
@@ -61,7 +61,7 @@ macTest('FLM-134 signed entitlements and signing certificate must be covered by 
   assert.throws(() => assertProfileCovers(p, entitlements, cert), /not covered/)
 })
 
-// Intent: FLM-134 exact archive verifier. Signed-command readings are stand-ins;
+// Intent: #1386 exact archive verifier. Signed-command readings are stand-ins;
 // this exercises rejection/ordering, NOT actual signing, stapling or app launch.
 async function verifierFixture(body) {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-verifier-test-'))
@@ -90,14 +90,14 @@ async function verifierFixture(body) {
     await body({ app, info, saveInfo, profile, entitlements, options, calls, launches: () => launches })
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 }
-macTest('FLM-134 verifier checks signature, profile and stapling before launch', () => verifierFixture(async f => {
+macTest('#1386 verifier checks signature, profile and stapling before launch', () => verifierFixture(async f => {
   assert.deepEqual(await verifyApp(f.app, f.options), { launched: true })
   assert.equal(f.launches(), 1)
   assert.ok(f.calls.some(call => call.includes('--strict')))
   assert.ok(f.calls.some(call => call.includes('stapler') && call.includes('validate')))
 }))
 for (const failure of ['signature', 'entitlement', 'certificate', 'requirement', 'staple', 'activity', 'architecture', 'early-exit']) {
-  macTest(`FLM-134 verifier fails closed on ${failure}`, () => verifierFixture(async f => {
+  macTest(`#1386 verifier fails closed on ${failure}`, () => verifierFixture(async f => {
     const invoke = f.options.invoke
     f.options.invoke = (command, args) => {
       if ((failure === 'signature' && args.includes('--verify')) || (failure === 'staple' && args.includes('stapler'))) throw new Error(`${failure} failed`)
@@ -115,30 +115,30 @@ for (const failure of ['signature', 'entitlement', 'certificate', 'requirement',
     assert.equal(f.launches(), 0)
   }))
 }
-macTest('FLM-134 archive-only mode never launches an app against personal keychains', () => verifierFixture(async f => {
+macTest('#1386 archive-only mode never launches an app against personal keychains', () => verifierFixture(async f => {
   f.options.allowLaunch = false
   assert.deepEqual(await verifyApp(f.app, f.options), { launched: false })
   assert.equal(f.launches(), 0)
   assert.ok(!f.calls.some(call => call[0].endsWith('/arch')))
 }))
-macTest('FLM-134 unsupported architecture is explicitly unproven, not a launch pass', () => verifierFixture(async f => {
+macTest('#1386 unsupported architecture is explicitly unproven, not a launch pass', () => verifierFixture(async f => {
   const invoke = f.options.invoke
   f.options.invoke = (command, args) => command.endsWith('/arch') ? { unsupported: true } : invoke(command, args)
   assert.deepEqual(await verifyApp(f.app, f.options), { launched: false })
   assert.equal(f.launches(), 0)
 }))
-test('FLM-439 F6 child environment contains only the explicit non-secret allowlist', () => {
+test('#1386 child environment contains only the explicit non-secret allowlist', () => {
   const env = launchEnvironment('/scratch/home')
   assert.deepEqual(Object.keys(env).sort(), ['CFFIXED_USER_HOME', 'HOME', 'LANG', 'PATH', 'TMPDIR', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME'].sort())
   assert.equal('GH_TOKEN' in env, false)
   assert.equal('APPLE_CERTIFICATE' in env, false)
 })
-macTest('FLM-134 launch guard rejects a real process that exits early without launching Fluux', async () => {
+macTest('#1386 launch guard rejects a real process that exits early without launching Fluux', async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-launch-test-'))
   try { await assert.rejects(launchForTenSeconds('/usr/bin/true', scratch), /before ten seconds/) }
   finally { rmSync(scratch, { recursive: true, force: true }) }
 })
-macTest('FLM-134 ten-second guard observes a real disposable process and stops it', async () => {
+macTest('#1386 ten-second guard observes a real disposable process and stops it', async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-survival-test-'))
   try {
     const executable = join(scratch, 'survival-fixture')
@@ -155,12 +155,12 @@ macTest('FLM-134 ten-second guard observes a real disposable process and stops i
     assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' })
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
-macTest('FLM-134 launch guard rejects a missing executable', async () => {
+macTest('#1386 launch guard rejects a missing executable', async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-missing-executable-'))
   try { await assert.rejects(launchForTenSeconds(join(scratch, 'missing'), scratch), /ENOENT/) }
   finally { rmSync(scratch, { recursive: true, force: true }) }
 })
-macTest('FLM-134 archive extraction preserves the app and rejects path traversal', () => {
+macTest('#1386 archive extraction preserves the app and rejects path traversal', () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-archive-test-'))
   try {
     const archive = join(scratch, 'app.tar.gz'); const out = join(scratch, 'out'); mkdirSync(out)
@@ -179,7 +179,7 @@ const workflow = parse(readFileSync('.github/workflows/release.yml', 'utf8'))
 const expression = (value, matrix) => typeof value === 'string' && value.startsWith('${{')
   ? Function('matrix', `return (${value.slice(3, -2)})`)(matrix) : value
 
-test('FLM-439 F5/F6 actual release steps reject archive ambiguity and isolate the download token', () => {
+test('#1386 actual release steps reject archive ambiguity and isolate the download token', () => {
   const job = workflow.jobs['build-macos']
   const buildIndex = job.steps.findIndex(step => step.uses?.startsWith('tauri-apps/tauri-action@'))
   const downloadIndex = job.steps.findIndex(step => step.name === 'Download signed macOS update archive')
@@ -222,7 +222,7 @@ test('FLM-439 F5/F6 actual release steps reject archive ambiguity and isolate th
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
 
-test('FLM-134 stable publication keeps existing prerelease exclusion; macOS overlay is exclusive', () => {
+test('#1386 stable publication keeps existing prerelease exclusion; macOS overlay is exclusive', () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-publication-workflow-'))
   try {
     const record = join(scratch, 'args.json')

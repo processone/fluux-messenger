@@ -9,7 +9,7 @@ import { communicationIdentity } from '../apps/fluux/scripts/macos-communication
 import { shareSettings } from '../apps/fluux/scripts/tauri-macos-share.mjs'
 import { designatedRequirement, readSignature } from './verify-macos-release.mjs'
 
-// FLM-439 F1/F2: a real public signature, not a test-authored codesign response.
+// #1386: a real public signature, not a test-authored codesign response.
 // Explicit probe: missing fixture is missing evidence, never a successful skip on Darwin.
 test('public 0.18.1 signature display writes XML, requirements and the requested DER certificate', { skip: process.platform !== 'darwin' }, () => {
   const app = process.env.FLUUX_MACOS_REFERENCE_APP

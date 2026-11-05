@@ -10,7 +10,7 @@ const { check, install, relaunch } = vi.hoisted(() => ({
 vi.mock('@tauri-apps/plugin-updater', () => ({ check }))
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch }))
 
-// FLM-134: released communication-enabled builds keep the updater and Updates settings.
+// #1386: released communication-enabled builds keep the updater and Updates settings.
 describe('communication-enabled updater', () => {
   beforeEach(() => {
     vi.useFakeTimers()

@@ -254,7 +254,7 @@ test('issue #1386 native communication changes select executable contract tests'
 })
 
 
-test('FLM-99 R1: platform-specific notification edits do not require macOS communication contracts', () => {
+test('Platform-specific notification edits do not require macOS communication contracts', () => {
   for (const name of ['linux.rs', 'windows.rs', 'settings_pane.rs']) {
     const plan = planFor([`apps/fluux/src-tauri/src/notifications/${name}`])
     assert.ok(plan.steps.some(step => step.command === 'cargo'))
@@ -271,7 +271,7 @@ test('FLM-105 W1: macOS metadata generator changes retain share and configuratio
   assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-share.test.mjs')))
 })
 
-// FLM-134: profile and verifier changes must select their behavior checks.
+// #1386: profile and verifier changes must select their behavior checks.
 test('macOS release profile and verifier changes select executable release tests', () => {
   for (const path of ['apps/fluux/scripts/macos-communication-profile.mjs',
     'apps/fluux/src-tauri/macos/net.processone.fluux.provisionprofile', 'scripts/verify-macos-release.mjs']) {
@@ -283,7 +283,7 @@ test('macOS release profile and verifier changes select executable release tests
   }
 })
 
-// FLM-439 G3: fail before any work when the explicit public-signature fixture is missing.
+// #1386: fail before any work when the explicit public-signature fixture is missing.
 test('public signature fixture requirement fails before children and accepts an extracted app', t => {
   const { cwd, write } = fixture(t)
   const plan = planFor(['scripts/verify-macos-release.mjs'])

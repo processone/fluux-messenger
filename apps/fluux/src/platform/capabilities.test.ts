@@ -194,7 +194,7 @@ describe('native communication update capability', () => {
     resetPlatformDetection()
   })
 
-  it.each([true, undefined])('FLM-134 preserves capabilities for communication marker %s', (enabled) => {
+  it.each([true, undefined])('#1386 preserves capabilities for communication marker %s', (enabled) => {
     vi.stubGlobal('__TAURI_INTERNALS__', {})
     vi.stubGlobal('__TAURI_OS_PLUGIN_INTERNALS__', { platform: 'macos' })
     vi.stubGlobal('navigator', { platform: 'MacIntel', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' })

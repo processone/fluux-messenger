@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import communicationInitialization from '../../src-tauri/src/communication-init.js?raw'
 import { platform, resetPlatformDetection, communicationAvailable } from './index'
 
-// FLM-134: execute the exact scripts included by the native builder, not a test-authored flag.
+// #1386: execute the exact scripts included by the native builder, not a test-authored flag.
 describe('native communication initialization scripts', () => {
   afterEach(() => { vi.unstubAllGlobals(); resetPlatformDetection() })
 

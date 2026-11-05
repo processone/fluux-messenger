@@ -2413,7 +2413,7 @@ mod tests {
 
     #[test]
     fn communication_build_retains_registered_updater() {
-        // FLM-134: exercise the same plugin builder as main, without a native window or network.
+        // #1386: exercise the same plugin builder as main, without a native window or network.
         use tauri_plugin_updater::UpdaterExt;
         let standard: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();

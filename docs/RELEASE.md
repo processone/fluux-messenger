@@ -57,7 +57,7 @@ the public release and publishes stable updater metadata automatically after its
 checks pass. Do not tag until the local test succeeds; the workflow does not wait
 for that test.
 
-This is a captain-run signing step. It requires the existing **Developer ID
+This is a local release-owner signing step. It requires the existing **Developer ID
 Application: ProcessOne (8L55BDM864)** identity and matching private key to be
 available on this Mac, plus the committed public production profile. The signing
 certificate must be listed in that profile. macOS may ask you to approve use of
