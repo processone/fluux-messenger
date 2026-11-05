@@ -1,9 +1,3 @@
-## Unreleased
-
-### Added
-
-- macOS: message notifications can use the system’s communication presentation with sender and room information
-
 ## What's New in v0.18.2
 
 ### Added

@@ -14,7 +14,7 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: 'Unreleased',
+    version: '0.18.3',
     date: 'Unreleased',
     sections: [{
       type: 'added',

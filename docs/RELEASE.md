@@ -57,11 +57,6 @@ the public release and publishes stable updater metadata automatically after its
 checks pass. Do not tag until the local test succeeds; the workflow does not wait
 for that test.
 
-When cutting that release, replace the authoritative `Unreleased` entry's version
-and date with the chosen release version and date, then regenerate the release
-notes through the normal release-preparation process. Do not attribute this
-feature to an already published release or replace an existing release tag.
-
 This is a captain-run signing step. It requires the existing **Developer ID
 Application: ProcessOne (8L55BDM864)** identity and matching private key to be
 available on this Mac, plus the committed public production profile. The signing
