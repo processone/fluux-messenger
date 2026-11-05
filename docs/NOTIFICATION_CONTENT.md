@@ -83,7 +83,7 @@ bounded query/deadline/memory rules.
 | --- | --- | --- |
 | App native chat | Contact name or sender local part; append formatted unread count | Latest resolved preview |
 | App ordinary iOS/macOS system room | `room name — nick`; room alone without a nick | Latest resolved preview |
-| App other native room / macOS communication experiment | `nick @ room name` (experiment's final communication layout is system-controlled) | Latest resolved preview |
+| App other native room | `nick @ room name` | Latest resolved preview |
 | App web chat | Contact name or sender local part | Localized `N new messages` |
 | App web room | `nick @ room name` for one, room name for several | Localized `N new messages` |
 | Web push | Payload title, else `from`, else `Fluux Messenger` | Localized `N new messages`; count displayed notifications for the same tag |
@@ -95,8 +95,9 @@ local formatter or in-app banners. iOS remote rooms lose communication-avatar,
 person-based Focus and communication-specific Siri treatment; direct messages
 and outgoing share suggestions retain their communication behavior. Local iOS
 room alerts keep their attachments and use one headline because the plugin has
-no subtitle field. Ordinary macOS uses the same headline; its disabled-by-default
-communication experiment remains unchanged.
+no subtitle field. Ordinary macOS uses the same headline, including ordinary fallbacks in its
+disabled-by-default communication experiment. Successful communication enrichment
+still uses the system-controlled layout; its sender and group metadata are unchanged.
 
 Counts intentionally have different sources: the app's unread count, the SW's
 still-displayed notification count, and the NSE's fresh claimed archive candidates.

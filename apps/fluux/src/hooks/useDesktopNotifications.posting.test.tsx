@@ -455,7 +455,7 @@ describe('useDesktopNotifications posting + guard', () => {
         ? { token: 'rename-token', commit: false }
         : { token: 'rename-token', commit: true, names: change === 'contact'
           ? { title: 'Alicia', senderName: 'Alicia' }
-          : { title: 'bob @ Projects', senderName: 'bob', roomName: 'Projects' } })
+          : { title: 'Projects — bob', senderName: 'bob', roomName: 'Projects' } })
       expect(invoke.mock.calls.filter(([command]) => command === 'finish_communication_notification')).toHaveLength(1)
       expect(invoke.mock.calls.some(([command]) => command === 'post_notification')).toBe(false)
     } finally { invoke.mockResolvedValue(null) }
@@ -529,14 +529,15 @@ describe('useDesktopNotifications posting + guard', () => {
     }) })
   })
 
-  it('posts a room via the native desktop command', async () => {
+  // Captain's FLM-434 F7 choice: ordinary fallbacks in experiment builds are room-first too.
+  it('posts a room-first ordinary fallback when experiment preparation returns null', async () => {
     renderHook(() => useDesktopNotifications())
     await handlers.onRoomMessage?.(
       { jid: 'team@conf.example.com', name: 'Team' },
       { id: 'room-message-1', nick: 'bob' },
     )
     expect(invoke).toHaveBeenCalledWith('post_notification', {
-      title: 'bob @ Team',
+      title: 'Team — bob',
       body: 'body text',
       navType: 'room',
       navTarget: 'team@conf.example.com',

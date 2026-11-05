@@ -39,7 +39,6 @@ describe('shared notification content contract v1', () => {
             const title = systemMessageNotificationTitle(target, built.title, os)
             expect(title).toBe((os === 'ios' || os === 'macos') && 'systemTitle' in input ? input.systemTitle : built.title)
           }
-          expect(systemMessageNotificationTitle(target, built.title, 'macos', true)).toBe(built.title)
         }
       })
     }

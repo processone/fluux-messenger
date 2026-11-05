@@ -348,7 +348,7 @@ export function useDesktopNotifications(): void {
     if (desktop) {
       if (!mobile) {
         const communication = communicationMetadata(target)
-        const systemTitle = systemMessageNotificationTitle(target, title, platform().os, !!communication)
+        const systemTitle = systemMessageNotificationTitle(target, title, platform().os)
         await postNativeDesktopNotification({ title: systemTitle, body, navType, navTarget, messageId, accountId,
           avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
           communication }, async () => {
@@ -365,7 +365,7 @@ export function useDesktopNotifications(): void {
             Object.entries(metadata).filter(([key]) => !['senderName', 'roomName', 'participants', 'participantIds'].includes(key)))
           if (JSON.stringify(identity(latestCommunication)) !== JSON.stringify(identity(communication))) return false
           if (latestCommunication.senderName !== communication.senderName || latestCommunication.roomName !== communication.roomName) {
-            return { title: current.title, senderName: latestCommunication.senderName,
+            return { title: systemMessageNotificationTitle(latest, current.title, platform().os), senderName: latestCommunication.senderName,
               ...(latestCommunication.roomName !== undefined ? { roomName: latestCommunication.roomName } : {}) }
           }
           return true

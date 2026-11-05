@@ -37,13 +37,13 @@ export function buildLocalMessageNotification(target: LocalMessageNotification, 
 }
 
 /** FLM-431: room-first titles only at the selected ordinary system-alert boundaries.
- * The notification plugin has no iOS subtitle field. In-app banners and the macOS
- * communication experiment retain their existing presentation.
+ * The notification plugin has no iOS subtitle field. In-app banners stay unchanged;
+ * successful macOS communication enrichment still uses the system's presentation.
  */
 export function systemMessageNotificationTitle(
-  target: LocalMessageNotification, fallback: string, os: string, communication = false,
+  target: LocalMessageNotification, fallback: string, os: string,
 ): string {
-  if (target.kind !== 'room' || (os !== 'ios' && (os !== 'macos' || communication))) return fallback
+  if (target.kind !== 'room' || (os !== 'ios' && os !== 'macos')) return fallback
   return target.message.nick ? `${target.entity.name} — ${target.message.nick}` : target.entity.name
 }
 
