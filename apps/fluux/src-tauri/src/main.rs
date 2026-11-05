@@ -2411,9 +2411,15 @@ mod tests {
     fn communication_build_retains_registered_updater() {
         // FLM-134: exercise the same plugin builder as main, without a native window or network.
         use tauri_plugin_updater::UpdaterExt;
+        let standard: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
         for identifier in ["net.processone.fluux", "net.processone.fluux.dev"] {
+            let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+            context.config_mut().identifier = identifier.into();
+            context.config_mut().plugins =
+                serde_json::from_value(standard["plugins"].clone()).unwrap();
             let app = with_communication_and_updates(tauri::test::mock_builder(), identifier)
-                .build(tauri::test::mock_context(tauri::test::noop_assets()))
+                .build(context)
                 .unwrap();
             // Accessing the registered updater state would panic if the plugin were absent.
             let _builder = app.updater_builder();
