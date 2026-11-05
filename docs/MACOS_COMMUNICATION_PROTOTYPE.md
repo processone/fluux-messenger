@@ -50,6 +50,21 @@ npm run check:tls-build
 cargo test --locked --manifest-path apps/fluux/src-tauri/Cargo.toml --features macos-communication
 ```
 
+The separate read-only signature probe uses an extracted public 0.18.1 archive:
+
+```sh
+FLUUX_MACOS_REFERENCE_APP="/absolute/path/Fluux Messenger.app" node --test scripts/macos-signature-read.test.mjs
+```
+
+The macOS native workflow downloads that public reference into temporary storage.
+The probe runs the verifier's actual signature-display commands, parses XML and
+the legacy requirement, and extracts a public DER certificate. It never signs,
+looks up private identities, accesses keychains, launches or installs an app.
+A missing local fixture is missing evidence, not a pass. This proves command
+compatibility only; it does not close the signed 0.18.2 release proof gap.
+The disposable-runner launch environment contains only explicit system paths,
+locale and scratch storage locations; it inherits no release credentials.
+
 The configuration probe exercises the real Tauri merger and metadata generator,
 then stops before compilation, bundling or signing. Native contracts inject OS
 effects. Verifier tests use stand-in signature/stapling readings and do not prove

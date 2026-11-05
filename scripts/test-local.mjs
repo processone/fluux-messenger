@@ -171,7 +171,11 @@ export function createPlan(changes, cwd = root) {
       if (path.startsWith('.cargo/')) nativeConfig(reason)
       continue
     }
+    if (path === 'scripts/macos-signature-read.test.mjs' || path === 'scripts/verify-macos-release.mjs') {
+      nodeTest('scripts/macos-signature-read.test.mjs', reason)
+    }
     if (path === `${app}/scripts/macos-communication-profile.mjs` || path === 'scripts/verify-macos-release.mjs'
+        || path === 'scripts/macos-signature-read.test.mjs'
         || path === 'scripts/macos-release.test.mjs' || path === `${native}/macos/net.processone.fluux.provisionprofile`) {
       communication(reason)
       continue

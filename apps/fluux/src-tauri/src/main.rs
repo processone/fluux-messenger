@@ -1280,11 +1280,14 @@ fn communication_available(identifier: &str) -> bool {
     communication_for_build(identifier, cfg!(feature = "macos-communication"))
 }
 
-fn with_communication_and_updates<R: tauri::Runtime>(
+fn with_updates<R: tauri::Runtime>(app: tauri::Builder<R>) -> tauri::Builder<R> {
+    app.plugin(tauri_plugin_updater::Builder::new().build())
+}
+
+fn with_communication<R: tauri::Runtime>(
     app: tauri::Builder<R>,
     identifier: &str,
 ) -> tauri::Builder<R> {
-    let app = app.plugin(tauri_plugin_updater::Builder::new().build());
     if communication_available(identifier) {
         app.append_invoke_initialization_script(include_str!("communication-init.js"))
     } else {
@@ -1530,7 +1533,8 @@ fn main() {
         // The disposable lab never checks or installs updates.
         app
     } else {
-        with_communication_and_updates(app, &identifier)
+        let app = with_updates(app);
+        with_communication(app, &identifier)
     };
     let app = app
         .manage(window_behavior::WindowBehavior::default())
@@ -2418,7 +2422,7 @@ mod tests {
             context.config_mut().identifier = identifier.into();
             context.config_mut().plugins =
                 serde_json::from_value(standard["plugins"].clone()).unwrap();
-            let app = with_communication_and_updates(tauri::test::mock_builder(), identifier)
+            let app = with_communication(with_updates(tauri::test::mock_builder()), identifier)
                 .build(context)
                 .unwrap();
             // Accessing the registered updater state would panic if the plugin were absent.

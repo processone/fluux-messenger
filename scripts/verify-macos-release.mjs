@@ -1,5 +1,5 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,9 +15,16 @@ function run(command, args) {
   return { stdout: result.stdout, stderr: result.stderr }
 }
 
+export function launchEnvironment(home) {
+  return { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'en_US.UTF-8', HOME: home,
+    CFFIXED_USER_HOME: home, TMPDIR: join(home, 'tmp'), XDG_DATA_HOME: join(home, 'data'),
+    XDG_CONFIG_HOME: join(home, 'config'), XDG_CACHE_HOME: join(home, 'cache') }
+}
+
 export async function launchForTenSeconds(executable, home) {
+  mkdirSync(join(home, 'tmp'), { recursive: true })
   const child = spawn(executable, [], {
-    env: { ...process.env, HOME: home, CFFIXED_USER_HOME: home, XDG_DATA_HOME: join(home, 'data'), XDG_CONFIG_HOME: join(home, 'config') },
+    env: launchEnvironment(home),
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let timer
@@ -42,7 +49,21 @@ export async function launchForTenSeconds(executable, home) {
   }
 }
 
-// Reading signatures/certificates does not look up or use a private signing identity.
+// Shared by the release verifier and the read-only public-signature probe.
+// Display only: no private identity lookup, signing operation or keychain access.
+export function readSignature(app, scratch, invoke = run) {
+  const signed = invoke('/usr/bin/codesign', ['--display', '--entitlements', '-', '--xml', app])
+  const entitlements = readPlist(signed.stdout)
+  const prefix = join(scratch, 'signing-certificate-')
+  invoke('/usr/bin/codesign', ['--display', `--extract-certificates=${prefix}`, app])
+  const certificate = readFileSync(`${prefix}0`)
+  const requirement = invoke('/usr/bin/codesign', ['--display', '--requirements', '-', app])
+  const text = `${requirement.stdout}\n${requirement.stderr}`
+  const actual = text.split('\n').find(line => line.startsWith('designated => '))?.slice('designated => '.length)
+  if (!actual) throw new Error('Missing designated requirement')
+  return { entitlements, certificate, requirement: normalizeRequirement(actual) }
+}
+
 export async function verifyApp(app, { arch, scratch, invoke = run, launch = launchForTenSeconds, decode = decodeProfile, allowLaunch = false } = {}) {
   if (!['arm64', 'x86_64'].includes(arch)) throw new Error('Expected arm64 or x86_64 release architecture')
   const contents = join(app, 'Contents')
@@ -54,16 +75,10 @@ export async function verifyApp(app, { arch, scratch, invoke = run, launch = lau
   const architectures = invoke('/usr/bin/lipo', ['-archs', executable]).stdout.toString().trim().split(/\s+/)
   if (!architectures.includes(arch)) throw new Error('Update archive has the wrong architecture')
   invoke('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', app])
-  const signed = invoke('/usr/bin/codesign', ['--display', '--entitlements', ':-', '--xml', app])
-  const entitlements = readPlist(signed.stdout)
+  const signed = readSignature(app, scratch, invoke)
   const profile = decode(join(contents, 'embedded.provisionprofile'))
-  const prefix = join(scratch, 'signing-certificate-')
-  invoke('/usr/bin/codesign', ['--display', '--extract-certificates', prefix, app])
-  assertProfileCovers(profile, entitlements, readFileSync(`${prefix}0`))
-  const requirement = invoke('/usr/bin/codesign', ['--display', '--requirements', ':-', app])
-  const text = `${requirement.stdout}\n${requirement.stderr}`
-  const actual = text.split('\n').find(line => line.startsWith('designated => '))?.slice('designated => '.length)
-  if (!actual || normalizeRequirement(actual) !== designatedRequirement) throw new Error('Designated requirement differs from the published release')
+  assertProfileCovers(profile, signed.entitlements, signed.certificate)
+  if (signed.requirement !== designatedRequirement) throw new Error('Designated requirement differs from the published release')
   invoke('/usr/bin/xcrun', ['stapler', 'validate', app])
   console.log(`Verified ${arch}: strict signature, authorized entitlements, embedded certificate, designated requirement, stapled notarization and activity type`)
   if (!allowLaunch) {

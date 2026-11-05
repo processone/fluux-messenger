@@ -194,7 +194,7 @@ index 13192db3..6fcc1d2e 100644
 @@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
  import { connectionStore, getBareJid } from '@fluux/sdk'
  import { osNotificationSilent } from './notificationSound'
- import { communicationTestAvailable } from '@/platform'
+ import { communicationAvailable } from '@/platform'
 +import { repro } from '@/utils/reproProbe'
  
  export interface NotificationNames {

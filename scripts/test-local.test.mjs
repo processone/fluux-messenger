@@ -277,5 +277,8 @@ test('macOS release profile and verifier changes select executable release tests
     'apps/fluux/src-tauri/macos/net.processone.fluux.provisionprofile', 'scripts/verify-macos-release.mjs']) {
     const plan = planFor([path])
     assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-release.test.mjs')))
+    if (path === 'scripts/verify-macos-release.mjs') {
+      assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-signature-read.test.mjs')))
+    }
   }
 })

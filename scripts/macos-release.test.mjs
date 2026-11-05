@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { assertProfileCovers, decodeProfile, validateProfile, validateCommunicationConfig } from '../apps/fluux/scripts/macos-communication-profile.mjs'
 import { shareSettings } from '../apps/fluux/scripts/tauri-macos-share.mjs'
-import { designatedRequirement, extractArchive, verifyApp, launchForTenSeconds } from './verify-macos-release.mjs'
+import { designatedRequirement, extractArchive, verifyApp, launchEnvironment, launchForTenSeconds } from './verify-macos-release.mjs'
 
 const root = resolve('apps/fluux/src-tauri')
 const profilePath = join(root, 'macos/net.processone.fluux.provisionprofile')
@@ -81,7 +81,8 @@ async function verifierFixture(body) {
       let stdout = ''
       if (command.endsWith('/lipo')) stdout = 'arm64'
       if (args.includes('--entitlements')) stdout = execFileSync('/usr/bin/plutil', ['-convert', 'xml1', '-o', '-', '--', '-'], { input: JSON.stringify(entitlements) })
-      if (args.includes('--extract-certificates')) writeFileSync(`${args[args.indexOf('--extract-certificates') + 1]}0`, Buffer.from(profile.DeveloperCertificates[0], 'base64'))
+      const certificateOption = args.find(arg => arg.startsWith('--extract-certificates='))
+      if (certificateOption) writeFileSync(`${certificateOption.slice('--extract-certificates='.length)}0`, Buffer.from(profile.DeveloperCertificates[0], 'base64'))
       if (args.includes('--requirements')) stdout = `designated => ${designatedRequirement}`
       return { stdout: Buffer.from(stdout), stderr: Buffer.alloc(0) }
     }
@@ -102,7 +103,8 @@ for (const failure of ['signature', 'entitlement', 'certificate', 'requirement',
       if ((failure === 'signature' && args.includes('--verify')) || (failure === 'staple' && args.includes('stapler'))) throw new Error(`${failure} failed`)
       if (failure === 'requirement' && args.includes('--requirements')) return { stdout: Buffer.from('designated => identifier "other"'), stderr: '' }
       const result = invoke(command, args)
-      if (failure === 'certificate' && args.includes('--extract-certificates')) writeFileSync(`${args[args.indexOf('--extract-certificates') + 1]}0`, 'wrong certificate')
+      const certificateOption = args.find(arg => arg.startsWith('--extract-certificates='))
+      if (failure === 'certificate' && certificateOption) writeFileSync(`${certificateOption.slice('--extract-certificates='.length)}0`, 'wrong certificate')
       return result
     }
     if (failure === 'entitlement') delete f.entitlements['com.apple.developer.usernotifications.communication']
@@ -125,6 +127,12 @@ macTest('FLM-134 unsupported architecture is explicitly unproven, not a launch p
   assert.deepEqual(await verifyApp(f.app, f.options), { launched: false })
   assert.equal(f.launches(), 0)
 }))
+test('FLM-439 F6 child environment contains only the explicit non-secret allowlist', () => {
+  const env = launchEnvironment('/scratch/home')
+  assert.deepEqual(Object.keys(env).sort(), ['CFFIXED_USER_HOME', 'HOME', 'LANG', 'PATH', 'TMPDIR', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME'].sort())
+  assert.equal('GH_TOKEN' in env, false)
+  assert.equal('APPLE_CERTIFICATE' in env, false)
+})
 macTest('FLM-134 launch guard rejects a real process that exits early without launching Fluux', async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-launch-test-'))
   try { await assert.rejects(launchForTenSeconds('/usr/bin/true', scratch), /before ten seconds/) }
@@ -135,9 +143,12 @@ macTest('FLM-134 ten-second guard observes a real disposable process and stops i
   try {
     const executable = join(scratch, 'survival-fixture')
     // A stand-in process proves the guard's timing, home isolation and cleanup, not signed Fluux launch.
-    writeFileSync(executable, '#!/bin/sh\nprintf "%s" "$HOME" > "$HOME/observed-home"\nprintf "%s" "$$" > "$HOME/pid"\nexec /bin/sleep 60\n', { mode: 0o755 })
+    writeFileSync(executable, '#!/bin/sh\ntest -z "${FLUUX_RELEASE_TEST_CREDENTIAL+x}" || exit 73\nprintf "%s" "$HOME" > "$HOME/observed-home"\nprintf "%s" "$$" > "$HOME/pid"\nexec /bin/sleep 60\n', { mode: 0o755 })
+    assert.equal('FLUUX_RELEASE_TEST_CREDENTIAL' in process.env, false)
+    process.env.FLUUX_RELEASE_TEST_CREDENTIAL = 'stand-in-not-a-real-credential'
     const start = performance.now()
-    await launchForTenSeconds(executable, scratch)
+    try { await launchForTenSeconds(executable, scratch) }
+    finally { delete process.env.FLUUX_RELEASE_TEST_CREDENTIAL }
     assert.ok(performance.now() - start >= 10_000)
     assert.equal(readFileSync(join(scratch, 'observed-home'), 'utf8'), scratch)
     const pid = Number(readFileSync(join(scratch, 'pid'), 'utf8'))
@@ -168,33 +179,44 @@ const workflow = parse(readFileSync('.github/workflows/release.yml', 'utf8'))
 const expression = (value, matrix) => typeof value === 'string' && value.startsWith('${{')
   ? Function('matrix', `return (${value.slice(3, -2)})`)(matrix) : value
 
-test('FLM-134 actual macOS verification step propagates failures for both release architectures', () => {
+test('FLM-439 F5/F6 actual release steps reject archive ambiguity and isolate the download token', () => {
   const job = workflow.jobs['build-macos']
   const buildIndex = job.steps.findIndex(step => step.uses?.startsWith('tauri-apps/tauri-action@'))
+  const downloadIndex = job.steps.findIndex(step => step.name === 'Download signed macOS update archive')
   const verificationIndex = job.steps.findIndex(step => step.name === 'Verify signed macOS update archive')
-  assert.ok(verificationIndex > buildIndex)
-  assert.notEqual(job.steps[verificationIndex]['continue-on-error'], true)
+  assert.ok(downloadIndex > buildIndex && verificationIndex > downloadIndex)
+  const download = job.steps[downloadIndex], verification = job.steps[verificationIndex]
+  assert.notEqual(verification['continue-on-error'], true)
+  assert.equal(verification.env.GH_TOKEN, undefined)
+  assert.ok(download.env.GH_TOKEN)
   assert.ok(workflow.jobs['rename-assets'].needs.includes('build-macos'))
-  assert.equal(workflow.jobs['rename-assets'].if, undefined, 'normal successful-needs gate must remain')
+  assert.equal(workflow.jobs['rename-assets'].if, undefined)
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-release-workflow-'))
   try {
-    // Captured from the published 0.18.1 asset labels, before renaming.
+    // Published 0.18.1 asset names before renaming; the second match follows the same real release naming convention.
     const assets = { aarch64: 'Fluux.Messenger_0.18.1_aarch64.app.tar.gz', x86_64: 'Fluux.Messenger_0.18.1_x64.app.tar.gz' }
     const recorder = join(scratch, 'verification.json')
-    writeFileSync(join(scratch, 'gh'), `#!${process.execPath}\nconst fs=require('node:fs'),path=require('node:path'); const a=process.argv.slice(2); if(a.slice(0,2).join(' ')!=='release download') process.exit(8); const pattern=a[a.indexOf('--pattern')+1]; const name=process.env.ASSET_NAME; if(!name.endsWith(pattern.slice(1))) process.exit(9); fs.writeFileSync(path.join(a[a.indexOf('--dir')+1],name),'archive fixture');`, { mode: 0o755 })
-    writeFileSync(join(scratch, 'node'), `#!${process.execPath}\nrequire('node:fs').writeFileSync(process.env.RECORDED,JSON.stringify(process.argv.slice(2))); process.exit(Number(process.env.VERIFIER_STATUS));`, { mode: 0o755 })
+    writeFileSync(join(scratch, 'gh'), `#!${process.execPath}\nconst fs=require('node:fs'),path=require('node:path'); const a=process.argv.slice(2); if(a.slice(0,2).join(' ')!=='release download'||!process.env.GH_TOKEN) process.exit(8); const pattern=a[a.indexOf('--pattern')+1]; for(const name of JSON.parse(process.env.ASSET_NAMES)) { if(!name.endsWith(pattern.slice(1))) process.exit(9); fs.writeFileSync(path.join(a[a.indexOf('--dir')+1],name),'archive fixture'); }`, { mode: 0o755 })
+    writeFileSync(join(scratch, 'node'), `#!${process.execPath}\nif(process.env.GH_TOKEN) process.exit(10); require('node:fs').writeFileSync(process.env.RECORDED,JSON.stringify(process.argv.slice(2))); process.exit(Number(process.env.VERIFIER_STATUS));`, { mode: 0o755 })
+    const { spawnSync } = require('node:child_process')
     for (const matrix of job.strategy.matrix.include) {
-      const step = job.steps[verificationIndex]
-      const env = Object.fromEntries(Object.entries(step.env).filter(([key]) => key !== 'GH_TOKEN').map(([key, value]) => [key, expression(value, matrix)]))
-      for (const status of [0, 1]) {
-        const { spawnSync } = require('node:child_process')
-        const run = spawnSync('/bin/bash', ['-e', '-c', step.run], { env: { ...process.env, ...env, PATH: `${scratch}:${process.env.PATH}`, RELEASE_TAG: 'v0.18.1', ASSET_NAME: assets[matrix.arch], RECORDED: recorder, VERIFIER_STATUS: String(status) }, encoding: 'utf8' })
-        assert.equal(run.status, status, run.stderr)
-        const args = JSON.parse(readFileSync(recorder))
-        assert.equal(args[0], 'scripts/verify-macos-release.mjs')
-        assert.equal(args[2], matrix.arch === 'aarch64' ? 'arm64' : 'x86_64')
-        assert.equal(args[3], '--launch', 'disposable release runners must execute the survival check')
-        console.log(`Actual release verification shell: ${matrix.arch}, verifier status ${status} => job status ${run.status}`)
+      for (const [count, status] of [[1, 0], [1, 1], [0, 0], [2, 0]]) {
+        const directory = join(scratch, `${matrix.arch}-${count}-${status}`)
+        const names = [assets[matrix.arch], assets[matrix.arch].replace('0.18.1', '0.18.0')].slice(0, count)
+        const env = { PATH: `${scratch}:/usr/bin:/bin`, RELEASE_TAG: 'v0.18.1', DOWNLOAD_DIR: directory, ASSET_NAMES: JSON.stringify(names), RECORDED: recorder, VERIFIER_STATUS: String(status) }
+        const downloaded = spawnSync('/bin/bash', ['-e', '-c', download.run], { env: { ...env, ASSET_ARCH: expression(download.env.ASSET_ARCH, matrix), GH_TOKEN: 'fixture-token' }, encoding: 'utf8' })
+        assert.equal(downloaded.status, 0, downloaded.stderr)
+        rmSync(recorder, { force: true })
+        const checked = spawnSync('/bin/bash', ['-e', '-c', verification.run], { env: { ...env, MACH_ARCH: expression(verification.env.MACH_ARCH, matrix) }, encoding: 'utf8' })
+        assert.equal(checked.status, count === 1 ? status : 1, checked.stderr)
+        if (count !== 1) assert.equal(require('node:fs').existsSync(recorder), false, 'ambiguous/missing archive must not reach verifier')
+        else {
+          const args = JSON.parse(readFileSync(recorder))
+          assert.equal(args[0], 'scripts/verify-macos-release.mjs')
+          assert.equal(args[2], matrix.arch === 'aarch64' ? 'arm64' : 'x86_64')
+          assert.equal(args[3], '--launch')
+        }
+        console.log(`Actual release shells: ${matrix.arch}, archives ${count}, verifier status ${status} => job status ${checked.status}`)
       }
     }
   } finally { rmSync(scratch, { recursive: true, force: true }) }
