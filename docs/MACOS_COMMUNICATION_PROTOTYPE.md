@@ -177,9 +177,37 @@ groups are deleted, never all Siri interactions or another application's data.
 
 ## Local test before publication
 
-The captain signs/tests the production identity with the supplied profile and
-existing release certificate. This implementation task does not authorize signing,
-keychain access, installation or publication. Never send private keys or passwords
+The captain chose a **local signed production build before tagging 0.18.2**.
+Follow the [complete local-build recipe](RELEASE.md#local-signed-macos-test-before-tagging-0182)
+on the candidate commit, including dependency/SDK setup and the existing Developer
+ID identity/key prerequisites. The direct build invocation is:
+
+```sh
+env -u APPLE_CERTIFICATE -u APPLE_CERTIFICATE_PASSWORD \
+  APPLE_TEAM_ID=8L55BDM864 \
+  APPLE_SIGNING_IDENTITY='Developer ID Application: ProcessOne (8L55BDM864)' \
+  npm run tauri --workspace=@xmpp/fluux -- build \
+    --target aarch64-apple-darwin \
+    --config src-tauri/tauri.release-macos.conf.json \
+    --config '{"bundle":{"createUpdaterArtifacts":false}}' \
+    --bundles app
+```
+
+Do not use `tauri:build`, `tauri:install` or the Dev override. The local wrapper
+always selects Dev, which cannot exercise communication notifications. This
+command uses the release overlay and the existing Developer ID key, with no CI
+certificate import. It disables updater artifact generation only; it does not
+remove the updater plugin. Quit the installed Fluux and open the signed app in
+`apps/fluux/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/` without
+installing it over the everyday app. It uses normal Fluux data and the shared
+keychain item; it is not an isolated Dev test.
+
+Record the local result before the captain tags the tested source. The existing
+tag workflow stays unchanged and publishes automatically after its checks; it
+will not wait for a manual test afterward. This document is not a claim that the
+local signed build has run or that the signed/notarized archive gap is closed.
+This implementation task does not authorize the worker to sign, inspect keychains,
+install or publish. Never send private keys or passwords
 in evidence. Use disposable XMPP data for test recordings. Releases no longer
 require the prototype's separate-user rule; any use of personal data or accounts
 still needs the owner's deliberate approval. A changed app name or scratch HOME

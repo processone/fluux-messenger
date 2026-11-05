@@ -50,6 +50,68 @@ The Dev app cannot prove this feature. Existing prerelease filtering remains
 unchanged, but no beta is required for this rollout. Keep `Refs #1386` until the
 captain's local result is recorded. See [macOS communication notifications](MACOS_COMMUNICATION_PROTOTYPE.md).
 
+## Local signed macOS test before tagging 0.18.2
+
+The captain chose a **local signed build before the tag**, not a beta and not an
+approval gate in the tag workflow. Do this on the candidate release commit before
+step 7 below. Once the tag is pushed, the existing workflow creates the public
+release and publishes stable updater metadata automatically after its checks pass.
+Do not tag until the local test succeeds; the workflow does not wait for that test.
+
+This is a captain-run signing step. It requires the existing **Developer ID
+Application: ProcessOne (8L55BDM864)** identity and matching private key to be
+available on this Mac, plus the committed public production profile. The signing
+certificate must be listed in that profile. macOS may ask you to approve use of
+that key. If the identity/key is unavailable, stop: do not
+substitute Fluux Dev, ad-hoc signing or a new certificate. No signing, keychain
+inspection or installation is performed by the implementation worker.
+
+From the project root, build the SDK, then invoke the direct Tauri entrypoint:
+
+```sh
+npm ci
+npm run build:sdk
+env -u APPLE_CERTIFICATE -u APPLE_CERTIFICATE_PASSWORD \
+  APPLE_TEAM_ID=8L55BDM864 \
+  APPLE_SIGNING_IDENTITY='Developer ID Application: ProcessOne (8L55BDM864)' \
+  npm run tauri --workspace=@xmpp/fluux -- build \
+    --target aarch64-apple-darwin \
+    --config src-tauri/tauri.release-macos.conf.json \
+    --config '{"bundle":{"createUpdaterArtifacts":false}}' \
+    --bundles app
+```
+
+This is the Apple silicon target for this Mac. On an Intel Mac, use
+`x86_64-apple-darwin` instead and substitute that target in the output path below.
+Do **not** use `tauri:build`, `tauri:install` or the Dev override: the local build
+wrapper always adds the Dev identity. The direct entrypoint above preserves
+`net.processone.fluux`, production TLS, communication support and the embedded
+profile. The inline override disables **updater artifact generation only**, so
+this local test does not need the separate Tauri updater-signing private key.
+The app's updater plugin and Updates settings remain enabled. Removing the CI
+certificate-payload variables avoids the extension's CI keychain-import path;
+the build still signs with your existing Developer ID key.
+
+The signed app is written to:
+
+```text
+apps/fluux/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Fluux Messenger.app
+```
+
+Quit the installed Fluux first, then open this app from its build folder. Do not
+copy it over your everyday app or run the install helper. It uses the **normal
+Fluux identity, data folder and shared keychain item**, not an isolated Dev store.
+Test a direct and a room notification, avatars, click/read routing, notification
+permissions, Focus, and whether a new keychain prompt appears; confirm Updates is
+still available. Record the exact tested commit and macOS version. Do not publish
+until you are satisfied with the local result.
+
+A local signed `.app` is not proof of a notarized/stapled updater archive or both
+architectures. Those remain the release jobs' checks and the explicit signed
+release proof gap. After a successful local test, proceed with the existing tag
+workflow using the same tested source. Do not claim `Closes #1386` until the local
+result is recorded.
+
 ## Overview
 
 The release process uses a single authoritative source for changelog data, which is then used to generate all other release artifacts.
@@ -230,6 +292,10 @@ git commit -m "chore: release v0.9.0"
 ```
 
 ### 7. Create and Push the Tag
+
+For 0.18.2, complete the [local signed macOS test](#local-signed-macos-test-before-tagging-0182)
+on the candidate commit first. The tag workflow publishes automatically; it does
+not wait for a later manual test.
 
 Push the release branch first so the tag has somewhere to live, then the tag:
 

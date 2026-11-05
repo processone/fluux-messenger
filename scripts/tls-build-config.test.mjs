@@ -16,7 +16,7 @@ const tauriVersion = readFileSync(join(root, 'apps/fluux/src-tauri/Cargo.lock'),
 
 // Exercise Tauri's actual config merging and Cargo invocation. The runner
 // records its arguments and deliberately stops before compilation or signing.
-function buildArgs({ dev = false, debug = false, releaseMacos = false, inspect } = {}) {
+function buildArgs({ dev = false, debug = false, releaseMacos = false, localSignedTest = false, inspect } = {}) {
   // N1: canonicalize the entire fixture so copied entry points match Node's resolved module URLs.
   const fixture = realpathSync(mkdtempSync(join(tmpdir(), 'fluux-tls-build-')))
   try {
@@ -45,6 +45,7 @@ function buildArgs({ dev = false, debug = false, releaseMacos = false, inspect }
     if (debug) args.push('--debug')
     if (dev) args.push('--config', join(native, 'tauri.dev.conf.json'))
     if (releaseMacos) args.push('--config', join(native, 'tauri.release-macos.conf.json'))
+    if (localSignedTest) args.push('--config', JSON.stringify({ bundle: { createUpdaterArtifacts: false } }), '--bundles', 'app')
     args.push('--config', JSON.stringify({ build: { beforeBuildCommand: '', frontendDist: '../dist' } }))
     const result = spawnSync(process.execPath, args, {
       cwd: fixture,
@@ -136,4 +137,23 @@ test('macOS release overlay reaches Cargo and the real profile-checked generator
   // Tauri may repeat a feature in Cargo's argv; Cargo enables a set, not a multiset.
   assert.deepEqual(new Set(nativeFeatures), new Set(expectedFeatures))
   assert.equal(hasProductionTls(args), true)
+})
+
+// Captain's FLM-439 F3 choice: document a local signed production build before tagging.
+// Exercise its exact overlays through Tauri, stopping at the runner before signing or bundling.
+test('documented local pre-tag configuration keeps production communication and disables only updater artifacts', { skip: process.platform !== 'darwin' }, () => {
+  const standard = JSON.parse(readFileSync(join(root, 'apps/fluux/src-tauri/tauri.conf.json'), 'utf8'))
+  const release = JSON.parse(readFileSync(join(root, 'apps/fluux/src-tauri/tauri.release-macos.conf.json'), 'utf8'))
+  const args = buildArgs({ releaseMacos: true, localSignedTest: true, inspect({ configuration }) {
+    const effective = JSON.parse(configuration)
+    assert.ok(effective.identifier === undefined || effective.identifier === standard.identifier)
+    assert.deepEqual(effective.build.features, release.build.features)
+    assert.equal(effective.bundle.createUpdaterArtifacts, false)
+    assert.equal(effective.bundle.macOS.files['embedded.provisionprofile'], release.bundle.macOS.files['embedded.provisionprofile'])
+    console.log('Unsigned local pre-tag configuration:', JSON.stringify({ identifier: effective.identifier || standard.identifier,
+      features: effective.build.features, profile: effective.bundle.macOS.files['embedded.provisionprofile'], createUpdaterArtifacts: effective.bundle.createUpdaterArtifacts }))
+  } })
+  assert.ok(hasProductionTls(args))
+  const enabled = args[args.indexOf('--features') + 1].split(/[ ,]+/)
+  for (const feature of release.build.features) assert.ok(enabled.includes(feature))
 })
