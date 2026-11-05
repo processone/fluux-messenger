@@ -1225,12 +1225,12 @@ export function EncryptionSettings() {
               //               neutral when presence is known, otherwise treated
               //               as "a backup might exist" since the
               //               dangerous assumption is absence.
-              // These four states drive the STATUS LINE only. The backup
-              // button renders regardless of sync state: the marker records
-              // a fingerprint, not the blob's encoding, so an in-sync backup
-              // can still be one no other XEP-0373 client can open (#1021)
-              // and the user needs a way to re-publish it. Retry and restore
-              // each have their own narrower gate below.
+              // These readings choose the status line; certainty also selects
+              // replacement/rotation warnings and backup acknowledgement.
+              // Backup remains available after probing, even when in sync:
+              // the marker confirms identity, not compatible encoding (#1021).
+              // Retry is only for an unknown presence probe, not unconfirmed
+              // identity. Restore keeps its separate presence gate below.
               const checking = backupState === 'checking'
               const inSync = isBackupInSync(backupState, backedUpFingerprint, fingerprint)
               return (

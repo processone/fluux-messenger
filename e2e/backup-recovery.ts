@@ -135,6 +135,24 @@ for (const source of ['server', 'file']) {
   })
 }
 
+/** R1: demo.tsx clears every fluux:* marker on reload, while the fixture
+ * retains its installed key and encrypted server backup. This is a reset,
+ * not a production-marker durability claim. */
+async function reloadWithResetMarker(page: Page, expectedFingerprint: string, expectedBackup: string) {
+  await reloadDemo(page)
+  await page.evaluate(() => { location.hash = '/settings/encryption' })
+  await expect(page.getByText(encryptionCopy.backupStatusUnconfirmed, { exact: true })).toBeVisible()
+  const actual = await page.evaluate(async () => {
+    const plugin = (window as any).__demoClient.e2ee.getPlugin('openpgp')
+    return { local: plugin.getOwnFingerprint(), marker: plugin.getBackedUpFingerprint(), server: await plugin.fetchSecretKeyBackup() }
+  })
+  expect(actual.local).toBe(expectedFingerprint)
+  expect(actual.marker).toBeNull()
+  expect(actual.server).toBe(expectedBackup)
+  expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
+  return actual
+}
+
 // FLM-357: a real Bob file must not inherit Alice's server-backup status.
 // The shared install/status code is real; this fixture injects native IPC and PEP.
 for (const kind of ['single-key', 'multi-key']) {
@@ -194,20 +212,7 @@ for (const kind of ['single-key', 'multi-key']) {
     expect(observation.marker).toBe(kind === 'multi-key' ? fingerprint : null)
     expect(observation.server).toBe(serverBefore)
     expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
-    await reloadDemo(page)
-    await page.evaluate(() => { location.hash = '/settings/encryption' })
-    // demo.tsx deliberately clears every fluux:* key on reload. It keeps the
-    // fixture's installed key, not its confirmed marker. R1 makes this neutral,
-    // unlike the confirmed Alice/Bob mismatch already asserted before reload.
-    await expect(page.getByText(encryptionCopy.backupStatusUnconfirmed, { exact: true })).toBeVisible()
-    const afterReload = await page.evaluate(async () => {
-      const plugin = (window as any).__demoClient.e2ee.getPlugin('openpgp')
-      return { local: plugin.getOwnFingerprint(), marker: plugin.getBackedUpFingerprint(), server: await plugin.fetchSecretKeyBackup() }
-    })
-    expect(afterReload.local).toBe(bobFingerprint)
-    expect(afterReload.marker).toBeNull()
-    expect(afterReload.server).toBe(serverBefore)
-    expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
+    const afterReload = await reloadWithResetMarker(page, bobFingerprint, serverBefore)
     await test.info().attach('backup-identity-observation', { contentType: 'application/json', body: JSON.stringify({ kind, local: observation.local, marker: observation.marker, serverFingerprints: [fingerprint], serverUnchanged: observation.server === serverBefore, afterReload: 'unconfirmed', afterReloadMarker: afterReload.marker, afterReloadServerUnchanged: afterReload.server === serverBefore, build: expectedBuild }) })
   })
 }
@@ -275,13 +280,14 @@ test('unconfirmed backup uses neutral decisions and acknowledged rotation re-pub
   expect(actual.backup).not.toBe(before)
   const secretPublications = (await audit(page)).publications.filter((node: string) => node === 'urn:xmpp:openpgp:0:secret-key').length
   expect(secretPublications).toBe(1)
-  await reloadDemo(page)
-  await page.evaluate(() => { location.hash = '/settings/encryption' })
-  await expect(page.getByText(encryptionCopy.backupStatusInSync, { exact: true })).toBeVisible()
+  const oldCodeRejected = await decrypt({ message: await readMessage({ armoredMessage: actual.backup }), passwords: [code], format: 'binary' }).then(() => false, () => true)
+  expect(oldCodeRejected).toBe(true)
+  const afterReload = await reloadWithResetMarker(page, fingerprint, actual.backup)
   await test.info().attach('unconfirmed-rotation-observation', { contentType: 'application/json', body: JSON.stringify({
     fingerprint: actual.fingerprint, marker: actual.marker, acknowledged, secretPublications,
     backupChanged: actual.backup !== before, previousSubkeys: oldKeys[0].getSubkeys().map(k => k.getFingerprint()),
-    backupSubkeys: subkeys, publishedSubkeys: published.getSubkeys().map(k => k.getFingerprint()).sort(), afterReload: 'confirmed',
+    backupSubkeys: subkeys, publishedSubkeys: published.getSubkeys().map(k => k.getFingerprint()).sort(), oldCodeRejected,
+    afterReload: 'unconfirmed-after-demo-reset', afterReloadMarker: afterReload.marker, afterReloadServerUnchanged: afterReload.server === actual.backup,
     boundary: 'Actual App and shared publication; native rotation readings use real fixture crypto, not native runtime proof',
   }) })
 })
