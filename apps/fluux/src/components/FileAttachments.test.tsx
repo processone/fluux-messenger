@@ -142,6 +142,21 @@ describe('FileAttachments', () => {
       expect(container.firstChild).toBeNull()
     })
 
+    it('reserves the default box again when a corrected attachment replaces a decoded unsized image', () => {
+      // Review FLM-429 R1: decode state belongs to one image source, not to the component.
+      // Own URLs: the failed-URL cache is shared across tests.
+      const unsized = { ...imageAttachment, url: 'https://example.com/decode-me.jpg' }
+      const { container, rerender } = render(<ImageAttachment attachment={unsized} />)
+      const reserved = () => container.querySelector('button.w-full')
+      expect(reserved()).toBeTruthy()
+
+      fireEvent.load(screen.getByRole('img'))
+      expect(reserved()).toBeNull()
+
+      rerender(<ImageAttachment attachment={{ ...unsized, url: 'https://example.com/fixed.jpg' }} />)
+      expect(reserved()).toBeTruthy()
+    })
+
     it('reserves the aspect-ratio box in the error state to avoid a layout shift', () => {
       // When an image fails to load — or its blob URL is invalidated AFTER it was
       // displayed (sleep/wake, WebKit blob reclaim) — the error fallback must keep

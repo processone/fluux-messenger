@@ -68,6 +68,10 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
 
   // Check if this URL previously failed - initialize state from cache
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(originalImageSrc))
+  // An unsized image has no box until it decodes; reserveBox holds the default 4:3 box open
+  // until then so a lazy or late decode above the reader does not resize the row. Keyed by
+  // source so a corrected attachment (new URL, same component) is reserved again.
+  const [decodedSrc, setDecodedSrc] = useState<string | null>(null)
 
   // Media-autoload gating: defer fetch unless policy allows or user tapped
   const { shouldLoad, approve } = useDeferredMedia(originalImageSrc, isOwnMessage)
@@ -103,6 +107,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   const width = attachment.width ?? attachment.thumbnail?.width
   const height = attachment.height ?? attachment.thumbnail?.height
   const hasKnownDimensions = width !== undefined && height !== undefined
+  const reserveBox = !hasKnownDimensions && decodedSrc !== originalImageSrc
 
   // Calculate aspect ratio to reserve space and prevent layout shift
   // Use 4:3 as default for unknown dimensions (common photo ratio)
@@ -139,11 +144,15 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   // Show loading placeholder while fetching (consent path) or peeking the cache.
   if ((shouldLoad && isLoading) || (!shouldLoad && isPeeking)) {
     return (
-      <div
-        className="pt-2 rounded-lg bg-fluux-hover/60 flex items-center justify-center"
-        style={{ aspectRatio, maxWidth: `${maxWidthPx}px`, maxHeight: '300px', minHeight: '100px' }}
-      >
-        <Loader2 className="size-6 text-fluux-muted animate-spin" />
+      // The 8px top padding sits OUTSIDE the aspect-ratio box, exactly as on the shown image
+      // below, so the row keeps its height when the image replaces the spinner.
+      <div className="pt-2" style={{ maxWidth: `${maxWidthPx}px` }}>
+        <div
+          className="rounded-lg bg-fluux-hover/60 flex items-center justify-center"
+          style={{ aspectRatio, maxHeight: '300px', minHeight: '100px' }}
+        >
+          <Loader2 className="size-6 text-fluux-muted animate-spin" />
+        </div>
       </div>
     )
   }
@@ -220,33 +229,43 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
         // A long press in the bubble opens the message's menu, which carries the image actions on
         // touch; the image's own menu is for the pointer's context click only.
         onContextMenu={imageMenu.handleContextMenu}
-        className="block pt-2 rounded-lg overflow-hidden hover:opacity-90 transition-opacity cursor-pointer text-start"
+        className={`block ${reserveBox ? 'w-full ' : ''}pt-2 rounded-lg overflow-hidden hover:opacity-90 transition-opacity cursor-pointer text-start`}
         style={{ maxWidth: `${maxWidthPx}px` }}
         tabIndex={-1}
       >
-        <img
-          src={effectiveSrc}
-          alt={attachment.name || 'Image attachment'}
-          width={width}
-          height={height}
-          className="max-w-full rounded-lg object-contain"
-          style={{
-            aspectRatio: aspectRatio,
-            maxHeight: '300px',
-          }}
-          loading="lazy"
-          // Notify the scroll layer ONLY when the load could shift layout. With known
-          // dimensions the aspect-ratio box above was reserved before decode, so the load
-          // moves nothing — and poking the scroll layer ran a non-idempotent re-anchor pass
-          // that injected a small reading-position drift compounding across conversation
-          // re-opens (cached <img>s re-fire onLoad on every re-mount). Unsized images fall
-          // back to a default box that the real decode CAN resize, so those still notify.
-          onLoad={hasKnownDimensions ? undefined : onLoad}
-          onError={() => {
-            failedUrlCache.add(originalImageSrc)
-            setLoadError(true)
-          }}
-        />
+        {/* Until an unsized image decodes, the <img> itself has no box (its alt text lays out
+            inline and ignores aspect-ratio) and a button shrink-wraps to nothing, so the button
+            takes the full available width and a wrapper holds the default box open. The wrapper
+            stays mounted afterwards so the load is never restarted. */}
+        <div style={reserveBox ? { aspectRatio, maxHeight: '300px' } : undefined}>
+          <img
+            src={effectiveSrc}
+            alt={attachment.name || 'Image attachment'}
+            width={width}
+            height={height}
+            className="max-w-full rounded-lg object-contain"
+            style={{
+              aspectRatio: aspectRatio,
+              maxHeight: '300px',
+              ...(reserveBox ? { display: 'block', width: '100%', height: '100%' } : null),
+            }}
+            loading="lazy"
+            // Notify the scroll layer ONLY when the load could shift layout. With known
+            // dimensions the aspect-ratio box above was reserved before decode, so the load
+            // moves nothing — and poking the scroll layer ran a non-idempotent re-anchor pass
+            // that injected a small reading-position drift compounding across conversation
+            // re-opens (cached <img>s re-fire onLoad on every re-mount). Unsized images fall
+            // back to a default box that the real decode CAN resize, so those still notify.
+            onLoad={hasKnownDimensions ? undefined : () => {
+              setDecodedSrc(originalImageSrc)
+              onLoad?.()
+            }}
+            onError={() => {
+              failedUrlCache.add(originalImageSrc)
+              setLoadError(true)
+            }}
+          />
+        </div>
       </button>
       <ImageContextMenu
         originalUrl={attachment.url}
