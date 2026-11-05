@@ -144,17 +144,18 @@ enum NotificationPresentation {
 
     /// Ordinary room alerts keep their room-first text. Carry the room image as an
     /// attachment instead of restoring iOS's sender-first communication presentation.
-    /// The system takes ownership of attachment files, so never hand it the mirror itself.
+    /// The system takes ownership on delivery, so keep a staged copy alive until then
+    /// and never hand it the mirror itself.
     static func roomAvatar(for jid: String, names: SharedNames) -> UNNotificationAttachment? {
         guard names.rooms[jid] != nil,
               let source = NotificationMirror.imageURL(for: jid, names: names),
               let data = try? Data(contentsOf: source), NotificationMirror.thumbnail(data) != nil else { return nil }
         let copy = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
-        defer { try? FileManager.default.removeItem(at: copy) }
         do {
             try data.write(to: copy, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             return try UNNotificationAttachment(identifier: "room-avatar", url: copy, options: nil)
         } catch {
+            try? FileManager.default.removeItem(at: copy)
             return nil
         }
     }

@@ -37,6 +37,10 @@ xcodebuild -project "$LAB/RoomAvatarLab.xcodeproj" -scheme RoomAvatarLab \
   > "$RESULTS/build.log" 2>&1
 STATUS=$?
 set -e
+CONTAINER="$(xcrun simctl get_app_container "$SIM" org.fluux.lab.room-avatar data 2>/dev/null || true)"
+if [[ -n "$CONTAINER" && -f "$CONTAINER/Library/Caches/RoomAvatarFixture/diagnostics.txt" ]]; then
+  cp "$CONTAINER/Library/Caches/RoomAvatarFixture/diagnostics.txt" "$RESULTS/diagnostics.txt"
+fi
 xcrun xcresulttool get test-results summary --path "$RESULTS/room-avatar.xcresult" --format json > "$RESULTS/summary.json" || true
 xcrun xcresulttool export attachments --path "$RESULTS/room-avatar.xcresult" --output-path "$RESULTS/attachments" || true
 printf 'Room-avatar checks exited %s. Evidence: %s\n' "$STATUS" "$RESULTS"

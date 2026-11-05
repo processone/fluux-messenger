@@ -66,11 +66,17 @@ final class Controller: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
         let label = UILabel(); label.numberOfLines = 0; label.accessibilityIdentifier = "fixture-status"
-        label.text = "Requesting notification permission"
+        label.text = "Enable notification permission before posting"
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { allowed, _ in
-            DispatchQueue.main.async { label.text = allowed ? "Ready to post room alert" : "Notification permission denied" }
-        }
+        let permission = UIButton(type: .system); permission.setTitle("Enable notifications", for: .normal)
+        permission.addAction(UIAction { _ in
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { allowed, _ in
+                DispatchQueue.main.async {
+                    label.text = allowed ? "Ready to post room alert" : "Notification permission denied"
+                    permission.isHidden = allowed
+                }
+            }
+        }, for: .touchUpInside)
         let button = UIButton(type: .system); button.setTitle("Post room alert", for: .normal)
         button.addAction(UIAction { _ in
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { allowed, error in
@@ -85,7 +91,7 @@ final class Controller: UIViewController {
                 } catch { print("Fixture failed: \(error)") }
             }
         }, for: .touchUpInside)
-        let stack = UIStackView(arrangedSubviews: [label, button]); stack.axis = .vertical; stack.spacing = 24
+        let stack = UIStackView(arrangedSubviews: [label, permission, button]); stack.axis = .vertical; stack.spacing = 24
         stack.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(stack)
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
                                      stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
