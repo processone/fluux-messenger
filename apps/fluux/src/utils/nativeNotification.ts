@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { connectionStore, getBareJid } from '@fluux/sdk'
 import { osNotificationSilent } from './notificationSound'
-import { communicationTestAvailable } from '@/platform'
+import { communicationAvailable } from '@/platform'
 
 export interface NotificationNames {
   title: string
@@ -50,7 +50,7 @@ export async function postNativeDesktopNotification(
 ): Promise<void> {
   try {
     const { communication, ...legacyPayload } = payload
-    if (communication && communicationTestAvailable()) {
+    if (communication && communicationAvailable()) {
       const token = await invoke<string | null>('prepare_communication_notification', { payload })
       if (token !== null) {
         // Empty means duplicate/cancelled, not a request to resend on the legacy path.

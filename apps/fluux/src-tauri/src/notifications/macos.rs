@@ -289,7 +289,7 @@ fn remove_delivered(identifiers: Vec<String>) {
 }
 
 pub fn dismiss(nav_type: &str, nav_target: &str, account_id: Option<&str>) -> Result<(), String> {
-    #[cfg(feature = "macos-communication-test")]
+    #[cfg(feature = "macos-communication")]
     cancel_communication(
         serde_json::json!({ "navType": nav_type, "navTarget": nav_target, "accountId": account_id }),
     );
@@ -309,7 +309,7 @@ pub fn dismiss(nav_type: &str, nav_target: &str, account_id: Option<&str>) -> Re
     identifiers.push(format!("{nav_type}:{nav_target}"));
     remove_delivered(identifiers);
     // The OS owns delivered history across process restarts; the in-memory index is only an optimization.
-    #[cfg(feature = "macos-communication-test")]
+    #[cfg(feature = "macos-communication")]
     if let Some(center) = current_center() {
         let expected = target.clone();
         let handler = block2::RcBlock::new(
@@ -330,7 +330,7 @@ pub fn dismiss(nav_type: &str, nav_target: &str, account_id: Option<&str>) -> Re
     Ok(())
 }
 
-#[cfg(any(feature = "macos-communication-test", test))]
+#[cfg(any(feature = "macos-communication", test))]
 fn belongs_to_target(identifier: &str, target: &NavTarget) -> bool {
     parse_identifier(identifier).is_some_and(|candidate| candidate.group_key() == target.group_key())
 }
@@ -544,7 +544,7 @@ mod tests {
         assert_eq!(std::fs::read(source).unwrap(), AVATAR_PNG);
     }
 
-    #[cfg(feature = "macos-communication-test")]
+    #[cfg(feature = "macos-communication")]
     #[test]
     fn incomplete_communication_identity_selects_legacy_without_native_preparation() {
         // #1386 / F4: absence of communication identity must not suppress a legacy alert.
@@ -625,7 +625,7 @@ mod tests {
 
 // This module belongs to the desktop binary, not the mobile library. Cargo's
 // build-script rustc-link-lib flags target the library when a package has both.
-#[cfg(feature = "macos-communication-test")]
+#[cfg(feature = "macos-communication")]
 #[link(name = "fluux_communication", kind = "static")]
 unsafe extern "C" {
     fn fluux_communication_prepare(json: *const std::ffi::c_char) -> *mut NSString;
@@ -637,11 +637,11 @@ unsafe extern "C" {
     fn fluux_communication_cancel(json: *const std::ffi::c_char);
 }
 
-#[cfg(feature = "macos-communication-test")]
+#[cfg(feature = "macos-communication")]
 #[link(name = "Intents", kind = "framework")]
 unsafe extern "C" {}
 
-#[cfg(feature = "macos-communication-test")]
+#[cfg(feature = "macos-communication")]
 pub fn prepare_communication(mut payload: serde_json::Value) -> Result<Option<String>, String> {
     let target: NavTarget =
         serde_json::from_value(payload.clone()).map_err(|_| "invalid notification target")?;
@@ -658,13 +658,13 @@ pub fn prepare_communication(mut payload: serde_json::Value) -> Result<Option<St
     payload["target"] = serde_json::to_value(target).map_err(|_| "invalid notification target")?;
     let json =
         std::ffi::CString::new(payload.to_string()).map_err(|_| "invalid notification payload")?;
-    // The bridge returns a retained NSString, or nil on older macOS, when the prototype
+    // The bridge returns a retained NSString, or nil on older macOS, when communication support
     // is disabled, or when the identity store is full. No alert is scheduled here.
     let token = unsafe { Retained::from_raw(fluux_communication_prepare(json.as_ptr())) };
     Ok(token.map(|s| s.to_string()))
 }
 
-#[cfg(feature = "macos-communication-test")]
+#[cfg(feature = "macos-communication")]
 pub fn finish_communication(token: &str, commit: bool, names: Option<serde_json::Value>) {
     let names = names.and_then(|value| std::ffi::CString::new(value.to_string()).ok());
     if let Ok(token) = std::ffi::CString::new(token) {
@@ -680,7 +680,7 @@ pub fn finish_communication(token: &str, commit: bool, names: Option<serde_json:
     }
 }
 
-#[cfg(feature = "macos-communication-test")]
+#[cfg(feature = "macos-communication")]
 pub fn cancel_communication(target: serde_json::Value) {
     if let Ok(json) = std::ffi::CString::new(target.to_string()) {
         unsafe {

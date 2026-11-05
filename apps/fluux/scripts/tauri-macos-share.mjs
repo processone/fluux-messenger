@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { shareResources } from './mobile-share-resources.mjs'
+import { validateCommunicationConfig } from './macos-communication-profile.mjs'
 
 const root = fileURLToPath(new URL('../src-tauri/', import.meta.url))
 const output = join(root, 'macos/.build')
@@ -20,8 +21,8 @@ export function shareSettings(config, env = process.env) {
     identifier, name: config.productName, version: config.version,
     bundleVersion: config.bundle?.macOS?.bundleVersion || config.version,
     signingIdentity, team, group: `${team || 'group'}.${identifier}.share`,
-    communicationTest: identifier === 'net.processone.fluux'
-      && (config.build?.features || []).includes('macos-communication-test'),
+    communication: identifier === 'net.processone.fluux'
+      && (config.build?.features || []).includes('macos-communication'),
   }
 }
 
@@ -57,15 +58,15 @@ const sign = (step, command, args) => {
 const readPlist = path => JSON.parse(run('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path]).toString())
 const writePlist = (path, value) => run('/usr/bin/plutil', ['-convert', 'xml1', '-o', path, '--', '-'], { input: JSON.stringify(value) })
 
-// #1386 keeps communication declarations and test-mode signing identifiers off ordinary builds.
+// #1386: only production-identity builds with the explicit feature declare communication support.
 export function hostMetadata(settings, info, entitlements) {
   return {
     info: { ...info, FluuxShareGroup: settings.group,
-      ...(settings.communicationTest ? { FluuxCommunicationTest: true, NSUserActivityTypes: ['INSendMessageIntent'] } : {}),
+      ...(settings.communication ? { FluuxCommunication: true, NSUserActivityTypes: ['INSendMessageIntent'] } : {}),
     },
     entitlements: { ...entitlements, 'com.apple.security.application-groups': [settings.group],
-      ...(settings.communicationTest ? { 'com.apple.developer.usernotifications.communication': true } : {}),
-      ...(settings.communicationTest && settings.team ? {
+      ...(settings.communication ? { 'com.apple.developer.usernotifications.communication': true } : {}),
+      ...(settings.communication && settings.team ? {
         'com.apple.application-identifier': `${settings.team}.${settings.identifier}`,
         'com.apple.developer.team-identifier': settings.team,
       } : {}),
@@ -81,6 +82,7 @@ function prepare() {
   const config = { ...base, ...platform, ...overrides, bundle: { ...base.bundle, ...platform.bundle, ...overrides.bundle,
     macOS: { ...base.bundle.macOS, ...platform.bundle?.macOS, ...overrides.bundle?.macOS } } }
   const settings = shareSettings(config)
+  validateCommunicationConfig(config, settings, root)
   mkdirSync(output, { recursive: true })
   writeFileSync(join(output, 'settings.json'), JSON.stringify(settings, null, 2))
   const host = readPlist(join(root, 'Entitlements.plist'))

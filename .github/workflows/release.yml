@@ -150,7 +150,22 @@ jobs:
           releaseDraft: false
           prerelease: ${{ needs.create-release.outputs.is_prerelease == 'true' }}
           uploadUpdaterJson: false
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} --config src-tauri/tauri.release-macos.conf.json
+
+      # Read back the exact uploaded updater bundle. A failure keeps rename-assets
+      # from generating/publishing latest.json for either macOS architecture.
+      - name: Verify signed macOS update archive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_ARCH: ${{ matrix.arch == 'aarch64' && 'aarch64' || 'x64' }}
+          MACH_ARCH: ${{ matrix.arch == 'aarch64' && 'arm64' || 'x86_64' }}
+        run: |
+          CHECK_DIR=$(mktemp -d)
+          trap 'rm -rf "$CHECK_DIR"' EXIT
+          gh release download "$RELEASE_TAG" --pattern "*_${ASSET_ARCH}.app.tar.gz" --dir "$CHECK_DIR"
+          ARCHIVES=("$CHECK_DIR"/*.app.tar.gz)
+          test "${#ARCHIVES[@]}" -eq 1 && test -f "${ARCHIVES[0]}"
+          node scripts/verify-macos-release.mjs "${ARCHIVES[0]}" "$MACH_ARCH" --launch
 
   build-windows:
     name: Build Windows

@@ -248,7 +248,7 @@ test('issue #1386 native prototype selects its executable contract tests', () =>
     'apps/fluux/src-tauri/src/notifications/macos.rs', 'apps/fluux/src-tauri/src/notifications/mod.rs', 'apps/fluux/src-tauri/src/notifications/backend.rs']) {
     const plan = planFor([path])
     assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-communication.test.mjs')))
-    assert.ok(plan.steps.some(step => step.command === 'cargo' && step.args.includes('macos-communication-test')))
+    assert.ok(plan.steps.some(step => step.command === 'cargo' && step.args.includes('macos-communication')))
     assert.ok(ids(plan).includes('test:platform'))
   }
 })
@@ -260,7 +260,7 @@ test('FLM-99 R1: platform-specific notification edits do not require the macOS p
     assert.ok(plan.steps.some(step => step.command === 'cargo'))
     assert.ok(ids(plan).includes('test:platform'))
     assert.ok(!plan.steps.some(step => step.requires === 'mac'))
-    assert.ok(!plan.steps.some(step => step.args.includes('macos-communication-test')))
+    assert.ok(!plan.steps.some(step => step.args.includes('macos-communication')))
   }
 })
 
@@ -269,4 +269,13 @@ test('FLM-105 W1: macOS metadata generator changes retain share and configuratio
   const plan = planFor(['apps/fluux/scripts/tauri-macos-share.mjs'])
   for (const id of ['test:ios-extensions', 'test:ios-share', 'check:tls-build']) assert.ok(ids(plan).includes(id), id)
   assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-share.test.mjs')))
+})
+
+// FLM-134: profile and verifier changes must select their behavior checks.
+test('macOS release profile and verifier changes select executable release tests', () => {
+  for (const path of ['apps/fluux/scripts/macos-communication-profile.mjs',
+    'apps/fluux/src-tauri/macos/net.processone.fluux.provisionprofile', 'scripts/verify-macos-release.mjs']) {
+    const plan = planFor([path])
+    assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-release.test.mjs')))
+  }
 })

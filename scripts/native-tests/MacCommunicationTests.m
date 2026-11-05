@@ -51,9 +51,9 @@ int main(int argc, const char **argv) {
             NSDictionary *devConfig = [NSJSONSerialization JSONObjectWithData:
                 [NSData dataWithContentsOfFile:@"apps/fluux/src-tauri/tauri.dev.conf.json"] options:0 error:nil];
             CHECK(standardConfig && devConfig);
-            CHECK([FluuxCommunicationNotifications enabledForIdentifier:standardConfig[@"identifier"] info:@{@"FluuxCommunicationTest":@YES}]);
+            CHECK([FluuxCommunicationNotifications enabledForIdentifier:standardConfig[@"identifier"] info:@{@"FluuxCommunication":@YES}]);
             CHECK(![FluuxCommunicationNotifications enabledForIdentifier:standardConfig[@"identifier"] info:@{}]);
-            CHECK(![FluuxCommunicationNotifications enabledForIdentifier:devConfig[@"identifier"] info:@{@"FluuxCommunicationTest":@YES}]);
+            CHECK(![FluuxCommunicationNotifications enabledForIdentifier:devConfig[@"identifier"] info:@{@"FluuxCommunication":@YES}]);
             NSMutableArray *requests = [NSMutableArray array];
             FluuxCommunicationNotifications *engine = fixture(requests);
             // Captain's F5 choice: retransform current names after the existing donation, schedule once, preserve content/identity.

@@ -41,10 +41,10 @@ describe('postNativeDesktopNotification', () => {
 // and a single scheduling decision without an accidental legacy resend.
 describe('communication prototype prepare/commit boundary', () => {
   const payload = { ...NOTIFICATION, communication: { senderId: 'sender@example.com', senderName: 'Sender' } }
-  beforeEach(() => { mockInvoke.mockReset().mockResolvedValue(null); vi.stubGlobal('__FLUUX_COMMUNICATION_TEST__', true) })
+  beforeEach(() => { mockInvoke.mockReset().mockResolvedValue(null); vi.stubGlobal('__FLUUX_COMMUNICATION__', true) })
   afterEach(() => { vi.unstubAllGlobals() })
 
-  // FLM-110 F2: a production/Dev host must not prepare even if a caller supplies metadata.
+  // A host without the communication marker must not prepare even if a caller supplies metadata.
   it('posts directly on the legacy path when the host has not enabled the prototype', async () => {
     vi.unstubAllGlobals()
     const eligible = vi.fn()

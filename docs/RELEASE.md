@@ -7,6 +7,49 @@ and run `npm run platform:qualify -- <evidence.json> <full-commit-sha>` against 
 release candidate. Report missing platform evidence explicitly; green build jobs
 alone do not establish application or physical-device behavior.
 
+## macOS communication profile and update check
+
+macOS releases alone pass `src-tauri/tauri.release-macos.conf.json`, retaining
+production TLS and the updater while enabling `macos-communication`. Dev is excluded.
+The public Developer ID profile lives at
+`apps/fluux/src-tauri/macos/net.processone.fluux.provisionprofile`; it is embedded
+in every released macOS app, not a private signing key. It authorizes
+`8L55BDM864.net.processone.fluux`, team `8L55BDM864`, and Communication Notifications.
+Its expiry is **31 October 2044, 10:03:31 Europe/Paris**. Generation and release
+verification require at least five years remaining: renew before that threshold,
+not just before expiry. Apple checks Developer ID profiles at launch; an expired
+or mismatched profile can stop the updated app and its updater from running.
+
+For renewal, the account owner generates/downloads a Developer ID profile for the
+same explicit App ID, retaining Communication Notifications and the existing
+release certificate. Replace only the public profile file, then run the macOS
+native profile tests and real configuration probe. Check its new expiry and
+certificate membership before release. Do not replace it with an iOS, development,
+Dev-identity or communication-prototype profile; do not create a new certificate
+or alter keychain sharing as part of renewal.
+
+After the existing signing/notarization action, each macOS job downloads its exact
+uploaded `.app.tar.gz` and runs `scripts/verify-macos-release.mjs`. This verifies
+strict signatures, communication/application/team entitlements covered by the
+embedded profile, signing-certificate membership, the unchanged 0.18.1 designated
+requirement, stapled notarization and `INSendMessageIntent`. It also requires the
+main executable to survive ten seconds where the runner can execute the archive's
+architecture; otherwise it explicitly reports runtime proof missing. The verifier
+uses disposable extraction/home folders and never installs the app. Its `--launch`
+option is enabled only in the disposable release runner. Local archive-only
+verification omits that option: a scratch HOME does not isolate personal keychains. A failure
+fails the macOS job; `rename-assets` cannot update `latest.json` because it needs
+all build jobs to succeed. Uploaded downloads can already exist before this check;
+this gate protects updater metadata, not release-page visibility.
+
+The captain changed rollout from beta-first to **stable 0.18.2 directly**, testing
+locally before deciding to publish. **Signed 0.18.2 release proof** remains an
+explicit accepted implementation gap, not a pass. Close it with actual signed
+archives for both architectures and the captain's local test before publication.
+The Dev app cannot prove this feature. Existing prerelease filtering remains
+unchanged, but no beta is required for this rollout. Keep `Refs #1386` until the
+captain's local result is recorded. See [macOS communication notifications](MACOS_COMMUNICATION_PROTOTYPE.md).
+
 ## Overview
 
 The release process uses a single authoritative source for changelog data, which is then used to generate all other release artifacts.

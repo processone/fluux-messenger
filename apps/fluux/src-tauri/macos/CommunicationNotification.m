@@ -36,13 +36,14 @@ API_AVAILABLE(macos(12.0))
 @implementation FluuxCommunicationRecord
 @end
 
+// Keep FluuxCommunicationTestGroups and fluux-communication-test- for cleanup of prior test donations.
 @implementation FluuxCommunicationNotifications {
     NSMutableDictionary<NSString *, FluuxCommunicationRecord *> *_pending;
     NSMutableSet<NSString *> *_attempted;
     NSMutableDictionary<NSString *, NSArray<NSString *> *> *_donationGroups;
 }
 + (BOOL)enabledForIdentifier:(NSString *)identifier info:(NSDictionary *)info {
-    return [identifier isEqual:@"net.processone.fluux"] && [info[@"FluuxCommunicationTest"] boolValue];
+    return [identifier isEqual:@"net.processone.fluux"] && [info[@"FluuxCommunication"] boolValue];
 }
 - (instancetype)init {
     if ((self = [super init])) {

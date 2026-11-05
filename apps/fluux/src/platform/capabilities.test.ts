@@ -188,19 +188,19 @@ describe('experimental mobile shell', () => {
   })
 })
 
-describe('native communication test update capability', () => {
+describe('native communication update capability', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     resetPlatformDetection()
   })
 
-  it.each([true, undefined])('I2 changes only updater availability for initialization marker %s', (disabled) => {
+  it.each([true, undefined])('FLM-134 preserves capabilities for communication marker %s', (enabled) => {
     vi.stubGlobal('__TAURI_INTERNALS__', {})
     vi.stubGlobal('__TAURI_OS_PLUGIN_INTERNALS__', { platform: 'macos' })
     vi.stubGlobal('navigator', { platform: 'MacIntel', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' })
-    vi.stubGlobal('__FLUUX_COMMUNICATION_TEST__', disabled)
+    vi.stubGlobal('__FLUUX_COMMUNICATION__', enabled)
     resetPlatformDetection()
     const ordinary = deriveCapabilities('desktop', 'macos')
-    expect(platform()).toEqual({ ...ordinary, hasInAppUpdates: disabled !== true })
+    expect(platform()).toEqual(ordinary)
   })
 })

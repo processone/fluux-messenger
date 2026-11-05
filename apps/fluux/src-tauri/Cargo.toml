@@ -13,8 +13,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
 default = []
-# Investigation #1386: explicit standard-identity test mode; never enabled by ordinary builds.
-macos-communication-test = []
+# Communication Notifications for standard-identity macOS releases; Dev stays excluded.
+macos-communication = []
 # Disposable unsigned qualification only: no real secrets or notifications.
 startup-recovery-lab = []
 # Enabled by the production Tauri config; local Dev builds keep ring only.
@@ -152,6 +152,8 @@ tauri-plugin-single-instance = { version = "=2.5.3", features = ["deep-link"] }
 keyring = { version = "3", features = ["windows-native", "sync-secret-service", "crypto-rust"] }
 
 [dev-dependencies]
+# Mock runtime verifies desktop plugin registration without launching an app.
+tauri = { version = "2", features = ["test"] }
 # test-util enables tokio's paused-time test runtime (`#[tokio::test(start_paused = true)]`),
 # used to make the Happy Eyeballs connection-racing tests deterministic without real waits.
 # Test-only: not pulled into release builds.
