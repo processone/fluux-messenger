@@ -117,7 +117,15 @@ export function setNavigationHandler(handler: NavigationHandler): () => void {
   }
 }
 
-/** Links that arrived before the app was online, oldest first; emptied by the call. */
+/**
+ * Hand back a link the chat view cannot act on yet, such as a shortcut that
+ * arrived before the account's roster loaded; it returns with the queue.
+ */
+export function deferDeepLink(uri: string): void {
+  queuedNavigation.push(uri)
+}
+
+/** Links that arrived before the app could act on them, oldest first; emptied by the call. */
 export function takeQueuedDeepLinks(): string[] {
   return queuedNavigation.splice(0)
 }
