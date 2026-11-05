@@ -57,8 +57,14 @@ echo ">>> Building .deb package..."
 echo "This will take several minutes on first build..."
 echo
 
-# Build the package
-dpkg-buildpackage -uc -us -b
+# dpkg-buildpackage requires debian/ at the repository root. Copy the contents
+# so rerunning the helper refreshes the files instead of nesting debian/debian/.
+mkdir -p debian
+cp -a packaging/debian/. debian/
+
+# Dependencies are installed above. Rust from rustup (and npm bundled with
+# NodeSource's nodejs) does not satisfy dpkg's package-based dependency check.
+dpkg-buildpackage -d -uc -us -b
 
 echo
 echo "=== Build Complete ==="

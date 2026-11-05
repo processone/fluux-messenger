@@ -742,6 +742,20 @@ NO_COLOR=1 ./fluux --verbose=xmpp 2> xmpp-debug.log
 
 You can build `.deb` packages locally using standard Debian tooling.
 
+On a fresh Debian/Ubuntu host with sudo access, run the helper from the repository
+root to install the prerequisites, build from source and inspect the package:
+
+```bash
+bash scripts/test-deb-build.sh
+```
+
+The helper copies `packaging/debian/` to the root-level `debian/` directory required
+by `dpkg-buildpackage`. It skips dpkg's package-based build dependency check because
+Rust installed by rustup and npm bundled with NodeSource's Node.js are not separate
+Debian packages. The compiler and packaging steps still run and must succeed.
+
+For a manual build, follow the steps below.
+
 ### Prerequisites
 
 Install Node.js 22 (Ubuntu 22.04 LTS version is too old):
@@ -779,7 +793,10 @@ sudo apt-get install -y \
 To build the `.deb` package from scratch (compiles everything):
 
 ```bash
-# From repository root (-d skips dpkg's dependency check for rustup-installed Rust)
+# From repository root, stage the maintained packaging files
+mkdir -p debian
+cp -a packaging/debian/. debian/
+# -d skips dpkg's dependency check for rustup-installed Rust and bundled npm
 dpkg-buildpackage -d -uc -us -b
 ```
 
@@ -800,11 +817,13 @@ If you've already built the binary with Tauri, you can skip the build step:
 npm run build:sdk
 npm run tauri -w @xmpp/fluux -- build
 
-# Then package (auto-detects existing binary)
+# Then stage the packaging files and package
+mkdir -p debian
+cp -a packaging/debian/. debian/
 dpkg-buildpackage -d -uc -us -b
 ```
 
-Or explicitly specify the binary path:
+After staging the packaging files, you can also explicitly specify the binary path:
 
 ```bash
 FLUUX_BINARY=apps/fluux/src-tauri/target/release/fluux dpkg-buildpackage -d -uc -us -b
