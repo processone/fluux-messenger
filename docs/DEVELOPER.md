@@ -503,6 +503,36 @@ To replay the migration, quit the app, delete `.identity-migrated` and the
 `net.processone.fluux*` directories (including their per-copy completion files), and
 restore the `com.processone.fluux*` ones.
 
+### Server backup status after key import
+
+The account-scoped backup marker records a fingerprint after a successful secret-key
+publication, or after an install proven to exist in the server backup. Direct server
+restores explicitly identify their already-verified server source and need no
+second read. File and generic picker installs read the server backup: identical
+encrypted packet bytes prove the source regardless
+of armor headers; otherwise the backend decrypts it with the install passphrase
+(including the established legacy-code fallback) and checks for the installed
+fingerprint. If a legacy file required a normalized working code, its original typed
+code is preserved through every picker and also tried once against a healed server
+copy, without repeating the already-failed normalized candidate.
+This inspection does not replace a pending web picker selection.
+A failed read/decryption or a different identity leaves prior confirmed state alone;
+file import never publishes or heals a secret backup. Settings reads the confirmed
+marker rather than treating an install result as backup evidence.
+
+Markers from the earlier namespace are ignored because file imports could write
+false claims. Only a newly confirmed backup/install establishes the versioned marker.
+This also resets previously correct status until fresh evidence establishes it;
+explicit clearing removes both layouts for that account without touching others.
+Settings treats a present backup without a confirmed marker as unknown identity,
+not a mismatch or proof of another device's ownership. One certainty reading drives
+the neutral status, factual known-presence replacement warning, rotation warning
+and rotation's backup-code acknowledgement. Rotation re-publishes in this state, deliberately
+replacing any existing backup and code, even when another device created them.
+A confirmed different marker remains a mismatch and retains its separate policy.
+Only a failed raw presence probe offers Check again; unconfirmed identity needs
+its code or fresh backup evidence, not another presence probe.
+
 ### Guided macOS backup recovery
 
 If native secret storage fails while loading an existing OpenPGP key, registration retains a

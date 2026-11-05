@@ -80,6 +80,21 @@ async function previewServer(page: Page) {
 for (const source of ['server', 'file']) {
   test(`guided ${source} restore previews, confirms and refreshes Settings without replacing its backup`, async ({ page }) => {
     await openRecovery(page)
+    if (source === 'file') {
+      // F1/F3: a real export has fresh packet bytes, and an old correct marker
+      // must not supply the proof on this device before the import is checked.
+      const exported = await page.evaluate(async fingerprint => {
+        const plugin = (window as any).__demoClient.e2ee.getPlugin('openpgp')
+        localStorage.setItem('fluux:openpgp:backedUpFingerprint:you@fluux.chat', fingerprint)
+        const legacyMarker = plugin.getBackedUpFingerprint()
+        const file = await plugin.pickKeyFile(), server = await plugin.fetchSecretKeyBackup()
+        plugin.pickKeyFile = async () => file
+        return { file, server, legacyMarker }
+      }, fingerprint)
+      expect(exported.legacyMarker).toBeNull()
+      const { unarmor } = await import('openpgp')
+      expect((await unarmor(exported.file)).data).not.toEqual((await unarmor(exported.server)).data)
+    }
     if (source === 'server') {
       await capture(page, 'after-startup-recovery.png')
       await page.getByRole('button', { name: 'Cancel', exact: true }).click()
@@ -107,6 +122,7 @@ for (const source of ['server', 'file']) {
     expect((await audit(page)).commands).not.toContain('openpgp_rotate_encryption_subkey')
     await page.evaluate(() => { location.hash = '/settings/encryption' })
     await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()
+    await expect(page.getByText('This key is backed up on the server.', { exact: true })).toBeVisible()
     await capture(page, `after-${source}-ready.png`)
     await page.reload()
     await expect(page.locator('[data-nav="messages"]')).toBeVisible()
@@ -116,6 +132,211 @@ for (const source of ['server', 'file']) {
     await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
     await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
     expect((await audit(page)).commands).not.toContain('openpgp_backup_import_selected')
+  })
+}
+
+/** R1: demo.tsx clears every fluux:* marker on reload, while the fixture
+ * retains its installed key and encrypted server backup. This is a reset,
+ * not a production-marker durability claim. */
+async function reloadWithResetMarker(page: Page, expectedFingerprint: string, expectedBackup: string) {
+  await reloadDemo(page)
+  await page.evaluate(() => { location.hash = '/settings/encryption' })
+  await expect(page.getByText(encryptionCopy.backupStatusUnconfirmed, { exact: true })).toBeVisible()
+  const actual = await page.evaluate(async () => {
+    const plugin = (window as any).__demoClient.e2ee.getPlugin('openpgp')
+    return { local: plugin.getOwnFingerprint(), marker: plugin.getBackedUpFingerprint(), server: await plugin.fetchSecretKeyBackup() }
+  })
+  expect(actual.local).toBe(expectedFingerprint)
+  expect(actual.marker).toBeNull()
+  expect(actual.server).toBe(expectedBackup)
+  expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
+  return actual
+}
+
+// FLM-357: a real Bob file must not inherit Alice's server-backup status.
+// The shared install/status code is real; this fixture injects native IPC and PEP.
+for (const kind of ['single-key', 'multi-key']) {
+  test(`FLM-357 ${kind} file import preserves Alice backup without claiming Bob is backed up`, async ({ page }) => {
+    const { decrypt, readMessage, encrypt, createMessage } = await import('openpgp')
+    const { parseSecretKeysFromBackupPayload } = await import('../apps/fluux/src/e2ee/backupKeyMaterial')
+    const { legacyNormalizeBackupPassphrase } = await import('../apps/fluux/src/e2ee/backupPassphrase')
+    const webMeta = JSON.parse(readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/web_meta.json', import.meta.url), 'utf8'))
+    const bobFingerprint = webMeta.bobFingerprint.toUpperCase()
+    const file = readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/web_bob_backup.asc', import.meta.url), 'utf8')
+    await openRecovery(page)
+    if (kind === 'single-key') {
+      // F3: reproduce the historical false claim from importing Bob over Alice.
+      const marker = await page.evaluate(fingerprint => {
+        localStorage.setItem('fluux:openpgp:backedUpFingerprint:you@fluux.chat', fingerprint)
+        return (window as any).__demoClient.e2ee.getPlugin('openpgp').getBackedUpFingerprint()
+      }, bobFingerprint)
+      expect(marker).toBeNull()
+    }
+    const serverBefore = await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').fetchSecretKeyBackup())
+    const serverKeys = await decrypt({ message: await readMessage({ armoredMessage: serverBefore }), passwords: [code], format: 'binary' })
+    const aliceKeys = await parseSecretKeysFromBackupPayload(serverKeys.data)
+    expect(aliceKeys.map(k => k.getFingerprint().toUpperCase())).toEqual([fingerprint])
+    let importFile = file
+    if (kind === 'multi-key') {
+      // Begin with a known marker, then choose a different real identity.
+      await previewServer(page)
+      await page.getByRole('button', { name: 'Use this key', exact: true }).click()
+      await page.getByRole('heading', { name: 'Confirm restored key', exact: true }).waitFor({ state: 'hidden' })
+      await page.evaluate(() => { location.hash = '/settings/encryption' })
+      await expect(page.getByText('This key is backed up on the server.', { exact: true })).toBeVisible()
+      await page.getByRole('button', { name: 'Restore from backup', exact: true }).click()
+      const bobKeys = await decrypt({ message: await readMessage({ armoredMessage: file }), passwords: [legacyNormalizeBackupPassphrase(code)], format: 'binary' })
+      const keys = [...aliceKeys, ...await parseSecretKeysFromBackupPayload(bobKeys.data)]
+      importFile = await encrypt({ message: await createMessage({ binary: new Uint8Array(keys.flatMap(k => [...k.write()])) }), passwords: [code], format: 'armored' })
+    }
+    await page.evaluate(file => { (window as any).__demoClient.e2ee.getPlugin('openpgp').pickKeyFile = async () => file }, importFile)
+    await page.getByRole('button', { name: 'Import from a file', exact: true }).click()
+    await backupInput(page).fill(code)
+    await page.getByRole('button', { name: 'Preview backup', exact: true }).click()
+    await expect(page.getByText(bobFingerprint, { exact: true })).toBeVisible()
+    await page.locator(`input[name="key-picker"][value="${bobFingerprint}"]`).check()
+    await page.getByRole('button', { name: 'Use this key', exact: true }).click()
+    await page.getByRole('heading', { name: 'Confirm restored key', exact: true }).waitFor({ state: 'hidden' })
+    await page.evaluate(() => { location.hash = '/settings/encryption' })
+    const expectedStatus = kind === 'multi-key' ? encryptionCopy.backupStatusMismatch : encryptionCopy.backupStatusUnconfirmed
+    await expect(page.getByText(expectedStatus, { exact: true })).toBeVisible()
+    await expect(page.getByText(encryptionCopy.backupStatusInSync, { exact: true })).toBeHidden()
+    await page.getByRole('button', { name: 'Key details', exact: true }).click()
+    await expect(page.getByText('Key restored from server', { exact: true })).toHaveCount(0)
+    await capture(page, `after-${kind}-backup-status.png`)
+    const observation = await page.evaluate(async () => {
+      const plugin = (window as any).__demoClient.e2ee.getPlugin('openpgp')
+      return { local: plugin.getOwnFingerprint(), marker: plugin.getBackedUpFingerprint(), server: await plugin.fetchSecretKeyBackup() }
+    })
+    expect(observation.local).toBe(bobFingerprint)
+    expect(observation.marker).toBe(kind === 'multi-key' ? fingerprint : null)
+    expect(observation.server).toBe(serverBefore)
+    expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
+    const afterReload = await reloadWithResetMarker(page, bobFingerprint, serverBefore)
+    await test.info().attach('backup-identity-observation', { contentType: 'application/json', body: JSON.stringify({ kind, local: observation.local, marker: observation.marker, serverFingerprints: [fingerprint], serverUnchanged: observation.server === serverBefore, afterReload: 'unconfirmed', afterReloadMarker: afterReload.marker, afterReloadServerUnchanged: afterReload.server === serverBefore, build: expectedBuild }) })
+  })
+}
+
+/** A real restore followed by demo reload clearing the markers, not a
+ * scripted Settings status. Policy and legacy-file journeys share this state. */
+async function openUnconfirmedSettings(page: Page) {
+  await openRecovery(page)
+  await previewServer(page)
+  await page.getByRole('button', { name: 'Use this key', exact: true }).click()
+  await page.getByRole('heading', { name: 'Confirm restored key', exact: true }).waitFor({ state: 'hidden' })
+  await reloadDemo(page)
+  await page.evaluate(() => { location.hash = '/settings/encryption' })
+  await expect(page.getByText(encryptionCopy.backupStatusUnconfirmed, { exact: true })).toBeVisible()
+}
+
+test('unconfirmed backup uses neutral decisions and acknowledged rotation re-publishes the current key', async ({ page }) => {
+  await openUnconfirmedSettings(page)
+  await expect(page.getByRole('button', { name: encryptionCopy.backupStatusRetry, exact: true })).toBeHidden()
+  await expect(page.getByText(encryptionCopy.backupStatusMismatch, { exact: true })).toBeHidden()
+  await page.getByRole('button', { name: encryptionCopy.backupAction, exact: true }).click()
+  await expect(page.getByText(encryptionCopy.backupReplaceUnconfirmedMessage, { exact: true })).toBeVisible()
+  await expect(page.getByText(encryptionCopy.backupReplaceUnknownMessage, { exact: true })).toBeHidden()
+  await expect(page.getByText(encryptionCopy.backupConflictTitle, { exact: true })).toBeHidden()
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await page.getByRole('button', { name: encryptionCopy.keyManagement, exact: true }).click()
+  await page.getByRole('button', { name: encryptionCopy.rotateAction, exact: true }).click()
+  await expect(page.getByText(encryptionCopy.rotateConfirmMessageWithBackup, { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: encryptionCopy.rotateConfirmAction, exact: true }).click()
+  const publish = page.getByRole('button', { name: encryptionCopy.backupPublish, exact: true })
+  await expect(publish).toBeDisabled()
+  const newCode = page.locator('input[name="passphrase"]')
+  await expect(newCode).not.toHaveValue('')
+  const savedCode = await newCode.inputValue()
+  expect((await audit(page)).commands).not.toContain('openpgp_rotate_encryption_subkey')
+  const before = await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').fetchSecretKeyBackup())
+  await page.getByRole('checkbox').check()
+  const acknowledged = await page.getByRole('checkbox').isChecked()
+  await publish.click()
+  await expect(page.getByText(encryptionCopy.backupStatusInSync, { exact: true })).toBeVisible()
+  const actual = await page.evaluate(async () => {
+    const plugin = (window as any).__demoClient.e2ee.getPlugin('openpgp')
+    return { marker: plugin.getBackedUpFingerprint(), fingerprint: plugin.getOwnFingerprint(),
+      backup: await plugin.fetchSecretKeyBackup(), publicArmored: JSON.parse(localStorage.getItem('__test_recovery_bundle')!).publicArmored }
+  })
+  const { decrypt, readMessage, readKey } = await import('openpgp')
+  const { parseSecretKeysFromBackupPayload } = await import('../apps/fluux/src/e2ee/backupKeyMaterial')
+  const original = await decrypt({ message: await readMessage({ armoredMessage: before }), passwords: [code], format: 'binary' })
+  const oldKeys = await parseSecretKeysFromBackupPayload(original.data)
+  const decrypted = await decrypt({ message: await readMessage({ armoredMessage: actual.backup }), passwords: [savedCode], format: 'binary' })
+  const [backedUp] = await parseSecretKeysFromBackupPayload(decrypted.data)
+  const published = await readKey({ armoredKey: actual.publicArmored })
+  const subkeys = backedUp.getSubkeys().map(k => k.getFingerprint()).sort()
+  expect(subkeys).toEqual(published.getSubkeys().map(k => k.getFingerprint()).sort())
+  expect(subkeys.some(fp => !oldKeys[0].getSubkeys().some(k => k.getFingerprint() === fp))).toBe(true)
+  expect(backedUp.getFingerprint().toUpperCase()).toBe(fingerprint)
+  expect(actual.marker).toBe(fingerprint)
+  expect(actual.fingerprint).toBe(fingerprint)
+  expect(actual.backup).not.toBe(before)
+  const secretPublications = (await audit(page)).publications.filter((node: string) => node === 'urn:xmpp:openpgp:0:secret-key').length
+  expect(secretPublications).toBe(1)
+  const oldCodeRejected = await decrypt({ message: await readMessage({ armoredMessage: actual.backup }), passwords: [code], format: 'binary' }).then(() => false, () => true)
+  expect(oldCodeRejected).toBe(true)
+  const afterReload = await reloadWithResetMarker(page, fingerprint, actual.backup)
+  await test.info().attach('unconfirmed-rotation-observation', { contentType: 'application/json', body: JSON.stringify({
+    fingerprint: actual.fingerprint, marker: actual.marker, acknowledged, secretPublications,
+    backupChanged: actual.backup !== before, previousSubkeys: oldKeys[0].getSubkeys().map(k => k.getFingerprint()),
+    backupSubkeys: subkeys, publishedSubkeys: published.getSubkeys().map(k => k.getFingerprint()).sort(), oldCodeRejected,
+    afterReload: 'unconfirmed-after-demo-reset', afterReloadMarker: afterReload.marker, afterReloadServerUnchanged: afterReload.server === actual.backup,
+    boundary: 'Actual App and shared publication; native rotation readings use real fixture crypto, not native runtime proof',
+  }) })
+})
+
+for (const mode of ['guided', 'ordinary-picker']) {
+  test(`legacy file retains the typed server code through ${mode} confirmation`, async ({ page }) => {
+    const { decrypt, readMessage, encrypt, createMessage } = await import('openpgp')
+    const { parseSecretKeysFromBackupPayload } = await import('../apps/fluux/src/e2ee/backupKeyMaterial')
+    const { legacyNormalizeBackupPassphrase } = await import('../apps/fluux/src/e2ee/backupPassphrase')
+    const original = readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/sequoia_alice_backup.asc', import.meta.url), 'utf8')
+    const decoded = await decrypt({ message: await readMessage({ armoredMessage: original }), passwords: [code], format: 'binary' })
+    const keys = await parseSecretKeysFromBackupPayload(decoded.data)
+    if (mode === 'ordinary-picker') {
+      const bob = readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/web_bob_backup.asc', import.meta.url), 'utf8')
+      const decodedBob = await decrypt({ message: await readMessage({ armoredMessage: bob }), passwords: [legacyNormalizeBackupPassphrase(code)], format: 'binary' })
+      keys.push(...await parseSecretKeysFromBackupPayload(decodedBob.data))
+    }
+    const legacy = await encrypt({ message: await createMessage({ binary: new Uint8Array(keys.flatMap(k => [...k.write()])) }), passwords: [legacyNormalizeBackupPassphrase(code)], format: 'armored' })
+    if (mode === 'guided') await openRecovery(page)
+    else await openUnconfirmedSettings(page)
+    const serverBefore = await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').fetchSecretKeyBackup())
+    await page.evaluate(({ file, typedCode }) => {
+      const w = window as any, plugin = w.__demoClient.e2ee.getPlugin('openpgp')
+      plugin.pickKeyFile = async () => file
+      const install = plugin.installSelectedKey.bind(plugin)
+      plugin.installSelectedKey = (message: string, working: string, fingerprint: string, options: any) => {
+        w.__legacyCodeObservation = { workingCodeDiffers: working !== typedCode, typedCodeSupplied: options?.typedPassphrase === typedCode }
+        return install(message, working, fingerprint, options)
+      }
+    }, { file: legacy, typedCode: code })
+    if (mode === 'guided') await page.getByRole('button', { name: 'Import from a file', exact: true }).click()
+    else {
+      await page.getByRole('button', { name: encryptionCopy.keyManagement, exact: true }).click()
+      await page.getByRole('button', { name: encryptionCopy.importFileAction, exact: true }).click()
+    }
+    await backupInput(page).fill(code)
+    await page.locator('form').getByRole('button', { name: mode === 'guided' ? 'Preview backup' : encryptionCopy.importFileAction, exact: true }).click()
+    await page.locator(`input[name="key-picker"][value="${fingerprint}"]`).check()
+    await page.getByRole('button', { name: encryptionCopy.keyPicker.confirm, exact: true }).click()
+    await expect(page.locator('input[name="key-picker"]')).toHaveCount(0)
+    await page.evaluate(() => { location.hash = '/settings/encryption' })
+    await expect(page.getByText(encryptionCopy.backupStatusInSync, { exact: true })).toBeVisible()
+    expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
+    const observed = await page.evaluate(async () => {
+      const w = window as any, plugin = w.__demoClient.e2ee.getPlugin('openpgp')
+      return { ...w.__legacyCodeObservation, fingerprint: plugin.getOwnFingerprint(), marker: plugin.getBackedUpFingerprint(), server: await plugin.fetchSecretKeyBackup() }
+    })
+    expect(observed.workingCodeDiffers).toBe(true)
+    expect(observed.typedCodeSupplied).toBe(true)
+    expect(observed.server).toBe(serverBefore)
+    await capture(page, `after-legacy-${mode}-confirmed.png`)
+    await test.info().attach('legacy-code-observation', { contentType: 'application/json', body: JSON.stringify({
+      mode, workingCodeDiffers: observed.workingCodeDiffers, typedCodeSupplied: observed.typedCodeSupplied,
+      fingerprint: observed.fingerprint, marker: observed.marker, serverUnchanged: observed.server === serverBefore,
+    }) })
   })
 }
 

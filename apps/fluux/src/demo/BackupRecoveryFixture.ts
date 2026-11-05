@@ -3,14 +3,15 @@
  * The native host supplies actual OpenPGP commands over an injected secret store. */
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { invoke as nativeInvoke } from '@tauri-apps/api/core'
-import { decrypt, encrypt, createMessage, readMessage, readKey, unarmor } from 'openpgp'
+import { decrypt, encrypt, createMessage, readMessage, readKey, readPrivateKey, unarmor, type PrivateKey } from 'openpgp'
 import { xml, type Element } from '@fluux/sdk/xmpp'
-import type { XMPPPrimitives } from '@fluux/sdk'
+import type { XMPPPrimitives, PEPItem } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
 import { chatStore } from '@fluux/sdk/stores'
 import { SequoiaPgpPlugin, type InvokeFn } from '@/e2ee/SequoiaPgpPlugin'
 import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
 import { parseSecretKeysFromBackupPayload } from '@/e2ee/backupKeyMaterial'
+import { withPassphraseFormatHeader } from '@/e2ee/passphraseFormatHeader'
 import { platform, setPlatformForTesting } from '@/platform'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import backup from '@/e2ee/fixtures/sequoia_alice_backup.asc?raw'
@@ -51,9 +52,23 @@ export function createBackupRecoveryFixture() {
   const audit = { native, build: __GIT_COMMIT__, commands: [] as string[], publications: [] as string[] }
   ;(window as any).__recoveryFixture = audit
   let installed: KeyBundle | null = JSON.parse(localStorage.getItem('__test_recovery_bundle') ?? 'null')
+  let fixtureKey: PrivateKey | null = null
   const privateKey = async () => {
-    const decrypted = await decrypt({ message: await readMessage({ armoredMessage: backup }), passwords: [meta.backupPassphrase], format: 'binary' })
-    return (await parseSecretKeysFromBackupPayload(decrypted.data))[0]
+    if (fixtureKey) return fixtureKey
+    const stored = !native && localStorage.getItem('__test_recovery_private_key')
+    if (stored) fixtureKey = await readPrivateKey({ armoredKey: stored })
+    else {
+      const decrypted = await decrypt({ message: await readMessage({ armoredMessage: backup }), passwords: [meta.backupPassphrase], format: 'binary' })
+      fixtureKey = (await parseSecretKeysFromBackupPayload(decrypted.data))[0]
+    }
+    return fixtureKey
+  }
+  const saveFixtureKey = (key: PrivateKey): KeyBundle => {
+    fixtureKey = key
+    installed = { fingerprint: key.getFingerprint().toUpperCase(), publicArmored: key.toPublic().armor(), keychainBacked: true, createdAt: key.getCreationTime().toISOString() }
+    localStorage.setItem('__test_recovery_bundle', JSON.stringify(installed))
+    localStorage.setItem('__test_recovery_private_key', key.armor())
+    return installed
   }
   const browserInvoke: InvokeFn = async <T>(cmd: string, args?: Record<string, unknown>) => {
     if (cmd === 'openpgp_has_persisted_key') return true as T
@@ -89,11 +104,21 @@ export function createBackupRecoveryFixture() {
       const keys = await parseSecretKeysFromBackupPayload(result.data)
       const bundles = keys.map(key => ({ fingerprint: key.getFingerprint().toUpperCase(), publicArmored: key.toPublic().armor(), keychainBacked: true, createdAt: key.getCreationTime().toISOString() }))
       if (cmd.endsWith('_all')) return bundles as T
-      installed = bundles.find(b => b.fingerprint === args!.selectedFingerprint) ?? null
-      if (!installed) throw new Error('Selected key missing')
-      if (args!.withoutMigration !== true) throw new Error('Fixture old storage is refused')
-      localStorage.setItem('__test_recovery_bundle', JSON.stringify(installed))
-      return installed as T
+      const selected = keys.find(key => key.getFingerprint().toUpperCase() === args!.selectedFingerprint)
+      if (!selected) throw new Error('Selected key missing')
+      // Once fresh storage was restored it accepts ordinary later imports.
+      if (args!.withoutMigration !== true && !installed) throw new Error('Fixture old storage is refused')
+      return saveFixtureKey(selected) as T
+    }
+    // R1: exercise real App routing and publication with real fixture crypto.
+    // This is a native-reading stand-in, not proof of Rust rotation or OS storage.
+    if (cmd === 'openpgp_rotate_encryption_subkey') {
+      if (!installed) throw new Error('no key for account')
+      return saveFixtureKey(await (await privateKey()).addSubkey({ type: 'ecc', curve: 'curve25519Legacy' })) as T
+    }
+    if (cmd === 'openpgp_backup_encrypt') {
+      if (!installed) throw new Error('no key for account')
+      return await encrypt({ message: await createMessage({ binary: (await privateKey()).write() }), passwords: [args!.passphrase as string], format: 'armored' }) as T
     }
     if (cmd === 'openpgp_decrypt') {
       if (!installed) throw new Error('no key for account')
@@ -115,13 +140,27 @@ export function createBackupRecoveryFixture() {
     return (native ? nativeInvoke : browserInvoke)(cmd, args)
   }
   class FixturePlugin extends SequoiaPgpPlugin {
-    override async pickKeyFile() { return backup }
+    override async pickKeyFile() {
+      // A real export freshly encrypts the key; it is not the server blob.
+      const key = await privateKey()
+      return withPassphraseFormatHeader(await encrypt({
+        message: await createMessage({ binary: key.write() }),
+        passwords: [meta.backupPassphrase], format: 'armored',
+      }))
+    }
   }
+  let secretItem: PEPItem | null = JSON.parse(localStorage.getItem('__test_recovery_secret_backup') ?? 'null')
   const xmpp: XMPPPrimitives = {
     sendStanza: async () => {},
     queryDisco: async () => ({ features: [{ var: 'http://jabber.org/protocol/pubsub' }, { var: 'http://jabber.org/protocol/pubsub#publish-options' }], identities: [{ category: 'pubsub', type: 'pep' }] }),
-    queryPEP: async (_jid, node) => !backupAbsent && node === 'urn:xmpp:openpgp:0:secret-key' ? [{ id: 'current', payload: { name: 'secretkey', attrs: { xmlns: 'urn:xmpp:openpgp:0' }, children: [btoa(String.fromCharCode(...(await unarmor(backup)).data))] } }] : [],
-    publishPEP: async node => { audit.publications.push(node) },
+    queryPEP: async (_jid, node) => !backupAbsent && node === 'urn:xmpp:openpgp:0:secret-key' ? secretItem ? [secretItem] : [{ id: 'current', payload: { name: 'secretkey', attrs: { xmlns: 'urn:xmpp:openpgp:0' }, children: [btoa(String.fromCharCode(...(await unarmor(backup)).data))] } }] : [],
+    publishPEP: async (node, item) => {
+      audit.publications.push(node)
+      if (node === 'urn:xmpp:openpgp:0:secret-key') {
+        secretItem = { id: item.id, payload: item.payload }
+        localStorage.setItem('__test_recovery_secret_backup', JSON.stringify(secretItem))
+      }
+    },
     retractPEP: async () => {}, deletePEP: async () => {}, subscribePEP: () => ({ unsubscribe: () => {} }),
   }
   // The App's raw-PEP facade and the plugin must observe the same protocol fixture.

@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
+import fixtureMeta from './fixtures/sequoia_meta.json'
 import {
   readBackedUpFingerprint,
   writeBackedUpFingerprint,
@@ -21,6 +22,30 @@ const FP_V6 = 'A'.repeat(64)
 describe('backupMarker', () => {
   beforeEach(() => {
     localStorage.clear()
+  })
+
+  it.each([fixtureMeta.aliceFingerprint, fixtureMeta.bobFingerprint])('F3 ignores the historical unproven marker %s until new confirmation', fingerprint => {
+    // This is the actual storage format older file imports wrote, including
+    // both a correct Alice claim and a false Bob claim over Alice's backup.
+    const legacyKey = `fluux:openpgp:backedUpFingerprint:${JID_A}`
+    localStorage.setItem(legacyKey, fingerprint)
+    expect(readBackedUpFingerprint(JID_A)).toBeNull()
+    writeBackedUpFingerprint(JID_A, fixtureMeta.aliceFingerprint)
+    expect(readBackedUpFingerprint(JID_A)).toBe(fixtureMeta.aliceFingerprint)
+  })
+
+  it('F3 clears current and historical layouts for only the requested account', () => {
+    const legacyA = `fluux:openpgp:backedUpFingerprint:${JID_A}`
+    const legacyB = `fluux:openpgp:backedUpFingerprint:${JID_B}`
+    localStorage.setItem(legacyA, fixtureMeta.bobFingerprint)
+    localStorage.setItem(legacyB, fixtureMeta.bobFingerprint)
+    writeBackedUpFingerprint(JID_A, fixtureMeta.aliceFingerprint)
+    writeBackedUpFingerprint(JID_B, fixtureMeta.bobFingerprint)
+    clearBackedUpFingerprint(JID_A)
+    expect(localStorage.getItem(legacyA)).toBeNull()
+    expect(readBackedUpFingerprint(JID_A)).toBeNull()
+    expect(localStorage.getItem(legacyB)).toBe(fixtureMeta.bobFingerprint)
+    expect(readBackedUpFingerprint(JID_B)).toBe(fixtureMeta.bobFingerprint)
   })
 
   it('returns null when no marker has been written', () => {

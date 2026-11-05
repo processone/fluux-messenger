@@ -7,6 +7,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { E2EEPluginError, type E2EEManager } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
 import { BackupRecoveryDialog } from './BackupRecoveryDialog'
+import { legacyNormalizeBackupPassphrase } from '@/e2ee/backupPassphrase'
 
 const meta = JSON.parse(readFileSync(resolve(__dirname, '../e2ee/fixtures/sequoia_meta.json'), 'utf8'))
 const backup = readFileSync(resolve(__dirname, '../e2ee/fixtures/sequoia_alice_backup.asc'), 'utf8')
@@ -50,6 +51,29 @@ describe('BackupRecoveryDialog', () => {
     await waitFor(() => expect(f.onRestored).toHaveBeenCalledWith(meta.aliceFingerprint))
     expect(f.plugin.installSelectedKey).toHaveBeenCalledExactlyOnceWith(backup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid: 'alice@example.com' })
   })
+  it('R2 carries the typed code alongside a legacy file working code at confirmation', async () => {
+    const f = setup()
+    const legacyFile = readFileSync(resolve(__dirname, '../e2ee/fixtures/web_alice_backup.asc'), 'utf8')
+    const web = JSON.parse(readFileSync(resolve(__dirname, '../e2ee/fixtures/web_meta.json'), 'utf8'))
+    const fingerprint = web.aliceFingerprint.toUpperCase()
+    const workingCode = legacyNormalizeBackupPassphrase(web.backupPassphrase)
+    f.plugin.pickKeyFile.mockResolvedValue(legacyFile)
+    f.plugin.importKeyFromFile.mockResolvedValue({ needsPicker: true, candidates: [{ fingerprint,
+      publicArmored: readFileSync(resolve(__dirname, '../e2ee/fixtures/web_alice_public.asc'), 'utf8'), keychainBacked: true }],
+      backupContext: { message: legacyFile, passphrase: workingCode, typedPassphrase: web.backupPassphrase } })
+    f.plugin.installSelectedKey.mockResolvedValue({ fingerprint })
+    render(<BackupRecoveryDialog {...f.props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.identityChoice.importFromFileTitle' }))
+    await screen.findByText('settings.encryption.recoveryCodeBody')
+    fireEvent.change(document.querySelector('input[name="backup-code"], input[name="passphrase"]')!, { target: { value: web.backupPassphrase } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.recoveryPreview' }))
+    await screen.findByText(fingerprint)
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.keyPicker.confirm' }))
+    await waitFor(() => expect(f.onRestored).toHaveBeenCalledWith(fingerprint))
+    expect(f.plugin.installSelectedKey).toHaveBeenCalledWith(legacyFile, workingCode, fingerprint,
+      { accountJid: 'alice@example.com', typedPassphrase: web.backupPassphrase })
+  })
+
   it('keeps the advertised fingerprint recommendation when confirming a multi-key preview', async () => {
     const f = setup()
     const bob = JSON.parse(readFileSync(resolve(__dirname, '../e2ee/fixtures/web_meta.json'), 'utf8')).bobFingerprint.toUpperCase()

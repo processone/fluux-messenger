@@ -5,8 +5,9 @@
  * The backup itself is an OpenPGP SKESK-encrypted blob — without the
  * passphrase we can't peek inside to see which key it contains. So to
  * tell the UI "your local key is already on the server" without asking
- * for the passphrase, we record the fingerprint *at the moment of
- * backup* locally and compare it against the current local fingerprint.
+ * for the passphrase, we record the fingerprint after publishing a backup or
+ * installing a key proven to exist in the server backup (matching packet
+ * bytes or a decrypted fingerprint), then compare it with the local key.
  *
  * Stored in localStorage because the SDK's `PluginStorage` backend is
  * currently in-memory; a marker that evaporates on app restart would
@@ -14,7 +15,10 @@
  * setups don't stomp each other.
  */
 
-const STORAGE_PREFIX = 'fluux:openpgp:backedUpFingerprint:'
+const LEGACY_STORAGE_PREFIX = 'fluux:openpgp:backedUpFingerprint:'
+// Earlier installs could mark an unrelated file as backed up. None of those
+// claims can be trusted; establish this version only from confirmed evidence.
+const STORAGE_PREFIX = `${LEGACY_STORAGE_PREFIX}v2:`
 
 function storage(): Storage | null {
   try {
@@ -48,8 +52,9 @@ export function readBackedUpFingerprint(bareJid: string): string | null {
 
 /**
  * Persist `fingerprint` as the latest backup marker for `bareJid`.
- * Called after a successful `backupSecretKey` or `restoreSecretKey` —
- * both leave the server backup and the local key in sync.
+ * Called after a successful `backupSecretKey`, or a successful key install
+ * proven to exist in the server backup by matching packet bytes or a
+ * decrypted fingerprint. File installation alone is not backup evidence.
  */
 export function writeBackedUpFingerprint(bareJid: string, fingerprint: string): void {
   if (!bareJid || !fingerprint) return
@@ -74,6 +79,7 @@ export function clearBackedUpFingerprint(bareJid: string): void {
   if (!s) return
   try {
     s.removeItem(storageKey(bareJid))
+    s.removeItem(`${LEGACY_STORAGE_PREFIX}${bareJid}`)
   } catch {
     // ignored — see writeBackedUpFingerprint
   }

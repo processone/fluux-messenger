@@ -20,6 +20,9 @@ export const changelog: ChangelogEntry[] = [
       type: 'added',
       items: [
         'iOS: a widget lists the conversations with unread messages, on the home screen and, with only the unread total, on the lock screen. It shows names, counts and times, never message text, and tapping a row opens that conversation',
+      type: 'fixed',
+      items: [
+        'Importing an OpenPGP key file checks that the server backup contains the same identity, including separately encrypted and older exports. Earlier backup-status markers are reset because file imports could record an incorrect claim. An unconfirmed backup now has a neutral status and a replacement warning. Rotating a key refreshes an unconfirmed backup and replaces its code, even if another device created it',
       ],
     }],
   },
