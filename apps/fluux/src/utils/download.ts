@@ -1,6 +1,7 @@
 import { platform } from '@/platform'
 import { useToastStore } from '@/stores/toastStore'
 import type { FileAttachment } from '@fluux/sdk'
+import { cachedMediaFilePath, resolveEncryptedMediaUrl, resolveWebEncryptedMediaUrl, resolveMediaUrl } from './mediaCache'
 
 /**
  * Download a file from a URL.
@@ -58,7 +59,6 @@ export async function downloadFile(
  */
 async function shareThroughSheet(url: string, filename: string): Promise<void> {
   const { invoke } = await import('@tauri-apps/api/core')
-  const { cachedMediaFilePath } = await import('./mediaCache')
   const cached = cachedMediaFilePath(url)
   if (cached) {
     await invoke('plugin:share-sheet|share_file', { path: cached, name: filename })
@@ -100,11 +100,9 @@ export async function downloadAttachment(
   try {
     let resolvedUrl = attachment.url
     if (attachment.encryption) {
-      const { resolveEncryptedMediaUrl, resolveWebEncryptedMediaUrl } = await import('./mediaCache')
       const resolve = platform().nativeMediaCache ? resolveEncryptedMediaUrl : resolveWebEncryptedMediaUrl
       resolvedUrl = await resolve(attachment.url, attachment.encryption)
     } else if (platform().nativeMediaCache) {
-      const { resolveMediaUrl } = await import('./mediaCache')
       resolvedUrl = await resolveMediaUrl(attachment.url)
     }
     await downloadFile(resolvedUrl, filename, options)

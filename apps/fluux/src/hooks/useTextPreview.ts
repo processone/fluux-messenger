@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { platform } from '@/platform'
+import { resolveEncryptedMediaUrl, resolveWebEncryptedMediaUrl } from '@/utils/mediaCache'
 import type { FileEncryption } from '@fluux/sdk'
 
 /** Maximum bytes to fetch for text preview */
@@ -74,7 +75,6 @@ async function fetchDecrypted(
   url: string,
   encryption: FileEncryption,
 ): Promise<{ text: string; isTruncated: boolean }> {
-  const { resolveEncryptedMediaUrl, resolveWebEncryptedMediaUrl } = await import('@/utils/mediaCache')
   const resolve = platform().nativeMediaCache ? resolveEncryptedMediaUrl : resolveWebEncryptedMediaUrl
   const response = await fetch(await resolve(url, encryption))
   if (!response.ok) {

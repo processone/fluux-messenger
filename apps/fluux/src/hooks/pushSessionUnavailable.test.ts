@@ -2,12 +2,16 @@ import { expect, it, vi } from 'vitest'
 import { connectionStore } from '@fluux/sdk'
 import { endPushSession } from './useNativePush'
 
-vi.mock('@/platform/ios/notificationMirror', () => { throw new Error('Notification module unavailable') })
+vi.mock('@/platform/ios/notificationMirror', () => ({
+  clearIOSNotificationMirror: vi.fn().mockRejectedValue(new Error('Notification cleanup unavailable')),
+}))
+vi.mock('@/platform/ios/notificationPreviews', () => ({ purgeIOSNotificationPreviews: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('@/utils/unreadWidget', () => ({ clearUnreadWidgetList: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@fluux/sdk', async () => ({
   connectionStore: (await import('../../../../packages/fluux-sdk/src/stores/connectionStore')).connectionStore,
 }))
 
-it('completes push cleanup when an offline notification module cannot load', async () => {
+it('completes offline push cleanup when notification cleanup fails', async () => {
   localStorage.setItem('fluux-push-registration', JSON.stringify({ jid: 'push.example.test', node: 'fixture-node' }))
   localStorage.setItem('fluux-push-token', 'fixture-token')
   await expect(endPushSession()).resolves.toBeUndefined()
@@ -16,7 +20,7 @@ it('completes push cleanup when an offline notification module cannot load', asy
 })
 
 
-it('waits for online disable and gateway unregister despite notification import failure', async () => {
+it('waits for online disable and gateway unregister despite notification cleanup failure', async () => {
   localStorage.clear()
   connectionStore.setState({ status: 'online', jid: 'fixture@example.com' })
   localStorage.setItem('fluux-push-registration', JSON.stringify({ jid: 'push.example.test', node: 'fixture-node' }))

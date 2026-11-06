@@ -5,6 +5,7 @@ import i18n from 'i18next'
 import { platform } from '@/platform'
 import type { MessageRowRef } from '@fluux/sdk'
 import { osNotificationSilent } from './notificationSound'
+import { reserveIOSNotification, isIOSNotificationCurrent } from '@/platform/ios/previewReadLedger'
 
 const SILENT_CHANNEL_ID = 'fluux-silent'
 
@@ -44,7 +45,6 @@ export async function postPluginNotification(options: Options, selected?: Messag
     }
     const extra = options.extra
     if (platform().os === 'ios' && extra?.navType === 'conversation' && typeof extra.navTarget === 'string' && typeof extra.messageId === 'string' && typeof extra.accountId === 'string') {
-      const { reserveIOSNotification, isIOSNotificationCurrent } = await import('@/platform/ios/previewReadLedger')
       const id = options.id ?? (crypto.getRandomValues(new Uint32Array(1))[0] & 0x7fffffff)
       if (!await reserveIOSNotification(extra.navTarget, extra.messageId, extra.accountId, String(id), selected)) return
       if (!isIOSNotificationCurrent(extra.navTarget, extra.messageId, extra.accountId, selected)) return
