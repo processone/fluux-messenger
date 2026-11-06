@@ -60,5 +60,19 @@ test('unsigned desktop extension and real shared-file adapter build and render w
       execFileSync('xcrun', ['swiftc', '-swift-version', '5', '-parse-as-library', '-whole-module-optimization', '-emit-object',
         '-target', `${architecture}-apple-macos10.13`, ...sources.slice(0, 4), '-o', join(scratch, `bridge-${architecture}.o`)], { timeout: 120000 })
     }
+    // Exercise the normal pre-host signing branch with a failing signer function, never a signing
+    // program. This proves assembly precedes signing and a signing failure prevents completion,
+    // not that any signature or notarization is valid.
+    assert.throws(() => buildWidgets(settings, {
+      output: join(scratch, 'sign-probe'),
+      sign(path, host, entitlements) {
+        assert.deepEqual(host, settings)
+        assert.ok(readFileSync(join(path, 'Contents/MacOS/FluuxWidgets')).length > 0)
+        const saved = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', entitlements]))
+        assert.deepEqual(saved, widgetEntitlements(settings))
+        throw new Error('Signing stand-in refused the assembled widget')
+      },
+    }), /Signing stand-in refused/)
+    console.log('Widget assembly precedes the signer; signing failure stops bundle completion (stand-in only)')
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })

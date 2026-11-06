@@ -25,7 +25,7 @@ export function widgetEntitlements(settings) {
 }
 
 /** The unsigned path only compiles and assembles files; it never invokes any signing program. */
-export function buildWidgets(settings, { output = join(root, 'macos/.build'), arch = process.env.TAURI_ENV_ARCH || process.arch, unsigned = false } = {}) {
+export function buildWidgets(settings, { output = join(root, 'macos/.build'), arch = process.env.TAURI_ENV_ARCH || process.arch, unsigned = false, sign = signExtension } = {}) {
   const architectures = arch === 'universal' ? ['arm64', 'x86_64'] :
     [['arm64', 'aarch64'].includes(arch) ? 'arm64' : ['x86_64', 'x64'].includes(arch) ? 'x86_64' : null]
   if (architectures.includes(null)) throw new Error(`Unsupported macOS architecture: ${arch}`)
@@ -51,7 +51,7 @@ export function buildWidgets(settings, { output = join(root, 'macos/.build'), ar
   })
   run('/usr/bin/xcrun', ['lipo', '-create', ...binaries, '-output', join(contents, 'MacOS/FluuxWidgets')])
   // Tauri embeds PlugIns unchanged and signs the enclosing app last, just as for FluuxShare.
-  if (!unsigned) signExtension(extension, settings, entitlements)
+  if (!unsigned) sign(extension, settings, entitlements)
   return extension
 }
 
