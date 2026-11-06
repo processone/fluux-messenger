@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import Intents
 
 @main struct NotificationContentChecks {
     struct Output: Decodable { let title: String; let body: String; let subtitle: String? }
@@ -39,12 +40,13 @@ import UserNotifications
             let peer = "alice@example.test"
             let room = "team@conference.example.test"
             let account = "me@example.test"
-            let names = SharedNames(contacts: input.name == "" ? [:] : [peer: "Alice"],
+            let nickname = "Alice"
+            let names = SharedNames(contacts: input.name == "" ? [:] : [peer: nickname],
                                     rooms: input.room == true ? [room: "Team"] : [:],
                                     account: input.signedOut == true ? nil : account)
             let original = UNMutableNotificationContent()
             original.body = input.body
-            original.userInfo = ["from": input.room == true ? room + "/Alice" : peer,
+            original.userInfo = ["from": input.room == true ? room + "/" + nickname : peer,
                                  "to": input.mismatch == true ? "other@example.test" : account]
             if let encrypted = input.encrypted { original.userInfo["encrypted"] = encrypted }
             var output: UNNotificationContent?
@@ -66,7 +68,7 @@ import UserNotifications
                 let events = input.events ?? []
                 let result = PreviewResult(events: events, complete: input.complete != false, archiveUnavailable: input.archiveUnavailable)
                 if input.duplicate == true {
-                    _ = try ledger.claim(result, session: session, conversation: peer, request: "prior", nickname: "Alice", words: words, now: Date().timeIntervalSince1970)
+                    _ = try ledger.claim(result, session: session, conversation: peer, request: "prior", nickname: nickname, words: words, now: Date().timeIntervalSince1970)
                 }
                 if input.read == true {
                     _ = try ledger.merge([PreviewLedger.Delta(account: account, epoch: session.epoch, conversation: peer, uid: "one", archiveAuthority: account, key: PreviewLedger.archiveKey("one"), read: true, notified: false)], now: Date().timeIntervalSince1970)
@@ -109,8 +111,21 @@ import UserNotifications
                 }
             }
             print("\(fixture.id): \(output?.title ?? "nil") / \(output?.body ?? "nil")")
-            if output?.title != input.expected.title || output?.body != input.expected.body || output?.subtitle != (input.expected.subtitle ?? "") {
-                failures.append("\(fixture.id): expected \(input.expected.title) / \(input.expected.body), got \(output?.title ?? "nil") / \(output?.body ?? "nil")")
+            var expected = input.expected
+            #if os(macOS)
+            if input.room == true {
+                // Accepted room-attribution contract: validate iOS message formatting through
+                // the real incoming intent; macOS cannot apply iOS content enrichment.
+                let incoming = NotificationPresentation.incomingIntent(from: room + "/" + nickname, body: input.body, names: names)
+                if incoming?.sender?.displayName != expected.title || incoming?.content != expected.body {
+                    failures.append("\(fixture.id): incoming room intent does not match the iOS content contract: \(incoming?.content ?? "nil")")
+                }
+                // Separately retain the ordinary fallback exercised by this macOS host.
+                expected = Output(title: expected.title, body: input.body, subtitle: nickname)
+            }
+            #endif
+            if output?.title != expected.title || output?.body != expected.body || output?.subtitle != (expected.subtitle ?? "") {
+                failures.append("\(fixture.id): expected \(expected.title) / \(expected.body), got \(output?.title ?? "nil") / \(output?.body ?? "nil")")
             }
         }
         for failure in failures { print(failure) }

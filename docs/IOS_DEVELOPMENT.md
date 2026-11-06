@@ -685,8 +685,10 @@ their occupancy after self-presence is available. Suspension retains that snapsh
 room removal, logout and account changes clear it. The extension still uses the
 own nick to suppress self-sent room messages. Incoming room-origin presentation
 does not depend on recipients or occupancy: two-person rooms and unavailable
-occupancy use the same room-first name and nickname/message rule. Generic outgoing
-intent fixtures still cover Apple's recipient and group-image contracts separately.
+occupancy use the same room-first name and nickname/message rule. Generic
+`NotificationPresentation.intent()` fixtures still cover Apple's recipient and
+group-image contracts separately; they do not describe outgoing share suggestions,
+which use `ShareSuggestions.intent()`.
 
 `npm run test:ios-notifications` uses native fixtures and real project image bytes for
 lookup, resizing, pruning, account isolation, missing images and intent construction.
