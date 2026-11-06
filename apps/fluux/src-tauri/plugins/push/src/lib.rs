@@ -98,6 +98,10 @@ mod platform {
     #[derive(serde::Serialize, serde::Deserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct BadgeState {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        account: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated: Option<f64>,
         unread: Vec<String>,
         events: u32,
         notify_all_rooms: Vec<String>,

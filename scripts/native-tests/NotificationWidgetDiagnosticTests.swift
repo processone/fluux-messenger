@@ -12,7 +12,7 @@ import UserNotifications
         let reads = PreviewTrace.AppReads()
         var owner: String? = account
         let observer = PreviewTrace.observeWidgetPublications(root: { root }, account: { owner }, queue: queue,
-            afterPublication: { root, account in reads.published(root: root, account: account) }, center: center)
+            afterPublication: { root, account, snapshot in reads.published(root: root, account: account, snapshotAt: snapshot) }, center: center)
         defer { center.removeObserver(observer) }
         let record = PreviewTrace.batchRecorder(root: root, correlation: UUID())
         func decisions() throws -> [String] {
@@ -22,24 +22,41 @@ import UserNotifications
         func publish(_ decision: WidgetPublication.Decision) {
             let time = Date().timeIntervalSince1970
             WidgetPublication.post(account: account, events: [.init(decision: decision, time: time),
-                .init(decision: .reloadRequested, time: time)], center: center)
+                .init(decision: .reloadRequested, time: time)], snapshotAt: UnreadList.load(root: root)!.updated / 1000, center: center)
             queue.sync {} // Await this publication's actual diagnostic work, not an arbitrary delay.
         }
         let expected: [String]
-        if scenario == "app-read-clear" || scenario == "app-read-still-listed" {
+        if scenario == "app-read-current" || scenario == "app-read-queued" {
+            let oldSnapshot = Date().timeIntervalSince1970 - 1
+            queue.sync { record(reads.observed(account: account, target: sender, time: Date().timeIntervalSince1970)) }
+            if scenario == "app-read-queued" {
+                WidgetPublication.post(account: account, events: [], snapshotAt: oldSnapshot, center: center)
+                queue.sync {}
+                let beforeCurrent = try decisions()
+                precondition(beforeCurrent == ["widgetAppReadObserved"], "An older queued snapshot cannot classify a newer read")
+                var cleared = list
+                cleared.rows = []; cleared.total = 0
+                try cleared.write(root: root)
+            }
+            WidgetPublication.post(account: account, events: [], snapshotAt: Date().timeIntervalSince1970, center: center)
+            queue.sync {}
+            expected = ["widgetAppReadObserved", "widgetAppReadNotListed"]
+        } else if scenario == "app-read-clear" || scenario == "app-read-still-listed" {
             queue.sync { record(reads.observed(account: account, target: sender, time: Date().timeIntervalSince1970)) }
             let beforePublication = try decisions()
             precondition(beforePublication == ["widgetAppReadObserved"], "Do not classify the old file during debounce")
             var prefix = ["widgetAppReadObserved"]
             if scenario == "app-read-still-listed" {
-                try list.write(root: root)
+                var retainedSnapshot = list
+                retainedSnapshot.updated = Date().timeIntervalSince1970 * 1000
+                try retainedSnapshot.write(root: root)
                 publish(.written) // Negative control: a publication really did retain the read target.
                 prefix += ["widgetAppListWritten", "widgetAppReloadRequested", "widgetAppReadStillListed"]
                 let retained = try decisions()
                 precondition(retained == prefix)
             }
             var cleared = list
-            cleared.rows = []; cleared.total = 0
+            cleared.rows = []; cleared.total = 0; cleared.updated = Date().timeIntervalSince1970 * 1000
             try cleared.write(root: root)
             publish(.cleared)
             expected = prefix + ["widgetAppListCleared", "widgetAppReloadRequested", "widgetAppReadNotListed"]
@@ -71,7 +88,7 @@ import UserNotifications
         for value in [account, sender, "other@example.com", "Private fixture name", "Private arbitrary error"] {
             precondition(!text.contains(value), "The app trace must retain no identity or arbitrary text")
         }
-        if scenario == "app-read-clear" || scenario == "app-read-still-listed" { print(text) }
+        if scenario == "app-read-clear" || scenario == "app-read-still-listed" || scenario == "app-read-current" || scenario == "app-read-queued" { print(text) }
         print("\(scenario): actual file read/clear, in-process publication and bounded export passed")
     }
 
@@ -84,11 +101,14 @@ import UserNotifications
         var list = UnreadList(account: account, total: 0, rows: [], updated: 1)
         var badge = SharedBadge(unread: [], events: 0, notifyAllRooms: [])
         switch scenario {
-        case "already-listed", "app-read-clear", "app-read-still-listed":
+        case "already-listed", "app-read-clear", "app-read-still-listed", "app-read-queued":
             list.rows = [.init(id: sender, kind: "chat", name: "Private fixture name", unread: 1, mentions: 0, last: 1)]
             list.total = 1
-        case "count-mismatch":
+        case "count-mismatch", "push-reconciles-read-row":
             list.rows = [.init(id: "stale@example.com", kind: "chat", name: "Private stale name", unread: 1, mentions: 0, last: 1)]
+            if scenario == "count-mismatch" {
+                list.rows.append(.init(id: "stale2@example.com", kind: "chat", name: "Private stale name", unread: 1, mentions: 0, last: 1))
+            }
             list.total = 1
         case "account-mismatch": list.account = "other@example.com"
         case "not-counted": badge.unread = [sender]
@@ -96,7 +116,9 @@ import UserNotifications
         }
         if scenario != "list-unavailable" { try list.write(root: root) }
         if scenario != "badge-unavailable" {
-            try JSONEncoder().encode(badge).write(to: root.appendingPathComponent("NotificationBadge.json"))
+            var state = try JSONSerialization.jsonObject(with: JSONEncoder().encode(badge)) as! [String: Any]
+            if scenario != "badge-legacy" { state["account"] = scenario == "badge-other-account" ? "other@example.com" : account }
+            try JSONSerialization.data(withJSONObject: state).write(to: root.appendingPathComponent("NotificationBadge.json"))
         }
         let store: NotificationDiagnostic?
         if scenario == "diagnostic-unavailable" {
@@ -111,6 +133,7 @@ import UserNotifications
             try appTrace(scenario, root: root, list: list, store: store!)
             return
         }
+        let badgeBefore = try? Data(contentsOf: root.appendingPathComponent("NotificationBadge.json"))
         let content = UNMutableNotificationContent()
         content.body = "Private fixture message"
         content.userInfo = ["from": sender + "/phone", "to": account, "encrypted": false]
@@ -125,13 +148,25 @@ import UserNotifications
         }
         precondition(delivered == 1)
         let written = UnreadList.load(root: root)
-        if scenario == "success" || scenario == "diagnostic-unavailable" || scenario == "count-mismatch" {
+        if ["success", "already-listed", "diagnostic-unavailable", "count-mismatch", "push-reconciles-read-row"].contains(scenario) {
             precondition(written?.rows.first?.id == sender && written?.total == 1,
                          "The actual extension hook must persist the counted conversation")
         } else if scenario == "list-unavailable" {
             precondition(written == nil)
         } else {
             precondition(written == list, "Skipped widget changes must leave its file unchanged")
+        }
+        if scenario == "badge-other-account" || scenario == "badge-legacy" {
+            precondition((try? Data(contentsOf: root.appendingPathComponent("NotificationBadge.json"))) == badgeBefore,
+                         "An unconfirmed account must not mutate another account's badge")
+        }
+        if scenario == "push-reconciles-read-row" || scenario == "count-mismatch" {
+            FileHandle.standardOutput.write(Data("actual shared widget state: ".utf8) + (try JSONEncoder().encode(written)) + Data("\n".utf8))
+            guard written?.rows.map(\.id) == [sender] && written?.total == 1 else {
+                FileHandle.standardError.write(Data("Prune the read row from the counted unread set; never raise the total to hide it\n".utf8))
+                try? FileManager.default.removeItem(at: root)
+                exit(1)
+            }
         }
         guard let store else {
             print("diagnostic-unavailable: notification delivered and unread row persisted without diagnostics")
@@ -142,16 +177,16 @@ import UserNotifications
         let decisions = entries.map { $0["decision"] as! String }
         let widget: [String]
         switch scenario {
-        case "success":
+        case "success", "push-reconciles-read-row":
             #if os(iOS)
             widget = ["widgetRowSelected", "widgetWriteSucceeded", "widgetReloadRequested"]
             #else
             widget = ["widgetRowSelected", "widgetWriteSucceeded", "widgetReloadUnavailable"]
             #endif
         case "count-mismatch":
-            widget = ["widgetRowSelected", "widgetWriteSucceeded", "widgetCountMismatch", "widgetReloadUnavailable"]
-        case "already-listed": widget = ["widgetAlreadyListed"]
-        case "account-mismatch": widget = ["widgetAccountMismatch"]
+            widget = ["widgetCountMismatch", "widgetRowSelected", "widgetWriteSucceeded", "widgetReloadUnavailable"]
+        case "already-listed": widget = ["widgetAlreadyListed", "widgetWriteSucceeded", "widgetReloadUnavailable"]
+        case "account-mismatch", "badge-other-account", "badge-legacy": widget = ["widgetAccountMismatch"]
         case "not-counted": widget = ["widgetNotCounted"]
         case "badge-unavailable": widget = ["widgetBadgeUnavailable"]
         case "list-unavailable": widget = ["widgetListUnavailable"]
@@ -176,7 +211,7 @@ import UserNotifications
         if scenario == "success" { print(text) }
         print("\(scenario): actual extension mutation and content-free diagnostic export passed")
         if scenario == "count-mismatch" {
-            print("The trace flags an existing inconsistent snapshot; it does not claim a count reconciliation fix")
+            print("The trace flags the old inconsistent input; the persisted snapshot is reconciled")
         }
     }
 }

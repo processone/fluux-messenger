@@ -2,6 +2,7 @@ import { chatStore, connectionStore, roomStore, unreadConversations } from '@flu
 import type { UnreadConversation } from '@fluux/sdk'
 import { platform } from '@/platform'
 import { observeWidgetSupport, resetWidgetSupportForTesting, widgetSessionSupported, type WidgetWriteResult } from '@/platform/apple/widgetSupport'
+import { pushBadgeState, sharePushBadge, type PushBadgeState } from './pushBadge'
 
 /**
  * What the home-screen widget shows, written into the shared App Group folder.
@@ -16,7 +17,7 @@ export interface UnreadWidgetList {
   account: string
   total: number
   rows: UnreadWidgetRow[]
-  /** When the app wrote the list, in milliseconds since the epoch. */
+  /** When this state snapshot was built, in milliseconds since the epoch. */
   updated: number
 }
 
@@ -60,8 +61,9 @@ function toRow(row: UnreadConversation): UnreadWidgetRow {
   }
 }
 
-let shared: string | null = null
 // Writes reach native code in order, so a stale list cannot land after a newer one or after a clear.
+// The desktop writer owns its file; only iOS has extension-side membership mutations.
+let shared: string | null = null
 let writes: Promise<void> = Promise.resolve()
 let active: { stop: () => void; cancel: () => void } | undefined
 // The account being signed out: nothing is published for it until the app has another one.
@@ -69,31 +71,32 @@ let clearedAccount: string | null = null
 // Ends the block when the session itself ends, however the publisher was stopped by then.
 let releaseBlock: (() => void) | undefined
 
-async function write(list: UnreadWidgetList | null, refresh = false): Promise<void> {
+async function write(list: UnreadWidgetList | null, refresh = false, badge?: PushBadgeState): Promise<void> {
   if (!widgetSessionSupported()) return
-  // `updated` moves on every build; only the content decides whether to write.
+  const desktop = platform().os === 'macos'
   const serialized = JSON.stringify(list && { ...list, updated: 0 })
-  // A new macOS session must renew a saved, possibly stale list even when its content is
-  // unchanged. Hook remounts within that session still use normal content deduplication.
   const initial = list !== null && (shared === null || shared === 'null')
-  const renew = refresh || (initial && platform().os === 'macos' && platform().publishesUnreadWidget)
-  if (!renew && serialized === shared) return
-  shared = serialized
+  const renew = refresh || (initial && desktop && platform().publishesUnreadWidget)
+  // Desktop retains its session cache and heartbeat; iOS rechecks extension-writable files.
+  if (desktop && !renew && serialized === shared) return
+  if (desktop) shared = serialized
   try {
+    // One projection owns membership even when the number of unread conversations is unchanged.
+    if (badge) await sharePushBadge(badge, { force: true })
     const { invoke } = await import('@tauri-apps/api/core')
     const result = await invoke<WidgetWriteResult | undefined>('plugin:widgets|set_unread_list', {
       list, ...(renew ? { heartbeat: true } : {}),
     })
     if (!observeWidgetSupport(result)) active?.stop()
   } catch (err) {
-    shared = null
+    if (desktop) shared = null
     console.warn('[Widgets] Unread list not shared:', err)
   }
 }
 
-/** Writes the list for the widget, or empties it for `null`, unless unchanged. */
-export function shareUnreadWidgetList(list: UnreadWidgetList | null, refresh = false): Promise<void> {
-  const next = writes.then(() => write(list, refresh))
+/** Rechecks the iOS file; desktop retains its session deduplication and refresh policy. */
+export function shareUnreadWidgetList(list: UnreadWidgetList | null, refresh = false, badge?: PushBadgeState): Promise<void> {
+  const next = writes.then(() => write(list, refresh, badge))
   writes = next
   return next
 }
@@ -117,11 +120,12 @@ export function clearUnreadWidgetList(): Promise<void> {
     })
     releaseBlock = () => { releaseBlock = undefined; unsubscribe() }
   }
-  return shareUnreadWidgetList(null)
+  return shareUnreadWidgetList(null, false, platform().usesNativePush ? { unread: [], events: 0, notifyAllRooms: [] } : undefined)
 }
 
-/** Forgets what was last shared, so the next list is sent. For tests. */
+/** Resets the publisher, session block and publication queue. For tests. */
 export function resetSharedUnreadWidgetList(): void {
+  active?.stop()
   resetWidgetSupportForTesting()
   shared = null
   writes = Promise.resolve()
@@ -147,21 +151,39 @@ export function startUnreadWidgetPublisher(events: () => number, heartbeatMs?: n
     timer = undefined
     if (stopped) return
     if (!widgetSessionSupported()) { stop(); return }
-    const account = connectionStore.getState().jid?.split('/')[0]
+    const connection = connectionStore.getState()
+    const account = connection.jid?.split('/')[0]
     if (account && account === clearedAccount) return
+    // A wake is not proof that catch-up has established the current unread state.
+    if (platform().usesNativePush && account && (connection.status !== 'online' || connection.isVerifying || connection.isCatchingUp || connection.replayOwners > 0)) return
     if (account !== clearedAccount) clearedAccount = null
-    void shareUnreadWidgetList(account
-      ? unreadWidgetList(account, chatStore.getState().conversations.values(), roomStore.getState(), events())
-      : null, refresh)
+    const conversations = chatStore.getState().conversations
+    const rooms = roomStore.getState()
+    const pending = events()
+    const now = Date.now()
+    const list = account ? unreadWidgetList(account, conversations.values(), rooms, pending, now) : null
+    const badge = platform().usesNativePush
+      ? account ? { ...pushBadgeState(conversations.values(), rooms, pending), account, updated: now }
+        : { unread: [], events: 0, notifyAllRooms: [] }
+      : undefined
+    void shareUnreadWidgetList(list, refresh, badge)
   }
   const schedule = () => { if (!stopped) timer ??= setTimeout(() => publish(), PUBLISH_DELAY_MS) }
   const unsubscribe = [chatStore.subscribe(schedule), roomStore.subscribe(schedule), connectionStore.subscribe(schedule)]
   const cancel = () => { clearTimeout(timer); timer = undefined }
   const heartbeat = heartbeatMs ? setInterval(() => publish(true), heartbeatMs) : undefined
+  // Do not leave a known snapshot waiting on a JS timer when iOS suspends the webview.
+  const flushBeforeHide = () => {
+    if (!platform().usesNativePush || document.visibilityState !== 'hidden' || timer === undefined) return
+    cancel()
+    publish()
+  }
+  document.addEventListener('visibilitychange', flushBeforeHide)
   const stop = () => {
     clearInterval(heartbeat)
     stopped = true
     cancel()
+    document.removeEventListener('visibilitychange', flushBeforeHide)
     unsubscribe.forEach(unsubscribeOne => unsubscribeOne())
     if (active?.stop === stop) active = undefined
   }

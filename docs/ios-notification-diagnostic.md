@@ -44,8 +44,10 @@ from the local deadline and iOS extension expiry.
   and four independent processes retaining all 200 entries before logout.
 - `npm run test:ios-notifications`: existing delivery/presentation tests plus
   exported preview/widget decisions, read-before-publication/clear timing, and negative
-  controls for retained read targets, body/identity leakage, wrong-account handoffs,
-  and a background diagnostic queue that must not block widget publication.
+  controls for retained read targets, verified-current native no-ops, body/identity leakage,
+  wrong-account/legacy badge state and a background diagnostic queue that must not block publication.
+  The same family exercises shared-file app deduplication, same-total membership reconciliation,
+  concurrent badge increments, late reads, rejected stale app frames and refused writer locks.
 - `FLUUX_DIAGNOSTIC_RESULTS=/absolute/path/outside/project npm run test:ios-diagnostic`:
   creates a disposable unsigned simulator, presents the production native share
   helper, cancels without sending, and verifies temporary-copy deletion. This

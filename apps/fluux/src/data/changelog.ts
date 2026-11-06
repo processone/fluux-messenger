@@ -31,6 +31,7 @@ export const changelog: ChangelogEntry[] = [
         'macOS: a keychain prompt waiting for your answer no longer blocks saving other secrets, such as your credentials, MCP token or encrypted OpenPGP key',
         'iOS: room notifications show the room picture. The room name stays first, with the sender above the message',
         'Scrolling up in conversations and rooms no longer jumps or skips messages when Fluux corrects its size estimate for older messages, for example after a long run of your own short replies',
+        'iOS: returning to Fluux removes widget rows that are already read, including after reading on another device. Push updates keep the listed conversations consistent with the unread total instead of retaining obsolete rows',
       ],
     }],
   },
