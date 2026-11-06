@@ -45,7 +45,8 @@ struct MacWidgetsTests {
             .init(id: "chloe@example.com", kind: "chat", name: "Chloé Lambert", unread: 1, mentions: 0, last: now.addingTimeInterval(-3 * 86400).timeIntervalSince1970 * 1000),
             .init(id: "users@conference.example.com", kind: "groupchat", name: "fluux-users", unread: 3, mentions: 1, last: now.addingTimeInterval(-9 * 86400).timeIntervalSince1970 * 1000),
         ]
-        var list = UnreadList(account: "me@example.com", total: rows.count + 1, rows: rows, updated: now.timeIntervalSince1970 * 1000)
+        // Relaunch regression: the previous session left the same content, now older than the stale window.
+        var list = UnreadList(account: "me@example.com", total: rows.count + 1, rows: rows, updated: now.addingTimeInterval(-25 * 60).timeIntervalSince1970 * 1000)
         check(try apply("names", names), "names written")
         check(reloads == 1, "first account publication refreshes a list waiting for its owner")
         check(try apply("names", names), "same-account names written")
@@ -55,14 +56,16 @@ struct MacWidgetsTests {
         check(try !apply("list", list), "identical unread list is not rewritten")
         check(reloads == 2, "identical unread list does not request another refresh")
         var timestampOnly = list
-        timestampOnly.updated += 1000
+        timestampOnly.updated = now.timeIntervalSince1970 * 1000
         check(try !apply("list", timestampOnly), "ordinary identical-list comparison ignores the timestamp")
         check(UnreadList.load(root: root)?.updated == list.updated, "ordinary timestamp changes do not renew the file")
         check(reloads == 2, "timestamp-only ordinary publication does not request a refresh")
         check(try apply("heartbeat", timestampOnly), "first-session renewal refreshes unchanged saved content immediately")
         check(UnreadList.load(root: root)?.updated == timestampOnly.updated, "relaunch renewal updates the saved timestamp before the periodic heartbeat")
         check(reloads == 3, "first-session renewal requests a refresh")
-        var heartbeat = list
+        let renewed = UnreadList.load(root: root)!
+        print("Relaunch persisted age: \(Int(now.timeIntervalSince1970 - list.updated / 1000))s -> \(Int(now.timeIntervalSince1970 - renewed.updated / 1000))s; renewed stale deadline: +\(Int(renewed.staleDate.timeIntervalSince(now)))s")
+        var heartbeat = timestampOnly
         heartbeat.updated += 15 * 60 * 1000
         check(try apply("heartbeat", heartbeat), "explicit fifteen-minute heartbeat renews the saved list")
         check(reloads == 4, "explicit heartbeat requests its refresh")
@@ -87,6 +90,7 @@ struct MacWidgetsTests {
         let expectedStale = Date(timeIntervalSince1970: list.updated / 1000).addingTimeInterval(20 * 60)
         check(list.staleDate == expectedStale, "shared saved-list deadline is exactly twenty minutes after updated")
 
+        list.updated = now.timeIntervalSince1970 * 1000
         // Render the product SwiftUI source, not a recreation of its design. This does not host WidgetKit.
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)

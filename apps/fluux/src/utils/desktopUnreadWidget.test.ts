@@ -64,6 +64,7 @@ describe('native macOS unread widget publication', () => {
     expect(invoke).not.toHaveBeenCalled()
   })
 
+  // Regression: relaunching unchanged unreads must renew the saved list before the next heartbeat.
   it('renews the first session publication but not an ordinary hook remount', async () => {
     chatStore.getState().addConversation({ id: 'alice@example.com', name: 'Alice Martin', type: 'chat', unreadCount: 2 })
     stop = startUnreadWidgetPublisher(() => 0, DESKTOP_WIDGET_HEARTBEAT_MS)
