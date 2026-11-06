@@ -410,6 +410,41 @@ For changes to the native host, run `cargo test --locked` and
 preparation has its own `npm run test:ios-icons` check. See also
 [Tauri mobile prerequisites](https://v2.tauri.app/start/prerequisites/#ios).
 
+## Unread conversations widget
+
+The `FluuxWidgets` extension (iOS 17 or later; the app itself still supports iOS 15) lists the
+conversations with unread messages: a home-screen widget in small, medium and large sizes, and a
+lock-screen widget (circular and inline) that shows only the unread total. A row holds the name, the
+unread count, an `@` marker for a mention and the time of the last message, never message text.
+Tapping a row opens that conversation through the `net.processone.fluux://shortcut` link the Shortcuts
+actions already use.
+
+The widget never connects to the server. It reads `UnreadWidget.json` from the App Group folder:
+
+- The app writes it. `unreadConversations` (SDK) selects the rows by the app icon badge's rule, so a
+  quiet room does not appear; `utils/unreadWidget.ts` builds the list, with `total` equal to the badge,
+  and the `widgets` plugin (`plugins/widgets`) writes the file and asks WidgetKit to redraw. It writes
+  nothing off iOS (`publishesUnreadWidget`), and an empty list on sign-out.
+- While the app is suspended, a push that raises the badge adds its conversation to the file
+  (`NotificationService.swift`, `UnreadList.recordPush`). Reloading a widget from a notification
+  extension is undocumented and unreliable: the file is right, but iOS may redraw only when it chooses
+  or when the app next opens.
+- Avatars come from the `Avatars/` copies the notification mirror already keeps.
+
+The Swift model (`plugins/widgets/ios/Sources/UnreadList.swift`) is compiled by the plugin, the
+widget and the notification extension. Strings are English and French (`mobile/ios/Widgets/Resources`).
+
+**Apple setup.** The widget has its own App ID, `<application identifier>.widgets`, joined to the
+existing App Group `group.<application identifier>.share`. It needs no push or keychain capability.
+Create the App ID and its development and App Store provisioning profiles in Apple Developer before
+the first signed build: automatic signing would otherwise create the App ID silently, visible to the
+whole team. The demo identity needs `<demo identifier>.widgets` in the demo's own group.
+
+Checks: `npm run test:ios-notifications` (list model and the push hook), `npm run test:ios-extensions`,
+and `npm run test:ios-build-scripts` (the install and TestFlight scripts require the widget and check
+its signature and group). A simulator build compiles the extension; the gallery and a push while
+suspended need a signed build on a device.
+
 ## Receive a shared link, document, or image
 
 Re-run `npm run tauri:ios:init` after adding or updating the sharing plugin.

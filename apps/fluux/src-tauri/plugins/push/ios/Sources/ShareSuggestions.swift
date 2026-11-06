@@ -1,5 +1,8 @@
 import Foundation
 import Intents
+#if os(iOS) && canImport(WidgetKit)
+import WidgetKit
+#endif
 
 /// Serializes donation and deletion so a late system callback cannot resurrect removed suggestions.
 enum ShareSuggestions {
@@ -17,14 +20,24 @@ enum ShareSuggestions {
         work { queue.async { running = false; next() } }
     }
 
+    /// The widget redraws once the names confirm a new account.
+    static func reloadWidgets() {
+        #if os(iOS) && canImport(WidgetKit)
+        if #available(iOS 14.0, *) { WidgetCenter.shared.reloadAllTimelines() }
+        #endif
+    }
+
     static func update(_ input: SharedNames, root: URL,
                        deleteAll: @escaping (@escaping (Error?) -> Void) -> Void = INInteraction.deleteAll,
                        delete: @escaping (String, @escaping (Error?) -> Void) -> Void = { INInteraction.delete(with: $0, completion: $1) },
+                       accountChanged: @escaping () -> Void = ShareSuggestions.reloadWidgets,
                        completion: @escaping (Error?) -> Void) {
         let old = SharedNames.load(root: root)
         // App Group ownership must change before any potentially stalled system callback.
         do { try NotificationMirror.writeNames(input, root: root) }
         catch { completion(error); return }
+        // The home-screen widget shows its list only for the account these names confirm.
+        if old.account != input.account { accountChanged() }
         enqueue { finished in
             let retained = input.preserveIfEmpty && old.account == input.account && input.contacts.isEmpty && input.rooms.isEmpty
                 ? old : input

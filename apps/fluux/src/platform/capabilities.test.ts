@@ -179,7 +179,7 @@ describe('experimental mobile shell', () => {
       'nativeXmppProxy',
       'notificationsManagedByOS',
       'opensLinksInSystemBrowser',
-      ...(os === 'ios' ? ['reducesLargePhotos', 'savesThroughShareSheet'] : []),
+      ...(os === 'ios' ? ['publishesUnreadWidget', 'reducesLargePhotos', 'savesThroughShareSheet'] : []),
       'scrollInputAlwaysObserved',
       ...(os === 'ios' ? ['supportsKeyRotation'] : []),
       'suspendedInBackground',

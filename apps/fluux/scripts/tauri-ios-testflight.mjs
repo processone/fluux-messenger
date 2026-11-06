@@ -79,6 +79,7 @@ try {
   for (const [bundle, target] of [
     [join(archivedApp, 'PlugIns/FluuxNotification.appex'), 'FluuxNotification'],
     [join(archivedApp, 'PlugIns/FluuxShare.appex'), 'FluuxShare'],
+    [join(archivedApp, 'PlugIns/FluuxWidgets.appex'), 'FluuxWidgets'],
     [archivedApp, 'fluux_iOS'],
   ]) {
     const entitlements = join(exportDir, `${target}.entitlements`)
@@ -129,7 +130,7 @@ try {
   if (value('ITSAppUsesNonExemptEncryption') !== 'false') throw new Error('The export compliance declaration is missing.')
   const plugIns = join(app, 'PlugIns')
   const extensions = existsSync(plugIns) ? readdirSync(plugIns).filter((name) => name.endsWith('.appex')) : []
-  for (const name of ['FluuxNotification.appex', 'FluuxShare.appex']) {
+  for (const name of ['FluuxNotification.appex', 'FluuxShare.appex', 'FluuxWidgets.appex']) {
     if (!extensions.includes(name)) throw new Error(`The IPA is missing ${name}.`)
   }
   // App Store Connect accepts a mismatch with warning 90473; refusing here catches a stale generated project.

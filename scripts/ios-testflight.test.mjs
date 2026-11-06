@@ -14,10 +14,10 @@ const stubs = {
   // Records the build number it was given and leaves the archive Tauri builds.
   tauri: `printf '%s' "$*" | sed -n 's/.*"bundleVersion":"\\([0-9]*\\)".*/\\1/p' > "$STATE/version"
 [ -n "$BUILD_FAILS" ] && exit 1
-mkdir -p "$ARCHIVE_APP/PlugIns/FluuxNotification.appex" "$ARCHIVE_APP/PlugIns/FluuxShare.appex"`,
+mkdir -p "$ARCHIVE_APP/PlugIns/FluuxNotification.appex" "$ARCHIVE_APP/PlugIns/FluuxShare.appex" "$ARCHIVE_APP/PlugIns/FluuxWidgets.appex"`,
   // Exports the archive to the IPA the script uploads.
   xcodebuild: 'mkdir -p "$IPA_DIR" && : > "$IPA_DIR/Fluux.ipa"',
-  unzip: 'mkdir -p "$4/Payload/Fluux.app/PlugIns/FluuxNotification.appex" "$4/Payload/Fluux.app/PlugIns/FluuxShare.appex"',
+  unzip: 'mkdir -p "$4/Payload/Fluux.app/PlugIns/FluuxNotification.appex" "$4/Payload/Fluux.app/PlugIns/FluuxShare.appex" "$4/Payload/Fluux.app/PlugIns/FluuxWidgets.appex"',
   // Reads answer by key; the last argument is the Info.plist being read.
   plutil: `[ "$1" = -replace ] && exit 0
 case "$2" in
@@ -45,7 +45,7 @@ function fixture(t, overrides = {}) {
   cpSync(resolve(repo, 'apps/fluux/scripts/ios-project-freshness.mjs'), resolve(app, 'scripts/ios-project-freshness.mjs'))
   mkdirSync(resolve(app, 'src-tauri/gen/apple/fluux.xcodeproj'), { recursive: true })
   writeFileSync(resolve(app, 'src-tauri/gen/apple/fluux.xcodeproj/project.pbxproj'), 'generated fixture')
-  for (const target of ['fluux_iOS', 'FluuxNotification', 'FluuxShare']) {
+  for (const target of ['fluux_iOS', 'FluuxNotification', 'FluuxShare', 'FluuxWidgets']) {
     mkdirSync(resolve(app, 'src-tauri/gen/apple', target))
     writeFileSync(resolve(app, 'src-tauri/gen/apple', target, `${target}.entitlements`),
       '<dict><key>aps-environment</key><string>development</string></dict>')

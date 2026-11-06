@@ -1,0 +1,3 @@
+[default]
+description = "Write the list of conversations with unread messages that the home-screen widget shows, and empty it on sign-out."
+permissions = ["allow-set-unread-list"]

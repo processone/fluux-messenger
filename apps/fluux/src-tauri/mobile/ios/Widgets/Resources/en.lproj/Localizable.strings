@@ -1,0 +1,8 @@
+"widget.name" = "Unread conversations";
+"widget.description" = "The conversations with unread messages.";
+"widget.signin" = "Sign in to Fluux";
+"widget.empty" = "No unread conversations";
+"widget.unread.one" = "unread";
+"widget.unread.other" = "unread";
+"widget.count.one %lld" = "%lld unread";
+"widget.count.other %lld" = "%lld unread";

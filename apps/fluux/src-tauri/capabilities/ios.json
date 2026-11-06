@@ -37,6 +37,7 @@
     "share-sheet:default",
     "background-task:default",
     "ios-feedback:default",
+    "widgets:default",
     "deep-link:default",
     "notification:allow-is-permission-granted",
     "notification:allow-request-permission",

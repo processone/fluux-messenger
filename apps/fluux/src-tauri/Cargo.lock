@@ -2053,6 +2053,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
+ "tauri-plugin-widgets",
  "tauri-plugin-window-state",
  "tauri-winrt-notification",
  "tokio",
@@ -6959,6 +6960,15 @@ dependencies = [
  "url",
  "windows-sys 0.61.2",
  "zip",
+]
+
+[[package]]
+name = "tauri-plugin-widgets"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

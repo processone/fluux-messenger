@@ -121,6 +121,8 @@ export interface PlatformCapabilities {
    * XMPP push app server (XEP-0357).
    */
   readonly usesNativePush: boolean
+  /** The app writes the unread list a home-screen widget shows. */
+  readonly publishesUnreadWidget: boolean
   /** Accepted gestures can use UIKit feedback generators. */
   readonly nativeHaptics: boolean
 
@@ -273,6 +275,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     usesWebPush: web,
     nativeHaptics: ios,
     usesNativePush: shell === 'mobile' && os === 'ios',
+    publishesUnreadWidget: shell === 'mobile' && os === 'ios',
 
     // Window and process. macOS overlays its window controls on the content,
     // Windows has no native frame at all, Linux keeps a native title bar.

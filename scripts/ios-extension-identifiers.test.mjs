@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -9,6 +9,7 @@ const project = (app, extensions) => [
   `PRODUCT_BUNDLE_IDENTIFIER = ${app};`,
   `PRODUCT_BUNDLE_IDENTIFIER = ${extensions}.share;`,
   `PRODUCT_BUNDLE_IDENTIFIER = ${extensions}.notification;`,
+  `PRODUCT_BUNDLE_IDENTIFIER = ${extensions}.widgets;`,
 ].join('\n')
 
 function fixture(t, contents) {
@@ -51,4 +52,28 @@ test('leaves the project alone for its own identifier', (t) => {
   withExtensionsUnder(path, 'net.processone.fluux', 'net.processone.fluux', () => {
     assert.equal(readFileSync(path, 'utf8'), project('net.processone.fluux', 'net.processone.fluux'))
   })
+})
+
+// FLM-418 review R3: a demo widget kept the production shared folder and link scheme.
+test('builds the widget with the build identifier\'s shared group and link scheme, then restores them', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'fluux-ios-widget-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  mkdirSync(join(dir, 'app.xcodeproj'))
+  mkdirSync(join(dir, 'FluuxWidgets'))
+  const pbx = join(dir, 'app.xcodeproj', 'project.pbxproj')
+  const plist = join(dir, 'FluuxWidgets', 'Info.plist')
+  const entitlements = join(dir, 'FluuxWidgets', 'FluuxWidgets.entitlements')
+  const info = (id) => `<dict>\n\t<key>FluuxShareGroup</key>\n\t<string>group.${id}.share</string>\n\t<key>FluuxAppScheme</key>\n\t<string>${id}</string>\n</dict>`
+  const ent = (id) => `<array><string>group.${id}.share</string></array>`
+  const prod = 'net.processone.fluux'
+  const demo = 'net.processone.fluux.demo'
+  writeFileSync(pbx, project(prod, prod))
+  writeFileSync(plist, info(prod))
+  writeFileSync(entitlements, ent(prod))
+  withExtensionsUnder(pbx, prod, demo, () => {
+    assert.equal(readFileSync(plist, 'utf8'), info(demo))
+    assert.equal(readFileSync(entitlements, 'utf8'), ent(demo))
+  })
+  assert.equal(readFileSync(plist, 'utf8'), info(prod))
+  assert.equal(readFileSync(entitlements, 'utf8'), ent(prod))
 })

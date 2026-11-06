@@ -53,6 +53,7 @@ tauri-plugin-share-inbox = { path = "plugins/share-inbox" }
 tauri-plugin-push = { path = "plugins/push" }
 tauri-plugin-share-sheet = { path = "plugins/share-sheet" }
 tauri-plugin-ios-feedback = { path = "plugins/ios-feedback" }
+tauri-plugin-widgets = { path = "plugins/widgets" }
 tauri-plugin-background-task = { path = "plugins/background-task" }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]

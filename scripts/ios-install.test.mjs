@@ -18,7 +18,7 @@ function fixture(t, { bundleId = 'net.processone.fluux', buildFails = false, sin
   const applications = resolve(app, 'src-tauri/gen/apple/build/fluux_iOS.xcarchive/Products/Applications')
   mkdirSync(resolve(app, 'scripts'), { recursive: true })
   mkdirSync(resolve(applications, 'Fluux.app'), { recursive: true })
-  for (const name of ['FluuxNotification', 'FluuxShare']) {
+  for (const name of ['FluuxNotification', 'FluuxShare', 'FluuxWidgets']) {
     mkdirSync(resolve(applications, `Fluux.app/PlugIns/${name}.appex`), { recursive: true })
   }
   mkdirSync(bin, { recursive: true })
@@ -43,7 +43,7 @@ fs.appendFileSync(process.env.COMMAND_LOG, command + ' ' + args.join(' ') + '\n'
 const options = JSON.parse(process.env.SIGNING)
 const bundle = args.at(-1)
 const name = bundle?.includes('FluuxNotification.appex') ? 'notification'
-  : bundle?.includes('FluuxShare.appex') ? 'share' : 'app'
+  : bundle?.includes('FluuxShare.appex') ? 'share' : bundle?.includes('FluuxWidgets.appex') ? 'widgets' : 'app'
 const affected = !options.target || options.target === name
 const id = process.env.BUNDLE_ID + (name === 'app' ? '' : '.' + name)
 const groups = ['group.net.processone.fluux.share']

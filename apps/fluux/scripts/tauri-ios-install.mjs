@@ -91,7 +91,7 @@ if (identifier !== 'net.processone.fluux') {
 }
 const plugIns = join(app, 'PlugIns')
 const extensions = readdirSync(plugIns).filter(name => name.endsWith('.appex'))
-for (const name of ['FluuxNotification.appex', 'FluuxShare.appex']) {
+for (const name of ['FluuxNotification.appex', 'FluuxShare.appex', 'FluuxWidgets.appex']) {
   if (!extensions.includes(name)) throw new Error(`The archive is missing ${name}.`)
 }
 const team = process.env.APPLE_DEVELOPMENT_TEAM
