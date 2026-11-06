@@ -43,8 +43,9 @@ from the local deadline and iOS extension expiry.
   recovery after a temporary writer lock, bounded failure under a sustained lock,
   and four independent processes retaining all 200 entries before logout.
 - `npm run test:ios-notifications`: existing delivery/presentation tests plus
-  exported preview/widget decisions, app-side read/clear publication, and negative
-  controls for body/identity leakage and wrong-account diagnostic handoffs.
+  exported preview/widget decisions, read-before-publication/clear timing, and negative
+  controls for retained read targets, body/identity leakage, wrong-account handoffs,
+  and a background diagnostic queue that must not block widget publication.
 - `FLUUX_DIAGNOSTIC_RESULTS=/absolute/path/outside/project npm run test:ios-diagnostic`:
   creates a disposable unsigned simulator, presents the production native share
   helper, cancels without sending, and verifies temporary-copy deletion. This
