@@ -42,6 +42,14 @@ test('unsigned desktop extension and real shared-file adapter build and render w
     assert.deepEqual(architectures, ['arm64', 'x86_64'])
     const library = join(scratch, 'bundle/libFluuxWidgets.dylib')
     assert.deepEqual(execFileSync('xcrun', ['lipo', '-archs', library], { encoding: 'utf8' }).trim().split(/\s+/).sort(), architectures)
+    for (const architecture of architectures) {
+      const symbols = execFileSync('nm', ['-gU', '-arch', architecture, library], { encoding: 'utf8' })
+      assert.match(symbols, /\bT _fluux_widgets_apply$/m, 'The C loader entry point must be globally defined')
+      const detail = execFileSync('nm', ['-m', '-arch', architecture, library], { encoding: 'utf8' })
+        .split('\n').find(line => line.endsWith(' _fluux_widgets_apply'))
+      assert.ok(detail, 'The optional writer must export its C entry point')
+      assert.doesNotMatch(detail, /private external|non-external/)
+    }
     const app = join(scratch, 'WidgetChecks.app/Contents')
     mkdirSync(join(app, 'MacOS'), { recursive: true })
     mkdirSync(join(app, 'Frameworks'), { recursive: true })

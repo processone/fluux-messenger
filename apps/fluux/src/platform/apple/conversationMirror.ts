@@ -1,6 +1,7 @@
 import { connectionStore, roomStore, rosterStore, chatStore } from '@fluux/sdk'
 import { platform } from '@/platform'
 import { shortcutConversations } from '@/utils/shortcutConversation'
+import { observeWidgetSupport, widgetSessionSupported, type WidgetWriteResult } from './widgetSupport'
 
 /** Display names by bare JID, which title the pushes their sender sends. */
 export interface PushSenderNames {
@@ -25,7 +26,7 @@ export function pushSenderNames(
 
 function supportsMirror(): boolean {
   return (platform().usesNativePush && platform().os === 'ios') ||
-    (platform().publishesUnreadWidget && platform().os === 'macos')
+    (platform().publishesUnreadWidget && platform().os === 'macos' && widgetSessionSupported())
 }
 
 function mirrorCommand(command: string): string {
@@ -51,11 +52,16 @@ export async function clearAppleConversationMirror(): Promise<void> {
   stopActive?.()
   // Native input writes are serialized before suggestion deletion; a stalled
   // system callback must not keep the signed-in account visible to the extension.
-  const wipe = (async () => {
+  const pending = writeQueue
+  const revoke = async () => {
     const { invoke } = await import('@tauri-apps/api/core')
-    await invoke(mirrorCommand('set_sender_names'), { names: { account: null, contacts: {}, rooms: {}, avatars: {} } })
-  })()
-  writeQueue = wipe.catch(() => {})
+    const result = await invoke<WidgetWriteResult | undefined>(mirrorCommand('set_sender_names'), { names: { account: null, contacts: {}, rooms: {}, avatars: {} } })
+    if (platform().os === 'macos') observeWidgetSupport(result)
+  }
+  const wipe = revoke()
+  // Preserve prompt revocation even when a system acknowledgement stalls, then wipe again
+  // after every in-flight write and the first wipe. A new session queues behind that barrier.
+  writeQueue = Promise.all([pending, wipe.catch(() => {})]).then(revoke).catch(() => {})
   await wipe
 }
 
@@ -74,7 +80,9 @@ export function startAppleConversationMirror(): () => void {
   const invoke = async (command: string, args: Record<string, unknown>, isCurrent?: () => boolean) => {
     const { invoke: nativeInvoke } = await import('@tauri-apps/api/core')
     if (isCurrent && !isCurrent()) return undefined
-    return nativeInvoke<{ written: boolean } | undefined>(command, args)
+    const result = await nativeInvoke<WidgetWriteResult | undefined>(command, args)
+    if (platform().os === 'macos' && !observeWidgetSupport(result)) stopActive?.()
+    return result
   }
   const enqueue = (work: () => Promise<void>) => {
     writeQueue = writeQueue.then(work).catch((err) => console.warn('[NativePush] Notification mirror not shared:', err))
@@ -82,6 +90,7 @@ export function startAppleConversationMirror(): () => void {
 
   const write = async () => {
     if (stopped || !account) return
+    if (!supportsMirror()) { stop(); return }
     const version = generation
     const owner = account
     const roster = rosterStore.getState()

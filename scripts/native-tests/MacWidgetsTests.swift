@@ -47,12 +47,23 @@ struct MacWidgetsTests {
         ]
         var list = UnreadList(account: "me@example.com", total: rows.count + 1, rows: rows, updated: now.timeIntervalSince1970 * 1000)
         check(try apply("names", names), "names written")
-        check(reloads == 0, "full names mirror does not request a widget refresh")
+        check(reloads == 1, "first account publication refreshes a list waiting for its owner")
+        check(try apply("names", names), "same-account names written")
+        check(reloads == 1, "same-account names mirror does not request a widget refresh")
         check(try apply("list", list), "unread list written")
-        check(reloads == 1, "changed unread list requests a refresh")
+        check(reloads == 2, "changed unread list requests a refresh")
         check(try !apply("list", list), "identical unread list is not rewritten")
-        check(reloads == 1, "identical unread list does not request another refresh")
-        check(UnreadList.shown(root: root, account: names.account).list == list, "widget reads the desktop writer's shared list")
+        check(reloads == 2, "identical unread list does not request another refresh")
+        var timestampOnly = list
+        timestampOnly.updated += 1000
+        check(try !apply("list", timestampOnly), "ordinary identical-list comparison ignores the timestamp")
+        check(UnreadList.load(root: root)?.updated == list.updated, "ordinary timestamp changes do not renew the file")
+        check(reloads == 2, "timestamp-only ordinary publication does not request a refresh")
+        var heartbeat = list
+        heartbeat.updated += 15 * 60 * 1000
+        check(try apply("heartbeat", heartbeat), "explicit fifteen-minute heartbeat renews the saved list")
+        check(reloads == 3, "explicit heartbeat requests its refresh")
+        check(UnreadList.shown(root: root, account: names.account).list == heartbeat, "widget reads the desktop writer's shared list")
         let json = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))) as! [String: Any]
         let savedRow = (json["rows"] as! [[String: Any]])[0]
         check(Set(savedRow.keys) == Set(["id", "kind", "name", "unread", "mentions", "last"]), "rows contain only accepted metadata, no message text")
@@ -63,7 +74,7 @@ struct MacWidgetsTests {
         check(try !avatar("other@example.com", hash), "another account cannot write an avatar")
         check(try !avatar("me@example.com", "../escape"), "avatar hashes cannot escape storage")
         check(try avatar("me@example.com", hash), "real image is reduced and saved")
-        check(reloads == 1, "avatar mirror does not request a widget refresh")
+        check(reloads == 3, "avatar mirror does not request a widget refresh")
         let imageURL = NotificationMirror.imageURL(for: rows[0].id, names: names, root: root)
         check(imageURL.flatMap { NSImage(contentsOf: $0) } != nil, "macOS decodes the widget avatar")
         let link = ShortcutConversation(id: rows[0].id, name: rows[0].name, kind: rows[0].kind, account: list.account).url(scheme: "net.processone.fluux")!
@@ -110,6 +121,7 @@ struct MacWidgetsTests {
         }
         names.account = "other@example.com"
         check(try apply("names", names), "account replacement writes new ownership")
+        check(reloads == 4, "account replacement refreshes the widget without its retry delay")
         check(NotificationMirror.imageURL(for: rows[0].id, names: names, root: root) == nil, "account replacement removes old avatar bytes")
         list.rows = []
         list.total = 0

@@ -22,9 +22,11 @@ The small widget and the background of other sizes open the conversation list.
 - The SDK selector owns unread semantics; `utils/unreadWidget.ts` publishes the
   list from the app's stores. Desktop publication continues while the window is
   closed. It renews the timestamp once every fifteen minutes, including when nothing changed.
-- `platform/apple/conversationMirror.ts` shares cached avatar bytes and names;
-  iOS's existing notification entry points forward to this shared implementation.
-  macOS sends these operations to the widgets plugin, not the push plugin.
+- `platform/apple/conversationMirror.ts` shares cached avatar bytes and names.
+  The session hook and sign-out lifecycle import this Apple owner directly on both
+  platforms. macOS sends these operations to the widgets plugin, not the push plugin.
+  Sign-out revokes promptly and queues a final wipe after pending writes; the next
+  account's publication waits behind that wipe.
 - `plugins/widgets/src/desktop.rs` exposes metadata-only commands. The Swift
   adapter in `plugins/widgets/macos/WidgetsBridge.swift` resolves the signed host's
   `FluuxShareGroup` and writes through the shared list and avatar model. IPC never
@@ -49,10 +51,12 @@ team and version. `tauri-macos-widgets.mjs` uses those same settings to compile
 macOS 14 as the extension minimum. `tauri.macos.conf.json` runs the Share Extension
 builder and then the widget builder before Tauri bundles and signs the host.
 Both extensions are embedded in `Contents/PlugIns`; Tauri does not re-sign them.
-A widget build/sign failure stops bundling.
+The optional `libFluuxWidgets.dylib` is embedded in `Contents/Frameworks` and signed
+before the extension and host. A library or widget build/sign failure stops bundling.
 
-The widget uses the same `<TEAM>.<host identifier>.share` App Group as FluuxShare.
-Its entitlements contain only sandbox and App Groups. It needs no new App ID or
+The widget uses the same `<TEAM>.<host identifier>.share` App Group as FluuxShare;
+the optional writer resolves that container using the host's entitlements.
+The widget's entitlements contain only sandbox and App Groups. It needs no new App ID or
 provisioning profile for Developer ID distribution. Development identity builds
 use their own group and conversation-link scheme. No provisioning record is
 created by the widget builder.
@@ -63,9 +67,15 @@ The widget builder compiles the shared Swift writer as `libFluuxWidgets.dylib`
 The loader checks the OS version before opening that exact bundled path; older
 Macs acquire no Swift runtime dependency. The webview also gates publication and
 avatar mirroring on the native OS version, so pre-widget Macs do no widget work.
-Only changed unread-list writes and the fifteen-minute timestamp heartbeat request
-a widget refresh; names/avatar mirror writes do not. The mirror still contains all
+Changed unread-list content and the explicit fifteen-minute timestamp heartbeat
+request a widget refresh. Ordinary duplicate lists ignore the timestamp and do not
+rewrite the file. A names write also refreshes when it changes the active account,
+so sign-in and account replacement do not wait for the widget's retry timeline.
+Other names changes and avatar writes do not request a refresh. The mirror still contains all
 contacts, rooms and conversation suggestions on supported Macs, as on iOS.
+If the optional library is absent in an unbundled development process, the native
+plugin logs once and reports unsupported for that process. Both webview producers
+then stop for the session instead of rebuilding and retrying the full mirror.
 No keychain operation is needed for unsigned compilation.
 
 ## Unsigned checks
@@ -112,8 +122,9 @@ isolated test app/user and signing runner to check:
    becomes stale. The system may defer reloads.
 5. Replacing the app with the next signed build retains a working widget rather
    than a grey placeholder.
-6. Both extensions pass strict signature verification before host verification,
-   and the packaged app passes notarization in the release dry run.
+6. Both extensions and `Contents/Frameworks/libFluuxWidgets.dylib` pass strict
+   signature verification before host verification, and the packaged app passes
+   notarization in the release dry run.
 
 A `swiftc`-built extension has not yet been qualified in the system gallery. If
 that registration fails because the bundle needs an Xcode-built target, use

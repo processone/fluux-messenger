@@ -55,7 +55,7 @@ export function buildWidgets(settings, { output = join(root, 'macos/.build'), ar
   const libraries = architectures.map(architecture => {
     const binary = join(output, `libFluuxWidgets-${architecture}.dylib`)
     run('/usr/bin/xcrun', ['swiftc', '-swift-version', '5', '-parse-as-library', '-emit-library',
-      '-target', `${architecture}-apple-macos14.0`, '-O', '-install-name', '@rpath/libFluuxWidgets.dylib',
+      '-target', `${architecture}-apple-macos14.0`, '-O', '-Xlinker', '-install_name', '-Xlinker', '@rpath/libFluuxWidgets.dylib',
       join(root, 'plugins/widgets/macos/WidgetsBridge.swift'), ...sources.slice(2), '-o', binary])
     return binary
   })
