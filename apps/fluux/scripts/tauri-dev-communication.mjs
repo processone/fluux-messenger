@@ -3,16 +3,25 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { shareSettings } from './tauri-macos-share.mjs'
-import { validateCommunicationConfig } from './macos-communication-profile.mjs'
+import { decodeProfile, devCommunicationIdentifier, soleDevSigner, validateCommunicationConfig, validateProfile } from './macos-communication-profile.mjs'
 
 const root = fileURLToPath(new URL('../src-tauri/', import.meta.url))
 const readConfig = name => JSON.parse(readFileSync(resolve(root, name), 'utf8'))
 
-// Accepted Dev plan: all bundled macOS Dev helpers share this fail-closed overlay.
+// The iOS scripts name the same Apple team APPLE_DEVELOPMENT_TEAM.
+const devTeam = env => env.APPLE_TEAM_ID || env.APPLE_DEVELOPMENT_TEAM
+
+// All bundled macOS Dev helpers share this fail-closed overlay.
 // Public-profile inspection only. The caller owns any later signing operation.
-export function devCommunicationConfig(env = process.env) {
-  if (!env.FLUUX_DEV_COMMUNICATION_PROFILE) throw new Error('Set FLUUX_DEV_COMMUNICATION_PROFILE to the separate Dev Developer ID profile')
-  if (!env.APPLE_SIGNING_IDENTITY || !env.APPLE_TEAM_ID) throw new Error('Set explicit APPLE_SIGNING_IDENTITY and APPLE_TEAM_ID for Dev communication')
+export function devCommunicationConfig(sourceEnv = process.env) {
+  if (!sourceEnv.FLUUX_DEV_COMMUNICATION_PROFILE) throw new Error('Set FLUUX_DEV_COMMUNICATION_PROFILE to the separate Dev Developer ID profile')
+  const team = devTeam(sourceEnv)
+  if (!team) throw new Error('Set APPLE_TEAM_ID or APPLE_DEVELOPMENT_TEAM for Dev communication')
+  const env = { ...sourceEnv, APPLE_TEAM_ID: team }
+  if (!env.APPLE_SIGNING_IDENTITY) {
+    const profile = validateProfile(decodeProfile(resolve(env.FLUUX_DEV_COMMUNICATION_PROFILE)), { team, identifier: devCommunicationIdentifier })
+    env.APPLE_SIGNING_IDENTITY = soleDevSigner(profile, team)
+  }
   const overlay = readConfig('tauri.dev-communication-macos.conf.json')
   const config = {
     ...readConfig('tauri.dev.conf.json'),

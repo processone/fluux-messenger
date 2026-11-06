@@ -37,21 +37,33 @@ export function validateProfile(profile, { team = communicationIdentity.team, no
 
 export const devCommunicationIdentifier = 'net.processone.fluux.dev'
 
+function currentDevSigners(profile, team, now) {
+  return (profile.DeveloperCertificates || []).map(encoded => new X509Certificate(Buffer.from(encoded, 'base64'))).filter(certificate => {
+    const subject = certificate.toLegacyObject().subject
+    const details = execFileSync('/usr/bin/openssl', ['x509', '-inform', 'DER', '-noout', '-text'], { input: certificate.raw }).toString()
+    return subject.CN?.startsWith('Developer ID Application: ') && subject.OU === team
+      && details.includes('1.2.840.113635.100.6.1.13:')
+      && now >= new Date(certificate.validFrom) && now < new Date(certificate.validTo)
+  })
+}
+
 // Match only public profile certificates. Never search a keychain or infer approval from a name.
 export function validateDevSigner(profile, signingIdentity, team, now = new Date()) {
   if (!signingIdentity || signingIdentity === '-') throw new Error('Dev communication requires an explicit Developer ID signing identity')
-  for (const encoded of profile.DeveloperCertificates || []) {
-    const certificate = new X509Certificate(Buffer.from(encoded, 'base64'))
-    const subject = certificate.toLegacyObject().subject
-    const fingerprint = certificate.fingerprint.replaceAll(':', '')
-    if (signingIdentity !== subject.CN && signingIdentity.toUpperCase() !== fingerprint) continue
-    const details = execFileSync('/usr/bin/openssl', ['x509', '-inform', 'DER', '-noout', '-text'], { input: certificate.raw }).toString()
-    if (!subject.CN?.startsWith('Developer ID Application: ') || subject.OU !== team
-        || !details.includes('1.2.840.113635.100.6.1.13:')
-        || now < new Date(certificate.validFrom) || now >= new Date(certificate.validTo)) continue
-    return certificate
-  }
-  throw new Error('Dev communication requires a valid Developer ID Application certificate listed in the profile')
+  const certificate = currentDevSigners(profile, team, now).find(candidate =>
+    signingIdentity === candidate.toLegacyObject().subject.CN || signingIdentity.toUpperCase() === candidate.fingerprint.replaceAll(':', ''))
+  if (!certificate) throw new Error('Dev communication requires a valid Developer ID Application certificate listed in the profile')
+  return certificate
+}
+
+// The profile is Apple's list of approved signers: when it names exactly one current
+// Developer ID certificate, that certificate is the only valid choice.
+export function soleDevSigner(profile, team, now = new Date()) {
+  const signers = currentDevSigners(profile, team, now)
+  if (signers.length === 1) return signers[0].fingerprint.replaceAll(':', '')
+  throw new Error(signers.length
+    ? 'The Dev profile lists several Developer ID certificates: set APPLE_SIGNING_IDENTITY to choose one'
+    : 'Dev communication requires a valid Developer ID Application certificate listed in the profile')
 }
 
 export function validateCommunicationConfig(config, settings, root) {

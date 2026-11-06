@@ -32,6 +32,8 @@ sed_inplace() {
 
 # Fail before mutating configuration or invoking any native/signing command.
 if [[ "$OSTYPE" == "darwin"* ]]; then
+    # The iOS scripts name the same Apple team APPLE_DEVELOPMENT_TEAM.
+    export APPLE_TEAM_ID="${APPLE_TEAM_ID:-$APPLE_DEVELOPMENT_TEAM}"
     DEV_COMMUNICATION_CONFIG="$(node "$SCRIPT_DIR/tauri-dev-communication.mjs")"
     export APPLE_SIGNING_IDENTITY="$(printf '%s' "$DEV_COMMUNICATION_CONFIG" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).bundle.macOS.signingIdentity))')"
 fi

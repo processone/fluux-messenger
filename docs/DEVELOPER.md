@@ -291,15 +291,24 @@ Before an authorized owner builds, set:
 
 ```sh
 export FLUUX_DEV_COMMUNICATION_PROFILE="/absolute/path/Fluux.dev.provisionprofile"
+export APPLE_DEVELOPMENT_TEAM="8L55BDM864"   # same variable as the iOS scripts
+```
+
+`APPLE_TEAM_ID` takes precedence over `APPLE_DEVELOPMENT_TEAM` when both are set.
+When `APPLE_SIGNING_IDENTITY` is unset, the build uses the only current Developer
+ID Application certificate for the team listed in the profile, pinned by SHA-1
+fingerprint; its private key must be in your keychain. If the profile lists
+several, choose one explicitly:
+
+```sh
 export APPLE_SIGNING_IDENTITY="Developer ID Application: Your organization (8L55BDM864)"
-export APPLE_TEAM_ID="8L55BDM864"
 ```
 
 The identity may instead be the exact SHA-1 fingerprint of a certificate listed
 in the profile. The public certificate must be a current Developer ID Application
 certificate for the team, not merely an identity with a plausible name. The build
 stops before compilation/signing if prerequisites are missing or mismatched. It
-never searches for a `Fluux Dev` certificate or falls back to ad-hoc/self-signing.
+never searches the keychain for a certificate or falls back to ad-hoc/self-signing.
 
 The local profile is not committed. Prefer storing it outside the project;
 `src-tauri/macos/*.dev.provisionprofile` is also ignored. The helper maps it into

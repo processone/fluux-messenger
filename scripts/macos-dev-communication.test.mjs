@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { test } from 'node:test'
 import { X509Certificate } from 'node:crypto'
-import { decodeProfile, validateProfile, validateDevSigner, devCommunicationIdentifier } from '../apps/fluux/scripts/macos-communication-profile.mjs'
+import { decodeProfile, validateProfile, validateDevSigner, soleDevSigner, devCommunicationIdentifier } from '../apps/fluux/scripts/macos-communication-profile.mjs'
 import { devCommunicationConfig } from '../apps/fluux/scripts/tauri-dev-communication.mjs'
 
 // Intent: accepted Dev plan, Developer ID for every bundled macOS Dev build.
@@ -16,7 +16,9 @@ const envFor = path => ({ FLUUX_DEV_COMMUNICATION_PROFILE: path, APPLE_TEAM_ID: 
 
 macTest('Dev preflight rejects missing prerequisites and the real production-only profile', () => {
   assert.throws(() => devCommunicationConfig({}), /FLUUX_DEV_COMMUNICATION_PROFILE/)
-  assert.throws(() => devCommunicationConfig({ FLUUX_DEV_COMMUNICATION_PROFILE: productionPath }), /explicit/)
+  assert.throws(() => devCommunicationConfig({ FLUUX_DEV_COMMUNICATION_PROFILE: productionPath }), /APPLE_DEVELOPMENT_TEAM/)
+  // The iOS team variable is accepted, and an omitted signer is looked up in the (wrong) profile.
+  assert.throws(() => devCommunicationConfig({ FLUUX_DEV_COMMUNICATION_PROFILE: productionPath, APPLE_DEVELOPMENT_TEAM: '8L55BDM864' }), /application/)
   const production = decodeProfile(productionPath)
   validateProfile(production)
   assert.throws(() => validateProfile(production, { identifier: devCommunicationIdentifier }), /application/)
@@ -35,6 +37,18 @@ macTest('explicit signer must match a current Developer ID certificate in the re
   }
   assert.throws(() => validateDevSigner(profile, certificate.fingerprint.replaceAll(':', ''), 'OTHERTEAM1'), /Developer ID/)
   assert.throws(() => validateDevSigner(profile, certificate.fingerprint.replaceAll(':', ''), profile.TeamIdentifier[0], new Date(certificate.validTo)), /Developer ID/)
+})
+
+macTest('an omitted signer resolves only to the sole current Developer ID certificate in the profile', () => {
+  const profile = decodeProfile(productionPath)
+  const certificate = new X509Certificate(Buffer.from(profile.DeveloperCertificates[0], 'base64'))
+  const fingerprint = certificate.fingerprint.replaceAll(':', '')
+  const team = profile.TeamIdentifier[0]
+  assert.equal(soleDevSigner({ DeveloperCertificates: [profile.DeveloperCertificates[0]] }, team), fingerprint)
+  assert.throws(() => soleDevSigner({ DeveloperCertificates: [profile.DeveloperCertificates[0], profile.DeveloperCertificates[0]] }, team), /APPLE_SIGNING_IDENTITY/)
+  assert.throws(() => soleDevSigner({ DeveloperCertificates: [profile.DeveloperCertificates[0]] }, 'OTHERTEAM1'), /Developer ID/)
+  assert.throws(() => soleDevSigner({ DeveloperCertificates: [profile.DeveloperCertificates[0]] }, team, new Date(certificate.validTo)), /Developer ID/)
+  assert.throws(() => soleDevSigner({}, team), /Developer ID/)
 })
 
 macTest('macOS bundled helper stops on missing profile before building or probing identities', () => {
