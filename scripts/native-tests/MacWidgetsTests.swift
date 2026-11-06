@@ -69,7 +69,7 @@ struct MacWidgetsTests {
         let link = ShortcutConversation(id: rows[0].id, name: rows[0].name, kind: rows[0].kind, account: list.account).url(scheme: "net.processone.fluux")!
         let components = URLComponents(url: link, resolvingAgainstBaseURL: false)!
         check(components.host == "shortcut" && components.queryItems?.first(where: { $0.name == "account" })?.value == list.account, "row link carries its account and destination")
-        // The captain selected fifteen minutes for both publication heartbeat and saved-list age.
+        // The accepted policy uses fifteen minutes for both publication heartbeat and saved-list age.
         let expectedStale = Date(timeIntervalSince1970: list.updated / 1000).addingTimeInterval(15 * 60)
         check(list.staleDate == expectedStale, "saved-list deadline is exactly fifteen minutes after updated")
 

@@ -42,7 +42,7 @@ describe('native macOS unread widget publication', () => {
     await vi.advanceTimersByTimeAsync(500)
     const first = invoke.mock.lastCall?.[1].list
     expect(first).toMatchObject({ account: 'me@example.com', total: 2, rows: [{ id: 'alice@example.com', unread: 2 }] })
-    // The captain selected a fifteen-minute heartbeat, not per-minute reloads.
+    // Desktop refresh policy uses a fifteen-minute heartbeat, not per-minute reloads.
     await vi.advanceTimersByTimeAsync(DESKTOP_WIDGET_HEARTBEAT_MS - 1000)
     expect(invoke).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(1000)

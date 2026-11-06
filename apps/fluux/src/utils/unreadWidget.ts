@@ -120,7 +120,7 @@ export function resetSharedUnreadWidgetList(): void {
 }
 
 const PUBLISH_DELAY_MS = 500
-// The captain selected a fifteen-minute heartbeat and matching saved-list age window.
+// Desktop policy uses a fifteen-minute heartbeat and matching saved-list age window.
 export const DESKTOP_WIDGET_HEARTBEAT_MS = 15 * 60_000
 
 /**
