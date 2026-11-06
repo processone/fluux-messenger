@@ -30,9 +30,15 @@ sed_inplace() {
     sed "$pattern" "$file" > "$tmpfile" && mv "$tmpfile" "$file"
 }
 
-# Disable updater artifacts if no signing key is available (local dev builds)
+# Fail before mutating configuration or invoking any native/signing command.
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    DEV_COMMUNICATION_CONFIG="$(node "$SCRIPT_DIR/tauri-dev-communication.mjs")"
+    export APPLE_SIGNING_IDENTITY="$(printf '%s' "$DEV_COMMUNICATION_CONFIG" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).bundle.macOS.signingIdentity))')"
+fi
+
+# Disable updater artifacts if no signing key is available (non-macOS local builds)
 UPDATER_DISABLED=false
-if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+if [[ "$OSTYPE" != "darwin"* ]] && [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
     echo "No signing key found, disabling updater artifacts for local build"
     sed_inplace 's/"createUpdaterArtifacts": true/"createUpdaterArtifacts": false/' "$TAURI_CONF"
     UPDATER_DISABLED=true
@@ -78,26 +84,11 @@ EXTRA_ARGS+=(--config "$DEV_CONF")
 # from a release build. See apps/fluux/src/anomaly/gate.ts.
 export FLUUX_ANOMALY=1
 
-# Sign local builds with a stable identity when one is available, so the macOS
-# notification grant survives Rust rebuilds. Ad-hoc signing (the default when no
-# identity is set) re-pins the grant to the binary's CDHash, so every Rust
-# rebuild resets the permission. Create the identity once via Keychain Access ->
-# Certificate Assistant -> Create a Certificate (name "Fluux Dev", Self-Signed
-# Root, Code Signing); it need NOT be trusted — codesign signs with an untrusted
-# self-signed cert fine (trust only affects Gatekeeper). Export
-# APPLE_SIGNING_IDENTITY yourself to override. CI is unaffected — it builds via
-# tauri-action, not this script.
-DEV_SIGNING_IDENTITY="Fluux Dev"
-if [[ "$OSTYPE" == "darwin"* ]] && [ -z "$APPLE_SIGNING_IDENTITY" ]; then
-    # No -v: a self-signed cert is untrusted (CSSMERR_TP_NOT_TRUSTED) and -v would
-    # filter it out, but it signs fine. Match the quoted name for precision.
-    if security find-identity -p codesigning 2>/dev/null | grep -qF "\"$DEV_SIGNING_IDENTITY\""; then
-        export APPLE_SIGNING_IDENTITY="$DEV_SIGNING_IDENTITY"
-        echo "Signing local build with '$DEV_SIGNING_IDENTITY' (durable notification grant)."
-    else
-        echo "No '$DEV_SIGNING_IDENTITY' code-signing identity found — building ad-hoc."
-        echo "  (Notification permission resets on each Rust rebuild; see this script's header to fix.)"
-    fi
+# Every bundled macOS Dev build requires its own authorized profile and explicit
+# Developer ID signer. Inspect only the public profile here; never probe identities
+# or fall back to the self-signed/ad-hoc ordinary-notification path.
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    EXTRA_ARGS+=(--config "$DEV_COMMUNICATION_CONFIG")
 fi
 
 # macOS multi-arch builds

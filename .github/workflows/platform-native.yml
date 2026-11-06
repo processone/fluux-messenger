@@ -36,7 +36,7 @@ jobs:
       - name: Probe effective release communication configuration without signing
         run: npm run check:tls-build
       - name: Guard production and Dev communication entitlements
-        run: node --test scripts/macos-share.test.mjs scripts/macos-release.test.mjs
+        run: node --test scripts/macos-share.test.mjs scripts/macos-release.test.mjs scripts/macos-dev-communication.test.mjs
       - name: Read the public reference release signature without signing
         run: |
           REFERENCE_DIR=$(mktemp -d)

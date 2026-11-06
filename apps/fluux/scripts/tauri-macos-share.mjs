@@ -21,7 +21,7 @@ export function shareSettings(config, env = process.env) {
     identifier, name: config.productName, version: config.version,
     bundleVersion: config.bundle?.macOS?.bundleVersion || config.version,
     signingIdentity, team, group: `${team || 'group'}.${identifier}.share`,
-    communication: identifier === 'net.processone.fluux'
+    communication: ['net.processone.fluux', 'net.processone.fluux.dev'].includes(identifier)
       && (config.build?.features || []).includes('macos-communication'),
   }
 }
@@ -58,7 +58,7 @@ const sign = (step, command, args) => {
 const readPlist = path => JSON.parse(run('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path]).toString())
 const writePlist = (path, value) => run('/usr/bin/plutil', ['-convert', 'xml1', '-o', path, '--', '-'], { input: JSON.stringify(value) })
 
-// #1386: only production-identity builds with the explicit feature declare communication support.
+// #1386 and accepted Dev capability: exact production/Dev identities require the explicit feature.
 export function hostMetadata(settings, info, entitlements) {
   return {
     info: { ...info, FluuxShareGroup: settings.group,

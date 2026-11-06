@@ -102,3 +102,6 @@ apps/fluux/src-tauri/mobile/ios/AppResources/
 
 # macOS extension build and signing metadata
 apps/fluux/src-tauri/macos/.build/
+
+# Machine-local Dev communication authorization; production profile is committed.
+apps/fluux/src-tauri/macos/*.dev.provisionprofile

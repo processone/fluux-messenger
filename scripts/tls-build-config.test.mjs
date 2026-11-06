@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { devCommunicationConfig } from '../apps/fluux/scripts/tauri-dev-communication.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const require = createRequire(import.meta.url)
@@ -16,7 +17,7 @@ const tauriVersion = readFileSync(join(root, 'apps/fluux/src-tauri/Cargo.lock'),
 
 // Exercise Tauri's actual config merging and Cargo invocation. The runner
 // records its arguments and deliberately stops before compilation or signing.
-function buildArgs({ dev = false, debug = false, releaseMacos = false, localSignedTest = false, inspect } = {}) {
+function buildArgs({ dev = false, debug = false, releaseMacos = false, devCommunication = false, localSignedTest = false, inspect } = {}) {
   // N1: canonicalize the entire fixture so copied entry points match Node's resolved module URLs.
   const fixture = realpathSync(mkdtempSync(join(tmpdir(), 'fluux-tls-build-')))
   try {
@@ -32,7 +33,7 @@ function buildArgs({ dev = false, debug = false, releaseMacos = false, localSign
     mkdirSync(join(native, 'tauri/src'), { recursive: true })
     writeFileSync(join(native, 'tauri/src/lib.rs'), '')
     writeFileSync(join(native, 'tauri/Cargo.toml'), `[package]\nname="tauri"\nversion="${tauriVersion}"\nedition="2021"\n[features]\ncustom-protocol=[]\n`)
-    for (const name of ['tauri.conf.json', 'tauri.dev.conf.json', 'tauri.linux.conf.json', 'tauri.macos.conf.json', 'tauri.windows.conf.json', 'tauri.release-macos.conf.json']) {
+    for (const name of ['tauri.conf.json', 'tauri.dev.conf.json', 'tauri.linux.conf.json', 'tauri.macos.conf.json', 'tauri.windows.conf.json', 'tauri.release-macos.conf.json', 'tauri.dev-communication-macos.conf.json']) {
       const source = join(root, 'apps/fluux/src-tauri', name)
       if (existsSync(source)) cpSync(source, join(native, name))
     }
@@ -44,6 +45,7 @@ function buildArgs({ dev = false, debug = false, releaseMacos = false, localSign
     const args = [cli, 'build', '--ci', '--no-bundle', '--runner', runner]
     if (debug) args.push('--debug')
     if (dev) args.push('--config', join(native, 'tauri.dev.conf.json'))
+    if (devCommunication) args.push('--config', typeof devCommunication === 'object' ? JSON.stringify(devCommunication) : join(native, 'tauri.dev-communication-macos.conf.json'))
     if (releaseMacos) args.push('--config', join(native, 'tauri.release-macos.conf.json'))
     if (localSignedTest) args.push('--config', JSON.stringify({ bundle: { createUpdaterArtifacts: false } }), '--bundles', 'app')
     args.push('--config', JSON.stringify({ build: { beforeBuildCommand: '', frontendDist: '../dist' } }))
@@ -156,4 +158,40 @@ test('documented local pre-tag configuration keeps production communication and 
   assert.ok(hasProductionTls(args))
   const enabled = args[args.indexOf('--features') + 1].split(/[ ,]+/)
   for (const feature of release.build.features) assert.ok(enabled.includes(feature))
+})
+
+// Accepted Dev plan: actual merger, no fabricated provisioning or signing.
+test('bundled Dev communication overlay preserves ring TLS and Dev identity while disabling only updater artifacts', { skip: process.platform !== 'darwin' }, () => {
+  const dev = JSON.parse(readFileSync(join(root, 'apps/fluux/src-tauri/tauri.dev.conf.json')))
+  const overlay = JSON.parse(readFileSync(join(root, 'apps/fluux/src-tauri/tauri.dev-communication-macos.conf.json')))
+  const args = buildArgs({ dev: true, devCommunication: true, inspect({ configuration }) {
+    const effective = JSON.parse(configuration)
+    assert.equal(effective.identifier, dev.identifier)
+    assert.equal(effective.productName, dev.productName)
+    assert.deepEqual(effective.build.features, overlay.build.features)
+    assert.equal(effective.bundle.createUpdaterArtifacts, false)
+    console.log('Unsigned Dev merger:', JSON.stringify(effective))
+  } })
+  assert.equal(hasProductionTls(args), false)
+  assert.ok(args[args.indexOf('--features') + 1].includes('macos-communication'))
+})
+
+// Accepted Dev plan: exercise the helper's actual validated overlay through Tauri.
+// Requires a real local public Dev profile, never a fabricated positive payload.
+test('real Dev preflight mapping and pinned signer reach the actual Tauri merger', {
+  skip: process.platform !== 'darwin' || !process.env.FLUUX_DEV_COMMUNICATION_PROFILE,
+}, () => {
+  const overlay = devCommunicationConfig()
+  buildArgs({ dev: true, devCommunication: overlay, inspect({ configuration }) {
+    const forwarded = JSON.parse(configuration)
+    assert.equal(forwarded.identifier, overlay.identifier)
+    assert.equal(forwarded.productName, overlay.productName)
+    assert.deepEqual(forwarded.bundle.macOS.files, overlay.bundle.macOS.files)
+    assert.equal(forwarded.bundle.macOS.signingIdentity, overlay.bundle.macOS.signingIdentity)
+    assert.deepEqual(forwarded.build.features, overlay.build.features)
+    assert.equal(forwarded.bundle.createUpdaterArtifacts, false)
+    console.log('Unsigned real Dev mapping:', JSON.stringify({ identifier: forwarded.identifier,
+      features: forwarded.build.features, files: forwarded.bundle.macOS.files,
+      signingIdentity: forwarded.bundle.macOS.signingIdentity, createUpdaterArtifacts: forwarded.bundle.createUpdaterArtifacts }))
+  } })
 })

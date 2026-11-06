@@ -10,7 +10,9 @@ alone do not establish application or physical-device behavior.
 ## macOS communication profile and update check
 
 macOS releases alone pass `src-tauri/tauri.release-macos.conf.json`, retaining
-production TLS and the updater while enabling `macos-communication`. Dev is excluded.
+production TLS and the updater while enabling `macos-communication`. Bundled
+macOS Dev helpers enable the same capability with a separate Dev profile and
+explicit Developer ID signer; they do not use this production overlay or profile.
 The public Developer ID profile lives at
 `apps/fluux/src-tauri/macos/net.processone.fluux.provisionprofile`; it is embedded
 in every released macOS app, not a private signing key. It authorizes
@@ -423,7 +425,13 @@ Testers download the beta from the GitHub Releases page directly.
 
 ### Local build verification (optional)
 
-For a quick smoke test before pushing the tag:
+For a production-identity test before pushing the tag, follow
+[Local signed macOS test before tagging](#local-signed-macos-test-before-tagging).
+The Dev build/install helpers do not qualify a production release.
+
+For a separate Dev-only smoke test, configure the
+[Dev profile and explicit Developer ID inputs](DEVELOPER.md#bundled-dev-communication-notifications)
+first, then run:
 
 ```bash
 npm run tauri:build
@@ -431,7 +439,9 @@ npm run tauri:build
 ./apps/fluux/scripts/tauri-build.sh --arm
 ```
 
-Launch the built binary and verify basic functionality (connect, send a message, etc.).
+Launch the built Dev app and verify basic functionality (connect, send a message,
+etc.). These helpers now stop if the required Dev profile or signing inputs are
+missing; they do not fall back to ad-hoc or self-signed builds.
 
 ### Promoting a beta to stable
 

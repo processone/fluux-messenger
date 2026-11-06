@@ -24,7 +24,7 @@ macTest('#1386 public production profile and mapped configuration pass without s
   console.log(JSON.stringify({ name: profile.Name, platform: profile.Platform, team: profile.TeamIdentifier,
     app: profile.Entitlements['com.apple.application-identifier'], expires: profile.ExpirationDate, allMacs: profile.ProvisionsAllDevices }))
 })
-macTest('#1386 generator rejects missing mapping/team; ordinary and Dev remain unaffected', () => {
+macTest('#1386 generator rejects missing mapping/team; ordinary builds remain unaffected; enabled Dev rejects production profile', () => {
   const config = { ...base, ...release }
   assert.throws(() => validateCommunicationConfig({ ...config, bundle: {} }, shareSettings(config, env), root), /mapping/)
   assert.throws(() => validateCommunicationConfig(config, shareSettings(config, {}), root), /known Apple team/)
@@ -34,7 +34,7 @@ macTest('#1386 generator rejects missing mapping/team; ordinary and Dev remain u
     validateCommunicationConfig(ordinary, shareSettings(ordinary, {}), root)
   }
   const dev = { ...config, identifier: `${base.identifier}.dev` }
-  validateCommunicationConfig(dev, shareSettings(dev, {}), root)
+  assert.throws(() => validateCommunicationConfig(dev, shareSettings(dev, env), root), /application/)
 })
 for (const [name, mutate, error] of [
   ['wrong app', p => { p.Entitlements['com.apple.application-identifier'] += '.dev' }, /application/],

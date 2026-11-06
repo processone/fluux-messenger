@@ -278,36 +278,49 @@ graph excludes AWS-LC. `npm run check:tls-build` exercises the installed Tauri C
 config merging and Cargo arguments with a runner that stops before compilation
 or signing. Run it after `npm ci`; it also requires Cargo on `PATH`.
 
-### Test notifications with `tauri:install`, not `tauri:dev`
+### Bundled Dev communication notifications
 
-`tauri dev` runs the **unbundled** debug binary (it never produces a `.app`), which macOS will not reliably authorize for notifications, so it is not the tool for testing native notifications, and there is nothing to code-sign there. Build and install a real bundle instead:
+Every bundled macOS Dev build through `tauri:build` or `tauri:install` now requires
+a separate Apple-authorized Developer ID profile and explicit signing inputs.
+Hot reload (`tauri:dev`) remains unchanged and is not reliable notification proof.
+The ordinary Dev override still has no features; the bundled macOS helper adds
+`tauri.dev-communication-macos.conf.json` last, selecting `macos-communication`
+without `production-tls`. Other platforms and release configuration are unchanged.
 
-```bash
-npm run tauri:install   # → "Fluux Messenger Dev.app" in /Applications, alongside prod
+Before an authorized owner builds, set:
+
+```sh
+export FLUUX_DEV_COMMUNICATION_PROFILE="/absolute/path/Fluux.dev.provisionprofile"
+export APPLE_SIGNING_IDENTITY="Developer ID Application: Your organization (8L55BDM864)"
+export APPLE_TEAM_ID="8L55BDM864"
 ```
 
-Launch **Fluux Messenger Dev**, accept the macOS prompt, and notifications fire. Use `tauri:dev` for everything else (UI, hot-reload).
+The identity may instead be the exact SHA-1 fingerprint of a certificate listed
+in the profile. The public certificate must be a current Developer ID Application
+certificate for the team, not merely an identity with a plausible name. The build
+stops before compilation/signing if prerequisites are missing or mismatched. It
+never searches for a `Fluux Dev` certificate or falls back to ad-hoc/self-signing.
 
-### Durable grants across rebuilds (optional)
+The local profile is not committed. Prefer storing it outside the project;
+`src-tauri/macos/*.dev.provisionprofile` is also ignored. The helper maps it into
+`Contents/embedded.provisionprofile`, preserves the Share Extension mapping and
+distinct Dev App Group, and disables local updater **artifact generation** only.
+The runtime updater and Updates settings remain enabled.
 
-Local builds are **ad-hoc signed** by default, which pins the grant to the binary's exact CDHash, so it resets on every **Rust** rebuild (frontend-only rebuilds keep it). To make the grant survive every rebuild, sign with a stable **self-signed** identity. No Apple Developer account is needed: these are *local* notifications (`UNUserNotificationCenter`), not APNs push, so there is no App ID, provisioning profile, or Apple Developer console involved.
+Ordinary local notifications can use self-signing without an Apple profile, but
+the restricted communication capability cannot. The old automatic self-signed
+bundled Dev path is intentionally replaced. This adds no APNs transport.
 
-**Create the certificate (once, ~1 min):**
+Signing and installation are separate owner operations, not prerequisites for
+running the unsigned configuration/native tests. Do not use `tauri:install` for
+those checks: it replaces an installed app. For actual notification testing use
+an owner-signed disposable bundle in an isolated macOS test user with disposable
+accounts. Dev and production share saved secrets; a temporary `HOME` or another
+app folder does not isolate the real keychain. Changing the signer may prompt for
+new notification or keychain approval.
 
-1. Open **Keychain Access** → menu **Certificate Assistant → Create a Certificate…**
-   - **Name:** `Fluux Dev`
-   - **Identity Type:** Self-Signed Root
-   - **Certificate Type:** Code Signing
-2. Rebuild and install: `npm run tauri:install`
-
-`scripts/tauri-build.sh` auto-detects a `Fluux Dev` code-signing identity and signs the build with it (logging `Signing local build with 'Fluux Dev'…`); without it, the build falls back to ad-hoc. Two things to know:
-
-- **The certificate does not need to be trusted.** A self-signed cert is reported as `CSSMERR_TP_NOT_TRUSTED`, but `codesign` signs with it regardless. Trust only affects Gatekeeper, not local signing or the notification binding. (The script detects it with `security find-identity -p codesigning`, *without* the `-v`/valid-only filter that would otherwise hide an untrusted cert.)
-- **First use prompts for keychain access.** The first time `codesign` uses the key, macOS shows *"codesign wants to use a key…"*. Click **Always Allow** so later rebuilds do not prompt again.
-
-Export `APPLE_SIGNING_IDENTITY="<name>"` to use a different identity. Set up the certificate **before** your first grant on the Dev app, or you will just re-click *Allow* once after switching from ad-hoc to signed.
-
-> Local dev only. The distributed release is signed with a real **Developer ID** certificate and **notarized** in CI: see [RELEASE.md](RELEASE.md). Nothing here changes the release path.
+See [Dev profile setup and renewal](MACOS_COMMUNICATION_PROTOTYPE.md#dev-profile-setup-and-renewal)
+for Apple setup, strict validation and required signed-app proof.
 
 ## Legacy identifier migration
 
@@ -999,10 +1012,12 @@ The extension build imports that certificate into an ephemeral private
 keychain, signs the extension, and removes the keychain without changing the
 user's default/search keychains. Tauri then signs the parent normally.
 
-Without an Apple team/identity, local builds produce an ad-hoc extension for
-compilation and bundle inspection. This is not proof that macOS will grant
-App Group access or load the sandboxed extension. Validate distribution with
-a proper Developer ID identity; do not advertise ad-hoc signing as a substitute.
+Ordinary non-communication configuration can produce an ad-hoc extension without
+an Apple team/identity for compilation and bundle inspection. Bundled macOS Dev
+helpers instead require an explicit Developer ID identity and matching Dev profile
+and fail without them. Neither unsigned inspection nor ad-hoc signing proves App
+Group access or loading of the sandboxed extension. Validate distribution with
+a proper Developer ID identity.
 If Fluux is not listed, check System Settings' extension controls for sharing.
 
 Checks: `node --test scripts/macos-share.test.mjs`, the ShareInbox component
@@ -1057,8 +1072,10 @@ On a signed test build, manual device verification must additionally confirm:
 Released macOS builds enable communication notifications for the standard
 `net.processone.fluux` identity through `tauri.release-macos.conf.json`. The
 `macos-communication` feature and generated plist flag retain the native gates;
-Dev and ordinary local builds keep the legacy notification path. The updater
-remains available independently of communication support.
+bundled macOS Dev helpers enable the same path with their separate Dev profile
+and explicit Developer ID signer; hot reload and ordinary non-communication
+configuration keep the legacy notification path. The updater remains available
+independently of communication support.
 
 See [macOS communication notifications](MACOS_COMMUNICATION_PROTOTYPE.md) for
 unsigned contracts, privacy inventory and cleanup. Follow the

@@ -274,9 +274,16 @@ test('FLM-105 W1: macOS metadata generator changes retain share and configuratio
 // #1386: profile and verifier changes must select their behavior checks.
 test('macOS release profile and verifier changes select executable release tests', () => {
   for (const path of ['apps/fluux/scripts/macos-communication-profile.mjs',
-    'apps/fluux/src-tauri/macos/net.processone.fluux.provisionprofile', 'scripts/verify-macos-release.mjs']) {
+    'apps/fluux/src-tauri/macos/net.processone.fluux.provisionprofile', 'scripts/verify-macos-release.mjs',
+    'apps/fluux/scripts/tauri-dev-communication.mjs', 'scripts/macos-dev-communication.test.mjs',
+    'apps/fluux/scripts/tauri-build.sh', 'apps/fluux/scripts/tauri-install.sh']) {
     const plan = planFor([path])
     assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-release.test.mjs')))
+    // Accepted Dev plan: common validator changes must retain Dev rejection checks.
+    assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-dev-communication.test.mjs')))
+    if (path.endsWith('/tauri-build.sh') || path.endsWith('/tauri-install.sh')) {
+      for (const id of ['full:sdk', 'full:app', 'typecheck', 'build']) assert.ok(ids(plan).includes(id), id)
+    }
     if (path === 'scripts/verify-macos-release.mjs') {
       assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-signature-read.test.mjs') && step.requires === 'macos-reference'))
     }
