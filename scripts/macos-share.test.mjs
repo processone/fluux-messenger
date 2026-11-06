@@ -54,20 +54,20 @@ test('signing failures name the failing step and stderr without leaking argv pas
 })
 
 
-test('issue #1386 declarations require the standard identity and explicit test feature', () => {
+test('issue #1386 declarations require the standard identity and explicit communication feature', () => {
   for (const identifier of [config.identifier, `${config.identifier}.dev`, `${config.identifier}.other`]) {
     for (const enabled of [false, true]) {
       for (const env of [{}, { APPLE_TEAM_ID: 'ABCDE12345' }]) {
-        const settings = shareSettings({ ...config, identifier, build: { features: enabled ? ['macos-communication-test'] : [] } }, env)
+        const settings = shareSettings({ ...config, identifier, build: { features: enabled ? ['macos-communication'] : [] } }, env)
         const metadata = hostMetadata(settings, { CFBundleDisplayName: config.productName }, { 'com.apple.security.network.client': true })
-        const prototype = enabled && identifier === config.identifier
-        assert.equal(metadata.info.FluuxCommunicationTest === true, prototype)
-        assert.equal(metadata.entitlements['com.apple.developer.usernotifications.communication'] === true, prototype)
-        assert.deepEqual(metadata.info.NSUserActivityTypes, prototype ? ['INSendMessageIntent'] : undefined)
+        const communication = enabled && identifier === config.identifier
+        assert.equal(metadata.info.FluuxCommunication === true, communication)
+        assert.equal(metadata.entitlements['com.apple.developer.usernotifications.communication'] === true, communication)
+        assert.deepEqual(metadata.info.NSUserActivityTypes, communication ? ['INSendMessageIntent'] : undefined)
         assert.equal(metadata.entitlements['com.apple.security.network.client'], true)
-        // J1: no team-specific signing identifiers on ordinary builds, Dev, or a test without a team.
-        assert.equal(metadata.entitlements['com.apple.application-identifier'], prototype && settings.team ? `${settings.team}.${identifier}` : undefined)
-        assert.equal(metadata.entitlements['com.apple.developer.team-identifier'], prototype ? settings.team : undefined)
+        // J1: no team-specific signing identifiers on ordinary builds, Dev, or metadata without a team.
+        assert.equal(metadata.entitlements['com.apple.application-identifier'], communication && settings.team ? `${settings.team}.${identifier}` : undefined)
+        assert.equal(metadata.entitlements['com.apple.developer.team-identifier'], communication ? settings.team : undefined)
       }
     }
   }

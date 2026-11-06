@@ -2,7 +2,7 @@
 
 [English version](PRIVACY.md)
 
-Date d'entrée en vigueur : **20 octobre 2026**
+Date d'entrée en vigueur : **5 novembre 2026**
 
 Cette politique couvre Fluux Messenger pour iOS, les ordinateurs et le web.
 Fluux est un client XMPP développé par ProcessOne. Vous choisissez votre compte
@@ -138,10 +138,14 @@ L'effacement des données du compte ne supprime pas tous les caches partagés
 d'avatars ou de médias, ni toutes les clés OpenPGP ; la suppression des clés
 dispose de ses propres commandes dans les réglages de chiffrement. Les copies
 sur les serveurs ou les appareils des destinataires échappent au nettoyage local.
-Sur iOS, Fluux fournit aussi au système des identités de conversations, des noms,
+Sur iOS et dans les versions macOS publiées, Fluux fournit aussi au système des identités de conversations, des noms,
 des pseudonymes des participants aux salons et des images en cache pour
 l'affichage des notifications et les suggestions de
-partage.
+partage. Sur macOS, les interactions de communication transmises utilisent des
+identifiants hachés propres au compte plutôt que les adresses brutes, sans corps
+de message. Ces hachages sont des pseudonymes, pas une anonymisation. macOS peut
+utiliser ces interactions pour Siri, les suggestions et la classification
+Concentration ; le système reçoit toujours l'aperçu de notification existant.
 
 ## Autres requêtes réseau
 

@@ -87,10 +87,7 @@ export function platform(): PlatformCapabilities {
     const os = shell === 'mobile'
       ? (nativePlatform() === 'android' ? 'android' : 'ios')
       : detectOS()
-    const detected = deriveCapabilities(shell, os)
-    current = shell === 'desktop' && communicationTestAvailable()
-      ? { ...detected, hasInAppUpdates: false }
-      : detected
+    current = deriveCapabilities(shell, os)
   }
   return current
 }
@@ -122,7 +119,7 @@ export function resetPlatformDetection(): void {
   current = null
 }
 
-/** Pre-module opt-in supplied only by the feature-enabled standard-identity macOS test host. */
-export function communicationTestAvailable(): boolean {
-  return typeof window !== 'undefined' && window.__FLUUX_COMMUNICATION_TEST__ === true
+/** Pre-module opt-in supplied only by the feature-enabled standard-identity macOS host. */
+export function communicationAvailable(): boolean {
+  return typeof window !== 'undefined' && window.__FLUUX_COMMUNICATION__ === true
 }

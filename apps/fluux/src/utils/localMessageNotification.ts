@@ -4,7 +4,7 @@ import { formatLocalizedPreview } from './messagePreviewText'
 import { formatUnreadCount } from './formatUnreadCount'
 import { newMessagesText } from './swMessages'
 import type { CommunicationMetadata } from './nativeNotification'
-import { communicationTestAvailable } from '@/platform'
+import { communicationAvailable } from '@/platform'
 
 export type LocalMessageNotification =
   | { kind: 'chat'; entity: Conversation; message: Message }
@@ -49,7 +49,7 @@ export function systemMessageNotificationTitle(
 
 /** Issue #1386: structured native metadata, never parsed from the composed title. */
 export function communicationMetadata(target: LocalMessageNotification): CommunicationMetadata | undefined {
-  if (!communicationTestAvailable()) return undefined
+  if (!communicationAvailable()) return undefined
   if (target.kind === 'chat') return {
     senderId: target.entity.id,
     senderName: target.entity.name || getLocalPart(target.message.from),

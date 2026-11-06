@@ -1271,13 +1271,28 @@ fn print_startup_diagnostics() {
     eprintln!("---");
 }
 
-// An explicit standard-identity communication test must not update over itself.
-fn communication_test_for_build(identifier: &str, enabled: bool) -> bool {
+// Dev remains excluded; released standard-identity builds opt in through their configuration.
+fn communication_for_build(identifier: &str, enabled: bool) -> bool {
     cfg!(target_os = "macos") && enabled && identifier == "net.processone.fluux"
 }
 
-fn communication_test_available(identifier: &str) -> bool {
-    communication_test_for_build(identifier, cfg!(feature = "macos-communication-test"))
+fn communication_available(identifier: &str) -> bool {
+    communication_for_build(identifier, cfg!(feature = "macos-communication"))
+}
+
+fn with_updates<R: tauri::Runtime>(app: tauri::Builder<R>) -> tauri::Builder<R> {
+    app.plugin(tauri_plugin_updater::Builder::new().build())
+}
+
+fn with_communication<R: tauri::Runtime>(
+    app: tauri::Builder<R>,
+    identifier: &str,
+) -> tauri::Builder<R> {
+    if communication_available(identifier) {
+        app.append_invoke_initialization_script(include_str!("communication-init.js"))
+    } else {
+        app
+    }
 }
 
 fn main() {
@@ -1517,12 +1532,9 @@ fn main() {
     let app = if cfg!(feature = "startup-recovery-lab") {
         // The disposable lab never checks or installs updates.
         app
-    } else if communication_test_available(&identifier) {
-        // One immutable startup marker drives both communication and updater capabilities.
-        // The updater plugin is absent too, so direct calls cannot check or install.
-        app.append_invoke_initialization_script(include_str!("communication-test-init.js"))
     } else {
-        app.plugin(tauri_plugin_updater::Builder::new().build())
+        let app = with_updates(app);
+        with_communication(app, &identifier)
     };
     let app = app
         .manage(window_behavior::WindowBehavior::default())
@@ -2400,7 +2412,26 @@ mod tests {
     const LOOPBACK: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
 
     #[test]
-    fn standard_identity_test_mode_preserves_ordinary_and_dev_builds() {
+    fn communication_build_retains_registered_updater() {
+        // #1386: exercise the same plugin builder as main, without a native window or network.
+        use tauri_plugin_updater::UpdaterExt;
+        let standard: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        for identifier in ["net.processone.fluux", "net.processone.fluux.dev"] {
+            let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+            context.config_mut().identifier = identifier.into();
+            context.config_mut().plugins =
+                serde_json::from_value(standard["plugins"].clone()).unwrap();
+            let app = with_communication(with_updates(tauri::test::mock_builder()), identifier)
+                .build(context)
+                .unwrap();
+            // Accessing the registered updater state would panic if the plugin were absent.
+            let _builder = app.updater_builder();
+        }
+    }
+
+    #[test]
+    fn standard_identity_communication_preserves_ordinary_and_dev_builds() {
         // Accepted standard-profile test: only net.processone.fluux + explicit mode on macOS.
         let standard: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
@@ -2410,32 +2441,26 @@ mod tests {
             let standard_id = standard["identifier"].as_str().unwrap();
             let dev_id = dev["identifier"].as_str().unwrap();
             assert_eq!(
-                communication_test_for_build(standard_id, enabled),
+                communication_for_build(standard_id, enabled),
                 cfg!(target_os = "macos") && enabled
             );
-            assert!(!communication_test_for_build(dev_id, enabled));
-            assert!(!communication_test_for_build(
-                "net.processone.other",
-                enabled
-            ));
+            assert!(!communication_for_build(dev_id, enabled));
+            assert!(!communication_for_build("net.processone.other", enabled));
         }
         assert_eq!(
-            communication_test_available(standard["identifier"].as_str().unwrap()),
-            cfg!(all(
-                target_os = "macos",
-                feature = "macos-communication-test"
-            ))
+            communication_available(standard["identifier"].as_str().unwrap()),
+            cfg!(all(target_os = "macos", feature = "macos-communication"))
         );
         assert!(!standard["build"]["features"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|v| v == "macos-communication-test"));
+            .any(|v| v == "macos-communication"));
         assert!(!dev["build"]["features"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|v| v == "macos-communication-test"));
+            .any(|v| v == "macos-communication"));
     }
 
     #[test]

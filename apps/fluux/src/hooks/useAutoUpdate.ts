@@ -38,7 +38,7 @@ interface UseAutoUpdateOptions {
 
 export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
   const { autoCheck = false } = options
-  // Includes distro-managed hosts and the explicit native test-mode guard.
+  // Platform capability also excludes hosts whose package manager supplies updates.
   const updaterEnabled = platform().hasInAppUpdates
   const [state, setState] = useState<UpdateState>(initialState)
   const [update, setUpdate] = useState<Awaited<ReturnType<typeof import('@tauri-apps/plugin-updater').check>> | null>(null)

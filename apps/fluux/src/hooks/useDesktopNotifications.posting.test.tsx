@@ -98,7 +98,7 @@ describe('useDesktopNotifications posting + guard', () => {
   let restorePlatform: () => void
   beforeEach(() => {
     resetNotificationFixtures()
-    vi.stubGlobal('__FLUUX_COMMUNICATION_TEST__', true)
+    vi.stubGlobal('__FLUUX_COMMUNICATION__', true)
     vi.clearAllMocks()
     handlers = {}
     restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
