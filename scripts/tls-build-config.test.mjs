@@ -16,7 +16,7 @@ const tauriVersion = readFileSync(join(root, 'apps/fluux/src-tauri/Cargo.lock'),
 
 // Exercise Tauri's actual config merging and Cargo invocation. The runner
 // records its arguments and deliberately stops before compilation or signing.
-function buildArgs({ dev = false, debug = false, communicationTest = false, inspect } = {}) {
+function buildArgs({ dev = false, debug = false, releaseMacos = false, localSignedTest = false, inspect } = {}) {
   // N1: canonicalize the entire fixture so copied entry points match Node's resolved module URLs.
   const fixture = realpathSync(mkdtempSync(join(tmpdir(), 'fluux-tls-build-')))
   try {
@@ -26,13 +26,13 @@ function buildArgs({ dev = false, debug = false, communicationTest = false, insp
     writeFileSync(join(fixture, 'dist/index.html'), '<!doctype html><title>Build probe</title>')
     writeFileSync(join(fixture, 'package.json'), JSON.stringify({ name: 'tls-build-probe', version: appVersion }))
     writeFileSync(join(native, 'src/main.rs'), 'fn main() {}\n')
-    writeFileSync(join(native, 'Cargo.toml'), `[package]\nname="tls-build-probe"\nversion="${appVersion}"\nedition="2021"\n[features]\nproduction-tls=[]\nmacos-communication-test=[]\n[dependencies]\ntauri={path="tauri"}\n`)
+    writeFileSync(join(native, 'Cargo.toml'), `[package]\nname="tls-build-probe"\nversion="${appVersion}"\nedition="2021"\n[features]\nproduction-tls=[]\nmacos-communication=[]\n[dependencies]\ntauri={path="tauri"}\n`)
     // Cargo metadata only needs a local stub; this probe must also work on a
     // fresh runner with no registry cache and must never download or build Rust.
     mkdirSync(join(native, 'tauri/src'), { recursive: true })
     writeFileSync(join(native, 'tauri/src/lib.rs'), '')
     writeFileSync(join(native, 'tauri/Cargo.toml'), `[package]\nname="tauri"\nversion="${tauriVersion}"\nedition="2021"\n[features]\ncustom-protocol=[]\n`)
-    for (const name of ['tauri.conf.json', 'tauri.dev.conf.json', 'tauri.linux.conf.json', 'tauri.macos.conf.json', 'tauri.windows.conf.json']) {
+    for (const name of ['tauri.conf.json', 'tauri.dev.conf.json', 'tauri.linux.conf.json', 'tauri.macos.conf.json', 'tauri.windows.conf.json', 'tauri.release-macos.conf.json']) {
       const source = join(root, 'apps/fluux/src-tauri', name)
       if (existsSync(source)) cpSync(source, join(native, name))
     }
@@ -44,10 +44,8 @@ function buildArgs({ dev = false, debug = false, communicationTest = false, insp
     const args = [cli, 'build', '--ci', '--no-bundle', '--runner', runner]
     if (debug) args.push('--debug')
     if (dev) args.push('--config', join(native, 'tauri.dev.conf.json'))
-    if (communicationTest) {
-      const base = JSON.parse(readFileSync(join(native, dev ? 'tauri.dev.conf.json' : 'tauri.conf.json'), 'utf8'))
-      args.push('--config', JSON.stringify({ build: { features: [...base.build.features, 'macos-communication-test'] }, bundle: { createUpdaterArtifacts: false } }))
-    }
+    if (releaseMacos) args.push('--config', join(native, 'tauri.release-macos.conf.json'))
+    if (localSignedTest) args.push('--config', JSON.stringify({ bundle: { createUpdaterArtifacts: false } }), '--bundles', 'app')
     args.push('--config', JSON.stringify({ build: { beforeBuildCommand: '', frontendDist: '../dist' } }))
     const result = spawnSync(process.execPath, args, {
       cwd: fixture,
@@ -92,20 +90,24 @@ test('production TLS can be tested without an optimized build', () => {
 })
 
 
-// Captain's F3 choice: exercise the installed Tauri merger and the real metadata generator,
+// #1386: exercise the installed Tauri merger and the real metadata generator,
 // not a hand-assembled configuration; stop before compilation, bundling or signing.
-test('standard-identity opt-in reaches Cargo and generates communication declarations without changing production TLS', { skip: process.platform !== 'darwin' }, () => {
+test('macOS release overlay reaches Cargo and the real profile-checked generator without disabling updater artifacts', { skip: process.platform !== 'darwin' }, () => {
   const standardConfig = JSON.parse(readFileSync(join(root, 'apps/fluux/src-tauri/tauri.conf.json'), 'utf8'))
-  const expectedFeatures = [...standardConfig.build.features, 'macos-communication-test']
-  const args = buildArgs({ communicationTest: true, inspect({ fixture, native, configuration }) {
+  const expectedFeatures = [...standardConfig.build.features, 'macos-communication']
+  const args = buildArgs({ releaseMacos: true, inspect({ fixture, native, configuration }) {
     assert.equal(typeof configuration, 'string', 'Tauri must forward its effective overrides to the native build')
     const effective = JSON.parse(configuration)
-    const team = 'ABCDE12345'
+    const team = '8L55BDM864'
     assert.ok(effective.identifier === undefined || effective.identifier === standardConfig.identifier, 'the inline test override must not introduce another identity')
     assert.deepEqual(effective.build.features, expectedFeatures)
+    assert.notEqual(effective.bundle?.createUpdaterArtifacts, false)
+    assert.equal(effective.bundle.macOS.files['embedded.provisionprofile'], 'macos/net.processone.fluux.provisionprofile')
+    mkdirSync(join(native, 'macos'), { recursive: true })
+    cpSync(join(root, 'apps/fluux/src-tauri/macos/net.processone.fluux.provisionprofile'), join(native, 'macos/net.processone.fluux.provisionprofile'))
     const scripts = join(fixture, 'scripts')
     mkdirSync(scripts)
-    for (const file of ['tauri-macos-share.mjs', 'mobile-share-resources.mjs']) {
+    for (const file of ['tauri-macos-share.mjs', 'mobile-share-resources.mjs', 'macos-communication-profile.mjs']) {
       cpSync(join(root, 'apps/fluux/scripts', file), join(scripts, file))
     }
     for (const file of ['Info.plist', 'Entitlements.plist']) cpSync(join(root, 'apps/fluux/src-tauri', file), join(native, file))
@@ -120,13 +122,13 @@ test('standard-identity opt-in reaches Cargo and generates communication declara
     assert.equal(generated.name, standardConfig.productName)
     const info = readPlist('Info.plist')
     const entitlements = readPlist('Host.entitlements')
-    assert.equal(info.FluuxCommunicationTest, true)
+    assert.equal(info.FluuxCommunication, true)
     assert.deepEqual(info.NSUserActivityTypes, ['INSendMessageIntent'])
     assert.equal(entitlements['com.apple.developer.usernotifications.communication'], true)
     assert.equal(entitlements['com.apple.application-identifier'], `${team}.${generated.identifier}`)
     assert.equal(entitlements['com.apple.developer.team-identifier'], team)
     console.log('Unsigned Tauri configuration probe:', JSON.stringify({ identifier: generated.identifier, features: effective.build.features,
-      testModeFlag: info.FluuxCommunicationTest, communicationEntitlement: entitlements['com.apple.developer.usernotifications.communication'],
+      communicationFlag: info.FluuxCommunication, communicationEntitlement: entitlements['com.apple.developer.usernotifications.communication'],
       applicationIdentifier: entitlements['com.apple.application-identifier'], teamIdentifier: entitlements['com.apple.developer.team-identifier'] }))
   } })
   const featureIndex = args.indexOf('--features')
@@ -135,4 +137,23 @@ test('standard-identity opt-in reaches Cargo and generates communication declara
   // Tauri may repeat a feature in Cargo's argv; Cargo enables a set, not a multiset.
   assert.deepEqual(new Set(nativeFeatures), new Set(expectedFeatures))
   assert.equal(hasProductionTls(args), true)
+})
+
+// Release policy: document a local signed production build before tagging.
+// Exercise its exact overlays through Tauri, stopping at the runner before signing or bundling.
+test('documented local pre-tag configuration keeps production communication and disables only updater artifacts', { skip: process.platform !== 'darwin' }, () => {
+  const standard = JSON.parse(readFileSync(join(root, 'apps/fluux/src-tauri/tauri.conf.json'), 'utf8'))
+  const release = JSON.parse(readFileSync(join(root, 'apps/fluux/src-tauri/tauri.release-macos.conf.json'), 'utf8'))
+  const args = buildArgs({ releaseMacos: true, localSignedTest: true, inspect({ configuration }) {
+    const effective = JSON.parse(configuration)
+    assert.ok(effective.identifier === undefined || effective.identifier === standard.identifier)
+    assert.deepEqual(effective.build.features, release.build.features)
+    assert.equal(effective.bundle.createUpdaterArtifacts, false)
+    assert.equal(effective.bundle.macOS.files['embedded.provisionprofile'], release.bundle.macOS.files['embedded.provisionprofile'])
+    console.log('Unsigned local pre-tag configuration:', JSON.stringify({ identifier: effective.identifier || standard.identifier,
+      features: effective.build.features, profile: effective.bundle.macOS.files['embedded.provisionprofile'], createUpdaterArtifacts: effective.bundle.createUpdaterArtifacts }))
+  } })
+  assert.ok(hasProductionTls(args))
+  const enabled = args[args.indexOf('--features') + 1].split(/[ ,]+/)
+  for (const feature of release.build.features) assert.ok(enabled.includes(feature))
 })

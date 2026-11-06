@@ -17,7 +17,7 @@ interface ImportMeta {
   readonly env: ImportMetaEnv
 }
 
-// Set by the explicit native test mode before platform detection; its updater plugin is absent.
+// Set by the communication-enabled native host before platform detection.
 interface Window {
-  readonly __FLUUX_COMMUNICATION_TEST__?: boolean
+  readonly __FLUUX_COMMUNICATION__?: boolean
 }

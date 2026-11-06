@@ -243,24 +243,24 @@ test('CLI propagates Git errors rather than claiming no tests are needed', () =>
   assert.doesNotMatch(result.stdout, /No tests selected/)
 })
 
-test('issue #1386 native prototype selects its executable contract tests', () => {
+test('issue #1386 native communication changes select executable contract tests', () => {
   for (const path of ['apps/fluux/src-tauri/macos/CommunicationNotification.m', 'apps/fluux/src-tauri/macos/CommunicationNotification.h', 'scripts/native-tests/MacCommunicationTests.m',
     'apps/fluux/src-tauri/src/notifications/macos.rs', 'apps/fluux/src-tauri/src/notifications/mod.rs', 'apps/fluux/src-tauri/src/notifications/backend.rs']) {
     const plan = planFor([path])
     assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-communication.test.mjs')))
-    assert.ok(plan.steps.some(step => step.command === 'cargo' && step.args.includes('macos-communication-test')))
+    assert.ok(plan.steps.some(step => step.command === 'cargo' && step.args.includes('macos-communication')))
     assert.ok(ids(plan).includes('test:platform'))
   }
 })
 
 
-test('FLM-99 R1: platform-specific notification edits do not require the macOS prototype', () => {
+test('Platform-specific notification edits do not require macOS communication contracts', () => {
   for (const name of ['linux.rs', 'windows.rs', 'settings_pane.rs']) {
     const plan = planFor([`apps/fluux/src-tauri/src/notifications/${name}`])
     assert.ok(plan.steps.some(step => step.command === 'cargo'))
     assert.ok(ids(plan).includes('test:platform'))
     assert.ok(!plan.steps.some(step => step.requires === 'mac'))
-    assert.ok(!plan.steps.some(step => step.args.includes('macos-communication-test')))
+    assert.ok(!plan.steps.some(step => step.args.includes('macos-communication')))
   }
 })
 
@@ -269,4 +269,29 @@ test('FLM-105 W1: macOS metadata generator changes retain share and configuratio
   const plan = planFor(['apps/fluux/scripts/tauri-macos-share.mjs'])
   for (const id of ['test:ios-extensions', 'test:ios-share', 'check:tls-build']) assert.ok(ids(plan).includes(id), id)
   assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-share.test.mjs')))
+})
+
+// #1386: profile and verifier changes must select their behavior checks.
+test('macOS release profile and verifier changes select executable release tests', () => {
+  for (const path of ['apps/fluux/scripts/macos-communication-profile.mjs',
+    'apps/fluux/src-tauri/macos/net.processone.fluux.provisionprofile', 'scripts/verify-macos-release.mjs']) {
+    const plan = planFor([path])
+    assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-release.test.mjs')))
+    if (path === 'scripts/verify-macos-release.mjs') {
+      assert.ok(plan.steps.some(step => step.args.includes('scripts/macos-signature-read.test.mjs') && step.requires === 'macos-reference'))
+    }
+  }
+})
+
+// #1386: fail before any work when the explicit public-signature fixture is missing.
+test('public signature fixture requirement fails before children and accepts an extracted app', t => {
+  const { cwd, write } = fixture(t)
+  const plan = planFor(['scripts/verify-macos-release.mjs'])
+  assert.throws(() => executePlan(plan, { cwd, env: {}, host: 'darwin', invoke() { assert.fail('work started before public fixture preflight') } }), /FLUUX_MACOS_REFERENCE_APP/)
+  assert.throws(() => checkRequirement('macos-reference', cwd, { FLUUX_MACOS_REFERENCE_APP: 'relative.app' }, 'darwin'), /absolute/)
+  assert.throws(() => checkRequirement('macos-reference', cwd, { FLUUX_MACOS_REFERENCE_APP: cwd }, 'darwin'), /FLUUX_MACOS_REFERENCE_APP/)
+  write('Reference.app/Contents/Info.plist', readFileSync(resolve(root, 'apps/fluux/src-tauri/Info.plist')))
+  let children = 0
+  executePlan(plan, { cwd, env: { FLUUX_MACOS_REFERENCE_APP: join(cwd, 'Reference.app') }, host: 'darwin', invoke() { children++ }, write() {} })
+  assert.ok(children > 0)
 })

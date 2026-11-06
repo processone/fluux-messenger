@@ -33,11 +33,27 @@ jobs:
         with:
           node-version: '26'
       - run: npm ci
-      - name: Probe effective communication test configuration without signing
+      - name: Probe effective release communication configuration without signing
         run: npm run check:tls-build
       - name: Guard production and Dev communication entitlements
-        run: node --test scripts/macos-share.test.mjs
-      - name: Test unsigned communication test-mode contracts
+        run: node --test scripts/macos-share.test.mjs scripts/macos-release.test.mjs
+      - name: Read the public reference release signature without signing
+        run: |
+          REFERENCE_DIR=$(mktemp -d)
+          trap 'rm -rf "$REFERENCE_DIR"' EXIT
+          curl --fail --location --silent --show-error \
+            https://github.com/processone/fluux-messenger/releases/download/v0.18.1/Fluux-Messenger_0.18.1_macOS_arm64.app.tar.gz \
+            --output "$REFERENCE_DIR/reference.app.tar.gz"
+          echo "579346872aff0083c4b25f8f59f13a8fe1cd8cb8a5ec1596619928dcee8951d0  $REFERENCE_DIR/reference.app.tar.gz" | shasum -a 256 -c -
+          node --input-type=module - "$REFERENCE_DIR" <<'JS'
+          import { extractArchive } from './scripts/verify-macos-release.mjs'
+          import { rmSync } from 'node:fs'
+          const directory = process.argv[2]
+          extractArchive(`${directory}/reference.app.tar.gz`, directory)
+          rmSync(`${directory}/reference.app.tar.gz`)
+          JS
+          FLUUX_MACOS_REFERENCE_APP="$REFERENCE_DIR/Fluux Messenger.app" node --test scripts/macos-signature-read.test.mjs
+      - name: Test unsigned communication contracts
         run: node --test scripts/macos-communication.test.mjs
       - name: Test the iPhone hinge layout
         run: npm run test:ios-hinge
@@ -46,10 +62,10 @@ jobs:
         run: |
           cargo test --locked
           cargo test --locked --features production-tls
-          cargo test --locked --features macos-communication-test
+          cargo test --locked --features macos-communication
           cargo clippy --locked -- -D warnings
           cargo clippy --locked --features production-tls -- -D warnings
-          cargo clippy --locked --features macos-communication-test -- -D warnings
+          cargo clippy --locked --features macos-communication -- -D warnings
       - name: Record proof boundary
         if: always()
         run: |

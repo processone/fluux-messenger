@@ -10,9 +10,8 @@ const { check, install, relaunch } = vi.hoisted(() => ({
 vi.mock('@tauri-apps/plugin-updater', () => ({ check }))
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch }))
 
-// Source: the captain's I2 choice disables checking and installation for the explicit standard-identity test mode only.
-// This exercises the native initialization marker through the real capability detection and consumers.
-describe('communication test updater isolation', () => {
+// #1386: released communication-enabled builds keep the updater and Updates settings.
+describe('communication-enabled updater', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.stubGlobal('__TAURI_INTERNALS__', {})
@@ -30,25 +29,8 @@ describe('communication test updater isolation', () => {
     resetPlatformDetection()
   })
 
-  it('blocks automatic/manual checks, installation and update prompts for the native test-mode marker', async () => {
-    vi.stubGlobal('__FLUUX_COMMUNICATION_TEST__', true)
-    const { result } = renderHook(() => useAutoUpdate({ autoCheck: true }))
-    expect(result.current.updaterEnabled).toBe(false)
-    expect(getVisibleCategories().map(category => category.id)).not.toContain('updates')
-    await act(async () => {
-      await vi.runOnlyPendingTimersAsync()
-      await result.current.checkForUpdate()
-      await result.current.downloadAndInstall()
-      await result.current.relaunchApp()
-    })
-    expect(check).not.toHaveBeenCalled()
-    expect(install).not.toHaveBeenCalled()
-    expect(relaunch).not.toHaveBeenCalled()
-    expect(result.current.available).toBe(false)
-    expect(result.current.error).toBeNull()
-  })
-
-  it('preserves automatic checks and manual installation for normal desktop identities', async () => {
+  it.each([true, undefined])('retains Updates, checks and installation with communication marker %s', async (marker) => {
+    vi.stubGlobal('__FLUUX_COMMUNICATION__', marker)
     const { result } = renderHook(() => useAutoUpdate({ autoCheck: true }))
     expect(result.current.updaterEnabled).toBe(true)
     expect(getVisibleCategories().map(category => category.id)).toContain('updates')

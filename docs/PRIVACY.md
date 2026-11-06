@@ -2,7 +2,7 @@
 
 [Version française](PRIVACY.fr.md)
 
-Effective date: **20 October 2026**
+Effective date: **5 November 2026**
 
 This policy covers Fluux Messenger for iOS, desktop and the web. Fluux is an
 XMPP client developed by ProcessOne. You choose your XMPP account and server;
@@ -113,9 +113,13 @@ ProcessOne's push service.
 Logout offers a choice to retain or clear local data. Clearing account data
 does not erase every shared avatar/media cache or OpenPGP key; key deletion has
 its own encryption-settings controls. Copies on servers or recipients' devices
-are outside local cleanup. On iOS, Fluux also supplies conversation identities,
+are outside local cleanup. On iOS and in released macOS builds, Fluux also supplies conversation identities,
 names, room participant nicknames and cached images to the system for notification
-display and share suggestions.
+display and share suggestions. On macOS, donated communication interactions use
+account-scoped hashed handles rather than raw addresses and contain no message
+body. These hashes are pseudonyms, not anonymization. macOS may use the
+interactions for Siri, suggestions and Focus classification; the system still
+receives the existing notification preview.
 
 ## Other network requests
 

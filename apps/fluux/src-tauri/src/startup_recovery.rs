@@ -14,8 +14,8 @@ pub mod lab;
 #[cfg(target_os = "macos")]
 pub mod macos;
 
-#[cfg(all(feature = "startup-recovery-lab", feature = "macos-communication-test"))]
-compile_error!("startup lab must not enable the signed communication test mode");
+#[cfg(all(feature = "startup-recovery-lab", feature = "macos-communication"))]
+compile_error!("startup lab must not enable the signed communication feature");
 
 pub const ATTEMPT_BUDGET: Duration = Duration::from_secs(20);
 include!(concat!(env!("OUT_DIR"), "/startup_cleanup_timeout.rs"));

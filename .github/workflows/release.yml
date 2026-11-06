@@ -48,7 +48,7 @@ jobs:
             -o "fluux-messenger-${VERSION}-source.tar.gz" HEAD
 
       - name: Create or Update Release
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           files: fluux-messenger-*-source.tar.gz
           tag_name: ${{ env.RELEASE_TAG }}
@@ -150,7 +150,29 @@ jobs:
           releaseDraft: false
           prerelease: ${{ needs.create-release.outputs.is_prerelease == 'true' }}
           uploadUpdaterJson: false
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} --config src-tauri/tauri.release-macos.conf.json
+
+      # Read back the exact uploaded updater bundle. A failure keeps rename-assets
+      # from generating/publishing latest.json for either macOS architecture.
+      - name: Download signed macOS update archive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_ARCH: ${{ matrix.arch == 'aarch64' && 'aarch64' || 'x64' }}
+          DOWNLOAD_DIR: ${{ runner.temp }}/fluux-update-${{ matrix.arch }}
+        run: |
+          mkdir "$DOWNLOAD_DIR"
+          gh release download "$RELEASE_TAG" --pattern "*_${ASSET_ARCH}.app.tar.gz" --dir "$DOWNLOAD_DIR"
+
+      - name: Verify signed macOS update archive
+        env:
+          MACH_ARCH: ${{ matrix.arch == 'aarch64' && 'arm64' || 'x86_64' }}
+          DOWNLOAD_DIR: ${{ runner.temp }}/fluux-update-${{ matrix.arch }}
+        run: |
+          trap 'rm -rf "$DOWNLOAD_DIR"' EXIT
+          ARCHIVES=("$DOWNLOAD_DIR"/*.app.tar.gz)
+          test "${#ARCHIVES[@]}" -eq 1
+          test -f "${ARCHIVES[0]}"
+          node scripts/verify-macos-release.mjs "${ARCHIVES[0]}" "$MACH_ARCH" --launch
 
   build-windows:
     name: Build Windows
@@ -241,7 +263,7 @@ jobs:
         run: apps/fluux/src-tauri/verify-windows-signatures.ps1
 
       - name: Upload Windows artifacts
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           files: |
             apps/fluux/src-tauri/target/release/bundle/nsis/*.exe
@@ -372,7 +394,7 @@ jobs:
           tar -czvf "dist/${TARBALL_NAME}" -C tarball-staging fluux-messenger
 
       - name: Upload tarball to Release
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           files: dist/*.tar.gz
           tag_name: ${{ env.RELEASE_TAG }}
@@ -407,7 +429,7 @@ jobs:
           mv ../fluux-messenger_*.deb dist/
 
       - name: Upload .deb to Release
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           files: dist/*.deb
           tag_name: ${{ env.RELEASE_TAG }}
@@ -448,7 +470,7 @@ jobs:
           mv *.flatpak ../dist/
 
       - name: Upload Flatpak to Release
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           files: dist/*.flatpak
           tag_name: ${{ env.RELEASE_TAG }}
@@ -589,7 +611,7 @@ jobs:
           mv ~/rpmbuild/RPMS/${{ matrix.rpm_arch }}/*.rpm dist/
 
       - name: Upload .rpm to Release
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           files: dist/*.rpm
           tag_name: ${{ env.RELEASE_TAG }}
@@ -633,7 +655,7 @@ jobs:
           echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
 
       - name: Upload web zip to Release
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           files: ${{ env.ZIP_NAME }}
           tag_name: ${{ env.RELEASE_TAG }}

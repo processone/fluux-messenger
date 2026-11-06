@@ -194,14 +194,14 @@ index 13192db3..6fcc1d2e 100644
 @@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
  import { connectionStore, getBareJid } from '@fluux/sdk'
  import { osNotificationSilent } from './notificationSound'
- import { communicationTestAvailable } from '@/platform'
+ import { communicationAvailable } from '@/platform'
 +import { repro } from '@/utils/reproProbe'
  
  export interface NotificationNames {
    title: string
 @@ -69,8 +70,9 @@ export async function postNativeDesktopNotification(
        }
-       // The captain chose prototype-only revalidation: null retains legacy desktop eligibility.
+       // Communication revalidation is separate from legacy eligibility: null retains the legacy path.
      }
 -    if (await superseded()) return
 +    if (await superseded()) { repro('post-superseded'); return }

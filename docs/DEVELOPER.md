@@ -80,7 +80,8 @@ script `scripts/test-affected.sh` uses this same implementation, not another rul
 | SDK entry points, shared core/stores/cache, authentication, connection, E2EE | Full SDK + app; platform and compiled Node/package consumer checks |
 | Locale JSON | Language tests and the existing native wording-generation contract |
 | Rust application | Whole application crate, locked dependencies; platform contracts |
-| macOS communication test sources/fixtures | Unsigned `macos-communication.test.mjs`, test-feature native crate and platform contracts |
+| macOS communication sources/fixtures | Unsigned `macos-communication.test.mjs`, `macos-communication` native crate and platform contracts |
+| Release verifier or public-signature probe | `macos-signature-read.test.mjs` with the public reference app, plus communication/release contracts |
 | Rust plugin | Plugin package through the main locked manifest, plus application consumer and platform tests |
 | `nse-openpgp` | Its own locked manifest, application consumer and notification contracts |
 | `PhotoPreparation.swift`, `ShareInboxPlugin.swift`, photo fixture | `test:ios-photos` and platform contracts |
@@ -100,7 +101,10 @@ Tests for the selector run before any selected code checks and as part of
 constant timings. The photo change also touches permissions, build scripts and
 `package.json`, so it deliberately selects broad checks, not just five fast files.
 
-Native evidence has explicit prerequisites. `test:ios-photos` needs macOS/Xcode
+Native evidence has explicit prerequisites. Signature-reader changes need macOS and
+`FLUUX_MACOS_REFERENCE_APP` as an absolute path to the extracted public 0.18.1 app;
+see [the read-only signature probe](MACOS_COMMUNICATION_PROTOTYPE.md#checks-without-signing-or-installing).
+`test:ios-photos` needs macOS/Xcode
 and `FLUUX_PHOTO_FIXTURES` pointing to real JPEG/HEIC images, including location
 and rotated portrait cases. `test:ios-share` needs the existing Xcode/XcodeGen
 setup and `FLUUX_SHARE_RESULTS` as an absolute output directory **outside** the
@@ -1048,12 +1052,16 @@ On a signed test build, manual device verification must additionally confirm:
    matches the last icon badge snapshot without showing the app.
 5. Launch an iOS 15 build and verify normal login/navigation still work.
 
-### macOS communication notification test mode
+### macOS communication notifications
 
-Issue #1386 has an explicit, disabled-by-default test mode on the ordinary
-`net.processone.fluux` identity; no third identity or Dev capability change is
-required. See [macOS communication test mode](MACOS_COMMUNICATION_PROTOTYPE.md)
-for its inline build override, unsigned checks, privacy inventory and required
-signed, isolated installed verification. Ordinary release and Dev builds retain
-the current path. Do not replace the everyday installation or use personal
-signing material. Automated contracts do not qualify appearance, clicks or Focus.
+Released macOS builds enable communication notifications for the standard
+`net.processone.fluux` identity through `tauri.release-macos.conf.json`. The
+`macos-communication` feature and generated plist flag retain the native gates;
+Dev and ordinary local builds keep the legacy notification path. The updater
+remains available independently of communication support.
+
+See [macOS communication notifications](MACOS_COMMUNICATION_PROTOTYPE.md) for
+unsigned contracts, privacy inventory and cleanup. Follow the
+[local signed build before tagging](RELEASE.md#local-signed-macos-test-before-tagging)
+for the production-identity test, not the Dev build/install wrappers. Configuration
+and native contract checks do not qualify signed-app appearance, clicks or Focus.

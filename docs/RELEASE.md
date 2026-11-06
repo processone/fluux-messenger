@@ -7,6 +7,109 @@ and run `npm run platform:qualify -- <evidence.json> <full-commit-sha>` against 
 release candidate. Report missing platform evidence explicitly; green build jobs
 alone do not establish application or physical-device behavior.
 
+## macOS communication profile and update check
+
+macOS releases alone pass `src-tauri/tauri.release-macos.conf.json`, retaining
+production TLS and the updater while enabling `macos-communication`. Dev is excluded.
+The public Developer ID profile lives at
+`apps/fluux/src-tauri/macos/net.processone.fluux.provisionprofile`; it is embedded
+in every released macOS app, not a private signing key. It authorizes
+`8L55BDM864.net.processone.fluux`, team `8L55BDM864`, and Communication Notifications.
+Its expiry is **31 October 2044, 10:03:31 Europe/Paris**. Generation and release
+verification require at least five years remaining: renew before that threshold,
+not just before expiry. Apple checks Developer ID profiles at launch; an expired
+or mismatched profile can stop the updated app and its updater from running.
+
+For renewal, the account owner generates/downloads a Developer ID profile for the
+same explicit App ID, retaining Communication Notifications and the existing
+release certificate. Replace only the public profile file, then run the macOS
+native profile tests and real configuration probe. Check its new expiry and
+certificate membership before release. Do not replace it with an iOS, development,
+Dev-identity or communication-prototype profile; do not create a new certificate
+or alter keychain sharing as part of renewal.
+
+After the existing signing/notarization action, each macOS job downloads its exact
+uploaded `.app.tar.gz` and runs `scripts/verify-macos-release.mjs`. This verifies
+strict signatures, communication/application/team entitlements covered by the
+embedded profile, signing-certificate membership, the unchanged 0.18.1 designated
+requirement, stapled notarization and `INSendMessageIntent`. It also requires the
+main executable to survive ten seconds where the runner can execute the archive's
+architecture; otherwise it explicitly reports runtime proof missing. The verifier
+uses disposable extraction/home folders and never installs the app. Its `--launch`
+option is enabled only in the disposable release runner. Local archive-only
+verification omits that option: a scratch HOME does not isolate personal keychains. A failure
+fails the macOS job; `rename-assets` cannot update `latest.json` because it needs
+all build jobs to succeed. Uploaded downloads can already exist before this check;
+this gate protects updater metadata, not release-page visibility.
+
+The feature is marked **Unreleased** until the next release is cut. Perform the
+local signed test before tagging the first release that carries the communication
+profile. No beta is required. Actual signed/stapled archive qualification for both
+architectures remains separate from profile reading and unsigned configuration
+checks. Keep `Refs #1386` until the local result is recorded. See
+[macOS communication notifications](MACOS_COMMUNICATION_PROTOTYPE.md).
+
+## Local signed macOS test before tagging
+
+Run this test on the candidate commit before step 7 for the first release carrying
+the communication profile. Once its tag is pushed, the existing workflow creates
+the public release and publishes stable updater metadata automatically after its
+checks pass. Do not tag until the local test succeeds; the workflow does not wait
+for that test.
+
+This is a local release-owner signing step. It requires the existing **Developer ID
+Application: ProcessOne (8L55BDM864)** identity and matching private key to be
+available on this Mac, plus the committed public production profile. The signing
+certificate must be listed in that profile. macOS may ask you to approve use of
+that key. If the identity/key is unavailable, stop: do not
+substitute Fluux Dev, ad-hoc signing or a new certificate.
+
+From the project root, build the SDK, then invoke the direct Tauri entrypoint:
+
+```sh
+npm ci
+npm run build:sdk
+env -u APPLE_CERTIFICATE -u APPLE_CERTIFICATE_PASSWORD \
+  APPLE_TEAM_ID=8L55BDM864 \
+  APPLE_SIGNING_IDENTITY='Developer ID Application: ProcessOne (8L55BDM864)' \
+  npm run tauri --workspace=@xmpp/fluux -- build \
+    --target aarch64-apple-darwin \
+    --config src-tauri/tauri.release-macos.conf.json \
+    --config '{"bundle":{"createUpdaterArtifacts":false}}' \
+    --bundles app
+```
+
+This is the Apple silicon target for this Mac. On an Intel Mac, use
+`x86_64-apple-darwin` instead and substitute that target in the output path below.
+Do **not** use `tauri:build`, `tauri:install` or the Dev override: the local build
+wrapper always adds the Dev identity. The direct entrypoint above preserves
+`net.processone.fluux`, production TLS, communication support and the embedded
+profile. The inline override disables **updater artifact generation only**, so
+this local test does not need the separate Tauri updater-signing private key.
+The app's updater plugin and Updates settings remain enabled. Removing the CI
+certificate-payload variables avoids the extension's CI keychain-import path;
+the build still signs with your existing Developer ID key.
+
+The signed app is written to:
+
+```text
+apps/fluux/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Fluux Messenger.app
+```
+
+Quit the installed Fluux first, then open this app from its build folder. Do not
+copy it over your everyday app or run the install helper. It uses the **normal
+Fluux identity, data folder and shared keychain item**, not an isolated Dev store.
+Test a direct and a room notification, avatars, click/read routing, notification
+permissions, Focus, and whether a new keychain prompt appears; confirm Updates is
+still available. Record the exact tested commit and macOS version. Do not publish
+until you are satisfied with the local result.
+
+A local signed `.app` is not proof of a notarized/stapled updater archive or both
+architectures. Those remain the release jobs' checks and the explicit signed
+release proof gap. After a successful local test, proceed with the existing tag
+workflow using the same tested source. Do not claim `Closes #1386` until the local
+result is recorded.
+
 ## Overview
 
 The release process uses a single authoritative source for changelog data, which is then used to generate all other release artifacts.
@@ -187,6 +290,11 @@ git commit -m "chore: release v0.9.0"
 ```
 
 ### 7. Create and Push the Tag
+
+For the first release carrying the communication profile, complete the
+[local signed macOS test](#local-signed-macos-test-before-tagging) on its candidate
+commit first. The tag workflow publishes automatically; it does
+not wait for a later manual test.
 
 Push the release branch first so the tag has somewhere to live, then the tag:
 
