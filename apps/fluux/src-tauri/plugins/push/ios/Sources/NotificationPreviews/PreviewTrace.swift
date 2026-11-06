@@ -155,7 +155,6 @@ enum PreviewTrace {
             }
             let listed = Set(list.rows.map { $0.id.lowercased() })
             var events: [Event] = []
-            if list.total < list.rows.count { events.append(.init(decision: .widgetCountMismatch, time: time)) }
             if targets.keys.contains(where: { !listed.contains($0) }) {
                 events.append(.init(decision: .widgetAppReadNotListed, time: time))
             }
