@@ -128,23 +128,41 @@ enum PreviewTrace {
         let time: TimeInterval
         var durationMs: Int? = nil
     }
-    /// Only store-confirmed read callbacks request this trace; ordinary navigation dismissal does not.
-    /// A read may be local or synchronized. This is not evidence of raw read-sync packet receipt.
-    static func appReadEvents(root: URL?, account: String?, target: String, observedAt: TimeInterval) -> [Event] {
-        guard let account else { return [] }
-        var events = [Event(decision: .widgetAppReadObserved, time: observedAt)]
-        guard let root, let data = try? Data(contentsOf: root.appendingPathComponent("UnreadWidget.json")),
-              let list = try? JSONDecoder().decode(WidgetReadSnapshot.self, from: data), list.account == account else {
-            events.append(.init(decision: .widgetAppReadStateUnavailable, time: Date().timeIntervalSince1970))
+    /// Owned by the app's mirror queue. Targets are bounded in memory and checked within the journal's time window.
+    /// Observe the read now, but inspect its effect after publication, not during the 500 ms debounce.
+    final class AppReads {
+        private var owner: String?
+        private var targets: [String: TimeInterval] = [:]
+
+        func clear() { owner = nil; targets.removeAll() }
+
+        func observed(account: String, target: String, time: TimeInterval) -> [Event] {
+            if owner != account { clear(); owner = account }
+            targets[target.lowercased()] = time
+            if targets.count > NotificationDiagnostic.limit, let oldest = targets.min(by: { $0.value < $1.value })?.key {
+                targets.removeValue(forKey: oldest)
+            }
+            return [.init(decision: .widgetAppReadObserved, time: time)]
+        }
+
+        func published(root: URL, account: String, time: TimeInterval = Date().timeIntervalSince1970) -> [Event] {
+            guard owner == account else { return [] }
+            targets = targets.filter { $0.value <= time && time - $0.value < NotificationDiagnostic.lifetime }
+            guard !targets.isEmpty else { return [] }
+            guard let data = try? Data(contentsOf: root.appendingPathComponent("UnreadWidget.json")),
+                  let list = try? JSONDecoder().decode(WidgetReadSnapshot.self, from: data), list.account == account else {
+                return [.init(decision: .widgetAppReadStateUnavailable, time: time)]
+            }
+            let listed = Set(list.rows.map { $0.id.lowercased() })
+            var events: [Event] = []
+            if list.total < list.rows.count { events.append(.init(decision: .widgetCountMismatch, time: time)) }
+            if targets.keys.contains(where: { !listed.contains($0) }) {
+                events.append(.init(decision: .widgetAppReadNotListed, time: time))
+            }
+            targets = targets.filter { listed.contains($0.key) }
+            if !targets.isEmpty { events.append(.init(decision: .widgetAppReadStillListed, time: time)) }
             return events
         }
-        if list.total < list.rows.count {
-            events.append(.init(decision: .widgetCountMismatch, time: Date().timeIntervalSince1970))
-        }
-        let listed = list.rows.contains { $0.id.lowercased() == target.lowercased() }
-        events.append(.init(decision: listed ? .widgetAppReadStillListed : .widgetAppReadNotListed,
-                            time: Date().timeIntervalSince1970))
-        return events
     }
     private struct WidgetReadSnapshot: Decodable {
         struct Row: Decodable { let id: String }
@@ -155,19 +173,27 @@ enum PreviewTrace {
 
     /// Widgets and push are separate Swift packages. Fixed in-process events share the existing
     /// journal without a second persistent log or a new public command.
-    static func observeWidgetPublications(root: @escaping () -> URL?, account: @escaping () -> String?,
+    static func observeWidgetPublications(root: @escaping () -> URL?, account: @escaping () -> String?, queue: DispatchQueue,
+                                          afterPublication: @escaping (URL, String) -> [Event] = { _, _ in [] },
                                           center: NotificationCenter = .default) -> NSObjectProtocol {
         center.addObserver(forName: Notification.Name("net.processone.fluux.widget-publication"), object: nil, queue: nil) { note in
-            guard let owner = note.userInfo?["account"] as? String, owner == account(), let root = root(),
+            guard let owner = note.userInfo?["account"] as? String,
                   let values = note.userInfo?["events"] as? [[String: Any]] else { return }
-            let allowed: [PreviewDecision] = [.widgetAppListWritten, .widgetAppListCleared, .widgetAppWriteFailed, .widgetAppReloadRequested]
-            let events = values.compactMap { value -> Event? in
-                guard let raw = value["decision"] as? String, let decision = PreviewDecision(rawValue: raw), allowed.contains(decision),
-                      let time = value["time"] as? TimeInterval, time.isFinite else { return nil }
-                return .init(decision: decision, time: time)
+            // Posting must not wait for SQLite or a read-state inspection to finish.
+            queue.async {
+                guard owner == account(), let root = root() else { return }
+                let allowed: [PreviewDecision] = [.widgetAppListWritten, .widgetAppListCleared, .widgetAppWriteFailed, .widgetAppReloadRequested]
+                var events = values.compactMap { value -> Event? in
+                    guard let raw = value["decision"] as? String, let decision = PreviewDecision(rawValue: raw), allowed.contains(decision),
+                          let time = value["time"] as? TimeInterval, time.isFinite else { return nil }
+                    return .init(decision: decision, time: time)
+                }
+                guard events.count == values.count else { return }
+                if events.contains(where: { $0.decision == .widgetAppListWritten || $0.decision == .widgetAppListCleared }) {
+                    events += afterPublication(root, owner)
+                }
+                batchRecorder(root: root, correlation: UUID())(events)
             }
-            guard events.count == values.count else { return }
-            batchRecorder(root: root, correlation: UUID())(events)
         }
     }
     static func recorder(root: URL?) -> (PreviewDecision, Int?) -> Void {

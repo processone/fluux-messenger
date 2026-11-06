@@ -451,8 +451,10 @@ processing marker as `received`:
 - `widgetCountMismatch` flags an observed snapshot with more rows than its total. It records no
   numeric counts or conversation identities and does not repair that snapshot.
 - `widgetAppReadObserved` records the app's existing conversation-read callback, whether local or
-  synchronized. `widgetAppReadStillListed`, `widgetAppReadNotListed` or `widgetAppReadStateUnavailable`
-  describes the widget file when the app checks it. These events do not prove raw read-sync receipt.
+  synchronized. The app keeps recent targets only in memory until subsequent widget publication:
+  `widgetAppReadStillListed`, `widgetAppReadNotListed` or `widgetAppReadStateUnavailable` then describes
+  the file, rather than the old snapshot during the publisher's 500 ms debounce. Mixed results may
+  record both listed and absent targets. These events do not prove raw read-sync receipt.
 - `widgetAppListWritten`, `widgetAppListCleared` or `widgetAppWriteFailed` records the actual app-side
   widget publication outcome; `widgetAppReloadRequested` records its redraw request. An empty list
   for a signed-in account records clearing; sign-out instead clears the journal's session.
@@ -468,8 +470,13 @@ A conversation read on another device is not evidence that a suspended iPhone ha
 read state. The app has no always-running background XMPP connection. Distinguish absent delivery,
 a received/app-observed read that did not clear the shared list, and a cleared list that WidgetKit
 has not redrawn. The app-side widget publication uses one in-process notification to the existing
-push diagnostic writer, not a second journal or a new public command. Its account value is checked
-transiently and never enters the export.
+push diagnostic writer, not a second journal or a new public command. The writer processes this
+handoff on the existing background mirror queue, without holding the widget command on SQLite.
+Its account value is checked transiently and never enters the export. Pending read checks are
+limited to 200 targets and ignore observations older than 48 hours. Targets remain only in memory,
+are forgotten when cleared, and are dropped on logout/account change.
+A new message may make a read conversation unread again; correlate these decisions with the
+controlled observation rather than treating a listed target alone as proof of a missed clear.
 
 **Apple setup.** The widget has its own App ID, `<application identifier>.widgets`, joined to the
 existing App Group `group.<application identifier>.share`. It needs no push or keychain capability.

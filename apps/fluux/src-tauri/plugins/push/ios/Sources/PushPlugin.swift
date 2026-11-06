@@ -33,6 +33,7 @@ class PushPlugin: Plugin {
 
     private var diagnosticTimer: Timer?
     private var widgetDiagnosticObserver: NSObjectProtocol?
+    private let widgetReads = PreviewTrace.AppReads()
     deinit {
         diagnosticTimer?.invalidate()
         if let observer = widgetDiagnosticObserver { NotificationCenter.default.removeObserver(observer) }
@@ -76,7 +77,8 @@ class PushPlugin: Plugin {
         NotificationDiagnosticShare.clear()
         if let observer = widgetDiagnosticObserver { NotificationCenter.default.removeObserver(observer) }
         widgetDiagnosticObserver = PreviewTrace.observeWidgetPublications(root: { NotificationMirror.root },
-                                                                          account: { SharedNames.load().account })
+            account: { SharedNames.load().account }, queue: mirrorQueue,
+            afterPublication: { [weak self] root, account in self?.widgetReads.published(root: root, account: account) ?? [] })
         cleanDiagnostic()
         diagnosticTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.cleanDiagnostic() }
         registerIfAuthorized()
@@ -97,8 +99,10 @@ class PushPlugin: Plugin {
             mirrorQueue.async {
                 do {
                     guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
+                    let accountChanged = SharedNames.load(root: root).account != names.account || names.account == nil
+                    if accountChanged { self.widgetReads.clear() }
                     if let diagnostic = try? NotificationDiagnostic(root: root) {
-                        if SharedNames.load(root: root).account != names.account || names.account == nil {
+                        if accountChanged {
                             try? diagnostic.reset(active: names.account != nil)
                             DispatchQueue.main.async { NotificationDiagnosticShare.clear() }
                         } else { try? diagnostic.activate() }
@@ -259,7 +263,7 @@ class PushPlugin: Plugin {
                     let root = NotificationMirror.root
                     guard SharedNames.load(root: root).account == account else { return }
                     let record = PreviewTrace.batchRecorder(root: root, correlation: UUID())
-                    record(PreviewTrace.appReadEvents(root: root, account: account, target: target, observedAt: observedAt))
+                    record(self.widgetReads.observed(account: account, target: target, time: observedAt))
                 }
             }
             let center = UNUserNotificationCenter.current()

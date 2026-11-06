@@ -8,35 +8,59 @@ import UserNotifications
     static let sender = "sender@example.com"
 
     static func appTrace(_ scenario: String, root: URL, list: UnreadList, store: NotificationDiagnostic) throws {
-        let center = NotificationCenter()
+        let center = NotificationCenter(), queue = DispatchQueue(label: "widget-trace-fixture")
+        let reads = PreviewTrace.AppReads()
         var owner: String? = account
-        let observer = PreviewTrace.observeWidgetPublications(root: { root }, account: { owner }, center: center)
+        let observer = PreviewTrace.observeWidgetPublications(root: { root }, account: { owner }, queue: queue,
+            afterPublication: { root, account in reads.published(root: root, account: account) }, center: center)
         defer { center.removeObserver(observer) }
         let record = PreviewTrace.batchRecorder(root: root, correlation: UUID())
+        func decisions() throws -> [String] {
+            let entries = try JSONSerialization.jsonObject(with: store.export()) as! [[String: Any]]
+            return entries.map { $0["decision"] as! String }
+        }
+        func publish(_ decision: WidgetPublication.Decision) {
+            let time = Date().timeIntervalSince1970
+            WidgetPublication.post(account: account, events: [.init(decision: decision, time: time),
+                .init(decision: .reloadRequested, time: time)], center: center)
+            queue.sync {} // Await this publication's actual diagnostic work, not an arbitrary delay.
+        }
         let expected: [String]
-        if scenario == "app-read-clear" {
-            record(PreviewTrace.appReadEvents(root: root, account: account, target: sender,
-                                             observedAt: Date().timeIntervalSince1970))
+        if scenario == "app-read-clear" || scenario == "app-read-still-listed" {
+            queue.sync { record(reads.observed(account: account, target: sender, time: Date().timeIntervalSince1970)) }
+            let beforePublication = try decisions()
+            precondition(beforePublication == ["widgetAppReadObserved"], "Do not classify the old file during debounce")
+            var prefix = ["widgetAppReadObserved"]
+            if scenario == "app-read-still-listed" {
+                try list.write(root: root)
+                publish(.written) // Negative control: a publication really did retain the read target.
+                prefix += ["widgetAppListWritten", "widgetAppReloadRequested", "widgetAppReadStillListed"]
+                let retained = try decisions()
+                precondition(retained == prefix)
+            }
             var cleared = list
             cleared.rows = []; cleared.total = 0
             try cleared.write(root: root)
-            let written = Date().timeIntervalSince1970
-            WidgetPublication.post(account: account, events: [.init(decision: .cleared, time: written),
-                .init(decision: .reloadRequested, time: written)], center: center)
-            record(PreviewTrace.appReadEvents(root: root, account: account, target: sender,
-                                             observedAt: Date().timeIntervalSince1970))
-            expected = ["widgetAppReadObserved", "widgetAppReadStillListed", "widgetAppListCleared",
-                        "widgetAppReloadRequested", "widgetAppReadObserved", "widgetAppReadNotListed"]
+            publish(.cleared)
+            expected = prefix + ["widgetAppListCleared", "widgetAppReloadRequested", "widgetAppReadNotListed"]
         } else {
             let time = Date().timeIntervalSince1970
             WidgetPublication.post(account: "other@example.com", events: [.init(decision: .cleared, time: time)], center: center)
             center.post(name: Notification.Name("net.processone.fluux.widget-publication"), object: nil,
                         userInfo: ["account": account, "events": [["decision": "Private arbitrary error", "time": time]]])
-            owner = nil
+            queue.sync { owner = nil; reads.clear() }
             WidgetPublication.post(account: account, events: [.init(decision: .cleared, time: time)], center: center)
-            owner = account
-            WidgetPublication.post(account: account, events: [.init(decision: .written, time: time),
-                .init(decision: .reloadRequested, time: time)], center: center)
+            queue.sync {}
+            queue.sync { owner = account }
+            do {
+                queue.suspend()
+                defer { queue.resume() }
+                WidgetPublication.post(account: account, events: [.init(decision: .written, time: time),
+                    .init(decision: .reloadRequested, time: time)], center: center)
+                let held = try decisions()
+                precondition(held.isEmpty, "Posting must return without waiting for the background diagnostic queue")
+            }
+            queue.sync {}
             expected = ["widgetAppListWritten", "widgetAppReloadRequested"]
         }
         let data = try store.export()
@@ -47,7 +71,7 @@ import UserNotifications
         for value in [account, sender, "other@example.com", "Private fixture name", "Private arbitrary error"] {
             precondition(!text.contains(value), "The app trace must retain no identity or arbitrary text")
         }
-        if scenario == "app-read-clear" { print(text) }
+        if scenario == "app-read-clear" || scenario == "app-read-still-listed" { print(text) }
         print("\(scenario): actual file read/clear, in-process publication and bounded export passed")
     }
 
@@ -60,7 +84,7 @@ import UserNotifications
         var list = UnreadList(account: account, total: 0, rows: [], updated: 1)
         var badge = SharedBadge(unread: [], events: 0, notifyAllRooms: [])
         switch scenario {
-        case "already-listed", "app-read-clear":
+        case "already-listed", "app-read-clear", "app-read-still-listed":
             list.rows = [.init(id: sender, kind: "chat", name: "Private fixture name", unread: 1, mentions: 0, last: 1)]
             list.total = 1
         case "count-mismatch":
