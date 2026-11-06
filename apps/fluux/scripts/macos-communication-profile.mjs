@@ -60,12 +60,14 @@ export function validateCommunicationConfig(config, settings, root) {
   const mapped = config.bundle?.macOS?.files?.['embedded.provisionprofile']
   if (typeof mapped !== 'string' || !mapped) throw new Error('Communication build requires an embedded.provisionprofile mapping')
   const profile = validateProfile(decodeProfile(resolve(root, mapped)), { team: settings.team, identifier: settings.identifier })
-  if (settings.identifier === devCommunicationIdentifier) validateDevSigner(profile, settings.signingIdentity, settings.team)
+  const certificate = settings.identifier === devCommunicationIdentifier
+    ? validateDevSigner(profile, settings.signingIdentity, settings.team) : undefined
   console.error(`Communication profile validated: ${profile.Name}; expires ${profile.ExpirationDate}`)
+  return certificate
 }
 
-export function assertProfileCovers(profile, entitlements, certificate, { identifier = communicationIdentity.identifier } = {}) {
-  validateProfile(profile, { identifier })
+export function assertProfileCovers(profile, entitlements, certificate) {
+  validateProfile(profile)
   for (const key of [communicationIdentity.entitlement, 'com.apple.application-identifier', 'com.apple.developer.team-identifier']) {
     if (entitlements[key] !== profile.Entitlements[key]) throw new Error(`Signed entitlement not covered by profile: ${key}`)
   }

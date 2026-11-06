@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { test } from 'node:test'
 import { X509Certificate } from 'node:crypto'
-import { decodeProfile, validateProfile, validateDevSigner, devCommunicationIdentifier, assertProfileCovers } from '../apps/fluux/scripts/macos-communication-profile.mjs'
+import { decodeProfile, validateProfile, validateDevSigner, devCommunicationIdentifier } from '../apps/fluux/scripts/macos-communication-profile.mjs'
 import { devCommunicationConfig } from '../apps/fluux/scripts/tauri-dev-communication.mjs'
 
 // Intent: accepted Dev plan, Developer ID for every bundled macOS Dev build.
@@ -57,8 +57,6 @@ test('real Dev profile authorizes the exact Dev overlay and remains rejected by 
   const profile = decodeProfile(process.env.FLUUX_DEV_COMMUNICATION_PROFILE)
   validateProfile(profile, { identifier: devCommunicationIdentifier })
   assert.throws(() => validateProfile(profile), /application/)
-  const certificate = validateDevSigner(profile, process.env.APPLE_SIGNING_IDENTITY, process.env.APPLE_TEAM_ID)
-  assertProfileCovers(profile, profile.Entitlements, certificate.raw, { identifier: devCommunicationIdentifier })
   assert.equal(config.identifier, devCommunicationIdentifier)
   assert.deepEqual(config.build.features, ['macos-communication'])
   assert.equal(config.bundle.createUpdaterArtifacts, false)

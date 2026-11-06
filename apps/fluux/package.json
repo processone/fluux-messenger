@@ -18,7 +18,6 @@
     "tauri": "node scripts/tauri.mjs",
     "tauri:dev": "./scripts/tauri-dev.sh",
     "tauri:build": "./scripts/tauri-build.sh",
-    "tauri:build:communication": "./scripts/tauri-build.sh",
     "tauri:install": "./scripts/tauri-install.sh",
     "tauri:ios:init": "tauri ios init --ci",
     "posttauri:ios:init": "node scripts/ios-project-freshness.mjs --record && npm run tauri:ios:icons",

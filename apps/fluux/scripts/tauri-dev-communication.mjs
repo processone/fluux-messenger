@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { shareSettings } from './tauri-macos-share.mjs'
-import { decodeProfile, validateDevSigner, validateCommunicationConfig } from './macos-communication-profile.mjs'
+import { validateCommunicationConfig } from './macos-communication-profile.mjs'
 
 const root = fileURLToPath(new URL('../src-tauri/', import.meta.url))
 const readConfig = name => JSON.parse(readFileSync(resolve(root, name), 'utf8'))
@@ -29,9 +29,8 @@ export function devCommunicationConfig(env = process.env) {
       },
     },
   }
-  validateCommunicationConfig(config, shareSettings(config, env), root)
+  const certificate = validateCommunicationConfig(config, shareSettings(config, env), root)
   // Pin the exact covered certificate, not a possibly ambiguous keychain display name.
-  const certificate = validateDevSigner(decodeProfile(env.FLUUX_DEV_COMMUNICATION_PROFILE), env.APPLE_SIGNING_IDENTITY, env.APPLE_TEAM_ID)
   config.bundle.macOS.signingIdentity = certificate.fingerprint.replaceAll(':', '')
   return config
 }

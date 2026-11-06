@@ -280,8 +280,7 @@ or signing. Run it after `npm ci`; it also requires Cargo on `PATH`.
 
 ### Bundled Dev communication notifications
 
-Every bundled macOS Dev build through `tauri:build` (also
-`tauri:build:communication` in the app workspace) or `tauri:install` now requires
+Every bundled macOS Dev build through `tauri:build` or `tauri:install` now requires
 a separate Apple-authorized Developer ID profile and explicit signing inputs.
 Hot reload (`tauri:dev`) remains unchanged and is not reliable notification proof.
 The ordinary Dev override still has no features; the bundled macOS helper adds
@@ -1013,10 +1012,12 @@ The extension build imports that certificate into an ephemeral private
 keychain, signs the extension, and removes the keychain without changing the
 user's default/search keychains. Tauri then signs the parent normally.
 
-Without an Apple team/identity, local builds produce an ad-hoc extension for
-compilation and bundle inspection. This is not proof that macOS will grant
-App Group access or load the sandboxed extension. Validate distribution with
-a proper Developer ID identity; do not advertise ad-hoc signing as a substitute.
+Ordinary non-communication configuration can produce an ad-hoc extension without
+an Apple team/identity for compilation and bundle inspection. Bundled macOS Dev
+helpers instead require an explicit Developer ID identity and matching Dev profile
+and fail without them. Neither unsigned inspection nor ad-hoc signing proves App
+Group access or loading of the sandboxed extension. Validate distribution with
+a proper Developer ID identity.
 If Fluux is not listed, check System Settings' extension controls for sharing.
 
 Checks: `node --test scripts/macos-share.test.mjs`, the ShareInbox component
@@ -1071,8 +1072,10 @@ On a signed test build, manual device verification must additionally confirm:
 Released macOS builds enable communication notifications for the standard
 `net.processone.fluux` identity through `tauri.release-macos.conf.json`. The
 `macos-communication` feature and generated plist flag retain the native gates;
-Dev and ordinary local builds keep the legacy notification path. The updater
-remains available independently of communication support.
+bundled macOS Dev helpers enable the same path with their separate Dev profile
+and explicit Developer ID signer; hot reload and ordinary non-communication
+configuration keep the legacy notification path. The updater remains available
+independently of communication support.
 
 See [macOS communication notifications](MACOS_COMMUNICATION_PROTOTYPE.md) for
 unsigned contracts, privacy inventory and cleanup. Follow the

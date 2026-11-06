@@ -175,9 +175,15 @@ export function createPlan(changes, cwd = root) {
     if (path === 'scripts/macos-signature-read.test.mjs' || path === 'scripts/verify-macos-release.mjs') {
       nodeTest('scripts/macos-signature-read.test.mjs', reason, [], { requires: 'macos-reference' })
     }
+    if (path === `${app}/scripts/tauri-build.sh` || path === `${app}/scripts/tauri-install.sh`) {
+      communication(reason)
+      gate(reason)
+      continue
+    }
     if (path === `${app}/scripts/macos-communication-profile.mjs` || path === 'scripts/verify-macos-release.mjs'
         || path === 'scripts/macos-signature-read.test.mjs'
-        || path === `${app}/scripts/tauri-dev-communication.mjs` || path === 'scripts/macos-dev-communication.test.mjs'
+        || path === `${app}/scripts/tauri-dev-communication.mjs`
+        || path === 'scripts/macos-dev-communication.test.mjs'
         || path === 'scripts/macos-release.test.mjs' || path === `${native}/macos/net.processone.fluux.provisionprofile`) {
       communication(reason)
       continue
