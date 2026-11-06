@@ -23,15 +23,18 @@ final class RoomAlertUITests: XCTestCase {
         let result = XCTWaiter.wait(for: [expectation], timeout: 10)
         let screenshot = try XCTUnwrap(result == .completed ? settled : nil,
                                       "The notification did not reach a settled rendered state")
-        // The retained simulator trees expose no attachment image. If a system
-        // version exposes the attachment identifier, verify that image is visible.
-        // Otherwise the kept settled picture still needs visual inspection.
-        let image = view.images["room-avatar"]
-        if image.exists {
-            XCTAssertTrue(image.isHittable, "The exposed room image must be visible")
-            XCTAssertFalse(image.frame.isEmpty)
-        } else {
-            print("ROOM IMAGE: not individually exposed to accessibility; inspect the settled capture")
+        // Retained simulator trees expose no avatar image. If a system version
+        // names an image after the notification origin, check its visibility.
+        // Otherwise the exact settled picture still needs visual inspection.
+        let title = view.descendants(matching: .any).matching(identifier: "NotificationTitle").firstMatch
+        if title.exists {
+            let image = view.images.matching(NSPredicate(format: "label == %@", title.label)).firstMatch
+            if image.exists {
+                XCTAssertTrue(image.isHittable, "The exposed origin image must be visible")
+                XCTAssertFalse(image.frame.isEmpty)
+            } else {
+                print("NOTIFICATION IMAGE: not individually exposed; inspect the settled capture")
+            }
         }
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
@@ -39,10 +42,11 @@ final class RoomAlertUITests: XCTestCase {
         add(attachment)
     }
 
-    // Regression source: the room image must coexist with room-before-nickname text.
     // Grant permission before posting so an unrelated app tap cannot consume the banner.
-    func testObserveNativeRoomAlert() throws {
-        let app = XCUIApplication()
+    // Each journey starts a fresh fixture host; repetitions must not reuse hidden controls.
+    private func postAlert(_ app: XCUIApplication, directControl: Bool = false) throws -> XCUIElement {
+        app.terminate()
+        app.launchArguments = directControl ? ["--direct-control"] : []
         app.launch()
         app.buttons["Enable notifications"].tap()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -52,14 +56,29 @@ final class RoomAlertUITests: XCTestCase {
             XCTAssertTrue(allow.exists)
             allow.tap()
         }
-        let ready = app.staticTexts.matching(NSPredicate(format: "label == %@", "Ready to post room alert")).firstMatch
-        guard ready.waitForExistence(timeout: 10) else {
-            XCTFail("Fixture could not obtain notification permission: \(app.staticTexts["fixture-status"].label)")
-            return
-        }
-        app.buttons["Post room alert"].tap()
+        let ready = app.staticTexts.matching(NSPredicate(format: "label == %@", "Ready to post alert")).firstMatch
+        _ = try XCTUnwrap(ready.waitForExistence(timeout: 10) ? ready : nil,
+                          "Fixture could not obtain notification permission")
+        app.buttons["Post alert"].tap()
         let banner = springboard.descendants(matching: .any).matching(identifier: "NotificationShortLookView").firstMatch
-        XCTAssertTrue(banner.waitForExistence(timeout: 10))
+        _ = try XCTUnwrap(banner.waitForExistence(timeout: 10) ? banner : nil)
+        return banner
+    }
+
+    // Qualification source: unsigned controls did not render communication images.
+    // Keep a distinct direct-image capture so room-image proof uses a qualified host.
+    func testDirectImageCapability() throws {
+        let app = XCUIApplication()
+        let banner = try postAlert(app, directControl: true)
+        XCTAssertTrue(banner.label.contains("Seve"))
+        try captureSettled(banner, named: "Direct-message image capability control")
+    }
+
+    // Accepted room-attribution layout: room picture and name first, then nickname and message.
+    func testObserveNativeRoomAlert() throws {
+        let app = XCUIApplication()
+        let banner = try postAlert(app)
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let label = banner.label
         let room = try XCTUnwrap(label.range(of: "XSF"))
         let nick = try XCTUnwrap(label.range(of: "Seve"))
@@ -67,6 +86,10 @@ final class RoomAlertUITests: XCTestCase {
         print("SYSTEM BANNER: \(label)")
         try captureSettled(banner, named: "Room notification with room-first text")
         print("COLLAPSED NOTIFICATION: \(banner.debugDescription)")
+        banner.press(forDuration: 1)
+        let expanded = springboard.descendants(matching: .any).matching(identifier: "notification-expanded-view").firstMatch
+        try captureSettled(expanded, named: "Expanded room notification")
+        print("EXPANDED NOTIFICATION: \(springboard.debugDescription)")
         XCUIDevice.shared.press(.home)
         springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.01)).press(forDuration: 0.1,
             thenDragTo: springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.8)))
@@ -74,9 +97,5 @@ final class RoomAlertUITests: XCTestCase {
         XCTAssertTrue(card.waitForExistence(timeout: 10))
         print("NOTIFICATION CENTER: \(springboard.debugDescription)")
         try captureSettled(card, named: "Room notification in Notification Center")
-        card.press(forDuration: 1)
-        let expanded = springboard.descendants(matching: .any).matching(identifier: "notification-expanded-view").firstMatch
-        try captureSettled(expanded, named: "Expanded room notification")
-        print("EXPANDED NOTIFICATION: \(springboard.debugDescription)")
     }
 }

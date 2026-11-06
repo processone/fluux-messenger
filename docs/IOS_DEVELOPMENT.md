@@ -612,22 +612,24 @@ and the extension rechecks ownership at handoff.
 The app server sends notifications with `mutable-content`. For notifications belonging to the signed-in account,
 the `FluuxNotification` service extension replaces the title with the sender's name, read from `NotificationNames.json` in the App Group container, which the app keeps up to
 date with the roster and the joined rooms. A contact shows its name. A room shows the room name as title and the
-nick as subtitle. The nick comes from the push's `muc_nick` attribute when the app server sends the room's bare address in `from`, otherwise from the resource of `from` (see [PUSH_PAYLOAD.md](PUSH_PAYLOAD.md)). Without either, the room name is shown alone. An unknown sender shows the local
+nick on the first message line. The nick comes from the push's `muc_nick` attribute when the app server sends the room's bare address in `from`, otherwise from the resource of `from` (see [PUSH_PAYLOAD.md](PUSH_PAYLOAD.md)). Without either, the room name is shown alone. An unknown sender shows the local
 part of its JID. Enable the App Group `group.net.processone.fluux.share` for the App ID
 `net.processone.fluux.notification` as well, and regenerate its provisioning profile.
 
-Direct-message remote pushes use iOS Communication Notifications. Known-room
-pushes instead use ordinary notifications, with the room name above the sender's
-nick. They bypass incoming intent construction, donation and communication content
-enrichment: iOS communication presentation would put the sender first. A valid cached
-room image is attached to the ordinary alert, so iOS shows it beside the room-first
-text. The attachment uses a disposable copy; the shared avatar mirror stays intact.
-Missing or corrupt room images do not fall back to a sender image. Room alerts retain
-the app icon, without person-based Focus treatment or communication-specific Siri
-behavior. Outgoing share suggestions
-remain unchanged. Local iOS system room alerts use `room — nick` (room alone when
-the nick is missing), because the notification plugin has no subtitle field;
-existing local attachments remain.
+Remote pushes use iOS Communication Notifications. A known room's incoming intent
+identifies the room by its bare JID, room name and cached room picture, never an
+occupant identity with a room picture. The nickname starts the message text, followed
+by the unchanged message; a missing nickname adds no prefix. This keeps the room
+first without the occupant-first heading of a group-message intent. Missing or corrupt
+room pictures use the app-icon fallback, never an occupant/contact picture. The mirror
+is read without staging media attachments or consuming its files.
+
+This attributes incoming room alerts to the room in iOS communication metadata;
+Focus filtering can differ from ordinary alerts and needs device qualification.
+Direct-message intents and outgoing group share suggestions remain unchanged.
+Local iOS system room alerts still use `room — nick` (room alone when the nick is
+missing), because the notification plugin has no subtitle field; existing local
+attachments remain.
 
 The main app declares
 `INSendMessageIntent` in `NSUserActivityTypes` and the
@@ -638,14 +640,19 @@ device build). For direct messages, the notification extension constructs and
 donates an incoming message intent and applies it to the notification using the
 contact's image. Missing or invalid images retain the existing fallback behavior.
 
-The unsigned native room-image regression runs with
-`FLUUX_ROOM_AVATAR_RESULTS=/absolute/output bash scripts/native-tests/NotificationRoomAvatar/run.sh`
-from the project root. It uses production presentation sources, a real project image
-and a sandbox-only mirror adapter, and captures the system banner. It proves the
-native producer and simulator rendering, not APNs delivery or physical-device behavior.
-Use `FLUUX_ROOM_AVATAR_ITERATIONS=10` for consecutive native and visual runs.
-Set `FLUUX_ROOM_AVATAR_NATIVE_ONLY=1` for screen-free metadata checks; these do not
-replace settled compact and expanded image acceptance.
+The native room-image regression runs with
+`FLUUX_ROOM_AVATAR_ADHOC=1 FLUUX_ROOM_AVATAR_RESULTS=/absolute/output /bin/bash scripts/native-tests/NotificationRoomAvatar/run.sh`
+from the project root. It uses production presentation sources, real project images
+and a sandbox-only mirror adapter. The visual journey checks a distinct direct-image
+control and captures settled compact, expanded and Notification Center room views.
+Communication rendering requires the fixture's communication entitlement and temporary
+ad hoc simulator signature (identity `-`); no saved certificate, development team,
+provisioning profile, account or Keychain is used. An unsigned host does not qualify
+the image path. Signature and entitlement metadata are retained with the results.
+This proves the native producer and simulator rendering, not APNs extension execution
+or physical-device behavior. Use `FLUUX_ROOM_AVATAR_ITERATIONS=10` for consecutive runs.
+Set `FLUUX_ROOM_AVATAR_NATIVE_ONLY=1` without `FLUUX_ROOM_AVATAR_ADHOC` for unsigned,
+screen-free metadata checks; these do not replace settled image acceptance.
 
 The dedicated iOS module lives under
 `plugins/push/ios/Sources/NotificationAvatars`; the push plugin compiles it through
@@ -676,30 +683,29 @@ The mirror also carries `roomParticipants`, keyed by the same room bare JID as
 the last-known occupant nicknames, without real member JIDs. Joined rooms publish
 their occupancy after self-presence is available. Suspension retains that snapshot;
 room removal, logout and account changes clear it. The extension still uses the
-own nick to suppress self-sent room messages. Ordinary incoming room presentation
+own nick to suppress self-sent room messages. Incoming room-origin presentation
 does not depend on recipients or occupancy: two-person rooms and unavailable
-occupancy use the same room-first title/subtitle rule. Generic intent construction
-fixtures still cover Apple's recipient and group-image contracts, but incoming
-known-room alerts no longer use that path.
+occupancy use the same room-first name and nickname/message rule. Generic outgoing
+intent fixtures still cover Apple's recipient and group-image contracts separately.
 
-`npm run test:ios-notifications` uses synthetic native fixtures for lookup,
-resizing, pruning, account isolation, missing images and intent construction.
+`npm run test:ios-notifications` uses native fixtures and real project image bytes for
+lookup, resizing, pruning, account isolation, missing images and intent construction.
 The macOS harness cannot exercise iOS-only group-image assignment or system
 content updates; simulator compilation covers those APIs. Real-device acceptance
 requires remote pushes with fixture identities: room above nick, missing nick,
 two-person/unknown occupancy, direct-message avatars, logout, and delivery while
-locked after first unlock. Simulator builds and fixtures do not prove APNs
-extension execution or the rendered Notification Center appearance. Ordinary
-remote room alerts attach the room's valid cached image while keeping room-first
-text and the app icon; missing or corrupt room images never select a sender image.
-Local attachments are unchanged. Inspect settled compact and expanded captures;
-attachment metadata and animation frames are not rendered-image acceptance.
+locked after first unlock. Metadata tests and compilation do not prove rendered
+Notification Center appearance. The separate qualified simulator journey captures
+system views but does not prove APNs extension execution or a signed physical iPhone.
+Room-origin alerts use only the room's cached image; a missing/corrupt image never
+selects an occupant picture. Local attachments are unchanged. Inspect settled compact
+and expanded captures; metadata and animation frames are not rendered-image acceptance.
 
 In-app room toasts on the web and iOS use the room picture (or the shared # fallback),
 with the sender first and the room name and message below. Browser combined-count
 summaries name the room above the count instead of attributing several messages
 to the latest sender; they keep the picture, separate dismiss control and navigation.
-Generic status toasts and system-notification producers are unchanged.
+In-app banners do not change generic status toasts or system-notification routing.
 `useSoundNotification` remains the owner of local message audio and its
 enabled/disabled preference.
 
@@ -707,9 +713,9 @@ To qualify room-first presentation on a signed iPhone build:
 
 1. Join a fixture room with an avatar and at least three occupants, then suspend
    Fluux after the mirror settles and receive a message from a known occupant.
-   Verify the room name above the sender nickname and the unchanged message body
-   in Notification Center. Verify the room's own image in the settled compact card
-   and expanded alert, with the app icon unchanged rather than a sender image.
+   Verify the room name above the sender nickname on the first message line, followed
+   by the unchanged message text in Notification Center. Verify the room's own image
+   and the app badge in the settled compact card and expanded alert, not an occupant image.
 2. Repeat without a nick, without a room avatar, then in a two-person room;
    confirm the room-only or room-first presentation. Without a room avatar, verify
    that neither view substitutes a sender image or shows a stale room image.

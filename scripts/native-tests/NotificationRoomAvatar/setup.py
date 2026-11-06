@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Unsigned native room-notification regression fixture. Run from the project root.
+"""Native room-notification regression fixture. Run from the project root.
 Usage: python3 scripts/native-tests/NotificationRoomAvatar/setup.py LAB_DIRECTORY
-No signing, account, Keychain, APNs or installed Fluux application is used.
+Optional ad hoc signing uses only the generated simulator app and no saved identity.
+No account, Keychain, APNs or installed Fluux application is used.
 Only NotificationMirror.root is redirected to the fixture app's sandbox.
 The production presentation code is copied unchanged; only the mirror root is isolated.
 """
 import hashlib
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -23,7 +25,9 @@ paths = [base + 'NotificationAvatars/' + x for x in [
     'SharedNotificationStore.swift', 'SharedBadge.swift', 'NotificationPresentation.swift',
     'ConversationDestination.swift', 'NotificationSoundSettings.swift']]
 paths += [base + 'NotificationPreviews/PreviewResult.swift']
-manifest = {'revision': rev, 'sources': {}, 'standIn': 'NotificationMirror.root only: private fixture app Caches/RoomAvatarFixture'}
+adhoc = os.environ.get('FLUUX_ROOM_AVATAR_ADHOC') == '1'
+manifest = {'revision': rev, 'sources': {}, 'standIn': 'NotificationMirror.root only: private fixture app Caches/RoomAvatarFixture',
+            'signing': 'ad hoc simulator identity -; no team or profile' if adhoc else 'disabled; metadata checks only'}
 for path in paths:
     data = (repo / path).read_bytes()
     manifest['sources'][path] = hashlib.sha256(data).hexdigest()
@@ -51,5 +55,13 @@ project = {'name': 'RoomAvatarLab', 'settings': {'base': settings}, 'targets': {
     'NativeTests': {'type': 'bundle.unit-test', 'platform': 'iOS', 'sources': ['Tests'], 'dependencies': [{'target': 'AvatarLab'}], 'settings': {'base': {'PRODUCT_BUNDLE_IDENTIFIER': 'org.fluux.lab.room-avatar.tests', 'PRODUCT_NAME': 'NativeTests'}}},
     'UITests': {'type': 'bundle.ui-testing', 'platform': 'iOS', 'sources': ['UITests'], 'dependencies': [{'target': 'AvatarLab'}], 'settings': {'base': {'PRODUCT_BUNDLE_IDENTIFIER': 'org.fluux.lab.room-avatar.ui', 'PRODUCT_NAME': 'UITests', 'TEST_TARGET_NAME': 'AvatarLab'}}}},
     'schemes': {'RoomAvatarLab': {'build': {'targets': {'AvatarLab': 'all', 'NativeTests': 'test', 'UITests': 'test'}}, 'test': {'targets': ['NativeTests', 'UITests']}}}}
+if adhoc:
+    project['settings']['base'].update({'CODE_SIGNING_ALLOWED': 'YES', 'CODE_SIGN_IDENTITY': '-',
+                                       'DEVELOPMENT_TEAM': '', 'CODE_SIGN_STYLE': 'Manual',
+                                       'PROVISIONING_PROFILE_SPECIFIER': ''})
+    project['targets']['AvatarLab']['entitlements'] = {
+        'path': 'App/Capabilities.entitlements',
+        'properties': {'com.apple.developer.usernotifications.communication': True},
+    }
 (lab / 'project.yml').write_text(json.dumps(project, indent=2))
 print(json.dumps(manifest, indent=2))

@@ -58,7 +58,7 @@ enum Fixture {
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completion: @escaping (UNNotificationPresentationOptions) -> Void) {
         let content = notification.request.content
-        Fixture.record("willPresent title=\(content.title), subtitle=\(content.subtitle), attachments=\(content.attachments.count)")
+        Fixture.record("willPresent title=\(content.title), subtitle=\(content.subtitle), body=\(content.body), attachments=\(content.attachments.count)")
         for attachment in content.attachments {
             let accessing = attachment.url.startAccessingSecurityScopedResource()
             let bytes = (try? Data(contentsOf: attachment.url))?.count ?? 0
@@ -79,22 +79,31 @@ final class Controller: UIViewController {
         permission.addAction(UIAction { _ in
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { allowed, _ in
                 DispatchQueue.main.async {
-                    label.text = allowed ? "Ready to post room alert" : "Notification permission denied"
+                    label.text = allowed ? "Ready to post alert" : "Notification permission denied"
                     permission.isHidden = allowed
                 }
             }
         }, for: .touchUpInside)
-        let button = UIButton(type: .system); button.setTitle("Post room alert", for: .normal)
+        let button = UIButton(type: .system); button.setTitle("Post alert", for: .normal)
         button.addAction(UIAction { _ in
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { allowed, error in
                 guard allowed else { return }
                 do {
-                    let names = try Fixture.prepare()
-                    let content = NotificationPresentation.content(for: Fixture.original(), names: names)
+                    var names = try Fixture.prepare()
+                    let original = Fixture.original()
+                    if ProcessInfo.processInfo.arguments.contains("--direct-control") {
+                        // A distinct real image qualifies communication presentation,
+                        // rather than mistaking the app icon for a contact picture.
+                        names.avatars["seve@example.com"] = names.avatars[Fixture.room]
+                        original.userInfo["from"] = "seve@example.com"
+                        original.userInfo.removeValue(forKey: "muc_nick")
+                        original.threadIdentifier = "seve@example.com"
+                    }
+                    let content = NotificationPresentation.content(for: original, names: names)
                     Fixture.record("producer attachments=\(content.attachments.count)")
                     UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "room-avatar-repro", content: content, trigger: nil)) { error in
                         Fixture.record("add accepted=\(error == nil); error=\(String(describing: error))")
-                        DispatchQueue.main.async { label.text = error == nil ? "Posted room alert" : "Notification failed" }
+                        DispatchQueue.main.async { label.text = error == nil ? "Posted alert" : "Notification failed" }
                     }
                 } catch { print("Fixture failed: \(error)") }
             }

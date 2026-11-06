@@ -97,15 +97,18 @@ enum NotificationPresentation {
         return bare
     }
 
+    private static func avatarImage(for jid: String, names: SharedNames, root: URL?) -> INImage? {
+        guard let url = NotificationMirror.imageURL(for: jid, names: names, root: root),
+              let data = try? Data(contentsOf: url), NotificationMirror.thumbnail(data) != nil else { return nil }
+        return INImage(imageData: data)
+    }
+
     static func intent(from: String, body: String, names: SharedNames, root: URL? = NotificationMirror.root) -> INSendMessageIntent? {
         guard let bare = bareJid(from) else { return nil }
         let title = SenderTitle(from: from, names: names)
         let room = names.rooms[bare]
         let nick = from.split(separator: "/", maxSplits: 1).dropFirst().first.map(String.init)
-        let image = NotificationMirror.imageURL(for: bare, names: names, root: root).flatMap { url -> INImage? in
-            guard let data = try? Data(contentsOf: url), NotificationMirror.thumbnail(data) != nil else { return nil }
-            return INImage(imageData: data)
-        }
+        let image = avatarImage(for: bare, names: names, root: root)
         // A room image describes the conversation, never the occupant who sent the message.
         let senderName = room.map { nick ?? $0 } ?? title.title
         let sender = INPerson(personHandle: INPersonHandle(value: room == nil ? bare : from, type: .unknown),
@@ -135,29 +138,26 @@ enum NotificationPresentation {
         return intent
     }
 
-    /// Known rooms use ordinary alerts: iOS communication presentation always puts the sender first.
-    /// Select this before constructing or donating an incoming intent; outgoing suggestions are separate.
-    static func incomingIntent(from: String, body: String, names: SharedNames) -> INSendMessageIntent? {
-        guard let bare = bareJid(from), names.rooms[bare] == nil else { return nil }
-        return intent(from: from, body: body, names: names)
-    }
-
-    /// Ordinary room alerts keep their room-first text. Carry the room image as an
-    /// attachment instead of restoring iOS's sender-first communication presentation.
-    /// The system takes ownership on delivery, so keep a staged copy alive until then
-    /// and never hand it the mirror itself.
-    static func roomAvatar(for jid: String, names: SharedNames) -> UNNotificationAttachment? {
-        guard names.rooms[jid] != nil,
-              let source = NotificationMirror.imageURL(for: jid, names: names),
-              let data = try? Data(contentsOf: source), NotificationMirror.thumbnail(data) != nil else { return nil }
-        let copy = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
-        do {
-            try data.write(to: copy, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-            return try UNNotificationAttachment(identifier: "room-avatar", url: copy, options: nil)
-        } catch {
-            try? FileManager.default.removeItem(at: copy)
-            return nil
+    /// Incoming room alerts belong to the room, not an occupant. iOS renders that
+    /// origin's name and image first; the nickname starts the message text instead
+    /// of becoming a sender-first group heading. Outgoing group suggestions are separate.
+    static func incomingIntent(from: String, body: String, names: SharedNames,
+                               root: URL? = NotificationMirror.root) -> INSendMessageIntent? {
+        guard let bare = bareJid(from) else { return nil }
+        guard let room = names.rooms[bare] else { return intent(from: from, body: body, names: names, root: root) }
+        let nick = SenderTitle(from: from, names: names).subtitle ?? ""
+        let message = nick.isEmpty ? body : nick + "\n" + body
+        let origin = INPerson(personHandle: INPersonHandle(value: bare, type: .unknown),
+                              nameComponents: nil, displayName: room,
+                              image: avatarImage(for: bare, names: names, root: root),
+                              contactIdentifier: nil, customIdentifier: bare)
+        let destination = names.account.flatMap { account -> String? in
+            let destination = ConversationDestination(account: account, jid: bare, type: "groupchat")
+            return destination.belongs(to: names) ? destination.identifier : nil
         }
+        return INSendMessageIntent(recipients: nil, outgoingMessageType: .outgoingMessageText,
+                                   content: message, speakableGroupName: nil, conversationIdentifier: destination,
+                                   serviceName: nil, sender: origin, attachments: nil)
     }
 
     /// `badgeAdded` hears of a conversation a push adds to the badge: its bare JID, whether it is a room,
@@ -186,9 +186,6 @@ enum NotificationPresentation {
             }
         }
         #if os(iOS)
-        if let bare = bareJid(from), let image = roomAvatar(for: bare, names: names) {
-            content.attachments.insert(image, at: 0)
-        }
         if #available(iOS 15.0, *), let intent = incomingIntent(from: from, body: content.body, names: names) {
             let interaction = INInteraction(intent: intent, response: nil)
             interaction.direction = .incoming
@@ -197,6 +194,10 @@ enum NotificationPresentation {
                 interaction.donate(completion: nil)
             }
             if let updated = try? content.updating(from: intent).mutableCopy() as? UNMutableNotificationContent {
+                if let bare = bareJid(from), names.rooms[bare] != nil {
+                    updated.body = intent.content ?? content.body
+                    updated.subtitle = ""
+                }
                 // Preserve the server's grouping id and the app's badge across the system update.
                 updated.threadIdentifier = content.threadIdentifier
                 updated.badge = content.badge
