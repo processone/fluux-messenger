@@ -195,12 +195,14 @@ describe('native communication update capability', () => {
   })
 
   it.each([true, undefined])('#1386 preserves capabilities for communication marker %s', (enabled) => {
+    // The native version, not WebKit's frozen Mac user agent, determines widget availability.
+    const version = '14.0'
     vi.stubGlobal('__TAURI_INTERNALS__', {})
-    vi.stubGlobal('__TAURI_OS_PLUGIN_INTERNALS__', { platform: 'macos' })
+    vi.stubGlobal('__TAURI_OS_PLUGIN_INTERNALS__', { platform: 'macos', version })
     vi.stubGlobal('navigator', { platform: 'MacIntel', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' })
     vi.stubGlobal('__FLUUX_COMMUNICATION__', enabled)
     resetPlatformDetection()
-    const ordinary = deriveCapabilities('desktop', 'macos')
+    const ordinary = deriveCapabilities('desktop', 'macos', version)
     expect(platform()).toEqual(ordinary)
   })
 })
