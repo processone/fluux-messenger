@@ -6,11 +6,12 @@ Nothing is uploaded automatically. Cancelling the sheet sends nothing.
 
 The local App Group journal keeps at most 200 entries for a 48-hour window. One
 notification can produce several entries. It records only the exact app/extension
-version and build, Unix time in seconds, an allowlisted preview decision, elapsed
+version and build, Unix time in seconds, an allowlisted decision, elapsed
 milliseconds when available, and a fresh random UUID correlating that processing
 run. App and extension runs get independent markers; these are not message or
 notification request identifiers. There are no message bodies, correspondents,
 message identifiers, push payloads, tokens, keys or arbitrary error text.
+The same export includes widget decisions; see [Unread conversations widget](IOS_DEVELOPMENT.md#unread-conversations-widget) for their meaning and proof limits.
 
 The journal excludes backup and uses iOS data protection. App and extension writes
 are serialized through SQLite transactions. SQLite uses a two-second busy timeout
@@ -42,7 +43,8 @@ from the local deadline and iOS extension expiry.
   recovery after a temporary writer lock, bounded failure under a sustained lock,
   and four independent processes retaining all 200 entries before logout.
 - `npm run test:ios-notifications`: existing delivery/presentation tests plus
-  exported preview decisions and negative controls for body/identity leakage.
+  exported preview/widget decisions, app-side read/clear publication, and negative
+  controls for body/identity leakage and wrong-account diagnostic handoffs.
 - `FLUUX_DIAGNOSTIC_RESULTS=/absolute/path/outside/project npm run test:ios-diagnostic`:
   creates a disposable unsigned simulator, presents the production native share
   helper, cancels without sending, and verifies temporary-copy deletion. This

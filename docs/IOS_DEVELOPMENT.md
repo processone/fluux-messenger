@@ -441,13 +441,21 @@ processing marker as `received`:
 
 - `widgetNotCounted`: the push did not add a conversation to the badge; the widget hook did not run.
   `widgetBadgeUnavailable` distinguishes a missing, unreadable or invalid badge snapshot from that case.
-- `widgetRootUnavailable`, `widgetListUnavailable`, `widgetAccountMismatch` or `widgetAlreadyListed`:
+- `widgetListUnavailable`, `widgetAccountMismatch` or `widgetAlreadyListed`:
   the widget update stopped before a write. A list-load failure does not distinguish an absent file
   from an unreadable or invalid file.
 - `widgetRowSelected`, then `widgetWriteSucceeded` or `widgetWriteFailed`: the extension selected a
   row and the file write returned success or failure.
 - `widgetReloadRequested` follows only a successful write and records a request, **not** a completed
   redraw. `widgetReloadUnavailable` means this runtime could not make that request.
+- `widgetCountMismatch` flags an observed snapshot with more rows than its total. It records no
+  numeric counts or conversation identities and does not repair that snapshot.
+- `widgetAppReadObserved` records the app's existing conversation-read callback, whether local or
+  synchronized. `widgetAppReadStillListed`, `widgetAppReadNotListed` or `widgetAppReadStateUnavailable`
+  describes the widget file when the app checks it. These events do not prove raw read-sync receipt.
+- `widgetAppListWritten`, `widgetAppListCleared` or `widgetAppWriteFailed` records the actual app-side
+  widget publication outcome; `widgetAppReloadRequested` records its redraw request. An empty list
+  for a signed-in account records clearing; sign-out instead clears the journal's session.
 
 These events add no account, conversation, name, message, path or raw error fields. The existing
 200-entry, 48-hour and logout/session bounds still apply. One widget sequence uses one diagnostic
@@ -455,6 +463,13 @@ transaction, outside the unread-file lock. Diagnostics remain best effort: an un
 folder or diagnostic store can leave no events, so their absence proves neither success nor failure.
 The export survives opening the app after the observation, but its version field alone does not
 attest the installed source commit. Record source provenance and visible results separately.
+
+A conversation read on another device is not evidence that a suspended iPhone has received the
+read state. The app has no always-running background XMPP connection. Distinguish absent delivery,
+a received/app-observed read that did not clear the shared list, and a cleared list that WidgetKit
+has not redrawn. The app-side widget publication uses one in-process notification to the existing
+push diagnostic writer, not a second journal or a new public command. Its account value is checked
+transiently and never enters the export.
 
 **Apple setup.** The widget has its own App ID, `<application identifier>.widgets`, joined to the
 existing App Group `group.<application identifier>.share`. It needs no push or keychain capability.

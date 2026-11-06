@@ -20,11 +20,12 @@ function inTauri(): boolean {
  *   Windows currently treats the command as best-effort because the inbox
  *   WinRT wrapper does not expose notification history tags.
  * - iOS: the push plugin removes delivered pushes and local notifications
- *   for the conversation.
+ *   for the conversation. Only store-confirmed read callbacks set `read` for
+ *   the account-checked, content-free widget diagnostic; navigation does not.
  * - Android: no-op.
  * - Web (PWA): service worker registration, keyed by tag.
  */
-export async function dismissNotification(navType: NavType, navTarget: string): Promise<void> {
+export async function dismissNotification(navType: NavType, navTarget: string, options: { read?: boolean } = {}): Promise<void> {
   try {
     const jid = connectionStore.getState().jid
     const accountId = jid ? getBareJid(jid) : null
@@ -32,7 +33,10 @@ export async function dismissNotification(navType: NavType, navTarget: string): 
       if (await isMobileTauri()) {
         if (!platform().usesNativePush) return
         const { invoke } = await import('@tauri-apps/api/core')
-        await invoke('plugin:push|dismiss_notifications', { target: navTarget })
+        await invoke('plugin:push|dismiss_notifications', {
+          target: navTarget,
+          ...(options.read && accountId ? { read: true, account: accountId } : {}),
+        })
         return
       }
       const { invoke } = await import('@tauri-apps/api/core')

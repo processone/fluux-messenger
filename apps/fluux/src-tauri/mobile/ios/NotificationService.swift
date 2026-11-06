@@ -20,9 +20,9 @@ final class NotificationService: UNNotificationServiceExtension {
         let names = loadNames()
         let root = ledgerRoot()
         // Capture one session for both paths: logout must reject every late event from this push.
-        let recordWidget = PreviewTrace.batchRecorder(root: root, correlation: UUID())
+        let record = PreviewTrace.batchRecorder(root: root, correlation: UUID())
         let diagnostic: (PreviewDecision, Int?) -> Void = { decision, duration in
-            recordWidget([.init(decision: decision, time: Date().timeIntervalSince1970, durationMs: duration)])
+            record([.init(decision: decision, time: Date().timeIntervalSince1970, durationMs: duration)])
         }
         delivery.diagnostic = diagnostic
         diagnostic(.received, nil)
@@ -63,10 +63,10 @@ final class NotificationService: UNNotificationServiceExtension {
                                                account: names.account,
                                                // Read under the list's lock, so the newest push leaves the newest total.
                                                total: SharedBadge.load(root: root)?.count ?? counted, root: root)
-            recordWidget(events.map(\.diagnostic))
+            record(events.map(\.diagnostic))
         }
         if !widgetCounted {
-            recordWidget([.init(decision: badge == nil ? .widgetBadgeUnavailable : .widgetNotCounted,
+            record([.init(decision: badge == nil ? .widgetBadgeUnavailable : .widgetNotCounted,
                                 time: Date().timeIntervalSince1970)])
         }
         delivery.begin(content, completion: finish)
@@ -133,13 +133,13 @@ private extension UnreadList.PushEvent {
     var diagnostic: PreviewTrace.Event {
         let value: PreviewDecision
         switch decision {
-        case .rootUnavailable: value = .widgetRootUnavailable
         case .listUnavailable: value = .widgetListUnavailable
         case .accountMismatch: value = .widgetAccountMismatch
         case .alreadyListed: value = .widgetAlreadyListed
         case .rowSelected: value = .widgetRowSelected
         case .writeSucceeded: value = .widgetWriteSucceeded
         case .writeFailed: value = .widgetWriteFailed
+        case .countMismatch: value = .widgetCountMismatch
         case .reloadRequested: value = .widgetReloadRequested
         case .reloadUnavailable: value = .widgetReloadUnavailable
         }

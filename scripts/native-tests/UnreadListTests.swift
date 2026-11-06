@@ -71,11 +71,10 @@ import UserNotifications
             var reloads = 0
             var tick: TimeInterval = 0
             let clock = { tick += 1; return Date(timeIntervalSince1970: tick) }
-            func record(_ owner: String? = account, conversation: String = "new@example.com", at folder: URL? = nil) -> [UnreadList.PushEvent] {
+            func record(_ owner: String? = account, conversation: String = "new@example.com", at folder: URL) -> [UnreadList.PushEvent] {
                 UnreadList.recordPush(conversation: conversation, kind: "chat", name: "Private name", account: owner,
                                       total: 4, root: folder, clock: clock, reload: { reloads += 1; return true })
             }
-            precondition(record().map(\.decision) == [.rootUnavailable])
             precondition(record(at: root).map(\.decision) == [.listUnavailable])
             try fixture().write(root: root)
             precondition(record("other@example.com", at: root).map(\.decision) == [.accountMismatch])

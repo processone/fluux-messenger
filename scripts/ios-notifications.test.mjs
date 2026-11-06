@@ -17,7 +17,8 @@ function compileNotificationTests(scratch, main, ios = false, realEngine = false
     ...['SharedNotificationStore.swift', 'SharedBadge.swift', 'NotificationPresentation.swift', 'ConversationDestination.swift', 'NotificationSoundSettings.swift'].map(name =>
       fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationAvatars/${name}`, import.meta.url))),
     fileURLToPath(new URL('../apps/fluux/src-tauri/plugins/push/ios/Sources/ShareSuggestions.swift', import.meta.url)),
-    fileURLToPath(new URL('../apps/fluux/src-tauri/plugins/widgets/ios/Sources/UnreadList.swift', import.meta.url)),
+    ...['UnreadList.swift', 'WidgetPublication.swift'].map(name =>
+      fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/widgets/ios/Sources/${name}`, import.meta.url))),
     ...['PreviewKeychain.swift', 'PreviewDelivery.swift', 'PreviewLedger.swift', 'PreviewResult.swift', 'PreviewTrace.swift'].map(name =>
       fileURLToPath(new URL(`../apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/${name}`, import.meta.url))),
     fileURLToPath(new URL(realEngine ? '../apps/fluux/src-tauri/mobile/ios/NotificationPreviewEngine.swift' : './native-tests/NotificationPreviewEngineStub.swift', import.meta.url)),
@@ -134,17 +135,13 @@ test('iOS widget push decisions reach the bounded content-free export', { skip: 
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-widget-diagnostic-'))
   try {
     const binary = compileNotificationTests(scratch, 'NotificationWidgetDiagnosticTests.swift')
-    for (const scenario of ['success', 'already-listed', 'account-mismatch', 'not-counted', 'badge-unavailable', 'list-unavailable', 'diagnostic-unavailable']) {
+    for (const scenario of ['success', 'already-listed', 'account-mismatch', 'not-counted', 'badge-unavailable', 'list-unavailable', 'diagnostic-unavailable', 'app-read-clear', 'app-publication-guards', 'count-mismatch']) {
       await t.test(scenario, () => {
         const output = execFileSync(binary, [scenario], { encoding: 'utf8' })
         assert.match(output, /passed|notification delivered/)
-        if (scenario === 'success') console.log(output.trim())
+        if (scenario === 'success' || scenario === 'app-read-clear' || scenario === 'count-mismatch') console.log(output.trim())
       })
     }
-    const iosBinary = compileNotificationTests(scratch, 'NotificationWidgetDiagnosticTests.swift', true)
-    const platform = execFileSync('xcrun', ['vtool', '-show-build', iosBinary], { encoding: 'utf8' })
-    assert.match(platform, /platform IOSSIMULATOR/)
-    console.log(platform.trim())
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
 

@@ -8,8 +8,10 @@ enum PreviewDecision: String, Codable {
     case previewsOff, senderNotCovered, snapshotChanged, noSession, ledgerUnavailable
     case previewsHidden, capabilityChanged, windowUnavailable, archiveUnavailable
     case deadline, systemExpiry, preview, noEngineResult, nothingNew, appShown, appDuplicate
-    case widgetNotCounted, widgetBadgeUnavailable, widgetRootUnavailable, widgetListUnavailable, widgetAccountMismatch, widgetAlreadyListed
+    case widgetNotCounted, widgetBadgeUnavailable, widgetListUnavailable, widgetAccountMismatch, widgetAlreadyListed
     case widgetRowSelected, widgetWriteSucceeded, widgetWriteFailed, widgetReloadRequested, widgetReloadUnavailable
+    case widgetCountMismatch, widgetAppReadObserved, widgetAppReadStillListed, widgetAppReadNotListed, widgetAppReadStateUnavailable
+    case widgetAppListWritten, widgetAppListCleared, widgetAppWriteFailed, widgetAppReloadRequested
 }
 
 /// Cross-process, bounded diagnostic storage. Session markers contain no account identifier.
@@ -85,7 +87,7 @@ final class NotificationDiagnostic {
             let now = now ?? Date().timeIntervalSince1970
             try prune(now: now)
             guard try session() == marker else { return }
-            for entry in entries.suffix(Self.limit) where entry.time > now - Self.lifetime && entry.time <= now {
+            for entry in entries where entry.time > now - Self.lifetime && entry.time <= now {
                 let data = try JSONEncoder().encode(entry)
                 var statement: OpaquePointer?
                 defer { sqlite3_finalize(statement) }
@@ -126,8 +128,50 @@ enum PreviewTrace {
         let time: TimeInterval
         var durationMs: Int? = nil
     }
-    static func recorder(root: URL?, correlation: UUID = UUID()) -> (PreviewDecision, Int?) -> Void {
-        let record = batchRecorder(root: root, correlation: correlation)
+    /// Only store-confirmed read callbacks request this trace; ordinary navigation dismissal does not.
+    /// A read may be local or synchronized. This is not evidence of raw read-sync packet receipt.
+    static func appReadEvents(root: URL?, account: String?, target: String, observedAt: TimeInterval) -> [Event] {
+        guard let account else { return [] }
+        var events = [Event(decision: .widgetAppReadObserved, time: observedAt)]
+        guard let root, let data = try? Data(contentsOf: root.appendingPathComponent("UnreadWidget.json")),
+              let list = try? JSONDecoder().decode(WidgetReadSnapshot.self, from: data), list.account == account else {
+            events.append(.init(decision: .widgetAppReadStateUnavailable, time: Date().timeIntervalSince1970))
+            return events
+        }
+        if list.total < list.rows.count {
+            events.append(.init(decision: .widgetCountMismatch, time: Date().timeIntervalSince1970))
+        }
+        let listed = list.rows.contains { $0.id.lowercased() == target.lowercased() }
+        events.append(.init(decision: listed ? .widgetAppReadStillListed : .widgetAppReadNotListed,
+                            time: Date().timeIntervalSince1970))
+        return events
+    }
+    private struct WidgetReadSnapshot: Decodable {
+        struct Row: Decodable { let id: String }
+        let account: String
+        let total: Int
+        let rows: [Row]
+    }
+
+    /// Widgets and push are separate Swift packages. Fixed in-process events share the existing
+    /// journal without a second persistent log or a new public command.
+    static func observeWidgetPublications(root: @escaping () -> URL?, account: @escaping () -> String?,
+                                          center: NotificationCenter = .default) -> NSObjectProtocol {
+        center.addObserver(forName: Notification.Name("net.processone.fluux.widget-publication"), object: nil, queue: nil) { note in
+            guard let owner = note.userInfo?["account"] as? String, owner == account(), let root = root(),
+                  let values = note.userInfo?["events"] as? [[String: Any]] else { return }
+            let allowed: [PreviewDecision] = [.widgetAppListWritten, .widgetAppListCleared, .widgetAppWriteFailed, .widgetAppReloadRequested]
+            let events = values.compactMap { value -> Event? in
+                guard let raw = value["decision"] as? String, let decision = PreviewDecision(rawValue: raw), allowed.contains(decision),
+                      let time = value["time"] as? TimeInterval, time.isFinite else { return nil }
+                return .init(decision: decision, time: time)
+            }
+            guard events.count == values.count else { return }
+            batchRecorder(root: root, correlation: UUID())(events)
+        }
+    }
+    static func recorder(root: URL?) -> (PreviewDecision, Int?) -> Void {
+        let record = batchRecorder(root: root, correlation: UUID())
         return { decision, duration in
             record([Event(decision: decision, time: Date().timeIntervalSince1970, durationMs: duration)])
         }
@@ -138,7 +182,7 @@ enum PreviewTrace {
         return { events in
             // Diagnostic I/O is best effort and never changes notification presentation.
             guard let store = try? NotificationDiagnostic(root: root) else { return }
-            let entries = events.suffix(NotificationDiagnostic.limit).map {
+            let entries = events.map {
                 NotificationDiagnostic.Entry(version: version, time: $0.time, correlation: correlation,
                                              decision: $0.decision, durationMs: $0.durationMs)
             }
