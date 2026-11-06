@@ -12,6 +12,8 @@ compile_error!("the recovery host requires test-only storage constructors");
 mod credentials;
 #[path = "../src/keychain_refusal.rs"]
 mod keychain_refusal;
+// Maintenance test exports are unused in this custom-harness GUI host.
+#[allow(unused_imports)]
 #[path = "../src/macos_secrets.rs"]
 mod macos_secrets;
 // Its iOS-only test imports are unused in this macOS-only GUI harness.
