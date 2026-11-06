@@ -4,5 +4,15 @@
   "identifier": "net.processone.fluux.dev",
   "build": {
     "features": []
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "xmpp",
+          "net.processone.fluux.dev"
+        ]
+      }
+    }
   }
 }

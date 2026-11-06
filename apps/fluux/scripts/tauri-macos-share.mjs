@@ -95,7 +95,7 @@ function prepare() {
   })
 }
 
-function signExtension(extension, settings) {
+export function signExtension(extension, settings, entitlements = join(output, 'Share.entitlements')) {
   const identity = settings.signingIdentity
   let scratch
   let keychain
@@ -122,10 +122,10 @@ function signExtension(extension, settings) {
     }
     sign('codesign', '/usr/bin/codesign', ['--force', '--sign', identity, '--options', 'runtime',
       ...(identity === '-' ? [] : ['--timestamp']), ...(keychain ? ['--keychain', keychain] : []),
-      '--entitlements', join(output, 'Share.entitlements'), extension])
+      '--entitlements', entitlements, extension])
     sign('codesign --verify', '/usr/bin/codesign', ['--verify', '--strict', extension])
   } catch (error) {
-    throw new Error(`Could not sign the macOS Share Extension (${error.message}); check the signing identity and certificate configuration`)
+    throw new Error(`Could not sign the macOS extension (${error.message}); check the signing identity and certificate configuration`)
   } finally {
     if (searchList) { try { run('/usr/bin/security', ['list-keychains', '-d', 'user', '-s', ...searchList]) } catch { /* Best effort. */ } }
     if (keychain) { try { run('/usr/bin/security', ['delete-keychain', keychain]) } catch { /* Already removed. */ } }

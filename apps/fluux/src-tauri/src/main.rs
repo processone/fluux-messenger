@@ -1705,6 +1705,8 @@ fn main() {
             macos_secrets::register_access_observer(startup_recovery::macos::credential_access_changed);
             #[cfg(target_os = "macos")]
             app.handle().plugin(tauri_plugin_share_inbox::init())?;
+            #[cfg(target_os = "macos")]
+            app.handle().plugin(tauri_plugin_widgets::init())?;
             // Wire up native notification backends (macOS: request auth now;
             // the delegate / click routing lands in a later task).
             notifications::setup(app.handle());

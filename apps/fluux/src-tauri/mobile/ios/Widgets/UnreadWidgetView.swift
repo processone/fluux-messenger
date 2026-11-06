@@ -2,6 +2,8 @@ import SwiftUI
 import WidgetKit
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
 #endif
 
 struct UnreadEntry: TimelineEntry {
@@ -9,14 +11,26 @@ struct UnreadEntry: TimelineEntry {
     /// Nil until the app has signed in and written a list.
     let list: UnreadList?
     let names: SharedNames
+    var root: URL? = nil
 }
 
 struct UnreadWidgetView: View {
     let entry: UnreadEntry
     @Environment(\.widgetFamily) private var family
 
+    var body: some View {
+        UnreadWidgetContent(entry: entry, family: family,
+                            scheme: Bundle.main.object(forInfoDictionaryKey: "FluuxAppScheme") as? String)
+    }
+}
+
+/// Presentation shared by the WidgetKit host and the unsigned native rendering fixture.
+/// WidgetKit owns its read-only family environment; the content only needs the selected family.
+struct UnreadWidgetContent: View {
+    let entry: UnreadEntry
+    let family: WidgetFamily
     /// The scheme the app registers; a row opens its conversation through it.
-    private var scheme: String? { Bundle.main.object(forInfoDictionaryKey: "FluuxAppScheme") as? String }
+    let scheme: String?
 
     private var rowLimit: Int {
         switch family {
@@ -31,13 +45,24 @@ struct UnreadWidgetView: View {
     private var listURL: URL? { scheme.flatMap { URL(string: "\($0)://shortcut") } }
 
     var body: some View {
+        #if os(macOS)
+        VStack(alignment: .leading, spacing: 4) {
+            content
+            if let list = entry.list, entry.date >= list.staleDate {
+                Text("widget.stale").font(.caption2).foregroundStyle(.secondary)
+            }
+        }.widgetURL(listURL)
+        #else
         content.widgetURL(listURL)
+        #endif
     }
 
     @ViewBuilder private var content: some View {
         switch family {
+        #if os(iOS)
         case .accessoryCircular: circular
         case .accessoryInline: inline
+        #endif
         default: home
         }
     }
@@ -46,6 +71,7 @@ struct UnreadWidgetView: View {
 
     // MARK: Lock screen: the unread total only
 
+    #if os(iOS)
     private var circular: some View {
         ZStack {
             AccessoryWidgetBackground()
@@ -60,6 +86,8 @@ struct UnreadWidgetView: View {
     private var inline: some View {
         Text(entry.list == nil ? LocalizedStringKey("widget.signin") : Self.unreadText(total))
     }
+
+    #endif
 
     // MARK: Home screen
 
@@ -135,9 +163,13 @@ struct UnreadWidgetView: View {
 
     private func avatar(_ row: UnreadList.Row) -> Image? {
         #if canImport(UIKit)
-        guard let url = NotificationMirror.imageURL(for: row.id, names: entry.names),
+        guard let url = NotificationMirror.imageURL(for: row.id, names: entry.names, root: entry.root),
               let image = UIImage(contentsOfFile: url.path) else { return nil }
         return Image(uiImage: image)
+        #elseif canImport(AppKit)
+        guard let url = NotificationMirror.imageURL(for: row.id, names: entry.names, root: entry.root),
+              let image = NSImage(contentsOf: url) else { return nil }
+        return Image(nsImage: image)
         #else
         return nil
         #endif
@@ -160,6 +192,7 @@ struct UnreadRowView: View {
     let image: Image?
     /// The entry's time, so the labels are right at each midnight without a redraw.
     let now: Date
+    @Environment(\.locale) private var locale
 
     var body: some View {
         HStack(spacing: 8) {
@@ -172,7 +205,7 @@ struct UnreadRowView: View {
             VStack(alignment: .trailing, spacing: 1) {
                 Text("\(row.unread)").font(.caption.bold())
                 if let date = row.date {
-                    Text(UnreadList.when(date, now: now)).font(.caption2).foregroundStyle(.secondary)
+                    Text(UnreadList.when(date, now: now, locale: locale)).font(.caption2).foregroundStyle(.secondary)
                 }
             }
         }

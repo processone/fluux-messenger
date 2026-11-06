@@ -67,10 +67,10 @@ let clearedAccount: string | null = null
 // Ends the block when the session itself ends, however the publisher was stopped by then.
 let releaseBlock: (() => void) | undefined
 
-async function write(list: UnreadWidgetList | null): Promise<void> {
+async function write(list: UnreadWidgetList | null, refresh = false): Promise<void> {
   // `updated` moves on every build; only the content decides whether to write.
   const serialized = JSON.stringify(list && { ...list, updated: 0 })
-  if (serialized === shared) return
+  if (!refresh && serialized === shared) return
   shared = serialized
   try {
     const { invoke } = await import('@tauri-apps/api/core')
@@ -82,8 +82,8 @@ async function write(list: UnreadWidgetList | null): Promise<void> {
 }
 
 /** Writes the list for the widget, or empties it for `null`, unless unchanged. */
-export function shareUnreadWidgetList(list: UnreadWidgetList | null): Promise<void> {
-  const next = writes.then(() => write(list))
+export function shareUnreadWidgetList(list: UnreadWidgetList | null, refresh = false): Promise<void> {
+  const next = writes.then(() => write(list, refresh))
   writes = next
   return next
 }
@@ -125,10 +125,11 @@ const PUBLISH_DELAY_MS = 500
  * Keeps the widget's list current while the app runs. Returns a function that
  * stops it. `events` reads the pending-event count the badge adds.
  */
-export function startUnreadWidgetPublisher(events: () => number): () => void {
+export function startUnreadWidgetPublisher(events: () => number, heartbeatMs?: number): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined
   let stopped = false
-  const publish = () => {
+  const publish = (refresh = false) => {
+    clearTimeout(timer)
     timer = undefined
     if (stopped) return
     const account = connectionStore.getState().jid?.split('/')[0]
@@ -136,12 +137,14 @@ export function startUnreadWidgetPublisher(events: () => number): () => void {
     if (account !== clearedAccount) clearedAccount = null
     void shareUnreadWidgetList(account
       ? unreadWidgetList(account, chatStore.getState().conversations.values(), roomStore.getState(), events())
-      : null)
+      : null, refresh)
   }
-  const schedule = () => { if (!stopped) timer ??= setTimeout(publish, PUBLISH_DELAY_MS) }
+  const schedule = () => { if (!stopped) timer ??= setTimeout(() => publish(), PUBLISH_DELAY_MS) }
   const unsubscribe = [chatStore.subscribe(schedule), roomStore.subscribe(schedule), connectionStore.subscribe(schedule)]
   const cancel = () => { clearTimeout(timer); timer = undefined }
+  const heartbeat = heartbeatMs ? setInterval(() => publish(true), heartbeatMs) : undefined
   const stop = () => {
+    clearInterval(heartbeat)
     stopped = true
     cancel()
     unsubscribe.forEach(unsubscribeOne => unsubscribeOne())

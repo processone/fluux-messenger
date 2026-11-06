@@ -112,7 +112,8 @@
         "storageIsDurable",
         "supportsKeyRotation",
         "syncsNativeTitleBarTheme",
-        "webviewStallsAfterSleep"
+        "webviewStallsAfterSleep",
+        "publishesUnreadWidget"
       ]
     },
     {

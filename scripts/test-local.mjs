@@ -154,6 +154,15 @@ export function createPlan(changes, cwd = root) {
       platform(reason)
       continue
     }
+    // The native widget shares views/models and the avatar reader with iOS. Keep both owners'
+    // checks when those files change, rather than treating a macOS compile as iOS qualification.
+    if (path === `${app}/scripts/tauri-macos-widgets.mjs` || path === `${app}/scripts/tauri-macos-share.mjs`
+        || path.startsWith(`${native}/plugins/widgets/`) || path.startsWith(`${native}/mobile/ios/Widgets/`)
+        || path.endsWith('/SharedNotificationStore.swift') || path === `${native}/tauri.macos.conf.json`
+        || path === 'scripts/native-tests/MacWidgetsTests.swift') {
+      nodeTest('scripts/macos-widgets-policy.test.mjs', reason)
+      nodeTest('scripts/macos-widgets.test.mjs', reason, [], { requires: 'mac' })
+    }
     const removed = status === 'D' || status === 'R'
     // Only known documentation roots are exempt, never generated permission references.
     if (/^(docs\/.*\.(md|png|jpg|svg)|README\.md|CONTRIBUTING\.md|CHANGELOG\.md|RELEASE_NOTES\.md|LICENSE)$/.test(path)) {

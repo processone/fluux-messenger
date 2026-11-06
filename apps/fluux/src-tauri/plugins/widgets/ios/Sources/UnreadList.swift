@@ -8,6 +8,7 @@ import WidgetKit
 ///
 /// The app replaces the whole list whenever its unread state changes. While the
 /// app is suspended, a push from a conversation not yet listed adds a row.
+@available(macOS 14.0, *)
 struct UnreadList: Codable, Equatable {
     struct Row: Codable, Equatable, Identifiable {
         let id: String
@@ -34,6 +35,10 @@ struct UnreadList: Codable, Equatable {
     var rows: [Row]
     /// When the app wrote the list, in milliseconds since the epoch.
     var updated: Double
+
+    /// The desktop publisher renews its timestamp every minute, even without new messages.
+    /// A five-minute grace period allows scheduling delays before the saved list is marked stale.
+    var staleDate: Date { Date(timeIntervalSince1970: updated / 1000).addingTimeInterval(5 * 60) }
 
     static func load(root: URL?) -> UnreadList? {
         guard let url = root?.appendingPathComponent(fileName),
@@ -116,6 +121,7 @@ struct UnreadList: Codable, Equatable {
     }
 }
 
+@available(macOS 14.0, *)
 extension UnreadList {
     /// The next `count` midnights after `date`: the moments a time label turns into "Yesterday", then a weekday.
     static func midnights(after date: Date, count: Int = 7, calendar: Calendar = .current) -> [Date] {

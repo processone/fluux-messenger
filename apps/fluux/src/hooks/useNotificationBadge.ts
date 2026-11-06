@@ -133,7 +133,7 @@ export function useNotificationBadge(): void {
   // list without changing any count above.
   useEffect(() => {
     if (!platform().publishesUnreadWidget) return
-    return startUnreadWidgetPublisher(() => eventsPendingCount)
+    return startUnreadWidgetPublisher(() => eventsPendingCount, platform().os === 'macos' ? 60_000 : undefined)
   }, [eventsPendingCount])
 
   // Initialize favicon badge handler (browser only)

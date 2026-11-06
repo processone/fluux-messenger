@@ -37,6 +37,8 @@ jobs:
         run: npm run check:tls-build
       - name: Guard production and Dev communication entitlements
         run: node --test scripts/macos-share.test.mjs scripts/macos-release.test.mjs scripts/macos-dev-communication.test.mjs
+      - name: Build and exercise the unsigned macOS unread widget
+        run: node --test --test-concurrency=1 scripts/macos-widgets-policy.test.mjs scripts/macos-widgets.test.mjs
       - name: Read the public reference release signature without signing
         run: |
           REFERENCE_DIR=$(mktemp -d)

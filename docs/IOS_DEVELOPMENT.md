@@ -431,6 +431,9 @@ The widget never connects to the server. It reads `UnreadWidget.json` from the A
   or when the app next opens.
 - Avatars come from the `Avatars/` copies the notification mirror already keeps.
 
+The same list and widget views also serve the native [macOS widget](MACOS_WIDGET.md).
+The Apple conversation mirror shares avatars on both platforms; desktop writes go through the widgets plugin.
+
 The Swift model (`plugins/widgets/ios/Sources/UnreadList.swift`) is compiled by the plugin, the
 widget and the notification extension. Strings are English and French (`mobile/ios/Widgets/Resources`).
 
