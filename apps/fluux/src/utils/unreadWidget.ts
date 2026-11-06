@@ -1,5 +1,6 @@
 import { chatStore, connectionStore, roomStore, unreadConversations } from '@fluux/sdk'
 import type { UnreadConversation } from '@fluux/sdk'
+import { pushBadgeState, sharePushBadge, type PushBadgeState } from './pushBadge'
 
 /**
  * What the home-screen widget shows, written into the shared App Group folder.
@@ -14,7 +15,7 @@ export interface UnreadWidgetList {
   account: string
   total: number
   rows: UnreadWidgetRow[]
-  /** When the app wrote the list, in milliseconds since the epoch. */
+  /** When this state snapshot was built, in milliseconds since the epoch. */
   updated: number
 }
 
@@ -58,7 +59,6 @@ function toRow(row: UnreadConversation): UnreadWidgetRow {
   }
 }
 
-let shared: string | null = null
 // Writes reach native code in order, so a stale list cannot land after a newer one or after a clear.
 let writes: Promise<void> = Promise.resolve()
 let active: { stop: () => void; cancel: () => void } | undefined
@@ -67,23 +67,21 @@ let clearedAccount: string | null = null
 // Ends the block when the session itself ends, however the publisher was stopped by then.
 let releaseBlock: (() => void) | undefined
 
-async function write(list: UnreadWidgetList | null): Promise<void> {
-  // `updated` moves on every build; only the content decides whether to write.
-  const serialized = JSON.stringify(list && { ...list, updated: 0 })
-  if (serialized === shared) return
-  shared = serialized
+async function write(list: UnreadWidgetList | null, badge?: PushBadgeState): Promise<void> {
   try {
+    // One projection owns membership even when the number of unread conversations is unchanged.
+    // The extension also writes both files: native code, not our last call, decides what is current.
+    if (badge) await sharePushBadge(badge, { force: true })
     const { invoke } = await import('@tauri-apps/api/core')
     await invoke('plugin:widgets|set_unread_list', { list })
   } catch (err) {
-    shared = null
     console.warn('[Widgets] Unread list not shared:', err)
   }
 }
 
-/** Writes the list for the widget, or empties it for `null`, unless unchanged. */
-export function shareUnreadWidgetList(list: UnreadWidgetList | null): Promise<void> {
-  const next = writes.then(() => write(list))
+/** Checks/replaces the actual shared list, or empties it for `null`; native code deduplicates. */
+export function shareUnreadWidgetList(list: UnreadWidgetList | null, badge?: PushBadgeState): Promise<void> {
+  const next = writes.then(() => write(list, badge))
   writes = next
   return next
 }
@@ -107,12 +105,12 @@ export function clearUnreadWidgetList(): Promise<void> {
     })
     releaseBlock = () => { releaseBlock = undefined; unsubscribe() }
   }
-  return shareUnreadWidgetList(null)
+  return shareUnreadWidgetList(null, { unread: [], events: 0, notifyAllRooms: [] })
 }
 
-/** Forgets what was last shared, so the next list is sent. For tests. */
+/** Resets the publisher, session block and publication queue. For tests. */
 export function resetSharedUnreadWidgetList(): void {
-  shared = null
+  active?.stop()
   writes = Promise.resolve()
   active = undefined
   releaseBlock?.()
@@ -131,19 +129,35 @@ export function startUnreadWidgetPublisher(events: () => number): () => void {
   const publish = () => {
     timer = undefined
     if (stopped) return
-    const account = connectionStore.getState().jid?.split('/')[0]
+    const connection = connectionStore.getState()
+    const account = connection.jid?.split('/')[0]
     if (account && account === clearedAccount) return
+    // A wake is not proof that catch-up has established the current unread state.
+    if (account && (connection.status !== 'online' || connection.isVerifying || connection.isCatchingUp || connection.replayOwners > 0)) return
     if (account !== clearedAccount) clearedAccount = null
-    void shareUnreadWidgetList(account
-      ? unreadWidgetList(account, chatStore.getState().conversations.values(), roomStore.getState(), events())
-      : null)
+    const conversations = chatStore.getState().conversations
+    const rooms = roomStore.getState()
+    const pending = events()
+    const now = Date.now()
+    const list = account ? unreadWidgetList(account, conversations.values(), rooms, pending, now) : null
+    void shareUnreadWidgetList(list,
+      account ? { ...pushBadgeState(conversations.values(), rooms, pending), account, updated: now }
+        : { unread: [], events: 0, notifyAllRooms: [] })
   }
   const schedule = () => { if (!stopped) timer ??= setTimeout(publish, PUBLISH_DELAY_MS) }
   const unsubscribe = [chatStore.subscribe(schedule), roomStore.subscribe(schedule), connectionStore.subscribe(schedule)]
   const cancel = () => { clearTimeout(timer); timer = undefined }
+  // Do not leave a known snapshot waiting on a JS timer when iOS suspends the webview.
+  const flushBeforeHide = () => {
+    if (document.visibilityState !== 'hidden' || timer === undefined) return
+    cancel()
+    publish()
+  }
+  document.addEventListener('visibilitychange', flushBeforeHide)
   const stop = () => {
     stopped = true
     cancel()
+    document.removeEventListener('visibilitychange', flushBeforeHide)
     unsubscribe.forEach(unsubscribeOne => unsubscribeOne())
     if (active?.stop === stop) active = undefined
   }

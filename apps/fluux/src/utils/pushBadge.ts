@@ -12,6 +12,10 @@ type RoomState = Parameters<typeof roomSelectors.roomsWithUnread>[0]
  * count only on a mention, which the push does not reveal.
  */
 export interface PushBadgeState {
+  /** Bare signed-in account; absent only while signed out or for legacy callers. */
+  account?: string
+  /** Snapshot time shared with the widget, to reject app work queued before a newer push. */
+  updated?: number
   /** Conversations and rooms counted in the badge. */
   unread: string[]
   /** Pending events (subscription requests, invitations, ...). */
@@ -42,10 +46,10 @@ export function pushBadgeState(
 
 let shared: string | null = null
 
-/** Sets the app icon badge and shares its state, unless it is unchanged. */
-export async function sharePushBadge(state: PushBadgeState): Promise<void> {
+/** Sets the badge unless unchanged; `force` rechecks extension-writable state and requires acknowledgement. */
+export async function sharePushBadge(state: PushBadgeState, { force = false } = {}): Promise<void> {
   const serialized = JSON.stringify(state)
-  if (serialized === shared) return
+  if (!force && serialized === shared) return
   shared = serialized
   try {
     const { invoke } = await import('@tauri-apps/api/core')
@@ -53,6 +57,7 @@ export async function sharePushBadge(state: PushBadgeState): Promise<void> {
   } catch (err) {
     shared = null
     console.warn('[NativePush] Badge not set:', err)
+    if (force) throw err
   }
 }
 

@@ -29,6 +29,7 @@ export const changelog: ChangelogEntry[] = [
         'macOS: Fluux cleans up old keychain copies without asking for access again. Copies that differ are kept, so you never lose a secret',
         'macOS: a keychain prompt waiting for your answer no longer blocks saving other secrets, such as your credentials, MCP token or encrypted OpenPGP key',
         'iOS: room notifications show the room picture. The room name stays first, with the sender above the message',
+        'iOS: returning to Fluux removes widget rows that are already read, including after reading on another device. Push updates keep the listed conversations consistent with the unread total instead of retaining obsolete rows',
       ],
     }],
   },

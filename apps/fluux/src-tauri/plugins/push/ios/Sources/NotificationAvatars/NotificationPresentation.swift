@@ -180,9 +180,9 @@ enum NotificationPresentation {
         content.title = sender.title
         if let subtitle = sender.subtitle { content.subtitle = subtitle }
         if var badge = current {
-            let counted = badge.unread.count
-            content.badge = NSNumber(value: badge.count(adding: from, rooms: names.rooms, root: badgeRoot))
-            if badge.unread.count > counted, let bare = bareJid(from) {
+            let change = badge.counting(adding: from, rooms: names.rooms, root: badgeRoot)
+            content.badge = NSNumber(value: change.count)
+            if change.added, let bare = bareJid(from) {
                 badgeAdded?(bare, names.rooms[bare] != nil || badge.notifyAllRooms.contains(bare), badge.count)
             }
         }

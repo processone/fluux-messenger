@@ -28,7 +28,6 @@ class PushPlugin: Plugin {
     // launch registration to Library/Caches/push-probe.txt, readable with `devicectl device copy from`.
     private let probe = ProcessInfo.processInfo.environment["FLUUX_PUSH_PROBE"] == "1"
 
-    private var badge: BadgeState?
     private let mirrorQueue = DispatchQueue(label: "fluux.notification-mirror")
 
     private var diagnosticTimer: Timer?
@@ -78,7 +77,9 @@ class PushPlugin: Plugin {
         if let observer = widgetDiagnosticObserver { NotificationCenter.default.removeObserver(observer) }
         widgetDiagnosticObserver = PreviewTrace.observeWidgetPublications(root: { NotificationMirror.root },
             account: { SharedNames.load().account }, queue: mirrorQueue,
-            afterPublication: { [weak self] root, account in self?.widgetReads.published(root: root, account: account) ?? [] })
+            needsReadCheck: { [weak self] in self?.widgetReads.hasPending ?? false },
+            afterPublication: { [weak self] root, account, snapshot in
+                self?.widgetReads.published(root: root, account: account, snapshotAt: snapshot) ?? [] })
         cleanDiagnostic()
         diagnosticTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.cleanDiagnostic() }
         registerIfAuthorized()
@@ -240,12 +241,16 @@ class PushPlugin: Plugin {
     /// service extension, which raises it on pushes while the app is suspended.
     @objc public func setBadge(_ invoke: Invoke) {
         do {
-            let badge = try invoke.parseArgs(BadgeState.self)
+            let badge = try invoke.parseArgs(SharedBadge.self)
             DispatchQueue.main.async {
-                self.badge = badge
-                self.restoreBadge()
+                do {
+                    guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
+                    try badge.writeIfChanged(root: root)
+                    self.applyBadgeCount(SharedBadge.load(root: root)?.count ?? badge.count)
+                    // The widget publication waits for this actual membership write, not just its dispatch.
+                    invoke.resolve()
+                } catch { invoke.reject(error.localizedDescription) }
             }
-            invoke.resolve()
         } catch {
             invoke.reject(error.localizedDescription)
         }
@@ -297,28 +302,20 @@ class PushPlugin: Plugin {
         }
     }
 
-    /// Puts back the badge the app last set, over what pushes added to it.
+    /// A wake does not make the app's old in-memory count authoritative over newer pushes.
+    /// The store publisher replaces membership after verification/catch-up; until then retain the shared state.
     @objc fileprivate func restoreBadge() {
-        guard let badge = badge else { return }
-        try? PushPlugin.writeShared(badge, to: "NotificationBadge.json")
-        let count = badge.unread.count + badge.events
+        guard let owner = SharedNames.load().account else { applyBadgeCount(0); return }
+        guard let badge = SharedBadge.load(), badge.account == owner else { return }
+        applyBadgeCount(badge.count)
+    }
+
+    private func applyBadgeCount(_ count: Int) {
         if #available(iOS 16.0, *) {
             UNUserNotificationCenter.current().setBadgeCount(count)
         } else {
             UIApplication.shared.applicationIconBadgeNumber = count
         }
-    }
-
-    private static func writeShared<T: Encodable>(_ value: T, to name: String) throws {
-        guard let group = Bundle.main.object(forInfoDictionaryKey: "FluuxShareGroup") as? String,
-              let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
-            throw PushError.sharedContainerUnavailable
-        }
-        // A push can arrive while the device is locked, after its first unlock.
-        try JSONEncoder().encode(value).write(
-            to: root.appendingPathComponent(name),
-            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
-        )
     }
 
     fileprivate func didTap(userInfo: [AnyHashable: Any]) {
@@ -511,14 +508,6 @@ private struct DismissTarget: Decodable {
     let target: String
     let read: Bool?
     let account: String?
-}
-
-/// What the app icon badge counts: `unread.count + events`. Read by the
-/// notification service extension.
-private struct BadgeState: Codable {
-    let unread: [String]
-    let events: Int
-    let notifyAllRooms: [String]
 }
 
 enum PushError: LocalizedError {

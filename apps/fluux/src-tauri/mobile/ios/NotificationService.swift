@@ -54,19 +54,23 @@ final class NotificationService: UNNotificationServiceExtension {
             .flatMap { try? JSONDecoder().decode(PreviewWords.self, from: $0) } ?? PreviewWords.localized
         // The widget lists what the badge counts: a push that raises the badge adds its conversation.
         var widgetCounted = false
-        let badge = SharedBadge.load(root: root)
+        let storedBadge = SharedBadge.load(root: root)
+        let badge = storedBadge.flatMap { $0.account == names.account ? $0 : nil }
         let content = NotificationPresentation.content(for: request.content, names: names, activity: words.activity,
-                                                       badge: badge, badgeRoot: root) { bare, isRoom, counted in
+                                                       badge: badge, badgeRoot: root) { bare, isRoom, _ in
             widgetCounted = true
             let events = UnreadList.recordPush(conversation: bare, kind: isRoom ? "groupchat" : "chat",
                                                name: (isRoom ? names.rooms[bare] : names.contacts[bare]) ?? bare,
                                                account: names.account,
-                                               // Read under the list's lock, so the newest push leaves the newest total.
-                                               total: SharedBadge.load(root: root)?.count ?? counted, root: root)
+                                               // Read one owned membership/total snapshot under the shared writer lock.
+                                               badge: SharedBadge.load(root: root).map {
+                                                   .init(account: $0.account, unread: $0.unread, total: $0.count, updated: $0.updated)
+                                               }, root: root)
             record(events.map(\.diagnostic))
         }
         if !widgetCounted {
-            record([.init(decision: badge == nil ? .widgetBadgeUnavailable : .widgetNotCounted,
+            record([.init(decision: storedBadge != nil && badge == nil ? .widgetAccountMismatch
+                                : badge == nil ? .widgetBadgeUnavailable : .widgetNotCounted,
                                 time: Date().timeIntervalSince1970)])
         }
         delivery.begin(content, completion: finish)
@@ -134,6 +138,8 @@ private extension UnreadList.PushEvent {
         let value: PreviewDecision
         switch decision {
         case .listUnavailable: value = .widgetListUnavailable
+        case .badgeUnavailable: value = .widgetBadgeUnavailable
+        case .notCounted: value = .widgetNotCounted
         case .accountMismatch: value = .widgetAccountMismatch
         case .alreadyListed: value = .widgetAlreadyListed
         case .rowSelected: value = .widgetRowSelected

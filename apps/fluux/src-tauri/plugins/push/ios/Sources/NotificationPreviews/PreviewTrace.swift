@@ -134,6 +134,7 @@ enum PreviewTrace {
         private var owner: String?
         private var targets: [String: TimeInterval] = [:]
 
+        var hasPending: Bool { !targets.isEmpty }
         func clear() { owner = nil; targets.removeAll() }
 
         func observed(account: String, target: String, time: TimeInterval) -> [Event] {
@@ -145,21 +146,23 @@ enum PreviewTrace {
             return [.init(decision: .widgetAppReadObserved, time: time)]
         }
 
-        func published(root: URL, account: String, time: TimeInterval = Date().timeIntervalSince1970) -> [Event] {
+        func published(root: URL, account: String, snapshotAt: TimeInterval? = nil,
+                       time: TimeInterval = Date().timeIntervalSince1970) -> [Event] {
             guard owner == account else { return [] }
             targets = targets.filter { $0.value <= time && time - $0.value < NotificationDiagnostic.lifetime }
-            guard !targets.isEmpty else { return [] }
+            let eligible = targets.filter { target in snapshotAt.map { target.value <= $0 } ?? true }
+            guard !eligible.isEmpty else { return [] }
             guard let data = try? Data(contentsOf: root.appendingPathComponent("UnreadWidget.json")),
                   let list = try? JSONDecoder().decode(WidgetReadSnapshot.self, from: data), list.account == account else {
                 return [.init(decision: .widgetAppReadStateUnavailable, time: time)]
             }
             let listed = Set(list.rows.map { $0.id.lowercased() })
             var events: [Event] = []
-            if targets.keys.contains(where: { !listed.contains($0) }) {
+            if eligible.keys.contains(where: { !listed.contains($0) }) {
                 events.append(.init(decision: .widgetAppReadNotListed, time: time))
             }
-            targets = targets.filter { listed.contains($0.key) }
-            if !targets.isEmpty { events.append(.init(decision: .widgetAppReadStillListed, time: time)) }
+            for target in eligible.keys where !listed.contains(target) { targets.removeValue(forKey: target) }
+            if eligible.keys.contains(where: { listed.contains($0) }) { events.append(.init(decision: .widgetAppReadStillListed, time: time)) }
             return events
         }
     }
@@ -173,13 +176,17 @@ enum PreviewTrace {
     /// Widgets and push are separate Swift packages. Fixed in-process events share the existing
     /// journal without a second persistent log or a new public command.
     static func observeWidgetPublications(root: @escaping () -> URL?, account: @escaping () -> String?, queue: DispatchQueue,
-                                          afterPublication: @escaping (URL, String) -> [Event] = { _, _ in [] },
+                                          needsReadCheck: @escaping () -> Bool = { true },
+                                          afterPublication: @escaping (URL, String, TimeInterval?) -> [Event] = { _, _, _ in [] },
                                           center: NotificationCenter = .default) -> NSObjectProtocol {
         center.addObserver(forName: Notification.Name("net.processone.fluux.widget-publication"), object: nil, queue: nil) { note in
             guard let owner = note.userInfo?["account"] as? String,
                   let values = note.userInfo?["events"] as? [[String: Any]] else { return }
+            let snapshotAt = (note.userInfo?["snapshotAt"] as? TimeInterval).flatMap { $0.isFinite ? $0 : nil }
             // Posting must not wait for SQLite or a read-state inspection to finish.
             queue.async {
+                // A native no-op with no pending reads needs neither account-file I/O nor SQLite.
+                if values.isEmpty && (snapshotAt == nil || !needsReadCheck()) { return }
                 guard owner == account(), let root = root() else { return }
                 let allowed: [PreviewDecision] = [.widgetAppListWritten, .widgetAppListCleared, .widgetAppWriteFailed, .widgetAppReloadRequested]
                 var events = values.compactMap { value -> Event? in
@@ -188,9 +195,10 @@ enum PreviewTrace {
                     return .init(decision: decision, time: time)
                 }
                 guard events.count == values.count else { return }
-                if events.contains(where: { $0.decision == .widgetAppListWritten || $0.decision == .widgetAppListCleared }) {
-                    events += afterPublication(root, owner)
+                if snapshotAt != nil || events.contains(where: { $0.decision == .widgetAppListWritten || $0.decision == .widgetAppListCleared }) {
+                    events += afterPublication(root, owner, snapshotAt)
                 }
+                guard !events.isEmpty else { return }
                 batchRecorder(root: root, correlation: UUID())(events)
             }
         }
