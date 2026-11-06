@@ -152,6 +152,25 @@ fn main() {
             .success());
         println!("cargo:rustc-link-search=native={}", out.display());
         println!("cargo:rustc-link-lib=static=fluux_communication");
+        // Objective-C @available checks need Clang's runtime; Rust's release LTO
+        // can discard its own copy of the availability helper.
+        let runtime = Command::new("xcrun")
+            .args(["clang", "--print-file-name=libclang_rt.osx.a"])
+            .output()
+            .expect("locate Clang's macOS runtime");
+        assert!(
+            runtime.status.success(),
+            "Could not locate Clang's macOS runtime"
+        );
+        let runtime = String::from_utf8(runtime.stdout).expect("Clang runtime path is UTF-8");
+        let runtime = std::path::Path::new(runtime.trim());
+        assert!(
+            runtime.is_file(),
+            "Clang's macOS runtime archive is missing"
+        );
+        // The desktop binary does not consume the library target, so pass the
+        // archive to each final link rather than bundling it into the Rust rlib.
+        println!("cargo:rustc-link-arg={}", runtime.display());
         println!("cargo:rustc-link-lib=framework=Intents");
         println!("cargo:rustc-link-lib=framework=UserNotifications");
         println!("cargo:rustc-link-lib=framework=AppKit");
