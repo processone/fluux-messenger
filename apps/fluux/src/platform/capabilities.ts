@@ -233,7 +233,7 @@ export interface PlatformCapabilities {
  * Pure, so a test can build any combination — including ones no real host
  * produces — without touching globals.
  */
-export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): PlatformCapabilities {
+export function deriveCapabilities(shell: PlatformShell, os: PlatformOS, osVersion?: string): PlatformCapabilities {
   const desktop = shell === 'desktop'
   const native = desktop || shell === 'mobile'
   const web = shell === 'web'
@@ -275,7 +275,7 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     usesWebPush: web,
     nativeHaptics: ios,
     usesNativePush: shell === 'mobile' && os === 'ios',
-    publishesUnreadWidget: (shell === 'mobile' && os === 'ios') || (shell === 'desktop' && os === 'macos'),
+    publishesUnreadWidget: (shell === 'mobile' && os === 'ios') || (shell === 'desktop' && os === 'macos' && (osVersion === undefined || Number(osVersion.split('.')[0]) >= 14)),
 
     // Window and process. macOS overlays its window controls on the content,
     // Windows has no native frame at all, Linux keeps a native title bar.

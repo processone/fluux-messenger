@@ -40,39 +40,56 @@ test('unsigned desktop extension and real shared-file adapter build and render w
     const binary = join(extension, 'Contents/MacOS/FluuxWidgets')
     const architectures = execFileSync('xcrun', ['lipo', '-archs', binary], { encoding: 'utf8' }).trim().split(/\s+/).sort()
     assert.deepEqual(architectures, ['arm64', 'x86_64'])
+    const library = join(scratch, 'bundle/libFluuxWidgets.dylib')
+    assert.deepEqual(execFileSync('xcrun', ['lipo', '-archs', library], { encoding: 'utf8' }).trim().split(/\s+/).sort(), architectures)
     const app = join(scratch, 'WidgetChecks.app/Contents')
     mkdirSync(join(app, 'MacOS'), { recursive: true })
+    mkdirSync(join(app, 'Frameworks'), { recursive: true })
+    cpSync(library, join(app, 'Frameworks/libFluuxWidgets.dylib'))
     cpSync(join(root, 'mobile/ios/Widgets/Resources'), join(app, 'Resources'), { recursive: true })
     writeFileSync(join(app, 'Info.plist'), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>WidgetChecks</string><key>CFBundleIdentifier</key><string>invalid.example.widget-checks</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>')
     const sources = ['plugins/widgets/macos/WidgetsBridge.swift', 'plugins/widgets/ios/Sources/UnreadList.swift',
       'plugins/push/ios/Sources/NotificationAvatars/SharedNotificationStore.swift',
       'plugins/push/ios/Sources/NotificationAvatars/ConversationDestination.swift',
       'mobile/ios/Widgets/UnreadWidgetView.swift'].map(path => join(root, path))
+    const loader = join(scratch, 'loader.o')
+    execFileSync('xcrun', ['clang', '-fobjc-arc', '-fblocks', '-mmacosx-version-min=14.0', '-c', join(root, 'plugins/widgets/macos/WidgetLoader.m'), '-o', loader])
     const executable = join(app, 'MacOS/WidgetChecks')
     execFileSync('xcrun', ['swiftc', '-swift-version', '5', '-parse-as-library', '-target', `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-macos14.0`,
-      ...sources, fileURLToPath(new URL('./native-tests/MacWidgetsTests.swift', import.meta.url)), '-o', executable], { timeout: 120000 })
+      ...sources, loader, fileURLToPath(new URL('./native-tests/MacWidgetsTests.swift', import.meta.url)), '-o', executable], { timeout: 120000 })
     const pictures = process.env.FLUUX_WIDGET_RESULTS ? resolve(process.env.FLUUX_WIDGET_RESULTS) : join(scratch, 'pictures')
     const output = execFileSync(executable, [join(scratch, 'shared'), pictures, join(root, '../public/logo.png')], { encoding: 'utf8', timeout: 60000 })
     assert.match(output, /rendered-view checks passed/)
     console.log(output.trim())
-    // The app's minimum stays unchanged: the reload bridge must also compile at the old minimum.
+    // E1: the old-minimum host loader must have no Swift runtime link dependency on either arch.
     for (const architecture of architectures) {
-      execFileSync('xcrun', ['swiftc', '-swift-version', '5', '-parse-as-library', '-whole-module-optimization', '-emit-object',
-        '-target', `${architecture}-apple-macos10.13`, ...sources.slice(0, 4), '-o', join(scratch, `bridge-${architecture}.o`)], { timeout: 120000 })
+      const probe = join(scratch, `loader-${architecture}`)
+      execFileSync('xcrun', ['clang', '-fobjc-arc', '-fblocks', '-arch', architecture,
+        `-mmacosx-version-min=${config.bundle.macOS.minimumSystemVersion}`, '-framework', 'Foundation',
+        join(root, 'plugins/widgets/macos/WidgetLoader.m'),
+        fileURLToPath(new URL('./native-tests/MacWidgetLoaderLink.m', import.meta.url)), '-o', probe])
+      const dependencies = execFileSync('otool', ['-L', probe], { encoding: 'utf8' })
+      assert.doesNotMatch(dependencies, /libswift|WidgetKit/)
+      if (architecture === (process.arch === 'arm64' ? 'arm64' : 'x86_64')) execFileSync(probe)
     }
-    // Exercise the normal pre-host signing branch with a failing signer function, never a signing
-    // program. This proves assembly precedes signing and a signing failure prevents completion,
-    // not that any signature or notarization is valid.
-    assert.throws(() => buildWidgets(settings, {
-      output: join(scratch, 'sign-probe'),
-      sign(path, host, entitlements) {
-        assert.deepEqual(host, settings)
+    const order = []
+    buildWidgets(settings, { output: join(scratch, 'sign-order'), sign(path, host, entitlements) {
+      assert.deepEqual(host, settings)
+      if (entitlements === null) {
+        assert.ok(readFileSync(path).length > 0)
+        order.push('library')
+      } else {
         assert.ok(readFileSync(join(path, 'Contents/MacOS/FluuxWidgets')).length > 0)
         const saved = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', entitlements]))
         assert.deepEqual(saved, widgetEntitlements(settings))
-        throw new Error('Signing stand-in refused the assembled widget')
-      },
+        order.push('extension')
+      }
+    } })
+    assert.deepEqual(order, ['library', 'extension'])
+    assert.throws(() => buildWidgets(settings, {
+      output: join(scratch, 'sign-refusal'),
+      sign() { throw new Error('Signing stand-in refused the assembled widget') },
     }), /Signing stand-in refused/)
-    console.log('Widget assembly precedes the signer; signing failure stops bundle completion (stand-in only)')
+    console.log('Library and extension assemble before pre-host signing; signing refusal stops completion (stand-ins only)')
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })

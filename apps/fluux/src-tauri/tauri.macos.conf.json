@@ -17,7 +17,8 @@
       "infoPlist": "macos/.build/Info.plist",
       "files": {
         "PlugIns/FluuxShare.appex": "macos/.build/FluuxShare.appex",
-        "PlugIns/FluuxWidgets.appex": "macos/.build/FluuxWidgets.appex"
+        "PlugIns/FluuxWidgets.appex": "macos/.build/FluuxWidgets.appex",
+        "Frameworks/libFluuxWidgets.dylib": "macos/.build/libFluuxWidgets.dylib"
       }
     }
   },

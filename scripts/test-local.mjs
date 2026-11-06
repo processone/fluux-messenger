@@ -159,7 +159,7 @@ export function createPlan(changes, cwd = root) {
     if (path === `${app}/scripts/tauri-macos-widgets.mjs` || path === `${app}/scripts/tauri-macos-share.mjs`
         || path.startsWith(`${native}/plugins/widgets/`) || path.startsWith(`${native}/mobile/ios/Widgets/`)
         || path.endsWith('/SharedNotificationStore.swift') || path === `${native}/tauri.macos.conf.json`
-        || path === 'scripts/native-tests/MacWidgetsTests.swift') {
+        || path === 'scripts/native-tests/MacWidgetsTests.swift' || path === 'scripts/native-tests/MacWidgetLoaderLink.m') {
       nodeTest('scripts/macos-widgets-policy.test.mjs', reason)
       nodeTest('scripts/macos-widgets.test.mjs', reason, [], { requires: 'mac' })
     }

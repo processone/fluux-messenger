@@ -10,6 +10,8 @@ test('native widget implementation paths select the unsigned macOS behavior suit
   for (const path of [
     'apps/fluux/scripts/tauri-macos-widgets.mjs',
     'apps/fluux/src-tauri/plugins/widgets/macos/WidgetsBridge.swift',
+    'apps/fluux/src-tauri/plugins/widgets/macos/WidgetLoader.m',
+    'scripts/native-tests/MacWidgetLoaderLink.m',
     'apps/fluux/src-tauri/plugins/widgets/src/desktop.rs',
     'apps/fluux/src-tauri/mobile/ios/Widgets/UnreadWidgetView.swift',
     'apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationAvatars/SharedNotificationStore.swift',

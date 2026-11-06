@@ -49,9 +49,6 @@ fn main() {
     }
 
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
-        // The widgets plugin supplies the static refresh shim. Weak-link its newer framework
-        // on the final host executable so pre-widget macOS versions still launch.
-        println!("cargo:rustc-link-arg=-Wl,-weak_framework,WidgetKit");
         // Small public-AppKit/WebKit adapter; no Swift runtime or signing access.
         let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
         let arch = match std::env::var("CARGO_CFG_TARGET_ARCH").unwrap().as_str() {

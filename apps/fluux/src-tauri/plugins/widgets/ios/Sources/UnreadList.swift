@@ -36,9 +36,9 @@ struct UnreadList: Codable, Equatable {
     /// When the app wrote the list, in milliseconds since the epoch.
     var updated: Double
 
-    /// The desktop publisher renews its timestamp every minute, even without new messages.
-    /// A five-minute grace period allows scheduling delays before the saved list is marked stale.
-    var staleDate: Date { Date(timeIntervalSince1970: updated / 1000).addingTimeInterval(5 * 60) }
+    /// The desktop publisher renews its timestamp every fifteen minutes, even without new messages.
+    /// The matching fifteen-minute age window marks the saved list stale without new publication.
+    var staleDate: Date { Date(timeIntervalSince1970: updated / 1000).addingTimeInterval(15 * 60) }
 
     static func load(root: URL?) -> UnreadList? {
         guard let url = root?.appendingPathComponent(fileName),

@@ -50,8 +50,21 @@ export function buildWidgets(settings, { output = join(root, 'macos/.build'), ar
     return binary
   })
   run('/usr/bin/xcrun', ['lipo', '-create', ...binaries, '-output', join(contents, 'MacOS/FluuxWidgets')])
+  // Swift stays in this optional macOS 14 library, not in the host's static link graph.
+  const library = join(output, 'libFluuxWidgets.dylib')
+  const libraries = architectures.map(architecture => {
+    const binary = join(output, `libFluuxWidgets-${architecture}.dylib`)
+    run('/usr/bin/xcrun', ['swiftc', '-swift-version', '5', '-parse-as-library', '-emit-library',
+      '-target', `${architecture}-apple-macos14.0`, '-O', '-install-name', '@rpath/libFluuxWidgets.dylib',
+      join(root, 'plugins/widgets/macos/WidgetsBridge.swift'), ...sources.slice(2), '-o', binary])
+    return binary
+  })
+  run('/usr/bin/xcrun', ['lipo', '-create', ...libraries, '-output', library])
   // Tauri embeds PlugIns unchanged and signs the enclosing app last, just as for FluuxShare.
-  if (!unsigned) sign(extension, settings, entitlements)
+  if (!unsigned) {
+    sign(library, settings, null)
+    sign(extension, settings, entitlements)
+  }
   return extension
 }
 

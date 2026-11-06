@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest'
 import { connectionStore } from '@fluux/sdk'
 import { endPushSession } from './useNativePush'
 
-vi.mock('@/platform/ios/notificationMirror', () => { throw new Error('Notification module unavailable') })
+vi.mock('@/platform/apple/conversationMirror', () => { throw new Error('Notification module unavailable') })
 vi.mock('@fluux/sdk', async () => ({
   connectionStore: (await import('../../../../packages/fluux-sdk/src/stores/connectionStore')).connectionStore,
 }))
@@ -25,15 +25,16 @@ it('waits for online disable and gateway unregister despite notification import 
   let release!: () => void
   const pending = new Promise<void>(resolve => { release = resolve })
   const calls: string[] = []
+  let signalDisable!: () => void
+  const disableStarted = new Promise<void>(resolve => { signalDisable = resolve })
   const push = {
     registerDevice: vi.fn(), enable: vi.fn(),
-    disable: vi.fn(async () => { calls.push('disable'); await pending }),
+    disable: vi.fn(async () => { calls.push('disable'); signalDisable(); await pending }),
     unregisterDevice: vi.fn(async () => { calls.push('unregister') }),
   }
   let finished = false
   const ending = endPushSession(push).then(() => { finished = true })
-  await vi.waitFor(() => expect(push.disable).toHaveBeenCalled())
-  await new Promise(resolve => setTimeout(resolve, 20))
+  await disableStarted
   expect(finished).toBe(false)
   release()
   await ending

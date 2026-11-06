@@ -3,6 +3,9 @@ import SwiftUI
 import WidgetKit
 import CryptoKit
 
+@_silgen_name("fluux_desktop_widgets_apply")
+func loadDesktopWidget(_ operation: UnsafePointer<CChar>, _ json: UnsafePointer<CChar>) -> Int32
+
 /// Accepted native macOS widget plan: exercise the actual shared-file adapter and views using
 /// disposable metadata and a real image from the project, without resolving an App Group or signing.
 @main
@@ -14,13 +17,20 @@ struct MacWidgetsTests {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let encoder = JSONEncoder()
+        var reloads = 0
         func apply<T: Encodable>(_ operation: String, _ value: T) throws -> Bool {
-            try DesktopWidgets.apply(operation, data: encoder.encode(value), root: root)
+            try DesktopWidgets.receive(operation, data: encoder.encode(value), root: root, reload: { reloads += 1 })
         }
         func check(_ condition: Bool, _ message: String) {
             precondition(condition, message)
             print("PASS: \(message)")
         }
+        let loaded = "list".withCString { operation in
+            "null".withCString { json in loadDesktopWidget(operation, json) }
+        }
+        // The scratch bundle has no App Group metadata: -1 means the optional library loaded
+        // and reached its storage boundary; -2 would mean the loader could not open the library.
+        check(loaded == -1, "Objective-C loader reaches the real optional Swift writer without resolving a container")
         let now = Date()
         let bytes = try Data(contentsOf: URL(fileURLWithPath: args[3]))
         let hash = Insecure.SHA1.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
@@ -37,24 +47,31 @@ struct MacWidgetsTests {
         ]
         var list = UnreadList(account: "me@example.com", total: rows.count + 1, rows: rows, updated: now.timeIntervalSince1970 * 1000)
         check(try apply("names", names), "names written")
+        check(reloads == 0, "full names mirror does not request a widget refresh")
         check(try apply("list", list), "unread list written")
+        check(reloads == 1, "changed unread list requests a refresh")
+        check(try !apply("list", list), "identical unread list is not rewritten")
+        check(reloads == 1, "identical unread list does not request another refresh")
         check(UnreadList.shown(root: root, account: names.account).list == list, "widget reads the desktop writer's shared list")
         let json = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))) as! [String: Any]
         let savedRow = (json["rows"] as! [[String: Any]])[0]
         check(Set(savedRow.keys) == Set(["id", "kind", "name", "unread", "mentions", "last"]), "rows contain only accepted metadata, no message text")
         check(UnreadList.shown(root: root, account: "other@example.com").list == nil, "another account cannot display the saved list")
         func avatar(_ account: String, _ hash: String) throws -> Bool {
-            try DesktopWidgets.apply("avatar", data: JSONSerialization.data(withJSONObject: ["account": account, "hash": hash, "data": bytes.base64EncodedString()]), root: root)
+            try DesktopWidgets.receive("avatar", data: JSONSerialization.data(withJSONObject: ["account": account, "hash": hash, "data": bytes.base64EncodedString()]), root: root, reload: { reloads += 1 })
         }
         check(try !avatar("other@example.com", hash), "another account cannot write an avatar")
         check(try !avatar("me@example.com", "../escape"), "avatar hashes cannot escape storage")
         check(try avatar("me@example.com", hash), "real image is reduced and saved")
+        check(reloads == 1, "avatar mirror does not request a widget refresh")
         let imageURL = NotificationMirror.imageURL(for: rows[0].id, names: names, root: root)
         check(imageURL.flatMap { NSImage(contentsOf: $0) } != nil, "macOS decodes the widget avatar")
         let link = ShortcutConversation(id: rows[0].id, name: rows[0].name, kind: rows[0].kind, account: list.account).url(scheme: "net.processone.fluux")!
         let components = URLComponents(url: link, resolvingAgainstBaseURL: false)!
         check(components.host == "shortcut" && components.queryItems?.first(where: { $0.name == "account" })?.value == list.account, "row link carries its account and destination")
-        check(now < list.staleDate && list.staleDate.addingTimeInterval(1) >= list.staleDate, "saved list becomes stale after the heartbeat grace period")
+        // The captain selected fifteen minutes for both publication heartbeat and saved-list age.
+        let expectedStale = Date(timeIntervalSince1970: list.updated / 1000).addingTimeInterval(15 * 60)
+        check(list.staleDate == expectedStale, "saved-list deadline is exactly fifteen minutes after updated")
 
         // Render the product SwiftUI source, not a recreation of its design. This does not host WidgetKit.
         _ = NSApplication.shared

@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { chatStore, connectionStore, roomStore, rosterStore } from '@fluux/sdk'
 import { setPlatformForTesting } from '@/platform'
 import { startAppleConversationMirror, clearAppleConversationMirror } from '@/platform/apple/conversationMirror'
-import { clearUnreadWidgetList, resetSharedUnreadWidgetList, startUnreadWidgetPublisher } from './unreadWidget'
+import { DESKTOP_WIDGET_HEARTBEAT_MS, clearUnreadWidgetList, resetSharedUnreadWidgetList, startUnreadWidgetPublisher } from './unreadWidget'
 
 // This suite needs the actual SDK stores, not the application's global store stand-ins.
 vi.unmock('@fluux/sdk')
@@ -38,21 +38,24 @@ describe('native macOS unread widget publication', () => {
 
   it('renews an unchanged list while running, then stays cleared through later heartbeats', async () => {
     chatStore.getState().addConversation({ id: 'alice@example.com', name: 'Alice Martin', type: 'chat', unreadCount: 2 })
-    stop = startUnreadWidgetPublisher(() => 1, 60_000)
+    stop = startUnreadWidgetPublisher(() => 1, DESKTOP_WIDGET_HEARTBEAT_MS)
     await vi.advanceTimersByTimeAsync(500)
     const first = invoke.mock.lastCall?.[1].list
     expect(first).toMatchObject({ account: 'me@example.com', total: 2, rows: [{ id: 'alice@example.com', unread: 2 }] })
-    await vi.advanceTimersByTimeAsync(60_000)
+    // The captain selected a fifteen-minute heartbeat, not per-minute reloads.
+    await vi.advanceTimersByTimeAsync(DESKTOP_WIDGET_HEARTBEAT_MS - 1000)
+    expect(invoke).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1000)
     expect(invoke.mock.lastCall?.[1].list.updated).toBeGreaterThan(first.updated)
     expect(invoke.mock.lastCall?.[1].list.rows).toEqual(first.rows)
     await clearUnreadWidgetList()
     invoke.mockClear()
-    await vi.advanceTimersByTimeAsync(120_000)
+    await vi.advanceTimersByTimeAsync(2 * DESKTOP_WIDGET_HEARTBEAT_MS)
     expect(invoke).not.toHaveBeenCalled()
     stop()
     stop = undefined
     connectionStore.getState().setJid(null)
-    await vi.advanceTimersByTimeAsync(120_000)
+    await vi.advanceTimersByTimeAsync(2 * DESKTOP_WIDGET_HEARTBEAT_MS)
     expect(invoke).not.toHaveBeenCalled()
   })
 
@@ -75,7 +78,7 @@ describe('native macOS unread widget publication', () => {
     expect(invoke).not.toHaveBeenCalled()
   })
 
-  it.each([{ shell: 'desktop', os: 'windows' }, { shell: 'web', os: 'macos' }] as const)('does not publish a mirror on $shell/$os', async (target) => {
+  it.each([{ shell: 'desktop', os: 'windows' }, { shell: 'web', os: 'macos' }, { shell: 'desktop', os: 'macos', osVersion: '13.7.8' }] as const)('does not publish a mirror on $shell/$os', async (target) => {
     restore()
     restore = setPlatformForTesting(target)
     stop = startAppleConversationMirror()

@@ -122,7 +122,7 @@ export function signExtension(extension, settings, entitlements = join(output, '
     }
     sign('codesign', '/usr/bin/codesign', ['--force', '--sign', identity, '--options', 'runtime',
       ...(identity === '-' ? [] : ['--timestamp']), ...(keychain ? ['--keychain', keychain] : []),
-      '--entitlements', entitlements, extension])
+      ...(entitlements ? ['--entitlements', entitlements] : []), extension])
     sign('codesign --verify', '/usr/bin/codesign', ['--verify', '--strict', extension])
   } catch (error) {
     throw new Error(`Could not sign the macOS extension (${error.message}); check the signing identity and certificate configuration`)

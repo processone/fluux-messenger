@@ -41,7 +41,7 @@ vi.mock('@/platform/ios/notificationSounds', () => ({ startIOSNotificationSounds
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
 
-import { clearIOSNotificationMirror } from '@/platform/ios/notificationMirror'
+import { clearAppleConversationMirror } from '@/platform/apple/conversationMirror'
 import { pushSenderNames, usePushSenderNames } from './usePushSenderNames'
 
 type Named = { jid: string; name: string; avatar?: string; avatarHash?: string; joined?: boolean; nickname?: string; occupants?: Map<string, { nick: string }> }
@@ -105,7 +105,7 @@ describe('usePushSenderNames', () => {
     const hook = renderHook(() => usePushSenderNames())
     await vi.advanceTimersByTimeAsync(1000)
     expect(shared()).toHaveLength(1)
-    await clearIOSNotificationMirror()
+    await clearAppleConversationMirror()
     expect(shared().at(-1)).toEqual({ account: null, contacts: {}, rooms: {}, avatars: {} })
     release()
     await vi.advanceTimersByTimeAsync(0)

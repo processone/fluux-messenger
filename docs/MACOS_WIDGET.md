@@ -2,7 +2,9 @@
 
 On macOS 14 and later, the native WidgetKit extension offers small, medium and
 large widgets. It reads the same `UnreadWidget.json` schema as the iOS widget; it
-never connects to XMPP. The application minimum is unchanged.
+never connects to XMPP. The host keeps its existing deployment target: its Objective-C
+loader does not link Swift or WidgetKit and loads the Swift writer only on macOS 14+.
+Intel release dependency inspection proves that link boundary, not an actual launch on an older Mac.
 
 The list follows the app icon badge's conversation rule: direct chats with unread
 messages, rooms with a mention, and rooms set to notify on every message. Pending
@@ -19,7 +21,7 @@ The small widget and the background of other sizes open the conversation list.
 
 - The SDK selector owns unread semantics; `utils/unreadWidget.ts` publishes the
   list from the app's stores. Desktop publication continues while the window is
-  closed. It renews the timestamp once a minute, including when nothing changed.
+  closed. It renews the timestamp once every fifteen minutes, including when nothing changed.
 - `platform/apple/conversationMirror.ts` shares cached avatar bytes and names;
   iOS's existing notification entry points forward to this shared implementation.
   macOS sends these operations to the widgets plugin, not the push plugin.
@@ -33,7 +35,7 @@ The small widget and the background of other sizes open the conversation list.
   Another account's list is hidden. Sign-out removes the list, names and avatars.
 
 WidgetKit controls redraw scheduling, particularly with the window closed. A
-reload request is not a guarantee of an immediate redraw. Five minutes after its
+reload request is not a guarantee of an immediate redraw. Fifteen minutes after its
 last publication, the timeline marks a retained list as the last saved list and
 asks the reader to open Fluux. This is an age indicator, not a claim that the
 process has quit; force-quit, delayed timers or system throttling may also leave
@@ -55,9 +57,16 @@ provisioning profile for Developer ID distribution. Development identity builds
 use their own group and conversation-link scheme. No provisioning record is
 created by the widget builder.
 
-The desktop reload shim is a static Swift library compiled by the widgets
-plugin's `build.rs`; WidgetKit is weak-linked and the entry point is guarded on
-older macOS releases. No keychain operation is needed to compile it.
+The widgets plugin's `build.rs` compiles only an Objective-C loader into the host.
+The widget builder compiles the shared Swift writer as `libFluuxWidgets.dylib`
+(macOS 14 minimum), embedded in `Contents/Frameworks` and signed before the host.
+The loader checks the OS version before opening that exact bundled path; older
+Macs acquire no Swift runtime dependency. The webview also gates publication and
+avatar mirroring on the native OS version, so pre-widget Macs do no widget work.
+Only changed unread-list writes and the fifteen-minute timestamp heartbeat request
+a widget refresh; names/avatar mirror writes do not. The mirror still contains all
+contacts, rooms and conversation suggestions on supported Macs, as on iOS.
+No keychain operation is needed for unsigned compilation.
 
 ## Unsigned checks
 
@@ -73,7 +82,7 @@ and renders small/medium/large unread, empty, signed-out and stale views in both
 languages. Set `FLUUX_WIDGET_RESULTS` to an output directory outside the project
 to retain those pictures. The fixture does not register an app, resolve an App
 Group, sign anything or access a keychain. It also compiles the bridge against
-the application's existing macOS deployment minimum.
+the application's existing macOS deployment minimum, without linking Swift into that host loader.
 
 For a standalone unsigned build, prepare metadata first, then explicitly select
 unsigned output:

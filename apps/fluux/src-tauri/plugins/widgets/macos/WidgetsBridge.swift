@@ -14,11 +14,14 @@ enum DesktopWidgets {
         switch operation {
         case "list":
             if let list = try decoder.decode(UnreadList?.self, from: data) {
-                // The desktop publisher is the only writer, but keep the shared file's lock contract.
+                // Identical publications need neither disk work nor a WidgetKit refresh.
+                if UnreadList.load(root: root) == list { return false }
                 try list.write(root: root)
             } else {
+                let hadList = UnreadList.load(root: root) != nil
                 try UnreadList.clear(root: root)
                 try NotificationMirror.writeNames(SharedNames(), root: root)
+                return hadList
             }
         case "names":
             try NotificationMirror.writeNames(decoder.decode(SharedNames.self, from: data), root: root)
@@ -28,6 +31,14 @@ enum DesktopWidgets {
             throw CocoaError(.coderInvalidValue)
         }
         return true
+    }
+
+    /// Mirror writes prepare future notification features but do not spend widget refresh budget.
+    /// A timestamp renewal is published only by the app's fifteen-minute heartbeat.
+    static func receive(_ operation: String, data: Data, root: URL, reload: () -> Void = Self.reload) throws -> Bool {
+        let written = try apply(operation, data: data, root: root)
+        if written && operation == "list" { reload() }
+        return written
     }
 
     static func reload() {
@@ -42,8 +53,7 @@ func fluuxWidgetsApply(_ operation: UnsafePointer<CChar>, _ json: UnsafePointer<
     guard #available(macOS 14.0, *) else { return 0 }
     guard let root = NotificationMirror.root else { return -1 }
     do {
-        let written = try DesktopWidgets.apply(String(cString: operation), data: Data(String(cString: json).utf8), root: root)
-        if written { DesktopWidgets.reload() }
+        let written = try DesktopWidgets.receive(String(cString: operation), data: Data(String(cString: json).utf8), root: root)
         return written ? 1 : 0
     } catch { return -1 }
 }
