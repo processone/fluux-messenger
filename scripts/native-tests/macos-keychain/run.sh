@@ -122,8 +122,8 @@ PY
   probe owner seed
   probe reader cleanup-untrusted
   probe owner legacy-read
-  # A writer from the old layout ignores revision coordination. The exact
-  # native generation predicate must still preserve its new value.
+  # A writer from the old layout ignores revision coordination. Attempt deletion
+  # by the stale item reference, then verify its replacement survives.
   export FLUUX_PROBE_KEYCHAIN="$HOME/cleanup-race.keychain-db"
   "$LAB/fixture" create "$FLUUX_PROBE_KEYCHAIN" "$HOME/password"
   probe owner seed

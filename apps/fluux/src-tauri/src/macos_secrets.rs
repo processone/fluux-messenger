@@ -117,7 +117,8 @@ pub trait Backend: SecretStore {
     /// Account attributes only; this must not decrypt secrets.
     fn accounts(&self) -> StoreResult<Vec<String>>;
     /// Queue best-effort maintenance only after a usable combined item loads.
-    /// Never block a normal read or change its authorization policy.
+    /// Preserve authorization policy. Native combined/fresh reads and writes
+    /// may wait for the helper to finish and synchronize revisions.
     fn schedule_cleanup(&self) {}
     /// Accounts whose secret the user restored from a backup instead of
     /// migrating. Their secrets live only in the fresh item.
@@ -1518,7 +1519,7 @@ mod native {
             return;
         }
         if action == "cleanup-race" {
-            cleanup::changed_generation(&raw);
+            cleanup::changed_reference(&raw);
             println!("a separate older-style write survives a stale-reference deletion attempt, confirmed by a fresh reader");
             return;
         }

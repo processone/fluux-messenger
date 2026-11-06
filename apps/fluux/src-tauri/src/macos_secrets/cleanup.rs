@@ -123,7 +123,7 @@ mod native {
     use security_framework_sys::{item::*, keychain_item::SecItemDelete};
 
     pub(super) const FLAG: &str = "--cleanup-legacy-keychain";
-    struct Generation {
+    struct ItemReference {
         reference: CFType,
     }
     // All calls use this exact-item backend under one exclusive revision lock.
@@ -209,7 +209,7 @@ mod native {
         Ok(unsafe { CFType::wrap_under_get_rule(*value) })
     }
     impl Store for Locked<'_> {
-        type Item = Generation;
+        type Item = ItemReference;
         fn combined(&self) -> StoreResult<Option<String>> {
             self.keychain.read_item(ACCOUNT)
         }
@@ -219,7 +219,7 @@ mod native {
         fn accounts(&self) -> StoreResult<Vec<String>> {
             self.keychain.accounts()
         }
-        fn snapshot(&self, account: &str) -> StoreResult<Option<Snapshot<Generation>>> {
+        fn snapshot(&self, account: &str) -> StoreResult<Option<Snapshot<ItemReference>>> {
             let items = match self
                 .keychain
                 .query(Some(account))
@@ -232,12 +232,12 @@ mod native {
                 Err(error) if error.code() == -25300 => return Ok(None),
                 Err(error) => {
                     return Err(
-                        format!("Read legacy generation ({}): {error}", error.code()).into(),
+                        format!("Read legacy item reference ({}): {error}", error.code()).into(),
                     )
                 }
             };
             let Some(SearchResult::Dict(attributes)) = items.first() else {
-                return Err("Missing keychain generation; copy retained".into());
+                return Err("Missing keychain item reference; copy retained".into());
             };
             let attributes = attributes.to_untyped();
             // SAFETY: these are the platform's immutable attribute keys.
@@ -251,11 +251,11 @@ mod native {
             Ok(Some(Snapshot {
                 value: String::from_utf8(bytes.bytes().to_vec())
                     .map_err(|_| "Invalid legacy keychain text; copy retained")?,
-                item: Generation { reference },
+                item: ItemReference { reference },
             }))
         }
-        fn remove(&self, snapshot: Snapshot<Generation>) -> StoreResult<bool> {
-            let generation = snapshot.item;
+        fn remove(&self, snapshot: Snapshot<ItemReference>) -> StoreResult<bool> {
+            let item = snapshot.item;
             if self.after.get().is_none() {
                 // Fence every cached legacy-mode writer before retiring even
                 // one original, including a subsequently recreated old item.
@@ -270,7 +270,7 @@ mod native {
                 let mut pairs = vec![
                     (key(kSecClass), key(kSecClassGenericPassword)),
                     (key(kSecAttrService), CFString::new(SERVICE).as_CFType()),
-                    (key(kSecValueRef), generation.reference),
+                    (key(kSecValueRef), item.reference),
                 ];
                 // Keep the explicit disposable-keychain search scope.
                 if let Some(keychain) = &self.keychain.keychain {
@@ -316,7 +316,7 @@ mod native {
     // Deferred cleanup must exercise the actual conditional deletion after an uncoordinated
     // legacy write, not a source-text or simulated-status assertion.
     #[cfg(test)]
-    pub(crate) fn changed_generation(keychain: &Keychain) {
+    pub(crate) fn changed_reference(keychain: &Keychain) {
         let (_revision, path, before) = keychain.cleanup_revision().unwrap();
         let locked = Locked::new(keychain, path, before);
         let snapshot = locked.snapshot("mcp-token").unwrap().unwrap();
@@ -429,7 +429,7 @@ pub(crate) use native::run_worker;
 #[cfg(all(target_os = "macos", not(test)))]
 pub(super) use native::schedule;
 #[cfg(all(target_os = "macos", test))]
-pub(super) use native::{changed_generation, invoke, perform, print_report};
+pub(super) use native::{changed_reference, invoke, perform, print_report};
 
 #[cfg(test)]
 mod tests {
@@ -501,7 +501,7 @@ mod tests {
         }
         fn snapshot(&self, account: &str) -> StoreResult<Option<Snapshot<Self::Item>>> {
             if self.read_failure.iter().any(|name| name == account) {
-                return Err("Read legacy generation (-25293)".into());
+                return Err("Read legacy item reference (-25293)".into());
             }
             Ok(self
                 .items
@@ -518,7 +518,7 @@ mod tests {
                 panic!("process exit during cleanup");
             }
             if self.delete_failure.contains(&name) {
-                return Err("Delete legacy generation (-25244)".into());
+                return Err("Delete legacy item reference (-25244)".into());
             }
             let mut items = self.items.borrow_mut();
             if self.race.as_ref() == Some(&name) {
@@ -657,7 +657,7 @@ mod tests {
         assert!(!diagnostic.contains("test-password") && !diagnostic.contains("alice@example.com"));
     }
     #[test]
-    fn changed_generation_and_interrupted_cleanup_preserve_secrets_on_restart() {
+    fn changed_reference_and_interrupted_cleanup_preserve_secrets_on_restart() {
         let mut store = fixture();
         store.race = Some("mcp-token".into());
         let result = clean(&store).unwrap();
