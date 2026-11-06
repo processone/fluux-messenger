@@ -59,10 +59,13 @@ struct MacWidgetsTests {
         check(try !apply("list", timestampOnly), "ordinary identical-list comparison ignores the timestamp")
         check(UnreadList.load(root: root)?.updated == list.updated, "ordinary timestamp changes do not renew the file")
         check(reloads == 2, "timestamp-only ordinary publication does not request a refresh")
+        check(try apply("heartbeat", timestampOnly), "first-session renewal refreshes unchanged saved content immediately")
+        check(UnreadList.load(root: root)?.updated == timestampOnly.updated, "relaunch renewal updates the saved timestamp before the periodic heartbeat")
+        check(reloads == 3, "first-session renewal requests a refresh")
         var heartbeat = list
         heartbeat.updated += 15 * 60 * 1000
         check(try apply("heartbeat", heartbeat), "explicit fifteen-minute heartbeat renews the saved list")
-        check(reloads == 3, "explicit heartbeat requests its refresh")
+        check(reloads == 4, "explicit heartbeat requests its refresh")
         check(UnreadList.shown(root: root, account: names.account).list == heartbeat, "widget reads the desktop writer's shared list")
         let json = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))) as! [String: Any]
         let savedRow = (json["rows"] as! [[String: Any]])[0]
@@ -74,15 +77,15 @@ struct MacWidgetsTests {
         check(try !avatar("other@example.com", hash), "another account cannot write an avatar")
         check(try !avatar("me@example.com", "../escape"), "avatar hashes cannot escape storage")
         check(try avatar("me@example.com", hash), "real image is reduced and saved")
-        check(reloads == 3, "avatar mirror does not request a widget refresh")
+        check(reloads == 4, "avatar mirror does not request a widget refresh")
         let imageURL = NotificationMirror.imageURL(for: rows[0].id, names: names, root: root)
         check(imageURL.flatMap { NSImage(contentsOf: $0) } != nil, "macOS decodes the widget avatar")
         let link = ShortcutConversation(id: rows[0].id, name: rows[0].name, kind: rows[0].kind, account: list.account).url(scheme: "net.processone.fluux")!
         let components = URLComponents(url: link, resolvingAgainstBaseURL: false)!
         check(components.host == "shortcut" && components.queryItems?.first(where: { $0.name == "account" })?.value == list.account, "row link carries its account and destination")
-        // The accepted policy uses fifteen minutes for both publication heartbeat and saved-list age.
-        let expectedStale = Date(timeIntervalSince1970: list.updated / 1000).addingTimeInterval(15 * 60)
-        check(list.staleDate == expectedStale, "saved-list deadline is exactly fifteen minutes after updated")
+        // The accepted policy keeps a fifteen-minute heartbeat plus five minutes of stale-caption grace.
+        let expectedStale = Date(timeIntervalSince1970: list.updated / 1000).addingTimeInterval(20 * 60)
+        check(list.staleDate == expectedStale, "shared saved-list deadline is exactly twenty minutes after updated")
 
         // Render the product SwiftUI source, not a recreation of its design. This does not host WidgetKit.
         _ = NSApplication.shared
@@ -114,6 +117,7 @@ struct MacWidgetsTests {
                     window.orderOut(nil)
                 }
                 try render("unread", list, now)
+                try render("grace", list, Date(timeIntervalSince1970: list.updated / 1000).addingTimeInterval(15 * 60 + 1))
                 try render("stale", list, list.staleDate.addingTimeInterval(1))
                 try render("empty", UnreadList(account: list.account, total: 0, rows: [], updated: list.updated), now)
                 try render("signed-out", nil, now)
@@ -121,7 +125,7 @@ struct MacWidgetsTests {
         }
         names.account = "other@example.com"
         check(try apply("names", names), "account replacement writes new ownership")
-        check(reloads == 4, "account replacement refreshes the widget without its retry delay")
+        check(reloads == 5, "account replacement refreshes the widget without its retry delay")
         check(NotificationMirror.imageURL(for: rows[0].id, names: names, root: root) == nil, "account replacement removes old avatar bytes")
         list.rows = []
         list.total = 0

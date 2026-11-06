@@ -1,5 +1,6 @@
 import { chatStore, connectionStore, roomStore, unreadConversations } from '@fluux/sdk'
 import type { UnreadConversation } from '@fluux/sdk'
+import { platform } from '@/platform'
 import { observeWidgetSupport, resetWidgetSupportForTesting, widgetSessionSupported, type WidgetWriteResult } from '@/platform/apple/widgetSupport'
 
 /**
@@ -72,12 +73,16 @@ async function write(list: UnreadWidgetList | null, refresh = false): Promise<vo
   if (!widgetSessionSupported()) return
   // `updated` moves on every build; only the content decides whether to write.
   const serialized = JSON.stringify(list && { ...list, updated: 0 })
-  if (!refresh && serialized === shared) return
+  // A new macOS session must renew a saved, possibly stale list even when its content is
+  // unchanged. Hook remounts within that session still use normal content deduplication.
+  const initial = list !== null && (shared === null || shared === 'null')
+  const renew = refresh || (initial && platform().os === 'macos' && platform().publishesUnreadWidget)
+  if (!renew && serialized === shared) return
   shared = serialized
   try {
     const { invoke } = await import('@tauri-apps/api/core')
     const result = await invoke<WidgetWriteResult | undefined>('plugin:widgets|set_unread_list', {
-      list, ...(refresh ? { heartbeat: true } : {}),
+      list, ...(renew ? { heartbeat: true } : {}),
     })
     if (!observeWidgetSupport(result)) active?.stop()
   } catch (err) {
@@ -126,7 +131,7 @@ export function resetSharedUnreadWidgetList(): void {
 }
 
 const PUBLISH_DELAY_MS = 500
-// Desktop policy uses a fifteen-minute heartbeat and matching saved-list age window.
+// Desktop policy uses a fifteen-minute heartbeat; the shared stale window adds five minutes of grace.
 export const DESKTOP_WIDGET_HEARTBEAT_MS = 15 * 60_000
 
 /**

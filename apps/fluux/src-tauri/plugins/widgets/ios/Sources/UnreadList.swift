@@ -37,8 +37,8 @@ struct UnreadList: Codable, Equatable {
     var updated: Double
 
     /// The desktop publisher renews its timestamp every fifteen minutes, even without new messages.
-    /// The matching fifteen-minute age window marks the saved list stale without new publication.
-    var staleDate: Date { Date(timeIntervalSince1970: updated / 1000).addingTimeInterval(15 * 60) }
+    /// The shared twenty-minute age window includes five minutes of scheduling grace.
+    var staleDate: Date { Date(timeIntervalSince1970: updated / 1000).addingTimeInterval(20 * 60) }
 
     static func load(root: URL?) -> UnreadList? {
         guard let url = root?.appendingPathComponent(fileName),

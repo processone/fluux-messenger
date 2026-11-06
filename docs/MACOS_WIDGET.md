@@ -21,7 +21,9 @@ The small widget and the background of other sizes open the conversation list.
 
 - The SDK selector owns unread semantics; `utils/unreadWidget.ts` publishes the
   list from the app's stores. Desktop publication continues while the window is
-  closed. It renews the timestamp once every fifteen minutes, including when nothing changed.
+  closed. Its first signed-in publication renews the saved timestamp immediately, even
+  after relaunch with unchanged unreads. Later timestamp renewals occur every fifteen
+  minutes; ordinary hook remounts and duplicate content do not trigger extra refreshes.
 - `platform/apple/conversationMirror.ts` shares cached avatar bytes and names.
   The session hook and sign-out lifecycle import this Apple owner directly on both
   platforms. macOS sends these operations to the widgets plugin, not the push plugin.
@@ -37,11 +39,13 @@ The small widget and the background of other sizes open the conversation list.
   Another account's list is hidden. Sign-out removes the list, names and avatars.
 
 WidgetKit controls redraw scheduling, particularly with the window closed. A
-reload request is not a guarantee of an immediate redraw. Fifteen minutes after its
+reload request is not a guarantee of an immediate redraw. Twenty minutes after its
 last publication, the timeline marks a retained list as the last saved list and
 asks the reader to open Fluux. This is an age indicator, not a claim that the
 process has quit; force-quit, delayed timers or system throttling may also leave
-an old snapshot. Midnight entries keep day labels current.
+an old snapshot. The shared Swift model exposes the same twenty-minute age window
+on iOS and macOS; the Mac caption gets five minutes of grace beyond the heartbeat.
+Midnight entries keep day labels current.
 
 ## Build and signing
 
@@ -69,7 +73,8 @@ Macs acquire no Swift runtime dependency. The webview also gates publication and
 avatar mirroring on the native OS version, so pre-widget Macs do no widget work.
 Changed unread-list content and the explicit fifteen-minute timestamp heartbeat
 request a widget refresh. Ordinary duplicate lists ignore the timestamp and do not
-rewrite the file. A names write also refreshes when it changes the active account,
+rewrite the file. Startup or a new signed-in session sends an immediate renewal
+through the heartbeat path, so a previously stale list does not wait fifteen minutes. A names write also refreshes when it changes the active account,
 so sign-in and account replacement do not wait for the widget's retry timeline.
 Other names changes and avatar writes do not request a refresh. The mirror still contains all
 contacts, rooms and conversation suggestions on supported Macs, as on iOS.

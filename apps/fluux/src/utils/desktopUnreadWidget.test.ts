@@ -64,6 +64,25 @@ describe('native macOS unread widget publication', () => {
     expect(invoke).not.toHaveBeenCalled()
   })
 
+  it('renews the first session publication but not an ordinary hook remount', async () => {
+    chatStore.getState().addConversation({ id: 'alice@example.com', name: 'Alice Martin', type: 'chat', unreadCount: 2 })
+    stop = startUnreadWidgetPublisher(() => 0, DESKTOP_WIDGET_HEARTBEAT_MS)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(invoke.mock.lastCall?.[1].heartbeat).toBe(true)
+    stop()
+    stop = startUnreadWidgetPublisher(() => 0, DESKTOP_WIDGET_HEARTBEAT_MS)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(invoke).toHaveBeenCalledTimes(1)
+    await clearUnreadWidgetList()
+    connectionStore.getState().setJid(null)
+    connectionStore.getState().setJid('me@example.com/desktop')
+    stop()
+    stop = startUnreadWidgetPublisher(() => 0, DESKTOP_WIDGET_HEARTBEAT_MS)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(invoke.mock.lastCall?.[1].heartbeat).toBe(true)
+    expect(invoke.mock.lastCall?.[1].list.account).toBe('me@example.com')
+  })
+
   it('routes the shared avatar mirror to the widget plugin and wipes it at sign-out', async () => {
     const bytes = readFileSync('public/logo.png')
     const hash = createHash('sha1').update(bytes).digest('hex')
