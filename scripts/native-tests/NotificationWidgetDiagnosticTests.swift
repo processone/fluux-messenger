@@ -7,6 +7,50 @@ import UserNotifications
     static let account = "fixture@example.com"
     static let sender = "sender@example.com"
 
+    static func appTrace(_ scenario: String, root: URL, list: UnreadList, store: NotificationDiagnostic) throws {
+        let center = NotificationCenter()
+        var owner: String? = account
+        let observer = PreviewTrace.observeWidgetPublications(root: { root }, account: { owner }, center: center)
+        defer { center.removeObserver(observer) }
+        let record = PreviewTrace.batchRecorder(root: root, correlation: UUID())
+        let expected: [String]
+        if scenario == "app-read-clear" {
+            record(PreviewTrace.appReadEvents(root: root, account: account, target: sender,
+                                             observedAt: Date().timeIntervalSince1970))
+            var cleared = list
+            cleared.rows = []; cleared.total = 0
+            try cleared.write(root: root)
+            let written = Date().timeIntervalSince1970
+            WidgetPublication.post(account: account, events: [.init(decision: .cleared, time: written),
+                .init(decision: .reloadRequested, time: written)], center: center)
+            record(PreviewTrace.appReadEvents(root: root, account: account, target: sender,
+                                             observedAt: Date().timeIntervalSince1970))
+            expected = ["widgetAppReadObserved", "widgetAppReadStillListed", "widgetAppListCleared",
+                        "widgetAppReloadRequested", "widgetAppReadObserved", "widgetAppReadNotListed"]
+        } else {
+            let time = Date().timeIntervalSince1970
+            WidgetPublication.post(account: "other@example.com", events: [.init(decision: .cleared, time: time)], center: center)
+            center.post(name: Notification.Name("net.processone.fluux.widget-publication"), object: nil,
+                        userInfo: ["account": account, "events": [["decision": "Private arbitrary error", "time": time]]])
+            owner = nil
+            WidgetPublication.post(account: account, events: [.init(decision: .cleared, time: time)], center: center)
+            owner = account
+            WidgetPublication.post(account: account, events: [.init(decision: .written, time: time),
+                .init(decision: .reloadRequested, time: time)], center: center)
+            expected = ["widgetAppListWritten", "widgetAppReloadRequested"]
+        }
+        let data = try store.export()
+        let entries = try JSONSerialization.jsonObject(with: data) as! [[String: Any]]
+        precondition(entries.map { $0["decision"] as! String } == expected)
+        precondition(entries.allSatisfy { Set($0.keys) == ["version", "time", "correlation", "decision"] })
+        let text = String(data: data, encoding: .utf8)!
+        for value in [account, sender, "other@example.com", "Private fixture name", "Private arbitrary error"] {
+            precondition(!text.contains(value), "The app trace must retain no identity or arbitrary text")
+        }
+        if scenario == "app-read-clear" { print(text) }
+        print("\(scenario): actual file read/clear, in-process publication and bounded export passed")
+    }
+
     static func main() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -16,8 +60,12 @@ import UserNotifications
         var list = UnreadList(account: account, total: 0, rows: [], updated: 1)
         var badge = SharedBadge(unread: [], events: 0, notifyAllRooms: [])
         switch scenario {
-        case "already-listed":
+        case "already-listed", "app-read-clear":
             list.rows = [.init(id: sender, kind: "chat", name: "Private fixture name", unread: 1, mentions: 0, last: 1)]
+            list.total = 1
+        case "count-mismatch":
+            list.rows = [.init(id: "stale@example.com", kind: "chat", name: "Private stale name", unread: 1, mentions: 0, last: 1)]
+            list.total = 1
         case "account-mismatch": list.account = "other@example.com"
         case "not-counted": badge.unread = [sender]
         default: break
@@ -35,6 +83,10 @@ import UserNotifications
             store = try NotificationDiagnostic(root: root)
             try store!.activate()
         }
+        if scenario.hasPrefix("app-") {
+            try appTrace(scenario, root: root, list: list, store: store!)
+            return
+        }
         let content = UNMutableNotificationContent()
         content.body = "Private fixture message"
         content.userInfo = ["from": sender + "/phone", "to": account, "encrypted": false]
@@ -49,7 +101,7 @@ import UserNotifications
         }
         precondition(delivered == 1)
         let written = UnreadList.load(root: root)
-        if scenario == "success" || scenario == "diagnostic-unavailable" {
+        if scenario == "success" || scenario == "diagnostic-unavailable" || scenario == "count-mismatch" {
             precondition(written?.rows.first?.id == sender && written?.total == 1,
                          "The actual extension hook must persist the counted conversation")
         } else if scenario == "list-unavailable" {
@@ -72,6 +124,8 @@ import UserNotifications
             #else
             widget = ["widgetRowSelected", "widgetWriteSucceeded", "widgetReloadUnavailable"]
             #endif
+        case "count-mismatch":
+            widget = ["widgetRowSelected", "widgetWriteSucceeded", "widgetCountMismatch", "widgetReloadUnavailable"]
         case "already-listed": widget = ["widgetAlreadyListed"]
         case "account-mismatch": widget = ["widgetAccountMismatch"]
         case "not-counted": widget = ["widgetNotCounted"]
@@ -79,19 +133,17 @@ import UserNotifications
         case "list-unavailable": widget = ["widgetListUnavailable"]
         default: preconditionFailure("Unknown fixture")
         }
-        // The unchanged transport-only delivery also records its terminal fallback decision.
-        precondition(decisions == ["received"] + widget + ["notEncrypted", "noEngineResult"], "Unexpected export: \(decisions)")
+        precondition(decisions.first == "received", "The push receipt must precede its widget decisions")
+        precondition(decisions.filter { $0.hasPrefix("widget") } == widget, "Unexpected widget export: \(decisions)")
         precondition(Set(entries.map { $0["correlation"] as! String }).count == 1,
                      "Push and widget events must share the same random processing marker")
         let times = entries.map { $0["time"] as! Double }
         precondition(zip(times, times.dropFirst()).allSatisfy { $0 <= $1 })
         for entry in entries {
-            var fields: Set<String> = ["version", "time", "correlation", "decision"]
-            if entry["decision"] as? String == "noEngineResult" {
-                fields.insert("durationMs")
-                precondition((entry["durationMs"] as? Int ?? -1) >= 0)
-            }
-            precondition(Set(entry.keys) == fields, "Export only the existing content-free schema")
+            let required: Set<String> = ["version", "time", "correlation", "decision"]
+            let allowed = required.union(["durationMs"])
+            precondition(required.isSubset(of: Set(entry.keys)) && Set(entry.keys).isSubset(of: allowed),
+                         "Export only the existing content-free schema")
         }
         let text = String(data: data, encoding: .utf8)!
         for privateValue in [account, sender, "other@example.com", "Private fixture name", content.body, "fixture-request"] {
@@ -99,5 +151,8 @@ import UserNotifications
         }
         if scenario == "success" { print(text) }
         print("\(scenario): actual extension mutation and content-free diagnostic export passed")
+        if scenario == "count-mismatch" {
+            print("The trace flags an existing inconsistent snapshot; it does not claim a count reconciliation fix")
+        }
     }
 }

@@ -32,7 +32,11 @@ class PushPlugin: Plugin {
     private let mirrorQueue = DispatchQueue(label: "fluux.notification-mirror")
 
     private var diagnosticTimer: Timer?
-    deinit { diagnosticTimer?.invalidate() }
+    private var widgetDiagnosticObserver: NSObjectProtocol?
+    deinit {
+        diagnosticTimer?.invalidate()
+        if let observer = widgetDiagnosticObserver { NotificationCenter.default.removeObserver(observer) }
+    }
     private func cleanDiagnostic() {
         mirrorQueue.async {
             guard let root = NotificationMirror.root, let store = try? NotificationDiagnostic(root: root) else { return }
@@ -70,6 +74,9 @@ class PushPlugin: Plugin {
             self, selector: #selector(removeUnattributedPushes), name: UIApplication.didBecomeActiveNotification, object: nil
         )
         NotificationDiagnosticShare.clear()
+        if let observer = widgetDiagnosticObserver { NotificationCenter.default.removeObserver(observer) }
+        widgetDiagnosticObserver = PreviewTrace.observeWidgetPublications(root: { NotificationMirror.root },
+                                                                          account: { SharedNames.load().account })
         cleanDiagnostic()
         diagnosticTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.cleanDiagnostic() }
         registerIfAuthorized()
@@ -244,7 +251,17 @@ class PushPlugin: Plugin {
     /// here or on another device.
     @objc public func dismissNotifications(_ invoke: Invoke) {
         do {
-            let target = try invoke.parseArgs(DismissTarget.self).target.lowercased()
+            let arguments = try invoke.parseArgs(DismissTarget.self)
+            let target = arguments.target.lowercased()
+            if arguments.read == true, let account = arguments.account {
+                let observedAt = Date().timeIntervalSince1970
+                mirrorQueue.async {
+                    let root = NotificationMirror.root
+                    guard SharedNames.load(root: root).account == account else { return }
+                    let record = PreviewTrace.batchRecorder(root: root, correlation: UUID())
+                    record(PreviewTrace.appReadEvents(root: root, account: account, target: target, observedAt: observedAt))
+                }
+            }
             let center = UNUserNotificationCenter.current()
             center.getDeliveredNotifications { delivered in
                 let identifiers = delivered
@@ -488,6 +505,8 @@ private class RemoteNotificationDelegate: NSObject, UNUserNotificationCenterDele
 
 private struct DismissTarget: Decodable {
     let target: String
+    let read: Bool?
+    let account: String?
 }
 
 /// What the app icon badge counts: `unread.count + events`. Read by the

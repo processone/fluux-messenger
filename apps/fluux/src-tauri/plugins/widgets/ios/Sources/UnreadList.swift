@@ -104,8 +104,8 @@ struct UnreadList: Codable, Equatable {
 
     /// Content-free observations from the notification extension, not proof that WidgetKit rendered.
     struct PushEvent: Equatable {
-        enum Decision { case rootUnavailable, listUnavailable, accountMismatch, alreadyListed, rowSelected,
-                             writeSucceeded, writeFailed, reloadRequested, reloadUnavailable }
+        enum Decision { case listUnavailable, accountMismatch, alreadyListed, rowSelected,
+                             writeSucceeded, writeFailed, countMismatch, reloadRequested, reloadUnavailable }
         let decision: Decision
         let time: TimeInterval
     }
@@ -120,7 +120,7 @@ struct UnreadList: Codable, Equatable {
         func event(_ decision: PushEvent.Decision) -> PushEvent {
             PushEvent(decision: decision, time: clock().timeIntervalSince1970)
         }
-        guard let root = root else { return [event(.rootUnavailable)] }
+        guard let root = root else { return [] }
         // Keep diagnostic I/O outside this lock: it must not delay another list writer or sign-out.
         var events: [PushEvent] = locked(root: root) {
             guard let list = load(root: root) else { return [event(.listUnavailable)] }
@@ -130,10 +130,12 @@ struct UnreadList: Codable, Equatable {
             let selected = event(.rowSelected)
             do {
                 try next.writeUnlocked(root: root)
-                return [selected, event(.writeSucceeded)]
+                var written = [selected, event(.writeSucceeded)]
+                if next.total < next.rows.count { written.append(event(.countMismatch)) }
+                return written
             } catch { return [selected, event(.writeFailed)] }
         }
-        guard events.last?.decision == .writeSucceeded else { return events }
+        guard events.contains(where: { $0.decision == .writeSucceeded }) else { return events }
         let requestedAt = clock().timeIntervalSince1970
         let requested = reload()
         events.append(PushEvent(decision: requested ? .reloadRequested : .reloadUnavailable, time: requestedAt))

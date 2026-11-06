@@ -118,6 +118,10 @@ mod platform {
     #[derive(serde::Serialize)]
     struct DismissTarget {
         target: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        read: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        account: Option<String>,
     }
 
     /// Removes the delivered notifications of a conversation that was read:
@@ -126,10 +130,19 @@ mod platform {
     async fn dismiss_notifications<R: Runtime>(
         app: tauri::AppHandle<R>,
         target: String,
+        read: Option<bool>,
+        account: Option<String>,
     ) -> Result<(), String> {
         app.state::<Push<R>>()
             .0
-            .run_mobile_plugin_async("dismissNotifications", DismissTarget { target })
+            .run_mobile_plugin_async(
+                "dismissNotifications",
+                DismissTarget {
+                    target,
+                    read,
+                    account,
+                },
+            )
             .await
             .map_err(|e| e.to_string())
     }
