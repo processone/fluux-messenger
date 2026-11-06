@@ -60,6 +60,29 @@ import Foundation
         check(try entries().count == NotificationDiagnostic.limit)
         try store.reset(active: false)
         check(try entries().isEmpty)
-        print("FLM-31: exact version, time, random marker, decision and duration only; 200-entry cap, 48-hour expiry, logout, stale-session rejection and concurrent writers passed")
+        // Widget events keep the operation timestamps and share the push's marker in one append.
+        try store.activate()
+        let widgetMarker = UUID()
+        let record = PreviewTrace.batchRecorder(root: root, correlation: widgetMarker)
+        let widgetTime = Date().timeIntervalSince1970 - 3
+        let widgetEvents: [PreviewTrace.Event] = [
+            .init(decision: .widgetRowSelected, time: widgetTime),
+            .init(decision: .widgetWriteSucceeded, time: widgetTime + 1),
+            .init(decision: .widgetReloadRequested, time: widgetTime + 2),
+        ]
+        record(widgetEvents)
+        let widgetEntries = try JSONSerialization.jsonObject(with: store.export()) as! [[String: Any]]
+        assert(widgetEntries.map { $0["decision"] as! String } == ["widgetRowSelected", "widgetWriteSucceeded", "widgetReloadRequested"])
+        assert(widgetEntries.map { $0["time"] as! Double } == widgetEvents.map(\.time))
+        assert(widgetEntries.allSatisfy { $0["correlation"] as? String == widgetMarker.uuidString &&
+            Set($0.keys) == ["version", "time", "correlation", "decision"] })
+        try store.reset(active: true)
+        record(widgetEvents)
+        let stale = try JSONSerialization.jsonObject(with: store.export()) as! [[String: Any]]
+        assert(stale.isEmpty, "A late widget batch must not restore the previous session")
+        let current = try store.session()!
+        try store.append(Array(repeating: entry(time: now), count: NotificationDiagnostic.limit + 17), session: current, now: now)
+        check(try entries().count == NotificationDiagnostic.limit)
+        print("FLM-31: exact version, time, random marker, decision and duration only; 200-entry cap, 48-hour expiry, logout, stale-session rejection, concurrent writers and timestamped widget batches passed")
     }
 }

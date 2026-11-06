@@ -122,11 +122,29 @@ test('iOS unread widget list follows the badge and holds no message text', { ski
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-unread-widget-'))
   try {
     const binary = compileNotificationTests(scratch, 'UnreadListTests.swift')
-    for (const scenario of ['round-trip', 'no-message-text', 'push-adds-row', 'room-rule', 'other-account', 'cap', 'concurrent-pushes', 'latest-total-wins', 'labels-follow-entry-date', 'mismatched-owner', 'midnights', 'clear-wins', 'clear']) {
+    for (const scenario of ['round-trip', 'no-message-text', 'push-adds-row', 'push-events', 'write-failure', 'room-rule', 'other-account', 'cap', 'concurrent-pushes', 'latest-total-wins', 'labels-follow-entry-date', 'mismatched-owner', 'midnights', 'clear-wins', 'clear']) {
       await t.test(scenario, () => {
         assert.match(execFileSync(binary, [scenario]).toString(), /passed/)
       })
     }
+  } finally { rmSync(scratch, { recursive: true, force: true }) }
+})
+
+test('iOS widget push decisions reach the bounded content-free export', { skip: process.platform !== 'darwin' }, async (t) => {
+  const scratch = mkdtempSync(join(tmpdir(), 'fluux-widget-diagnostic-'))
+  try {
+    const binary = compileNotificationTests(scratch, 'NotificationWidgetDiagnosticTests.swift')
+    for (const scenario of ['success', 'already-listed', 'account-mismatch', 'not-counted', 'badge-unavailable', 'list-unavailable', 'diagnostic-unavailable']) {
+      await t.test(scenario, () => {
+        const output = execFileSync(binary, [scenario], { encoding: 'utf8' })
+        assert.match(output, /passed|notification delivered/)
+        if (scenario === 'success') console.log(output.trim())
+      })
+    }
+    const iosBinary = compileNotificationTests(scratch, 'NotificationWidgetDiagnosticTests.swift', true)
+    const platform = execFileSync('xcrun', ['vtool', '-show-build', iosBinary], { encoding: 'utf8' })
+    assert.match(platform, /platform IOSSIMULATOR/)
+    console.log(platform.trim())
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
 

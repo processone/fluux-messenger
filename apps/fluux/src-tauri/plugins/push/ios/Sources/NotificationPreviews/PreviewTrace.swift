@@ -8,6 +8,8 @@ enum PreviewDecision: String, Codable {
     case previewsOff, senderNotCovered, snapshotChanged, noSession, ledgerUnavailable
     case previewsHidden, capabilityChanged, windowUnavailable, archiveUnavailable
     case deadline, systemExpiry, preview, noEngineResult, nothingNew, appShown, appDuplicate
+    case widgetNotCounted, widgetBadgeUnavailable, widgetRootUnavailable, widgetListUnavailable, widgetAccountMismatch, widgetAlreadyListed
+    case widgetRowSelected, widgetWriteSucceeded, widgetWriteFailed, widgetReloadRequested, widgetReloadUnavailable
 }
 
 /// Cross-process, bounded diagnostic storage. Session markers contain no account identifier.
@@ -73,20 +75,27 @@ final class NotificationDiagnostic {
         try sql("DELETE FROM entries WHERE id NOT IN (SELECT id FROM entries ORDER BY id DESC LIMIT \(Self.limit))")
     }
     func append(_ entry: Entry, session marker: UUID, now: TimeInterval? = nil) throws {
+        try append([entry], session: marker, now: now)
+    }
+    /// A widget decision/write/reload sequence spends one bounded lock wait, not one per event.
+    func append(_ entries: [Entry], session marker: UUID, now: TimeInterval? = nil) throws {
+        guard !entries.isEmpty else { return }
         try transaction {
             // A queued writer must not mistake newer committed entries for a clock rollback.
             let now = now ?? Date().timeIntervalSince1970
             try prune(now: now)
-            guard try session() == marker, entry.time > now - Self.lifetime, entry.time <= now else { return }
-            let data = try JSONEncoder().encode(entry)
-            var statement: OpaquePointer?
-            defer { sqlite3_finalize(statement) }
-            guard sqlite3_prepare_v2(db, "INSERT INTO entries(time,data) VALUES(?,?)", -1, &statement, nil) == SQLITE_OK else { throw Failure.unavailable }
-            sqlite3_bind_double(statement, 1, entry.time)
-            let status = data.withUnsafeBytes { bytes -> Int32 in
-                sqlite3_bind_blob(statement, 2, bytes.baseAddress, Int32(bytes.count), unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+            guard try session() == marker else { return }
+            for entry in entries.suffix(Self.limit) where entry.time > now - Self.lifetime && entry.time <= now {
+                let data = try JSONEncoder().encode(entry)
+                var statement: OpaquePointer?
+                defer { sqlite3_finalize(statement) }
+                guard sqlite3_prepare_v2(db, "INSERT INTO entries(time,data) VALUES(?,?)", -1, &statement, nil) == SQLITE_OK else { throw Failure.unavailable }
+                sqlite3_bind_double(statement, 1, entry.time)
+                let status = data.withUnsafeBytes { bytes -> Int32 in
+                    sqlite3_bind_blob(statement, 2, bytes.baseAddress, Int32(bytes.count), unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+                }
+                guard status == SQLITE_OK, sqlite3_step(statement) == SQLITE_DONE else { throw Failure.unavailable }
             }
-            guard status == SQLITE_OK, sqlite3_step(statement) == SQLITE_DONE else { throw Failure.unavailable }
             try prune(now: now)
         }
     }
@@ -112,15 +121,28 @@ final class NotificationDiagnostic {
 enum PreviewTrace {
     private static let log = Logger(subsystem: "net.processone.fluux", category: "notification")
     static func note(_ message: String) { log.notice("\(message, privacy: .public)") }
-    static func recorder(root: URL?) -> (PreviewDecision, Int?) -> Void {
-        guard let root, let store = try? NotificationDiagnostic(root: root), let session = try? store.session() else { return { _, _ in } }
-        let correlation = UUID()
-        let version = "\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"))"
+    struct Event {
+        let decision: PreviewDecision
+        let time: TimeInterval
+        var durationMs: Int? = nil
+    }
+    static func recorder(root: URL?, correlation: UUID = UUID()) -> (PreviewDecision, Int?) -> Void {
+        let record = batchRecorder(root: root, correlation: correlation)
         return { decision, duration in
+            record([Event(decision: decision, time: Date().timeIntervalSince1970, durationMs: duration)])
+        }
+    }
+    static func batchRecorder(root: URL?, correlation: UUID) -> ([Event]) -> Void {
+        guard let root, let store = try? NotificationDiagnostic(root: root), let session = try? store.session() else { return { _ in } }
+        let version = "\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"))"
+        return { events in
             // Diagnostic I/O is best effort and never changes notification presentation.
             guard let store = try? NotificationDiagnostic(root: root) else { return }
-            try? store.append(.init(version: version, time: Date().timeIntervalSince1970,
-                                    correlation: correlation, decision: decision, durationMs: duration), session: session)
+            let entries = events.suffix(NotificationDiagnostic.limit).map {
+                NotificationDiagnostic.Entry(version: version, time: $0.time, correlation: correlation,
+                                             decision: $0.decision, durationMs: $0.durationMs)
+            }
+            try? store.append(entries, session: session)
         }
     }
 }

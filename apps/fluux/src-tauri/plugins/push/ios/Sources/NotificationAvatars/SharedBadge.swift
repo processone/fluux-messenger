@@ -20,22 +20,15 @@ struct SharedBadge: Codable {
 
     var count: Int { unread.count + events }
 
-    mutating func count(adding from: String, rooms: [String: String]) -> Int {
+    mutating func count(adding from: String, rooms: [String: String], root: URL? = NotificationMirror.root) -> Int {
         let bare = from.split(separator: "/", maxSplits: 1).first.map(String.init) ?? from
         let isRoom = rooms[bare] != nil || notifyAllRooms.contains(bare)
         if !unread.contains(bare) && (!isRoom || notifyAllRooms.contains(bare)) {
             unread.append(bare)
-            if let url = sharedFile("NotificationBadge.json"), let data = try? JSONEncoder().encode(self) {
+            if let url = root?.appendingPathComponent("NotificationBadge.json"), let data = try? JSONEncoder().encode(self) {
                 try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             }
         }
         return count
     }
-}
-
-private func sharedFile(_ name: String) -> URL? {
-    guard let root = NotificationMirror.root else {
-        return nil
-    }
-    return root.appendingPathComponent(name)
 }

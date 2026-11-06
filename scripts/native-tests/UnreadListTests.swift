@@ -67,6 +67,40 @@ import UserNotifications
             precondition(push("bruno@example.com/phone", names: names, badge: counted, root: root) == nil)
             let after = try Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))
             precondition(after == before)
+        case "push-events":
+            var reloads = 0
+            var tick: TimeInterval = 0
+            let clock = { tick += 1; return Date(timeIntervalSince1970: tick) }
+            func record(_ owner: String? = account, conversation: String = "new@example.com", at folder: URL? = nil) -> [UnreadList.PushEvent] {
+                UnreadList.recordPush(conversation: conversation, kind: "chat", name: "Private name", account: owner,
+                                      total: 4, root: folder, clock: clock, reload: { reloads += 1; return true })
+            }
+            precondition(record().map(\.decision) == [.rootUnavailable])
+            precondition(record(at: root).map(\.decision) == [.listUnavailable])
+            try fixture().write(root: root)
+            precondition(record("other@example.com", at: root).map(\.decision) == [.accountMismatch])
+            precondition(record(conversation: "alice@example.com", at: root).map(\.decision) == [.alreadyListed])
+            precondition(reloads == 0, "A skipped write must never request a reload")
+            let events = record(at: root)
+            precondition(events.map(\.decision) == [.rowSelected, .writeSucceeded, .reloadRequested])
+            precondition(zip(events, events.dropFirst()).allSatisfy { $0.time < $1.time }, "Keep each operation's original timestamp")
+            precondition(UnreadList.load(root: root)!.rows.first?.id == "new@example.com" && reloads == 1)
+            let unavailable = UnreadList.recordPush(conversation: "next@example.com", kind: "chat", name: "Next",
+                                                     account: account, total: 5, root: root, reload: { false })
+            precondition(unavailable.map(\.decision) == [.rowSelected, .writeSucceeded, .reloadUnavailable])
+        case "write-failure":
+            try fixture().write(root: root)
+            let before = try Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))
+            // Exercise a real filesystem refusal, not a writer that merely returns a canned error.
+            precondition(geteuid() != 0, "This fixture needs an unprivileged process")
+            try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: root.path)
+            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path) }
+            var reloads = 0
+            let events = UnreadList.recordPush(conversation: "new@example.com", kind: "chat", name: "Private name",
+                                               account: account, total: 4, root: root, reload: { reloads += 1; return true })
+            precondition(events.map(\.decision) == [.rowSelected, .writeFailed] && reloads == 0)
+            let after = try Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))
+            precondition(after == before, "The failed write must leave the existing list unchanged")
         case "room-rule":
             try fixture().write(root: root)
             // A room outside notify-all counts only on a mention, which a push does not reveal.
