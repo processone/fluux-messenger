@@ -1298,6 +1298,10 @@ fn with_communication<R: tauri::Runtime>(
 }
 
 fn main() {
+    // The silent cleanup helper must exit before directory migration, tracing,
+    // single-instance handling, plugins or a webview can open personal state.
+    #[cfg(target_os = "macos")]
+    macos_secrets::run_cleanup_worker();
     tls::init_crypto_provider();
 
     // Keep the loopback hop to the local XMPP bridge off any system-wide proxy.

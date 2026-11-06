@@ -344,8 +344,8 @@ platform keys the app's directories by identifier, including the webview's Index
 The keychain service name stays `com.processone.fluux`. On macOS, `macos_secrets.rs` packs
 remembered credentials, `last_user`, OpenPGP passphrases (including inactive accounts), and the MCP token
 into one versioned `secrets-v1` item. Startup, credential commands, OpenPGP and MCP share its
-mutex-protected cache. A normal migrated launch decrypts one item, so a changed identity needs at most
-one keychain access approval. A user denial/cancel (`-25293`, `-128`), carried as a numeric
+mutex-protected cache. Normal migrated startup consumers decrypt one item, so a changed identity needs
+at most one keychain access approval. Separate maintenance reads only with interaction disabled. A user denial/cancel (`-25293`, `-128`), carried as a numeric
 typed backend error, is cached as a failure for the launch. Deterministic combined-item failures
 (invalid UTF-8, malformed JSON/schema or an unsupported version) are also cached, without overwriting
 the item or repeating its access approval. Transient **combined-item** errors retry on the next call.
@@ -385,18 +385,48 @@ Explicit wipe/forget clears only the needed account/copy denial outcomes; later 
 sources, without repeating migration enumeration or unblocking unrelated refusals. Settings' explicit OpenPGP retry reads only that account's refused item and
 keeps its previous refusal if a transient error prevents an answer. Non-denial old-item failures,
 including invalid old bytes after repair, retry on a later call for that source only. When every source is readable, migration writes the combined item,
-then reads it back to verify it. **This release does not delete or rewrite any originals during migration.**
-Keep them for at least one release so a Dev build cannot break the installed 0.18.0 release's
-remembered login, MCP token or OpenPGP passphrase. Automatic cleanup is deferred and is not scheduled
-by a marker. Any `pending_cleanup` field from an earlier development build is ignored: an existing
-bundle is the normal source and startup does not read its originals or attempt bulk cleanup,
-except for the validated recovery path described below.
+then reads it back to verify it. Migration itself does not delete or rewrite originals. The
+compatibility release retained them so the older layout remained usable. After a usable combined
+snapshot loads, the app now schedules one best-effort cleanup helper per launch. The startup cache
+continues to use the combined item, and still ignores an earlier development build's
+`pending_cleanup` field. A partial migration never schedules cleanup.
 
-When an original differs from an `identity-migration-backup:*` copy, the live original wins; both
-copies remain in the old layout and are preserved in the combined item. A recovery copy supplies a
+The helper runs before its own directory migration, plugins or webview start. It disables keychain
+interaction only in that separate process, leaving the app's explicit authorization requests alone.
+It tries the exclusive revision lock without waiting, reads and verifies the current combined item,
+then removes only recognized legacy entries whose exact bytes remain represented under the same
+name in that item. This includes separately stored migration backups and recovery copies; the
+copies inside the combined item remain available. It never rewrites either combined item. Missing,
+differing, unrecognized, refused or invalid copies remain, as do accounts routed to fresh restored
+storage and their aliases. An unreadable fresh-start record stops cleanup. A refused combined read,
+invalid bundle or unavailable revision lock stops cleanup without erasing anything.
+
+Deletion matches the exact native reference returned with the secret snapshot, never just its account
+name. The helper has no in-process writers that could refresh that reference. In the native probe,
+a separate old-layout writer changed the item, the stale deletion was refused, and a fresh reader
+confirmed the persisted replacement survived. The stale process also could not find the changed item
+by name, so this check does not distinguish reference-based rejection from a stale keychain view.
+Password-data predicates are ignored by the file-based keychain, and date
+predicates fail to match even unchanged items; neither is used as a safeguard. Each deletion stands
+on its own verified copy; interrupted or failed cleanup is safe to repeat on a later launch, without
+a completion marker. Logs retain native failure
+statuses and, only when copies remain, explain reopening the current app or using explicit logout/forget,
+without logging account names or secret contents. Cleanup never adds authorization dialogs.
+
+During migration, when an original differs from an `identity-migration-backup:*` copy, the live
+original wins; both copies initially remain in the old layout and are preserved in the combined item. A recovery copy supplies a
 missing original. A failed combined write or verification serves the already-read legacy snapshot for
 that launch and retries migration on the next launch; explicit changes then use the legacy layout.
 An unverified replacement is discarded before such a legacy mutation, with stale-writer checks.
+Before its first native deletion attempt, cleanup durably advances the shared revision once under
+its exclusive lock. This invalidates a running instance's legacy fallback even if an older writer
+recreates the retired item names with different values. The helper reports its old and new revisions;
+the scheduling app updates only matching observations, since cleanup never changes its bundled data.
+The worker holds the observation mutex until it installs that report, so a queued app write cannot
+see the new file revision before its own observations are synchronized. The child's file-lock attempt
+is nonblocking, including when an app operation already holds that lock. Other running instances
+retain their stale-writer rejection and must quit and reopen before changing secrets. A completed
+cleanup with no deletion attempt does not advance the revision.
 Failure never authorizes deleting an original. Load/write errors are logged centrally; OpenPGP returns
 the full backend error, including restart instructions, rather than hiding it behind a generic error.
 
@@ -415,14 +445,14 @@ passphrase forget is deleting. Unrelated accounts remain intact. Current bundled
 leave the current password/passphrase in the bundle. Cleanup errors reach the caller and Rust log,
 and the matching old item plus its backups are all attempted. macOS continues to clear `last_user`
 when credential erasure succeeded but old-copy cleanup failed, then reports the cleanup error; iOS
-retains its existing stop-on-failure ordering. Automatic bulk cleanup is deferred
-for at least one release and tracked by FLM-81.
+retains its existing stop-on-failure ordering. Silent duplicate cleanup does not change these
+explicit erase semantics.
 
 A light scratch-keychain probe showed prompt-free deletion for the owner and an already-trusted Dev
 identity. An untrusted Dev identity was refused with `-25244` while dialogs were disabled. Therefore,
-cross-identity cleanup is not unconditionally prompt-free: it may need authorization, and refused
-old copies can remain if authorization is refused. The captain chose to prompt if needed so explicit
-logout/forget can erase every matching copy immediately. On untrusted identities, logout may ask once
+explicit cross-identity erasure is not unconditionally prompt-free: it may need authorization, and
+refused old copies can remain. Explicit logout/forget permit prompts to erase every matching copy;
+automatic duplicate cleanup instead retains copies that need authorization. On untrusted identities, logout may ask once
 per old item, including backups. Only explicit macOS keep-data logout allows two minutes for
 credential authorization, without a competing shorter deadline. Login with Remember me unchecked,
 full wipes, `--clear-storage`, and other platforms retain their previous 2.5-second bounded wait.
@@ -467,8 +497,8 @@ unrecognized entries under the service are preserved too.
 Already-trusted legacy items need no migration approvals. Otherwise, expect one per old item:
 normally three, four with MCP, plus inactive-account secrets or recovery copies. Use Always Allow;
 Allow permits only that operation. A launch interrupted before the combined write can ask again for
-old items; once the combined item exists, ordinary startup never re-reads them unless key recovery
-is needed. A trusted migrated identity
+old items; once the combined item exists, ordinary startup consumers never re-read them unless key
+recovery is needed. The separate cleanup helper may read legacy copies only with interaction disabled. A trusted migrated identity
 needs no approval; an untrusted changed identity needs at most one. The previous `.keychain-reowned`
 marker is unused. Windows, Linux and iOS retain their layouts.
 
@@ -490,10 +520,11 @@ FLUUX_KEYCHAIN_RESULTS=/absolute/path/outside/project bash scripts/native-tests/
 ```
 
 The launcher builds the Rust test host, copies it into old-release and Dev ad-hoc identities, and uses
-explicit keychains under a scratch `HOME` with `FM3000_LOCAL_CODESIGN_DIR`. It tests migration without
-cleanup, one denial, simulated Always Allow (equivalent items trusting both identities), Dev
+explicit keychains under a scratch `HOME` with `FM3000_LOCAL_CODESIGN_DIR`. It tests initial migration
+without in-place cleanup, one denial, simulated Always Allow (equivalent items trusting both identities), Dev
 consolidation followed by the old identity reading its unchanged originals, a pending-cleanup bundle
-with a changed original, failed-write fallback/retry, no-op writes, atomic revisions, unavailable
+with a changed original, silent helper cleanup and restart, preservation of untrusted/restored/foreign
+copies, conditional deletion after an uncoordinated older write, failed-write fallback/retry, no-op writes, atomic revisions, unavailable
 revision tracking, token rotation and logout. FLM-86 fixtures refuse just a credential, OpenPGP
 passphrase or MCP token using real disposable ACLs, and corrupt one old item's UTF-8. The other
 consumers still work; repeated calls produce one migration enumeration and no partial combined write.
