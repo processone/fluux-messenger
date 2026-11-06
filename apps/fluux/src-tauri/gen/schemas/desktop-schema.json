@@ -7461,10 +7461,34 @@
           "markdownDescription": "Write the list of conversations with unread messages that the home-screen widget shows, and empty it on sign-out.\n#### This default permission set includes:\n\n- `allow-set-unread-list`"
         },
         {
+          "description": "Enables the set_notification_avatar command without any pre-configured scope.",
+          "type": "string",
+          "const": "widgets:allow-set-notification-avatar",
+          "markdownDescription": "Enables the set_notification_avatar command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_sender_names command without any pre-configured scope.",
+          "type": "string",
+          "const": "widgets:allow-set-sender-names",
+          "markdownDescription": "Enables the set_sender_names command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_unread_list command without any pre-configured scope.",
           "type": "string",
           "const": "widgets:allow-set-unread-list",
           "markdownDescription": "Enables the set_unread_list command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_notification_avatar command without any pre-configured scope.",
+          "type": "string",
+          "const": "widgets:deny-set-notification-avatar",
+          "markdownDescription": "Denies the set_notification_avatar command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_sender_names command without any pre-configured scope.",
+          "type": "string",
+          "const": "widgets:deny-set-sender-names",
+          "markdownDescription": "Denies the set_sender_names command without any pre-configured scope."
         },
         {
           "description": "Denies the set_unread_list command without any pre-configured scope.",

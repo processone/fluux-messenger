@@ -18,6 +18,58 @@ Write the list of conversations with unread messages that the home-screen widget
 <tr>
 <td>
 
+`widgets:allow-set-notification-avatar`
+
+</td>
+<td>
+
+Enables the set_notification_avatar command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`widgets:deny-set-notification-avatar`
+
+</td>
+<td>
+
+Denies the set_notification_avatar command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`widgets:allow-set-sender-names`
+
+</td>
+<td>
+
+Enables the set_sender_names command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`widgets:deny-set-sender-names`
+
+</td>
+<td>
+
+Denies the set_sender_names command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `widgets:allow-set-unread-list`
 
 </td>
