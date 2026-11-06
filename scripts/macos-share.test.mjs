@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { shareSettings, extensionPlist, describeFailure, hostMetadata } from '../apps/fluux/scripts/tauri-macos-share.mjs'
 
-const config = { identifier: 'net.processone.fluux', productName: 'Fluux Messenger', version: '0.17.4' }
+const config = JSON.parse(readFileSync(new URL('../apps/fluux/src-tauri/tauri.conf.json', import.meta.url)))
 test('signed production and development imports have separate group containers', () => {
   const env = { APPLE_TEAM_ID: 'ABCDE12345' }
   const production = shareSettings(config, env)
@@ -54,18 +54,18 @@ test('signing failures name the failing step and stderr without leaking argv pas
 })
 
 
-test('issue #1386 declarations require the standard identity and explicit communication feature', () => {
+test('accepted Dev capability and #1386 declarations require an exact identity and explicit communication feature', () => {
   for (const identifier of [config.identifier, `${config.identifier}.dev`, `${config.identifier}.other`]) {
     for (const enabled of [false, true]) {
       for (const env of [{}, { APPLE_TEAM_ID: 'ABCDE12345' }]) {
         const settings = shareSettings({ ...config, identifier, build: { features: enabled ? ['macos-communication'] : [] } }, env)
         const metadata = hostMetadata(settings, { CFBundleDisplayName: config.productName }, { 'com.apple.security.network.client': true })
-        const communication = enabled && identifier === config.identifier
+        const communication = enabled && [config.identifier, `${config.identifier}.dev`].includes(identifier)
         assert.equal(metadata.info.FluuxCommunication === true, communication)
         assert.equal(metadata.entitlements['com.apple.developer.usernotifications.communication'] === true, communication)
         assert.deepEqual(metadata.info.NSUserActivityTypes, communication ? ['INSendMessageIntent'] : undefined)
         assert.equal(metadata.entitlements['com.apple.security.network.client'], true)
-        // J1: no team-specific signing identifiers on ordinary builds, Dev, or metadata without a team.
+        // No signing identifiers on ordinary builds or metadata without a team.
         assert.equal(metadata.entitlements['com.apple.application-identifier'], communication && settings.team ? `${settings.team}.${identifier}` : undefined)
         assert.equal(metadata.entitlements['com.apple.developer.team-identifier'], communication ? settings.team : undefined)
       }

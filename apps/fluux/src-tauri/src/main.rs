@@ -1271,9 +1271,11 @@ fn print_startup_diagnostics() {
     eprintln!("---");
 }
 
-// Dev remains excluded; released standard-identity builds opt in through their configuration.
+// Exact production and Dev identities opt in through their bundled macOS configuration.
 fn communication_for_build(identifier: &str, enabled: bool) -> bool {
-    cfg!(target_os = "macos") && enabled && identifier == "net.processone.fluux"
+    cfg!(target_os = "macos")
+        && enabled
+        && matches!(identifier, "net.processone.fluux" | "net.processone.fluux.dev")
 }
 
 fn communication_available(identifier: &str) -> bool {
@@ -2432,7 +2434,7 @@ mod tests {
 
     #[test]
     fn standard_identity_communication_preserves_ordinary_and_dev_builds() {
-        // Accepted standard-profile test: only net.processone.fluux + explicit mode on macOS.
+        // Accepted Dev capability: exact production and Dev identities + explicit mode on macOS.
         let standard: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
         let dev: serde_json::Value =
@@ -2444,7 +2446,10 @@ mod tests {
                 communication_for_build(standard_id, enabled),
                 cfg!(target_os = "macos") && enabled
             );
-            assert!(!communication_for_build(dev_id, enabled));
+            assert_eq!(
+                communication_for_build(dev_id, enabled),
+                cfg!(target_os = "macos") && enabled
+            );
             assert!(!communication_for_build("net.processone.other", enabled));
         }
         assert_eq!(

@@ -43,7 +43,7 @@ API_AVAILABLE(macos(12.0))
     NSMutableDictionary<NSString *, NSArray<NSString *> *> *_donationGroups;
 }
 + (BOOL)enabledForIdentifier:(NSString *)identifier info:(NSDictionary *)info {
-    return [identifier isEqual:@"net.processone.fluux"] && [info[@"FluuxCommunication"] boolValue];
+    return ([identifier isEqual:@"net.processone.fluux"] || [identifier isEqual:@"net.processone.fluux.dev"]) && [info[@"FluuxCommunication"] boolValue];
 }
 - (instancetype)init {
     if ((self = [super init])) {

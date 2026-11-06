@@ -1,16 +1,16 @@
 # macOS communication notifications (#1386)
 
 Released macOS builds enable communication notifications for `net.processone.fluux`.
-The updater stays enabled, including automatic checks and Updates settings. Dev
-(`net.processone.fluux.dev`), ordinary local builds and pull request builds do not
-opt in. There is no in-app switch, as on iOS.
+The updater stays enabled, including automatic checks and Updates settings. Bundled
+macOS Dev helpers also enable it with a separate Dev profile and explicit Developer
+ID signing; hot reload and ordinary base-configuration builds do not opt in. There is no in-app switch, as on iOS.
 
 ## Activation and release profile
 
 The macOS release job alone passes `src-tauri/tauri.release-macos.conf.json`.
 It selects `production-tls` and `macos-communication` and maps the public profile
 `macos/net.processone.fluux.provisionprofile` to `Contents/embedded.provisionprofile`.
-The gates remain macOS + standard identity + Cargo feature + generated
+The gates remain macOS + exact production or Dev identity + Cargo feature + generated
 `FluuxCommunication` plist flag. An immutable `__FLUUX_COMMUNICATION__` startup
 marker allows frontend communication preparation without disabling updates.
 
@@ -200,3 +200,49 @@ a test on one macOS version does not qualify all older systems.
 
 References: [Apple communication notifications](https://developer.apple.com/documentation/usernotifications/implementing-communication-notifications),
 [macOS capabilities](https://developer.apple.com/help/account/reference/supported-capabilities-macos/).
+
+## Dev profile setup and renewal
+
+The Dev identity remains `net.processone.fluux.dev` / Fluux Messenger Dev, team
+`8L55BDM864`. Only Developer ID is supported by this local path, not Mac App
+Development. Every bundled macOS Dev helper requires the capability. Hot reload
+stays unchanged. See [local inputs](DEVELOPER.md#bundled-dev-communication-notifications).
+
+Only an authorized owner uses the Apple developer account:
+
+1. Select the ProcessOne team and the exact explicit Dev App ID; register it if absent.
+2. Enable Communication Notifications, preserving other Dev capabilities. Do not
+   modify production or add Push Notifications for this local feature.
+3. Generate/regenerate a Distribution → Developer ID profile for that Dev ID,
+   selecting an existing compatible Developer ID Application certificate.
+4. Download the public profile and keep its path local. Never export private keys
+   or create/import certificates as part of this helper.
+
+Dev validation requires OSX, the exact team and
+`8L55BDM864.net.processone.fluux.dev`, communication authorization, all-Mac
+coverage without a device list, certificate coverage and at least five years of
+profile validity remaining. Production callers remain pinned to the production
+identifier and reject a Dev profile. Dev rejects the production profile. Renew
+before falling below five years and regenerate after capability/certificate
+changes; replace the local file and rebuild. An expired Developer ID profile can
+prevent launch. Final signer membership still needs verification on the actual
+signed bundle, regardless of preflight certificate checks.
+
+Unsigned checks exercise metadata, fail-closed input handling and compiled gates:
+
+```sh
+node --test scripts/macos-dev-communication.test.mjs
+npm run check:tls-build
+```
+
+Set the documented inputs to include the real Dev-profile positive contract;
+without them that test explicitly skips. The actual profile and signed-app proof
+must not be inferred from production-profile negative checks or altered payloads.
+
+Required live proof remains separate: use an owner-signed disposable Dev bundle
+in an isolated macOS test user. Verify its signature, embedded profile, entitlements,
+certificate membership, `INSendMessageIntent`, flag, extension and launch, recording
+the OS and binary version. Exercise direct/room avatars and fallback, warm/cold
+clicks, read dismissal, replay suppression, logout cleanup, denied permission,
+mentions, DND and sound. No production proof exception covers Dev; automated
+contracts do not establish notification appearance or prompt-free secret access.

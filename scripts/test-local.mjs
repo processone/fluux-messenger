@@ -120,6 +120,7 @@ export function createPlan(changes, cwd = root) {
   const communication = reason => {
     nodeTest('scripts/macos-communication.test.mjs', reason)
     nodeTest('scripts/macos-release.test.mjs', reason)
+    nodeTest('scripts/macos-dev-communication.test.mjs', reason)
     npm('check:tls-build', reason)
     add('cargo:communication-test', 'cargo', ['test', '--locked', '--manifest-path', mainManifest,
       '--features', 'macos-communication'], reason, { requires: 'mac' })
@@ -176,6 +177,7 @@ export function createPlan(changes, cwd = root) {
     }
     if (path === `${app}/scripts/macos-communication-profile.mjs` || path === 'scripts/verify-macos-release.mjs'
         || path === 'scripts/macos-signature-read.test.mjs'
+        || path === `${app}/scripts/tauri-dev-communication.mjs` || path === 'scripts/macos-dev-communication.test.mjs'
         || path === 'scripts/macos-release.test.mjs' || path === `${native}/macos/net.processone.fluux.provisionprofile`) {
       communication(reason)
       continue
