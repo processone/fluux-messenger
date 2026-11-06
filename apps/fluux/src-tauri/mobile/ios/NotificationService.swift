@@ -18,7 +18,12 @@ final class NotificationService: UNNotificationServiceExtension {
         let delivery = PreviewDelivery()
         self.delivery = delivery
         let names = loadNames()
-        let diagnostic = PreviewTrace.recorder(root: ledgerRoot())
+        let root = ledgerRoot()
+        // Capture one session for both paths: logout must reject every late event from this push.
+        let recordWidget = PreviewTrace.batchRecorder(root: root, correlation: UUID())
+        let diagnostic: (PreviewDecision, Int?) -> Void = { decision, duration in
+            recordWidget([.init(decision: decision, time: Date().timeIntervalSince1970, durationMs: duration)])
+        }
         delivery.diagnostic = diagnostic
         diagnostic(.received, nil)
         let tag = String(request.identifier.prefix(8))
@@ -48,12 +53,21 @@ final class NotificationService: UNNotificationServiceExtension {
         let words = wordValue.flatMap { JSONSerialization.isValidJSONObject($0) ? try? JSONSerialization.data(withJSONObject: $0) : nil }
             .flatMap { try? JSONDecoder().decode(PreviewWords.self, from: $0) } ?? PreviewWords.localized
         // The widget lists what the badge counts: a push that raises the badge adds its conversation.
-        let content = NotificationPresentation.content(for: request.content, names: names, activity: words.activity) { bare, isRoom, counted in
-            UnreadList.recordPush(conversation: bare, kind: isRoom ? "groupchat" : "chat",
-                                  name: (isRoom ? names.rooms[bare] : names.contacts[bare]) ?? bare,
-                                  account: names.account,
-                                  // Read under the list's lock, so the newest push leaves the newest total.
-                                  total: SharedBadge.load()?.count ?? counted, root: NotificationMirror.root)
+        var widgetCounted = false
+        let badge = SharedBadge.load(root: root)
+        let content = NotificationPresentation.content(for: request.content, names: names, activity: words.activity,
+                                                       badge: badge, badgeRoot: root) { bare, isRoom, counted in
+            widgetCounted = true
+            let events = UnreadList.recordPush(conversation: bare, kind: isRoom ? "groupchat" : "chat",
+                                               name: (isRoom ? names.rooms[bare] : names.contacts[bare]) ?? bare,
+                                               account: names.account,
+                                               // Read under the list's lock, so the newest push leaves the newest total.
+                                               total: SharedBadge.load(root: root)?.count ?? counted, root: root)
+            recordWidget(events.map(\.diagnostic))
+        }
+        if !widgetCounted {
+            recordWidget([.init(decision: badge == nil ? .widgetBadgeUnavailable : .widgetNotCounted,
+                                time: Date().timeIntervalSince1970)])
         }
         delivery.begin(content, completion: finish)
         let sender = (content.userInfo["from"] as? String).flatMap(NotificationPresentation.bareJid)
@@ -113,4 +127,22 @@ final class NotificationService: UNNotificationServiceExtension {
         }
     }
     override func serviceExtensionTimeWillExpire() { delivery?.finish(expiration: .systemExpiry) }
+}
+
+private extension UnreadList.PushEvent {
+    var diagnostic: PreviewTrace.Event {
+        let value: PreviewDecision
+        switch decision {
+        case .rootUnavailable: value = .widgetRootUnavailable
+        case .listUnavailable: value = .widgetListUnavailable
+        case .accountMismatch: value = .widgetAccountMismatch
+        case .alreadyListed: value = .widgetAlreadyListed
+        case .rowSelected: value = .widgetRowSelected
+        case .writeSucceeded: value = .widgetWriteSucceeded
+        case .writeFailed: value = .widgetWriteFailed
+        case .reloadRequested: value = .widgetReloadRequested
+        case .reloadUnavailable: value = .widgetReloadUnavailable
+        }
+        return .init(decision: value, time: time)
+    }
 }

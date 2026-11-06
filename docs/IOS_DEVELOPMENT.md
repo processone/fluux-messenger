@@ -425,14 +425,36 @@ The widget never connects to the server. It reads `UnreadWidget.json` from the A
   quiet room does not appear; `utils/unreadWidget.ts` builds the list, with `total` equal to the badge,
   and the `widgets` plugin (`plugins/widgets`) writes the file and asks WidgetKit to redraw. It writes
   nothing off iOS (`publishesUnreadWidget`), and an empty list on sign-out.
-- While the app is suspended, a push that raises the badge adds its conversation to the file
-  (`NotificationService.swift`, `UnreadList.recordPush`). Reloading a widget from a notification
-  extension is undocumented and unreliable: the file is right, but iOS may redraw only when it chooses
-  or when the app next opens.
+- While the app is suspended, a push that raises the badge attempts to add its conversation to the
+  existing account-owned file (`NotificationService.swift`, `UnreadList.recordPush`). A missing or
+  mismatched list, an already-listed conversation or a failed write does not request a reload.
+  A successful write requests a reload; this is not proof that iOS rendered the new timeline.
 - Avatars come from the `Avatars/` copies the notification mirror already keeps.
 
 The Swift model (`plugins/widgets/ios/Sources/UnreadList.swift`) is compiled by the plugin, the
 widget and the notification extension. Strings are English and French (`mobile/ios/Widgets/Resources`).
+
+For a background-refresh investigation, observe the widget **before** reopening Fluux, then use
+**Settings → Notifications → Export diagnostic**. The existing content-free export preserves the
+notification extension's widget decisions with their operation timestamps and the same random
+processing marker as `received`:
+
+- `widgetNotCounted`: the push did not add a conversation to the badge; the widget hook did not run.
+  `widgetBadgeUnavailable` distinguishes a missing, unreadable or invalid badge snapshot from that case.
+- `widgetRootUnavailable`, `widgetListUnavailable`, `widgetAccountMismatch` or `widgetAlreadyListed`:
+  the widget update stopped before a write. A list-load failure does not distinguish an absent file
+  from an unreadable or invalid file.
+- `widgetRowSelected`, then `widgetWriteSucceeded` or `widgetWriteFailed`: the extension selected a
+  row and the file write returned success or failure.
+- `widgetReloadRequested` follows only a successful write and records a request, **not** a completed
+  redraw. `widgetReloadUnavailable` means this runtime could not make that request.
+
+These events add no account, conversation, name, message, path or raw error fields. The existing
+200-entry, 48-hour and logout/session bounds still apply. One widget sequence uses one diagnostic
+transaction, outside the unread-file lock. Diagnostics remain best effort: an unavailable shared
+folder or diagnostic store can leave no events, so their absence proves neither success nor failure.
+The export survives opening the app after the observation, but its version field alone does not
+attest the installed source commit. Record source provenance and visible results separately.
 
 **Apple setup.** The widget has its own App ID, `<application identifier>.widgets`, joined to the
 existing App Group `group.<application identifier>.share`. It needs no push or keychain capability.

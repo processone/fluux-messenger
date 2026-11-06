@@ -97,22 +97,52 @@ struct UnreadList: Codable, Equatable {
         return next
     }
 
-    /// The notification extension's side: `total` is read once the lock is held, so a push that waited
-    /// for another reads the badge after that one, never a count taken before it. Adds a pushed conversation to the file the app last wrote
-    /// and asks for a redraw. iOS may defer that redraw until the app next opens; the file is right either way.
+    /// Content-free observations from the notification extension, not proof that WidgetKit rendered.
+    struct PushEvent: Equatable {
+        enum Decision { case rootUnavailable, listUnavailable, accountMismatch, alreadyListed, rowSelected,
+                             writeSucceeded, writeFailed, reloadRequested, reloadUnavailable }
+        let decision: Decision
+        let time: TimeInterval
+    }
+
+    /// `total` is read under the list's lock so an overlapping push sees the newest badge.
+    /// Return only fixed decisions and their times; the caller owns diagnostic persistence.
+    @discardableResult
     static func recordPush(conversation: String, kind: String, name: String, account: String?,
-                           total: @autoclosure () -> Int, root: URL?) {
-        guard let root = root else { return }
-        // Read and write under one lock: a clear or a newer list from the app lands before or after, never between.
-        let added: Bool = locked(root: root) {
-            guard let list = load(root: root),
-                  let next = list.adding(conversation, kind: kind, name: name, account: account, total: total()) else { return false }
-            return (try? next.writeUnlocked(root: root)) != nil
+                           total: @autoclosure () -> Int, root: URL?,
+                           clock: () -> Date = Date.init,
+                           reload: () -> Bool = requestReload) -> [PushEvent] {
+        func event(_ decision: PushEvent.Decision) -> PushEvent {
+            PushEvent(decision: decision, time: clock().timeIntervalSince1970)
         }
-        guard added else { return }
+        guard let root = root else { return [event(.rootUnavailable)] }
+        // Keep diagnostic I/O outside this lock: it must not delay another list writer or sign-out.
+        var events: [PushEvent] = locked(root: root) {
+            guard let list = load(root: root) else { return [event(.listUnavailable)] }
+            guard list.account == account else { return [event(.accountMismatch)] }
+            guard let next = list.adding(conversation, kind: kind, name: name, account: account,
+                                         total: total(), now: clock()) else { return [event(.alreadyListed)] }
+            let selected = event(.rowSelected)
+            do {
+                try next.writeUnlocked(root: root)
+                return [selected, event(.writeSucceeded)]
+            } catch { return [selected, event(.writeFailed)] }
+        }
+        guard events.last?.decision == .writeSucceeded else { return events }
+        let requestedAt = clock().timeIntervalSince1970
+        let requested = reload()
+        events.append(PushEvent(decision: requested ? .reloadRequested : .reloadUnavailable, time: requestedAt))
+        return events
+    }
+
+    private static func requestReload() -> Bool {
         #if os(iOS) && canImport(WidgetKit)
-        if #available(iOS 14.0, *) { WidgetCenter.shared.reloadTimelines(ofKind: widgetKind) }
+        if #available(iOS 14.0, *) {
+            WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
+            return true
+        }
         #endif
+        return false
     }
 }
 
