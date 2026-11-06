@@ -88,16 +88,20 @@ bounded query/deadline/memory rules.
 | App web room | `nick @ room name` for one, room name for several | Localized `N new messages` |
 | Web push | Payload title, else `from`, else `Fluux Messenger` | Localized `N new messages`; count displayed notifications for the same tag |
 | iOS remote chat | Mirrored contact name, else sender local part | Localized `nickname: N new messages` for fresh ledger candidates |
-| iOS remote room | Mirrored room name with nick as subtitle, ordinary alert without incoming intent donation/enrichment | Transport-safe body; OX room preview is not supported |
+| iOS remote room | Mirrored room name, attributed to the room's bare identity with its cached room picture | Nick on the first message line, then the unchanged transport-safe body; no prefix without a nick; OX room preview is not supported |
 
 Room-first order is a system-presentation policy, not a change to the shared
-local formatter or in-app banners. iOS remote rooms lose communication-avatar,
-person-based Focus and communication-specific Siri treatment; direct messages
-and outgoing share suggestions retain their communication behavior. Local iOS
-room alerts keep their attachments and use one headline because the plugin has
-no subtitle field. Ordinary macOS uses the same headline, including ordinary fallbacks in its
-disabled-by-default communication experiment. Successful communication enrichment
-still uses the system-controlled layout; its sender and group metadata are unchanged.
+local formatter or in-app banners. iOS remote rooms use communication enrichment
+with the room as the notification origin, never an occupant with a room picture.
+Missing or corrupt room pictures never select a contact picture. The nickname
+starts the message instead of becoming an occupant-first group heading. This room
+attribution can change Focus filtering and needs physical-device qualification.
+Direct messages and outgoing share suggestions retain their existing communication
+behavior. Local iOS room alerts keep their attachments and use one headline because
+the plugin has no subtitle field. Ordinary macOS uses the same headline, including
+ordinary fallbacks in its disabled-by-default communication experiment. Successful
+macOS communication enrichment still uses the system-controlled layout; its sender
+and group metadata are unchanged.
 
 Counts intentionally have different sources: the app's unread count, the SW's
 still-displayed notification count, and the NSE's fresh claimed archive candidates.
@@ -115,8 +119,12 @@ npm run test:ios-notifications
 
 On macOS, the native runner compiles the actual Swift service/presentation,
 completion gate and SQLite ledger with `swiftc`, a synthetic engine, synthetic
-account names and isolated temporary storage. It requires no device, signing,
-installed app or network. The project template has no extension test target or
+account names and isolated temporary storage. For room rows it compares the iOS
+contract against the real incoming intent and separately checks the ordinary
+fallback, since macOS cannot apply iOS content enrichment. The qualified simulator
+journey in [iOS development](IOS_DEVELOPMENT.md#remote-push-notifications) covers rendered
+room alerts separately. The macOS runner requires no device, signing, installed
+app or network. The project template has no extension test target or
 XCTest scheme; these standalone Swift checks provide device-free coverage.
 They do not prove APNs delivery, real archive fetching/decryption, system preview
 presentation or physical-device resource limits.

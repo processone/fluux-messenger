@@ -156,15 +156,10 @@ import UniformTypeIdentifiers
     }
 
     static func fixtureImage() -> Data {
-        let context = CGContext(data: nil, width: 640, height: 480, bitsPerComponent: 8, bytesPerRow: 0,
-                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-        context.setFillColor(CGColor(red: 0.3, green: 0.5, blue: 0.8, alpha: 1))
-        context.fill(CGRect(x: 0, y: 0, width: 640, height: 480))
-        let output = NSMutableData()
-        let destination = CGImageDestinationCreateWithData(output, UTType.png.identifier as CFString, 1, nil)!
-        CGImageDestinationAddImage(destination, context.makeImage()!, nil)
-        precondition(CGImageDestinationFinalize(destination))
-        return output as Data
+        // The mirror/image contracts use real project bytes, shared with the iOS fixture.
+        let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        return try! Data(contentsOf: project.appendingPathComponent("assets/readme/fluux-logo.png"))
     }
 
     static func mirror() throws {
@@ -402,7 +397,7 @@ import UniformTypeIdentifiers
         print("muc_nick passed")
     }
 
-    /// FLM-431: ordinary incoming rooms retain room-before-nick order, independent of occupancy.
+    /// Accepted room-attribution layout: room identity first, independent of occupancy.
     static func roomFirst() {
         let room = "xsf@muc.xmpp.org"
         for participants in [[:], [room: SharedRoomParticipants(ownNick: "Me", nicks: ["Seve", "Me"])]] {
@@ -416,11 +411,18 @@ import UniformTypeIdentifiers
                 original.sound = .default
                 original.userInfo = ["from": room, "muc_nick": nick, "to": "me@example.com"]
                 let from = NotificationPresentation.sender(of: original.userInfo, names: names)!
-                precondition(NotificationPresentation.incomingIntent(from: from, body: original.body, names: names) == nil,
-                             "Known rooms must bypass incoming intent creation and donation")
+                let incoming = NotificationPresentation.incomingIntent(from: from, body: original.body, names: names)!
+                precondition(incoming.sender?.personHandle?.value == room && incoming.sender?.displayName == names.rooms[room],
+                             "The notification origin is the room, never an occupant")
+                precondition(incoming.speakableGroupName == nil, "Do not restore an occupant-first group heading")
                 let result = NotificationPresentation.content(for: original, names: names)
-                precondition(result.title == "XSF" && result.subtitle == nick)
-                precondition(result.body == original.body && result.threadIdentifier == original.threadIdentifier)
+                precondition(result.title == names.rooms[room])
+                #if os(iOS)
+                precondition(result.subtitle.isEmpty && result.body == incoming.content)
+                #else
+                precondition(result.subtitle == nick && result.body == original.body)
+                #endif
+                precondition(result.threadIdentifier == original.threadIdentifier)
                 precondition(result.sound != nil && result.userInfo["to"] as? String == "me@example.com")
                 precondition(original.subtitle == "Stale server subtitle", "Do not mutate the request")
                 print("Room alert: title=\(result.title), subtitle=\(result.subtitle), body=\(result.body)")

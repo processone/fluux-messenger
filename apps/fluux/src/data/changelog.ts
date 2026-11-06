@@ -27,6 +27,7 @@ export const changelog: ChangelogEntry[] = [
       items: [
         'Importing an OpenPGP key file checks that the server backup contains the same identity, including separately encrypted and older exports. Earlier backup-status markers are reset because file imports could record an incorrect claim. An unconfirmed backup now has a neutral status and a replacement warning. Rotating a key refreshes an unconfirmed backup and replaces its code, even if another device created it',
         'macOS: obsolete keychain copies are removed only when the shared saved secrets contain the same values, without extra access prompts. Copies that changed or cannot be checked remain available',
+        'iOS: room push alerts show the room picture when available, keeping the room name first and the sender nickname above the message. Missing or invalid room pictures never use a sender picture',
       ],
     }],
   },
