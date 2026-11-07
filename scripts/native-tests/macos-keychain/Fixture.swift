@@ -22,12 +22,17 @@ check(SecKeychainSetUserInteractionAllowed(false))
 let password = try String(contentsOfFile: args[3], encoding: .utf8)
 var keychain: SecKeychain?
 check(SecKeychainCreate(args[2], UInt32(password.utf8.count), password, false, nil, &keychain))
-if args[1] == "approved" || args[1] == "legacy-approved" || args[1].hasPrefix("partial-") {
+if args[1] == "approved" || args[1] == "pending-approved" || args[1] == "prompt-approved" || args[1] == "legacy-approved" || args[1].hasPrefix("partial-") {
     guard args.count == 6 else { die("two test identities required") }
     let service = "com.processone.fluux"
     let items: [(String, Data)]
-    if args[1] == "approved" {
-        items = [("secrets-v1", try Data(contentsOf: URL(fileURLWithPath: home + "/approved-item.json")))]
+    if args[1] == "approved" || args[1] == "pending-approved" || args[1] == "prompt-approved" {
+        let combined = ("secrets-v1", try Data(contentsOf: URL(fileURLWithPath: home + "/approved-item.json")))
+        // Saving must not wait on a sibling's prompt: both native items need
+        // equivalent Always Allow access for the two disposable identities.
+        items = args[1] != "approved"
+            ? [combined, ("secrets-fresh-v1", Data(#"{"version":1,"items":{}}"#.utf8))]
+            : [combined]
     } else {
         items = [
             ("last_user", Data("alice@example.com".utf8)),
@@ -49,7 +54,9 @@ if args[1] == "approved" || args[1] == "legacy-approved" || args[1].hasPrefix("p
         check(SecTrustedApplicationCreateFromPath(path, &app)); trusted.append(app!)
     }
     var access: SecAccess?
-    check(SecAccessCreate(service as CFString, trusted as CFArray, &access))
+    // Real-prompt qualification trusts only the writer; the reader must ask.
+    let itemTrust = args[1] == "prompt-approved" ? [trusted[0]] : trusted
+    check(SecAccessCreate(service as CFString, itemTrust as CFArray, &access))
     // FLM-86: only one old item's ACL excludes the reader. These are real
     // disposable-keychain access failures, with dialogs disabled throughout.
     let pgpAccount = "openpgp_passphrase:alice@example.com"

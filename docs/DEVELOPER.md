@@ -513,10 +513,13 @@ marker is unused. Windows, Linux and iOS retain their layouts.
 
 Release and Dev still share the service and combined item; neither re-creates the other's entries.
 A separate file lock and a single, atomically replaced revision value refuse stale writes from another
-running cache, without a second keychain decrypt. Reads hold a shared lock while decrypting, so one
-copy waiting for authorization does not block another copy's read. Writes retain an exclusive lock
-through the revision update and keychain mutation. Identical saves skip writes; deleting an absent
-bundle entry still cleans matching old copies but does not rewrite the bundle.
+running cache, without a second keychain decrypt. Reads hold a shared lock only to capture the revision,
+then release it before decrypting. One copy waiting for authorization therefore holds no revision lock:
+neither reads nor writes in another copy wait on that copy's dialog. Writes retain an exclusive lock
+through the revision update and keychain mutation, advancing the revision before changing the item.
+A reader whose lookup overlaps that mutation retains its earlier revision and cannot save stale data.
+Identical saves skip writes; deleting an absent bundle entry still cleans matching old copies but does
+not rewrite the bundle.
 A missing, unreadable or invalid revision file never blocks reading secrets: only writes are refused
 when the cache cannot establish a revision. Restart the stale app before saving again. Ad-hoc rebuilds
 may require one new access approval. This remains the file-based keychain, with no new provisioning
@@ -542,7 +545,11 @@ Copy-only MCP backups hold the logical value's failure, while OpenPGP recovery-o
 candidates with a held refusal. Explicit retry reads that source without replacing the token or
 promoting an unvalidated passphrase.
 A new owner process then migrates all readable originals. A second process reads while another reader holds the
-shared revision lock; exclusive writes still exclude readers and writers. Native invalid UTF-8,
+shared revision lock; exclusive writes still exclude readers and writers. A test barrier pauses a production
+read after revision capture and before native lookup for each combined item. The other identity completes
+credential saving, logout, MCP reset and encrypted OpenPGP save/reload before that reader resumes;
+the resumed reader cannot write over the newer revision. The barrier models an authorization wait,
+not the signed application's dialog. Native invalid UTF-8,
 malformed JSON and future-version fixtures each produce one old combined-item read across startup
 consumers and explicit retry, with no item replacement; explicit erase also checks the independent
 fresh store once. It runs the focused secrets, credentials, OpenPGP storage
