@@ -9,14 +9,26 @@
     ]
   },
   "build": {
-    "beforeBundleCommand": "node scripts/tauri-macos-share.mjs"
+    "beforeBundleCommand": "node scripts/tauri-macos-share.mjs && node scripts/tauri-macos-widgets.mjs"
   },
   "bundle": {
     "macOS": {
       "entitlements": "macos/.build/Host.entitlements",
       "infoPlist": "macos/.build/Info.plist",
       "files": {
-        "PlugIns/FluuxShare.appex": "macos/.build/FluuxShare.appex"
+        "PlugIns/FluuxShare.appex": "macos/.build/FluuxShare.appex",
+        "PlugIns/FluuxWidgets.appex": "macos/.build/FluuxWidgets.appex",
+        "Frameworks/libFluuxWidgets.dylib": "macos/.build/libFluuxWidgets.dylib"
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "xmpp",
+          "net.processone.fluux"
+        ]
       }
     }
   }

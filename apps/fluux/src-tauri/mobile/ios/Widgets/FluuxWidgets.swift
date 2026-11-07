@@ -9,6 +9,13 @@ struct FluuxWidgets: WidgetBundle {
 /// Lists the conversations with unread messages that the app last wrote into the shared folder.
 /// It never connects to the server: it shows the list as the app, or a push, left it.
 struct UnreadWidget: Widget {
+    private static var families: [WidgetFamily] {
+        #if os(macOS)
+        return [.systemSmall, .systemMedium, .systemLarge]
+        #else
+        return [.systemSmall, .systemMedium, .systemLarge, .accessoryCircular, .accessoryInline]
+        #endif
+    }
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: UnreadList.widgetKind, provider: UnreadProvider()) { entry in
             UnreadWidgetView(entry: entry)
@@ -16,7 +23,7 @@ struct UnreadWidget: Widget {
         }
         .configurationDisplayName("widget.name")
         .description("widget.description")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryCircular, .accessoryInline])
+        .supportedFamilies(Self.families)
     }
 }
 
@@ -37,8 +44,12 @@ struct UnreadProvider: TimelineProvider {
             completion(Timeline(entries: [now], policy: .after(now.date.addingTimeInterval(60))))
             return
         }
-        let midnights = UnreadList.midnights(after: now.date)
-        let entries = [now] + midnights.map { UnreadEntry(date: $0, list: now.list, names: now.names) }
+        var dates = UnreadList.midnights(after: now.date)
+        #if os(macOS)
+        if let stale = now.list?.staleDate, stale > now.date { dates.append(stale) }
+        #endif
+        let midnights = dates.sorted()
+        let entries = [now] + midnights.map { UnreadEntry(date: $0, list: now.list, names: now.names, root: now.root) }
         completion(Timeline(entries: entries, policy: .atEnd))
     }
 
@@ -49,7 +60,7 @@ struct UnreadProvider: TimelineProvider {
         let names = SharedNames.load(root: root)
         // The list belongs to the account the app is signed in with; a signed-out or switched app leaves none to show.
         let shown = UnreadList.shown(root: root, account: names.account)
-        return (UnreadEntry(date: Date(), list: shown.list, names: names), shown.awaitingAccount)
+        return (UnreadEntry(date: Date(), list: shown.list, names: names, root: root), shown.awaitingAccount)
     }
 
     /// Sample data for the gallery, not the user's conversations.

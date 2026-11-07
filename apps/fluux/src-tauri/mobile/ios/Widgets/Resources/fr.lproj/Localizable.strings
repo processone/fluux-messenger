@@ -6,3 +6,4 @@
 "widget.unread.other" = "non lus";
 "widget.count.one %lld" = "%lld non lu";
 "widget.count.other %lld" = "%lld non lus";
+"widget.stale" = "Dernière liste enregistrée · ouvrez Fluux pour actualiser";

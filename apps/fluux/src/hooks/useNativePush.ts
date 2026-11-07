@@ -293,12 +293,12 @@ export async function endPushSession(push?: PushRegistrar): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     const revokeContent = async () => {
-      const [{ clearIOSNotificationMirror }, { purgeIOSNotificationPreviews }, { clearUnreadWidgetList }] = await Promise.all([
-        import('@/platform/ios/notificationMirror'), import('@/platform/ios/notificationPreviews'),
+      const [{ clearAppleConversationMirror }, { purgeIOSNotificationPreviews }, { clearUnreadWidgetList }] = await Promise.all([
+        import('@/platform/apple/conversationMirror'), import('@/platform/ios/notificationPreviews'),
         import('@/utils/unreadWidget'),
       ])
       await Promise.all([
-        clearIOSNotificationMirror().catch(() => {}),
+        clearAppleConversationMirror().catch(() => {}),
         purgeIOSNotificationPreviews().catch(() => {}),
         clearUnreadWidgetList(),
       ])

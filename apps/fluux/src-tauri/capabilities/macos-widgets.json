@@ -1,0 +1,15 @@
+{
+  "identifier": "macos-widgets",
+  "description": "Publish unread conversation metadata and disposable avatars for the native desktop widget.",
+  "windows": [
+    "main"
+  ],
+  "platforms": [
+    "macOS"
+  ],
+  "permissions": [
+    "widgets:default",
+    "widgets:allow-set-sender-names",
+    "widgets:allow-set-notification-avatar"
+  ]
+}

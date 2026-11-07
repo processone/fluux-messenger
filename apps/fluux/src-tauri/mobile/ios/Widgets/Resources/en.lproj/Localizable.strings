@@ -6,3 +6,4 @@
 "widget.unread.other" = "unread";
 "widget.count.one %lld" = "%lld unread";
 "widget.count.other %lld" = "%lld unread";
+"widget.stale" = "Last saved list · open Fluux to refresh";

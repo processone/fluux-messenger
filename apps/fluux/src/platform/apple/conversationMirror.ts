@@ -1,6 +1,7 @@
 import { connectionStore, roomStore, rosterStore, chatStore } from '@fluux/sdk'
 import { platform } from '@/platform'
 import { shortcutConversations } from '@/utils/shortcutConversation'
+import { observeWidgetSupport, widgetSessionSupported, type WidgetWriteResult } from './widgetSupport'
 
 /** Display names by bare JID, which title the pushes their sender sends. */
 export interface PushSenderNames {
@@ -23,6 +24,15 @@ export function pushSenderNames(
   return { contacts: namesByJid(contacts), rooms: namesByJid(rooms) }
 }
 
+function supportsMirror(): boolean {
+  return (platform().usesNativePush && platform().os === 'ios') ||
+    (platform().publishesUnreadWidget && platform().os === 'macos' && widgetSessionSupported())
+}
+
+function mirrorCommand(command: string): string {
+  return `plugin:${platform().os === 'macos' ? 'widgets' : 'push'}|${command}`
+}
+
 const WRITE_DELAY_MS = 1000
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024
 
@@ -37,22 +47,27 @@ async function avatarBytes(url: string, signal: AbortSignal): Promise<ArrayBuffe
 let writeQueue = Promise.resolve()
 let stopActive: (() => void) | undefined
 
-export async function clearIOSNotificationMirror(): Promise<void> {
-  if (!platform().usesNativePush || platform().os !== 'ios') return
+export async function clearAppleConversationMirror(): Promise<void> {
+  if (!supportsMirror()) return
   stopActive?.()
   // Native input writes are serialized before suggestion deletion; a stalled
   // system callback must not keep the signed-in account visible to the extension.
-  const wipe = (async () => {
+  const pending = writeQueue
+  const revoke = async () => {
     const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('plugin:push|set_sender_names', { names: { account: null, contacts: {}, rooms: {}, avatars: {} } })
-  })()
-  writeQueue = wipe.catch(() => {})
+    const result = await invoke<WidgetWriteResult | undefined>(mirrorCommand('set_sender_names'), { names: { account: null, contacts: {}, rooms: {}, avatars: {} } })
+    if (platform().os === 'macos') observeWidgetSupport(result)
+  }
+  const wipe = revoke()
+  // Preserve prompt revocation even when a system acknowledgement stalls, then wipe again
+  // after every in-flight write and the first wipe. A new session queues behind that barrier.
+  writeQueue = Promise.all([pending, wipe.catch(() => {})]).then(revoke).catch(() => {})
   await wipe
 }
 
-/** Starts the iOS App Group mirror; other platforms have no native side effects. */
-export function startIOSNotificationMirror(): () => void {
-  if (!platform().usesNativePush || platform().os !== 'ios') return () => {}
+/** Starts the Apple shared-conversation mirror for iOS notifications or the macOS widget. */
+export function startAppleConversationMirror(): () => void {
+  if (!supportsMirror()) return () => {}
 
   let account = connectionStore.getState().jid?.split('/')[0] ?? null
   let generation = 0
@@ -65,7 +80,9 @@ export function startIOSNotificationMirror(): () => void {
   const invoke = async (command: string, args: Record<string, unknown>, isCurrent?: () => boolean) => {
     const { invoke: nativeInvoke } = await import('@tauri-apps/api/core')
     if (isCurrent && !isCurrent()) return undefined
-    return nativeInvoke<{ written: boolean } | undefined>(command, args)
+    const result = await nativeInvoke<WidgetWriteResult | undefined>(command, args)
+    if (platform().os === 'macos' && !observeWidgetSupport(result)) stopActive?.()
+    return result
   }
   const enqueue = (work: () => Promise<void>) => {
     writeQueue = writeQueue.then(work).catch((err) => console.warn('[NativePush] Notification mirror not shared:', err))
@@ -73,6 +90,7 @@ export function startIOSNotificationMirror(): () => void {
 
   const write = async () => {
     if (stopped || !account) return
+    if (!supportsMirror()) { stop(); return }
     const version = generation
     const owner = account
     const roster = rosterStore.getState()
@@ -122,7 +140,7 @@ export function startIOSNotificationMirror(): () => void {
       }
     }
     // Establish account ownership before sending any bytes. Native code wipes a previous account.
-    await invoke('plugin:push|set_sender_names', {
+    await invoke(mirrorCommand('set_sender_names'), {
       names: { ...names, account: owner, avatars, conversations,
         ...(Object.keys(roomParticipants).length ? { roomParticipants } : {}),
         ...(preserveIfEmpty ? { preserveIfEmpty: true } : {}) },
@@ -138,7 +156,7 @@ export function startIOSNotificationMirror(): () => void {
         if (!current()) return
         let binary = ''
         for (const byte of bytes) binary += String.fromCharCode(byte)
-        const result = await invoke('plugin:push|set_notification_avatar', {
+        const result = await invoke(mirrorCommand('set_notification_avatar'), {
           avatar: { account: owner, hash, data: btoa(binary) },
         }, current)
         if (!current()) return
@@ -172,7 +190,7 @@ export function startIOSNotificationMirror(): () => void {
     reads.abort()
     reads = new AbortController()
     enqueue(async () => {
-      await invoke('plugin:push|set_sender_names', {
+      await invoke(mirrorCommand('set_sender_names'), {
         names: { account: null, contacts: {}, rooms: {}, avatars: {} },
       })
     })

@@ -1,5 +1,5 @@
-//! The unread list a home-screen widget shows. The app hands it over here; Swift writes it into the
-//! App Group folder the widget reads and asks WidgetKit to redraw (`WidgetsPlugin.swift`).
+//! The unread list an Apple native widget shows. The app hands it over here; Swift writes it into
+//! the App Group folder and asks WidgetKit to redraw (mobile plugin or desktop bridge).
 #[cfg(target_os = "ios")]
 mod platform {
     use tauri::{
@@ -58,3 +58,8 @@ mod platform {
 }
 #[cfg(target_os = "ios")]
 pub use platform::init;
+
+#[cfg(target_os = "macos")]
+mod desktop;
+#[cfg(target_os = "macos")]
+pub use desktop::init;

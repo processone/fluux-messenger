@@ -4,7 +4,7 @@ import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { setWebAppBadge } from '@/utils/appBadge'
 import { pushBadgeState, sharePushBadge } from '@/utils/pushBadge'
-import { startUnreadWidgetPublisher } from '@/utils/unreadWidget'
+import { DESKTOP_WIDGET_HEARTBEAT_MS, startUnreadWidgetPublisher } from '@/utils/unreadWidget'
 import { platform } from '@/platform'
 
 // Set Tauri dock/taskbar badge
@@ -133,7 +133,7 @@ export function useNotificationBadge(): void {
   // list without changing any count above.
   useEffect(() => {
     if (!platform().publishesUnreadWidget) return
-    return startUnreadWidgetPublisher(() => eventsPendingCount)
+    return startUnreadWidgetPublisher(() => eventsPendingCount, platform().os === 'macos' ? DESKTOP_WIDGET_HEARTBEAT_MS : undefined)
   }, [eventsPendingCount])
 
   // Initialize favicon badge handler (browser only)
