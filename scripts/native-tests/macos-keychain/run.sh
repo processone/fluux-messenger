@@ -66,6 +66,43 @@ with open(pathlib.Path(sys.argv[2]).with_suffix('.lock'), 'a+b') as lock:
     subprocess.run([sys.argv[1], 'macos_secrets::native::native_keychain_probe', '--exact', '--ignored', '--nocapture'], check=True, timeout=15)
 PY
   probe reader exclusive-write
+  # Saving must not wait on the other copy's prompt: suspend the production
+  # read just before native lookup, then complete real writes in another identity.
+  for account in secrets-v1 secrets-fresh-v1; do
+    export FLUUX_PROBE_KEYCHAIN="$HOME/pending-$account.keychain-db" FLUUX_PENDING_ACCOUNT="$account"
+    "$LAB/fixture" approved "$FLUUX_PROBE_KEYCHAIN" "$HOME/password" "$LAB/owner" "$LAB/reader"
+    probe owner pending-prepare
+    FLUUX_PROBE_ACTION=pending-read python3 - "$LAB/reader" "$LAB/owner" <<'PY'
+import os, selectors, subprocess, sys, time
+args = ['macos_secrets::native::native_keychain_probe', '--exact', '--ignored', '--nocapture']
+reader = subprocess.Popen([sys.argv[1], *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+try:
+    # A semantic barrier, not a sleep: the reader has captured its revision.
+    deadline = time.monotonic() + 15
+    with selectors.DefaultSelector() as ready:
+        ready.register(reader.stdout, selectors.EVENT_READ)
+        output = b''
+        while b'pending native lookup\n' not in output:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not ready.select(remaining):
+                raise TimeoutError('reader did not reach native lookup')
+            chunk = os.read(reader.stdout.fileno(), 4096)
+            if not chunk:
+                raise RuntimeError('reader exited before native lookup: ' + output.decode())
+            output += chunk
+    env = dict(os.environ, FLUUX_PROBE_ACTION='pending-writes')
+    subprocess.run([sys.argv[2], *args], env=env, check=True, timeout=20)
+    assert reader.poll() is None, 'reader must remain paused until all writes finish'
+    tail, _ = reader.communicate(b'\n', timeout=15)
+    print((output + tail).decode(), end='')
+    assert reader.returncode == 0
+finally:
+    if reader.poll() is None:
+        reader.kill()
+        reader.communicate()
+PY
+  done
+  export FLUUX_PROBE_KEYCHAIN="$HOME/approved.keychain-db"
   probe reader startup
   # The Dev identity must not break the installed release's old layout.
   export FLUUX_PROBE_KEYCHAIN="$HOME/release-dev.keychain-db"
