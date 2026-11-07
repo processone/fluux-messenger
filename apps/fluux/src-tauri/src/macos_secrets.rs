@@ -1482,6 +1482,16 @@ mod native {
             }
             return;
         }
+        if action == "prompt-read" {
+            // Manual native qualification only: the launcher supplies an
+            // explicit disposable item whose ACL excludes this test identity.
+            assert!(SecKeychain::user_interaction_allowed().unwrap());
+            let account = std::env::var("FLUUX_PENDING_ACCOUNT").unwrap();
+            println!("starting isolated authorization lookup");
+            let _ = raw.get(&account);
+            println!("isolated authorization lookup ended");
+            return;
+        }
         let _no_dialogs = SecKeychain::disable_user_interaction().unwrap();
         if action == "cleanup-normal-read" {
             let logical = Secrets::new(raw);
@@ -1618,7 +1628,7 @@ mod native {
                     .fingerprint(),
                 cert.fingerprint()
             );
-            assert!(std::fs::read_dir(home.join("pending-keys"))
+            assert!(std::fs::read_dir(home.join("pending-keys/openpgp"))
                 .unwrap()
                 .all(|entry| {
                     entry
