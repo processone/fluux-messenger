@@ -1572,12 +1572,6 @@ mod native {
             );
             return;
         }
-        if action == "pending-prepare" {
-            assert!(raw.get(FRESH_ACCOUNT).unwrap().is_none());
-            raw.set(FRESH_ACCOUNT, r#"{"version":1,"items":{}}"#)
-                .unwrap();
-            return;
-        }
         if action == "pending-writes" {
             let logical = std::sync::Arc::new(Secrets::new(raw));
             let credentials = crate::credentials::StoredCredentials {

@@ -70,8 +70,7 @@ PY
   # read just before native lookup, then complete real writes in another identity.
   for account in secrets-v1 secrets-fresh-v1; do
     export FLUUX_PROBE_KEYCHAIN="$HOME/pending-$account.keychain-db" FLUUX_PENDING_ACCOUNT="$account"
-    "$LAB/fixture" approved "$FLUUX_PROBE_KEYCHAIN" "$HOME/password" "$LAB/owner" "$LAB/reader"
-    probe owner pending-prepare
+    "$LAB/fixture" pending-approved "$FLUUX_PROBE_KEYCHAIN" "$HOME/password" "$LAB/owner" "$LAB/reader"
     FLUUX_PROBE_ACTION=pending-read python3 - "$LAB/reader" "$LAB/owner" <<'PY'
 import os, selectors, subprocess, sys, time
 args = ['macos_secrets::native::native_keychain_probe', '--exact', '--ignored', '--nocapture']

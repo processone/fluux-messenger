@@ -22,12 +22,17 @@ check(SecKeychainSetUserInteractionAllowed(false))
 let password = try String(contentsOfFile: args[3], encoding: .utf8)
 var keychain: SecKeychain?
 check(SecKeychainCreate(args[2], UInt32(password.utf8.count), password, false, nil, &keychain))
-if args[1] == "approved" || args[1] == "legacy-approved" || args[1].hasPrefix("partial-") {
+if args[1] == "approved" || args[1] == "pending-approved" || args[1] == "legacy-approved" || args[1].hasPrefix("partial-") {
     guard args.count == 6 else { die("two test identities required") }
     let service = "com.processone.fluux"
     let items: [(String, Data)]
-    if args[1] == "approved" {
-        items = [("secrets-v1", try Data(contentsOf: URL(fileURLWithPath: home + "/approved-item.json")))]
+    if args[1] == "approved" || args[1] == "pending-approved" {
+        let combined = ("secrets-v1", try Data(contentsOf: URL(fileURLWithPath: home + "/approved-item.json")))
+        // Saving must not wait on a sibling's prompt: both native items need
+        // equivalent Always Allow access for the two disposable identities.
+        items = args[1] == "pending-approved"
+            ? [combined, ("secrets-fresh-v1", Data(#"{"version":1,"items":{}}"#.utf8))]
+            : [combined]
     } else {
         items = [
             ("last_user", Data("alice@example.com".utf8)),
