@@ -155,6 +155,20 @@ interface Args {
 type IosGestureLike = { end?: () => void; tail?: () => 'tap' | 'fling' | null }
 // Private command identity: virtual-core keeps this object when a queued command starts writing.
 type ScrollCommandLike = { phase?: string }
+// The private library correction an estimate refresh reuses, and the state its resize path checks first.
+type CorrectionInternals = {
+  scrollState?: ScrollCommandLike | null
+  _holdOffset?: number
+  _awaitingCommandReadBack?: () => boolean
+  _canWriteScroll?: () => boolean
+  applyScrollAdjustment?: (delta: number) => boolean
+}
+type ItemKey = ReturnType<Virtualizer<HTMLElement, Element>['options']['getItemKey']>
+// What the next measurement write corrects, judged when it was decided: the row virtual-core is
+// about to resize, or an estimate refresh whose shift at the reader is already measured.
+type Correction =
+  | { kind: 'resize'; index: number; key: ItemKey; start: number; end: number; first: boolean }
+  | { kind: 'estimates' }
 // One navigation write, from the call that decided it to the outcome its receipt reads. `command`
 // is set while the library holds it for a fling; `outcome` once it has been written or refused.
 interface WriteRecord {
@@ -181,8 +195,7 @@ export function useTanstackMessageVirtualizer({
   const writeIdRef = useRef(0)
   // Bumped whenever the reader takes the pixels: any destination decided earlier is void.
   const generationRef = useRef(0)
-  // The row virtual-core is about to resize, as seen by the measurement that precedes its write.
-  const measuringRef = useRef<{ index: number; key: ReturnType<Virtualizer<HTMLElement, Element>['options']['getItemKey']>; start: number; end: number; first: boolean } | null>(null)
+  const correctionRef = useRef<Correction | null>(null)
   const setScrollWriteObserver = useCallback<NonNullable<MessageVirtualizer['setScrollWriteObserver']>>(
     observer => { writeObserverRef.current = observer }, [],
   )
@@ -308,8 +321,8 @@ export function useTanstackMessageVirtualizer({
       // The observer below can hand the pixels to the reader (cancelPendingScroll) before we write.
       const generation = generationRef.current
       // Taken before the observer: its takeover can invalidate this write.
-      const measuring = source === 'measurement' ? measuringRef.current : null
-      if (source === 'measurement') measuringRef.current = null
+      const correction = source === 'measurement' ? correctionRef.current : null
+      if (source === 'measurement') correctionRef.current = null
       const scroller = instance.scrollElement
       const rows = itemKeyRef.current?.items
       const observer = writeObserverRef.current
@@ -359,14 +372,16 @@ export function useTanstackMessageVirtualizer({
       // erases the movement (#1601), and an adjustment approved for a row that is no longer above
       // the reader is wrong. So the adjustment is judged against the reader's live position and
       // added to it, and the library's write bookkeeping is pointed at what is actually written.
+      // An estimate refresh measured its shift at that live position just before asking.
       const live = scroller?.scrollTop ?? offset
       const hold = (instance as unknown as { _holdOffset?: number })._holdOffset ?? 0
-      const sameRow = measuring !== null
-        && instance.scrollElement === scroller && itemKeyRef.current?.items === rows
-        && instance.options.getItemKey(measuring.index) === measuring.key
+      const sameRows = instance.scrollElement === scroller && itemKeyRef.current?.items === rows
       const anchorIndex = heldAnchorIndex()
-      const above = sameRow && (anchorIndex !== undefined ? measuring.index < anchorIndex
-        : measuring.first ? measuring.start < live + hold : measuring.end <= live + hold)
+      const above = correction?.kind === 'estimates' ? sameRows
+        : correction?.kind === 'resize' && sameRows
+          && instance.options.getItemKey(correction.index) === correction.key
+          && (anchorIndex !== undefined ? correction.index < anchorIndex
+            : correction.first ? correction.start < live + hold : correction.end <= live + hold)
       const delta = above ? options.adjustments ?? 0 : 0
       retargetLibraryWrite(instance, live + hold, delta)
       elementScroll(live, { ...options, adjustments: delta }, instance)
@@ -391,8 +406,8 @@ export function useTanstackMessageVirtualizer({
       const cached = instance.measurementsCache?.[index]
       const first = known.itemSizeCache ? !known.itemSizeCache.has(key) : true
       const start = cached?.start ?? Infinity
-      measuringRef.current = index >= 0
-        ? { index, key, start, end: start + (known.itemSizeCache?.get(key) ?? cached?.size ?? 0), first } : null
+      correctionRef.current = index >= 0
+        ? { kind: 'resize', index, key, start, end: start + (known.itemSizeCache?.get(key) ?? cached?.size ?? 0), first } : null
       if (index >= 0 && size > 0) onMeasuredRef.current?.(String(key), size)
       if (size > 0 && element.querySelector('[data-msg-text]') && !samplePendingRef.current) {
         samplePendingRef.current = true
@@ -514,6 +529,53 @@ export function useTanstackMessageVirtualizer({
     offsetCbRef.current?.(scroller.scrollTop, false)
   }, [retireHeld, scrollRef, virtualizer])
 
+  // The row an estimate refresh keeps where the reader sees it: the held anchor, or the row at the
+  // reader's live offset. None while the caller owns the pixels, or while a smooth or written command
+  // is landing, which virtual-core's own resize correction also leaves alone.
+  const readEstimateAnchor = () => {
+    const lib = virtualizer as unknown as CorrectionInternals
+    const scroller = virtualizer.scrollElement
+    const phase = lib.scrollState?.phase
+    if (!adjustmentEnabledRef.current || !scroller || phase === 'smooth' || phase === 'smoothLanded'
+      || lib._awaitingCommandReadBack?.()) return null
+    virtualizer.getTotalSize()
+    const index = heldAnchorRef.current !== null ? heldAnchorIndex()
+      : virtualizer.getVirtualItemForOffset(scroller.scrollTop + (lib._holdOffset ?? 0))?.index
+    const item = index === undefined ? undefined : virtualizer.measurementsCache[index]
+    return item ? { index: item.index, key: item.key, start: item.start } : null
+  }
+
+  // A shift past what the scroller can still reach is clamped by the spacer the old estimates sized.
+  // The window would then render at the clamped offset, mounting rows the reader is not looking at,
+  // and their first measurements replace the library's recovery of the rest. So the taller layout
+  // commits first, windowed where the reader is going; the write lands in the same task, before any
+  // paint. A commit that cannot run synchronously leaves the clamp to the library as before.
+  const commitRoomFor = (delta: number) => {
+    const lib = virtualizer as unknown as CorrectionInternals
+    const scroller = virtualizer.scrollElement
+    const offset = virtualizer.scrollOffset
+    if (!scroller || offset === null || lib._canWriteScroll?.() === false
+      || delta <= scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop) return
+    virtualizer.scrollOffset = offset + delta
+    try { virtualizer.options.onChange?.(virtualizer, true) }
+    finally { virtualizer.scrollOffset = offset }
+  }
+
+  // Unlike a remeasurement, a refresh changes only estimates of rows nobody has seen, as a first
+  // measurement does, so the shift is kept in either direction. It goes through the library's own
+  // correction, which an iOS gesture defers, and is written like a resize correction. Returns whether
+  // it moved the reader, whose transforms must then commit in the same paint.
+  const keepEstimateAnchor = (anchor: NonNullable<ReturnType<typeof readEstimateAnchor>>): boolean => {
+    const item = virtualizer.measurementsCache[anchor.index]
+    const delta = item?.key === anchor.key ? item.start - anchor.start : 0
+    const lib = virtualizer as unknown as CorrectionInternals
+    if (delta === 0 || typeof lib.applyScrollAdjustment !== 'function') return false
+    commitRoomFor(delta)
+    correctionRef.current = { kind: 'estimates' }
+    try { return lib.applyScrollAdjustment(delta) }
+    finally { correctionRef.current = null }
+  }
+
   return {
     cancelPendingScroll,
     hasPendingFling: () =>
@@ -523,10 +585,12 @@ export function useTanstackMessageVirtualizer({
       // change or a row resizes, and getOffsetForIndex reads the last derivation. A new getItemKey
       // identity is the option change that re-derives them while keeping every measured size; it
       // is kept for later renders so they do not derive a second time.
+      const anchor = readEstimateAnchor()
       itemKeyRef.current = nextItemKey(itemKeyRef.current?.items ?? items)
       virtualizer.setOptions({ ...virtualizer.options, getItemKey: itemKeyRef.current.getItemKey })
       virtualizer.getTotalSize()
-      virtualizer.options.onChange?.(virtualizer, sync)
+      const shifted = anchor !== null && keepEstimateAnchor(anchor)
+      virtualizer.options.onChange?.(virtualizer, sync || shifted)
     },
     retainMessage: id => {
       if (retainedIdRef.current === id) return
