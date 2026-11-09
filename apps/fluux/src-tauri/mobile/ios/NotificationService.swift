@@ -69,9 +69,13 @@ final class NotificationService: UNNotificationServiceExtension {
             record(events.map(\.diagnostic))
         }
         if !widgetCounted {
-            record([.init(decision: storedBadge != nil && badge == nil ? .widgetAccountMismatch
-                                : badge == nil ? .widgetBadgeUnavailable : .widgetNotCounted,
-                                time: Date().timeIntervalSince1970)])
+            let time = Date().timeIntervalSince1970
+            if let storedBadge, badge == nil {
+                record([.init(decision: .widgetAccountMismatch, time: time),
+                        .init(decision: storedBadge.account == nil ? .widgetBadgeOwnerMissing : .widgetBadgeOwnerMismatch, time: time)])
+            } else {
+                record([.init(decision: badge == nil ? .widgetBadgeUnavailable : .widgetNotCounted, time: time)])
+            }
         }
         delivery.begin(content, completion: finish)
         let sender = (content.userInfo["from"] as? String).flatMap(NotificationPresentation.bareJid)
@@ -141,6 +145,9 @@ private extension UnreadList.PushEvent {
         case .badgeUnavailable: value = .widgetBadgeUnavailable
         case .notCounted: value = .widgetNotCounted
         case .accountMismatch: value = .widgetAccountMismatch
+        case .badgeOwnerMissing: value = .widgetBadgeOwnerMissing
+        case .badgeOwnerMismatch: value = .widgetBadgeOwnerMismatch
+        case .listOwnerMismatch: value = .widgetListOwnerMismatch
         case .alreadyListed: value = .widgetAlreadyListed
         case .rowSelected: value = .widgetRowSelected
         case .writeSucceeded: value = .widgetWriteSucceeded

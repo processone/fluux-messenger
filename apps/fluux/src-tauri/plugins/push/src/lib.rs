@@ -2,11 +2,14 @@
 //! returns the device token the XMPP push registration needs.
 
 mod conversation_destination;
+#[cfg(any(target_os = "ios", test))]
+mod diagnostic_context;
 mod notification_names;
 
 #[cfg(target_os = "ios")]
 mod platform {
     use super::conversation_destination::{valid_bare_jid, ConversationDestination};
+    use super::diagnostic_context::{ExportDiagnosticArguments, PublisherDiagnostic};
     use super::notification_names::SenderNames;
     use tauri::{
         plugin::{Builder, PluginHandle, TauriPlugin},
@@ -30,10 +33,14 @@ mod platform {
     #[tauri::command]
     async fn export_notification_diagnostic<R: Runtime>(
         app: tauri::AppHandle<R>,
+        publisher: Option<PublisherDiagnostic>,
     ) -> Result<(), String> {
         app.state::<Push<R>>()
             .0
-            .run_mobile_plugin_async("exportNotificationDiagnostic", ())
+            .run_mobile_plugin_async(
+                "exportNotificationDiagnostic",
+                ExportDiagnosticArguments { publisher },
+            )
             .await
             .map_err(|e| e.to_string())
     }

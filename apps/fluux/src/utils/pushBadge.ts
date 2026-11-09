@@ -44,17 +44,26 @@ export function pushBadgeState(
   return { unread, events, notifyAllRooms }
 }
 
+export type BadgeDiagnosticStep = 'issued' | 'acknowledged' | 'rejected'
+
 let shared: string | null = null
 
 /** Sets the badge unless unchanged; `force` rechecks extension-writable state and requires acknowledgement. */
-export async function sharePushBadge(state: PushBadgeState, { force = false } = {}): Promise<void> {
+export async function sharePushBadge(state: PushBadgeState, { force = false, observe }: {
+  force?: boolean
+  observe?: (step: BadgeDiagnosticStep) => void
+} = {}): Promise<void> {
+  const note = (step: BadgeDiagnosticStep) => { try { observe?.(step) } catch { /* Diagnostics never control publication. */ } }
   const serialized = JSON.stringify(state)
   if (!force && serialized === shared) return
   shared = serialized
   try {
     const { invoke } = await import('@tauri-apps/api/core')
+    note('issued')
     await invoke('plugin:push|set_badge', { badge: state })
+    note('acknowledged')
   } catch (err) {
+    note('rejected')
     shared = null
     console.warn('[NativePush] Badge not set:', err)
     if (force) throw err

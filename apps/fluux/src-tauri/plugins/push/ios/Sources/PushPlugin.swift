@@ -33,6 +33,7 @@ class PushPlugin: Plugin {
     private var diagnosticTimer: Timer?
     private var widgetDiagnosticObserver: NSObjectProtocol?
     private let widgetReads = PreviewTrace.AppReads()
+    private let widgetBadgeWrites = WidgetDiagnostic.BadgeWrites()
     deinit {
         diagnosticTimer?.invalidate()
         if let observer = widgetDiagnosticObserver { NotificationCenter.default.removeObserver(observer) }
@@ -49,7 +50,8 @@ class PushPlugin: Plugin {
         mirrorQueue.async {
             do {
                 guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
-                let data = try NotificationDiagnostic(root: root).export()
+                let arguments = try invoke.parseArgs(WidgetDiagnostic.Arguments.self)
+                let data = try WidgetDiagnostic.export(root: root, publisher: arguments.publisher, badgeWrites: self.widgetBadgeWrites)
                 DispatchQueue.main.async {
                     do {
                         guard let presenter = self.manager.viewController else { throw NotificationDiagnostic.Failure.unavailable }
@@ -101,7 +103,7 @@ class PushPlugin: Plugin {
                 do {
                     guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
                     let accountChanged = SharedNames.load(root: root).account != names.account || names.account == nil
-                    if accountChanged { self.widgetReads.clear() }
+                    if accountChanged { self.widgetReads.clear(); self.widgetBadgeWrites.clear() }
                     if let diagnostic = try? NotificationDiagnostic(root: root) {
                         if accountChanged {
                             try? diagnostic.reset(active: names.account != nil)
@@ -242,14 +244,26 @@ class PushPlugin: Plugin {
     @objc public func setBadge(_ invoke: Invoke) {
         do {
             let badge = try invoke.parseArgs(SharedBadge.self)
+            let attempt = widgetBadgeWrites.received(account: badge.account)
             DispatchQueue.main.async {
                 do {
                     guard let root = NotificationMirror.root else { throw PushError.sharedContainerUnavailable }
-                    try badge.writeIfChanged(root: root)
+                    try badge.writeIfChanged(root: root) { outcome in
+                        let phase: WidgetDiagnostic.NativeBadge
+                        switch outcome {
+                        case .written: phase = .written
+                        case .current: phase = .current
+                        case .superseded: phase = .superseded
+                        }
+                        self.widgetBadgeWrites.finished(attempt, phase: phase)
+                    }
                     self.applyBadgeCount(SharedBadge.load(root: root)?.count ?? badge.count)
                     // The widget publication waits for this actual membership write, not just its dispatch.
                     invoke.resolve()
-                } catch { invoke.reject(error.localizedDescription) }
+                } catch {
+                    self.widgetBadgeWrites.finished(attempt, phase: .failed)
+                    invoke.reject(error.localizedDescription)
+                }
             }
         } catch {
             invoke.reject(error.localizedDescription)

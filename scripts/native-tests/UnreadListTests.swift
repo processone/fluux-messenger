@@ -44,6 +44,25 @@ import UserNotifications
         let badge = SharedBadge(unread: ["alice@example.com", "dev@conference.example.com"], events: 1,
                                 notifyAllRooms: ["all@conference.example.com"], account: account)
         switch CommandLine.arguments[1] {
+        case "badge-write-observations":
+            let now = Date().timeIntervalSince1970 * 1000
+            let first = SharedBadge(unread: ["first@example.com"], events: 0, notifyAllRooms: [], account: account, updated: now - 5000)
+            var outcomes: [SharedBadge.AppWrite] = []
+            let observe: (SharedBadge.AppWrite) -> Void = { result in
+                outcomes.append(result)
+                // A nested current check would deadlock if observation still held the file lock.
+                let current = SharedBadge.load(root: root)!
+                precondition(try! current.writeIfChanged(root: root) == false)
+            }
+            let wrote = try first.writeIfChanged(root: root, observed: observe)
+            precondition(wrote)
+            let unchanged = try first.writeIfChanged(root: root, observed: observe)
+            precondition(!unchanged)
+            let newer = SharedBadge(unread: ["newer@example.com"], events: 0, notifyAllRooms: [], account: account, updated: now - 1000)
+            try newer.writeIfChanged(root: root)
+            let superseded = try first.writeIfChanged(root: root, observed: observe)
+            precondition(!superseded && outcomes == [.written, .current, .superseded])
+            precondition(SharedBadge.load(root: root) == newer, "Observation cannot replace a newer counted membership")
         case "round-trip":
             try fixture().write(root: root)
             precondition(UnreadList.load(root: root) == fixture(), "The list must read back as written")
@@ -81,7 +100,7 @@ import UserNotifications
             }
             precondition(record(at: root).map(\.decision) == [.listUnavailable])
             try fixture().write(root: root)
-            precondition(record("other@example.com", at: root).map(\.decision) == [.accountMismatch])
+            precondition(record("other@example.com", at: root).map(\.decision) == [.accountMismatch, .listOwnerMismatch])
             precondition(reloads == 0, "A refused account must never request a reload")
             precondition(record(conversation: "alice@example.com", at: root).map(\.decision) == [.alreadyListed, .writeSucceeded, .reloadRequested])
             let events = record(at: root)

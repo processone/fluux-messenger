@@ -1,6 +1,7 @@
 import { chatStore, connectionStore, roomStore, unreadConversations } from '@fluux/sdk'
 import type { UnreadConversation } from '@fluux/sdk'
 import { pushBadgeState, sharePushBadge, type PushBadgeState } from './pushBadge'
+import { observeWidgetBadge, resetWidgetPublisherDiagnostic, widgetPublisherDiagnostic } from './unreadWidgetDiagnostic'
 
 /**
  * What the home-screen widget shows, written into the shared App Group folder.
@@ -71,7 +72,7 @@ async function write(list: UnreadWidgetList | null, badge?: PushBadgeState): Pro
   try {
     // One projection owns membership even when the number of unread conversations is unchanged.
     // The extension also writes both files: native code, not our last call, decides what is current.
-    if (badge) await sharePushBadge(badge, { force: true })
+    if (badge) await sharePushBadge(badge, { force: true, observe: observeWidgetBadge(list?.account ?? null) })
     const { invoke } = await import('@tauri-apps/api/core')
     await invoke('plugin:widgets|set_unread_list', { list })
   } catch (err) {
@@ -93,6 +94,7 @@ export function shareUnreadWidgetList(list: UnreadWidgetList | null, badge?: Pus
  */
 export function clearUnreadWidgetList(): Promise<void> {
   active?.cancel()
+  resetWidgetPublisherDiagnostic()
   const account = connectionStore.getState().jid?.split('/')[0] ?? null
   releaseBlock?.()
   clearedAccount = account
@@ -115,6 +117,20 @@ export function resetSharedUnreadWidgetList(): void {
   active = undefined
   releaseBlock?.()
   clearedAccount = null
+  resetWidgetPublisherDiagnostic()
+}
+
+/** Only fixed states leave this module; no account or conversation identity is exported. */
+export function unreadWidgetDiagnosticContext() {
+  const connection = connectionStore.getState()
+  const owner = connection.jid?.split('/')[0] ?? null
+  return widgetPublisherDiagnostic({
+    active: !!active && !(owner && owner === clearedAccount), owner,
+    online: typeof connection.status === 'string' ? connection.status === 'online' : null,
+    verifying: typeof connection.isVerifying === 'boolean' ? connection.isVerifying : null,
+    catchingUp: typeof connection.isCatchingUp === 'boolean' ? connection.isCatchingUp : null,
+    replaying: typeof connection.replayOwners === 'number' ? connection.replayOwners > 0 : null,
+  })
 }
 
 const PUBLISH_DELAY_MS = 500
@@ -145,7 +161,12 @@ export function startUnreadWidgetPublisher(events: () => number): () => void {
         : { unread: [], events: 0, notifyAllRooms: [] })
   }
   const schedule = () => { if (!stopped) timer ??= setTimeout(publish, PUBLISH_DELAY_MS) }
-  const unsubscribe = [chatStore.subscribe(schedule), roomStore.subscribe(schedule), connectionStore.subscribe(schedule)]
+  let diagnosticOwner = connectionStore.getState().jid?.split('/')[0] ?? null
+  const unsubscribe = [chatStore.subscribe(schedule), roomStore.subscribe(schedule), connectionStore.subscribe(() => {
+    const owner = connectionStore.getState().jid?.split('/')[0] ?? null
+    if (owner !== diagnosticOwner) { resetWidgetPublisherDiagnostic(); diagnosticOwner = owner }
+    schedule()
+  })]
   const cancel = () => { clearTimeout(timer); timer = undefined }
   // Do not leave a known snapshot waiting on a JS timer when iOS suspends the webview.
   const flushBeforeHide = () => {
@@ -159,7 +180,7 @@ export function startUnreadWidgetPublisher(events: () => number): () => void {
     cancel()
     document.removeEventListener('visibilitychange', flushBeforeHide)
     unsubscribe.forEach(unsubscribeOne => unsubscribeOne())
-    if (active?.stop === stop) active = undefined
+    if (active?.stop === stop) { active = undefined; resetWidgetPublisherDiagnostic() }
   }
   active?.stop()
   active = { stop, cancel }

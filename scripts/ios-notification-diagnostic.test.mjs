@@ -5,6 +5,20 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
+test('widget current observations stay closed, bounded and separate from history', { skip: process.platform !== 'darwin' }, () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'fluux-widget-diagnostic-'))
+  try {
+    const binary = join(scratch, 'widget-diagnostic')
+    execFileSync('xcrun', ['swiftc', '-swift-version', '5', '-module-cache-path', join(scratch, 'cache'),
+      'apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/PreviewTrace.swift',
+      'apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/WidgetDiagnostic.swift',
+      'scripts/native-tests/WidgetDiagnosticContextTests.swift', '-lsqlite3', '-o', binary], { timeout: 120000 })
+    const output = execFileSync(binary, [], { encoding: 'utf8', timeout: 30000 })
+    assert.match(output, /passed/)
+    console.log(output.trim())
+  } finally { rmSync(scratch, { recursive: true, force: true }) }
+})
+
 test('FLM-31 content-free local diagnostic lifecycle', { skip: process.platform !== 'darwin' }, () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-diagnostic-'))
   try {

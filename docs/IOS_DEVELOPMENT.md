@@ -457,8 +457,9 @@ processing marker as `received`:
   it. The latter can still prune obsolete rows. `widgetBadgeUnavailable` distinguishes a missing,
   unreadable or invalid badge snapshot.
 - `widgetListUnavailable` or `widgetAccountMismatch`: the update stopped before a write. Ownership
-  must match for both the list and badge, including after upgrades. A list-load failure does not
-  distinguish an absent file from an unreadable or invalid file.
+  must match for both the list and badge, including after upgrades. New refusals also identify the
+  actual guard reached: `widgetBadgeOwnerMissing`, `widgetBadgeOwnerMismatch` or `widgetListOwnerMismatch`.
+  A list-load failure does not distinguish an absent file from an unreadable or invalid file.
 - `widgetAlreadyListed`: the newly counted conversation already has a row. A following write/reload
   republishes it and reconciles other membership; it does not reset a more precise app-provided count.
 - `widgetRowSelected`, then `widgetWriteSucceeded` or `widgetWriteFailed`: the extension selected a
@@ -479,6 +480,11 @@ processing marker as `received`:
   for a signed-in account records clearing; sign-out instead clears the journal's session. A verified
   no-op can settle read checks without claiming a write or reload. A superseded queued frame does
   neither. These handoff flags add no decision names or fields to the exported journal.
+
+The voluntary share copy also includes a separately delimited `widgetSnapshotBegin`/`widgetSnapshotEnd`
+group of current closed observations. It is not a historical refusal or an atomic app/native snapshot.
+See [the diagnostic format](ios-notification-diagnostic.md#widget-refusal-categories-and-current-observations)
+for its five-field encoding, unknown-state rules and temporary-copy bounds.
 
 These events add no account, conversation, name, message, path or raw error fields. The existing
 200-entry, 48-hour and logout/session bounds still apply. One widget sequence uses one diagnostic

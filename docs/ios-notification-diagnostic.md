@@ -35,9 +35,59 @@ new displayable body; it does not prove the server's reason for sending a push.
 `noEngineResult`, `deadline`, and `systemExpiry` distinguish missing engine output
 from the local deadline and iOS extension expiry.
 
+## Widget refusal categories and current observations
+
+Historical `widgetAccountMismatch` remains available. Future refusals also record
+exactly the guard reached: `widgetBadgeOwnerMissing`, `widgetBadgeOwnerMismatch`
+or `widgetListOwnerMismatch`. A list guard reached first does not speculate about
+an unread badge guard. These categories neither adopt old ownership nor change
+counting, presentation or the guarded write. They cannot explain older generic
+entries retroactively.
+
+The existing voluntary export also adds a current-observation group to its
+**temporary share copy**, not to another persistent log or the stored journal.
+The existing five fields are unchanged. `widgetSnapshotBegin` and
+`widgetSnapshotEnd` delimit the group under one fresh random `correlation`.
+Each intervening entry contains one closed `decision` and its observation `time`.
+There is no `snapshot` field, account value, identity hash or free-text error.
+The share copy reserves space for the complete group within its 200-entry ceiling,
+keeping the newest historical entries that fit. Stored historical retention
+remains 200 entries/48 hours. Export does not activate a signed-out session.
+
+The group samples these separate boundaries:
+
+- App store facts: online, verification, catch-up and archive replay, each with an
+  explicit unknown state. They do not release any readiness barrier.
+- Native file ownership **relations**, separately for badge and list: missing
+  owner, matching owner, different owner or unavailable/unknown. File contents
+  and owners never leave the app.
+- App badge-command emission and its pending, accepted or rejected acknowledgement.
+- The last observed native badge reception/write outcome: received, written,
+  current without writing, superseded, failed or unknown. This in-memory state
+  is account-scoped and invalidated at session changes; late old completions
+  cannot restore it.
+
+These are successive observations, not an atomic cross-layer snapshot. App facts
+are sampled before invoking the existing export command and retain that sample's
+time; a missing, future or more-than-five-seconds-old sample becomes unknown.
+Native relations and native badge phase are sampled separately during export.
+App and native observations do not establish cross-layer account identity or
+attribute a current state to an earlier refusal.
+
+`WidgetDiagnostic.observations(in:)` defines the reading contract. A group missing
+its start/end, mixing correlations or containing unrelated categories is unknown.
+A missing or contradictory category is unknown on its own axis. An acknowledgement
+without observed command emission is also unknown. A truncated group must never
+be interpreted as a complete snapshot, and absent events never prove nonexecution.
+A native acknowledgement does not prove a WidgetKit render or an installed native
+source revision. Physical iPhone qualification remains separate.
+
 ## Validation
 
-- `node --test scripts/ios-notification-diagnostic.test.mjs`: native storage cap,
+- `node --test scripts/ios-notification-diagnostic.test.mjs`: closed current groups,
+  ownership relations, explicit unknown/incomplete/contradictory states, fresh
+  correlations, identity-free output, transient share-copy snapshots and the
+  unchanged native storage cap,
   age boundary, closed export schema, logout, session rotation and concurrent writers.
   The unchanged lifecycle regression runs alongside controlled SQLite contention:
   recovery after a temporary writer lock, bounded failure under a sustained lock,
