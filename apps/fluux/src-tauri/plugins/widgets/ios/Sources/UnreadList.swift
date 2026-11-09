@@ -151,7 +151,8 @@ struct UnreadList: Codable, Equatable {
 
     /// Content-free observations from the notification extension, not proof that WidgetKit rendered.
     struct PushEvent: Equatable {
-        enum Decision { case listUnavailable, badgeUnavailable, accountMismatch, notCounted, alreadyListed, rowSelected,
+        enum Decision { case listUnavailable, badgeUnavailable, accountMismatch, badgeOwnerMissing, badgeOwnerMismatch,
+                             listOwnerMismatch, notCounted, alreadyListed, rowSelected,
                              writeSucceeded, writeFailed, countMismatch, reloadRequested, reloadUnavailable }
         let decision: Decision
         let time: TimeInterval
@@ -173,9 +174,11 @@ struct UnreadList: Codable, Equatable {
         do {
             events = try locked(root: root) {
                 guard let list = load(root: root) else { return [event(.listUnavailable)] }
-                guard list.account == account else { return [event(.accountMismatch)] }
+                guard list.account == account else { return [event(.accountMismatch), event(.listOwnerMismatch)] }
                 guard let badge = badge(), badge.total >= badge.unread.count else { return [event(.badgeUnavailable)] }
-                guard badge.account == account else { return [event(.accountMismatch)] }
+                guard badge.account == account else {
+                    return [event(.accountMismatch), event(badge.account == nil ? .badgeOwnerMissing : .badgeOwnerMismatch)]
+                }
                 // Legacy inconsistent input is observable even though the new merge repairs it.
                 var observations: [PushEvent] = list.total < list.rows.count ? [event(.countMismatch)] : []
                 let decision: PushEvent.Decision = !badge.unread.contains(conversation) ? .notCounted

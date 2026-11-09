@@ -110,14 +110,14 @@ import UserNotifications
                 list.rows.append(.init(id: "stale2@example.com", kind: "chat", name: "Private stale name", unread: 1, mentions: 0, last: 1))
             }
             list.total = 1
-        case "account-mismatch": list.account = "other@example.com"
+        case "account-mismatch", "both-owners-differ": list.account = "other@example.com"
         case "not-counted": badge.unread = [sender]
         default: break
         }
         if scenario != "list-unavailable" { try list.write(root: root) }
         if scenario != "badge-unavailable" {
             var state = try JSONSerialization.jsonObject(with: JSONEncoder().encode(badge)) as! [String: Any]
-            if scenario != "badge-legacy" { state["account"] = scenario == "badge-other-account" ? "other@example.com" : account }
+            if scenario != "badge-legacy" { state["account"] = ["badge-other-account", "both-owners-differ"].contains(scenario) ? "other@example.com" : account }
             try JSONSerialization.data(withJSONObject: state).write(to: root.appendingPathComponent("NotificationBadge.json"))
         }
         let store: NotificationDiagnostic?
@@ -156,7 +156,7 @@ import UserNotifications
         } else {
             precondition(written == list, "Skipped widget changes must leave its file unchanged")
         }
-        if scenario == "badge-other-account" || scenario == "badge-legacy" {
+        if ["badge-other-account", "badge-legacy", "both-owners-differ"].contains(scenario) {
             precondition((try? Data(contentsOf: root.appendingPathComponent("NotificationBadge.json"))) == badgeBefore,
                          "An unconfirmed account must not mutate another account's badge")
         }
@@ -186,7 +186,9 @@ import UserNotifications
         case "count-mismatch":
             widget = ["widgetCountMismatch", "widgetRowSelected", "widgetWriteSucceeded", "widgetReloadUnavailable"]
         case "already-listed": widget = ["widgetAlreadyListed", "widgetWriteSucceeded", "widgetReloadUnavailable"]
-        case "account-mismatch", "badge-other-account", "badge-legacy": widget = ["widgetAccountMismatch"]
+        case "account-mismatch": widget = ["widgetAccountMismatch", "widgetListOwnerMismatch"]
+        case "badge-other-account", "both-owners-differ": widget = ["widgetAccountMismatch", "widgetBadgeOwnerMismatch"]
+        case "badge-legacy": widget = ["widgetAccountMismatch", "widgetBadgeOwnerMissing"]
         case "not-counted": widget = ["widgetNotCounted"]
         case "badge-unavailable": widget = ["widgetBadgeUnavailable"]
         case "list-unavailable": widget = ["widgetListUnavailable"]

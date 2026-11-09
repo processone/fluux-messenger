@@ -33,18 +33,22 @@ struct SharedBadge: Codable, Equatable {
                                              options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
+    enum AppWrite: Equatable { case written, current, superseded }
     @discardableResult
-    func writeIfChanged(root: URL) throws -> Bool {
-        try Self.locked(root: root) {
+    func writeIfChanged(root: URL, observed: (AppWrite) -> Void = { _ in }) throws -> Bool {
+        let outcome: AppWrite = try Self.locked(root: root) {
             if let current = Self.load(root: root) {
                 if current.account == account, current.unread == unread, current.events == events,
-                   current.notifyAllRooms == notifyAllRooms { return false }
+                   current.notifyAllRooms == notifyAllRooms { return .current }
                 if let time = updated, let newer = current.updated, current.account == account,
-                   newer > time, newer <= Date().timeIntervalSince1970 * 1000 { return false }
+                   newer > time, newer <= Date().timeIntervalSince1970 * 1000 { return .superseded }
             }
             try writeUnlocked(root: root)
-            return true
+            return .written
         }
+        // Observation happens after releasing the shared writer lock, never inside the mutation.
+        observed(outcome)
+        return outcome == .written
     }
 
     /// Re-read under the lock, so overlapping extensions cannot discard another push's membership.

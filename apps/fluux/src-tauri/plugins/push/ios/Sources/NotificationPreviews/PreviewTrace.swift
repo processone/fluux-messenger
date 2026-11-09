@@ -12,6 +12,18 @@ enum PreviewDecision: String, Codable {
     case widgetRowSelected, widgetWriteSucceeded, widgetWriteFailed, widgetReloadRequested, widgetReloadUnavailable
     case widgetCountMismatch, widgetAppReadObserved, widgetAppReadStillListed, widgetAppReadNotListed, widgetAppReadStateUnavailable
     case widgetAppListWritten, widgetAppListCleared, widgetAppWriteFailed, widgetAppReloadRequested
+    case widgetBadgeOwnerMissing, widgetBadgeOwnerMismatch, widgetListOwnerMismatch
+    case widgetSnapshotBegin, widgetSnapshotEnd
+    case widgetSnapshotOnline, widgetSnapshotOffline, widgetSnapshotConnectionUnknown
+    case widgetSnapshotVerifying, widgetSnapshotNotVerifying, widgetSnapshotVerificationUnknown
+    case widgetSnapshotCatchingUp, widgetSnapshotNotCatchingUp, widgetSnapshotCatchUpUnknown
+    case widgetSnapshotReplaying, widgetSnapshotNotReplaying, widgetSnapshotReplayUnknown
+    case widgetSnapshotBadgeOwnerMissing, widgetSnapshotBadgeOwnerMatches, widgetSnapshotBadgeOwnerDiffers, widgetSnapshotBadgeOwnerUnknown
+    case widgetSnapshotListOwnerMissing, widgetSnapshotListOwnerMatches, widgetSnapshotListOwnerDiffers, widgetSnapshotListOwnerUnknown
+    case widgetSnapshotBadgeCommandEmitted, widgetSnapshotBadgeCommandUnknown
+    case widgetSnapshotBadgeAckPending, widgetSnapshotBadgeAckAccepted, widgetSnapshotBadgeAckRejected, widgetSnapshotBadgeAckUnknown
+    case widgetSnapshotNativeBadgeReceived, widgetSnapshotNativeBadgeWritten, widgetSnapshotNativeBadgeCurrent
+    case widgetSnapshotNativeBadgeSuperseded, widgetSnapshotNativeBadgeFailed, widgetSnapshotNativeBadgeUnknown
 }
 
 /// Cross-process, bounded diagnostic storage. Session markers contain no account identifier.
