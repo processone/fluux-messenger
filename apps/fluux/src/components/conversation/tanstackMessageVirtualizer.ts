@@ -344,11 +344,14 @@ export function useTanstackMessageVirtualizer({
             ? { status: 'applied', offset: scroller.scrollTop }
             : { status: 'refused', reason: 'detached' })
         }
+        // Record the physical write before publishing its read-back: the offset callback can
+        // synchronously flush an iOS held correction and commit a larger spacer. Observing that
+        // layout before this write is recorded mistakes its old-bottom clamp for reader movement.
+        observer?.({ phase: 'after', source, behavior: options.behavior })
         // The DOM result is authoritative: the browser can clamp, round or drop a write. Publish
         // its actual offset here, not a destination after a possibly still-queued command returns.
         // Smooth writes have not landed yet; native events and rAF publish their real progress.
         if (scroller && options.behavior !== 'smooth') offsetCbRef.current?.(scroller.scrollTop, false)
-        observer?.({ phase: 'after', source, behavior: options.behavior })
         return
       }
       // The library decided on `offset` when the row resized, and the observer above (or a scroll
