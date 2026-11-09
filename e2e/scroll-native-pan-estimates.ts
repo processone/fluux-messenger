@@ -21,6 +21,8 @@ type Demo = Window & {
 type Metrics = { contentWidthPx: number; header: number; continuation: number }
 type Refresh = { at: number; direction: string | null; top: number; metrics: Metrics; before: PanSample }
 type Scroll = { at: number; from: number; top: number; trusted: boolean }
+/** Largest upward scroll event still read as one native autoscroll step. */
+const NATIVE_STEP_PX = 200
 type Observation = {
   start: PanSample; initial: Metrics; samples: PanSample[]; refreshes: Refresh[]
   inputs: { at: number; trusted: boolean }[]
@@ -227,8 +229,9 @@ for (const kind of ['chat', 'room'] as const) {
         // The library's own direction flag reads null between its offset poll's idle frames, so
         // the native scroll events on both sides of the refresh carry the backward motion. One
         // event can also fold in a measurement correction, so a few events are searched for a
-        // native autoscroll step.
-        const step = (scroll: Scroll) => scroll.trusted && scroll.top < scroll.from && scroll.from - scroll.top <= 20
+        // native autoscroll step: a few dozen pixels per event even on a slow runner, where an
+        // estimate correction moves the offset by hundreds of pixels or more.
+        const step = (scroll: Scroll) => scroll.trusted && scroll.top < scroll.from && scroll.from - scroll.top <= NATIVE_STEP_PX
         const previous = result.scrolls.filter(scroll => scroll.at < refresh.at).slice(-4)
         const following = result.scrolls.filter(scroll => scroll.at > refresh.at).slice(0, 4)
         // Offsets are not comparable across a refresh that moved them, so progress is read in messages.

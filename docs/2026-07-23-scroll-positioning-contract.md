@@ -150,9 +150,10 @@ narrows the sample and widens it again; and continuation rows whose first plain 
 chrome. The virtualizer's own observer measures every row; a forwarding probe records each
 estimate refresh with its resampled metrics. The journeys require the expected metric changes
 during backward motion. Across every refresh and every frame a reading cannot return to a newer
-message, move the same message against the pan, or skip more than a few older messages; native
-autoscroll moves by elapsed time, so readings more than 100ms apart are exempt from the skip check,
-and a refresh with no reading that close fails as unproven. Unit coverage, including the actual
+message, move the same message against the pan, or skip more older messages than native
+autoscroll reveals in the time between them (three rows per 100ms, and at least three). Readings
+more than 250ms apart follow a stalled frame and are exempt from the skip check, and a refresh with
+no reading that close fails as unproven. Unit coverage, including the actual
 sampler, growth past the scroll room with a windowed list, and the held-anchor, suppression and
 animated-scroll precedence, is in
 `apps/fluux/src/components/conversation/tanstackMessageVirtualizer.estimates.test.tsx`.

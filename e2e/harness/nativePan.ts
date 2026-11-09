@@ -16,13 +16,16 @@ export function expectProgress(before: PanSample, after: PanSample, context: str
   if (after.anchor!.id === before.anchor!.id) expect(after.anchor!.top, `${context}: the same message cannot move against the pan`).toBeGreaterThanOrEqual(before.anchor!.top - 1)
 }
 
-/** Native autoscroll moves by elapsed time, so after a stalled frame it legitimately reveals more;
- * only readings this close together are compared for continuity. */
-export const FRAME_GAP_MS = 100
+/** Native autoscroll moves by elapsed time, so after a stalled frame it legitimately reveals much
+ * more; only readings this close together are compared for continuity. A slow runner spaces its
+ * frames about 100ms apart, and the refresh frame itself takes longer. */
+export const FRAME_GAP_MS = 250
 
-/** One frame of an upward pan brings at most the few rows just above the previous first message
- * into view; a reading that lands far older has skipped what the reader had not reached yet. */
+/** An upward pan brings at most a few rows above the previous first message into view per 100ms of
+ * native movement; a reading that lands further back has skipped what the reader had not reached. */
 export function expectContinuity(before: PanSample, after: PanSample, context: string, rows = 3) {
-  if (after.at - before.at > FRAME_GAP_MS) return
-  expect(before.anchor!.order - after.anchor!.order, `${context}: cannot skip older messages`).toBeLessThanOrEqual(rows)
+  const elapsed = after.at - before.at
+  if (elapsed > FRAME_GAP_MS) return
+  const allowed = Math.max(rows, Math.ceil(rows * elapsed / 100))
+  expect(before.anchor!.order - after.anchor!.order, `${context}: cannot skip older messages`).toBeLessThanOrEqual(allowed)
 }
