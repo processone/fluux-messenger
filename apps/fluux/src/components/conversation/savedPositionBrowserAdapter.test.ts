@@ -8,6 +8,7 @@ import type {
   SavedPositionExecutionLease,
 } from './positioningController'
 import { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
+import { findBottomAnchor } from './bottomAnchor'
 import { SavedPositionBrowserAdapter } from './savedPositionBrowserAdapter'
 import { anOwner, appliedWrite, currentOwner } from './scrollWriteTestDoubles'
 
@@ -238,6 +239,34 @@ describe('BottomFractionAnchorBrowserAdapter', () => {
     })
     expect(scrollToIndex).toHaveBeenCalledWith(4, { align: 'end' })
     expect(scrollToOffset).not.toHaveBeenCalled()
+  })
+
+  // Bug source: the scroll-media-boxes journey (images-without-size, up-warm) measured a 16 px jump
+  // when an image decoded above a reader resting with a row's bottom on the viewport bottom. The
+  // re-pin used `end` alignment, which measures from the virtualizer spacer and so ignores the
+  // list's 16 px top padding. Readings from that run: scrollTop 12262, viewport 532 px, anchor
+  // row 72 px tall with its content top at 12722 (virtualizer start 12706).
+  it('re-pins a mounted bottom-edge anchor where it was captured', () => {
+    const viewport = scrollerHarness({ scrollTop: 12_262, clientHeight: 532 })
+    appendMessageRow(viewport.scroller, { top: 100 + 12_722 - 12_262, height: 72 })
+    const { virtualizer, scrollToOffset, scrollToIndex } = virtualizerHarness(
+      viewport.scroller,
+      { items: [{ index: 4, start: 12_706, size: 72, key: 'anchor' }], offset: 12_706 },
+    )
+    const browser = new BottomFractionAnchorBrowserAdapter({
+      getScroller: () => viewport.scroller,
+      getVirtualizer: () => virtualizer,
+    })
+    const captured = findBottomAnchor(viewport.scroller)
+    expect(captured).toEqual(anchor(1))
+
+    expect(browser.position(captured!)).toEqual({
+      kind: 'positioned',
+      scrollTop: 12_262,
+      reassert: true,
+    })
+    expect(scrollToOffset).toHaveBeenCalledWith(12_262, { owner: undefined })
+    expect(scrollToIndex).not.toHaveBeenCalled()
   })
 
   it('uses current DOM geometry without a virtualizer and rejects hidden anchors', () => {
