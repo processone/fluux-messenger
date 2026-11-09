@@ -46,6 +46,8 @@ export function buildWidgets(settings, { output = join(root, 'macos/.build'), ar
     const binary = join(output, `FluuxWidgets-${architecture}`)
     run('/usr/bin/xcrun', ['swiftc', '-swift-version', '5', '-parse-as-library', '-application-extension',
       '-module-name', 'FluuxWidgets', '-target', `${architecture}-apple-macos14.0`, '-O',
+      // Match Xcode's app-extension launch entry; standalone Swift main bypasses its bootstrap.
+      '-Xlinker', '-e', '-Xlinker', '_NSExtensionMain',
       '-framework', 'WidgetKit', '-framework', 'SwiftUI', ...sources, '-o', binary])
     return binary
   })

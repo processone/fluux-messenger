@@ -57,6 +57,9 @@ builder and then the widget builder before Tauri bundles and signs the host.
 Both extensions are embedded in `Contents/PlugIns`; Tauri does not re-sign them.
 The optional `libFluuxWidgets.dylib` is embedded in `Contents/Frameworks` and signed
 before the extension and host. A library or widget build/sign failure stops bundling.
+The extension's executable enters Foundation's `NSExtensionMain`, matching Xcode's
+app-extension link step. Entering standalone Swift `main` instead bypasses that
+bootstrap and can crash before the system receives any widget descriptors.
 
 The widget uses the same `<TEAM>.<host identifier>.share` App Group as FluuxShare;
 the optional writer resolves that container using the host's entitlements.
@@ -91,8 +94,9 @@ From the project root, on macOS with Xcode:
 node --test scripts/macos-widgets.test.mjs
 ```
 
-This compiles a universal unsigned extension, checks bundle metadata, runs the
-actual Swift shared-file adapter against a disposable directory and a real image,
+This compiles a universal unsigned extension, checks bundle metadata and verifies
+that each architecture's actual Mach-O launch address enters the Foundation
+extension stub. It runs the actual Swift shared-file adapter against a disposable directory and a real image,
 and renders small/medium/large unread, empty, signed-out and stale views in both
 languages. Set `FLUUX_WIDGET_RESULTS` to an output directory outside the project
 to retain those pictures. The fixture does not register an app, resolve an App

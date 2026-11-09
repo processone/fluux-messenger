@@ -40,6 +40,19 @@ test('unsigned desktop extension and real shared-file adapter build and render w
     const binary = join(extension, 'Contents/MacOS/FluuxWidgets')
     const architectures = execFileSync('xcrun', ['lipo', '-archs', binary], { encoding: 'utf8' }).trim().split(/\s+/).sort()
     assert.deepEqual(architectures, ['arm64', 'x86_64'])
+    // Regression: a system-hosted widget needs Xcode's Foundation extension entry,
+    // not standalone Swift main, which traps during ExtensionFoundation bootstrap.
+    for (const architecture of architectures) {
+      const commands = execFileSync('otool', ['-arch', architecture, '-l', binary], { encoding: 'utf8' })
+      const textAddress = commands.match(/segname __TEXT\s+vmaddr (0x[0-9a-f]+)/i)?.[1]
+      const entryOffset = commands.match(/cmd LC_MAIN\s+cmdsize \d+\s+entryoff (\d+)/)?.[1]
+      assert.ok(textAddress && entryOffset, 'Read the actual executable launch address')
+      const entryAddress = BigInt(textAddress) + BigInt(entryOffset)
+      const indirect = execFileSync('otool', ['-arch', architecture, '-Iv', binary], { encoding: 'utf8' })
+      const foundationEntries = [...indirect.matchAll(/^(0x[0-9a-f]+)\s+\d+\s+_NSExtensionMain$/gmi)]
+      assert.ok(foundationEntries.some(match => BigInt(match[1]) === entryAddress),
+        'LC_MAIN must enter the Foundation extension launch stub, not standalone Swift main')
+    }
     const library = join(scratch, 'bundle/libFluuxWidgets.dylib')
     assert.deepEqual(execFileSync('xcrun', ['lipo', '-archs', library], { encoding: 'utf8' }).trim().split(/\s+/).sort(), architectures)
     for (const architecture of architectures) {
