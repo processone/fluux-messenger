@@ -10,7 +10,6 @@ import {
   CLEAR_OF_BOTTOM_PX,
   SETTLE_MS,
   settle,
-  wheelUntil,
   wheelAwayFromBottom,
   loadDemo,
   assertScrollShadow,
@@ -1302,18 +1301,23 @@ test.describe('Typing indicator never covers message text', () => {
       const interactionBeforeWheel = await list.getAttribute('data-message-interaction')
       if (interaction === 'held') expect(interactionBeforeWheel).not.toBeNull()
       else expect(interactionBeforeWheel).toBeNull()
-      await wheelUntil(
-        page,
-        -50,
+      // One bounded step, then wait for it: Chromium can publish a wheel's scroll after the command
+      // and a 100ms wait have returned. More input after that stale read moved the reader 100px up,
+      // or landed after the downward return; either way a held reader rightly kept reading.
+      await page.mouse.wheel(0, -50)
+      await expect.poll(
         async () => (await measureGlued(page, 'after-target-resize')).top,
-        top => top < retargeted.top,
-        { message: 'upward wheel input did not move the selected message', positionPointer: false },
-      )
+        { message: 'upward wheel input did not move the selected message' },
+      ).toBeLessThan(retargeted.top)
+      await settle(page)
       const upward = await measureGlued(page, 'after-target-resize')
       expect(upward.top).toBeLessThan(retargeted.top)
+      expect(upward.dist, 'the upward step must leave the true bottom').toBeGreaterThan(GLUED_TOLERANCE_PX)
       expect(upward.dist).toBeLessThan(AT_BOTTOM_OK_PX)
       expect(await list.evaluate(element => (element as HTMLElement).style.overflowAnchor)).toBe('none')
-      const movement = await list.evaluate(element => {
+      // The downward step is the measured distance to the bottom: the input alone leaves the reader
+      // the growth's height short, and only the delayed compensation reaches the true bottom.
+      const movement = await list.evaluate((element, step) => {
         const scroller = element as HTMLElement
         const bounds = scroller.getBoundingClientRect()
         const row = [...scroller.querySelectorAll<HTMLElement>('.message-row')].find(element => {
@@ -1321,14 +1325,14 @@ test.describe('Typing indicator never covers message text', () => {
           return rect.top > bounds.top + 80 && rect.bottom < bounds.bottom - 100
         })!
         const before = scroller.scrollTop
-        scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: 50, bubbles: true }))
+        scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: step, bubbles: true }))
         row.style.minHeight = `${row.getBoundingClientRect().height + 50}px`
         const afterLayout = scroller.scrollTop
-        scroller.scrollTop = before + 50
+        scroller.scrollTop = before + step
         return { before, afterLayout, afterInput: scroller.scrollTop }
-      })
+      }, upward.dist)
       expect(movement.afterLayout, 'growth below the browser anchor must leave scrollTop unchanged').toBe(movement.before)
-      expect(movement.afterInput - movement.before).toBe(50)
+      expect(movement.afterInput - movement.before, 'the downward input must apply in full').toBe(upward.dist)
       await page.waitForTimeout(SETTLE_MS)
       await page.evaluate((jid) => {
         const client = (window as unknown as {
