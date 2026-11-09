@@ -4,6 +4,7 @@ import type { Message, RoomMessage } from '@fluux/sdk'
 import { bootDemo } from './harness/demoBoot'
 import { withPinWindow } from './harness/pinWindow'
 import { syncEngineGeometry } from './harness/compositorSync'
+import { wheelAfterListenerRegistration } from './harness/wheelInput'
 import {
   STRESS_ROOM_JID,
   FRAME_SAMPLE_MS,
@@ -4609,7 +4610,7 @@ for (const virtualized of [false, true]) {
           scope.__fluuxTriggerMediaLoad()
         })
       } else {
-        await page.mouse.wheel(0, -20)
+        await wheelAfterListenerRegistration(page, 0, -20)
       }
       await page.evaluate(roomJid => (window as unknown as FinalBoundaryWindow).__demoClient.emitSDK('room:typing', { roomJid, nick: 'AwayBot', isTyping: true }), STRESS_ROOM_JID)
       await page.waitForTimeout(SETTLE_MS)
