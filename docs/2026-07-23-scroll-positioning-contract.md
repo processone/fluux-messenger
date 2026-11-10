@@ -66,7 +66,13 @@ the bound, and restores again when its batch lands under the same reader-held ru
 insertion handling stands aside for any shift the load restores. A load whose request the controller
 refused, as it does under a hover interaction hold, or has superseded since, holds nothing: the
 coordinator drops it at its first shift, and ambient insertion handling keeps that shift and the
-batch's.
+batch's. At the resident bound such a batch also evicts the newest rows, so the last resident ID
+moves as it does for a live-edge arrival. Ambient insertion handling tells the two apart by whether
+the row that was first is still resident: rows that land above it are above the reader whatever
+happened to the tail, so their shift is preserved. That row is found through its aliases, since the
+batch may carry it with an archive ID it lacked, which renames its handle. The bottom row the trim
+leaves, even the reader's own message, is a slide rather than an arrival or a send (see the
+sliding-window rule below), so it starts no live-edge request that would supersede that hold.
 All authoritative slices share the same controller-owned
 `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
 measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
@@ -704,8 +710,9 @@ dependent effects use them to follow render-scoped window facts. The authoritati
 dependency rules live with the implementation in
 `apps/fluux/src/components/conversation/useScrollExecutors.ts`.
 
-Ambient layout preservation is entirely inside the scroll owner. `MessageList` receives only the
-store-owned interior-placement version; it receives no raw anchor capture/restore callbacks. The
+Ambient layout preservation is entirely inside the scroll owner. `MessageList` provides only the
+store-owned interior-placement version and a lookup of where a row it renders sits, resolved through
+the row's aliases; it receives no raw anchor capture/restore callbacks. The
 virtualized executor corrects through `scrollToOffset`/`scrollToIndex` so TanStack's pending-scroll
 reconciler is retargeted rather than raced by an unleased `scrollTop` write. Pre-mutation anchors
 for divider movement and delayed insertion are captured continuously, and the accepted request

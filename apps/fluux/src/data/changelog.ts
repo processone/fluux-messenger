@@ -32,6 +32,7 @@ export const changelog: ChangelogEntry[] = [
         'iOS: room notifications show the room picture. The room name stays first, with the sender above the message',
         'Scrolling up in conversations and rooms no longer jumps or skips messages when Fluux corrects its size estimate for older messages, for example after a long run of your own short replies',
         'Scrolling back through a very long conversation or room no longer gets stuck or returns to the newest messages once you go past the latest 5,000 messages, so you can read back to the start',
+        'In long conversations and rooms, the messages you are reading no longer jump away when older messages finish loading while your pointer rests on a message or you keep scrolling',
       ],
     }],
   },

@@ -70,9 +70,11 @@ const mockProcessMessageForLinkPreview = vi.fn().mockResolvedValue(undefined)
 let mockEncryptionState: { kind: string; fingerprint?: string; trust?: string } = { kind: 'disabled' }
 
 // Mock SDK hooks
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
   // FLM-256: draft recovery keys by stable store identity, not per-render action wrappers.
   chatStore: {},
+  // The list resolves row handles through the SDK's own lookup; keep the real one.
+  findMessageRowIndex: (await importOriginal<typeof import('@fluux/sdk')>()).findMessageRowIndex,
   messageRowRef: (message: { id: string; stanzaId?: string; originId?: string }) => ({
     id: message.id,
     ...(message.stanzaId ? { stanzaId: message.stanzaId } : message.originId ? { originId: message.originId } : {}),

@@ -71,7 +71,7 @@ import { VirtualRowSizeHistory } from './virtualRowGrowth'
 import { Loader2, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
-import { messageRowId, messageRowKey, messageRowKeys } from './messageRowIdentity'
+import { findResidentRowIndex, messageRowId, messageRowKey, messageRowKeys } from './messageRowIdentity'
 import { useArrivalJump } from './useArrivalJump'
 
 // ============================================================================
@@ -632,6 +632,7 @@ export function MessageList<T extends BaseMessage>({
     messageCount: deduplicatedMessages.length,
     interiorPlacementVersion,
     firstMessageId,
+    residentRowIndex: (rowId) => findResidentRowIndex(deduplicatedMessages, rowId),
     firstNewMessageId: firstNewRowId,
     readPointerId,
     clearFirstNewMessageId,

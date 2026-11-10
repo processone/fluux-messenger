@@ -10,6 +10,7 @@ import {
   messageRowRefFromRowId,
   messageTargetRowId,
   findMessageRowElement,
+  findResidentRowIndex,
   messageRowId,
   messageRowKeys,
   readMessageRowId,
@@ -271,5 +272,43 @@ describe('direct-chat rows sharing a client id', () => {
     expect(indexById.get(messageRowId(first)!)).toBe(1)
     expect(indexById.get(messageRowId(second)!)).toBe(2)
     expect(indexById.get('reused')).toBe(1)
+  })
+})
+
+// Bug: a backward archive page can carry the row it was paged from and backfill that row's
+// archive id, which renames its handle. The row is still resident, above the reader, and a lookup
+// by the handle taken before the page must still find it.
+describe('findResidentRowIndex', () => {
+  const roomJid = 'stress-0@conference.example.com'
+  const roomRow = (id: string, minute: number, extra: { stanzaId?: string } = {}) => ({
+    type: 'groupchat' as const, roomJid, from: `${roomJid}/U0_1`, nick: 'U0_1', id,
+    body: `message ${id}`, timestamp: new Date(minute * 60_000), isOutgoing: false, ...extra,
+  })
+
+  it('finds a room row by the handle it had before its archive id was backfilled', () => {
+    const first = roomRow('stress-0-0', 100)
+    const handle = messageRowId(first)!
+    const afterPage = [roomRow('older-0', 50), roomRow('older-1', 51), { ...first, stanzaId: 'archive-100' }]
+
+    expect(messageRowId(afterPage[2])).not.toBe(handle)
+    expect(findResidentRowIndex(afterPage, handle)).toBe(2)
+  })
+
+  it('finds a direct-chat row named by its origin id after the archive id arrives', () => {
+    const contact = 'contact@example.com'
+    const first = {
+      type: 'chat' as const, conversationId: contact, from: contact, id: 'c-1', originId: 'origin-1',
+      body: 'hello', timestamp: new Date(100 * 60_000), isOutgoing: false,
+    }
+    const handle = messageRowId(first)!
+    const afterPage = [{ ...first, id: 'c-0', originId: 'origin-0' }, { ...first, stanzaId: 'archive-1' }]
+
+    expect(messageRowId(afterPage[1])).not.toBe(handle)
+    expect(findResidentRowIndex(afterPage, handle)).toBe(1)
+  })
+
+  it('answers -1 once the row left the window', () => {
+    const first = roomRow('stress-0-0', 100)
+    expect(findResidentRowIndex([roomRow('stress-0-1', 101)], messageRowId(first)!)).toBe(-1)
   })
 })

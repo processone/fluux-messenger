@@ -122,16 +122,27 @@ export function insertionAnchorApplies(
  * Distinguish a mid-array insertion from the three other ways the resident array changes.
  *
  * - A live-edge arrival moves the LAST row. Content added below a scrolled-up reader cannot move
- *   them, and the bottom-pin loop owns the at-bottom case.
- * - A load-older/newer batch also rewrites the array without moving the bottom row and owns its own
- *   directional restore, which must not be fought. It is identified by a snapshot landing in THIS
- *   commit, not merely by a first-id change: at the resident bound an insertion evicts the oldest
- *   row and so moves the first id too.
+ *   them, and the bottom-pin loop owns the at-bottom case. At the resident bound it also evicts
+ *   the row that was first.
+ * - A load-older/newer batch owns its own directional restore, which must not be fought. It is
+ *   identified by a snapshot landing in THIS commit, not merely by a first-id change: at the
+ *   resident bound an insertion evicts the oldest row and so moves the first id too.
+ * - Rows that land above the row that was first, which stays resident, are above the reader
+ *   whatever happened to the tail. That is a load-older batch no directional restore holds: the
+ *   controller refused its request (a hover hold as it started) or released it (the reader moved
+ *   on). At the resident bound that batch also evicts the newest rows, so the bottom row moves
+ *   too. The batch may also carry the row that was first and backfill its archive id, which
+ *   renames its handle: where it sits is resolved alias-aware, not by comparing handles.
  * - An interior placement bump is authoritative on its own, even when the ids look unchanged.
  */
 export function decideInsertionMutation(input: {
   tracked: ResidentTrackingState
   next: ResidentTrackingState
+  /**
+   * Where the tracked first row sits in the resident window this commit renders, resolved
+   * alias-aware, or -1 once it left it.
+   */
+  trackedFirstRowIndex: number
   directionalLoadLanding: boolean
   hasAnchor: boolean
 }): AmbientMutationDecision {
@@ -144,10 +155,11 @@ export function decideInsertionMutation(input: {
     tracked.firstMessageId !== next.firstMessageId
   const interiorPlacementAdvanced =
     next.interiorPlacementVersion > tracked.interiorPlacementVersion
+  const rowsLandedAboveFirst = input.trackedFirstRowIndex > 0
 
   const inserted =
     !input.directionalLoadLanding &&
-    (interiorPlacementAdvanced || (residentChanged && !bottomMoved))
+    (interiorPlacementAdvanced || rowsLandedAboveFirst || (residentChanged && !bottomMoved))
 
   return inserted && input.hasAnchor ? { kind: 'preserve' } : { kind: 'retrack' }
 }
