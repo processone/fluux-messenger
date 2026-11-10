@@ -165,6 +165,12 @@ export interface UseMessageListScrollOptions {
   messageCount: number
   interiorPlacementVersion?: number
   firstMessageId: string | undefined
+  /**
+   * Whether a row id is in this render's resident window. Ambient insertion handling uses it to
+   * tell rows landing above the former first row (a load-older batch, which at the resident bound
+   * also evicts the newest rows) from a live-edge arrival that evicted that row.
+   */
+  isResidentRow?: (rowId: string) => boolean
   firstNewMessageId?: string  // Row handle of the first unread message (for new message marker)
   /** Row handle of the furthest read message, including XEP-0490 sync. */
   readPointerId?: string
@@ -289,6 +295,7 @@ export function useMessageListScroll({
   messageCount,
   interiorPlacementVersion = 0,
   firstMessageId,
+  isResidentRow,
   firstNewMessageId,
   readPointerId,
   clearFirstNewMessageId,
@@ -900,6 +907,7 @@ export function useMessageListScroll({
           window,
           directionalRequestFacts(positioningControllerRef, id),
         ) ?? false,
+      isResidentRow: (id) => isResidentRow?.(id) ?? false,
       beginLayoutPreservation: (input) => {
         if (!reconcileMessageTargetAfterResize()) positioningControllerRef.current?.beginLayoutPreservation(input)
       },

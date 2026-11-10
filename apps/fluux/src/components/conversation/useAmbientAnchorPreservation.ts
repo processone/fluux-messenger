@@ -56,6 +56,8 @@ export interface AmbientAnchorPorts {
     conversationId: string,
     window: { firstMessageId: string; interiorPlacementVersion: number },
   ) => boolean
+  /** Whether a row with this id is in the resident window of the render being committed. */
+  isResidentRow: (messageId: string) => boolean
   beginLayoutPreservation: (input: {
     conversationId: string
     desired: LayoutPreservationRequest['desired']
@@ -288,9 +290,12 @@ export function useAmbientAnchorPreservation({
     }
     // Declared before the directional restore effect, so an in-flight snapshot is still unrestored
     // here when its load genuinely lands.
+    const trackedFirstId = insertionTrackingRef.current.firstMessageId
     const decision = decideInsertionMutation({
       tracked: insertionTrackingRef.current,
       next,
+      trackedFirstStillResident:
+        trackedFirstId !== undefined && portsRef.current.isResidentRow(trackedFirstId),
       directionalLoadLanding: portsRef.current.isDirectionalLoadLanding(
         conversationId,
         { firstMessageId: firstMessageId ?? '', interiorPlacementVersion },

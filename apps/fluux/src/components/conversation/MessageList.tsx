@@ -306,6 +306,10 @@ export function MessageList<T extends BaseMessage>({
   const firstMessageId = deduplicatedMessages[0]
     ? messageRowId(deduplicatedMessages[0])
     : undefined
+  const residentRowIds = useMemo(
+    () => new Set(deduplicatedMessages.map((message) => messageRowId(message))),
+    [deduplicatedMessages],
+  )
   const lastMessage = messages[messages.length - 1]
   const lastMessageId = lastMessage ? messageRowId(lastMessage) : undefined
   // The SDK names the divider's ROW, so this resolves the RESIDENT row it means —
@@ -632,6 +636,7 @@ export function MessageList<T extends BaseMessage>({
     messageCount: deduplicatedMessages.length,
     interiorPlacementVersion,
     firstMessageId,
+    isResidentRow: (rowId) => residentRowIds.has(rowId),
     firstNewMessageId: firstNewRowId,
     readPointerId,
     clearFirstNewMessageId,

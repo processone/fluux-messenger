@@ -3219,7 +3219,8 @@ test.describe('Insertion drift while scrolled up', () => {
    * and the arrival lands between the rows they now read and those rows: below the view after
    * scrolling up, above it after scrolling down. The rows the reader then sees are the ones tracked.
    * `hover` says whether a hover hold is active as the load starts; every wheel lands where the
-   * pointer rests, which stays put.
+   * pointer rests, which stays put. With `arrival: false` no delayed message lands, so only the
+   * batch moves the window.
    */
   async function insertDuringInFlightLoadOlder(
     page: Page,
@@ -3230,6 +3231,7 @@ test.describe('Insertion drift while scrolled up', () => {
       scrollBeforeArrival?: 'up' | 'down'
       kind?: ConversationKind
       hover?: HoverAtLoadStart
+      arrival?: boolean
     } = {},
   ) {
     const kind = options.kind ?? 'room'
@@ -3295,6 +3297,8 @@ test.describe('Insertion drift while scrolled up', () => {
       )
       await page.waitForTimeout(400)
       await syncEngineGeometry(page)
+      await expect(list, 'precondition: the reader\'s wheel must end any hover hold')
+        .not.toHaveAttribute('data-message-interaction')
       const moved = await readView(page, kind)
       expect(moved, 'the message list must be readable').not.toBeNull()
       expect(
@@ -3306,7 +3310,9 @@ test.describe('Insertion drift while scrolled up', () => {
     }
 
     // The delayed arrival lands while that load is still waiting for its batch.
-    await deliverDelayed(page, kind, { id: 'delayed-arrival-0', timestamp: insertTs, body })
+    if (options.arrival !== false) {
+      await deliverDelayed(page, kind, { id: 'delayed-arrival-0', timestamp: insertTs, body })
+    }
     await page.waitForTimeout(400)
     await syncEngineGeometry(page)
 
@@ -3667,25 +3673,93 @@ test.describe('Insertion drift while scrolled up', () => {
 
   // FLM-210, review FLM-338 R1, at the resident bound: there the arrival also evicts the oldest
   // row, a window shift the pending load restores for at once, so it held the same off-screen row.
-  // No hover-hold variant here: at the bound a load the hover hold refused leaves its batch, which
-  // also evicts the newest rows, unheld even with no arrival (FLM-384).
-  test('invariant-14q: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when a delayed message lands below them', async ({ page }) => {
+  // With a hover hold, the load the hover hold refused leaves its batch to ambient insertion
+  // handling, and at the bound that batch also evicts the newest rows.
+  for (const hover of HOVER_AT_LOAD_START) {
+    test(`invariant-14q${hoverVariant(hover)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when a delayed message lands below them`, async ({ page }) => {
+      await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
+      const r = await insertDuringInFlightLoadOlder(
+        page,
+        'bound delayed arrival below a reader who scrolled up\n'.repeat(18),
+        { scrollBeforeArrival: 'up', hover },
+      )
+      console.log(`── INSERTION-DRIFT bound-below-moved-reader ${hover} ──`, JSON.stringify(r))
+      expect(
+        r.loadStartBelowViewport,
+        `precondition: the wheel must take the rows the load started from below the view — ${JSON.stringify(r)}`,
+      ).toBe(true)
+      expect(r.insertedBelowViewport, `the arrival must land BELOW the viewport — ${JSON.stringify(r)}`).toBe(true)
+      expect(
+        r.insertedAboveLoadStart,
+        `the arrival must land above the rows the load started from — ${JSON.stringify(r)}`,
+      ).toBe(true)
+      expect(
+        r.firstIdMidway,
+        `precondition: at the resident bound the arrival must evict the oldest row — ${JSON.stringify(r)}`,
+      ).not.toBe(r.firstIdBefore)
+      expect(
+        r.firstIdAfter,
+        `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+      ).not.toBe(r.firstIdMidway)
+      expect(
+        r.midwayDrift,
+        `an arrival below the reader moved their rows by ${r.midwayDrift}px while the load waited — ${JSON.stringify(r)}`,
+      ).toBeLessThanOrEqual(HELD_ROW_PX)
+      expect(
+        r.drift,
+        `an arrival below the reader moved their rows by ${r.drift}px once the batch landed — ${JSON.stringify(r)}`,
+      ).toBeLessThanOrEqual(HELD_ROW_PX)
+    })
+  }
+
+  // The reported defect, at the same bound with no arrival. A hover hold as the load starts makes
+  // the controller refuse the load's restore, so the batch is ambient insertion handling's to hold.
+  // At the bound the batch also evicts the newest rows, which moves the bottom row, and that
+  // handling took the batch for a live-edge arrival: the rows the reader scrolled to left the view.
+  for (const hover of HOVER_AT_LOAD_START) {
+    test(`invariant-14w${hoverVariant(hover)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when the batch lands`, async ({ page }) => {
+      await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
+      const r = await insertDuringInFlightLoadOlder(page, '', {
+        scrollBeforeArrival: 'up',
+        hover,
+        arrival: false,
+      })
+      console.log(`── INSERTION-DRIFT bound-batch-moved-reader ${hover} ──`, JSON.stringify(r))
+      expect(
+        r.loadStartBelowViewport,
+        `precondition: the wheel must take the rows the load started from below the view — ${JSON.stringify(r)}`,
+      ).toBe(true)
+      expect(
+        r.firstIdMidway,
+        `precondition: nothing may move the window before the batch — ${JSON.stringify(r)}`,
+      ).toBe(r.firstIdBefore)
+      expect(
+        r.firstIdAfter,
+        `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+      ).not.toBe(r.firstIdBefore)
+      expect(
+        r.residentCountAfter,
+        `precondition: at the resident bound the batch must evict as many newest rows — ${JSON.stringify(r)}`,
+      ).toBe(r.residentCountBefore)
+      expect(
+        r.drift,
+        `the batch moved the reader's rows by ${r.drift}px — ${JSON.stringify(r)}`,
+      ).toBeLessThanOrEqual(HELD_ROW_PX)
+    })
+  }
+
+  // The same defect class without a hover hold: at the bound an arrival above the reader
+  // starts the load's restore, and the reader then scrolls on, which releases the load. Its batch
+  // is again ambient insertion handling's to hold, and it evicts the newest rows.
+  test('invariant-14x: at the resident bound, a reader who scrolls on while a load-older waits after an interior arrival keeps the rows they scrolled to', async ({ page }) => {
     await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
     const r = await insertDuringInFlightLoadOlder(
       page,
-      'bound delayed arrival below a reader who scrolled up\n'.repeat(18),
-      { scrollBeforeArrival: 'up' },
+      'bound delayed arrival before the reader scrolls on\n'.repeat(18),
+      { wheelDuringWaitPx: 200 },
     )
-    console.log('── INSERTION-DRIFT bound-below-moved-reader ──', JSON.stringify(r))
-    expect(
-      r.loadStartBelowViewport,
-      `precondition: the wheel must take the rows the load started from below the view — ${JSON.stringify(r)}`,
-    ).toBe(true)
-    expect(r.insertedBelowViewport, `the arrival must land BELOW the viewport — ${JSON.stringify(r)}`).toBe(true)
-    expect(
-      r.insertedAboveLoadStart,
-      `the arrival must land above the rows the load started from — ${JSON.stringify(r)}`,
-    ).toBe(true)
+    console.log('── INSERTION-DRIFT bound-moved-during-load-older ──', JSON.stringify(r))
+    expect(r.insertedAboveViewport, 'the arrival must land ABOVE the viewport').toBe(true)
     expect(
       r.firstIdMidway,
       `precondition: at the resident bound the arrival must evict the oldest row — ${JSON.stringify(r)}`,
@@ -3695,12 +3769,12 @@ test.describe('Insertion drift while scrolled up', () => {
       `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
     ).not.toBe(r.firstIdMidway)
     expect(
-      r.midwayDrift,
-      `an arrival below the reader moved their rows by ${r.midwayDrift}px while the load waited — ${JSON.stringify(r)}`,
-    ).toBeLessThanOrEqual(HELD_ROW_PX)
+      r.movedTop !== null && r.midwayTop !== null && r.movedTop - r.midwayTop > 100,
+      `precondition: the wheel must have moved the reader down the history — ${JSON.stringify(r)}`,
+    ).toBe(true)
     expect(
-      r.drift,
-      `an arrival below the reader moved their rows by ${r.drift}px once the batch landed — ${JSON.stringify(r)}`,
+      r.movedDrift,
+      `the batch moved the rows the reader scrolled to by ${r.movedDrift}px — ${JSON.stringify(r)}`,
     ).toBeLessThanOrEqual(HELD_ROW_PX)
   })
 

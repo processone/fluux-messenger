@@ -166,11 +166,16 @@ describe('insertionAnchorApplies', () => {
 describe('decideInsertionMutation', () => {
   const call = (
     next: Partial<ResidentTrackingState>,
-    extra: { directionalLoadLanding?: boolean; hasAnchor?: boolean } = {},
+    extra: {
+      directionalLoadLanding?: boolean
+      hasAnchor?: boolean
+      trackedFirstStillResident?: boolean
+    } = {},
   ) =>
     decideInsertionMutation({
       tracked: resident(),
       next: resident(next),
+      trackedFirstStillResident: extra.trackedFirstStillResident ?? false,
       directionalLoadLanding: extra.directionalLoadLanding ?? false,
       hasAnchor: extra.hasAnchor ?? true,
     })
@@ -194,15 +199,49 @@ describe('decideInsertionMutation', () => {
   it('yields to a directional load landing in this commit', () => {
     // Same array change as the preserved case; only the in-flight snapshot differs. A first-id
     // change alone cannot distinguish these two, which is why the load flag is consulted.
-    expect(call({ firstMessageId: 'older-0', messageCount: 250 })).toEqual({
+    expect(
+      call(
+        { firstMessageId: 'older-0', messageCount: 250 },
+        { trackedFirstStillResident: true },
+      ),
+    ).toEqual({
       kind: 'preserve',
     })
     expect(
       call(
         { firstMessageId: 'older-0', messageCount: 250 },
-        { directionalLoadLanding: true },
+        { directionalLoadLanding: true, trackedFirstStillResident: true },
       ),
     ).toEqual({ kind: 'retrack' })
+  })
+
+  // The reported defect: at the resident bound a load-older batch lands above the old first row
+  // AND evicts the newest rows, so the bottom row moves too. A load the controller refused (a hover
+  // hold as it started) or released (the reader moved on) leaves that batch to this decision.
+  describe('a load-older batch at the resident bound, which also trims the newest rows', () => {
+    const batchAtBound = { firstMessageId: 'older-0', lastMessageId: 'm-149' }
+
+    it('preserves the reader when no directional load holds it', () => {
+      expect(call(batchAtBound, { trackedFirstStillResident: true })).toEqual({
+        kind: 'preserve',
+      })
+    })
+
+    it('still yields to the directional load that holds it', () => {
+      expect(
+        call(batchAtBound, { directionalLoadLanding: true, trackedFirstStillResident: true }),
+      ).toEqual({ kind: 'retrack' })
+    })
+
+    it('is told apart from a live-edge arrival at the bound, which evicts the old first row', () => {
+      // The same three scalars move: the first id, the last id, and not the count.
+      expect(
+        call(
+          { firstMessageId: 'm-1', lastMessageId: 'm-200' },
+          { trackedFirstStillResident: false },
+        ),
+      ).toEqual({ kind: 'retrack' })
+    })
   })
 
   it('treats an interior placement bump as authoritative even when the bottom moved', () => {
