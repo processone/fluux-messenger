@@ -14,6 +14,12 @@
  *    it. An incoming message while scrolled up never yanks them.
  * 3. "New bottom row" keys off the last message id as well as the count: a send REPLACES the
  *    optimistic row in place when it reconciles to its server id, growing nothing.
+ * 4. A bottom row the resident window's slide brought in is not an arrival. Past the window bound
+ *    a load trims the far end, so the bottom row changes with nothing sent or received. While the
+ *    window is off the live edge the store holds live messages out of it, and a window that just
+ *    came back to the live edge came back by a load — so a changed bottom row on either side of a
+ *    slide is the slide. Following it pinned the reader to the bottom of a window slid back into
+ *    history, which loaded newer history until the window snapped back to the newest messages.
  *
  * @module Components/Conversation/NewMessageDecision
  */
@@ -33,6 +39,10 @@ export interface NewMessageFacts {
   savedPositionPending: boolean
   /** A controller-owned directional (prepend) restore has not landed yet. */
   directionalHistoryPending: boolean
+  /** Whether the resident window holds the newest message of the conversation now. */
+  windowAtLiveEdge: boolean
+  /** Whether it did when the baseline was taken. */
+  baselineWindowAtLiveEdge: boolean
 }
 
 export type NewMessageDecision =
@@ -51,6 +61,11 @@ export type NewMessageDecision =
   /** A message arrived while the reader is scrolled up: do not move them. */
   | 'hold-incoming'
   /**
+   * The resident window slid, carrying a different bottom row with it: nothing arrived. The load
+   * that slid it owns the reading position.
+   */
+  | 'window-slid'
+  /**
    * The effect ran without a new bottom row. Named rather than silent: it is the blind spot
    * behind "I sent a message and it did not scroll", where the row's props had not propagated
    * yet, and a trace that says nothing cannot distinguish that from a decision.
@@ -58,18 +73,23 @@ export type NewMessageDecision =
   | 'no-bottom-row'
 
 export function decideOnNewMessage(facts: NewMessageFacts): NewMessageDecision {
+  const windowSlid = !facts.windowAtLiveEdge || !facts.baselineWindowAtLiveEdge
+  // A send can only reach a window at the live edge: off it, an outgoing bottom row is history.
+  const ownSend = facts.lastMessageIsOutgoing && !windowSlid
+
   if (facts.savedPositionPending) {
-    return facts.lastMessageIsOutgoing ? 'outgoing-during-restore' : 'restore-pending'
+    return ownSend ? 'outgoing-during-restore' : 'restore-pending'
   }
   if (facts.directionalHistoryPending) {
-    return facts.lastMessageIsOutgoing ? 'outgoing-during-prepend' : 'prepend-pending'
+    return ownSend ? 'outgoing-during-prepend' : 'prepend-pending'
   }
 
   const countIncreased = facts.messageCount > facts.baselineMessageCount
   const lastMessageChanged =
     facts.lastMessageId !== undefined && facts.lastMessageId !== facts.baselineLastMessageId
   if (!countIncreased && !lastMessageChanged) return 'no-bottom-row'
+  if (windowSlid) return 'window-slid'
 
-  if (facts.lastMessageIsOutgoing) return 'follow-outgoing'
+  if (ownSend) return 'follow-outgoing'
   return facts.atBottom ? 'follow-incoming' : 'hold-incoming'
 }

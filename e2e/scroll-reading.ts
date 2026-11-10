@@ -1999,6 +1999,73 @@ test.describe('Sliding window (load-older past the cap)', () => {
     expect(recentered.atLiveEdge, `jump-to-latest did not recenter to the live edge: ${JSON.stringify(recentered)}`).toBe(true)
     expect(recentered.count, `resident not bounded after recenter: ${JSON.stringify(recentered)}`).toBeLessThanOrEqual(100)
   })
+
+  // A reader could not scroll back past the resident window of a one-to-one chat longer than it:
+  // every pull past the bound was undone and the view went back to the newest messages. A pull at
+  // the bound trims the newest rows; when the new bottom row was the reader's own message, the list
+  // followed it as if it had just been sent, and the pin at the bottom of the slid window loaded
+  // newer history until the window was back at the newest messages. The demo chat has the reader
+  // send every seventh message, so the second and third slides here end on one of theirs.
+  test('scrolling back past the bound keeps sliding older when a slide ends on the reader own message', async ({ page }) => {
+    const chatJid = 'stress-contact@fluux.chat'
+    await bootDemo(page, '/demo.html?tutorial=false&virt=1&window=100&stress=rooms:1,messages:150,msgStep:0')
+    await activateChat(page, chatJid)
+
+    const readWindow = (newestId: string | null) => page.evaluate(({ jid, newestId }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const store = (window as any).__chatStore.getState()
+      const messages: { id: string; timestamp: Date | string; isOutgoing?: boolean }[] = store.messages.get(jid) ?? []
+      const last = messages[messages.length - 1]
+      return {
+        firstAt: messages.length ? new Date(messages[0].timestamp).getTime() : null,
+        lastId: last?.id ?? null,
+        lastIsOwn: Boolean(last?.isOutgoing),
+        count: messages.length,
+        atLiveEdge: store.windowAtLiveEdge.get(jid) !== false,
+        newestRendered: newestId !== null &&
+          document.querySelector(`[data-message-list] [data-message-id="${CSS.escape(newestId)}"]`) !== null,
+      }
+    }, { jid: chatJid, newestId })
+
+    const start = await readWindow(null)
+    expect(start.atLiveEdge, `expected to open at the newest messages: ${JSON.stringify(start)}`).toBe(true)
+    expect(start.count, `expected a full window: ${JSON.stringify(start)}`).toBe(100)
+    const newestId = start.lastId!
+
+    /** The window once it stops moving: a snap back runs on after the pull has landed. */
+    const readSettled = async () => {
+      let previous = await readWindow(newestId)
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        await page.waitForTimeout(400)
+        const next = await readWindow(newestId)
+        if (JSON.stringify(next) === JSON.stringify(previous)) return next
+        previous = next
+      }
+      return previous
+    }
+
+    let previousFirstAt = start.firstAt!
+    let slidOntoOwnMessage = false
+    for (let pull = 1; pull <= 5; pull += 1) {
+      await scrollToTopAndLoad(page)
+      await page.waitForFunction(({ jid, before }) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const messages = (window as any).__chatStore.getState().messages.get(jid) ?? []
+        return messages.length > 0 && new Date(messages[0].timestamp).getTime() !== before
+      }, { jid: chatJid, before: previousFirstAt }, { timeout: 6_000 }).catch(() => { /* asserted below */ })
+      const after = await readSettled()
+      const where = `after pull ${pull}: ${JSON.stringify(after)}`
+      expect(after.firstAt!, `the window did not slide older, ${where}`).toBeLessThan(previousFirstAt)
+      expect(after.atLiveEdge, `the window went back to the newest messages, ${where}`).toBe(false)
+      expect(after.lastId, `the window went back to the newest messages, ${where}`).not.toBe(newestId)
+      expect(after.newestRendered, `the list shows the newest message again, ${where}`).toBe(false)
+      expect(after.count, `the window grew past its bound, ${where}`).toBeLessThanOrEqual(100)
+      slidOntoOwnMessage ||= after.lastIsOwn
+      previousFirstAt = after.firstAt!
+    }
+    // The case the journey exists for: a slide that left the reader's own message at the bottom.
+    expect(slidOntoOwnMessage, 'no slide ended on the reader own message; the journey no longer covers the defect').toBe(true)
+  })
 })
 
 // ── Opening a conversation from a push notification ──
