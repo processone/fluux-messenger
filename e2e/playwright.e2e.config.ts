@@ -140,7 +140,7 @@ export default defineConfig({
     // actual browser input path rather than simulating its movement with scrollTop assignments.
     {
       name: 'scroll-native-pan-chromium',
-      testMatch: 'scroll-native-pan.ts',
+      testMatch: ['scroll-native-pan.ts', 'scroll-native-pan-estimates.ts'],
       use: { ...devices['Desktop Chrome'], launchOptions: { args: ['--enable-blink-features=MiddleClickAutoscroll'] } },
     },
     ...SUITES.flatMap(suite =>

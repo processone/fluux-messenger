@@ -380,7 +380,8 @@ export function MessageList<T extends BaseMessage>({
   )
   // The first calibration corrects an unread-divider landing written from fallback estimates, so
   // its spacer commits before the divider is re-asserted. Later ones are batched: a synchronous
-  // re-render re-windows the list, and the rows it mounts queue the next sample.
+  // re-render re-windows the list, and the rows it mounts queue the next sample. The adapter
+  // still commits a later one at once when keeping the reader in place moved the scroll offset.
   const { metricsRef: rowMetricsRef, sample: sampleRowMetrics } = useRowMetrics(scrollContainerRef, first => {
     virtualizer.refreshEstimates?.(first)
     if (first) reassertUnreadMarker()

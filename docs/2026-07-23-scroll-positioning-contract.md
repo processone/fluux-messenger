@@ -124,8 +124,39 @@ does not by itself demonstrate the backward-measurement defect.
 WebKit has no equivalent middle-click mode. The compensation also applies to other inputs and
 engines, but dedicated WebKit upward-wheel/momentum proof with a measured row shrinking above the
 reader is an explicitly accepted proof gap for this change. Existing shared WebKit measurement and
-reading regression coverage does not qualify that specific timing case. Broader estimate refresh
-from own-only width fallback or further chrome calibration remains separate from this correction.
+reading regression coverage does not qualify that specific timing case.
+
+Native upward panning also retains visible progress when the metrics behind unmeasured estimates
+are resampled. Two legitimate samples change estimates during a pan: when only own hug-width
+bubbles are mounted the sampled width is their widest text, a lower bound that gives way to the
+full content width once an incoming row mounts; and up to three chrome corrections per geometry
+follow when a plain row of a shape first mounts. An estimate refresh keeps the held anchor, or
+else the row at the reader's live offset, at the same placement: the offset shift the new
+estimates cause above it goes through the library's own scroll correction, in either direction and
+during backward scrolling, because no row the reader has seen changed size. A refresh that moved
+the offset commits its re-render in the same task, so no paint shows the new offset with the old
+row positions. A shift larger than the scroll room the old spacer leaves would be clamped, and the
+window rendered at the clamped offset would mount older rows whose first measurements replace the
+library's recovery of the rest, skipping the reader far back. Such a refresh first commits the
+taller layout windowed at the shifted offset, then writes the whole shift, all before paint.
+Disabled automatic adjustment and a smooth or written scroll still landing keep their pixels; an
+iOS gesture defers the correction as it does a resize. Correcting the estimates also stops the
+own-only feedback loop, in which an uncompensated refresh re-windowed the list away from the
+incoming row and the width sample fell back to the own lower bound, so the list never settled.
+`e2e/scroll-native-pan-estimates.ts` seeds a direct chat and a room for three journeys, each
+panning upward with actual Chromium middle-click autoscroll: a latest window of own messages only,
+whose first incoming row widens the sample; a run of own messages below incoming ones, which
+narrows the sample and widens it again; and continuation rows whose first plain one corrects the
+chrome. The virtualizer's own observer measures every row; a forwarding probe records each
+estimate refresh with its resampled metrics. The journeys require the expected metric changes
+during backward motion. Across every refresh and every frame a reading cannot return to a newer
+message, move the same message against the pan, or skip more older messages than native
+autoscroll reveals in the time between them (three rows per 100ms, and at least three). Readings
+more than 250ms apart follow a stalled frame and are exempt from the skip check, and a refresh with
+no reading that close fails as unproven. Unit coverage, including the actual
+sampler, growth past the scroll room with a windowed list, and the held-anchor, suppression and
+animated-scroll precedence, is in
+`apps/fluux/src/components/conversation/tanstackMessageVirtualizer.estimates.test.tsx`.
 
 Automatic older/newer pagination requires that independently observed movement geometry reach
 the relevant boundary, subject to the directional coordinator's eligibility checks. Layout-only
@@ -599,7 +630,8 @@ refresh unmeasured estimates while retaining measured sizes. On the first calibr
 `MessageList` commits the new spacer and reasserts the current marker execution in the same task
 before paint, without starting another frame loop. Later calibrations refresh the estimates in
 React's next render and leave the marker to its own frames: a synchronous re-render re-windows the
-list, and the rows it mounts would queue the next sample inside the current one. Row chrome is
+list, and the rows it mounts would queue the next sample inside the current one. A later refresh
+commits at once only when keeping the reader in place moved the scroll offset. Row chrome is
 sampled only from plain-text rows without rendered `<br>` line breaks, and chrome-only
 recalibrations stop notifying after a fixed
 count per content width, line box and font. The controller's 300px drift guard applies only when

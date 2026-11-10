@@ -5,6 +5,7 @@ import type { DemoClient } from '@fluux/sdk/demo'
 import type { chatStore, roomStore } from '@fluux/sdk/stores'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
+import { expectProgress, type PanSample as Sample } from './harness/nativePan'
 import { waitForTopVisibleSettled } from './harness/scrollHarness'
 import capturedMeasurements from '../apps/fluux/src/components/conversation/__fixtures__/nativePanMeasurements.json' with { type: 'json' }
 
@@ -16,10 +17,6 @@ type Demo = Window & {
   __settingsStore: typeof useSettingsStore
 }
 const targetId = 'interaction-target'
-type Sample = {
-  at: number; top: number; height: number; client: number
-  anchor: { id: string; order: number; top: number; bottom: number } | null
-}
 type ScrollReading = { at: number; from: number; top: number; trusted: boolean }
 type Measurement = {
   key: string; oldSize: number | null; size: number; cached: boolean; direction: string | null
@@ -161,13 +158,6 @@ function installCapture({ indices, delta, minHeight }: { indices: number[]; delt
       return data
     },
   }
-}
-
-function expectProgress(before: Sample, after: Sample, context: string) {
-  expect(before.anchor, `${context}: an initial visible message anchors the comparison`).not.toBeNull()
-  expect(after.anchor, `${context}: a final visible message anchors the comparison`).not.toBeNull()
-  expect(after.anchor!.order, `${context}: cannot return to a newer message`).toBeLessThanOrEqual(before.anchor!.order)
-  if (after.anchor!.id === before.anchor!.id) expect(after.anchor!.top, `${context}: the same message cannot move against the pan`).toBeGreaterThanOrEqual(before.anchor!.top - 1)
 }
 
 async function arrive(page: Page, kind: Kind, ids: string[], own = false) {
