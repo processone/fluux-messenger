@@ -262,6 +262,18 @@ cannot start the current one. Server discovery can finish before either input,
 so waiting for MAM alone would snapshot an empty store on a cold profile and
 send no query at all.
 
+The lifecycle also emits `freshSessionDiscoverySettled` for the current session
+when server discovery finishes, including failure or a response without
+capability data. Once the inputs have settled, missing capability data schedules
+one retry at a time, five seconds after the previous attempt settles. The
+preparation owner remains held: an unknown capability is not proof that archive
+sync is unnecessary, and consumers such as the iOS unread publisher must not
+replace unseen arrivals with a cached zero. A successful MAM result starts the
+normal pipeline with its own owners; an explicit result without MAM releases
+only preparation. Retries stop on disconnect, resumption, supersession, cleanup
+or a known capability result. Discovery also rejects stale-session results, so
+an old reply cannot install another account's capabilities or release new work.
+
 Archive reads and roster discovery can proceed when the server conversation
 list is unavailable. List reconciliation and replacement-publishing rules are
 owned by [Conversation List Sync](XEP-CONVERSATION_SYNC.md#4-operations).

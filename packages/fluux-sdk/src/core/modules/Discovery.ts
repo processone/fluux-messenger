@@ -66,6 +66,7 @@ export class Discovery extends BaseModule {
    * rejection so a failed probe can be retried.
    */
   private pepSupportProbe: Promise<boolean> | null = null
+  private sessionGeneration = 0
 
 
   /**
@@ -101,6 +102,7 @@ export class Discovery extends BaseModule {
    */
   resetSessionCache(): void {
     this.pepSupportProbe = null
+    this.sessionGeneration += 1
   }
 
   /**
@@ -140,6 +142,8 @@ export class Discovery extends BaseModule {
   async fetchServerInfo(): Promise<void> {
     const currentJid = this.deps.getCurrentJid()
     if (!currentJid) return
+    const generation = this.sessionGeneration
+    const current = () => generation === this.sessionGeneration && this.deps.getCurrentJid() === currentJid
 
     // Query the server domain (bare domain, not full JID)
     const domain = getDomain(currentJid)
@@ -153,6 +157,7 @@ export class Discovery extends BaseModule {
 
     try {
       const result = await this.deps.sendIQ(iq)
+      if (!current()) return
       const query = result.getChild('query', NS_DISCO_INFO)
       if (!query) return
 
@@ -178,6 +183,7 @@ export class Discovery extends BaseModule {
       // advertise MAM.
       if (!features.includes(NS_MAM)) {
         const accountMamFeatures = await this.fetchAccountMamFeatures(currentJid)
+        if (!current()) return
         if (accountMamFeatures.length > 0) {
           features = [...new Set([...features, ...accountMamFeatures])].sort()
         }

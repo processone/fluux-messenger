@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { setPlatformForTesting } from '@/platform'
+
+let restorePlatform: () => void
+beforeEach(() => { restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' }) })
+afterEach(() => { restorePlatform() })
 
 const mockInvoke = vi.fn()
 const widgetCalls = () => mockInvoke.mock.calls.filter(([command]) => command === 'plugin:widgets|set_unread_list')

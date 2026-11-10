@@ -3,6 +3,9 @@ import { chatStore, connectionStore, roomStore } from '@fluux/sdk'
 import { clearUnreadWidgetList, resetSharedUnreadWidgetList, startUnreadWidgetPublisher, unreadWidgetDiagnosticContext } from './unreadWidget'
 import { observeWidgetBadge, resetWidgetPublisherDiagnostic, widgetPublisherDiagnostic } from './unreadWidgetDiagnostic'
 import { sharePushBadge } from './pushBadge'
+import { setPlatformForTesting } from '@/platform'
+
+let restorePlatform: () => void
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke }))
@@ -10,13 +13,14 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke }))
 vi.mock('@fluux/sdk', async importOriginal => importOriginal<typeof import('@fluux/sdk')>())
 
 beforeEach(() => {
+  restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
   resetSharedUnreadWidgetList()
   chatStore.getState().reset(); roomStore.getState().reset(); connectionStore.getState().reset()
   connectionStore.setState({ jid: 'fixture@example.test/device', status: 'online', isVerifying: false })
   invoke.mockReset().mockResolvedValue(undefined)
 })
-afterEach(() => { resetSharedUnreadWidgetList(); vi.useRealTimers() })
+afterEach(() => { resetSharedUnreadWidgetList(); restorePlatform(); vi.useRealTimers() })
 
 const context = () => unreadWidgetDiagnosticContext()
 const commands = () => invoke.mock.calls.map(([command]) => command)
