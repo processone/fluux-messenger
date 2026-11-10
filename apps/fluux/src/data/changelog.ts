@@ -20,14 +20,17 @@ export const changelog: ChangelogEntry[] = [
       type: 'added',
       items: [
         'macOS: a native desktop widget lists unread conversations with names, avatars, counts, mention markers and times, without message text. Clicking a row opens the conversation; an old saved list is marked when Fluux stops updating it',
-        'iOS: a widget lists the conversations with unread messages, on the home screen and, with only the unread total, on the lock screen. It shows names, counts and times, never message text, and tapping a row opens that conversation',
-        'macOS: message notifications can use the system’s communication presentation with sender and room information',
+        'iOS: a new widget shows your unread conversations on the home screen. The lock screen shows the unread total. Tap a row to open that conversation. Message text is never shown',
+        'macOS: message notifications now show who wrote to you, with the sender and room details. They look like those of other chat apps',
       ],
     }, {
       type: 'fixed',
       items: [
-        'Importing an OpenPGP key file checks that the server backup contains the same identity, including separately encrypted and older exports. Earlier backup-status markers are reset because file imports could record an incorrect claim. An unconfirmed backup now has a neutral status and a replacement warning. Rotating a key refreshes an unconfirmed backup and replaces its code, even if another device created it',
-        'macOS: obsolete keychain copies are removed only when the shared saved secrets contain the same values, without extra access prompts. Copies that changed or cannot be checked remain available',
+        'OpenPGP: importing a key file now checks that your server backup matches it. You see a clear status when the backup is not confirmed, and a warning before you replace it. Rotating a key refreshes the backup and gives you a new code',
+        'macOS: Fluux cleans up old keychain copies without asking for access again. Copies that differ are kept, so you never lose a secret',
+        'macOS: a keychain prompt waiting for your answer no longer blocks saving other secrets, such as your credentials, MCP token or encrypted OpenPGP key',
+        'iOS: room notifications show the room picture. The room name stays first, with the sender above the message',
+        'Scrolling up in conversations and rooms no longer jumps or skips messages when Fluux corrects its size estimate for older messages, for example after a long run of your own short replies',
       ],
     }],
   },

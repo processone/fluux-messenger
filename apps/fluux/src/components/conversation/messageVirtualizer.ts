@@ -64,6 +64,11 @@ export interface MessageVirtualizer {
    * use the new estimates either way; `sync` also commits the re-render before returning, which
    * a caller positioning against the rendered content height needs. A batched refresh joins
    * React's next render instead of nesting one inside the current measurement.
+   * What the reader sees stays in place: the held anchor, or else the row at the viewport top,
+   * keeps its placement however the estimates above it change, in either scroll direction. When
+   * that moves the scroll offset the re-render commits with it, so no paint shows one without the
+   * other. Disabled automatic adjustment, or an animated or written scroll still landing, leaves
+   * the pixels alone.
    */
   refreshEstimates?(sync: boolean): void
   retainMessage?(id: string | null): void

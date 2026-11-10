@@ -4,6 +4,7 @@ import type { Message, RoomMessage } from '@fluux/sdk'
 import { bootDemo } from './harness/demoBoot'
 import { withPinWindow } from './harness/pinWindow'
 import { syncEngineGeometry } from './harness/compositorSync'
+import { publishWheelListener } from './harness/wheelInput'
 import {
   STRESS_ROOM_JID,
   FRAME_SAMPLE_MS,
@@ -4579,20 +4580,25 @@ for (const virtualized of [false, true]) {
       await page.waitForTimeout(SETTLE_MS)
       const list = page.locator('[data-message-list]').first()
       await list.hover()
+      if (input === 'prevented-wheel') {
+        await list.evaluate(scroller => {
+          const scope = window as unknown as { __mediaInputEvents: { trusted: boolean; top: number }[] }
+          scope.__mediaInputEvents = []
+          scroller.addEventListener('wheel', event => {
+            scope.__mediaInputEvents.push({ trusted: event.isTrusted, top: scroller.scrollTop })
+            event.preventDefault()
+          }, { passive: false, once: true })
+        })
+        await publishWheelListener(page)
+      }
       const before = await list.evaluate((scroller, input) => {
         const scope = window as unknown as FinalBoundaryWindow & {
           __fluuxTriggerMediaLoad: () => void
           __mediaInputEvents: { trusted: boolean; top: number }[]
         }
         scope.__finalLoads = 0
-        scope.__mediaInputEvents = []
+        if (input === 'scheduled-scroll') scope.__mediaInputEvents = []
         scope.__fluuxTriggerMediaLoad()
-        if (input === 'prevented-wheel') {
-          scroller.addEventListener('wheel', event => {
-            scope.__mediaInputEvents.push({ trusted: event.isTrusted, top: scroller.scrollTop })
-            event.preventDefault()
-          }, { passive: false, once: true })
-        }
         return { top: scroller.scrollTop, height: scroller.scrollHeight }
       }, input)
       if (input === 'scheduled-scroll') {

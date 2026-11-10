@@ -926,6 +926,8 @@ mod native {
         observed_revision: std::sync::Arc<Mutex<BTreeMap<String, u64>>>,
         #[cfg(test)]
         revision_dir: Option<std::path::PathBuf>,
+        #[cfg(test)]
+        before_read_item: Option<fn()>,
     }
     impl Keychain {
         // Release and Dev share the item but not their memory caches. A shared,
@@ -988,8 +990,8 @@ mod native {
                 .mode(0o600)
                 .open(path.with_extension("lock"))
                 .map_err(|e| e.to_string())?;
-            // Readers may wait for authorization while holding this lock. Let
-            // other readers proceed, but keep writes exclusive through mutation.
+            // Readers hold this only to capture the revision, never while
+            // waiting for keychain authorization. Writes stay exclusive through mutation.
             if !wait {
                 file.try_lock().map_err(|error| {
                     format!("Secrets are busy or unavailable; cleanup deferred: {error}")
@@ -1168,7 +1170,10 @@ mod native {
         fn read(&self, account: &str) -> StoreResult<Option<String>> {
             let _access = super::AccessScope::begin();
             let revision = if is_bundle(account) {
-                self.revision(false).ok()
+                // Drop the shared lock before a native lookup can prompt. A
+                // concurrent writer advances the revision before changing the
+                // item, so keeping this earlier value still rejects stale saves.
+                self.revision(false).ok().map(|(_, _, value)| value)
             } else {
                 None
             };
@@ -1177,10 +1182,14 @@ mod native {
                     .observed_revision
                     .lock()
                     .map_err(|_| "Revision lock poisoned")?;
-                match revision.as_ref() {
-                    Some((_, _, value)) => observed.insert(account.into(), *value),
+                match revision {
+                    Some(value) => observed.insert(account.into(), value),
                     None => observed.remove(account),
                 };
+            }
+            #[cfg(test)]
+            if let Some(pause) = self.before_read_item {
+                pause();
             }
             self.read_item(account)
         }
@@ -1473,6 +1482,16 @@ mod native {
             }
             return;
         }
+        if action == "prompt-read" {
+            // Manual native qualification only: the launcher supplies an
+            // explicit disposable item whose ACL excludes this test identity.
+            assert!(SecKeychain::user_interaction_allowed().unwrap());
+            let account = std::env::var("FLUUX_PENDING_ACCOUNT").unwrap();
+            println!("starting isolated authorization lookup");
+            let _ = raw.get(&account);
+            println!("isolated authorization lookup ended");
+            return;
+        }
         let _no_dialogs = SecKeychain::disable_user_interaction().unwrap();
         if action == "cleanup-normal-read" {
             let logical = Secrets::new(raw);
@@ -1539,6 +1558,86 @@ mod native {
             raw.mark_fresh_account("openpgp_passphrase:alice@example.com")
                 .unwrap();
             println!("prepared verified originals, migration backup, a foreign item and independent restored storage");
+            return;
+        }
+        // Saving must not wait for the other copy's access prompt (R1).
+        // The launcher releases this barrier only after the writer has finished.
+        // Native operations still target the explicit disposable keychain.
+        if action == "pending-read" {
+            let mut raw = raw;
+            raw.before_read_item = Some(|| {
+                use std::io::{Read, Write};
+                println!("pending native lookup");
+                std::io::stdout().flush().unwrap();
+                let mut release = [0];
+                std::io::stdin().read_exact(&mut release).unwrap();
+            });
+            let account = std::env::var("FLUUX_PENDING_ACCOUNT").unwrap();
+            let value = raw.get(&account).unwrap();
+            assert!(value.is_some());
+            let error = raw.set(&account, value.as_deref().unwrap()).unwrap_err();
+            assert!(error.contains("quit and reopen"), "{error}");
+            println!(
+                "resumed reader rejects a write after the other identity advanced the revision"
+            );
+            return;
+        }
+        if action == "pending-writes" {
+            let logical = std::sync::Arc::new(Secrets::new(raw));
+            let credentials = crate::credentials::StoredCredentials {
+                jid: "pending@example.com".into(),
+                password: "fixture-password".into(),
+                server: None,
+            };
+            crate::credentials::save(logical.as_ref(), &credentials).unwrap();
+            logical.set("mcp-token", "fixture-rotated-token").unwrap();
+            crate::credentials::delete_macos(logical.as_ref()).unwrap();
+            logical.delete("mcp-token").unwrap();
+            let storage = crate::openpgp_storage::KeyStorage::for_testing_with_store(
+                home.join("pending-keys"),
+                logical.clone(),
+            );
+            let (cert, _) =
+                sequoia_openpgp::cert::CertBuilder::general_purpose(Some("pending@example.com"))
+                    .generate()
+                    .unwrap();
+            if std::env::var("FLUUX_PENDING_ACCOUNT").unwrap() == FRESH_ACCOUNT {
+                storage.save_fresh(&credentials.jid, &cert).unwrap();
+            } else {
+                storage.save(&credentials.jid, &cert).unwrap();
+            }
+            // Reopen with an empty cache and decrypt the actual encrypted file.
+            let reopened = std::sync::Arc::new(Secrets::new(Keychain {
+                keychain: Some(SecKeychain::open(&path).unwrap()),
+                ..Keychain::default()
+            }));
+            assert!(crate::credentials::load(reopened.as_ref())
+                .unwrap()
+                .is_none());
+            assert!(reopened.get("mcp-token").unwrap().is_none());
+            let storage = crate::openpgp_storage::KeyStorage::for_testing_with_store(
+                home.join("pending-keys"),
+                reopened,
+            );
+            assert_eq!(
+                storage
+                    .load(&credentials.jid)
+                    .unwrap()
+                    .unwrap()
+                    .cert
+                    .fingerprint(),
+                cert.fingerprint()
+            );
+            assert!(std::fs::read_dir(home.join("pending-keys/openpgp"))
+                .unwrap()
+                .all(|entry| {
+                    entry
+                        .unwrap()
+                        .path()
+                        .extension()
+                        .is_none_or(|ext| ext != "pass")
+                }));
+            println!("credential save, logout, MCP reset and encrypted OpenPGP save/reload completed before the other reader resumed");
             return;
         }
         // FLM-104 I1: the launcher holds a shared revision lock in a separate
