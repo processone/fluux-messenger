@@ -434,8 +434,10 @@ The widget never connects to the server. It reads `UnreadWidget.json` from the A
   over newer pushes. Native deduplication ignores snapshot-build time; timestamped older queued
   frames cannot overwrite a newer same-account push. Future stamps after clock rollback do not
   block app publication indefinitely.
-- While the app is suspended, a push that raises the badge reconciles the existing account-owned
+- While the app is suspended, a push for a counted conversation reconciles the existing account-owned
   file against the full current badge membership (`NotificationService.swift`, `UnreadList.recordPush`).
+  A conversation already counted can repair a missing or stale row without raising the badge; an
+  already-correct list needs no write or reload for that unchanged membership.
   Read rows are removed rather than concealed by raising the total. Pending events and the row cap
   can still make the total exceed the row count. The badge and list use the same cross-process lock;
   overlapping badge increments re-read current membership rather than overwrite one another.
@@ -456,15 +458,17 @@ For a background-refresh investigation, observe the widget **before** reopening 
 notification extension's widget decisions with their operation timestamps and the same random
 processing marker as `received`:
 
-- `widgetNotCounted`: the push did not add a conversation, or a newer badge snapshot no longer counts
-  it. The latter can still prune obsolete rows. `widgetBadgeUnavailable` distinguishes a missing,
-  unreadable or invalid badge snapshot.
+- `widgetNotCounted`: the push is not in known counted membership, or a newer badge snapshot no
+  longer counts it. The latter can still prune obsolete rows. Already-counted conversations instead
+  reach row reconciliation. `widgetBadgeUnavailable` distinguishes a missing, unreadable or invalid
+  badge snapshot.
 - `widgetListUnavailable` or `widgetAccountMismatch`: the update stopped before a write. Ownership
   must match for both the list and badge, including after upgrades. New refusals also identify the
   actual guard reached: `widgetBadgeOwnerMissing`, `widgetBadgeOwnerMismatch` or `widgetListOwnerMismatch`.
   A list-load failure does not distinguish an absent file from an unreadable or invalid file.
-- `widgetAlreadyListed`: the newly counted conversation already has a row. A following write/reload
-  republishes it and reconciles other membership; it does not reset a more precise app-provided count.
+- `widgetAlreadyListed`: the counted conversation already has a row. Newly counted conversations
+  are republished; already-counted conversations write only if reconciliation changes the list.
+  Neither path resets a more precise app-provided unread count.
 - `widgetRowSelected`, then `widgetWriteSucceeded` or `widgetWriteFailed`: the extension selected a
   row and the file write returned success or failure.
 - `widgetReloadRequested` follows only a successful write and records a request, **not** a completed

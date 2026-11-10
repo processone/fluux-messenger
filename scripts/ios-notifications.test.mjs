@@ -137,13 +137,13 @@ test('iOS widget push decisions reach the bounded content-free export', { skip: 
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-widget-diagnostic-'))
   try {
     const binary = compileNotificationTests(scratch, 'NotificationWidgetDiagnosticTests.swift')
-    for (const scenario of ['success', 'already-listed', 'account-mismatch', 'not-counted', 'badge-unavailable', 'list-unavailable', 'diagnostic-unavailable', 'app-read-clear', 'app-read-still-listed', 'app-publication-guards', 'app-read-current', 'app-read-queued', 'badge-other-account', 'badge-legacy', 'both-owners-differ', 'count-mismatch', 'push-reconciles-read-row']) {
+    for (const scenario of ['success', 'already-listed', 'account-mismatch', 'not-counted', 'badge-unavailable', 'list-unavailable', 'diagnostic-unavailable', 'app-read-clear', 'app-read-still-listed', 'app-publication-guards', 'app-read-current', 'app-read-queued', 'badge-other-account', 'badge-legacy', 'both-owners-differ', 'count-mismatch', 'push-reconciles-read-row', 'already-counted-missing-row', 'already-counted-stale-row', 'already-counted-current', 'already-counted-list-owner-mismatch']) {
       await t.test(scenario, () => {
         const result = spawnSync(binary, [scenario], { encoding: 'utf8' })
         assert.equal(result.status, 0, result.error?.message ?? `${result.stdout}\n${result.stderr}`)
         const output = result.stdout
         assert.match(output, /passed|notification delivered/)
-        if (scenario === 'success' || scenario === 'app-read-clear' || scenario === 'app-read-still-listed' || scenario === 'app-read-current' || scenario === 'app-read-queued' || scenario === 'count-mismatch' || scenario === 'push-reconciles-read-row') console.log(output.trim())
+        if (scenario === 'success' || scenario === 'app-read-clear' || scenario === 'app-read-still-listed' || scenario === 'app-read-current' || scenario === 'app-read-queued' || scenario === 'count-mismatch' || scenario === 'push-reconciles-read-row' || scenario === 'already-counted-stale-row') console.log(output.trim())
       })
     }
   } finally { rmSync(scratch, { recursive: true, force: true }) }

@@ -52,12 +52,11 @@ final class NotificationService: UNNotificationServiceExtension {
         let wordValue = values?["account"] as? String == names.account ? values?["words"] : nil
         let words = wordValue.flatMap { JSONSerialization.isValidJSONObject($0) ? try? JSONSerialization.data(withJSONObject: $0) : nil }
             .flatMap { try? JSONDecoder().decode(PreviewWords.self, from: $0) } ?? PreviewWords.localized
-        // The widget lists what the badge counts: a push that raises the badge adds its conversation.
+        // The widget lists counted membership, even when another push does not raise its total.
         var widgetCounted = false
         let storedBadge = SharedBadge.load(root: root)
         let badge = storedBadge.flatMap { $0.account == names.account ? $0 : nil }
-        let content = NotificationPresentation.content(for: request.content, names: names, activity: words.activity,
-                                                       badge: badge, badgeRoot: root) { bare, isRoom, _ in
+        func recordCountedWidget(_ bare: String, isRoom: Bool, refreshCurrent: Bool) {
             widgetCounted = true
             let events = UnreadList.recordPush(conversation: bare, kind: isRoom ? "groupchat" : "chat",
                                                name: (isRoom ? names.rooms[bare] : names.contacts[bare]) ?? bare,
@@ -65,8 +64,19 @@ final class NotificationService: UNNotificationServiceExtension {
                                                // Read one owned membership/total snapshot under the shared writer lock.
                                                badge: SharedBadge.load(root: root).map {
                                                    .init(account: $0.account, unread: $0.unread, total: $0.count, updated: $0.updated)
-                                               }, root: root)
+                                               }, root: root, refreshCurrent: refreshCurrent)
             record(events.map(\.diagnostic))
+        }
+        let content = NotificationPresentation.content(for: request.content, names: names, activity: words.activity,
+                                                       badge: badge, badgeRoot: root) { bare, isRoom, _ in
+            recordCountedWidget(bare, isRoom: isRoom, refreshCurrent: true)
+        }
+        // A counted conversation can be missing from a stale list. Reconcile it without
+        // incrementing the badge or spending another redraw when the list is already correct.
+        if !widgetCounted, let badge,
+           let from = NotificationPresentation.sender(of: request.content.userInfo, names: names),
+           let bare = NotificationPresentation.bareJid(from), badge.unread.contains(bare) {
+            recordCountedWidget(bare, isRoom: names.rooms[bare] != nil || badge.notifyAllRooms.contains(bare), refreshCurrent: false)
         }
         if !widgetCounted {
             let time = Date().timeIntervalSince1970

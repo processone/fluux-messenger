@@ -131,7 +131,7 @@ struct UnreadList: Codable, Equatable {
     /// Keep only currently counted rows, then add this push if it still counts.
     /// A smaller total alone cannot identify which old conversation was read.
     func adding(_ conversation: String, kind: String, name: String, account owner: String?,
-                badge: BadgeSnapshot, now: Date = Date()) -> UnreadList? {
+                badge: BadgeSnapshot, now: Date = Date(), refreshCurrent: Bool = true) -> UnreadList? {
         guard owner == account, badge.account == account, badge.total >= badge.unread.count else { return nil }
         var next = self
         var seen = Set<String>()
@@ -142,9 +142,9 @@ struct UnreadList: Codable, Equatable {
         }
         next.rows = Array(next.rows.prefix(Self.maxRows))
         next.total = badge.total
-        // The hook represents a newly counted conversation. Republish even an existing row so
-        // a cached empty timeline can recover, but never replace the app's more precise row counts.
-        guard !next.sameContent(as: self) || badge.unread.contains(conversation) else { return nil }
+        // A newly counted conversation refreshes an existing row so a cached empty timeline
+        // can recover. Already-counted pushes only repair changed membership, preserving precise counts.
+        guard !next.sameContent(as: self) || (refreshCurrent && badge.unread.contains(conversation)) else { return nil }
         next.updated = badge.updated ?? now.timeIntervalSince1970 * 1000
         return next
     }
@@ -162,7 +162,7 @@ struct UnreadList: Codable, Equatable {
     /// Return only fixed decisions and their times; the caller owns diagnostic persistence.
     @discardableResult
     static func recordPush(conversation: String, kind: String, name: String, account: String?,
-                           badge: @autoclosure () -> BadgeSnapshot?, root: URL?,
+                           badge: @autoclosure () -> BadgeSnapshot?, root: URL?, refreshCurrent: Bool = true,
                            clock: () -> Date = Date.init,
                            reload: () -> Bool = requestReload) -> [PushEvent] {
         func event(_ decision: PushEvent.Decision) -> PushEvent {
@@ -185,7 +185,7 @@ struct UnreadList: Codable, Equatable {
                     : list.rows.contains(where: { $0.id == conversation }) ? .alreadyListed : .rowSelected
                 observations.append(event(decision))
                 guard let next = list.adding(conversation, kind: kind, name: name, account: account,
-                                             badge: badge, now: clock()) else { return observations }
+                                             badge: badge, now: clock(), refreshCurrent: refreshCurrent) else { return observations }
                 do {
                     try next.writeUnlocked(root: root)
                     observations.append(event(.writeSucceeded))

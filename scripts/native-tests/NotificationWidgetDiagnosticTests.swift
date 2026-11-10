@@ -97,23 +97,27 @@ import UserNotifications
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let scenario = CommandLine.arguments[1]
-        let names = SharedNames(contacts: [sender: "Private fixture name"], account: account)
+        var names = SharedNames(contacts: [sender: "Private fixture name"], account: account)
         var list = UnreadList(account: account, total: 0, rows: [], updated: 1)
         var badge = SharedBadge(unread: [], events: 0, notifyAllRooms: [])
         switch scenario {
         case "already-listed", "app-read-clear", "app-read-still-listed", "app-read-queued":
             list.rows = [.init(id: sender, kind: "chat", name: "Private fixture name", unread: 1, mentions: 0, last: 1)]
             list.total = 1
-        case "count-mismatch", "push-reconciles-read-row":
+        case "count-mismatch", "push-reconciles-read-row", "already-counted-stale-row":
             list.rows = [.init(id: "stale@example.com", kind: "chat", name: "Private stale name", unread: 1, mentions: 0, last: 1)]
             if scenario == "count-mismatch" {
                 list.rows.append(.init(id: "stale2@example.com", kind: "chat", name: "Private stale name", unread: 1, mentions: 0, last: 1))
             }
             list.total = 1
-        case "account-mismatch", "both-owners-differ": list.account = "other@example.com"
-        case "not-counted": badge.unread = [sender]
+        case "already-counted-current":
+            list.rows = [.init(id: sender, kind: "chat", name: "Private fixture name", unread: 7, mentions: 0, last: 1)]
+            list.total = 1
+        case "account-mismatch", "both-owners-differ", "already-counted-list-owner-mismatch": list.account = "other@example.com"
+        case "not-counted": names.rooms[sender] = "Private muted room"
         default: break
         }
+        if scenario.hasPrefix("already-counted-") { badge.unread = [sender] }
         if scenario != "list-unavailable" { try list.write(root: root) }
         if scenario != "badge-unavailable" {
             var state = try JSONSerialization.jsonObject(with: JSONEncoder().encode(badge)) as! [String: Any]
@@ -148,7 +152,8 @@ import UserNotifications
         }
         precondition(delivered == 1)
         let written = UnreadList.load(root: root)
-        if ["success", "already-listed", "diagnostic-unavailable", "count-mismatch", "push-reconciles-read-row"].contains(scenario) {
+        if ["success", "already-listed", "diagnostic-unavailable", "count-mismatch", "push-reconciles-read-row",
+            "already-counted-missing-row", "already-counted-stale-row"].contains(scenario) {
             precondition(written?.rows.first?.id == sender && written?.total == 1,
                          "The actual extension hook must persist the counted conversation")
         } else if scenario == "list-unavailable" {
@@ -156,11 +161,14 @@ import UserNotifications
         } else {
             precondition(written == list, "Skipped widget changes must leave its file unchanged")
         }
-        if ["badge-other-account", "badge-legacy", "both-owners-differ"].contains(scenario) {
+        if ["badge-other-account", "badge-legacy", "both-owners-differ"].contains(scenario) || scenario.hasPrefix("already-counted-") {
             precondition((try? Data(contentsOf: root.appendingPathComponent("NotificationBadge.json"))) == badgeBefore,
-                         "An unconfirmed account must not mutate another account's badge")
+                         "Unconfirmed owners and already-counted pushes must not mutate badge membership")
         }
-        if scenario == "push-reconciles-read-row" || scenario == "count-mismatch" {
+        if scenario == "already-counted-current" {
+            precondition(written?.rows.first?.unread == 7, "Keep the app's precise unread count")
+        }
+        if scenario == "push-reconciles-read-row" || scenario == "count-mismatch" || scenario == "already-counted-stale-row" {
             FileHandle.standardOutput.write(Data("actual shared widget state: ".utf8) + (try JSONEncoder().encode(written)) + Data("\n".utf8))
             guard written?.rows.map(\.id) == [sender] && written?.total == 1 else {
                 FileHandle.standardError.write(Data("Prune the read row from the counted unread set; never raise the total to hide it\n".utf8))
@@ -177,7 +185,7 @@ import UserNotifications
         let decisions = entries.map { $0["decision"] as! String }
         let widget: [String]
         switch scenario {
-        case "success", "push-reconciles-read-row":
+        case "success", "push-reconciles-read-row", "already-counted-missing-row", "already-counted-stale-row":
             #if os(iOS)
             widget = ["widgetRowSelected", "widgetWriteSucceeded", "widgetReloadRequested"]
             #else
@@ -186,7 +194,8 @@ import UserNotifications
         case "count-mismatch":
             widget = ["widgetCountMismatch", "widgetRowSelected", "widgetWriteSucceeded", "widgetReloadUnavailable"]
         case "already-listed": widget = ["widgetAlreadyListed", "widgetWriteSucceeded", "widgetReloadUnavailable"]
-        case "account-mismatch": widget = ["widgetAccountMismatch", "widgetListOwnerMismatch"]
+        case "already-counted-current": widget = ["widgetAlreadyListed"]
+        case "account-mismatch", "already-counted-list-owner-mismatch": widget = ["widgetAccountMismatch", "widgetListOwnerMismatch"]
         case "badge-other-account", "both-owners-differ": widget = ["widgetAccountMismatch", "widgetBadgeOwnerMismatch"]
         case "badge-legacy": widget = ["widgetAccountMismatch", "widgetBadgeOwnerMissing"]
         case "not-counted": widget = ["widgetNotCounted"]
@@ -207,7 +216,7 @@ import UserNotifications
                          "Export only the existing content-free schema")
         }
         let text = String(data: data, encoding: .utf8)!
-        for privateValue in [account, sender, "other@example.com", "Private fixture name", content.body, "fixture-request"] {
+        for privateValue in [account, sender, "other@example.com", "Private fixture name", "Private muted room", content.body, "fixture-request"] {
             precondition(!text.contains(privateValue), "No account, conversation, message or request identity may enter diagnostics")
         }
         if scenario == "success" { print(text) }
