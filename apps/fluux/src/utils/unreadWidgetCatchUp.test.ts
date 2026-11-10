@@ -49,13 +49,16 @@ describe('iOS read publication after session discovery settles', () => {
     restorePlatform()
   })
 
-  it.each(['failed', 'missing-query'] as const)('recovers %s discovery before publishing the confirmed local read', async (outcome) => {
+  it.each(['failed', 'missing-query', 'account-failed', 'account-missing-query'] as const)('recovers %s discovery before publishing the confirmed local read', async (outcome) => {
     const client = createMockClient()
+    const accountProbe = outcome.startsWith('account-')
     const discoveryReply = deferred<Element>()
+    const accountReply = deferred<Element>()
     const retryReply = deferred<Element>()
     const archive = deferred<void>()
     const sendIQ = vi.fn<ModuleDependencies['sendIQ']>()
-      .mockReturnValueOnce(discoveryReply.promise).mockReturnValueOnce(retryReply.promise)
+      .mockReturnValueOnce(discoveryReply.promise).mockReturnValueOnce(accountProbe ? accountReply.promise : retryReply.promise)
+    if (accountProbe) sendIQ.mockReturnValueOnce(retryReply.promise)
     const emitSDK: ModuleDependencies['emitSDK'] = (event, payload) => {
       if (event === 'connection:server-info') connectionStore.getState().setServerInfo((payload as SDKEvents['connection:server-info']).info)
     }
@@ -132,10 +135,21 @@ describe('iOS read publication after session discovery settles', () => {
     expect(pending).toMatchObject({ appTotal: 0, catchUpOwners: 1, isCatchingUp: true, nativeBadgeTotal: 3, nativeWidgetTotal: 3, commandCount: 0 })
 
     // A finished request with unknown capabilities is not proof that the cached zero is current.
-    if (outcome === 'failed') discoveryReply.reject(new Error('fixture discovery failed'))
+    if (accountProbe) {
+      discoveryReply.resolve(xml('iq', { type: 'result' }, xml('query', { xmlns: NS_DISCO_INFO })))
+      await vi.advanceTimersByTimeAsync(0)
+      if (outcome === 'account-failed') accountReply.reject(new Error('fixture account discovery failed'))
+      else accountReply.resolve(xml('iq', { type: 'result' }))
+    } else if (outcome === 'failed') discoveryReply.reject(new Error('fixture discovery failed'))
     else discoveryReply.resolve(xml('iq', { type: 'result' }))
     await vi.advanceTimersByTimeAsync(1_000)
     const unknown = state()
+    if (process.env.FLUUX_CATCHUP_EVIDENCE) {
+      writeFileSync(`${process.env.FLUUX_CATCHUP_EVIDENCE}-${outcome}-unknown.json`, JSON.stringify({
+        synthetic: true, unknown, capabilityDataPublished: connectionStore.getState().serverInfo !== null,
+        note: 'Synthetic state; not the origin of the physical phone count',
+      }, null, 2) + '\n')
+    }
     expect(unknown).toMatchObject({ appTotal: 0, isCatchingUp: true, nativeBadgeTotal: 3, nativeWidgetTotal: 3, commandCount: 0 })
     expect(connectionStore.getState().serverInfo).toBeNull()
     await vi.advanceTimersByTimeAsync(5_000)
@@ -146,7 +160,7 @@ describe('iOS read publication after session discovery settles', () => {
       }, null, 2) + '\n')
     }
     expect(client.server.fetchServerInfo).toHaveBeenCalledTimes(1)
-    expect(sendIQ).toHaveBeenCalledTimes(2)
+    expect(sendIQ).toHaveBeenCalledTimes(accountProbe ? 3 : 2)
     retryReply.resolve(xml('iq', { type: 'result' }, xml('query', { xmlns: NS_DISCO_INFO }, xml('feature', { var: NS_MAM }))))
     await vi.advanceTimersByTimeAsync(MAM_ROOM_CATCHUP_DELAY_MS + 600)
     const retrieving = state()

@@ -7,7 +7,8 @@ import WidgetKit
 /// home-screen widget. A row holds a name, counts and a time, never message text.
 ///
 /// The caught-up app checks/replaces the whole list against shared state. While
-/// suspended, a newly counted push reconciles membership and republishes its row.
+/// suspended, counted pushes reconcile membership. Newly counted pushes also
+/// refresh an unchanged row.
 @available(macOS 14.0, *)
 struct UnreadList: Codable, Equatable {
     struct Row: Codable, Equatable, Identifiable {
