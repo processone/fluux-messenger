@@ -63,4 +63,43 @@ describe('server discovery session ownership', () => {
     expect(published()[0][1].info.features).toEqual([NS_MAM])
     expect(sendIQ).toHaveBeenCalledTimes(2)
   })
+
+  it.each(['service-unavailable', 'feature-not-implemented'])('retains domain features after the account explicitly rejects disco: %s', async condition => {
+    const refusal = Object.assign(new Error(condition), { name: 'StanzaError' })
+    sendIQ.mockResolvedValueOnce(response(['urn:xmpp:carbons:2'])).mockRejectedValueOnce(refusal)
+    await discovery.fetchServerInfo()
+    expect(published()).toHaveLength(1)
+    expect(published()[0][1].info.features).toEqual(['urn:xmpp:carbons:2'])
+    expect(sendIQ).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    { name: 'TimeoutError', message: 'IQ timeout' },
+    { name: 'Error', message: 'connection lost' },
+  ])('keeps $name account transport failures unknown', async failure => {
+    sendIQ.mockResolvedValueOnce(response(['urn:xmpp:carbons:2']))
+      .mockRejectedValueOnce(Object.assign(new Error(failure.message), { name: failure.name }))
+    await discovery.fetchServerInfo()
+    expect(published()).toEqual([])
+    expect(sendIQ).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not apply the account refusal policy to domain discovery', async () => {
+    sendIQ.mockRejectedValueOnce(Object.assign(new Error('service-unavailable'), { name: 'StanzaError' }))
+    await discovery.fetchServerInfo()
+    expect(published()).toEqual([])
+    expect(sendIQ).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops an explicit account refusal after its session is replaced', async () => {
+    let reject!: (error: Error) => void
+    const account = new Promise<Element>((_resolve, fail) => { reject = fail })
+    sendIQ.mockResolvedValueOnce(response(['urn:xmpp:carbons:2'])).mockReturnValueOnce(account)
+    const done = discovery.fetchServerInfo()
+    await vi.waitFor(() => expect(sendIQ).toHaveBeenCalledTimes(2))
+    discovery.resetSessionCache()
+    reject(Object.assign(new Error('service-unavailable'), { name: 'StanzaError' }))
+    await done
+    expect(published()).toEqual([])
+  })
 })

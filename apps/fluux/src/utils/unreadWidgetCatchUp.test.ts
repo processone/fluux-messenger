@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { writeFileSync } from 'node:fs'
 import { chatStore, connectionStore, roomStore, rosterStore, type SDKEvents } from '@fluux/sdk'
-import { xml, type Element, NS_DISCO_INFO, NS_MAM } from '@fluux/sdk/xmpp'
+import { xml, type Element, NS_DISCO_INFO, NS_MAM, NS_CARBONS } from '@fluux/sdk/xmpp'
 import { setPlatformForTesting } from '@/platform'
 import { resetSharedUnreadWidgetList, startUnreadWidgetPublisher, unreadWidgetList } from './unreadWidget'
 // Compose the actual SDK lifecycle with its application consumer; production app code does not import these internals.
@@ -49,9 +49,11 @@ describe('iOS read publication after session discovery settles', () => {
     restorePlatform()
   })
 
-  it.each(['failed', 'missing-query', 'account-failed', 'account-missing-query'] as const)('recovers %s discovery before publishing the confirmed local read', async (outcome) => {
+  it.each(['failed', 'missing-query', 'account-failed', 'account-missing-query', 'account-refused', 'account-refused-with-owner'] as const)('settles %s discovery before publishing the confirmed local read', async (outcome) => {
     const client = createMockClient()
     const accountProbe = outcome.startsWith('account-')
+    const refused = outcome.startsWith('account-refused')
+    const overlapping = outcome === 'account-refused-with-owner'
     const discoveryReply = deferred<Element>()
     const accountReply = deferred<Element>()
     const retryReply = deferred<Element>()
@@ -129,16 +131,18 @@ describe('iOS read publication after session discovery settles', () => {
     client._emit('online')
     await engine.handleConnectionSuccess(false)
     expect(state().appTotal).toBe(3)
+    const endOther = overlapping ? connectionStore.getState().beginUpdate(['messages']) : undefined
     for (const id of ids) chatStore.getState().markReadToNewest(id)
     await vi.advanceTimersByTimeAsync(600)
     const pending = state()
-    expect(pending).toMatchObject({ appTotal: 0, catchUpOwners: 1, isCatchingUp: true, nativeBadgeTotal: 3, nativeWidgetTotal: 3, commandCount: 0 })
+    expect(pending).toMatchObject({ appTotal: 0, catchUpOwners: overlapping ? 2 : 1, isCatchingUp: true, nativeBadgeTotal: 3, nativeWidgetTotal: 3, commandCount: 0 })
 
     // A finished request with unknown capabilities is not proof that the cached zero is current.
     if (accountProbe) {
-      discoveryReply.resolve(xml('iq', { type: 'result' }, xml('query', { xmlns: NS_DISCO_INFO })))
+      discoveryReply.resolve(xml('iq', { type: 'result' }, xml('query', { xmlns: NS_DISCO_INFO }, xml('feature', { var: NS_CARBONS }))))
       await vi.advanceTimersByTimeAsync(0)
-      if (outcome === 'account-failed') accountReply.reject(new Error('fixture account discovery failed'))
+      if (refused) accountReply.reject(Object.assign(new Error('service-unavailable'), { name: 'StanzaError' }))
+      else if (outcome === 'account-failed') accountReply.reject(new Error('fixture account discovery failed'))
       else accountReply.resolve(xml('iq', { type: 'result' }))
     } else if (outcome === 'failed') discoveryReply.reject(new Error('fixture discovery failed'))
     else discoveryReply.resolve(xml('iq', { type: 'result' }))
@@ -149,6 +153,29 @@ describe('iOS read publication after session discovery settles', () => {
         synthetic: true, unknown, capabilityDataPublished: connectionStore.getState().serverInfo !== null,
         note: 'Synthetic state; not the origin of the physical phone count',
       }, null, 2) + '\n')
+    }
+    if (refused) {
+      endOther?.()
+      await vi.advanceTimersByTimeAsync(600)
+      const settled = state()
+      if (process.env.FLUUX_CATCHUP_EVIDENCE) {
+        writeFileSync(`${process.env.FLUUX_CATCHUP_EVIDENCE}-${outcome}-refusal.json`, JSON.stringify({
+          synthetic: true, pending, afterReply: unknown, settled, commands,
+          capabilityDataPublished: connectionStore.getState().serverInfo !== null,
+          standIns: ['IQ transport and StanzaError reply', 'unrelated lifecycle collaborators', 'native bridge; not OS badge or WidgetKit rendering'],
+        }, null, 2) + '\n')
+      }
+      expect(unknown).toMatchObject(overlapping
+        ? { catchUpOwners: 1, isCatchingUp: true, nativeBadgeTotal: 3, nativeWidgetTotal: 3, commandCount: 0 }
+        : { catchUpOwners: 0, isCatchingUp: false, nativeBadgeTotal: 0, nativeWidgetTotal: 0, commandCount: 2 })
+      expect(settled).toMatchObject({ appTotal: 0, catchUpOwners: 0, isCatchingUp: false, nativeBadgeTotal: 0, nativeWidgetTotal: 0 })
+      expect(connectionStore.getState().serverInfo?.features).toContain(NS_CARBONS)
+      expect(connectionStore.getState().serverInfo?.features).not.toContain(NS_MAM)
+      expect(client.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
+      expect(commands).toEqual(['plugin:push|set_badge', 'plugin:widgets|set_unread_list'])
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(client.server.fetchServerInfo).not.toHaveBeenCalled()
+      return
     }
     expect(unknown).toMatchObject({ appTotal: 0, isCatchingUp: true, nativeBadgeTotal: 3, nativeWidgetTotal: 3, commandCount: 0 })
     expect(connectionStore.getState().serverInfo).toBeNull()

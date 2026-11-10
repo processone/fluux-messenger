@@ -231,7 +231,8 @@ export class Discovery extends BaseModule {
    * @param currentJid - The connected full JID
    * @returns The MAM-family feature namespaces advertised by the bare JID
    *   (e.g. `urn:xmpp:mam:2`, `urn:xmpp:mam:2#extended`), an empty array for a
-   *   valid result without MAM, or null when capability knowledge is unavailable.
+   *   valid result without MAM or a definitive account refusal, or null when
+   *   capability knowledge is unavailable.
    */
   private async fetchAccountMamFeatures(currentJid: string): Promise<string[] | null> {
     const bareJid = getBareJid(currentJid)
@@ -251,9 +252,9 @@ export class Discovery extends BaseModule {
         .map((feature: Element) => feature.attrs.var as string)
         .filter((v: string) => typeof v === 'string' && v.startsWith(NS_MAM))
     } catch (err) {
-      // Connection remains usable, but failed discovery cannot prove MAM is absent.
+      // A server error reply rejects account discovery; a lost reply remains unknown.
       logWarn(`Account MAM disco failed: ${err instanceof Error ? err.message : String(err)}`)
-      return null
+      return (err as { name?: unknown } | null)?.name === 'StanzaError' ? [] : null
     }
   }
 
