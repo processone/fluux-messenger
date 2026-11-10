@@ -428,7 +428,11 @@ export function useMessageListScroll({
    * commit carries is not mistaken for a message landing at the bottom.
    */
   const rebaseArrivalBaseline = useCallback(() => {
-    arrivalBaselineRef.current.rebase({ count: messageCountRef.current, lastMessageId: lastMessageIdRef.current })
+    arrivalBaselineRef.current.rebase({
+      count: messageCountRef.current,
+      lastMessageId: lastMessageIdRef.current,
+      windowAtLiveEdge: windowAtLiveEdgeRef.current,
+    })
   }, [])
 
   /**
@@ -478,8 +482,10 @@ export function useMessageListScroll({
   messageCountRef.current = messageCount
   const lastMessageIdRef = useRef(lastMessageId)
   lastMessageIdRef.current = lastMessageId
+  const windowAtLiveEdgeRef = useRef(windowAtLiveEdge !== false)
+  windowAtLiveEdgeRef.current = windowAtLiveEdge !== false
   // What an arrival is measured against; see the module for why it is not "the previous commit".
-  const arrivalBaselineRef = useRef(createArrivalBaseline(lastMessageId))
+  const arrivalBaselineRef = useRef(createArrivalBaseline(lastMessageId, windowAtLiveEdge !== false))
   const hasInitializedRef = useRef(false)
   const pendingSyncedLiveEdgeRef = useRef<{
     conversationId: string
@@ -2229,16 +2235,19 @@ export function useMessageListScroll({
     if (!scroller || !hasInitializedRef.current || staticMode) return
 
     const atBottom = isAtBottomRef.current
+    const baseline = arrivalBaselineRef.current.read()
     const decision = decideOnNewMessage({
       messageCount,
-      baselineMessageCount: arrivalBaselineRef.current.read().count,
+      baselineMessageCount: baseline.count,
       lastMessageId,
-      baselineLastMessageId: arrivalBaselineRef.current.read().lastMessageId,
+      baselineLastMessageId: baseline.lastMessageId,
       lastMessageIsOutgoing,
       atBottom,
       savedPositionPending: !!positioningControllerRef.current?.isSavedPositionPending(conversationId),
       directionalHistoryPending:
         !!positioningControllerRef.current?.isDirectionalHistoryPending(conversationId),
+      windowAtLiveEdge: windowAtLiveEdge !== false,
+      baselineWindowAtLiveEdge: baseline.windowAtLiveEdge,
     })
 
     const followOwnSend = () =>
@@ -2251,11 +2260,13 @@ export function useMessageListScroll({
     const trace = {
       decision,
       messageCount,
-      baselineCount: arrivalBaselineRef.current.read().count,
+      baselineCount: baseline.count,
       lastMessageId,
-      baselineLastMessageId: arrivalBaselineRef.current.read().lastMessageId,
+      baselineLastMessageId: baseline.lastMessageId,
       outgoing: lastMessageIsOutgoing,
       isAtBottom: atBottom,
+      windowAtLiveEdge: windowAtLiveEdge !== false,
+      baselineWindowAtLiveEdge: baseline.windowAtLiveEdge,
     }
 
     switch (decision) {
@@ -2296,6 +2307,11 @@ export function useMessageListScroll({
       case 'hold-incoming':
         debugLog('NEW MSG NO SCROLL (incoming, not at bottom)', trace)
         break
+      case 'window-slid':
+        // The load that slid the window holds the reading position; following the bottom row it
+        // brought would pin the reader to the bottom of a window slid back into history.
+        debugLog('NEW MSG NO SCROLL (window slid)', trace)
+        break
       case 'no-bottom-row':
         // Logged rather than silent: this is the blind spot behind "I sent a message and it did
         // not scroll", where the row's props had not propagated by the time this effect fired.
@@ -2318,6 +2334,9 @@ export function useMessageListScroll({
     messageCount,
     reconcileLiveEdge,
     staticMode,
+    // A slide that moves the window off or back onto the live edge without changing the bottom
+    // row still re-bases: a later arrival is measured against where the window is now.
+    windowAtLiveEdge,
   ])
 
   // ==========================================================================

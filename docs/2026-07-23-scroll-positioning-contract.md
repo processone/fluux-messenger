@@ -463,6 +463,15 @@ preservation step is still pending, matching the existing send-stick suppression
 owner releases after its first position is applied, not after the entire measurement-settle loop.
 Later ordinary stimuli handle content from any dropped attempt.
 
+A bottom row that a sliding-window load brings in is neither an arrival nor a send. A load past
+the resident bound slides the window off the live edge, and the new bottom row is whichever older
+message the slide kept, often the reader's own. The new-message decision reads whether the window
+is at the live edge now and whether it was when the arrival baseline was taken. When either is
+false, the bottom-row change is a slide: it creates no live-edge request, and the directional load
+that slid the window keeps the reading position. A send can only reach a window at the live edge,
+so an outgoing bottom row off it is history. See `newMessageDecision.ts` and the sliding-window
+journeys in `e2e/scroll-reading.ts`.
+
 Container growth after the composer shrinks is re-open-only: post-resize geometry cannot distinguish
 a follower left short of the bottom from a reader who deliberately scrolled up, so this stimulus
 never creates an ambient live-edge request.
