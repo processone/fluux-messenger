@@ -1,4 +1,4 @@
-import { messageRowRef, matchesMessageRowAlias, type MessageRowRef } from '@fluux/sdk'
+import { findMessageRowIndex, messageRowRef, matchesMessageRowAlias, type MessageRowRef } from '@fluux/sdk'
 import type { WrapIdentity } from '@/stores/wrappedCodeBlocksStore'
 
 const OCCUPANT_ROW_PREFIX = 'occupant-row:'
@@ -158,6 +158,21 @@ export function messageRowRefFromRowId(rowId: string): MessageRowRef {
     return { id: rowId }
   }
   return { id: rowId }
+}
+
+/**
+ * Where the row a presentation handle names now sits in `messages`, or -1 once it left them.
+ *
+ * A handle is a name taken at one moment, not a durable identity: an archive id backfilled later
+ * (a backward page can carry the row it was paged from) or a reflected local echo renames the
+ * row. This resolves the handle the way every other row lookup does, through
+ * `findMessageRowIndex` and the row's local alias, so the renamed row is still found.
+ */
+export function findResidentRowIndex(
+  messages: readonly Parameters<typeof findMessageRowIndex>[0][number][],
+  rowId: string,
+): number {
+  return findMessageRowIndex(messages, messageRowRefFromRowId(rowId))
 }
 
 export function messageTargetRowId(target: string | MessageRowRef): string {

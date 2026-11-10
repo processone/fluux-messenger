@@ -56,8 +56,11 @@ export interface AmbientAnchorPorts {
     conversationId: string,
     window: { firstMessageId: string; interiorPlacementVersion: number },
   ) => boolean
-  /** Whether a row with this id is in the resident window of the render being committed. */
-  isResidentRow: (messageId: string) => boolean
+  /**
+   * Where the row a handle names sits in the resident window of the render being committed,
+   * resolved alias-aware, or -1 once it left it.
+   */
+  residentRowIndex: (messageId: string) => number
   beginLayoutPreservation: (input: {
     conversationId: string
     desired: LayoutPreservationRequest['desired']
@@ -294,8 +297,8 @@ export function useAmbientAnchorPreservation({
     const decision = decideInsertionMutation({
       tracked: insertionTrackingRef.current,
       next,
-      trackedFirstStillResident:
-        trackedFirstId !== undefined && portsRef.current.isResidentRow(trackedFirstId),
+      trackedFirstRowIndex:
+        trackedFirstId === undefined ? -1 : portsRef.current.residentRowIndex(trackedFirstId),
       directionalLoadLanding: portsRef.current.isDirectionalLoadLanding(
         conversationId,
         { firstMessageId: firstMessageId ?? '', interiorPlacementVersion },

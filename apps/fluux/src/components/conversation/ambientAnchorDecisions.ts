@@ -131,14 +131,18 @@ export function insertionAnchorApplies(
  *   whatever happened to the tail. That is a load-older batch no directional restore holds: the
  *   controller refused its request (a hover hold as it started) or released it (the reader moved
  *   on). At the resident bound that batch also evicts the newest rows, so the bottom row moves
- *   too.
+ *   too. The batch may also carry the row that was first and backfill its archive id, which
+ *   renames its handle: where it sits is resolved alias-aware, not by comparing handles.
  * - An interior placement bump is authoritative on its own, even when the ids look unchanged.
  */
 export function decideInsertionMutation(input: {
   tracked: ResidentTrackingState
   next: ResidentTrackingState
-  /** The tracked first row is still in the resident window this commit renders. */
-  trackedFirstStillResident: boolean
+  /**
+   * Where the tracked first row sits in the resident window this commit renders, resolved
+   * alias-aware, or -1 once it left it.
+   */
+  trackedFirstRowIndex: number
   directionalLoadLanding: boolean
   hasAnchor: boolean
 }): AmbientMutationDecision {
@@ -151,8 +155,7 @@ export function decideInsertionMutation(input: {
     tracked.firstMessageId !== next.firstMessageId
   const interiorPlacementAdvanced =
     next.interiorPlacementVersion > tracked.interiorPlacementVersion
-  const rowsLandedAboveFirst =
-    tracked.firstMessageId !== next.firstMessageId && input.trackedFirstStillResident
+  const rowsLandedAboveFirst = input.trackedFirstRowIndex > 0
 
   const inserted =
     !input.directionalLoadLanding &&

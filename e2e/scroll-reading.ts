@@ -3161,6 +3161,105 @@ test.describe('Insertion drift while scrolled up', () => {
   }
 
   /**
+   * Record what the next older-history page leaves in the resident window, read as it merges and
+   * before any positioning reacts. With `carryFirstRow`, the first resident row first loses its
+   * archive id, as the oldest resident row can, and the page carries it back with that id: a page
+   * asked for from a later row's archive id reaches back over it. Merging the page backfills the
+   * id, which renames the row's handle, in the same commit that adds the older rows and, at the
+   * resident bound, trims the newest.
+   */
+  async function watchNextOlderPage(
+    page: Page,
+    kind: ConversationKind,
+    options: { carryFirstRow?: boolean } = {},
+  ) {
+    const ready = await page.evaluate(([jid, kind, carryFirstRow]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      const store = kind === 'room' ? w.__roomStore : w.__chatStore
+      const method = kind === 'room' ? 'mergeRoomMAMMessages' : 'mergeMAMMessages'
+      const original = store.getState()[method]
+      if (typeof original !== 'function') return false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let carried: any = null
+      if (carryFirstRow) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const resident: any[] = store.getState().messages.get(jid) ?? []
+        if (!resident[0]?.stanzaId) return false
+        carried = resident[0]
+        store.setState({
+          messages: new Map(store.getState().messages)
+            .set(jid, [{ ...carried, stanzaId: undefined }, ...resident.slice(1)]),
+        })
+      }
+      w.__olderPageLanding = null
+      store.setState({
+        // The merge's arguments: id, page rows, page info, complete, direction, options.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        [method]: (id: string, rows: any[], ...rest: unknown[]) => {
+          if (id !== jid || rest[2] !== 'backward') return original(id, rows, ...rest)
+          store.setState({ [method]: original })
+          original(id, carried ? [...rows, carried] : rows, ...rest)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const resident: any[] = store.getState().messages.get(jid) ?? []
+          const carriedIndex = carried
+            ? resident.findIndex((message) => message.id === carried.id)
+            : -1
+          w.__olderPageLanding = {
+            firstId: resident[0]?.id ?? null,
+            count: resident.length,
+            tailId: resident.at(-1)?.id ?? null,
+            tailIsOutgoing: Boolean(resident.at(-1)?.isOutgoing),
+            carriedIndex,
+            carriedStanzaId: carriedIndex >= 0 ? resident[carriedIndex].stanzaId ?? null : null,
+            expectedStanzaId: carried?.stanzaId ?? null,
+          }
+        },
+      })
+      return true
+    }, [conversationJid(kind), kind, options.carryFirstRow ?? false] as const)
+    expect(ready, 'the older-history merge must be watchable for this scenario').toBe(true)
+    await settle(page)
+    await syncEngineGeometry(page)
+  }
+
+  /** What {@link watchNextOlderPage} recorded as the page merged, or null before it did. */
+  const readOlderPageLanding = (page: Page) => page.evaluate(() =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__olderPageLanding as {
+      firstId: string | null
+      count: number
+      tailId: string | null
+      tailIsOutgoing: boolean
+      carriedIndex: number
+      carriedStanzaId: string | null
+      expectedStanzaId: string | null
+    } | null)
+
+  /**
+   * The reader wrote the newest half of the stress room's resident rows. A load-older at the
+   * resident bound trims the newest rows, so the bottom row it leaves is one of their own older
+   * messages: nobody sent anything.
+   */
+  async function ownNewestHalfOfRoom(page: Page) {
+    await page.evaluate((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const store = (window as any).__roomStore
+      const state = store.getState()
+      const nick = state.rooms.get(jid)?.nickname as string
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resident: any[] = state.messages.get(jid) ?? []
+      const half = Math.floor(resident.length / 2)
+      const owned = resident.map((message, index) => index < half
+        ? message
+        : { ...message, isOutgoing: true, nick, from: `${jid}/${nick}` })
+      store.setState({ messages: new Map(state.messages).set(jid, owned) })
+    }, STRESS_ROOM_JID)
+    await settle(page)
+    await syncEngineGeometry(page)
+  }
+
+  /**
    * Whether a hover hold (FLM-229) is active as a load-older starts. Either way the pointer rests on
    * the middle of the list, where every later wheel lands, and stays there: a hover hold starts only
    * when the pointer moves onto a message, so none starts later on. With `none`, one wheel tick ends
@@ -3741,6 +3840,85 @@ test.describe('Insertion drift while scrolled up', () => {
         r.residentCountAfter,
         `precondition: at the resident bound the batch must evict as many newest rows — ${JSON.stringify(r)}`,
       ).toBe(r.residentCountBefore)
+      expect(
+        r.drift,
+        `the batch moved the reader's rows by ${r.drift}px — ${JSON.stringify(r)}`,
+      ).toBeLessThanOrEqual(HELD_ROW_PX)
+    })
+  }
+
+  // Bug found in review of the hold above: the batch can also carry the row that was first and
+  // backfill its archive id, which renames that row's handle. Looked up by that handle, the row
+  // seemed evicted, so the batch was taken for a live-edge arrival again.
+  for (const hover of HOVER_AT_LOAD_START) {
+    test(`invariant-14y${hoverVariant(hover)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when the batch also backfills the first row's archive id`, async ({ page }) => {
+      await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
+      await watchNextOlderPage(page, 'room', { carryFirstRow: true })
+      const r = await insertDuringInFlightLoadOlder(page, '', {
+        scrollBeforeArrival: 'up',
+        hover,
+        arrival: false,
+      })
+      const landing = await readOlderPageLanding(page)
+      console.log(`── INSERTION-DRIFT bound-batch-backfills-first ${hover} ──`, JSON.stringify({ ...r, landing }))
+      expect(
+        r.loadStartBelowViewport,
+        `precondition: the wheel must take the rows the load started from below the view — ${JSON.stringify(r)}`,
+      ).toBe(true)
+      expect(
+        landing !== null && landing.firstId !== r.firstIdBefore,
+        `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(landing)}`,
+      ).toBe(true)
+      expect(
+        landing!.carriedStanzaId !== null && landing!.carriedStanzaId === landing!.expectedStanzaId,
+        `precondition: the batch must backfill the first row's archive id — ${JSON.stringify(landing)}`,
+      ).toBe(true)
+      expect(
+        landing!.carriedIndex,
+        `precondition: the row that was first must stay resident below the older rows — ${JSON.stringify(landing)}`,
+      ).toBeGreaterThan(0)
+      expect(
+        landing!.count,
+        `precondition: at the resident bound the batch must evict as many newest rows — ${JSON.stringify(landing)}`,
+      ).toBe(r.residentCountBefore)
+      expect(
+        r.drift,
+        `the batch moved the reader's rows by ${r.drift}px — ${JSON.stringify(r)}`,
+      ).toBeLessThanOrEqual(HELD_ROW_PX)
+    })
+  }
+
+  // Bug found in review of the hold above: trimming the newest rows can leave one of the reader's
+  // own older messages last. That moved bottom row was taken for the reader's send, which returned
+  // them to the live edge although they sent nothing.
+  for (const hover of HOVER_AT_LOAD_START) {
+    test(`invariant-14z${hoverVariant(hover)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when the trimmed tail leaves their own older message last`, async ({ page }) => {
+      await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
+      await ownNewestHalfOfRoom(page)
+      await watchNextOlderPage(page, 'room')
+      const r = await insertDuringInFlightLoadOlder(page, '', {
+        scrollBeforeArrival: 'up',
+        hover,
+        arrival: false,
+      })
+      const landing = await readOlderPageLanding(page)
+      console.log(`── INSERTION-DRIFT bound-batch-own-tail ${hover} ──`, JSON.stringify({ ...r, landing }))
+      expect(
+        r.loadStartBelowViewport,
+        `precondition: the wheel must take the rows the load started from below the view — ${JSON.stringify(r)}`,
+      ).toBe(true)
+      expect(
+        landing !== null && landing.firstId !== r.firstIdBefore,
+        `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(landing)}`,
+      ).toBe(true)
+      expect(
+        landing!.count,
+        `precondition: at the resident bound the batch must evict as many newest rows — ${JSON.stringify(landing)}`,
+      ).toBe(r.residentCountBefore)
+      expect(
+        landing!.tailIsOutgoing,
+        `precondition: the trimmed tail must leave the reader's own older message last — ${JSON.stringify(landing)}`,
+      ).toBe(true)
       expect(
         r.drift,
         `the batch moved the reader's rows by ${r.drift}px — ${JSON.stringify(r)}`,
