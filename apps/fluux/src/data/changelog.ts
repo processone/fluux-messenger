@@ -19,6 +19,7 @@ export const changelog: ChangelogEntry[] = [
     sections: [{
       type: 'added',
       items: [
+        'macOS: a native desktop widget lists unread conversations with names, avatars, counts, mention markers and times, without message text. Clicking a row opens the conversation; an old saved list is marked when Fluux stops updating it',
         'iOS: a new widget shows your unread conversations on the home screen. The lock screen shows the unread total. Tap a row to open that conversation. Message text is never shown',
         'macOS: message notifications now show who wrote to you, with the sender and room details. They look like those of other chat apps',
       ],

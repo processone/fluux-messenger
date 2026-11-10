@@ -67,7 +67,10 @@ Transport selection and platform fallbacks follow
 ## Desktop: the `xmpp:` URI scheme
 
 The `xmpp:` scheme (RFC 5122) is registered with the OS through the Tauri
-deep-link plugin (`apps/fluux/src-tauri/tauri.conf.json`, `schemes: ["xmpp"]`).
+deep-link plugin. The base registration is in `apps/fluux/src-tauri/tauri.conf.json`.
+On macOS, `tauri.macos.conf.json` registers both `xmpp` and `net.processone.fluux`;
+the Dev override in `tauri.dev.conf.json` uses `xmpp` and `net.processone.fluux.dev`.
+The app-specific scheme opens widget conversation links with account validation.
 
 ### Forms
 
@@ -172,7 +175,7 @@ prefill is invalid, so a malformed link cannot survive a reload.
 | Startup owner (login link replaces the saved account) | `apps/fluux/src/hooks/useSessionPersistence.ts`     |
 | Web boot capture                   | `apps/fluux/src/main.tsx`                                       |
 | Form consumption + custom-server note | `apps/fluux/src/components/LoginScreen.tsx`                  |
-| Scheme registration (desktop)      | `apps/fluux/src-tauri/tauri.conf.json`                         |
+| Scheme registration (desktop)      | `apps/fluux/src-tauri/tauri.conf.json`, `tauri.macos.conf.json` and `tauri.dev.conf.json` |
 
 See also the design spec:
 [docs/superpowers/specs/2026-06-27-connection-prefill-links-design.md](superpowers/specs/2026-06-27-connection-prefill-links-design.md).

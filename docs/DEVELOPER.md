@@ -80,6 +80,7 @@ script `scripts/test-affected.sh` uses this same implementation, not another rul
 | SDK entry points, shared core/stores/cache, authentication, connection, E2EE | Full SDK + app; platform and compiled Node/package consumer checks |
 | Locale JSON | Language tests and the existing native wording-generation contract |
 | Rust application | Whole application crate, locked dependencies; platform contracts |
+| macOS widget sources/fixtures | Unsigned `macos-widgets.test.mjs`, widgets plugin and platform contracts; signed gallery/container/notarization proof remains separate ([guide](MACOS_WIDGET.md)) |
 | macOS communication sources/fixtures | Unsigned `macos-communication.test.mjs`, `macos-communication` native crate and platform contracts |
 | Release verifier or public-signature probe | `macos-signature-read.test.mjs` with the public reference app, plus communication/release contracts |
 | Rust plugin | Plugin package through the main locked manifest, plus application consumer and platform tests |

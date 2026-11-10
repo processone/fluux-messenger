@@ -10,7 +10,7 @@
  * @module Platform
  */
 
-import { platform as nativePlatform } from '@tauri-apps/plugin-os'
+import { platform as nativePlatform, version as nativeVersion } from '@tauri-apps/plugin-os'
 import {
   deriveCapabilities,
   type PlatformCapabilities,
@@ -87,7 +87,13 @@ export function platform(): PlatformCapabilities {
     const os = shell === 'mobile'
       ? (nativePlatform() === 'android' ? 'android' : 'ios')
       : detectOS()
-    current = deriveCapabilities(shell, os)
+    // The actual Mac host must confirm its version; unknown versions fail closed for WidgetKit.
+    // Pure inventory derivation and test overrides without a version describe a current host.
+    let osVersion: string | undefined
+    if (shell === 'desktop' && os === 'macos') {
+      try { osVersion = nativeVersion() ?? '' } catch { osVersion = '' }
+    }
+    current = deriveCapabilities(shell, os, osVersion)
   }
   return current
 }
@@ -105,10 +111,10 @@ export function platform(): PlatformCapabilities {
  * ```
  */
 export function setPlatformForTesting(
-  host: { shell: PlatformShell; os?: PlatformOS } | PlatformCapabilities
+  host: { shell: PlatformShell; os?: PlatformOS; osVersion?: string } | PlatformCapabilities
 ): () => void {
   const previous = current
-  current = 'nativeKeychain' in host ? host : deriveCapabilities(host.shell, host.os ?? 'other')
+  current = 'nativeKeychain' in host ? host : deriveCapabilities(host.shell, host.os ?? 'other', host.osVersion)
   return () => {
     current = previous
   }

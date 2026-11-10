@@ -431,6 +431,9 @@ The widget never connects to the server. It reads `UnreadWidget.json` from the A
   or when the app next opens.
 - Avatars come from the `Avatars/` copies the notification mirror already keeps.
 
+The same list and widget views also serve the native [macOS widget](MACOS_WIDGET.md).
+The Apple conversation mirror shares avatars on both platforms; desktop writes go through the widgets plugin.
+
 The Swift model (`plugins/widgets/ios/Sources/UnreadList.swift`) is compiled by the plugin, the
 widget and the notification extension. Strings are English and French (`mobile/ios/Widgets/Resources`).
 
@@ -658,9 +661,10 @@ The dedicated iOS module lives under
 `plugins/push/ios/Sources/NotificationAvatars`; the push plugin compiles it through
 its Swift package, and `project.yml` compiles the same sources into the extension.
 The extension entry point delegates to it. The shared React hook calls the guarded
-`platform/ios/notificationMirror.ts` entry point, which does nothing off native iOS.
-It reads cached roster and room avatars, including fetched room images and
-room-editor images, and sends one image at a time through the push plugin. No
+`platform/apple/conversationMirror.ts` entry point. On iOS it uses the push plugin;
+on macOS 14+ it uses the widgets plugin. Other platforms and older Macs do no
+mirror work. It reads cached roster and room avatars, including fetched room
+images and room-editor images, and sends one image at a time through the owning plugin. No
 avatar URL travels in the push payload, and the extension never downloads an image.
 
 IndexedDB remains authoritative. `NotificationNames.json` includes the active

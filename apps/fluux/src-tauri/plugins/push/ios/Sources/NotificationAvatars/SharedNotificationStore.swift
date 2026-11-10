@@ -1,6 +1,5 @@
 import Foundation
 import ImageIO
-import UniformTypeIdentifiers
 
 /// Metadata only; an entry carries its owner across saved shortcuts and account switches.
 struct ShortcutConversation: Codable, Equatable {
@@ -94,6 +93,7 @@ struct SharedNames: Codable {
         try values.encodeIfPresent(account, forKey: .account)
     }
 
+    @available(macOS 14.0, *)
     static func load(root: URL? = NotificationMirror.root) -> SharedNames {
         guard let root = root,
               let data = try? Data(contentsOf: root.appendingPathComponent("NotificationNames.json")),
@@ -109,6 +109,7 @@ struct NotificationAvatar: Decodable {
 }
 
 /// A disposable mirror: the WebView's avatar cache owns the source images.
+@available(macOS 14.0, *)
 enum NotificationMirror {
     static let maxImageBytes = 64 * 1024
     static let maxSourceBytes = 2 * 1024 * 1024
@@ -191,7 +192,7 @@ enum NotificationMirror {
                 kCGImageSourceShouldCacheImmediately: true,
               ] as CFDictionary) else { return nil }
         let output = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(output, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        guard let destination = CGImageDestinationCreateWithData(output, "public.jpeg" as CFString, 1, nil) else { return nil }
         CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
         guard CGImageDestinationFinalize(destination), output.length <= maxImageBytes else { return nil }
         return output as Data

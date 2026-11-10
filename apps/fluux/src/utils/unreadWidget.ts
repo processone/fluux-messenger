@@ -1,5 +1,7 @@
 import { chatStore, connectionStore, roomStore, unreadConversations } from '@fluux/sdk'
 import type { UnreadConversation } from '@fluux/sdk'
+import { platform } from '@/platform'
+import { observeWidgetSupport, resetWidgetSupportForTesting, widgetSessionSupported, type WidgetWriteResult } from '@/platform/apple/widgetSupport'
 
 /**
  * What the home-screen widget shows, written into the shared App Group folder.
@@ -67,14 +69,22 @@ let clearedAccount: string | null = null
 // Ends the block when the session itself ends, however the publisher was stopped by then.
 let releaseBlock: (() => void) | undefined
 
-async function write(list: UnreadWidgetList | null): Promise<void> {
+async function write(list: UnreadWidgetList | null, refresh = false): Promise<void> {
+  if (!widgetSessionSupported()) return
   // `updated` moves on every build; only the content decides whether to write.
   const serialized = JSON.stringify(list && { ...list, updated: 0 })
-  if (serialized === shared) return
+  // A new macOS session must renew a saved, possibly stale list even when its content is
+  // unchanged. Hook remounts within that session still use normal content deduplication.
+  const initial = list !== null && (shared === null || shared === 'null')
+  const renew = refresh || (initial && platform().os === 'macos' && platform().publishesUnreadWidget)
+  if (!renew && serialized === shared) return
   shared = serialized
   try {
     const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('plugin:widgets|set_unread_list', { list })
+    const result = await invoke<WidgetWriteResult | undefined>('plugin:widgets|set_unread_list', {
+      list, ...(renew ? { heartbeat: true } : {}),
+    })
+    if (!observeWidgetSupport(result)) active?.stop()
   } catch (err) {
     shared = null
     console.warn('[Widgets] Unread list not shared:', err)
@@ -82,8 +92,8 @@ async function write(list: UnreadWidgetList | null): Promise<void> {
 }
 
 /** Writes the list for the widget, or empties it for `null`, unless unchanged. */
-export function shareUnreadWidgetList(list: UnreadWidgetList | null): Promise<void> {
-  const next = writes.then(() => write(list))
+export function shareUnreadWidgetList(list: UnreadWidgetList | null, refresh = false): Promise<void> {
+  const next = writes.then(() => write(list, refresh))
   writes = next
   return next
 }
@@ -112,6 +122,7 @@ export function clearUnreadWidgetList(): Promise<void> {
 
 /** Forgets what was last shared, so the next list is sent. For tests. */
 export function resetSharedUnreadWidgetList(): void {
+  resetWidgetSupportForTesting()
   shared = null
   writes = Promise.resolve()
   active = undefined
@@ -120,28 +131,35 @@ export function resetSharedUnreadWidgetList(): void {
 }
 
 const PUBLISH_DELAY_MS = 500
+// Desktop policy uses a fifteen-minute heartbeat; the shared stale window adds five minutes of grace.
+export const DESKTOP_WIDGET_HEARTBEAT_MS = 15 * 60_000
 
 /**
  * Keeps the widget's list current while the app runs. Returns a function that
  * stops it. `events` reads the pending-event count the badge adds.
  */
-export function startUnreadWidgetPublisher(events: () => number): () => void {
+export function startUnreadWidgetPublisher(events: () => number, heartbeatMs?: number): () => void {
+  if (!widgetSessionSupported()) return () => {}
   let timer: ReturnType<typeof setTimeout> | undefined
   let stopped = false
-  const publish = () => {
+  const publish = (refresh = false) => {
+    clearTimeout(timer)
     timer = undefined
     if (stopped) return
+    if (!widgetSessionSupported()) { stop(); return }
     const account = connectionStore.getState().jid?.split('/')[0]
     if (account && account === clearedAccount) return
     if (account !== clearedAccount) clearedAccount = null
     void shareUnreadWidgetList(account
       ? unreadWidgetList(account, chatStore.getState().conversations.values(), roomStore.getState(), events())
-      : null)
+      : null, refresh)
   }
-  const schedule = () => { if (!stopped) timer ??= setTimeout(publish, PUBLISH_DELAY_MS) }
+  const schedule = () => { if (!stopped) timer ??= setTimeout(() => publish(), PUBLISH_DELAY_MS) }
   const unsubscribe = [chatStore.subscribe(schedule), roomStore.subscribe(schedule), connectionStore.subscribe(schedule)]
   const cancel = () => { clearTimeout(timer); timer = undefined }
+  const heartbeat = heartbeatMs ? setInterval(() => publish(true), heartbeatMs) : undefined
   const stop = () => {
+    clearInterval(heartbeat)
     stopped = true
     cancel()
     unsubscribe.forEach(unsubscribeOne => unsubscribeOne())
