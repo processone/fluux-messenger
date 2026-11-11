@@ -24,7 +24,7 @@ Requirements: macOS, Xcode with an iOS simulator runtime, Python 3, XcodeGen. Ov
 `FLUUX_WIDGETS_RUNTIME`. Results (build and test logs, `widgets.xcresult`, and `attachments/` with a
 picture and springboard tree per step) go to the results folder. The runner creates and deletes only its
 own simulator. `npm run test:local` plans this lab whenever widget, `UnreadList`, `NotificationService`
-or push plugin files, or the lab itself, change. Labels are matched in English.
+or push extension sources, or the lab itself, change. Labels are matched in English.
 
 **Not proven here** (needs a real device): APNs waking the suspended extension, its memory limit, a
 locked phone, iOS redraw rationing, the host app's own routing from the link, and the signed build's
