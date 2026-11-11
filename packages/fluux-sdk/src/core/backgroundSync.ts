@@ -46,6 +46,8 @@ import { executeWithConcurrency } from '../utils/concurrencyUtils'
  */
 export const RESUME_REPLAY_LIMIT_MS = 10_000
 export const SERVER_DISCOVERY_RETRY_DELAY_MS = 5_000
+/** Ceiling of the growing delay between discovery retries while capability data stays unknown. */
+export const SERVER_DISCOVERY_RETRY_MAX_DELAY_MS = 60_000
 import {
   getRoomMembershipEpoch,
   invalidateRoomMemberships,
@@ -140,11 +142,14 @@ export function setupBackgroundSyncSideEffects(
   let discoverySettledGeneration = -1
   let discoveryRetryTimer: ReturnType<typeof setTimeout> | undefined
   let discoveryRetryAttempt: object | undefined
+  // Retries so far in this unresolved stretch; each one waits twice as long, up to the ceiling.
+  let discoveryRetryCount = 0
 
   function cancelServerDiscoveryRetry(): void {
     clearTimeout(discoveryRetryTimer)
     discoveryRetryTimer = undefined
     discoveryRetryAttempt = undefined
+    discoveryRetryCount = 0
   }
 
   function needsServerDiscovery(generation: number): boolean {
@@ -158,9 +163,11 @@ export function setupBackgroundSyncSideEffects(
     const generation = sessionGeneration
     if (discoveryRetryTimer !== undefined || discoveryRetryAttempt || !needsServerDiscovery(generation)) return
     // Keep preparation owned while capability knowledge is missing; never publish a cached zero instead.
+    const delay = Math.min(SERVER_DISCOVERY_RETRY_DELAY_MS * 2 ** discoveryRetryCount, SERVER_DISCOVERY_RETRY_MAX_DELAY_MS)
     discoveryRetryTimer = setTimeout(() => {
       discoveryRetryTimer = undefined
       if (!needsServerDiscovery(generation)) return
+      discoveryRetryCount += 1
       const attempt = {}
       discoveryRetryAttempt = attempt
       void client.server.fetchServerInfo().catch(() => {}).finally(() => {
@@ -170,7 +177,7 @@ export function setupBackgroundSyncSideEffects(
         discoverySettledGeneration = generation
         maybeTriggerBackgroundSync()
       })
-    }, SERVER_DISCOVERY_RETRY_DELAY_MS)
+    }, delay)
   }
 
   // --- Late-MAM room retry (issue D) ---

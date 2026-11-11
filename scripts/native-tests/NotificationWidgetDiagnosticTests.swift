@@ -161,9 +161,16 @@ import UserNotifications
         } else {
             precondition(written == list, "Skipped widget changes must leave its file unchanged")
         }
-        if ["badge-other-account", "badge-legacy", "both-owners-differ"].contains(scenario) || scenario.hasPrefix("already-counted-") {
+        if ["badge-other-account", "both-owners-differ"].contains(scenario) || scenario.hasPrefix("already-counted-") {
             precondition((try? Data(contentsOf: root.appendingPathComponent("NotificationBadge.json"))) == badgeBefore,
-                         "Unconfirmed owners and already-counted pushes must not mutate badge membership")
+                         "Another account's badge and already-counted pushes must not mutate badge membership")
+        }
+        if scenario == "badge-legacy" {
+            // Captain's decision: a badge written by an older build, with no owner, still raises the app icon
+            // count, but it never adds or removes widget rows (the list was checked unchanged above).
+            let after = try JSONDecoder().decode(SharedBadge.self, from: Data(contentsOf: root.appendingPathComponent("NotificationBadge.json")))
+            precondition(after.account == nil && after.unread.contains(sender), "An unowned badge may still count the push for the icon")
+            precondition(delivered == 1)
         }
         if scenario == "already-counted-current" {
             precondition(written?.rows.first?.unread == 7, "Keep the app's precise unread count")

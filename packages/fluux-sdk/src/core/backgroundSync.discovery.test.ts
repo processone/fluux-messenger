@@ -3,7 +3,7 @@ import { createMockClient, localStorageMock } from './sideEffects.testHelpers'
 
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
 
-import { setupBackgroundSyncSideEffects, SERVER_DISCOVERY_RETRY_DELAY_MS } from './backgroundSync'
+import { setupBackgroundSyncSideEffects, SERVER_DISCOVERY_RETRY_DELAY_MS, SERVER_DISCOVERY_RETRY_MAX_DELAY_MS } from './backgroundSync'
 import { MAM_ROOM_CATCHUP_DELAY_MS } from '../utils/mamCatchUpUtils'
 import { connectionStore } from '../stores/connectionStore'
 import { roomStore } from '../stores/roomStore'
@@ -76,11 +76,34 @@ describe('background session discovery recovery', () => {
     expect(client.server.fetchServerInfo).toHaveBeenCalledTimes(1)
     expect(active()).toBe(true)
     pending.resolve()
-    await vi.advanceTimersByTimeAsync(SERVER_DISCOVERY_RETRY_DELAY_MS - 1)
+    // The second attempt waits twice as long as the first (backoff).
+    await vi.advanceTimersByTimeAsync(2 * SERVER_DISCOVERY_RETRY_DELAY_MS - 1)
     expect(client.server.fetchServerInfo).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(1)
     expect(client.server.fetchServerInfo).toHaveBeenCalledTimes(2)
     expect(active()).toBe(true)
+  })
+
+  // Review finding: a server that keeps refusing domain discovery must not be polled every 5 seconds all session.
+  it('doubles the wait between retries up to a ceiling while capability data stays unknown', async () => {
+    connect()
+    discoverySettled()
+    let expected = SERVER_DISCOVERY_RETRY_DELAY_MS
+    let calls = 0
+    while (expected < SERVER_DISCOVERY_RETRY_MAX_DELAY_MS) {
+      await vi.advanceTimersByTimeAsync(expected - 1)
+      expect(client.server.fetchServerInfo).toHaveBeenCalledTimes(calls)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(client.server.fetchServerInfo).toHaveBeenCalledTimes(++calls)
+      expected = Math.min(expected * 2, SERVER_DISCOVERY_RETRY_MAX_DELAY_MS)
+    }
+    // At the ceiling the wait stops growing.
+    for (let i = 0; i < 2; i++) {
+      await vi.advanceTimersByTimeAsync(SERVER_DISCOVERY_RETRY_MAX_DELAY_MS - 1)
+      expect(client.server.fetchServerInfo).toHaveBeenCalledTimes(calls)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(client.server.fetchServerInfo).toHaveBeenCalledTimes(++calls)
+    }
   })
 
   it('releases only preparation after an explicit result without MAM', async () => {

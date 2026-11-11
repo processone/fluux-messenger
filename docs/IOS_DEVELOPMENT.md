@@ -444,7 +444,8 @@ The widget never connects to the server. It reads `UnreadWidget.json` from the A
   Missing or unconfirmed ownership, unavailable state and failed writes do not request a reload.
   A newly counted conversation already listed is republished without discarding the app's more
   precise row counts. Successful writes request reload; this is not proof of rendered timelines.
-  Legacy badge files without an account need the upgraded app to publish a fresh snapshot first.
+  A legacy badge file without an account (written by an older build) still raises the app icon count on a push,
+  but it never adds or removes widget rows: those need the upgraded app to publish a fresh, owned snapshot first.
 - Avatars come from the `Avatars/` copies the notification mirror already keeps.
 
 The same list and widget views also serve the native [macOS widget](MACOS_WIDGET.md).

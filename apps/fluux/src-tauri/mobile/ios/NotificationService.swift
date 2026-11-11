@@ -56,6 +56,9 @@ final class NotificationService: UNNotificationServiceExtension {
         var widgetCounted = false
         let storedBadge = SharedBadge.load(root: root)
         let badge = storedBadge.flatMap { $0.account == names.account ? $0 : nil }
+        // An older build wrote the badge without an owner: it may still raise the app icon count,
+        // but only an owned badge may add or remove widget rows (the list guards refuse the rest).
+        let iconBadge = storedBadge.flatMap { $0.account == nil || $0.account == names.account ? $0 : nil }
         func recordCountedWidget(_ bare: String, isRoom: Bool, refreshCurrent: Bool) {
             widgetCounted = true
             let events = UnreadList.recordPush(conversation: bare, kind: isRoom ? "groupchat" : "chat",
@@ -68,7 +71,7 @@ final class NotificationService: UNNotificationServiceExtension {
             record(events.map(\.diagnostic))
         }
         let content = NotificationPresentation.content(for: request.content, names: names, activity: words.activity,
-                                                       badge: badge, badgeRoot: root) { bare, isRoom, _ in
+                                                       badge: iconBadge, badgeRoot: root) { bare, isRoom, _ in
             recordCountedWidget(bare, isRoom: isRoom, refreshCurrent: true)
         }
         // A counted conversation can be missing from a stale list. Reconcile it without
