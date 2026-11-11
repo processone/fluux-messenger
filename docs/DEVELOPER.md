@@ -185,8 +185,9 @@ WebKit takes each trace screenshot through the macOS window server, about 25 tim
 second per test, and each picture takes one of the window server's image buffers. With
 several workers, the buffers can pile up faster than they are freed; when none is left, the
 window server aborts and macOS ends the login session. The traces keep
-their DOM snapshots, actions, console and network. For the same reason, avoid `--trace on`
-and video recording on long macOS WebKit runs: both turn the window captures back on.
+their DOM snapshots, actions, console and network. For the same reason, avoid video
+recording on long macOS WebKit runs: it captures the window the same way. A `--trace` flag
+on the command line is safe: it changes only the mode and keeps screenshots off.
 
 ### macOS native startup recovery
 
