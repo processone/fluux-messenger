@@ -20,13 +20,27 @@ beforeEach(() => {
     configurable: true,
   })
   vi.stubGlobal('ResizeObserver', class {
-    constructor(callback: ResizeObserverCallback) { deliverResize = entries => callback(entries, this as unknown as ResizeObserver) }
-    observe() {} unobserve() {} disconnect() {}
+    constructor(private callback: ResizeObserverCallback) {}
+    observe(element: Element) {
+      resizeObservers.set(element, [this.callback, this as unknown as ResizeObserver])
+    }
+    unobserve(element: Element) { resizeObservers.delete(element) }
+    disconnect() {}
   })
 })
-// The library's resize observer. While the reader scrolls, rows are measured only through it.
-let deliverResize: (entries: ResizeObserverEntry[]) => void = () => {}
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.replaceChildren() })
+// While the reader scrolls, rows are measured only through the library's resize observer. Each
+// entry goes to the observer that observes its row.
+const resizeObservers = new Map<Element, [ResizeObserverCallback, ResizeObserver]>()
+const deliverResize = (entries: ResizeObserverEntry[]) => {
+  for (const entry of entries) {
+    const [callback, observer] = resizeObservers.get(entry.target)!
+    callback([entry], observer)
+  }
+}
+afterEach(() => {
+  cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals()
+  resizeObservers.clear(); document.body.replaceChildren()
+})
 
 function bouncingList() {
   const scroller = document.body.appendChild(document.createElement('div'))

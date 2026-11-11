@@ -100,10 +100,10 @@ export function observeElementOffsetWithRaf(
     startPolling()
   }
 
+  // The capture-phase listener above has already marked this event's scroll in progress.
   const onScroll = () => {
     lastOffset = el.scrollTop
     cb(lastOffset, true)
-    onScrollStarted()
   }
 
   el.addEventListener('scroll', onScrollStarted, { capture: true, passive: true })
@@ -263,8 +263,8 @@ export function useTanstackMessageVirtualizer({
   // and collapse the content height. The caller owns estimation; see useRowMetrics for calibration.
   // @tanstack hands its offset callback to `observeElementOffset` on (re)mount. At the accepted
   // writer we push the element's actual post-write position with isScrolling=false, so rows mount
-  // without waiting for a native event; a write the library makes on its own while the reader
-  // scrolls reports it as motion instead (reportWritten). Queued navigation keeps its command
+  // without waiting for a native event; a write the library makes on its own while a scroll is in
+  // progress reports it as motion instead (reportWritten). Queued navigation keeps its command
   // identity until that first write; the caller returning does not turn it into layout
   // reconciliation. The non-sync callback uses plain rerender() rather than a synthetic scroll
   // event's flushSync, which is illegal during a MAM-prepend restore useLayoutEffect.
@@ -272,10 +272,10 @@ export function useTanstackMessageVirtualizer({
   const scrollActivityRef = useRef<ScrollActivity>({ active: false })
   // Set while virtual-core runs its commit-time update. See the tracking after useVirtualizer.
   const committingRef = useRef(false)
-  // Reports the element's position as motion while the reader scrolls. With keepDirection it is
-  // the read-back of our own write: a correction moves the content, not the reader, so the reader's
-  // direction is kept rather than taken from the correction's sign. Inside React's commit the
-  // report asks for no synchronous render, as virtual-core asks for none there itself.
+  // Reports the element's position as motion while a scroll is in progress. With keepDirection it
+  // is the read-back of our own write: a correction moves the content, not the reader, so the
+  // reader's direction is kept rather than taken from the correction's sign. Inside React's commit
+  // the report asks for no synchronous render, as virtual-core asks for none there itself.
   const reportMotion = (instance: Virtualizer<HTMLElement, Element>, offset: number, keepDirection: boolean) => {
     const report = offsetCbRef.current
     if (!report) return
@@ -290,8 +290,8 @@ export function useTanstackMessageVirtualizer({
       if (keepDirection) instance.scrollDirection = direction
     }
   }
-  // Publishes the position our own write left the element at: at rest, or as motion while the
-  // reader scrolls, so the write does not clear the library's isScrolling and direction mid-scroll.
+  // Publishes the position our own write left the element at: at rest, or as motion while a scroll
+  // is in progress, so the write does not clear the library's isScrolling and direction mid-scroll.
   const reportWritten = (instance: Virtualizer<HTMLElement, Element>, offset: number) => {
     if (scrollActivityRef.current.active) reportMotion(instance, offset, true)
     else offsetCbRef.current?.(offset, false)
@@ -422,7 +422,7 @@ export function useTanstackMessageVirtualizer({
         // its actual offset here, not a destination after a possibly still-queued command returns.
         // Smooth writes have not landed yet; native events and rAF publish their real progress.
         // A navigation write is published at rest. The library's own writes (a hold flush, a clamp
-        // retry, a prepend anchor sync) correct the content under a reader who may be scrolling.
+        // retry, a prepend anchor sync) correct the content while a scroll may be in progress.
         if (scroller && options.behavior !== 'smooth') {
           if (source === 'navigation') offsetCbRef.current?.(scroller.scrollTop, false)
           else reportWritten(instance, scroller.scrollTop)
@@ -453,10 +453,10 @@ export function useTanstackMessageVirtualizer({
     measureElement: (element, entry, instance) => {
       writeObserverRef.current?.({ phase: 'before-measure', source: 'measurement' })
       if (instance.scrollElement && instance.scrollOffset !== instance.scrollElement.scrollTop) {
-        // While the reader scrolls this is reported as motion. At rest it cleared the library's
-        // isScrolling and direction mid-scroll, and with them its overscroll guard, so a correction
-        // held through a rubber band was written mid-bounce. A position the library already holds
-        // (the element sits behind it by that held correction) is then left alone.
+        // While a scroll is in progress this is reported as motion. At rest it cleared the
+        // library's isScrolling and direction mid-scroll, and with them its overscroll guard, so a
+        // correction held through a rubber band was written mid-bounce. A position the library
+        // already holds (the element sits behind it by that held correction) is then left alone.
         const top = instance.scrollElement.scrollTop
         if (scrollActivityRef.current.active) reportMotion(instance, top, false)
         else offsetCbRef.current?.(top, false)
