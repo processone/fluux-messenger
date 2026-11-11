@@ -89,6 +89,15 @@ import SQLite3
         try require(exported().count == 2, "same connection must recover after contention")
         print("Sustained lock returned unavailable after \(elapsed) seconds; committed entries survived and the connection recovered")
 
+        // Fail the second insert in a real batch: the first insert must roll back too.
+        try sql("CREATE TRIGGER reject_second_batch_entry BEFORE INSERT ON entries WHEN (SELECT COUNT(*) FROM entries) >= 3 BEGIN SELECT RAISE(ABORT, 'fixture rejection'); END")
+        var batchFailed = false
+        do { try store.append([entry(version: version), entry(version: version), entry(version: version)], session: marker) }
+        catch NotificationDiagnostic.Failure.unavailable { batchFailed = true }
+        try sql("DROP TRIGGER reject_second_batch_entry")
+        try require(batchFailed && exported().count == 2, "a failed widget batch must leave no partial diagnostic sequence")
+        print("Widget batch insert failure rolled back every new entry")
+
         try store.reset(active: true)
         let next = try store.session()!
         var children: [(Process, Pipe)] = []

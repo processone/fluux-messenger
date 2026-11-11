@@ -4,6 +4,7 @@ import { Bell, BellOff, ChevronRight, Send } from 'lucide-react'
 import { connectionStore, type PushStatus } from '@fluux/sdk'
 import { disableNativePush, requestNativePushRegistration, type PushRegistrar } from '@/hooks/useNativePush'
 import { Toggle } from '@/components/ui/Toggle'
+import { unreadWidgetDiagnosticContext } from '@/utils/unreadWidget'
 
 export type IosPermission = 'checking' | 'granted' | 'denied' | 'default' | 'unavailable'
 
@@ -76,7 +77,7 @@ export function IosNotificationsCard({
     setExportFailed(false)
     try {
       const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('plugin:push|export_notification_diagnostic')
+      await invoke('plugin:push|export_notification_diagnostic', { publisher: unreadWidgetDiagnosticContext() })
     } catch { setExportFailed(true) }
     finally { setExporting(false) }
   }

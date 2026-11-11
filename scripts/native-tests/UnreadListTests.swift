@@ -23,11 +23,14 @@ import UserNotifications
         let content = UNMutableNotificationContent()
         content.userInfo = ["from": from, "to": account]
         var total: Int?
-        _ = NotificationPresentation.content(for: content, names: names, badge: badge) { bare, isRoom, count in
+        if SharedBadge.load(root: root) == nil { try! badge.writeIfChanged(root: root) }
+        _ = NotificationPresentation.content(for: content, names: names, badge: badge, badgeRoot: root) { bare, isRoom, count in
             total = count
             UnreadList.recordPush(conversation: bare, kind: isRoom ? "groupchat" : "chat",
                                   name: (isRoom ? names.rooms[bare] : names.contacts[bare]) ?? bare,
-                                  account: names.account, total: count, root: root)
+                                  account: names.account, badge: SharedBadge.load(root: root).map {
+                                      .init(account: $0.account, unread: $0.unread, total: $0.count, updated: $0.updated)
+                                  }, root: root)
         }
         return total
     }
@@ -39,8 +42,27 @@ import UserNotifications
                                 rooms: ["quiet@conference.example.com": "Quiet", "all@conference.example.com": "Release team"],
                                 account: account)
         let badge = SharedBadge(unread: ["alice@example.com", "dev@conference.example.com"], events: 1,
-                                notifyAllRooms: ["all@conference.example.com"])
+                                notifyAllRooms: ["all@conference.example.com"], account: account)
         switch CommandLine.arguments[1] {
+        case "badge-write-observations":
+            let now = Date().timeIntervalSince1970 * 1000
+            let first = SharedBadge(unread: ["first@example.com"], events: 0, notifyAllRooms: [], account: account, updated: now - 5000)
+            var outcomes: [SharedBadge.AppWrite] = []
+            let observe: (SharedBadge.AppWrite) -> Void = { result in
+                outcomes.append(result)
+                // A nested current check would deadlock if observation still held the file lock.
+                let current = SharedBadge.load(root: root)!
+                precondition(try! current.writeIfChanged(root: root) == false)
+            }
+            let wrote = try first.writeIfChanged(root: root, observed: observe)
+            precondition(wrote)
+            let unchanged = try first.writeIfChanged(root: root, observed: observe)
+            precondition(!unchanged)
+            let newer = SharedBadge(unread: ["newer@example.com"], events: 0, notifyAllRooms: [], account: account, updated: now - 1000)
+            try newer.writeIfChanged(root: root)
+            let superseded = try first.writeIfChanged(root: root, observed: observe)
+            precondition(!superseded && outcomes == [.written, .current, .superseded])
+            precondition(SharedBadge.load(root: root) == newer, "Observation cannot replace a newer counted membership")
         case "round-trip":
             try fixture().write(root: root)
             precondition(UnreadList.load(root: root) == fixture(), "The list must read back as written")
@@ -67,6 +89,44 @@ import UserNotifications
             precondition(push("bruno@example.com/phone", names: names, badge: counted, root: root) == nil)
             let after = try Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))
             precondition(after == before)
+        case "push-events":
+            var reloads = 0
+            var tick: TimeInterval = 0
+            let clock = { tick += 1; return Date(timeIntervalSince1970: tick) }
+            func record(_ owner: String? = account, conversation: String = "new@example.com", at folder: URL) -> [UnreadList.PushEvent] {
+                UnreadList.recordPush(conversation: conversation, kind: "chat", name: "Private name", account: owner,
+                                      badge: .init(account: account, unread: Array(Set(fixture().rows.map(\.id) + [conversation])), total: 4),
+                                      root: folder, clock: clock, reload: { reloads += 1; return true })
+            }
+            precondition(record(at: root).map(\.decision) == [.listUnavailable])
+            try fixture().write(root: root)
+            precondition(record("other@example.com", at: root).map(\.decision) == [.accountMismatch, .listOwnerMismatch])
+            precondition(reloads == 0, "A refused account must never request a reload")
+            precondition(record(conversation: "alice@example.com", at: root).map(\.decision) == [.alreadyListed, .writeSucceeded, .reloadRequested])
+            let events = record(at: root)
+            precondition(events.map(\.decision) == [.rowSelected, .writeSucceeded, .reloadRequested])
+            precondition(zip(events, events.dropFirst()).allSatisfy { $0.time < $1.time }, "Keep each operation's original timestamp")
+            precondition(UnreadList.load(root: root)!.rows.first?.id == "new@example.com" && reloads == 2)
+            let unavailable = UnreadList.recordPush(conversation: "next@example.com", kind: "chat", name: "Next",
+                                                     account: account,
+                                                     badge: .init(account: account, unread: UnreadList.load(root: root)!.rows.map(\.id) + ["next@example.com"], total: 5),
+                                                     root: root, reload: { false })
+            precondition(unavailable.map(\.decision) == [.rowSelected, .writeSucceeded, .reloadUnavailable])
+        case "write-failure":
+            try fixture().write(root: root)
+            let before = try Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))
+            // Exercise a real filesystem refusal, not a writer that merely returns a canned error.
+            precondition(geteuid() != 0, "This fixture needs an unprivileged process")
+            try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: root.path)
+            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path) }
+            var reloads = 0
+            let events = UnreadList.recordPush(conversation: "new@example.com", kind: "chat", name: "Private name",
+                                               account: account,
+                                               badge: .init(account: account, unread: fixture().rows.map(\.id) + ["new@example.com"], total: 4),
+                                               root: root, reload: { reloads += 1; return true })
+            precondition(events.map(\.decision) == [.rowSelected, .writeFailed] && reloads == 0)
+            let after = try Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))
+            precondition(after == before, "The failed write must leave the existing list unchanged")
         case "room-rule":
             try fixture().write(root: root)
             // A room outside notify-all counts only on a mention, which a push does not reveal.
@@ -87,31 +147,106 @@ import UserNotifications
         case "cap":
             var full = fixture()
             full.rows = (0..<UnreadList.maxRows).map { .init(id: "c\($0)@example.com", kind: "chat", name: "C\($0)", unread: 1, mentions: 0, last: 1) }
-            let next = full.adding("new@example.com", kind: "chat", name: "New", account: account, total: 99)!
+            let next = full.adding("new@example.com", kind: "chat", name: "New", account: account,
+                                   badge: .init(account: account, unread: full.rows.map(\.id) + ["new@example.com"], total: 99))!
             precondition(next.rows.count == UnreadList.maxRows && next.rows[0].id == "new@example.com" && next.total == 99)
-        case "concurrent-pushes":
-            // FLM-418 R2: overlapping read-modify-write changes must not lose a row.
+        case "concurrent-pushes", "latest-total-wins":
+            // Exercise both real producers: stale captured badge values must not lose a concurrent push.
             var list = fixture()
-            list.rows = []
+            list.rows = []; list.total = 0
             try list.write(root: root)
+            let pending = CommandLine.arguments[1] == "latest-total-wins" ? 2 : 0
+            let initial = SharedBadge(unread: [], events: pending, notifyAllRooms: [], account: account)
+            try initial.writeIfChanged(root: root)
             DispatchQueue.concurrentPerform(iterations: 10) { index in
-                UnreadList.recordPush(conversation: "c\(index)@example.com", kind: "chat", name: "C\(index)",
-                                      account: account, total: index, root: root)
+                _ = push("c\(index)@example.com", names: names, badge: initial, root: root)
             }
-            precondition(Set(UnreadList.load(root: root)!.rows.map(\.id)).count == 10, "No push may lose another's row")
-        case "latest-total-wins":
-            // FLM-418 R2: the badge is read under the list's lock, so the last writer leaves the newest total.
-            var list = fixture()
-            list.rows = []
-            try list.write(root: root)
-            let lock = NSLock()
-            var badge = 0
-            DispatchQueue.concurrentPerform(iterations: 10) { index in
-                lock.lock(); badge = max(badge, index + 1); lock.unlock()
-                UnreadList.recordPush(conversation: "c\(index)@example.com", kind: "chat", name: "C\(index)",
-                                      account: account, total: { lock.lock(); defer { lock.unlock() }; return badge }(), root: root)
-            }
-            precondition(UnreadList.load(root: root)!.total == 10, "The newest total must survive")
+            let saved = UnreadList.load(root: root)!, counted = SharedBadge.load(root: root)!
+            precondition(Set(saved.rows.map(\.id)).count == 10, "No push may lose another's row")
+            precondition(Set(counted.unread).count == 10 && saved.total == 10 + pending,
+                         "Latest full membership and pending-event total must survive")
+        case "app-file-authority":
+            var app = UnreadList(account: account, total: 0, rows: [], updated: 1)
+            let firstWrite = try app.writeIfChanged(root: root)
+            precondition(firstWrite)
+            let initial = SharedBadge(unread: [], events: 0, notifyAllRooms: [], account: account)
+            _ = push("bruno@example.com/phone", names: names, badge: initial, root: root)
+            let pushed = UnreadList.load(root: root)!
+            precondition(pushed.rows.count == 1)
+            app.updated = Date().timeIntervalSince1970 * 1000 + 1
+            var caughtUpBadge = initial
+            caughtUpBadge.updated = app.updated
+            try caughtUpBadge.writeIfChanged(root: root)
+            let replaced = try app.writeIfChanged(root: root)
+            precondition(replaced, "The app's unchanged content must replace an extension mutation")
+            let restored = UnreadList.load(root: root)!
+            let bytes = try Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))
+            app.updated += 1
+            let duplicate = try app.writeIfChanged(root: root)
+            precondition(!duplicate, "An actually current file needs no write or reload")
+            let unchanged = try Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))
+            precondition(unchanged == bytes)
+            print(String(data: try JSONEncoder().encode(["extension": pushed, "app": restored]), encoding: .utf8)!)
+        case "queued-app-frame":
+            let captured = Date().timeIntervalSince1970 * 1000 - 100
+            var app = UnreadList(account: account, total: 0, rows: [], updated: captured)
+            try app.write(root: root)
+            let badge = SharedBadge(unread: [], events: 0, notifyAllRooms: [], account: account, updated: captured)
+            try badge.writeIfChanged(root: root)
+            _ = push("bruno@example.com/phone", names: names, badge: badge, root: root)
+            let pushed = UnreadList.load(root: root)!
+            let badgeChanged = try badge.writeIfChanged(root: root)
+            precondition(!badgeChanged && SharedBadge.load(root: root)!.unread == ["bruno@example.com"], "A queued old badge must not erase a newer push")
+            let stale = try app.publish(root: root)
+            precondition(stale == .superseded && UnreadList.load(root: root)! == pushed)
+            // A genuinely later caught-up read can clear it; the stale frame alone could not.
+            app.updated = Date().timeIntervalSince1970 * 1000 + 1
+            var caughtUpBadge = badge
+            caughtUpBadge.updated = app.updated
+            try caughtUpBadge.writeIfChanged(root: root)
+            let fresh = try app.publish(root: root)
+            precondition(fresh == .written && UnreadList.load(root: root)!.rows.isEmpty)
+        case "clock-rollback":
+            var current = fixture()
+            current.updated = Date().timeIntervalSince1970 * 1000 + 60_000
+            try current.write(root: root)
+            let app = UnreadList(account: account, total: 0, rows: [], updated: Date().timeIntervalSince1970 * 1000)
+            let result = try app.publish(root: root)
+            precondition(result == .written, "A future stamp after clock rollback must not block a current app indefinitely")
+        case "membership-reconcile":
+            var old = fixture()
+            old.rows = [old.rows[0]]; old.total = 1
+            let next = old.adding("bruno@example.com", kind: "chat", name: "Bruno", account: account,
+                                  badge: .init(account: account, unread: ["bruno@example.com"], total: 1))!
+            precondition(next.total == 1 && next.rows.map(\.id) == ["bruno@example.com"], "Replace membership, never hide stale rows by raising the total")
+            precondition(old.adding("bruno@example.com", kind: "chat", name: "Bruno", account: account,
+                                   badge: .init(account: "other@example.com", unread: [], total: 0)) == nil)
+            var precise = old
+            precise.rows[0] = .init(id: "alice@example.com", kind: "chat", name: "Alice", unread: 7, mentions: 2, last: 42)
+            let refreshed = precise.adding("alice@example.com", kind: "chat", name: "Alice", account: account,
+                badge: .init(account: account, unread: ["alice@example.com"], total: 1))!
+            precondition(refreshed.rows[0] == precise.rows[0], "An overlapping push must preserve the app's precise row counts")
+            print(String(data: try JSONEncoder().encode(["before": old, "after": next]), encoding: .utf8)!)
+        case "read-wins":
+            var old = fixture()
+            old.rows = [old.rows[0]]; old.total = 1
+            try old.write(root: root)
+            let read = SharedBadge(unread: [], events: 0, notifyAllRooms: [], account: account)
+            try read.writeIfChanged(root: root)
+            let events = UnreadList.recordPush(conversation: "alice@example.com", kind: "chat", name: "Alice", account: account,
+                badge: SharedBadge.load(root: root).map { .init(account: $0.account, unread: $0.unread, total: $0.count, updated: $0.updated) }, root: root, reload: { true })
+            precondition(events.map(\.decision) == [.notCounted, .writeSucceeded, .reloadRequested])
+            precondition(UnreadList.load(root: root)!.rows.isEmpty && UnreadList.load(root: root)!.total == 0)
+        case "lock-refused":
+            try fixture().write(root: root)
+            let before = try Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))
+            try FileManager.default.removeItem(at: root.appendingPathComponent(UnreadList.lockName))
+            try FileManager.default.createDirectory(at: root.appendingPathComponent(UnreadList.lockName), withIntermediateDirectories: false)
+            let events = UnreadList.recordPush(conversation: "new@example.com", kind: "chat", name: "New", account: account,
+                badge: .init(account: account, unread: ["new@example.com"], total: 1), root: root, reload: { preconditionFailure("Never reload an unlocked write") })
+            precondition(events.map(\.decision) == [.writeFailed])
+            let after = try Data(contentsOf: root.appendingPathComponent(UnreadList.fileName))
+            precondition(before == after)
         case "labels-follow-entry-date":
             // FLM-418 R5: labels are relative to the entry's date, not the real clock.
             var calendar = Calendar(identifier: .gregorian)
@@ -157,7 +292,8 @@ import UserNotifications
         case "clear-wins":
             try fixture().write(root: root)
             try UnreadList.clear(root: root)
-            UnreadList.recordPush(conversation: "late@example.com", kind: "chat", name: "Late", account: account, total: 1, root: root)
+            UnreadList.recordPush(conversation: "late@example.com", kind: "chat", name: "Late", account: account,
+                                  badge: .init(account: account, unread: ["late@example.com"], total: 1), root: root)
             precondition(UnreadList.load(root: root) == nil, "A push after the clear must not bring the list back")
         case "clear":
             try fixture().write(root: root)

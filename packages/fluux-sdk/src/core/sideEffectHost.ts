@@ -80,8 +80,9 @@ export interface MdsSideEffectHost {
   retractDisplayed(conversationJid: string): Promise<void>
 }
 
-/** The discovery probe background sync runs once per session. */
+/** Capability discovery and search probes owned by background session preparation. */
 export interface DiscoverySideEffectHost {
+  fetchServerInfo(): Promise<void>
   discoverMAMSearchCapability(): Promise<void>
 }
 

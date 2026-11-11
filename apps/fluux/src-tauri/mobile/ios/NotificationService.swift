@@ -18,7 +18,12 @@ final class NotificationService: UNNotificationServiceExtension {
         let delivery = PreviewDelivery()
         self.delivery = delivery
         let names = loadNames()
-        let diagnostic = PreviewTrace.recorder(root: ledgerRoot())
+        let root = ledgerRoot()
+        // Capture one session for both paths: logout must reject every late event from this push.
+        let record = PreviewTrace.batchRecorder(root: root, correlation: UUID())
+        let diagnostic: (PreviewDecision, Int?) -> Void = { decision, duration in
+            record([.init(decision: decision, time: Date().timeIntervalSince1970, durationMs: duration)])
+        }
         delivery.diagnostic = diagnostic
         diagnostic(.received, nil)
         let tag = String(request.identifier.prefix(8))
@@ -47,13 +52,40 @@ final class NotificationService: UNNotificationServiceExtension {
         let wordValue = values?["account"] as? String == names.account ? values?["words"] : nil
         let words = wordValue.flatMap { JSONSerialization.isValidJSONObject($0) ? try? JSONSerialization.data(withJSONObject: $0) : nil }
             .flatMap { try? JSONDecoder().decode(PreviewWords.self, from: $0) } ?? PreviewWords.localized
-        // The widget lists what the badge counts: a push that raises the badge adds its conversation.
-        let content = NotificationPresentation.content(for: request.content, names: names, activity: words.activity) { bare, isRoom, counted in
-            UnreadList.recordPush(conversation: bare, kind: isRoom ? "groupchat" : "chat",
-                                  name: (isRoom ? names.rooms[bare] : names.contacts[bare]) ?? bare,
-                                  account: names.account,
-                                  // Read under the list's lock, so the newest push leaves the newest total.
-                                  total: SharedBadge.load()?.count ?? counted, root: NotificationMirror.root)
+        // The widget lists counted membership, even when another push does not raise its total.
+        var widgetCounted = false
+        let storedBadge = SharedBadge.load(root: root)
+        let badge = storedBadge.flatMap { $0.account == names.account ? $0 : nil }
+        func recordCountedWidget(_ bare: String, isRoom: Bool, refreshCurrent: Bool) {
+            widgetCounted = true
+            let events = UnreadList.recordPush(conversation: bare, kind: isRoom ? "groupchat" : "chat",
+                                               name: (isRoom ? names.rooms[bare] : names.contacts[bare]) ?? bare,
+                                               account: names.account,
+                                               // Read one owned membership/total snapshot under the shared writer lock.
+                                               badge: SharedBadge.load(root: root).map {
+                                                   .init(account: $0.account, unread: $0.unread, total: $0.count, updated: $0.updated)
+                                               }, root: root, refreshCurrent: refreshCurrent)
+            record(events.map(\.diagnostic))
+        }
+        let content = NotificationPresentation.content(for: request.content, names: names, activity: words.activity,
+                                                       badge: badge, badgeRoot: root) { bare, isRoom, _ in
+            recordCountedWidget(bare, isRoom: isRoom, refreshCurrent: true)
+        }
+        // A counted conversation can be missing from a stale list. Reconcile it without
+        // incrementing the badge or spending another redraw when the list is already correct.
+        if !widgetCounted, let badge,
+           let from = NotificationPresentation.sender(of: request.content.userInfo, names: names),
+           let bare = NotificationPresentation.bareJid(from), badge.unread.contains(bare) {
+            recordCountedWidget(bare, isRoom: names.rooms[bare] != nil || badge.notifyAllRooms.contains(bare), refreshCurrent: false)
+        }
+        if !widgetCounted {
+            let time = Date().timeIntervalSince1970
+            if let storedBadge, badge == nil {
+                record([.init(decision: .widgetAccountMismatch, time: time),
+                        .init(decision: storedBadge.account == nil ? .widgetBadgeOwnerMissing : .widgetBadgeOwnerMismatch, time: time)])
+            } else {
+                record([.init(decision: badge == nil ? .widgetBadgeUnavailable : .widgetNotCounted, time: time)])
+            }
         }
         delivery.begin(content, completion: finish)
         let sender = (content.userInfo["from"] as? String).flatMap(NotificationPresentation.bareJid)
@@ -109,4 +141,27 @@ final class NotificationService: UNNotificationServiceExtension {
         }
     }
     override func serviceExtensionTimeWillExpire() { delivery?.finish(expiration: .systemExpiry) }
+}
+
+private extension UnreadList.PushEvent {
+    var diagnostic: PreviewTrace.Event {
+        let value: PreviewDecision
+        switch decision {
+        case .listUnavailable: value = .widgetListUnavailable
+        case .badgeUnavailable: value = .widgetBadgeUnavailable
+        case .notCounted: value = .widgetNotCounted
+        case .accountMismatch: value = .widgetAccountMismatch
+        case .badgeOwnerMissing: value = .widgetBadgeOwnerMissing
+        case .badgeOwnerMismatch: value = .widgetBadgeOwnerMismatch
+        case .listOwnerMismatch: value = .widgetListOwnerMismatch
+        case .alreadyListed: value = .widgetAlreadyListed
+        case .rowSelected: value = .widgetRowSelected
+        case .writeSucceeded: value = .widgetWriteSucceeded
+        case .writeFailed: value = .widgetWriteFailed
+        case .countMismatch: value = .widgetCountMismatch
+        case .reloadRequested: value = .widgetReloadRequested
+        case .reloadUnavailable: value = .widgetReloadUnavailable
+        }
+        return .init(decision: value, time: time)
+    }
 }

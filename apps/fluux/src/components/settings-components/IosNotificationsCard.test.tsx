@@ -13,6 +13,11 @@ const mockInvoke = vi.fn().mockResolvedValue(undefined)
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
 
 const mockSetWebPushEnabled = vi.fn()
+const { diagnosticContext } = vi.hoisted(() => ({ diagnosticContext: {
+  observedAt: 123, online: null, verifying: null, catchingUp: null, replaying: null,
+  badgeCommand: 'unknown', badgeAcknowledgement: 'unknown',
+} }))
+vi.mock('@/utils/unreadWidget', () => ({ unreadWidgetDiagnosticContext: () => diagnosticContext }))
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -152,7 +157,7 @@ describe('notification diagnostic export', () => {
     renderCard({ permission: 'denied', isConnected: false })
     expect(mockInvoke).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'settings.notificationDiagnostic.export' }))
-    await waitFor(() => expect(mockInvoke).toHaveBeenCalledExactlyOnceWith('plugin:push|export_notification_diagnostic'))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledExactlyOnceWith('plugin:push|export_notification_diagnostic', { publisher: diagnosticContext }))
     expect(mockSetWebPushEnabled).not.toHaveBeenCalled()
   })
   it('prevents duplicate exports and explains failure without showing native error details', async () => {

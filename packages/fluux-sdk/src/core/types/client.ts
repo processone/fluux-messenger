@@ -91,6 +91,8 @@ export interface InternalClientEvents {
   /** Roster (contact list) fully loaded from server */
   rosterLoaded: () => void
   freshSessionInputsReady: () => void
+  /** The current session's server discovery settled; capability data may remain unknown. */
+  freshSessionDiscoverySettled: () => void
   conversationListReady: (conversations: SDKEvents['conversation:list-synced']['conversations']) => void
 }
 

@@ -45,6 +45,7 @@ import { executeWithConcurrency } from '../utils/concurrencyUtils'
  * owns its scopes independently, including beyond this reception limit.
  */
 export const RESUME_REPLAY_LIMIT_MS = 10_000
+export const SERVER_DISCOVERY_RETRY_DELAY_MS = 5_000
 import {
   getRoomMembershipEpoch,
   invalidateRoomMemberships,
@@ -135,6 +136,42 @@ export function setupBackgroundSyncSideEffects(
   // it after `online` in the same session, so a generation mismatch means the
   // signal belongs to a session that is already gone.
   let inputsReadyGeneration = -1
+  // Discovery can settle without serverInfo (failure or an unusable response).
+  let discoverySettledGeneration = -1
+  let discoveryRetryTimer: ReturnType<typeof setTimeout> | undefined
+  let discoveryRetryAttempt: object | undefined
+
+  function cancelServerDiscoveryRetry(): void {
+    clearTimeout(discoveryRetryTimer)
+    discoveryRetryTimer = undefined
+    discoveryRetryAttempt = undefined
+  }
+
+  function needsServerDiscovery(generation: number): boolean {
+    return generation === sessionGeneration && isFreshSession && !backgroundSyncDone
+      && inputsReadyGeneration === generation
+      && connectionStore.getState().status === 'online' && client.isConnected()
+      && !connectionStore.getState().serverInfo?.features
+  }
+
+  function scheduleServerDiscoveryRetry(): void {
+    const generation = sessionGeneration
+    if (discoveryRetryTimer !== undefined || discoveryRetryAttempt || !needsServerDiscovery(generation)) return
+    // Keep preparation owned while capability knowledge is missing; never publish a cached zero instead.
+    discoveryRetryTimer = setTimeout(() => {
+      discoveryRetryTimer = undefined
+      if (!needsServerDiscovery(generation)) return
+      const attempt = {}
+      discoveryRetryAttempt = attempt
+      void client.server.fetchServerInfo().catch(() => {}).finally(() => {
+        if (discoveryRetryAttempt !== attempt) return
+        discoveryRetryAttempt = undefined
+        if (!needsServerDiscovery(generation)) return
+        discoverySettledGeneration = generation
+        maybeTriggerBackgroundSync()
+      })
+    }, SERVER_DISCOVERY_RETRY_DELAY_MS)
+  }
 
   // --- Late-MAM room retry (issue D) ---
   // A room whose disco resolves supportsMAM AFTER the single 10s catch-up pass
@@ -592,9 +629,16 @@ export function setupBackgroundSyncSideEffects(
     if (connectionStore.getState().status !== 'online' || !client.isConnected()) return
     const features = connectionStore.getState().serverInfo?.features
     const supportsMAM = features?.includes(NS_MAM) ?? false
-    // No archive retrieval will run: release unknown-target preparation.
-    if (features && !supportsMAM) endSessionPreparation()
-    if (!supportsMAM) return
+    if (!supportsMAM) {
+      if (features) {
+        cancelServerDiscoveryRetry()
+        endSessionPreparation()
+      } else if (discoverySettledGeneration === sessionGeneration) {
+        scheduleServerDiscoveryRetry()
+      }
+      return
+    }
+    cancelServerDiscoveryRetry()
     triggerBackgroundSync()
   }
 
@@ -602,6 +646,7 @@ export function setupBackgroundSyncSideEffects(
   // also be followed by a synthetic 'online' when cache integrity forces full
   // setup; preserve the resume boundary and confirmed joins on that upgrade.
   const unsubscribeOnline = client.internal.on('online', () => {
+    cancelServerDiscoveryRetry()
     const followsUninterruptedResume = uninterruptedResumeMayEmitSyntheticOnline
     uninterruptedResumeMayEmitSyntheticOnline = false
     sessionGeneration += 1
@@ -639,6 +684,11 @@ export function setupBackgroundSyncSideEffects(
     maybeTriggerBackgroundSync()
   })
 
+  const unsubscribeDiscoverySettled = client.internal.on('freshSessionDiscoverySettled', () => {
+    discoverySettledGeneration = sessionGeneration
+    maybeTriggerBackgroundSync()
+  })
+
   // SM resumption: the server replays undelivered stanzas, so no bulk MAM sync is
   // needed for rooms already caught up to live. But the delayed fresh-session room
   // pass (Stage 4) never runs here, so a room NOT caught up to live this
@@ -650,6 +700,7 @@ export function setupBackgroundSyncSideEffects(
   // preview; a gap-open room forward-fills from its recorded gap). Caught-up rooms
   // are skipped, so this stays out of SM's "server replays, no MAM" path.
   const unsubscribeResumed = client.internal.on('resumed', () => {
+    cancelServerDiscoveryRetry()
     sessionGeneration += 1
     uninterruptedResumeMayEmitSyntheticOnline = true
     isFreshSession = false
@@ -718,6 +769,7 @@ export function setupBackgroundSyncSideEffects(
     (state) => state.status,
     (status) => {
       if (status !== 'online' && previousStatus === 'online') {
+        cancelServerDiscoveryRetry()
         sessionGeneration += 1
         endSessionPrep = undefined
         connectionStore.getState().resetCatchUp()
@@ -884,11 +936,13 @@ export function setupBackgroundSyncSideEffects(
   })
 
   return () => {
+    cancelServerDiscoveryRetry()
     sessionGeneration += 1
     mamInFlightRooms.clear()
     pendingRoomHandoffs.clear()
     unsubscribeOnline()
     unsubscribeInputsReady()
+    unsubscribeDiscoverySettled()
     unsubscribeResumed()
     unsubscribeConnection()
     unsubscribeServerInfo()
