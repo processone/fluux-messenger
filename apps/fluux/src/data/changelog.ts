@@ -34,7 +34,7 @@ export const changelog: ChangelogEntry[] = [
         'Scrolling back through a very long conversation or room no longer gets stuck or returns to the newest messages once you go past the latest 5,000 messages, so you can read back to the start',
         'In long conversations and rooms, the messages you are reading no longer jump away when older messages finish loading while your pointer rests on a message or you keep scrolling',
         'macOS: reading a conversation or room now also clears its notifications that arrived before Fluux was last restarted',
-        'iOS: returning to Fluux removes widget rows that are already read, including after reading on another device. Push updates keep the listed conversations consistent with the unread total instead of retaining obsolete rows',
+        'iOS: the unread widget list drops conversations that are already read, including ones read on another device, and keeps updating after your server refuses a capability check. Checked in automated tests and on a simulator, not yet on a physical iPhone',
       ],
     }],
   },

@@ -522,8 +522,14 @@ Checks: `npm run test:ios-notifications` (list model and the push hook), `npm ru
 and `npm run test:ios-build-scripts` (the install and TestFlight scripts require the widget and check
 its signature and group). `npm run test:ios-widgets` runs the unsigned simulator widget lab
 (`scripts/native-tests/ios-widgets`): gallery add, rows and avatar, a row tap, the production
-notification service run in-process, and sign-out. What still needs a signed build on a device: a push
-waking the suspended extension, iOS redraw rationing, and the signed App ID, profile and App Group.
+notification service run in-process, and sign-out. What still needs a signed build on a device (the
+phone-only list; simulators cannot show these, so the widget freeze reported on a phone stays open until
+a phone confirms it):
+
+- APNs waking the suspended notification extension, and that extension's memory limit.
+- A locked phone.
+- iOS rationing widget redraw requests (a refused redraw leaves the widget unchanged until the app opens).
+- The signed install's App ID, provisioning profile and App Group.
 
 ## Receive a shared link, document, or image
 
