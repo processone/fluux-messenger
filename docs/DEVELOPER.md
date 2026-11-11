@@ -180,6 +180,15 @@ npm run test:e2e -- --project="*-chromium" --workers=2
 npm run test:e2e -- --project=scroll-reading-webkit
 ```
 
+On macOS, the WebKit projects keep their failure traces without screenshots. Playwright's
+WebKit takes each trace screenshot through the macOS window server, about 25 times a
+second per test, and each picture takes one of the window server's image buffers. With
+several workers, the buffers can pile up faster than they are freed; when none is left, the
+window server aborts and macOS ends the login session. The traces keep
+their DOM snapshots, actions, console and network. For the same reason, avoid video
+recording on long macOS WebKit runs: it captures the window the same way. A `--trace` flag
+on the command line is safe: it changes only the mode and keeps screenshots off.
+
 ### macOS native startup recovery
 
 On macOS a native cover sits above the webview until the page proves it is
