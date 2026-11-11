@@ -445,8 +445,10 @@ whole team. The demo identity needs `<demo identifier>.widgets` in the demo's ow
 
 Checks: `npm run test:ios-notifications` (list model and the push hook), `npm run test:ios-extensions`,
 and `npm run test:ios-build-scripts` (the install and TestFlight scripts require the widget and check
-its signature and group). A simulator build compiles the extension; the gallery and a push while
-suspended need a signed build on a device.
+its signature and group). `npm run test:ios-widgets` runs the unsigned simulator widget lab
+(`scripts/native-tests/ios-widgets`): gallery add, rows and avatar, a row tap, the production
+notification service run in-process, and sign-out. What still needs a signed build on a device: a push
+waking the suspended extension, iOS redraw rationing, and the signed App ID, profile and App Group.
 
 ## Receive a shared link, document, or image
 

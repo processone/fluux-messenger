@@ -166,9 +166,15 @@ export function createPlan(changes, cwd = root) {
       nodeTest('scripts/macos-widgets.test.mjs', reason, [], { requires: 'mac' })
     }
     if (path.startsWith(`${native}/mobile/ios/Widgets/`) || path === `${native}/plugins/widgets/ios/Sources/UnreadList.swift`
-        || path === `${native}/mobile/ios/NotificationService.swift` || path.startsWith(`${native}/plugins/push/ios/Sources/`)
-        || path.startsWith('scripts/native-tests/ios-widgets/')) {
+        || path === `${native}/mobile/ios/NotificationService.swift` || path === 'scripts/native-tests/NotificationPreviewEngineStub.swift'
+        || path === `${native}/plugins/push/ios/Sources/ShareSuggestions.swift`
+        || path.startsWith(`${native}/plugins/push/ios/Sources/NotificationAvatars/`)
+        || path.startsWith(`${native}/plugins/push/ios/Sources/NotificationPreviews/`)) {
       widgetLab(reason)
+    }
+    // The lab's own files run the lab and its platform contracts, like ios-share and ios-diagnostic.
+    if (path.startsWith('scripts/native-tests/ios-widgets/')) {
+      widgetLab(reason); platform(reason); continue
     }
     const removed = status === 'D' || status === 'R'
     // Only known documentation roots are exempt, never generated permission references.
