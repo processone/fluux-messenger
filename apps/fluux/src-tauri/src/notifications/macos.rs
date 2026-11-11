@@ -271,23 +271,61 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
     Ok(())
 }
 
-/// Remove already-delivered notifications from Notification Center by their
-/// identifiers (see `encode_identifier`). Called when a conversation/room is
-/// read so its stale entry disappears. Best-effort: no-op when the process is
-/// not app-bundled (`current_center()` returns `None`) or when an identifier
-/// has no matching delivered notification.
-fn remove_delivered(identifiers: Vec<String>) {
-    let Some(center) = current_center() else {
-        return;
-    };
-    use objc2_foundation::NSArray;
-    // Keep the NSStrings alive in `ids` while `refs` borrows them for the call.
-    let ids: Vec<Retained<NSString>> = identifiers.iter().map(|s| NSString::from_str(s)).collect();
-    let refs: Vec<&NSString> = ids.iter().map(|s| &**s).collect();
-    let array = NSArray::from_slice(&refs);
-    center.removeDeliveredNotificationsWithIdentifiers(&array);
+/// What read dismissal needs from Notification Center, so the same rule runs
+/// against macOS and against a test stand-in.
+trait DeliveredStore: Clone + Send + 'static {
+    /// Remove already-delivered notifications by identifier (see
+    /// `encode_identifier`); identifiers with no delivered match are ignored.
+    fn remove(&self, identifiers: Vec<String>);
+    /// Hand the identifiers of every delivered notification to `found`,
+    /// possibly later and on another thread.
+    fn read<F: FnOnce(Vec<String>) + Send + 'static>(&self, found: F);
 }
 
+/// The system Notification Center. Best-effort: a no-op when the process is
+/// not app-bundled (`current_center()` returns `None`).
+#[derive(Clone, Copy)]
+struct SystemCenter;
+
+impl DeliveredStore for SystemCenter {
+    fn remove(&self, identifiers: Vec<String>) {
+        let Some(center) = current_center() else {
+            return;
+        };
+        use objc2_foundation::NSArray;
+        // Keep the NSStrings alive in `ids` while `refs` borrows them for the call.
+        let ids: Vec<Retained<NSString>> =
+            identifiers.iter().map(|s| NSString::from_str(s)).collect();
+        let refs: Vec<&NSString> = ids.iter().map(|s| &**s).collect();
+        let array = NSArray::from_slice(&refs);
+        center.removeDeliveredNotificationsWithIdentifiers(&array);
+    }
+
+    fn read<F: FnOnce(Vec<String>) + Send + 'static>(&self, found: F) {
+        let Some(center) = current_center() else {
+            return;
+        };
+        // The completion block is callable through `Fn`; `found` runs once.
+        let found = Mutex::new(Some(found));
+        let handler = block2::RcBlock::new(
+            move |notifications: NonNull<objc2_foundation::NSArray<UNNotification>>| {
+                // SAFETY: the system passes a valid array that is alive for the
+                // duration of this callback.
+                let notifications = unsafe { notifications.as_ref() };
+                let identifiers = notifications
+                    .iter()
+                    .map(|n| n.request().identifier().to_string())
+                    .collect();
+                if let Some(found) = found.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                    found(identifiers);
+                }
+            },
+        );
+        center.getDeliveredNotificationsWithCompletionHandler(&handler);
+    }
+}
+
+/// Called when a conversation/room is read so its stale entries disappear.
 pub fn dismiss(nav_type: &str, nav_target: &str, account_id: Option<&str>) -> Result<(), String> {
     #[cfg(feature = "macos-communication")]
     cancel_communication(
@@ -299,38 +337,38 @@ pub fn dismiss(nav_type: &str, nav_target: &str, account_id: Option<&str>) -> Re
         message_id: None,
         account_id: account_id.map(str::to_string),
     };
-    let mut identifiers = DELIVERED_IDS
+    dismiss_read(SystemCenter, &DELIVERED_IDS, target);
+    Ok(())
+}
+
+/// Remove every delivered notification for the read conversation and account.
+fn dismiss_read(
+    store: impl DeliveredStore,
+    index: &Mutex<Option<HashMap<String, Vec<String>>>>,
+    target: NavTarget,
+) {
+    let mut identifiers = index
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .get_or_insert_with(HashMap::new)
         .remove(&target.group_key())
         .unwrap_or_default();
     // Also clear the identifier used by pre-routing releases.
-    identifiers.push(format!("{nav_type}:{nav_target}"));
-    remove_delivered(identifiers);
-    // The OS owns delivered history across process restarts; the in-memory index is only an optimization.
-    #[cfg(feature = "macos-communication")]
-    if let Some(center) = current_center() {
-        let expected = target.clone();
-        let handler = block2::RcBlock::new(
-            move |notifications: NonNull<objc2_foundation::NSArray<UNNotification>>| {
-                let notifications = unsafe { notifications.as_ref() };
-                let identifiers = notifications
-                    .iter()
-                    .filter_map(|n| {
-                        let identifier = n.request().identifier().to_string();
-                        belongs_to_target(&identifier, &expected).then_some(identifier)
-                    })
-                    .collect();
-                remove_delivered(identifiers);
-            },
+    identifiers.push(format!("{}:{}", target.nav_type, target.nav_target));
+    store.remove(identifiers);
+    // The index only knows what this process posted. Notification Center keeps
+    // earlier alerts across relaunches, so every build also sweeps its list.
+    let sweeper = store.clone();
+    store.read(move |delivered| {
+        sweeper.remove(
+            delivered
+                .into_iter()
+                .filter(|identifier| belongs_to_target(identifier, &target))
+                .collect(),
         );
-        center.getDeliveredNotificationsWithCompletionHandler(&handler);
-    }
-    Ok(())
+    });
 }
 
-#[cfg(any(feature = "macos-communication", test))]
 fn belongs_to_target(identifier: &str, target: &NavTarget) -> bool {
     parse_identifier(identifier).is_some_and(|candidate| candidate.group_key() == target.group_key())
 }
@@ -566,8 +604,63 @@ mod tests {
         }
     }
 
+    /// Notification Center as a plain list, so read dismissal can run in tests.
+    #[derive(Clone, Default)]
+    struct DeliveredList(std::sync::Arc<Mutex<Vec<String>>>);
+
+    impl DeliveredStore for DeliveredList {
+        fn remove(&self, identifiers: Vec<String>) {
+            self.0
+                .lock()
+                .unwrap()
+                .retain(|id| !identifiers.contains(id));
+        }
+
+        fn read<F: FnOnce(Vec<String>) + Send + 'static>(&self, found: F) {
+            let delivered = self.0.lock().unwrap().clone();
+            found(delivered);
+        }
+    }
+
     #[test]
-    fn communication_restart_dismissal_matches_conversation_and_account_not_message() {
+    fn read_after_relaunch_removes_alerts_from_the_earlier_run() {
+        // Bug fix: reading a conversation must remove every delivered alert for
+        // that account and conversation, including alerts delivered before the
+        // app last started, in every macOS build rather than only the
+        // communication-notification one.
+        let room = NavTarget {
+            nav_type: "room".into(),
+            nav_target: "team@conference.example.com".into(),
+            account_id: Some("tester@example.com".into()),
+            message_id: None,
+        };
+        let other_room = NavTarget {
+            nav_target: "design@conference.example.com".into(),
+            ..room.clone()
+        };
+        let delivered = |target: &NavTarget, message: &str| {
+            let mut alert = target.clone();
+            alert.message_id = Some(message.into());
+            encode_identifier(&alert)
+        };
+        let center = DeliveredList::default();
+        *center.0.lock().unwrap() = vec![
+            delivered(&room, "room-message-1"),
+            delivered(&other_room, "room-message-2"),
+            delivered(&room, "room-message-3"),
+        ];
+
+        // The relaunched process has posted nothing yet, so its index is empty.
+        dismiss_read(center.clone(), &Mutex::new(None), room);
+
+        assert_eq!(
+            *center.0.lock().unwrap(),
+            [delivered(&other_room, "room-message-2")]
+        );
+    }
+
+    #[test]
+    fn restart_dismissal_matches_conversation_and_account_not_message() {
         // #1386: OS-delivered identifiers must still be removable after the process index is lost.
         let target = NavTarget { nav_type: "room".into(), nav_target: "team@conference.example.com".into(),
             account_id: Some("tester@example.com".into()), message_id: None };
