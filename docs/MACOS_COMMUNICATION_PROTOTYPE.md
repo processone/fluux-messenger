@@ -132,8 +132,9 @@ The enriched image is validated and loaded into memory. Fallback attachments
 receive independent, private temporary copies; the cached source is never moved.
 Copies are removed on the single scheduling completion. Missing/invalid avatars
 preserve text. Click routing uses the existing serialized navigation identifier
-including account and message. Read dismissal queries OS-delivered history as
-well as the process-local index, preserving account boundaries after restart.
+including account and message. Read dismissal, shared with every macOS build,
+queries OS-delivered history as well as the process-local index, preserving
+account boundaries after restart.
 The existing frontend filters and sound preference remain authoritative. The
 macOS backend continues to set no system sound; this communication path does not introduce
 an additional alert tone or interruption level.
