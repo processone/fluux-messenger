@@ -155,6 +155,94 @@ import UniformTypeIdentifiers
         precondition(delivered)
     }
 
+    /// Intent: a push the extension skips records only its own decision in the diagnostic
+    /// journal, never a trailing `noEngineResult`; an engine that ran without output still does.
+    static func skipJournal() throws {
+        let account = "me@example.com"
+        let peer = "alice@example.com"
+        let room = "team@muc.example.com"
+        let names = SharedNames(contacts: [peer: "Alice"], rooms: [room: "Team"], account: account)
+        var failures: [String] = []
+        func run(_ name: String, expected: PreviewDecision, userInfo: [String: Any] = [:], allowed: Bool = true,
+                 engine: Bool = false, setup: (URL, PreviewLedger) throws -> Data?) throws {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let journal = try NotificationDiagnostic(root: root)
+            try journal.activate()
+            let snapshot = try setup(root, PreviewLedger(root: root))
+            let original = UNMutableNotificationContent()
+            original.body = "[OpenPGP-encrypted message]"
+            let push: [String: Any] = ["from": peer + "/phone", "to": account]
+            original.userInfo = push.merging(userInfo) { $1 }
+            if original.userInfo["encrypted"] as? Bool == false { original.body = "Are we still on for lunch?" }
+            if userInfo["from"] is NSNull { original.userInfo["from"] = nil }
+            let service = NotificationService()
+            service.loadNames = { names }
+            service.readSnapshot = { snapshot }
+            service.ledgerRoot = { root }
+            service.previewsAllowed = { $0(allowed) }
+            var fetches = 0
+            service.runPreview = { _, _, _, _, complete in
+                fetches += 1
+                complete(nil)
+                return {}
+            }
+            var delivered: [UNNotificationContent] = []
+            service.didReceive(UNNotificationRequest(identifier: name, content: original, trigger: nil)) { delivered.append($0) }
+            let entries = try JSONDecoder().decode([NotificationDiagnostic.Entry].self, from: journal.export())
+            let decisions = entries.map(\.decision.rawValue)
+            print("\(name): \(decisions.joined(separator: ", "))")
+            let fallback = NotificationPresentation.content(for: original, names: names, activity: PreviewWords.localized.activity)
+            if decisions != [PreviewDecision.received.rawValue, expected.rawValue] { failures.append("\(name) recorded \(decisions)") }
+            if Set(entries.map(\.correlation)).count != 1 { failures.append("\(name) split across processing runs") }
+            if delivered.count != 1 || delivered.first?.body != fallback.body || delivered.first?.title != fallback.title {
+                failures.append("\(name) delivered \(delivered.map { "\($0.title) / \($0.body)" })")
+            }
+            if fetches != (engine ? 1 : 0) { failures.append("\(name) ran the preview engine \(fetches) times") }
+        }
+        func snapshotData(_ session: PreviewLedger.Session?, account snapshotAccount: String = "me@example.com",
+                      peers: [String] = ["alice@example.com"]) throws -> Data {
+            var values: [String: Any] = ["account": snapshotAccount, "opt_in": true, "peers": Dictionary(uniqueKeysWithValues: peers.map { ($0, [String]()) })]
+            if let session { values["ledger"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(session)) }
+            return try JSONSerialization.data(withJSONObject: values)
+        }
+        func activated(_ ledger: PreviewLedger, now: Date = Date()) throws -> PreviewLedger.Session {
+            try ledger.capability(account: account, purge: false, now: now.timeIntervalSince1970)!
+        }
+        try run("room", expected: .groupChat, userInfo: ["from": room + "/Alice"]) { _, ledger in try snapshotData(activated(ledger)) }
+        try run("not encrypted", expected: .notEncrypted, userInfo: ["encrypted": false]) { _, ledger in try snapshotData(activated(ledger)) }
+        try run("no sender", expected: .noSender, userInfo: ["from": NSNull()]) { _, ledger in try snapshotData(activated(ledger)) }
+        try run("previews off", expected: .previewsOff) { _, _ in nil }
+        try run("sender not covered", expected: .senderNotCovered) { _, ledger in try snapshotData(activated(ledger), peers: ["bob@example.com"]) }
+        try run("snapshot for another account", expected: .snapshotChanged) { _, ledger in
+            try snapshotData(activated(ledger), account: "other@example.com")
+        }
+        try run("no session", expected: .noSession) { _, _ in try snapshotData(nil) }
+        try run("ledger unavailable", expected: .ledgerUnavailable) { root, ledger in
+            let data = try snapshotData(activated(ledger))
+            // A store that is no longer a database cannot be opened by the extension.
+            try Data("not a database".utf8).write(to: root.appendingPathComponent("NotificationLedger.sqlite"))
+            return data
+        }
+        try run("previews hidden", expected: .previewsHidden, allowed: false) { _, ledger in try snapshotData(activated(ledger)) }
+        try run("capability changed", expected: .capabilityChanged) { _, ledger in
+            let data = try snapshotData(activated(ledger))
+            // The app refreshed the capability after writing this snapshot.
+            _ = try activated(ledger)
+            return data
+        }
+        try run("window unavailable", expected: .windowUnavailable) { _, ledger in
+            // A capability activated after the device clock's current time has no archive window yet.
+            try snapshotData(activated(ledger, now: Date().addingTimeInterval(3600)))
+        }
+        try run("engine without result", expected: .noEngineResult, engine: true) { _, ledger in try snapshotData(activated(ledger)) }
+        for failure in failures { print(failure) }
+        fflush(stdout)
+        precondition(failures.isEmpty, "skip journal")
+        print("skip journal passed")
+    }
+
     static func fixtureImage() -> Data {
         // The mirror/image contracts use real project bytes, shared with the iOS fixture.
         let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -469,6 +557,8 @@ import UniformTypeIdentifiers
             try! serverPlaintext()
         case "uncovered-body":
             try! uncoveredBody()
+        case "skip-journal":
+            try! skipJournal()
         case "mirror":
             try! mirror()
         case "intents":
