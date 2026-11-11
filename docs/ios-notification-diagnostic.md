@@ -38,7 +38,8 @@ reached the preview engine and the engine returned no output. A push the extensi
 skips before that step (`groupChat`, `notEncrypted`, `noSender`, `previewsOff`,
 `senderNotCovered`, `snapshotChanged`, `noSession`, `ledgerUnavailable`,
 `previewsHidden`, `capabilityChanged` or `windowUnavailable`) records `received` and
-that one decision only, never a trailing `noEngineResult`.
+that one preview decision only, never a trailing `noEngineResult`. Widget decisions
+recorded for the same push are separate and share its correlation.
 
 ## Widget refusal categories and current observations
 
