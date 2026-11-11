@@ -162,6 +162,19 @@ test('Swift and native test fixtures route to their runtime owner rather than Vi
   for (const path of ['apps/fluux/src-tauri/plugins/ios-feedback/ios/Sources/HingeLayout.swift', 'scripts/native-tests/HingeLayoutTests.swift', 'scripts/ios-hinge-layout.test.mjs']) {
     assert.ok(ids(planFor([path])).includes('test:ios-hinge'))
   }
+  // Widget and push extension files run the simulator widget lab.
+  for (const path of ['apps/fluux/src-tauri/mobile/ios/Widgets/UnreadWidgetView.swift', 'apps/fluux/src-tauri/plugins/widgets/ios/Sources/UnreadList.swift',
+    'apps/fluux/src-tauri/mobile/ios/NotificationService.swift', 'apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationAvatars/SharedBadge.swift',
+    'scripts/native-tests/ios-widgets/WidgetsUITests.swift']) {
+    assert.ok(ids(planFor([path])).includes('test:ios-widgets'), path)
+  }
+  // The lab's own files run the lab and platform contracts, not the full gate.
+  for (const path of ['scripts/native-tests/ios-widgets/Host.swift', 'scripts/native-tests/ios-widgets/README.md']) {
+    const lab = planFor([path])
+    assert.ok(ids(lab).includes('test:ios-widgets'), path)
+    assert.ok(!ids(lab).includes('full:app') && !ids(lab).includes('full:sdk'), path)
+  }
+  assert.throws(() => checkRequirement('widgets', root, {}, 'darwin'), /FLUUX_WIDGETS_RESULTS/)
   const diagnostic = planFor(['scripts/native-tests/ios-diagnostic/UITests.swift'])
   assert.ok(ids(diagnostic).includes('test:ios-diagnostic'))
   assert.ok(ids(diagnostic).includes('test:ios-notifications'))

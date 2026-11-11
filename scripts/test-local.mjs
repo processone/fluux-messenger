@@ -142,6 +142,8 @@ export function createPlan(changes, cwd = root) {
     npm('test:ios-share', reason, { requires: 'share' })
     nodeTest('scripts/macos-share.test.mjs', reason)
   }
+  // The simulator widget lab: iOS widget and push-extension files, and the lab itself.
+  const widgetLab = reason => npm('test:ios-widgets', reason, { requires: 'widgets' })
   const packageContract = reason => {
     npm('test:node --workspace=@fluux/sdk', reason)
     npm('test:package --workspace=@fluux/sdk', reason)
@@ -162,6 +164,17 @@ export function createPlan(changes, cwd = root) {
         || path === 'scripts/native-tests/MacWidgetsTests.swift' || path === 'scripts/native-tests/MacWidgetLoaderLink.m') {
       nodeTest('scripts/macos-widgets-policy.test.mjs', reason)
       nodeTest('scripts/macos-widgets.test.mjs', reason, [], { requires: 'mac' })
+    }
+    if (path.startsWith(`${native}/mobile/ios/Widgets/`) || path === `${native}/plugins/widgets/ios/Sources/UnreadList.swift`
+        || path === `${native}/mobile/ios/NotificationService.swift` || path === 'scripts/native-tests/NotificationPreviewEngineStub.swift'
+        || path === `${native}/plugins/push/ios/Sources/ShareSuggestions.swift`
+        || path.startsWith(`${native}/plugins/push/ios/Sources/NotificationAvatars/`)
+        || path.startsWith(`${native}/plugins/push/ios/Sources/NotificationPreviews/`)) {
+      widgetLab(reason)
+    }
+    // The lab's own files run the lab and its platform contracts, like ios-share and ios-diagnostic.
+    if (path.startsWith('scripts/native-tests/ios-widgets/')) {
+      widgetLab(reason); platform(reason); continue
     }
     const removed = status === 'D' || status === 'R'
     // Only known documentation roots are exempt, never generated permission references.
@@ -364,8 +377,8 @@ export function checkRequirement(requirement, cwd, env = process.env, host = pro
   if (requirement === 'photos' && (!env.FLUUX_PHOTO_FIXTURES || !existsSync(env.FLUUX_PHOTO_FIXTURES) || !statSync(env.FLUUX_PHOTO_FIXTURES).isDirectory())) {
     throw new Error('Missing photo evidence: set FLUUX_PHOTO_FIXTURES to real JPEG/HEIC fixtures; a skipped test is not validation')
   }
-  if (requirement === 'share' || requirement === 'diagnostic') {
-    const variable = requirement === 'share' ? 'FLUUX_SHARE_RESULTS' : 'FLUUX_DIAGNOSTIC_RESULTS'
+  if (requirement === 'share' || requirement === 'diagnostic' || requirement === 'widgets') {
+    const variable = { share: 'FLUUX_SHARE_RESULTS', diagnostic: 'FLUUX_DIAGNOSTIC_RESULTS', widgets: 'FLUUX_WIDGETS_RESULTS' }[requirement]
     const destination = env[variable]
     if (!destination || !isAbsolute(destination)) throw new Error(`Set ${variable} to an absolute output directory outside the project`)
     // Resolve existing ancestors, so a symlink cannot redirect evidence into the project.
