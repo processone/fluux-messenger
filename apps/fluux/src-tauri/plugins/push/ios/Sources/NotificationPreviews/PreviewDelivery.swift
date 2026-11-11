@@ -52,11 +52,11 @@ final class PreviewDelivery {
         let needsBegin = handler == nil
         lock.unlock()
         if needsBegin { begin(content, completion: completion) }
-        guard allowed else { diagnostic(.previewsHidden, nil); trace("no preview, iOS previews set to never"); finish(); return }
+        guard allowed else { return skip(.previewsHidden, "iOS previews set to never") }
         guard let snapshot = snapshot, let sender = sender, Self.covers(sender, snapshot: snapshot),
               var input = (try? JSONSerialization.jsonObject(with: snapshot)) as? [String: Any] else { finish(); return }
-        guard isCurrent(snapshot) else { diagnostic(.capabilityChanged, nil); trace("no preview, capability changed"); finish(); return }
-        guard prepare(&input) else { diagnostic(.windowUnavailable, nil); trace("no preview, ledger window unavailable"); finish(); return }
+        guard isCurrent(snapshot) else { return skip(.capabilityChanged, "capability changed") }
+        guard prepare(&input) else { return skip(.windowUnavailable, "ledger window unavailable") }
         input["sender"] = sender
         // Keep a second for final handoff within the eight-second delivery deadline.
         // Preparation/settings time is part of the budget, not a fresh seven seconds.
@@ -73,8 +73,15 @@ final class PreviewDelivery {
         if handler == nil { lock.unlock(); cancellation() }
         else { cancel = cancellation; lock.unlock() }
     }
+    /// Delivers the transport-safe content without running the preview engine. `decision` is
+    /// the push's only outcome in the journal, so no `noEngineResult` follows it.
+    func skip(_ decision: PreviewDecision, _ reason: String) {
+        diagnostic(decision, nil)
+        trace("no preview, \(reason)")
+        finish(skipped: true)
+    }
     func finish(result: PreviewResult? = nil, expiration: PreviewDecision? = nil, isCurrent: () -> Bool = { false },
-                select: (PreviewResult) -> PreviewSelection = { _ in PreviewSelection() }) {
+                select: (PreviewResult) -> PreviewSelection = { _ in PreviewSelection() }, skipped: Bool = false) {
         lock.lock()
         let completion = handler
         let content = fallback
@@ -85,6 +92,7 @@ final class PreviewDelivery {
         lock.unlock()
         cancellation?()
         guard let completion = completion, let content = content else { return }
+        guard !skipped else { completion(content); return }
         let elapsed = Int(Date().timeIntervalSince(started) * 1000)
         // Without an archive, keep the transport-safe push content.
         if result?.archiveUnavailable == true, isCurrent() {

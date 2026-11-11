@@ -32,7 +32,12 @@ identify event classes missing from a push, or establish the cause of a past
 burst. In particular, `nothingNew` means the existing preview selection found no
 new displayable body; it does not prove the server's reason for sending a push.
 `noEngineResult`, `deadline`, and `systemExpiry` distinguish missing engine output
-from the local deadline and iOS extension expiry.
+from the local deadline and iOS extension expiry. `noEngineResult` means the push
+reached the preview engine and the engine returned no output. A push the extension
+skips before that step (`groupChat`, `notEncrypted`, `noSender`, `previewsOff`,
+`senderNotCovered`, `snapshotChanged`, `noSession`, `ledgerUnavailable`,
+`previewsHidden`, `capabilityChanged` or `windowUnavailable`) records `received` and
+that one decision only, never a trailing `noEngineResult`.
 
 ## Validation
 
@@ -42,7 +47,8 @@ from the local deadline and iOS extension expiry.
   recovery after a temporary writer lock, bounded failure under a sustained lock,
   and four independent processes retaining all 200 entries before logout.
 - `npm run test:ios-notifications`: existing delivery/presentation tests plus
-  exported preview decisions and negative controls for body/identity leakage.
+  exported preview decisions, including one decision per skipped push, and negative
+  controls for body/identity leakage.
 - `FLUUX_DIAGNOSTIC_RESULTS=/absolute/path/outside/project npm run test:ios-diagnostic`:
   creates a disposable unsigned simulator, presents the production native share
   helper, cancels without sending, and verifies temporary-copy deletion. This

@@ -57,11 +57,7 @@ final class NotificationService: UNNotificationServiceExtension {
         }
         delivery.begin(content, completion: finish)
         let sender = (content.userInfo["from"] as? String).flatMap(NotificationPresentation.bareJid)
-        let skip = { (decision: PreviewDecision, reason: String) in
-            diagnostic(decision, nil)
-            delivery.trace("no preview, \(reason)")
-            delivery.finish()
-        }
+        let skip = delivery.skip
         // Only covered direct pushes can replace their transport-safe body with an archive preview.
         guard content.userInfo["encrypted"] as? Bool != false else { return skip(.notEncrypted, "not encrypted") }
         guard let sender = sender else { return skip(.noSender, "no sender") }
