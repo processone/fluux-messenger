@@ -18,7 +18,10 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); observers.clear(); document.body.replaceChildren() })
 
-function measurementHarness(fixture: (typeof fixtures)[number]) {
+function measurementHarness(
+  fixture: (typeof fixtures)[number],
+  { initialSize = fixture.measurement.oldSize, takeoverOnScroll = false } = {},
+) {
   const { before, measurement, items } = fixture
   const scroller = document.body.appendChild(document.createElement('div'))
   Object.defineProperties(scroller, {
@@ -28,14 +31,19 @@ function measurementHarness(fixture: (typeof fixtures)[number]) {
   scroller.scrollTo = vi.fn((options?: ScrollToOptions | number, top?: number) => {
     scroller.scrollTop = typeof options === 'number' ? top ?? 0 : options?.top ?? 0
   })
+  // The app's own scroll handler is attached when the list mounts, before the virtualizer's, and
+  // hands the pixels to the reader on each user scroll event.
+  let takeover = () => {}
+  if (takeoverOnScroll) scroller.addEventListener('scroll', () => takeover())
   const indexById = new Map(items.map(item => [item.key, item.index]))
   const { result } = renderHook(() => useTanstackMessageVirtualizer({
     items, indexById, scrollRef: { current: scroller }, estimateSize: index => items[index].size,
     initialMeasurements: new Map(items.filter(item => item.measured).map(item => [item.key, item.size])),
   }))
+  takeover = () => result.current.cancelPendingScroll?.()
   const row = scroller.appendChild(document.createElement('div'))
   row.dataset.index = String(measurement.index)
-  let rowHeight = measurement.oldSize
+  let rowHeight = initialSize
   row.getBoundingClientRect = () => new DOMRect(0, 0, 984, rowHeight)
   act(() => result.current.measureElement(row))
   const resize = (size: number) => {
@@ -69,6 +77,50 @@ it.each(fixtures)('$kind: compensates an above-viewport remeasurement during bac
   expect(result.current.getMessageStart!(anchor.key)! - scroller.scrollTop)
     .toBe(initialPlacement + before.top - after.top)
   expect(scroller.scrollTo).toHaveBeenCalledOnce()
+})
+
+// Intent: a continuous scroll keeps the virtualizer's direction until scroll events stop, so the
+// direction-dependent fold rule sees the real motion. The reader takeover runs on every user scroll
+// event before the virtualizer reports it; reporting the offset at rest there cleared the direction,
+// and a measured row above the reader that grows during backward motion was compensated. Replay the
+// recorded native movement, with that row's captured heights as its growth.
+it.each(fixtures)('$kind: keeps backward motion for the fold rule through a reader takeover', fixture => {
+  const { before, after, measurement } = fixture
+  const { scroller, resize } = measurementHarness(fixture, { initialSize: measurement.size, takeoverOnScroll: true })
+  act(() => {
+    scroller.scrollTop = before.top
+    scroller.dispatchEvent(new Event('scroll'))
+    scroller.scrollTop = after.top
+    scroller.dispatchEvent(new Event('scroll'))
+  })
+  vi.mocked(scroller.scrollTo).mockClear()
+  act(() => resize(measurement.oldSize))
+  // The library's backward rule leaves growth above the reader uncompensated.
+  expect(scroller.scrollTop).toBe(after.top)
+  expect(scroller.scrollTo).not.toHaveBeenCalled()
+})
+
+// Intent: the same direction must survive a correction written mid-scroll. A shrink above the reader
+// is compensated in either direction; reporting that write at rest cleared the direction, and the
+// next growth above the reader, still during backward motion, was compensated too. Replay the
+// recorded movement, then the row's captured heights as a shrink and a growth.
+it.each(fixtures)('$kind: keeps backward motion for the fold rule after a correction written mid-scroll', fixture => {
+  const { before, after, measurement } = fixture
+  const { scroller, resize } = measurementHarness(fixture, { takeoverOnScroll: true })
+  act(() => {
+    scroller.scrollTop = before.top
+    scroller.dispatchEvent(new Event('scroll'))
+    scroller.scrollTop = after.top
+    scroller.dispatchEvent(new Event('scroll'))
+  })
+  const shrink = measurement.size - measurement.oldSize
+  act(() => resize(measurement.size))
+  expect(scroller.scrollTop).toBe(after.top + shrink)
+  vi.mocked(scroller.scrollTo).mockClear()
+  act(() => resize(measurement.oldSize))
+  // The library's backward rule leaves growth above the reader uncompensated.
+  expect(scroller.scrollTop).toBe(after.top + shrink)
+  expect(scroller.scrollTo).not.toHaveBeenCalled()
 })
 
 // Intent: FLM-309 F5. Two resize notifications can arrive before the lazy layout rebuild.

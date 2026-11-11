@@ -86,6 +86,57 @@ describe('observeElementOffsetWithRaf', () => {
     expect(cb).not.toHaveBeenCalled() // poll is no longer running
   })
 
+  // Intent: a continuous scroll keeps isScrolling true, and with it the virtualizer's direction,
+  // until scroll events stop. Each event already reports its offset, so the next frame's poll reads
+  // no change; counting those frames as idle reported the scroll as stopped every few frames.
+  // Readings: one trusted scroll event per frame, recorded during Chromium middle-click autoscroll
+  // upward through the demo app's virtualized stress room.
+  const NATIVE_PAN_TOPS = [
+    8031, 8030, 8029, 8027, 8024, 8022, 8020, 8018, 8015, 8013, 8011, 8009,
+    8007, 8002, 8000, 7998, 7995, 7993, 7991, 7989, 7986, 7984, 7982, 7980,
+  ]
+
+  it('keeps reporting scrolling while scroll events arrive every frame, then settles', () => {
+    const el = makeEl(8032)
+    const cb = vi.fn()
+    const activity = { active: false }
+    observeElementOffsetWithRaf({ scrollElement: el as unknown as HTMLElement }, cb, activity)
+
+    const inProgress: boolean[] = []
+    for (const top of NATIVE_PAN_TOPS) {
+      el.scrollTop = top
+      el._fire('scroll')
+      flush(1)
+      inProgress.push(activity.active)
+    }
+    expect(cb.mock.calls.filter(([, scrolling]) => !scrolling)).toEqual([])
+    expect(cb).toHaveBeenLastCalledWith(7980, true)
+    expect(inProgress.every(Boolean)).toBe(true)
+
+    flush(12)
+    expect(cb).toHaveBeenLastCalledWith(7980, false)
+    expect(activity.active).toBe(false)
+    cb.mockClear()
+    flush(5)
+    expect(cb).not.toHaveBeenCalled()
+  })
+
+  it('marks a scroll in progress from movement the poll sees without scroll events', () => {
+    const el = makeEl(0)
+    const cb = vi.fn()
+    const activity = { active: false }
+    observeElementOffsetWithRaf({ scrollElement: el as unknown as HTMLElement }, cb, activity)
+
+    el._fire('wheel')
+    flush(1)
+    expect(activity.active).toBe(false) // a wheel that moves nothing is not a scroll
+    el.scrollTop = 500
+    flush(1)
+    expect(activity.active).toBe(true)
+    flush(12)
+    expect(activity.active).toBe(false)
+  })
+
   it('still re-windows on a normal scroll event (Chromium path unchanged)', () => {
     const el = makeEl(0)
     const cb = vi.fn()

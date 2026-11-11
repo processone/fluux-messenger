@@ -132,6 +132,14 @@ engines, but dedicated WebKit upward-wheel/momentum proof with a measured row sh
 reader is an explicitly accepted proof gap for this change. Existing shared WebKit measurement and
 reading regression coverage does not qualify that specific timing case.
 
+These direction rules need the virtualizer to see a scroll as in progress for as long as it lasts.
+The offset observer reports every position as motion from the first scroll event, or the first
+offset change its frame poll sees, until neither has arrived for six frames; only then does it
+report the scroll at rest. While a scroll is in progress, the reader takeover leaves the
+virtualizer's motion state alone, and a resize correction written mid-scroll reports its read-back
+as motion with the reader's direction kept: the correction moves the content, not the reader.
+Navigation writes and reports outside a scroll still publish at rest.
+
 Native upward panning also retains visible progress when the metrics behind unmeasured estimates
 are resampled. Two legitimate samples change estimates during a pan: when only own hug-width
 bubbles are mounted the sampled width is their widest text, a lower bound that gives way to the
