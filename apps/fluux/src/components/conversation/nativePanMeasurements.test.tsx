@@ -2,6 +2,7 @@
 // measured row above the viewport shrinks. These readings come from the actual demo pan.
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { act, cleanup, renderHook } from '@testing-library/react'
+import { Virtualizer } from '@tanstack/react-virtual'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import fixtures from './__fixtures__/nativePanMeasurements.json'
 
@@ -16,43 +17,65 @@ beforeEach(() => {
     disconnect() {}
   })
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); observers.clear(); document.body.replaceChildren() })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); observers.clear(); document.body.replaceChildren() })
 
 function measurementHarness(
   fixture: (typeof fixtures)[number],
-  { initialSize = fixture.measurement.oldSize, takeoverOnScroll = false } = {},
+  { initialSize = fixture.measurement.oldSize, takeoverOnScroll = false, estimated = false } = {},
 ) {
-  const { before, measurement, items } = fixture
+  const { before, measurement } = fixture
+  // An estimated row is laid out at initialSize until its first resize delivery (mount, below).
+  const items = estimated
+    ? fixture.items.map(item => item.index === measurement.index ? { ...item, size: initialSize, measured: false } : item)
+    : fixture.items
+  // The scrollable range follows the list's spacer as each render commits, with the padding the
+  // capture recorded around it. The browser clamps a write to that range.
+  const padding = before.height - fixture.items.reduce((sum, item) => sum + item.size, 0)
+  let height = before.height
   const scroller = document.body.appendChild(document.createElement('div'))
   Object.defineProperties(scroller, {
     offsetHeight: { value: before.client }, offsetWidth: { value: 984 },
-    clientHeight: { value: before.client }, scrollHeight: { value: before.height },
+    clientHeight: { value: before.client }, scrollHeight: { get: () => height },
   })
   scroller.scrollTo = vi.fn((options?: ScrollToOptions | number, top?: number) => {
-    scroller.scrollTop = typeof options === 'number' ? top ?? 0 : options?.top ?? 0
+    const wanted = typeof options === 'number' ? top ?? 0 : options?.top ?? 0
+    scroller.scrollTop = Math.max(0, Math.min(wanted, height - before.client))
   })
   // The app's own scroll handler is attached when the list mounts, before the virtualizer's, and
   // hands the pixels to the reader on each user scroll event.
   let takeover = () => {}
   if (takeoverOnScroll) scroller.addEventListener('scroll', () => takeover())
   const indexById = new Map(items.map(item => [item.key, item.index]))
-  const { result } = renderHook(() => useTanstackMessageVirtualizer({
-    items, indexById, scrollRef: { current: scroller }, estimateSize: index => items[index].size,
-    initialMeasurements: new Map(items.filter(item => item.measured).map(item => [item.key, item.size])),
-  }))
+  const { result } = renderHook(() => {
+    const list = useTanstackMessageVirtualizer({
+      items, indexById, scrollRef: { current: scroller }, estimateSize: index => items[index].size,
+      initialMeasurements: new Map(items.filter(item => item.measured).map(item => [item.key, item.size])),
+    })
+    height = list.getTotalSize() + padding
+    return list
+  })
   takeover = () => result.current.cancelPendingScroll?.()
   const row = scroller.appendChild(document.createElement('div'))
   row.dataset.index = String(measurement.index)
   let rowHeight = initialSize
   row.getBoundingClientRect = () => new DOMRect(0, 0, 984, rowHeight)
-  act(() => result.current.measureElement(row))
+  // Mid-scroll the library only observes a newly mounted row; its first measurement is the
+  // resize observer's first delivery.
+  const mount = () => act(() => result.current.measureElement(row))
+  if (!estimated) mount()
   const resize = (size: number) => {
     rowHeight = size
     observers.get(row)!([
       { target: row, borderBoxSize: [{ blockSize: size }] } as unknown as ResizeObserverEntry,
     ], {} as ResizeObserver)
   }
-  return { scroller, result, resize }
+  const scrollThrough = (...tops: number[]) => act(() => {
+    for (const top of tops) {
+      scroller.scrollTop = top
+      scroller.dispatchEvent(new Event('scroll'))
+    }
+  })
+  return { scroller, result, resize, mount, scrollThrough }
 }
 
 it.each(fixtures)('$kind: compensates an above-viewport remeasurement during backward native movement', fixture => {
@@ -153,3 +176,89 @@ it.each(fixtures.flatMap(fixture => (['idle', 'forward'] as const).map(direction
     expect(scroller.scrollTo).toHaveBeenCalledOnce()
   },
 )
+
+// Intent: a continuous scroll keeps the virtualizer's direction until scroll events stop, also when
+// WebKit momentum moves the element on without a scroll event and a row resize arrives first. The
+// measurement hook reported that position at rest, clearing the direction, and the row's growth
+// above the reader during backward motion was compensated. The momentum carries on by the recorded
+// step.
+it.each(fixtures)('$kind: keeps backward motion when a row is measured between withheld scroll events', fixture => {
+  const { before, after, measurement } = fixture
+  const { scroller, resize, scrollThrough } = measurementHarness(fixture, { initialSize: measurement.size, takeoverOnScroll: true })
+  scrollThrough(before.top, after.top)
+  const top = after.top - (before.top - after.top)
+  scroller.scrollTop = top
+  vi.mocked(scroller.scrollTo).mockClear()
+  act(() => resize(measurement.oldSize))
+  // The library's backward rule leaves growth above the reader uncompensated.
+  expect(scroller.scrollTop).toBe(top)
+  expect(scroller.scrollTo).not.toHaveBeenCalled()
+})
+
+// The reader scrolls down to the end of the list and 46px past it, the end stretch measured on an
+// iPhone, and the row above shrinks mid-bounce. While the element reports a position past its range
+// the library holds the correction rather than writing it.
+function heldThroughRubberBand(fixture: (typeof fixtures)[number]) {
+  const { before, after, measurement } = fixture
+  const list = measurementHarness(fixture, { takeoverOnScroll: true })
+  const max = list.scroller.scrollHeight - list.scroller.clientHeight
+  list.scrollThrough(max - (before.top - after.top), max, max + 46)
+  vi.mocked(list.scroller.scrollTo).mockClear()
+  act(() => list.resize(measurement.size))
+  expect(list.scroller.scrollTop, 'precondition: the shrink is held mid-bounce').toBe(max + 46)
+  expect(list.scroller.scrollTo).not.toHaveBeenCalled()
+  return { ...list, max }
+}
+
+// Intent: the measurement hook's at-rest report also cleared the library's overscroll guard, so a
+// correction held through a rubber band was written mid-bounce. Any resize delivery mid-bounce runs
+// that hook; here the same row reports its new size again.
+it.each(fixtures)('$kind: keeps a correction held through a rubber band when a row reports mid-bounce', fixture => {
+  const { scroller, resize, max } = heldThroughRubberBand(fixture)
+  act(() => resize(fixture.measurement.size))
+  expect(scroller.scrollTop).toBe(max + 46)
+  expect(scroller.scrollTo).not.toHaveBeenCalled()
+})
+
+// Intent: the library writes a held correction itself once the element is back in range. Reporting
+// that write at rest cleared the bounce's backward direction, and the row's growth above the reader
+// was compensated. Replay the row's captured heights as the held shrink and then a growth.
+it.each(fixtures)('$kind: keeps backward motion after a held correction is written as the bounce returns', fixture => {
+  const { measurement } = fixture
+  const { scroller, resize, scrollThrough, max } = heldThroughRubberBand(fixture)
+  const shrink = measurement.size - measurement.oldSize
+  scrollThrough(max)
+  expect(scroller.scrollTop, 'the held shrink is written').toBe(max + shrink)
+  vi.mocked(scroller.scrollTo).mockClear()
+  act(() => resize(measurement.oldSize))
+  // The library's backward rule leaves growth above the reader uncompensated.
+  expect(scroller.scrollTop).toBe(max + shrink)
+  expect(scroller.scrollTo).not.toHaveBeenCalled()
+})
+
+// Intent: a correction past the end of the scrollable range is clamped by the browser, and the
+// library writes the rest from its commit-time update once the list commits its new size. That
+// write's read-back was reported at rest, so the library took the reader as stopped mid-scroll;
+// reported as motion from inside React's commit, it must not ask for a synchronous render. The row
+// is still at its estimate as the reader leaves the end of the list: its captured heights are the
+// estimate and the first measurement.
+it.each(fixtures)('$kind: keeps the scroll in progress after a clamped correction is retried in the commit', fixture => {
+  const { before, after, measurement } = fixture
+  const adjustments = vi.spyOn(Virtualizer.prototype, 'applyScrollAdjustment')
+  const errors = vi.spyOn(console, 'error')
+  const { scroller, resize, mount, scrollThrough } = measurementHarness(fixture, {
+    initialSize: measurement.size, estimated: true, takeoverOnScroll: true,
+  })
+  const max = scroller.scrollHeight - scroller.clientHeight
+  const top = max - (before.top - after.top)
+  scrollThrough(max, top)
+  mount()
+  act(() => resize(measurement.oldSize))
+  const growth = measurement.oldSize - measurement.size
+  expect(top + growth, 'precondition: the correction overshoots the range').toBeGreaterThan(max)
+  expect(scroller.scrollTop, 'the clamped correction is written in full').toBe(top + growth)
+  const library = adjustments.mock.contexts.at(-1) as Virtualizer<HTMLElement, Element>
+  expect(library.isScrolling).toBe(true)
+  expect(library.scrollDirection).toBe('backward')
+  expect(errors.mock.calls.flat().join('\n')).not.toContain('flushSync')
+})
