@@ -265,7 +265,8 @@ send no query at all.
 The lifecycle also emits `freshSessionDiscoverySettled` for the current session
 when server discovery finishes, including failure or a response without
 capability data. Once the inputs have settled, missing capability data schedules
-one retry at a time, five seconds after the previous attempt settles. When the
+one retry at a time, after the previous attempt settles. The wait starts at 5
+seconds and doubles up to a 60-second ceiling. When the
 domain does not advertise MAM, a valid account-JID answer without MAM or an
 explicit account error reply (`StanzaError`) treats account MAM as unsupported
 and retains the known domain features. A timeout, lost connection or unusable
