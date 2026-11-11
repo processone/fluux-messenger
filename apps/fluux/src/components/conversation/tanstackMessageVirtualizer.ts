@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { defaultRangeExtractor, elementScroll, useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
 import type { MessageVirtualizer, ScrollWrite, ScrollWriteOutcome, ScrollWriteOwner } from './messageVirtualizer'
 
-// Frames the offset must hold steady before we declare scrolling settled and stop polling
-// (~100ms at 60fps — close to @tanstack's default 150ms isScrollingResetDelay).
+// Frames with neither a scroll event nor an offset change before we declare scrolling settled and
+// stop polling (~100ms at 60fps — close to @tanstack's default 150ms isScrollingResetDelay).
 const OFFSET_POLL_IDLE_FRAMES = 6
 const ENTRY_OVERSCAN = 2
 const STEADY_OVERSCAN = 12
@@ -26,6 +26,16 @@ function useEntryOverscan(hasRows: boolean): number {
   return overscan
 }
 
+// Marks a virtualizer whose commit-time update the adapter already tracks.
+const COMMIT_TRACKED = Symbol('commitTracked')
+
+/**
+ * Whether the offset observer is following a scroll in progress. See observeElementOffsetWithRaf.
+ * `start`, set by the observer, marks one the caller found first, once a wheel or touch move has
+ * started the observer's poll; the poll then settles it.
+ */
+export interface ScrollActivity { active: boolean; start?: () => void }
+
 /**
  * Drop-in replacement for @tanstack/react-virtual's `observeElementOffset` that re-windows from a
  * requestAnimationFrame poll of `scrollTop`, not only from the element's `scroll` event.
@@ -40,13 +50,21 @@ function useEntryOverscan(hasRows: boolean): number {
  *
  * HOW: keep the `scroll` listener (so the Chromium path is unchanged) but, once a gesture starts
  * (scroll / wheel / touch), poll `scrollTop` every frame and push each change into the virtualizer.
- * The poll stops after the offset is stable for OFFSET_POLL_IDLE_FRAMES, so it runs only during an
- * active scroll. It is strictly READ-ONLY (never writes scrollTop) so it cannot feed back into the
- * scroll-correction loops. Same `(instance, cb) => cleanup` contract as the @tanstack default.
+ * The poll stops after OFFSET_POLL_IDLE_FRAMES with neither a scroll event nor an offset change, so
+ * it runs only during an active scroll. A scroll event counts as motion even when the poll then
+ * reads the offset that event already reported: otherwise a steady stream of events would read as
+ * settled every few frames, clearing the virtualizer's isScrolling and direction mid-scroll. It is
+ * strictly READ-ONLY (never writes scrollTop) so it cannot feed back into the scroll-correction
+ * loops. Same `(instance, cb) => cleanup` contract as the @tanstack default.
+ *
+ * `activity.active` tells the caller whether a scroll is in progress: from a scroll event, marked
+ * before the element's other scroll listeners run, or an observed offset change, until the poll
+ * settles. While it is set, this observer reports the positions itself.
  */
 export function observeElementOffsetWithRaf(
   instance: { scrollElement: HTMLElement | null },
   cb: (offset: number, isScrolling: boolean) => void,
+  activity: ScrollActivity = { active: false },
 ): void | (() => void) {
   const el = instance.scrollElement
   if (!el) return
@@ -60,9 +78,11 @@ export function observeElementOffsetWithRaf(
     if (offset !== lastOffset) {
       lastOffset = offset
       idleFrames = 0
+      activity.active = true
       cb(offset, true)
     } else if (++idleFrames >= OFFSET_POLL_IDLE_FRAMES) {
       rafId = null
+      activity.active = false
       cb(offset, false) // scrolling settled — resume measurement adjustments
       return
     }
@@ -76,23 +96,42 @@ export function observeElementOffsetWithRaf(
     }
   }
 
-  const onScroll = () => {
-    lastOffset = el.scrollTop
-    cb(lastOffset, true)
+  // Capture phase: runs before the app's own scroll handler on this element, so a reader takeover
+  // that handler triggers already sees the scroll in progress.
+  const onScrollStarted = () => {
+    activity.active = true
+    idleFrames = 0
     startPolling()
   }
 
+  // A wheel or touch move can move the element before its first scroll event. A caller that finds it
+  // moved in that window starts the scroll there. Without such input it leaves the scroll to its event.
+  activity.start = () => {
+    if (rafId !== null && !activity.active) onScrollStarted()
+  }
+
+  // The capture-phase listener above has already marked this event's scroll in progress.
+  const onScroll = () => {
+    lastOffset = el.scrollTop
+    cb(lastOffset, true)
+  }
+
+  el.addEventListener('scroll', onScrollStarted, { capture: true, passive: true })
   el.addEventListener('scroll', onScroll, { passive: true })
   // Momentum initiators: WebKit may suppress the `scroll` event during the inertial phase, so
   // begin polling the moment the gesture starts rather than waiting for a `scroll` that won't come.
-  el.addEventListener('wheel', startPolling, { passive: true })
-  el.addEventListener('touchmove', startPolling, { passive: true })
+  // Capture phase, so the poll has started when the app's own input handlers take over the reader.
+  el.addEventListener('wheel', startPolling, { capture: true, passive: true })
+  el.addEventListener('touchmove', startPolling, { capture: true, passive: true })
 
   return () => {
+    el.removeEventListener('scroll', onScrollStarted, { capture: true })
     el.removeEventListener('scroll', onScroll)
-    el.removeEventListener('wheel', startPolling)
-    el.removeEventListener('touchmove', startPolling)
+    el.removeEventListener('wheel', startPolling, { capture: true })
+    el.removeEventListener('touchmove', startPolling, { capture: true })
     if (rafId !== null) cancelAnimationFrame(rafId)
+    activity.active = false
+    delete activity.start
   }
 }
 
@@ -236,15 +275,60 @@ export function useTanstackMessageVirtualizer({
   // and collapse the content height. The caller owns estimation; see useRowMetrics for calibration.
   // @tanstack hands its offset callback to `observeElementOffset` on (re)mount. At the accepted
   // writer we push the element's actual post-write position with isScrolling=false, so rows mount
-  // without waiting for a native event. Queued navigation keeps its command identity until that
-  // first write; the caller returning does not turn it into layout reconciliation. The non-sync
-  // callback uses plain rerender() rather than a synthetic scroll event's flushSync, which is
-  // illegal during a MAM-prepend restore useLayoutEffect.
+  // without waiting for a native event; a write the library makes on its own while a scroll is in
+  // progress reports it as motion instead (reportWritten). Queued navigation keeps its command
+  // identity until that first write; the caller returning does not turn it into layout
+  // reconciliation. The non-sync callback uses plain rerender() rather than a synthetic scroll
+  // event's flushSync, which is illegal during a MAM-prepend restore useLayoutEffect.
   const offsetCbRef = useRef<((offset: number, isScrolling: boolean) => void) | null>(null)
+  const scrollActivityRef = useRef<ScrollActivity>({ active: false })
+  // Set while virtual-core runs its commit-time update. See the tracking after useVirtualizer.
+  const committingRef = useRef(false)
+  // Reports the element's position as motion while a scroll is in progress. With keepDirection it
+  // is the read-back of our own write: a correction moves the content, not the reader, so the
+  // reader's direction is kept rather than taken from the correction's sign. Inside React's commit
+  // the report asks for no synchronous render, as virtual-core asks for none there itself.
+  const reportMotion = useCallback((instance: Virtualizer<HTMLElement, Element>, offset: number, keepDirection: boolean) => {
+    const report = offsetCbRef.current
+    if (!report) return
+    const direction = instance.scrollDirection
+    const options = instance.options
+    const onChange = options.onChange
+    if (committingRef.current && onChange) options.onChange = inst => onChange(inst, false)
+    try {
+      report(offset, true)
+    } finally {
+      options.onChange = onChange
+      if (keepDirection) instance.scrollDirection = direction
+    }
+  }, [])
+  // Publishes the position our own write left the element at: at rest, or as motion while a scroll
+  // is in progress, so the write does not clear the library's isScrolling and direction mid-scroll.
+  const reportWritten = (instance: Virtualizer<HTMLElement, Element>, offset: number) => {
+    if (scrollActivityRef.current.active) reportMotion(instance, offset, true)
+    else offsetCbRef.current?.(offset, false)
+  }
+  // Publishes the element's position from outside the offset observer: as motion while a scroll is
+  // in progress, otherwise at rest. A wheel or touch move can move the list before its first scroll
+  // event. Once it has, a position the library does not hold yet starts the scroll: published at
+  // rest, the library would hold it and then drop the event's own report as a repeat. The library
+  // holds a held correction on top of the element's position, and a sub-pixel difference is the
+  // browser rounding our own write.
+  const reportElementPosition = useCallback((instance: Virtualizer<HTMLElement, Element>, top: number) => {
+    const activity = scrollActivityRef.current
+    const hold = (instance as unknown as { _holdOffset?: number })._holdOffset ?? 0
+    if (!activity.active && instance.scrollOffset !== null && Math.abs(top + hold - instance.scrollOffset) >= 1) {
+      activity.start?.()
+    }
+    if (activity.active) reportMotion(instance, top, false)
+    else offsetCbRef.current?.(top, false)
+  }, [reportMotion])
   const observeOffset = useCallback(
     (instance: Virtualizer<HTMLElement, Element>, cb: (offset: number, isScrolling: boolean) => void) => {
       offsetCbRef.current = cb
-      const cleanup = observeElementOffsetWithRaf(instance, cb)
+      const activity: ScrollActivity = { active: false }
+      scrollActivityRef.current = activity
+      const cleanup = observeElementOffsetWithRaf(instance, cb, activity)
       return () => {
         offsetCbRef.current = null
         cleanup?.()
@@ -364,7 +448,12 @@ export function useTanstackMessageVirtualizer({
         // The DOM result is authoritative: the browser can clamp, round or drop a write. Publish
         // its actual offset here, not a destination after a possibly still-queued command returns.
         // Smooth writes have not landed yet; native events and rAF publish their real progress.
-        if (scroller && options.behavior !== 'smooth') offsetCbRef.current?.(scroller.scrollTop, false)
+        // A navigation write is published at rest. The library's own writes (a hold flush, a clamp
+        // retry) correct the content while a scroll may be in progress.
+        if (scroller && options.behavior !== 'smooth') {
+          if (source === 'navigation') offsetCbRef.current?.(scroller.scrollTop, false)
+          else reportWritten(instance, scroller.scrollTop)
+        }
         return
       }
       // The library decided on `offset` when the row resized, and the observer above (or a scroll
@@ -386,12 +475,16 @@ export function useTanstackMessageVirtualizer({
       retargetLibraryWrite(instance, live + hold, delta)
       elementScroll(live, { ...options, adjustments: delta }, instance)
       observer?.({ phase: 'after', source, behavior: options.behavior })
-      if (instance.scrollElement) offsetCbRef.current?.(instance.scrollElement.scrollTop, false)
+      if (instance.scrollElement) reportWritten(instance, instance.scrollElement.scrollTop)
     },
     measureElement: (element, entry, instance) => {
       writeObserverRef.current?.({ phase: 'before-measure', source: 'measurement' })
       if (instance.scrollElement && instance.scrollOffset !== instance.scrollElement.scrollTop) {
-        offsetCbRef.current?.(instance.scrollElement.scrollTop, false)
+        // While a scroll is in progress this is reported as motion. At rest it cleared the
+        // library's isScrolling and direction mid-scroll, and with them its overscroll guard, so a
+        // correction held through a rubber band was written mid-bounce. A position the library
+        // already holds (the element sits behind it by that held correction) is then left alone.
+        reportElementPosition(instance, instance.scrollElement.scrollTop)
       }
       // Preserve fractional border-box heights: integer rounding leaves seams or overlaps
       // between grouped message tints, especially after previews at scaled text sizes.
@@ -428,6 +521,20 @@ export function useTanstackMessageVirtualizer({
   // suppression or the held anchor needs no reassignment and no render to take effect.
   if (virtualizer.shouldAdjustScrollPositionOnItemSizeChange !== shouldAdjustOnResize) {
     virtualizer.shouldAdjustScrollPositionOnItemSizeChange = shouldAdjustOnResize
+  }
+
+  // virtual-core also writes from its commit-time update, run in a layout effect: a hold flush or a
+  // clamp retry. React cannot render synchronously inside its commit, so a read-back reported from
+  // there asks for no synchronous render (reportMotion). The method is private: a library that
+  // renames it leaves those reports asking as the library would.
+  const commitUpdate = virtualizer as unknown as { _willUpdate?: () => unknown; [COMMIT_TRACKED]?: true }
+  if (typeof commitUpdate._willUpdate === 'function' && !commitUpdate[COMMIT_TRACKED]) {
+    const willUpdate = commitUpdate._willUpdate
+    commitUpdate._willUpdate = () => {
+      committingRef.current = true
+      try { return willUpdate() } finally { committingRef.current = false }
+    }
+    commitUpdate[COMMIT_TRACKED] = true
   }
 
   const getOffsetForMessageId = useCallback((id: string): number | null => {
@@ -526,8 +633,12 @@ export function useTanstackMessageVirtualizer({
     // writes immediately during an iOS end pull, clamping the native rubber band (FLM-219),
     // and can re-land on the cancelled position after the reader starts moving (#1465).
     virtualizer.cancelScroll()
-    offsetCbRef.current?.(scroller.scrollTop, false)
-  }, [retireHeld, scrollRef, virtualizer])
+    // While the reader scrolls, the offset observer reports each position as motion. A report at
+    // rest here would clear the library's isScrolling and direction, and the library would then
+    // drop the scroll event's own report as a repeat of the position it already holds. A wheel or
+    // touch move can move the list before its first scroll event: see reportElementPosition.
+    if (!scrollActivityRef.current.active) reportElementPosition(virtualizer, scroller.scrollTop)
+  }, [reportElementPosition, retireHeld, scrollRef, virtualizer])
 
   // The row an estimate refresh keeps where the reader sees it: the held anchor, or the row at the
   // reader's live offset. None while the caller owns the pixels, or while a smooth or written command

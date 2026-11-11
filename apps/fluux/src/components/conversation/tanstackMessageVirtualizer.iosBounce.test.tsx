@@ -19,9 +19,28 @@ beforeEach(() => {
     value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1',
     configurable: true,
   })
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(private callback: ResizeObserverCallback) {}
+    observe(element: Element) {
+      resizeObservers.set(element, [this.callback, this as unknown as ResizeObserver])
+    }
+    unobserve(element: Element) { resizeObservers.delete(element) }
+    disconnect() {}
+  })
 })
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.replaceChildren() })
+// While the reader scrolls, rows are measured only through the library's resize observer. Each
+// entry goes to the observer that observes its row.
+const resizeObservers = new Map<Element, [ResizeObserverCallback, ResizeObserver]>()
+const deliverResize = (entries: ResizeObserverEntry[]) => {
+  for (const entry of entries) {
+    const [callback, observer] = resizeObservers.get(entry.target)!
+    callback([entry], observer)
+  }
+}
+afterEach(() => {
+  cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals()
+  resizeObservers.clear(); document.body.replaceChildren()
+})
 
 function bouncingList() {
   const scroller = document.body.appendChild(document.createElement('div'))
@@ -82,7 +101,11 @@ it('keeps the rows the reader sees still when the finger lifts after a takeover'
   const above = scroller.appendChild(document.createElement('div'))
   above.dataset.index = '10'
   above.getBoundingClientRect = () => new DOMRect(0, 0, 800, 100)
-  act(() => virtualizer.measureElement(above))
+  // The finger is still dragging, so the row is measured as a browser reports it mid-scroll.
+  act(() => {
+    virtualizer.measureElement(above)
+    deliverResize([{ target: above, borderBoxSize: [{ blockSize: 100, inlineSize: 800 }] } as unknown as ResizeObserverEntry])
+  })
   expect(scroller.scrollTop, 'precondition: the library holds the growth while the finger is down').toBe(3000)
   act(() => {
     scroller.dispatchEvent(new Event('touchend'))
