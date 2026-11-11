@@ -39,6 +39,7 @@
     "test:ios-extensions": "node --test scripts/ios-extension-identifiers.test.mjs scripts/ios-share-schemes.test.mjs",
     "test:ios-diagnostic": "bash scripts/native-tests/ios-diagnostic/run.sh",
     "test:ios-share": "bash scripts/native-tests/ios-share/run.sh",
+    "test:ios-widgets": "bash scripts/native-tests/ios-widgets/run.sh",
     "test:ios-photos": "node --test scripts/ios-photo-reduction.test.mjs",
     "test:ios-generated-files": "node --test scripts/ios-generated-files.test.mjs",
     "test:ios-project": "node --test scripts/ios-project-freshness.test.mjs",

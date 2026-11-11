@@ -162,6 +162,12 @@ test('Swift and native test fixtures route to their runtime owner rather than Vi
   for (const path of ['apps/fluux/src-tauri/plugins/ios-feedback/ios/Sources/HingeLayout.swift', 'scripts/native-tests/HingeLayoutTests.swift', 'scripts/ios-hinge-layout.test.mjs']) {
     assert.ok(ids(planFor([path])).includes('test:ios-hinge'))
   }
+  // FLM-47: widget and push extension files run the simulator widget lab.
+  for (const path of ['apps/fluux/src-tauri/mobile/ios/Widgets/UnreadWidgetView.swift', 'apps/fluux/src-tauri/plugins/widgets/ios/Sources/UnreadList.swift',
+    'apps/fluux/src-tauri/mobile/ios/NotificationService.swift', 'apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationAvatars/SharedBadge.swift',
+    'scripts/native-tests/ios-widgets/WidgetsUITests.swift']) {
+    assert.ok(ids(planFor([path])).includes('test:ios-widgets'), path)
+  }
   const diagnostic = planFor(['scripts/native-tests/ios-diagnostic/UITests.swift'])
   assert.ok(ids(diagnostic).includes('test:ios-diagnostic'))
   assert.ok(ids(diagnostic).includes('test:ios-notifications'))
