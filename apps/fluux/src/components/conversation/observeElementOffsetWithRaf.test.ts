@@ -8,7 +8,7 @@
  * change scrollTop WITHOUT firing a `scroll` event and assert the offset is still re-emitted.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { observeElementOffsetWithRaf } from './tanstackMessageVirtualizer'
+import { observeElementOffsetWithRaf, type ScrollActivity } from './tanstackMessageVirtualizer'
 
 describe('observeElementOffsetWithRaf', () => {
   let rafQueue: Array<FrameRequestCallback | undefined>
@@ -135,6 +135,26 @@ describe('observeElementOffsetWithRaf', () => {
     expect(activity.active).toBe(true)
     flush(12)
     expect(activity.active).toBe(false)
+  })
+
+  // Intent: the adapter starts a scroll it finds after a wheel moved the list and before the first
+  // scroll event, so the virtualizer keeps its direction from there. Without such input the scroll is
+  // left to its event, and a started scroll still settles when nothing follows, or every later
+  // correction would read as motion.
+  it('starts a scroll for the caller only after wheel input, and settles it once nothing moves', () => {
+    const el = makeEl(300)
+    const cb = vi.fn()
+    const activity: ScrollActivity = { active: false }
+    observeElementOffsetWithRaf({ scrollElement: el as unknown as HTMLElement }, cb, activity)
+
+    activity.start?.()
+    expect(activity.active).toBe(false)
+    el._fire('wheel')
+    activity.start?.()
+    expect(activity.active).toBe(true)
+    flush(12)
+    expect(activity.active).toBe(false)
+    expect(cb).toHaveBeenLastCalledWith(300, false)
   })
 
   it('still re-windows on a normal scroll event (Chromium path unchanged)', () => {

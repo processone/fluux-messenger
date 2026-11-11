@@ -136,14 +136,17 @@ These direction rules need the virtualizer to see a scroll as in progress for as
 The offset observer reports every position as motion from the first scroll event, or the first
 offset change its frame poll sees, until neither has arrived for six frames; only then does it
 report the scroll at rest. While a scroll is in progress, the reader takeover leaves the
-virtualizer's motion state alone. Every write the library makes on its own reports its read-back
-as motion with the reader's direction kept, since a correction moves the content, not the reader:
-a resize correction, a held correction written once the element is back in range, the rest of a
-correction the browser clamped, and a prepend anchor sync. The measurement hook, which reports a
-position the element reached without a scroll event, reports it as motion too, so the library
-keeps its overscroll guard and leaves a correction held through a rubber band unwritten until the
-bounce returns. A report from inside React's commit asks for no synchronous render, as the
-library's own commit-time update asks for none. Navigation writes and reports outside a scroll
+virtualizer's motion state alone. A wheel or touch move can move the list before its first scroll
+event. Once one has, the takeover or the measurement hook that finds the list a pixel or more from
+the position the virtualizer holds starts the scroll, reported as motion. Reported at rest, the
+virtualizer would drop the scroll event's own report as a repeat. Every write the library makes on
+its own reports its read-back as motion with the reader's direction kept, since a correction moves
+the content, not the reader: a resize correction, a held correction written once the element is
+back in range, and the rest of a correction the browser clamped. The measurement hook, which
+reports a position the element reached without a scroll event, reports it as motion too, so the
+library keeps its overscroll guard and leaves a correction held through a rubber band unwritten
+until the bounce returns. A report from inside React's commit asks for no synchronous render, as
+the library's own commit-time update asks for none. Navigation writes and reports outside a scroll
 still publish at rest.
 
 Native upward panning also retains visible progress when the metrics behind unmeasured estimates

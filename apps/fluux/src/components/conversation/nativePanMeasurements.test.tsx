@@ -195,6 +195,36 @@ it.each(fixtures)('$kind: keeps backward motion when a row is measured between w
   expect(scroller.scrollTo).not.toHaveBeenCalled()
 })
 
+// Intent: a continuous scroll keeps the virtualizer's direction from its first scroll event. A wheel
+// can move the list before that event: the app's reader takeover, run on the wheel input, reported
+// the moved position at rest, and the library then dropped the event's own report as a repeat. A row
+// measured in that window did the same. Either way the row's growth above the reader during backward
+// motion was compensated. The list comes to rest at the recorded start, then a wheel moves it by the
+// recorded step.
+it.each(fixtures.flatMap(fixture => (['takeover', 'measurement'] as const).map(first => ({ fixture, first }))))(
+  '$fixture.kind: keeps backward motion when the list moves before its first scroll event ($first)',
+  ({ fixture, first }) => {
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', vi.fn((frame: FrameRequestCallback) => frames.push(frame)))
+    const { before, after, measurement } = fixture
+    const { scroller, result, resize, scrollThrough } = measurementHarness(fixture, { initialSize: measurement.size, takeoverOnScroll: true })
+    scrollThrough(before.top)
+    act(() => { for (let i = 0; i < 20; i++) frames.splice(0).forEach(frame => frame(0)) })
+    expect(frames, 'precondition: the list is at rest').toEqual([])
+    scroller.dispatchEvent(new Event('wheel'))
+    scroller.scrollTop = after.top
+    if (first === 'takeover') {
+      act(() => result.current.cancelPendingScroll?.())
+      scrollThrough(after.top)
+    }
+    vi.mocked(scroller.scrollTo).mockClear()
+    act(() => resize(measurement.oldSize))
+    // The library's backward rule leaves growth above the reader uncompensated.
+    expect(scroller.scrollTop).toBe(after.top)
+    expect(scroller.scrollTo).not.toHaveBeenCalled()
+  },
+)
+
 // The reader scrolls down to the end of the list and 46px past it, the end stretch measured on an
 // iPhone, and the row above shrinks mid-bounce. While the element reports a position past its range
 // the library holds the correction rather than writing it.
