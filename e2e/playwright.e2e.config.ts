@@ -80,13 +80,14 @@ const TRACE_MODE = 'retain-on-failure' as const
  * macOS WebKit traces carry no screenshots.
  *
  * Playwright's WebKit on macOS takes each trace screenshot by asking the window server for a
- * picture of the test window, about 25 times a second for as long as a test runs. While the
- * display sleeps, the window server keeps the buffers of those pictures: a long local run
- * exhausts them, the window server aborts, and macOS ends the whole login session.
+ * picture of the test window, about 25 times a second for as long as a test runs. Each picture
+ * takes one of the window server's image buffers. With several workers, the buffers can pile up
+ * faster than they are freed; when none is left, the window server aborts and macOS ends the
+ * whole login session.
  *
  * The trace keeps its DOM snapshots, actions, console and network, which is what a failure is
- * diagnosed from. Explicit `page.screenshot()` calls still work: a run makes a few dozen, not
- * tens of thousands. Linux, where CI runs, has no window server and keeps the screenshots.
+ * diagnosed from. Explicit `page.screenshot()` calls still work: a run makes dozens, not tens
+ * of thousands. Linux, where CI runs, has no window server and keeps the screenshots.
  */
 const WEBKIT_TRACE = process.platform === 'darwin'
   ? { trace: { mode: TRACE_MODE, screenshots: false } }
