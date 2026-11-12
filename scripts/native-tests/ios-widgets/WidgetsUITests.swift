@@ -52,6 +52,17 @@ final class WidgetsUITests: XCTestCase {
         return nil
     }
 
+    /// Goes home and swipes through the pages until the widget's own text (`marker`) is on screen.
+    func showWidgetPage(_ marker: String) -> Bool {
+        XCUIDevice.shared.press(.home)
+        sleep(1)
+        for _ in 0..<4 {
+            if onHome(marker, timeout: 3) != nil { return true }
+            springboard.swipeLeft()
+        }
+        return false
+    }
+
     func launchHost(_ argument: String) {
         app.terminate()
         app.launchArguments = [argument]
@@ -123,6 +134,7 @@ final class WidgetsUITests: XCTestCase {
                       "the production NotificationService delivered the push")
         XCUIDevice.shared.press(.home)
         sleep(3)
+        XCTAssertTrue(showWidgetPage("Alice Lab"), "the widget's page can be found by swiping")
         shot("11-after-push")
         XCTAssertNotNil(onHome("Bob Lab", timeout: 20), "the pushed conversation was added to the widget")
         XCTAssertNotNil(onHome("Alice Lab"), "the listed conversation stays")
@@ -144,32 +156,37 @@ final class WidgetsUITests: XCTestCase {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["FLUUX_WIDGETS_HOURLY"] == "1",
                           "waits about an hour: set FLUUX_WIDGETS_HOURLY=1 to run it")
         launchHost("-seed")
-        XCUIDevice.shared.press(.home)
-        sleep(3)
-        XCTAssertNotNil(onHome("Alice Lab", timeout: 20), "the seeded row is shown before the silent change")
+        XCTAssertTrue(showWidgetPage("Alice Lab"), "the seeded row is shown before the silent change")
         XCTAssertNil(onHome("Carol Lab", timeout: 1))
         launchHost("-silentchange")
         app.terminate()
         let changedAt = Date()
-        XCUIDevice.shared.press(.home)
-        shot("13-silent-change-written")
+        XCTAssertTrue(showWidgetPage("Alice Lab"), "the widget is still on screen after the silent change")
+        dump("13-silent-change-written")
         XCTAssertNil(onHome("Carol Lab", timeout: 2), "no redraw was requested, so the change is not shown at once")
-        // The list changed with no redraw request: the row must not show before the timeline's own hour is up,
-        // so a reload from any other cause cannot pass as the hourly re-read.
+        // The row must not show before the timeline's own hour is up, so a reload from any other cause
+        // cannot pass as the hourly re-read. Each poll first finds the widget's page, so a miss means the
+        // widget did not redraw, not that it was off screen; the springboard tree is kept every 10 minutes.
+        var lastDump = Date()
         while Date().timeIntervalSince(changedAt) < 80 * 60 {
-            XCUIDevice.shared.press(.home)
+            let onScreen = showWidgetPage("Alice Lab")
             if onHome("Carol Lab", timeout: 5) != nil {
                 let minutes = Int(Date().timeIntervalSince(changedAt) / 60)
-                shot("15-after-hourly-reread")
+                dump("15-after-hourly-reread")
                 let note = XCTAttachment(string: "Carol Lab shown \(minutes) minutes after the silent change")
                 note.lifetime = .keepAlways
                 add(note)
                 XCTAssertGreaterThanOrEqual(minutes, 55, "the row came from another reload, not the hourly re-read (\(minutes) minutes)")
                 return
             }
+            if Date().timeIntervalSince(lastDump) > 600 || !onScreen {
+                dump("14-poll-\(Int(Date().timeIntervalSince(changedAt) / 60))min-widgetOnScreen-\(onScreen)")
+                lastDump = Date()
+            }
             sleep(30)
         }
-        shot("15-no-reread")
+        _ = showWidgetPage("Alice Lab")
+        dump("15-no-reread")
         XCTFail("the widget did not show the silent change within 80 minutes")
     }
 }
