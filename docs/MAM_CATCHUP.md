@@ -271,9 +271,9 @@ domain does not advertise MAM, a valid account-JID answer without MAM or an
 explicit account error reply (`StanzaError`) treats account MAM as unsupported
 and retains the known domain features. A timeout, lost connection or unusable
 answer still leaves capability knowledge unknown. The preparation owner remains
-held: an unknown capability is not proof that archive sync is unnecessary, and
-consumers such as the iOS unread publisher must not replace unseen arrivals with
-a cached zero. A successful MAM result starts the normal pipeline with its own
+held: an unknown capability is not proof that archive sync is unnecessary. The
+iOS unread publisher does not wait for catch-up, so it can publish the cached
+count before unseen arrivals are fetched and republishes as they land. A successful MAM result starts the normal pipeline with its own
 owners; a definitive negative account result releases only preparation. Retries
 stop on disconnect, resumption, supersession, cleanup or a known capability result. Discovery also rejects stale-session results, so
 an old reply cannot install another account's capabilities or release new work.

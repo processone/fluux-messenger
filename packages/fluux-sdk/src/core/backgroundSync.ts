@@ -162,7 +162,7 @@ export function setupBackgroundSyncSideEffects(
   function scheduleServerDiscoveryRetry(): void {
     const generation = sessionGeneration
     if (discoveryRetryTimer !== undefined || discoveryRetryAttempt || !needsServerDiscovery(generation)) return
-    // Keep preparation owned while capability knowledge is missing; never publish a cached zero instead.
+    // Keep preparation owned while capability knowledge is missing, so archive sync is not skipped.
     const delay = Math.min(SERVER_DISCOVERY_RETRY_DELAY_MS * 2 ** discoveryRetryCount, SERVER_DISCOVERY_RETRY_MAX_DELAY_MS)
     discoveryRetryTimer = setTimeout(() => {
       discoveryRetryTimer = undefined

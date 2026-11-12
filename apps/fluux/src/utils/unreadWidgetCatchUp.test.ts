@@ -23,7 +23,7 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-describe('iOS read publication after session discovery settles', () => {
+describe('iOS read publication while session discovery is settling', () => {
   let restorePlatform: () => void
   let stopPublisher: (() => void) | undefined
   let stopSync: (() => void) | undefined
