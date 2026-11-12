@@ -56,7 +56,8 @@ func seed(_ root: URL) throws {
     try NotificationMirror.writeNames(names, root: root)
     let mirrored = try NotificationMirror.writeAvatar(.init(account: labAccount, hash: hash, data: avatarPNG().base64EncodedString()), root: root)
     precondition(mirrored, "avatar mirrored")
-    let badge = SharedBadge(unread: ["alice@lab.test"], events: 0, notifyAllRooms: [])
+    // The app stamps the badge with its account; an unowned (legacy) badge cannot authorize a widget row.
+    let badge = SharedBadge(unread: ["alice@lab.test"], events: 0, notifyAllRooms: [], account: labAccount)
     try JSONEncoder().encode(badge).write(to: root.appendingPathComponent("NotificationBadge.json"), options: .atomic)
     let now = Date().timeIntervalSince1970 * 1000
     try UnreadList(account: labAccount, total: 1,

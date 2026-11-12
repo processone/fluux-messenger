@@ -191,7 +191,8 @@ import UniformTypeIdentifiers
             var delivered: [UNNotificationContent] = []
             service.didReceive(UNNotificationRequest(identifier: name, content: original, trigger: nil)) { delivered.append($0) }
             let entries = try JSONDecoder().decode([NotificationDiagnostic.Entry].self, from: journal.export())
-            let decisions = entries.map(\.decision.rawValue)
+            // Widget publication decisions share the journal and the correlation; this scenario owns the preview decisions.
+            let decisions = entries.map(\.decision.rawValue).filter { !$0.hasPrefix("widget") }
             print("\(name): \(decisions.joined(separator: ", "))")
             let fallback = NotificationPresentation.content(for: original, names: names, activity: PreviewWords.localized.activity)
             if decisions != [PreviewDecision.received.rawValue, expected.rawValue] { failures.append("\(name) recorded \(decisions)") }

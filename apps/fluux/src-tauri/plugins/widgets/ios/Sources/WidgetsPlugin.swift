@@ -17,7 +17,7 @@ class WidgetsPlugin: Plugin {
         // one more as the app leaves covers what the foreground writes already requested.
         NotificationCenter.default.addObserver(
             forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: nil
-        ) { _ in WidgetsPlugin.reload() }
+        ) { _ in _ = WidgetsPlugin.reload() }
     }
 
     @objc public func setUnreadList(_ invoke: Invoke) {
@@ -29,18 +29,41 @@ class WidgetsPlugin: Plugin {
                           let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
                         throw WidgetsError.sharedContainerUnavailable
                     }
-                    if let list = list { try list.write(root: root) } else { try UnreadList.clear(root: root) }
-                    WidgetsPlugin.reload()
+                    if let list = list {
+                        switch try list.publish(root: root) {
+                        case .current:
+                            // Confirmed against the actual file, not a cache of the app's previous call.
+                            WidgetPublication.post(account: list.account, events: [], snapshotAt: list.updated / 1000)
+                            invoke.resolve(); return
+                        case .superseded:
+                            // Keep a push that arrived after this app frame was built; do not call it current.
+                            invoke.resolve(); return
+                        case .written: break
+                        }
+                    } else { try UnreadList.clear(root: root) }
+                    var events = [WidgetPublication.Event(decision: list?.rows.isEmpty == true ? .cleared : .written,
+                                                         time: Date().timeIntervalSince1970)]
+                    let reloadTime = Date().timeIntervalSince1970
+                    if WidgetsPlugin.reload() { events.append(.init(decision: .reloadRequested, time: reloadTime)) }
+                    WidgetPublication.post(account: list?.account, events: events, snapshotAt: list.map { $0.updated / 1000 })
                     invoke.resolve()
-                } catch { invoke.reject(error.localizedDescription) }
+                } catch {
+                    WidgetPublication.post(account: list?.account,
+                                           events: [.init(decision: .writeFailed, time: Date().timeIntervalSince1970)])
+                    invoke.reject(error.localizedDescription)
+                }
             }
         } catch { invoke.reject(error.localizedDescription) }
     }
 
-    private static func reload() {
+    private static func reload() -> Bool {
         #if canImport(WidgetKit)
-        if #available(iOS 14.0, *) { WidgetCenter.shared.reloadTimelines(ofKind: UnreadList.widgetKind) }
+        if #available(iOS 14.0, *) {
+            WidgetCenter.shared.reloadTimelines(ofKind: UnreadList.widgetKind)
+            return true
+        }
         #endif
+        return false
     }
 }
 

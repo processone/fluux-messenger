@@ -61,6 +61,8 @@ export interface SessionLifecycleDeps {
   /** Emit the SDK `online` event (fresh-session side effects depend on it). */
   emitOnline: () => void
   emitFreshSessionInputsReady: () => void
+  /** Discovery finished, including failure or a response without capability data. */
+  emitFreshSessionDiscoverySettled: () => void
   emitConversationListReady: (conversations: SyncedConversation[]) => void
   /** Transition the presence machine to connected (`CONNECT`). */
   connectPresence: () => void
@@ -383,7 +385,10 @@ export class SessionLifecycleEngine {
           console.warn('[WebPush] queryServices failed:', err)
         })
       }
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => {
+      // Preparation can recover an unavailable discovery without treating it as synchronized state.
+      if (!this.isSessionStale(gen)) this.deps.emitFreshSessionDiscoverySettled()
+    })
     this.deps.push.checkSupport().catch(() => {})
     this.deps.discovery.discoverHttpUploadService().catch(() => {})
     this.deps.profile.fetchOwnProfile().catch(() => {})

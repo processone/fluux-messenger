@@ -56,6 +56,7 @@ export interface MockSideEffectClient {
     queryRoomMembers: Mock
   }
   server: {
+    fetchServerInfo: Mock
     discoverMAMSearchCapability: Mock
   }
   isConnected: Mock
@@ -103,6 +104,7 @@ export function createMockClient(): MockSideEffectClient & SideEffectHost {
       queryRoomMembers: vi.fn().mockResolvedValue([]),
     },
     server: {
+      fetchServerInfo: vi.fn().mockResolvedValue(undefined),
       discoverMAMSearchCapability: vi.fn().mockResolvedValue(undefined),
     },
     isConnected: vi.fn().mockReturnValue(true),

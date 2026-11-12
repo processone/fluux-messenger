@@ -60,6 +60,15 @@ describe('dismissNotification', () => {
     })
   })
 
+  it('iOS: distinguishes a store-confirmed read from ordinary navigation dismissal', async () => {
+    isMobileTauri.mockResolvedValue(true)
+    restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    await dismissNotification('conversation', 'alice@example.com', { read: true })
+    expect(invoke).toHaveBeenCalledWith('plugin:push|dismiss_notifications', {
+      target: 'alice@example.com', read: true, account: 'me@example.com',
+    })
+  })
+
   it('Android: remains a no-op', async () => {
     isMobileTauri.mockResolvedValue(true)
     restorePlatform = setPlatformForTesting({ shell: 'mobile', os: 'android' })

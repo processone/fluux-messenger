@@ -74,6 +74,7 @@ describe('SessionLifecycleEngine', () => {
   let ensureE2EEManager: ReturnType<typeof vi.fn>
   let emitOnline: ReturnType<typeof vi.fn>
   let emitFreshSessionInputsReady: ReturnType<typeof vi.fn>
+  let emitFreshSessionDiscoverySettled: ReturnType<typeof vi.fn>
   let connectPresence: ReturnType<typeof vi.fn>
   let unsubscribe: () => void
   let queueOwner: MUC
@@ -97,6 +98,7 @@ describe('SessionLifecycleEngine', () => {
     ensureE2EEManager = vi.fn()
     emitOnline = vi.fn()
     emitFreshSessionInputsReady = vi.fn()
+    emitFreshSessionDiscoverySettled = vi.fn()
     connectPresence = vi.fn()
     const deps = {
       ...modules,
@@ -108,6 +110,7 @@ describe('SessionLifecycleEngine', () => {
       emitSDK: client.emit,
       emitOnline,
       emitFreshSessionInputsReady,
+      emitFreshSessionDiscoverySettled,
       emitConversationListReady: vi.fn(),
       connectPresence,
     } as unknown as SessionLifecycleDeps
@@ -334,6 +337,58 @@ describe('SessionLifecycleEngine', () => {
       await engine.refreshConversationList()
 
       expect(stores.chat.mergeServerConversations).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('freshSessionDiscoverySettled', () => {
+    const pending = () => {
+      let resolve!: () => void
+      const promise = new Promise<void>(done => { resolve = done })
+      return { promise, resolve }
+    }
+    beforeEach(() => { vi.useFakeTimers() })
+    afterEach(() => { vi.useRealTimers() })
+
+    it('does not announce pending discovery and announces it once after completion', async () => {
+      const reply = pending()
+      modules.discovery.fetchServerInfo.mockReturnValue(reply.promise)
+      await engine.handleConnectionSuccess(false)
+      expect(emitFreshSessionDiscoverySettled).not.toHaveBeenCalled()
+      reply.resolve()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(emitFreshSessionDiscoverySettled).toHaveBeenCalledTimes(1)
+    })
+
+    it('announces failed discovery without preventing input readiness', async () => {
+      modules.discovery.fetchServerInfo.mockRejectedValue(new Error('fixture discovery failed'))
+      await engine.handleConnectionSuccess(false)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(emitFreshSessionDiscoverySettled).toHaveBeenCalledTimes(1)
+      expect(emitFreshSessionInputsReady).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores an older session completion while the current discovery is still pending', async () => {
+      const old = pending()
+      const current = pending()
+      modules.discovery.fetchServerInfo.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise)
+      await engine.handleConnectionSuccess(false)
+      await engine.handleConnectionSuccess(false)
+      old.resolve()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(emitFreshSessionDiscoverySettled).not.toHaveBeenCalled()
+      current.resolve()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(emitFreshSessionDiscoverySettled).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores discovery that finishes after transport loss', async () => {
+      const reply = pending()
+      modules.discovery.fetchServerInfo.mockReturnValue(reply.promise)
+      await engine.handleConnectionSuccess(false)
+      stores.connection.getStatus.mockReturnValue('reconnecting')
+      reply.resolve()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(emitFreshSessionDiscoverySettled).not.toHaveBeenCalled()
     })
   })
 

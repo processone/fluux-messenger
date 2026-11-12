@@ -66,6 +66,7 @@ export class Discovery extends BaseModule {
    * rejection so a failed probe can be retried.
    */
   private pepSupportProbe: Promise<boolean> | null = null
+  private sessionGeneration = 0
 
 
   /**
@@ -101,6 +102,7 @@ export class Discovery extends BaseModule {
    */
   resetSessionCache(): void {
     this.pepSupportProbe = null
+    this.sessionGeneration += 1
   }
 
   /**
@@ -140,6 +142,8 @@ export class Discovery extends BaseModule {
   async fetchServerInfo(): Promise<void> {
     const currentJid = this.deps.getCurrentJid()
     if (!currentJid) return
+    const generation = this.sessionGeneration
+    const current = () => generation === this.sessionGeneration && this.deps.getCurrentJid() === currentJid
 
     // Query the server domain (bare domain, not full JID)
     const domain = getDomain(currentJid)
@@ -153,6 +157,7 @@ export class Discovery extends BaseModule {
 
     try {
       const result = await this.deps.sendIQ(iq)
+      if (!current()) return
       const query = result.getChild('query', NS_DISCO_INFO)
       if (!query) return
 
@@ -178,6 +183,7 @@ export class Discovery extends BaseModule {
       // advertise MAM.
       if (!features.includes(NS_MAM)) {
         const accountMamFeatures = await this.fetchAccountMamFeatures(currentJid)
+        if (!current() || accountMamFeatures === null) return
         if (accountMamFeatures.length > 0) {
           features = [...new Set([...features, ...accountMamFeatures])].sort()
         }
@@ -224,11 +230,13 @@ export class Discovery extends BaseModule {
    *
    * @param currentJid - The connected full JID
    * @returns The MAM-family feature namespaces advertised by the bare JID
-   *   (e.g. `urn:xmpp:mam:2`, `urn:xmpp:mam:2#extended`), or an empty array.
+   *   (e.g. `urn:xmpp:mam:2`, `urn:xmpp:mam:2#extended`), an empty array for a
+   *   valid result without MAM or a definitive account refusal, or null when
+   *   capability knowledge is unavailable.
    */
-  private async fetchAccountMamFeatures(currentJid: string): Promise<string[]> {
+  private async fetchAccountMamFeatures(currentJid: string): Promise<string[] | null> {
     const bareJid = getBareJid(currentJid)
-    if (!bareJid) return []
+    if (!bareJid) return null
 
     try {
       const iq = xml(
@@ -238,15 +246,15 @@ export class Discovery extends BaseModule {
       )
       const result = await this.deps.sendIQ(iq)
       const query = result.getChild('query', NS_DISCO_INFO)
-      if (!query) return []
+      if (!query) return null
 
       return query.getChildren('feature')
         .map((feature: Element) => feature.attrs.var as string)
         .filter((v: string) => typeof v === 'string' && v.startsWith(NS_MAM))
     } catch (err) {
-      // Bare-JID disco failed — treat as no MAM support, don't block connection.
+      // A server error reply rejects account discovery; a lost reply remains unknown.
       logWarn(`Account MAM disco failed: ${err instanceof Error ? err.message : String(err)}`)
-      return []
+      return (err as { name?: unknown } | null)?.name === 'StanzaError' ? [] : null
     }
   }
 

@@ -2,11 +2,14 @@
 //! returns the device token the XMPP push registration needs.
 
 mod conversation_destination;
+#[cfg(any(target_os = "ios", test))]
+mod diagnostic_context;
 mod notification_names;
 
 #[cfg(target_os = "ios")]
 mod platform {
     use super::conversation_destination::{valid_bare_jid, ConversationDestination};
+    use super::diagnostic_context::{ExportDiagnosticArguments, PublisherDiagnostic};
     use super::notification_names::SenderNames;
     use tauri::{
         plugin::{Builder, PluginHandle, TauriPlugin},
@@ -30,10 +33,14 @@ mod platform {
     #[tauri::command]
     async fn export_notification_diagnostic<R: Runtime>(
         app: tauri::AppHandle<R>,
+        publisher: Option<PublisherDiagnostic>,
     ) -> Result<(), String> {
         app.state::<Push<R>>()
             .0
-            .run_mobile_plugin_async("exportNotificationDiagnostic", ())
+            .run_mobile_plugin_async(
+                "exportNotificationDiagnostic",
+                ExportDiagnosticArguments { publisher },
+            )
             .await
             .map_err(|e| e.to_string())
     }
@@ -98,6 +105,10 @@ mod platform {
     #[derive(serde::Serialize, serde::Deserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct BadgeState {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        account: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated: Option<f64>,
         unread: Vec<String>,
         events: u32,
         notify_all_rooms: Vec<String>,
@@ -118,6 +129,10 @@ mod platform {
     #[derive(serde::Serialize)]
     struct DismissTarget {
         target: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        read: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        account: Option<String>,
     }
 
     /// Removes the delivered notifications of a conversation that was read:
@@ -126,10 +141,19 @@ mod platform {
     async fn dismiss_notifications<R: Runtime>(
         app: tauri::AppHandle<R>,
         target: String,
+        read: Option<bool>,
+        account: Option<String>,
     ) -> Result<(), String> {
         app.state::<Push<R>>()
             .0
-            .run_mobile_plugin_async("dismissNotifications", DismissTarget { target })
+            .run_mobile_plugin_async(
+                "dismissNotifications",
+                DismissTarget {
+                    target,
+                    read,
+                    account,
+                },
+            )
             .await
             .map_err(|e| e.to_string())
     }

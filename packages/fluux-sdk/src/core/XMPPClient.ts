@@ -788,6 +788,7 @@ export class XMPPClient {
       emitSDK: moduleDeps.emitSDK,
       emitOnline: () => this.emit('online'),
       emitFreshSessionInputsReady: () => this.emit('freshSessionInputsReady'),
+      emitFreshSessionDiscoverySettled: () => this.emit('freshSessionDiscoverySettled'),
       emitConversationListReady: (conversations) => this.emit('conversationListReady', conversations),
       connectPresence: () => this.presenceActor.send({ type: 'CONNECT' }),
     })

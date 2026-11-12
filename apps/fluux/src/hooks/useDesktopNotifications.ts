@@ -480,13 +480,13 @@ export function useDesktopNotifications(): void {
   const handleConversationRead = (conversationId: string) => {
     coalescerRef.current.delete(conversationId)
     hideBanner('conversation', conversationId)
-    void dismissNotification('conversation', conversationId)
+    void dismissNotification('conversation', conversationId, { read: true })
   }
 
   const handleRoomRead = (roomJid: string) => {
     coalescerRef.current.delete(`room:${roomJid}`)
     hideBanner('room', roomJid)
-    void dismissNotification('room', roomJid)
+    void dismissNotification('room', roomJid, { read: true })
   }
 
   // A read that settled during catch-up never crosses unread > 0 → 0: the message and a

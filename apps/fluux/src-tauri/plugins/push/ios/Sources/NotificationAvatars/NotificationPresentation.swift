@@ -165,6 +165,7 @@ enum NotificationPresentation {
     static func content(for original: UNNotificationContent, names: SharedNames = SharedNames.load(),
                         activity: String = PreviewWords.localized.activity,
                         badge current: SharedBadge? = SharedBadge.load(),
+                        badgeRoot: URL? = NotificationMirror.root,
                         badgeAdded: ((String, Bool, Int) -> Void)? = nil) -> UNNotificationContent {
         guard let content = original.mutableCopy() as? UNMutableNotificationContent else { return original }
         content.body = NotificationContent.transportBody(content.body, encrypted: content.userInfo["encrypted"] as? Bool,
@@ -179,9 +180,9 @@ enum NotificationPresentation {
         content.title = sender.title
         if let subtitle = sender.subtitle { content.subtitle = subtitle }
         if var badge = current {
-            let counted = badge.unread.count
-            content.badge = NSNumber(value: badge.count(adding: from, rooms: names.rooms))
-            if badge.unread.count > counted, let bare = bareJid(from) {
+            let change = badge.counting(adding: from, rooms: names.rooms, root: badgeRoot)
+            content.badge = NSNumber(value: change.count)
+            if change.added, let bare = bareJid(from) {
                 badgeAdded?(bare, names.rooms[bare] != nil || badge.notifyAllRooms.contains(bare), badge.count)
             }
         }

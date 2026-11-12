@@ -423,12 +423,29 @@ The widget never connects to the server. It reads `UnreadWidget.json` from the A
 
 - The app writes it. `unreadConversations` (SDK) selects the rows by the app icon badge's rule, so a
   quiet room does not appear; `utils/unreadWidget.ts` builds the list, with `total` equal to the badge,
-  and the `widgets` plugin (`plugins/widgets`) writes the file and asks WidgetKit to redraw. It writes
-  nothing off iOS (`publishesUnreadWidget`), and an empty list on sign-out.
-- While the app is suspended, a push that raises the badge adds its conversation to the file
-  (`NotificationService.swift`, `UnreadList.recordPush`). Reloading a widget from a notification
-  extension is undocumented and unreliable: the file is right, but iOS may redraw only when it chooses
-  or when the app next opens.
+  and the `widgets` plugin (`plugins/widgets`) compares against the actual file under its writer lock.
+  A cache of the app's own last call cannot detect extension-added rows. Equal content needs no write
+  or reload; a changed snapshot is written and requests a redraw. It writes nothing off iOS
+  (`publishesUnreadWidget`), and an empty list on sign-out.
+- One store publisher sends badge membership and widget rows from the same snapshot, including
+  same-total membership changes. It waits for wake verification, replay and catch-up to finish, then
+  waits for the badge write acknowledgement before publishing rows. A pending known snapshot is
+  flushed when the webview hides. Waking the native app no longer restores an old in-memory badge
+  over newer pushes. Native deduplication ignores snapshot-build time; timestamped older queued
+  frames cannot overwrite a newer same-account push. Future stamps after clock rollback do not
+  block app publication indefinitely.
+- While the app is suspended, a push for a counted conversation reconciles the existing account-owned
+  file against the full current badge membership (`NotificationService.swift`, `UnreadList.recordPush`).
+  A conversation already counted can repair a missing or stale row without raising the badge; an
+  already-correct list needs no write or reload for that unchanged membership.
+  Read rows are removed rather than concealed by raising the total. Pending events and the row cap
+  can still make the total exceed the row count. The badge and list use the same cross-process lock;
+  overlapping badge increments re-read current membership rather than overwrite one another.
+  Missing or unconfirmed ownership, unavailable state and failed writes do not request a reload.
+  A newly counted conversation already listed is republished without discarding the app's more
+  precise row counts. Successful writes request reload; this is not proof of rendered timelines.
+  A legacy badge file without an account (written by an older build) still raises the app icon count on a push,
+  but it never adds or removes widget rows: those need the upgraded app to publish a fresh, owned snapshot first.
 - Avatars come from the `Avatars/` copies the notification mirror already keeps.
 
 The same list and widget views also serve the native [macOS widget](MACOS_WIDGET.md).
@@ -436,6 +453,65 @@ The Apple conversation mirror shares avatars on both platforms; desktop writes g
 
 The Swift model (`plugins/widgets/ios/Sources/UnreadList.swift`) is compiled by the plugin, the
 widget and the notification extension. Strings are English and French (`mobile/ios/Widgets/Resources`).
+
+For a background-refresh investigation, observe the widget **before** reopening Fluux, then use
+**Settings → Notifications → Export diagnostic**. The existing content-free export preserves the
+notification extension's widget decisions with their operation timestamps and the same random
+processing marker as `received`:
+
+- `widgetNotCounted`: the push is not in known counted membership, or a newer badge snapshot no
+  longer counts it. The latter can still prune obsolete rows. Already-counted conversations instead
+  reach row reconciliation. `widgetBadgeUnavailable` distinguishes a missing, unreadable or invalid
+  badge snapshot.
+- `widgetListUnavailable` or `widgetAccountMismatch`: the update stopped before a write. Ownership
+  must match for both the list and badge, including after upgrades. New refusals also identify the
+  actual guard reached: `widgetBadgeOwnerMissing`, `widgetBadgeOwnerMismatch` or `widgetListOwnerMismatch`.
+  A list-load failure does not distinguish an absent file from an unreadable or invalid file.
+- `widgetAlreadyListed`: the counted conversation already has a row. Newly counted conversations
+  are republished; already-counted conversations write only if reconciliation changes the list.
+  Neither path resets a more precise app-provided unread count.
+- `widgetRowSelected`, then `widgetWriteSucceeded` or `widgetWriteFailed`: the extension selected a
+  row and the file write returned success or failure.
+- `widgetReloadRequested` follows only a successful write and records a request, **not** a completed
+  redraw. `widgetReloadUnavailable` means this runtime could not make that request.
+- `widgetCountMismatch` flags an observed snapshot with more rows than its total. It records no
+  numeric counts or conversation identities. A subsequent successful write can repair that old input.
+- `widgetAppReadObserved` records the app's existing conversation-read callback, whether local or
+  synchronized. The app keeps recent targets only in memory until a widget publication or a native
+  check confirming that the requested snapshot already matches the file:
+  `widgetAppReadStillListed`, `widgetAppReadNotListed` or `widgetAppReadStateUnavailable` then describes
+  the file, rather than the old snapshot during the publisher's 500 ms debounce. Mixed results may
+  record both listed and absent targets. A queued snapshot older than the observed read cannot settle
+  that read check. These events do not prove raw read-sync receipt.
+- `widgetAppListWritten`, `widgetAppListCleared` or `widgetAppWriteFailed` records the actual app-side
+  widget publication outcome; `widgetAppReloadRequested` records its redraw request. An empty list
+  for a signed-in account records clearing; sign-out instead clears the journal's session. A verified
+  no-op can settle read checks without claiming a write or reload. A superseded queued frame does
+  neither. These handoff flags add no decision names or fields to the exported journal.
+
+The voluntary share copy also includes a separately delimited `widgetSnapshotBegin`/`widgetSnapshotEnd`
+group of current closed observations. It is not a historical refusal or an atomic app/native snapshot.
+See [the diagnostic format](ios-notification-diagnostic.md#widget-refusal-categories-and-current-observations)
+for its five-field encoding, unknown-state rules and temporary-copy bounds.
+
+These events add no account, conversation, name, message, path or raw error fields. The existing
+200-entry, 48-hour and logout/session bounds still apply. One widget sequence uses one diagnostic
+transaction, outside the unread-file lock. Diagnostics remain best effort: an unavailable shared
+folder or diagnostic store can leave no events, so their absence proves neither success nor failure.
+The export survives opening the app after the observation, but its version field alone does not
+attest the installed source commit. Record source provenance and visible results separately.
+
+A conversation read on another device is not evidence that a suspended iPhone has received the
+read state. The app has no always-running background XMPP connection. Distinguish absent delivery,
+a received/app-observed read that did not clear the shared list, and a cleared list that WidgetKit
+has not redrawn. The app-side widget publication uses one in-process notification to the existing
+push diagnostic writer, not a second journal or a new public command. The writer processes this
+handoff on the existing background mirror queue, without holding the widget command on SQLite.
+Its account value is checked transiently and never enters the export. Pending read checks are
+limited to 200 targets and ignore observations older than 48 hours. Targets remain only in memory,
+are forgotten when cleared, and are dropped on logout/account change.
+A new message may make a read conversation unread again; correlate these decisions with the
+controlled observation rather than treating a listed target alone as proof of a missed clear.
 
 **Apple setup.** The widget has its own App ID, `<application identifier>.widgets`, joined to the
 existing App Group `group.<application identifier>.share`. It needs no push or keychain capability.
@@ -447,8 +523,14 @@ Checks: `npm run test:ios-notifications` (list model and the push hook), `npm ru
 and `npm run test:ios-build-scripts` (the install and TestFlight scripts require the widget and check
 its signature and group). `npm run test:ios-widgets` runs the unsigned simulator widget lab
 (`scripts/native-tests/ios-widgets`): gallery add, rows and avatar, a row tap, the production
-notification service run in-process, and sign-out. What still needs a signed build on a device: a push
-waking the suspended extension, iOS redraw rationing, and the signed App ID, profile and App Group.
+notification service run in-process, and sign-out. What still needs a signed build on a device (the
+phone-only list; simulators cannot show these, so the widget freeze reported on a phone stays open until
+a phone confirms it):
+
+- APNs waking the suspended notification extension, and that extension's memory limit.
+- A locked phone.
+- iOS rationing widget redraw requests (a refused redraw leaves the widget unchanged until the app opens).
+- The signed install's App ID, provisioning profile and App Group.
 
 ## Receive a shared link, document, or image
 

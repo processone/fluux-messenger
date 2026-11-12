@@ -167,8 +167,11 @@ export function useNotificationBadge(): void {
 
     if (platform().hasNativeAppBadge) {
       void setTauriBadge(totalCount)
+    } else if (platform().publishesUnreadWidget) {
+      // The store publisher sends badge membership and widget rows from the same snapshot,
+      // including same-total membership changes and the end of wake catch-up.
     } else if (platform().usesNativePush) {
-      // The app icon badge, which pushes raise while the app is suspended.
+      // Native push platforms without the widget publisher own their badge here.
       void sharePushBadge(pushBadgeState(
         chatStore.getState().conversations.values(),
         roomStore.getState(),
