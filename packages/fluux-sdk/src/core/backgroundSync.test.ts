@@ -2399,7 +2399,7 @@ describe('catch-up owners (Updating step)', () => {
 
   // Real-app finding (iOS simulator, release build): the app creates a client
   // that never connects. It still sees the global store go online and began an
-  // owner nothing released, so the step (and the widget publisher gated on it)
+  // owner nothing released, so the step (and the catch-up state shown to the user)
   // stayed on for the whole session.
   it('does not hold the step for a client that never made the connection', () => {
     withMam()

@@ -63,7 +63,7 @@ remains 200 entries/48 hours. Export does not activate a signed-out session.
 The group samples these separate boundaries:
 
 - App store facts: online, verification, catch-up and archive replay, each with an
-  explicit unknown state. They do not release any readiness barrier.
+  explicit unknown state. They are observations only; the publisher waits for online, verification and replay, not catch-up.
 - Native file ownership **relations**, separately for badge and list: missing
   owner, matching owner, different owner or unavailable/unknown. File contents
   and owners never leave the app.

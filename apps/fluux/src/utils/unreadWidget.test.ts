@@ -150,17 +150,27 @@ describe('startUnreadWidgetPublisher', () => {
     } finally { stop() }
   })
 
-  it.each([
-    { status: 'connecting' }, { isVerifying: true }, { isCatchingUp: true }, { replayOwners: 1 },
-  ])('keeps extension state until the current stores are ready: %j', async (pending) => {
-    asStore(connectionStore).set({ jid: 'me@example.com/phone', status: 'online', ...pending })
-    startUnreadWidgetPublisher(() => 0)
-    await vi.advanceTimersByTimeAsync(600)
-    expect(mockInvoke).not.toHaveBeenCalled()
-    asStore(connectionStore).set({ jid: 'me@example.com/phone', status: 'online', isCatchingUp: false })
-    await vi.advanceTimersByTimeAsync(600)
-    expect(widgetCalls()).toHaveLength(1)
-  })
+  it.each([{ status: 'connecting' }, { isVerifying: true }, { replayOwners: 1 }])(
+    'keeps extension state until the session is online, verified and not replaying: %j', async (pending) => {
+      asStore(connectionStore).set({ jid: 'me@example.com/phone', status: 'online', ...pending })
+      startUnreadWidgetPublisher(() => 0)
+      await vi.advanceTimersByTimeAsync(600)
+      expect(mockInvoke).not.toHaveBeenCalled()
+      asStore(connectionStore).set({ jid: 'me@example.com/phone', status: 'online', isVerifying: false, replayOwners: 0, isCatchingUp: false })
+      await vi.advanceTimersByTimeAsync(600)
+      expect(widgetCalls()).toHaveLength(1)
+    })
+
+  // FLM-59: the badge showed a number saved by a push while the app showed nothing unread, until catch-up ended.
+  it.each([{ isCatchingUp: true }])(
+    'replaces the saved count with the app count at once, without waiting for %j', async (pending) => {
+      asStore(connectionStore).set({ jid: 'me@example.com/phone', status: 'online', ...pending })
+      startUnreadWidgetPublisher(() => 0)
+      await vi.advanceTimersByTimeAsync(600)
+      expect(mockInvoke).toHaveBeenCalledWith('plugin:push|set_badge',
+        { badge: { account: 'me@example.com', updated: expect.any(Number), unread: [], events: 0, notifyAllRooms: [] } })
+      expect(widgetCalls()).toHaveLength(1)
+    })
 
   it('publishes same-total unread membership changes to both mirrors', async () => {
     asStore(chatStore).set({ conversations: new Map([[chats[0].id, chats[0]]]) })

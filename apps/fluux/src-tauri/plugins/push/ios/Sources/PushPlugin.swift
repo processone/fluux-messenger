@@ -316,8 +316,8 @@ class PushPlugin: Plugin {
         }
     }
 
-    /// A wake does not make the app's old in-memory count authoritative over newer pushes.
-    /// The store publisher replaces membership after verification/catch-up; until then retain the shared state.
+    /// A wake reapplies the shared count. The store publisher replaces it with the app's own count
+    /// once the session is online and verified, without waiting for archive catch-up; until then retain the shared state.
     @objc fileprivate func restoreBadge() {
         guard let owner = SharedNames.load().account else { applyBadgeCount(0); return }
         guard let badge = SharedBadge.load(), badge.account == owner else { return }
