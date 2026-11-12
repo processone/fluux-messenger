@@ -171,8 +171,10 @@ export function startUnreadWidgetPublisher(events: () => number, heartbeatMs?: n
     const connection = connectionStore.getState()
     const account = connection.jid?.split('/')[0]
     if (account && account === clearedAccount) return
-    // A wake is not proof that catch-up has established the current unread state.
-    if (platform().usesNativePush && account && (connection.status !== 'online' || connection.isVerifying || connection.isCatchingUp || connection.replayOwners > 0)) return
+    // Wait only for the session to be online, so the stores are loaded. Catch-up is not waited for: it can take
+    // minutes, and until the app writes, the icon shows the number the notification extension saved, which can
+    // already be read elsewhere. Catch-up changes publish again as they land.
+    if (platform().usesNativePush && account && connection.status !== 'online') return
     if (account !== clearedAccount) clearedAccount = null
     const conversations = chatStore.getState().conversations
     const rooms = roomStore.getState()

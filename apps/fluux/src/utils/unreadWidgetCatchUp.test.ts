@@ -49,7 +49,7 @@ describe('iOS read publication after session discovery settles', () => {
     restorePlatform()
   })
 
-  it.each(['failed', 'missing-query', 'account-failed', 'account-missing-query', 'account-refused', 'account-refused-with-owner'] as const)('settles %s discovery before publishing the confirmed local read', async (outcome) => {
+  it.each(['failed', 'missing-query', 'account-failed', 'account-missing-query', 'account-refused', 'account-refused-with-owner'] as const)('replaces the saved count at once while %s discovery is still settling', async (outcome) => {
     const client = createMockClient()
     const accountProbe = outcome.startsWith('account-')
     const refused = outcome.startsWith('account-refused')
@@ -135,9 +135,9 @@ describe('iOS read publication after session discovery settles', () => {
     for (const id of ids) chatStore.getState().markReadToNewest(id)
     await vi.advanceTimersByTimeAsync(600)
     const pending = state()
-    expect(pending).toMatchObject({ appTotal: 0, catchUpOwners: overlapping ? 2 : 1, isCatchingUp: true, nativeBadgeTotal: 3, nativeWidgetTotal: 3, commandCount: 0 })
+    expect(pending).toMatchObject({ appTotal: 0, catchUpOwners: overlapping ? 2 : 1, isCatchingUp: true, nativeBadgeTotal: 0, nativeWidgetTotal: 0 })
 
-    // A finished request with unknown capabilities is not proof that the cached zero is current.
+    // The saved 3 is replaced by the app's own 0 as soon as the session is online, with catch-up still running.
     if (accountProbe) {
       discoveryReply.resolve(xml('iq', { type: 'result' }, xml('query', { xmlns: NS_DISCO_INFO }, xml('feature', { var: NS_CARBONS }))))
       await vi.advanceTimersByTimeAsync(0)
@@ -166,18 +166,18 @@ describe('iOS read publication after session discovery settles', () => {
         }, null, 2) + '\n')
       }
       expect(unknown).toMatchObject(overlapping
-        ? { catchUpOwners: 1, isCatchingUp: true, nativeBadgeTotal: 3, nativeWidgetTotal: 3, commandCount: 0 }
-        : { catchUpOwners: 0, isCatchingUp: false, nativeBadgeTotal: 0, nativeWidgetTotal: 0, commandCount: 2 })
+        ? { catchUpOwners: 1, isCatchingUp: true, nativeBadgeTotal: 0, nativeWidgetTotal: 0 }
+        : { catchUpOwners: 0, isCatchingUp: false, nativeBadgeTotal: 0, nativeWidgetTotal: 0 })
       expect(settled).toMatchObject({ appTotal: 0, catchUpOwners: 0, isCatchingUp: false, nativeBadgeTotal: 0, nativeWidgetTotal: 0 })
       expect(connectionStore.getState().serverInfo?.features).toContain(NS_CARBONS)
       expect(connectionStore.getState().serverInfo?.features).not.toContain(NS_MAM)
       expect(client.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
-      expect(commands).toEqual(['plugin:push|set_badge', 'plugin:widgets|set_unread_list'])
+      expect(commands.slice(0, 2)).toEqual(['plugin:push|set_badge', 'plugin:widgets|set_unread_list'])
       await vi.advanceTimersByTimeAsync(60_000)
       expect(client.server.fetchServerInfo).not.toHaveBeenCalled()
       return
     }
-    expect(unknown).toMatchObject({ appTotal: 0, isCatchingUp: true, nativeBadgeTotal: 3, nativeWidgetTotal: 3, commandCount: 0 })
+    expect(unknown).toMatchObject({ appTotal: 0, isCatchingUp: true, nativeBadgeTotal: 0, nativeWidgetTotal: 0 })
     expect(connectionStore.getState().serverInfo).toBeNull()
     await vi.advanceTimersByTimeAsync(5_000)
     if (process.env.FLUUX_CATCHUP_EVIDENCE) {
@@ -191,7 +191,7 @@ describe('iOS read publication after session discovery settles', () => {
     retryReply.resolve(xml('iq', { type: 'result' }, xml('query', { xmlns: NS_DISCO_INFO }, xml('feature', { var: NS_MAM }))))
     await vi.advanceTimersByTimeAsync(MAM_ROOM_CATCHUP_DELAY_MS + 600)
     const retrieving = state()
-    expect(retrieving).toMatchObject({ appTotal: 0, isCatchingUp: true, nativeBadgeTotal: 3, nativeWidgetTotal: 3, commandCount: 0 })
+    expect(retrieving).toMatchObject({ appTotal: 0, isCatchingUp: true, nativeBadgeTotal: 0, nativeWidgetTotal: 0 })
     expect(client.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
     archive.resolve(undefined)
     await vi.advanceTimersByTimeAsync(600)
@@ -204,7 +204,7 @@ describe('iOS read publication after session discovery settles', () => {
       }, null, 2) + '\n')
     }
     expect(settled).toMatchObject({ appTotal: 0, catchUpOwners: 0, isCatchingUp: false, nativeBadgeTotal: 0, nativeWidgetTotal: 0 })
-    expect(commands).toEqual(['plugin:push|set_badge', 'plugin:widgets|set_unread_list'])
+    expect(commands.slice(0, 2)).toEqual(['plugin:push|set_badge', 'plugin:widgets|set_unread_list'])
     expect(connectionStore.getState().serverInfo?.features).toContain(NS_MAM)
   })
 })
