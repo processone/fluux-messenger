@@ -2397,10 +2397,10 @@ describe('catch-up owners (Updating step)', () => {
     expect(caughtUp()).toBe(true)
   })
 
-  // Real-app finding (iOS simulator): React StrictMode builds a second client in
-  // the render it discards. That client never connects, but it sees the global
-  // store go online and began an owner nothing released, so the step (and the
-  // widget publisher gated on it) stayed on for the whole session.
+  // Real-app finding (iOS simulator, release build): the app creates a client
+  // that never connects. It still sees the global store go online and began an
+  // owner nothing released, so the step (and the widget publisher gated on it)
+  // stayed on for the whole session.
   it('does not hold the step for a client that never made the connection', () => {
     withMam()
     connectionStore.getState().setStatus('disconnected')
