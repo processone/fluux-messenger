@@ -794,7 +794,12 @@ export function setupBackgroundSyncSideEffects(
       // reconnect, and a saved session restored by a new client. A status that
       // flips straight from 'disconnected' to 'online' made no connection
       // attempt (the demo), so there is nothing to catch up on.
-      if (status === 'online' && previousStatus !== 'online' && previousStatus !== 'disconnected' && !isResumedSession) {
+      // Only the client that made the connection prepares. The stores are
+      // global, so a client that never connected (React StrictMode builds one
+      // in the render it discards) also sees this status. It would never get
+      // the online signal that releases its owner, and the leaked owner would
+      // hold isCatchingUp true for the whole session.
+      if (status === 'online' && previousStatus !== 'online' && previousStatus !== 'disconnected' && !isResumedSession && client.isConnected()) {
         endSessionPreparation()
         endSessionPrep = connectionStore.getState().beginUpdate([])
       }
