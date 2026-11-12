@@ -30,6 +30,30 @@ const KEYCHAIN_DELETE_TIMEOUT_MS = 2500
 const MACOS_LOGOUT_AUTHORIZATION_TIMEOUT_MS = 120_000
 
 /**
+ * Starts a native credential error raised because the keychain could not be
+ * reached: locked, its unlock prompt dismissed, or (Linux) no Secret Service
+ * running. Set by the desktop credential commands outside macOS
+ * (`credential_error` in `src-tauri/src/main.rs`).
+ */
+const KEYCHAIN_UNAVAILABLE_PREFIX = 'keychain-unavailable:'
+
+// Set once this launch could not reach the keychain. Later reads in the same
+// launch answer null without asking again, so a locked keyring prompts once
+// per launch instead of again when the login form opens. A save that reaches
+// the keychain clears it.
+let keychainUnavailableThisLaunch = false
+
+/** Reset the per-launch keychain state between tests. */
+export function resetKeychainLaunchStateForTesting(): void {
+  keychainUnavailableThisLaunch = false
+}
+
+function isKeychainUnavailable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.startsWith(KEYCHAIN_UNAVAILABLE_PREFIX)
+}
+
+/**
  * Check if credentials might be saved (without triggering keychain prompt)
  * This allows showing the login form immediately on first run
  */
@@ -55,6 +79,7 @@ export async function saveCredentials(
   await invoke('save_credentials', { jid, password, server })
   // Set flag so we know to check keychain on next launch
   localStorage.setItem(STORAGE_KEY_HAS_CREDENTIALS, 'true')
+  keychainUnavailableThisLaunch = false
   console.log('[Fluux] Keychain: credentials saved')
 }
 
@@ -64,6 +89,10 @@ export async function saveCredentials(
  */
 export async function getCredentials(): Promise<StoredCredentials | null> {
   if (!platform().nativeKeychain) {
+    return null
+  }
+  if (keychainUnavailableThisLaunch) {
+    console.log('[Fluux] Keychain: unavailable earlier in this launch, not asking again')
     return null
   }
 
@@ -80,6 +109,13 @@ export async function getCredentials(): Promise<StoredCredentials | null> {
     }
     return result
   } catch (error) {
+    if (isKeychainUnavailable(error)) {
+      // A locked or missing keychain says nothing about what it holds: keep
+      // the flag so a later launch with the keychain available signs in.
+      keychainUnavailableThisLaunch = true
+      console.warn('[Fluux] Keychain: unavailable, keeping saved credentials for a later launch:', error)
+      return null
+    }
     console.error('[Fluux] Keychain: failed to get credentials:', error)
     // Clear flag on error to prevent repeated failed attempts
     localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)

@@ -4,6 +4,7 @@ import type { DiscoveryFailure } from '@fluux/sdk'
 import { LoginScreen } from './LoginScreen'
 import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
+import { useToastStore } from '@/stores/toastStore'
 
 const mockConnect = vi.fn()
 
@@ -741,6 +742,27 @@ describe('LoginScreen credential validation', () => {
         await new Promise(resolve => setTimeout(resolve, 0))
         if (method === 'password') expect(mockSaveCredentials).toHaveBeenCalledWith('fixture@example.invalid', 'local-secret', expect.anything())
         else expect(mockSaveCredentials).not.toHaveBeenCalled()
+    })
+    // #1224: a Linux desktop without a running Secret Service signs in, but
+    // the keyring refuses the password the user asked to be remembered.
+    it('tells the user when the keychain could not save the password', async () => {
+        usePlatform('desktop', 'linux')
+        useToastStore.setState({ toasts: [] })
+        mockConnect.mockResolvedValue({ jid: 'fixture@example.invalid', authentication: { method: 'password', mechanism: 'PLAIN' } })
+        mockSaveCredentials.mockRejectedValueOnce('keychain-unavailable: Keychain platform error during save: '
+            + 'Platform secure storage failure: DBus error: The name org.freedesktop.secrets was not provided by any .service files')
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+        const { container } = render(<LoginScreen />)
+        await screen.findByText('login.storedInKeychain')
+        fireEvent.change(container.querySelector('#jid')!, { target: { value: 'fixture@example.invalid' } })
+        fireEvent.change(container.querySelector('#password')!, { target: { value: 'local-secret' } })
+        fireEvent.click(container.querySelector('#remember')!)
+        fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
+        await waitFor(() => expect(useToastStore.getState().toasts).toEqual([
+            expect.objectContaining({ type: 'error', message: 'login.keychainSaveFailed' }),
+        ]))
+        errors.mockRestore()
+        useToastStore.setState({ toasts: [] })
     })
     it('preserves a prefilled keychain password after FAST and replaces it only after password validation', async () => {
         mockHasSavedCredentials.mockReturnValue(true)

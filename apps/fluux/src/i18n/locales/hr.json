@@ -38,6 +38,7 @@
         "storedInKeychain": "(spremljeno u privjesak)",
         "staySignedIn": "(ostani prijavljen)",
         "credentialsLoaded": "Vjerodajnice učitane iz privjeska",
+        "keychainSaveFailed": "Vaša lozinka nije spremljena jer je sustavski svežanj ključeva zaključan ili nedostupan.",
         "connecting": "Povezivanje...",
         "connect": "Poveži se",
         "showPassword": "Prikaži lozinku",

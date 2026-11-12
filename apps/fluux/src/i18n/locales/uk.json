@@ -38,6 +38,7 @@
         "storedInKeychain": "(збережено в Keychain)",
         "staySignedIn": "(залишатися в системі)",
         "credentialsLoaded": "Облікові дані завантажені з Keychain",
+        "keychainSaveFailed": "Пароль не збережено, оскільки системна в'язка ключів заблокована або недоступна.",
         "connecting": "Підключення...",
         "connect": "Підключитися",
         "showPassword": "Показати пароль",

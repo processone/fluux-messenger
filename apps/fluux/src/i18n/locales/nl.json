@@ -38,6 +38,7 @@
         "storedInKeychain": "(opgeslagen in Sleutelhanger)",
         "staySignedIn": "(ingelogd blijven)",
         "credentialsLoaded": "Inloggegevens geladen uit Sleutelhanger",
+        "keychainSaveFailed": "Je wachtwoord is niet opgeslagen omdat de systeemsleutelbos vergrendeld of niet beschikbaar is.",
         "connecting": "Verbinden...",
         "connect": "Verbinden",
         "showPassword": "Wachtwoord tonen",

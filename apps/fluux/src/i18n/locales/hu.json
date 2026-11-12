@@ -38,6 +38,7 @@
         "storedInKeychain": "(Kulcskarikában tárolva)",
         "staySignedIn": "(bejelentkezve maradás)",
         "credentialsLoaded": "Hitelesítő adatok betöltve a Kulcskarikából",
+        "keychainSaveFailed": "A jelszó nem lett elmentve, mert a rendszerkulcstartó zárolva van vagy nem érhető el.",
         "connecting": "Csatlakozás...",
         "connect": "Csatlakozás",
         "showPassword": "Jelszó megjelenítése",

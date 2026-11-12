@@ -23,6 +23,7 @@ import { OverflowMenu } from './OverflowMenu'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
 import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
 import { useLoginPrefillDeepLink } from '@/hooks/useLoginPrefillDeepLink'
+import { useToastStore } from '@/stores/toastStore'
 
 const STORAGE_KEY_JID = 'xmpp-last-jid'
 const STORAGE_KEY_SERVER = 'xmpp-last-server'
@@ -385,6 +386,10 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
           setLoadedFromKeychain(true)
         } catch (err) {
           console.error('Failed to save credentials to keychain:', err)
+          // Signed in, but the password is not remembered (#1224): say so
+          // rather than let Remember me look like it worked. This form is gone
+          // once online, so the chat view's toasts show it until dismissed.
+          useToastStore.getState().addToast('error', t('login.keychainSaveFailed'), 0)
         }
       }
     } catch {

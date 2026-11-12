@@ -38,6 +38,7 @@
         "storedInKeychain": "(saugoma raktų grandinėje)",
         "staySignedIn": "(likti prisijungus)",
         "credentialsLoaded": "Prisijungimo duomenys įkelti iš raktų grandinės",
+        "keychainSaveFailed": "Slaptažodis neišsaugotas, nes sistemos raktų saugykla užrakinta arba nepasiekiama.",
         "connecting": "Jungiamasi...",
         "connect": "Prisijungti",
         "showPassword": "Rodyti slaptažodį",

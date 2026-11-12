@@ -488,6 +488,27 @@ fn classify_keyring_error(e: &keyring::Error, operation: &str) -> String {
     }
 }
 
+/// Starts a credential command error when the keyring could not be reached:
+/// locked, its unlock prompt dismissed, or (Linux) no Secret Service running.
+/// What it holds is then unknown, so the webview keeps its saved-credentials
+/// hint and a later start with the keyring available still signs in.
+/// `apps/fluux/src/utils/keychain.ts` reads the same prefix.
+#[cfg(not(target_os = "macos"))]
+const KEYCHAIN_UNAVAILABLE_PREFIX: &str = "keychain-unavailable:";
+
+/// Describe a keyring error for the credential commands, marking the errors
+/// that mean the keyring could not be reached rather than an answer from it.
+#[cfg(not(target_os = "macos"))]
+fn credential_error(e: &keyring::Error, operation: &str) -> String {
+    let desc = classify_keyring_error(e, operation);
+    match e {
+        keyring::Error::NoStorageAccess(_) | keyring::Error::PlatformFailure(_) => {
+            format!("{KEYCHAIN_UNAVAILABLE_PREFIX} {desc}")
+        }
+        _ => desc,
+    }
+}
+
 /// Save credentials to OS keychain.
 /// Runs on a background thread to avoid blocking the main thread when
 /// macOS shows a keychain authorization dialog.
@@ -519,7 +540,7 @@ async fn save_credentials(
         })?;
 
         entry.set_password(&json).map_err(|e| {
-            let desc = classify_keyring_error(&e, "save");
+            let desc = credential_error(&e, "save");
             tracing::error!("Keychain: {} for {}", desc, jid);
             desc
         })?;
@@ -532,7 +553,7 @@ async fn save_credentials(
         last_user_entry
             .set_password(&credentials.jid)
             .map_err(|e| {
-                let desc = classify_keyring_error(&e, "save last_user");
+                let desc = credential_error(&e, "save last_user");
                 tracing::error!("Keychain: {} for {}", desc, jid);
                 desc
             })?;
@@ -564,7 +585,7 @@ async fn get_credentials() -> Result<Option<StoredCredentials>, String> {
                 return Ok(None);
             }
             Err(e) => {
-                let desc = classify_keyring_error(&e, "read last_user");
+                let desc = credential_error(&e, "read last_user");
                 tracing::error!("Keychain: {}", desc);
                 return Err(desc);
             }
@@ -590,7 +611,7 @@ async fn get_credentials() -> Result<Option<StoredCredentials>, String> {
                 Ok(None)
             }
             Err(e) => {
-                let desc = classify_keyring_error(&e, &format!("read credentials for {}", jid));
+                let desc = credential_error(&e, &format!("read credentials for {}", jid));
                 tracing::error!("Keychain: {}", desc);
                 Err(desc)
             }
@@ -2566,6 +2587,37 @@ mod tests {
     #[test]
     fn test_keepalive_display_active_fails_open_off_macos() {
         assert!(keepalive_display_active());
+    }
+
+    // #1224: a keyring that could not be reached keeps the webview's
+    // saved-credentials hint, while an answer from the keyring does not.
+    // The inner messages are those of the Secret Service backend on Linux.
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn credential_errors_mark_an_unreachable_keyring() {
+        let backend = |message: &str| Box::new(std::io::Error::other(message.to_string()));
+        let unreachable = [
+            keyring::Error::NoStorageAccess(backend("Secret Service: unlock prompt was dismissed")),
+            keyring::Error::NoStorageAccess(backend("Secret Service: object locked")),
+            keyring::Error::PlatformFailure(backend(
+                "DBus error: The name org.freedesktop.secrets was not provided by any .service files",
+            )),
+            keyring::Error::PlatformFailure(backend(
+                "No DBus session or Secret Service provider found",
+            )),
+        ];
+        for error in &unreachable {
+            let message = credential_error(error, "read last_user");
+            assert!(message.starts_with(KEYCHAIN_UNAVAILABLE_PREFIX), "{message}");
+        }
+        let answered = [
+            keyring::Error::Ambiguous(Vec::new()),
+            keyring::Error::BadEncoding(vec![0xff]),
+        ];
+        for error in &answered {
+            let message = credential_error(error, "read last_user");
+            assert!(!message.starts_with(KEYCHAIN_UNAVAILABLE_PREFIX), "{message}");
+        }
     }
 
     #[test]

@@ -17,7 +17,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }))
 
 // Import after mocking
-import { hasSavedCredentials, saveCredentials, getCredentials, deleteCredentials } from './keychain'
+import { hasSavedCredentials, saveCredentials, getCredentials, deleteCredentials, resetKeychainLaunchStateForTesting } from './keychain'
 
 const STORAGE_KEY = 'xmpp-has-saved-credentials'
 
@@ -25,6 +25,7 @@ describe('keychain utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    resetKeychainLaunchStateForTesting()
     usePlatform('desktop')
   })
 
@@ -147,6 +148,43 @@ describe('keychain utilities', () => {
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
       expect(errorSpy).toHaveBeenCalled()
       errorSpy.mockRestore()
+    })
+
+    // #1224: what the Linux credential commands answer when the keyring is
+    // locked (unlock prompt dismissed) or when no Secret Service is running.
+    const LOCKED_KEYRING = 'keychain-unavailable: Keychain locked or inaccessible during read last_user: '
+      + "Couldn't access platform secure storage: Secret Service: unlock prompt was dismissed"
+    const MISSING_KEYRING = 'keychain-unavailable: Keychain platform error during read last_user: '
+      + 'Platform secure storage failure: DBus error: The name org.freedesktop.secrets was not provided by any .service files'
+
+    it.each([['locked', LOCKED_KEYRING], ['missing', MISSING_KEYRING]])(
+      'keeps the saved-credentials hint when the keyring is %s, for a later launch',
+      async (_state, nativeError) => {
+        localStorage.setItem(STORAGE_KEY, 'true')
+        mockInvoke.mockRejectedValue(nativeError)
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+        expect(await getCredentials()).toBeNull()
+        expect(hasSavedCredentials()).toBe(true)
+        warnSpy.mockRestore()
+      },
+    )
+
+    it('asks a locked keyring once per launch, and again after a save reaches it', async () => {
+      localStorage.setItem(STORAGE_KEY, 'true')
+      const credentials = { jid: 'user@example.com', password: 'password', server: null }
+      mockInvoke.mockRejectedValueOnce(LOCKED_KEYRING)
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      expect(await getCredentials()).toBeNull()
+      expect(await getCredentials()).toBeNull()
+      expect(mockInvoke).toHaveBeenCalledTimes(1)
+
+      mockInvoke.mockResolvedValueOnce(undefined).mockResolvedValueOnce(credentials)
+      await saveCredentials('user@example.com', 'password', null)
+      expect(await getCredentials()).toEqual(credentials)
+      expect(mockInvoke).toHaveBeenLastCalledWith('get_credentials')
+      warnSpy.mockRestore()
     })
 
     it('should keep localStorage flag when credentials found', async () => {

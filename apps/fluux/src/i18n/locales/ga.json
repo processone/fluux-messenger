@@ -38,6 +38,7 @@
         "storedInKeychain": "(stóráilte i Keychain)",
         "staySignedIn": "(fan logáilte isteach)",
         "credentialsLoaded": "Dintiúir luchtaithe ó Keychain",
+        "keychainSaveFailed": "Níor sábháladh do phasfhocal mar go bhfuil fáinne eochracha an chórais faoi ghlas nó nach bhfuil sé ar fáil.",
         "connecting": "Ag ceangal...",
         "connect": "Ceangail",
         "showPassword": "Taispeáin pasfhocal",

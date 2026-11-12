@@ -38,6 +38,7 @@
         "storedInKeychain": "(lagret i nøkkelring)",
         "staySignedIn": "(forbli innlogget)",
         "credentialsLoaded": "Legitimasjon lastet fra nøkkelring",
+        "keychainSaveFailed": "Passordet ble ikke lagret fordi systemnøkkelringen er låst eller utilgjengelig.",
         "connecting": "Kobler til...",
         "connect": "Koble til",
         "showPassword": "Vis passord",

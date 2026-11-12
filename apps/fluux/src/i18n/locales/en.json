@@ -38,6 +38,7 @@
         "storedInKeychain": "(stored in Keychain)",
         "staySignedIn": "(stay signed in)",
         "credentialsLoaded": "Credentials loaded from Keychain",
+        "keychainSaveFailed": "Your password was not saved because the system keychain is locked or unavailable.",
         "connecting": "Connecting...",
         "connect": "Connect",
         "showPassword": "Show password",

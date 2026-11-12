@@ -38,6 +38,7 @@
         "storedInKeychain": "(захавана ў Keychain)",
         "staySignedIn": "(заставацца ў сістэме)",
         "credentialsLoaded": "Уліковыя даныя загружаны з Keychain",
+        "keychainSaveFailed": "Пароль не захаваны, бо сістэмная звязка ключоў заблакаваная або недаступная.",
         "connecting": "Падключэнне...",
         "connect": "Падключыцца",
         "showPassword": "Паказаць пароль",

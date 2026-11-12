@@ -38,6 +38,7 @@
         "storedInKeychain": "(stocat în Keychain)",
         "staySignedIn": "(rămâi conectat)",
         "credentialsLoaded": "Credențiale încărcate din Keychain",
+        "keychainSaveFailed": "Parola nu a fost salvată deoarece inelul de chei al sistemului este blocat sau indisponibil.",
         "connecting": "Se conectează...",
         "connect": "Conectare",
         "showPassword": "Arată parola",

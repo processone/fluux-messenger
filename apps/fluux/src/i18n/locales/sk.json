@@ -38,6 +38,7 @@
         "storedInKeychain": "(uložené v kľúčenke)",
         "staySignedIn": "(zostať prihlásený)",
         "credentialsLoaded": "Prihlasovacie údaje načítané z kľúčenky",
+        "keychainSaveFailed": "Heslo sa neuložilo, pretože systémový zväzok kľúčov je zamknutý alebo nedostupný.",
         "connecting": "Pripája sa...",
         "connect": "Pripojiť",
         "showPassword": "Zobraziť heslo",

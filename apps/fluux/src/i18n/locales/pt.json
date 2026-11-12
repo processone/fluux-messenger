@@ -38,6 +38,7 @@
         "storedInKeychain": "(guardado no Keychain)",
         "staySignedIn": "(manter sessão)",
         "credentialsLoaded": "Credenciais carregadas do Keychain",
+        "keychainSaveFailed": "A sua palavra-passe não foi guardada porque o porta-chaves do sistema está bloqueado ou indisponível.",
         "connecting": "A ligar...",
         "connect": "Ligar",
         "showPassword": "Mostrar palavra-passe",
