@@ -289,10 +289,6 @@ import UserNotifications
             }
             precondition(dates[0] > evening && dates[0].timeIntervalSince(evening) == 1800, "The first midnight is the next one")
             precondition(zip(dates, dates.dropFirst()).allSatisfy { calendar.isDate($1, inSameDayAs: calendar.date(byAdding: .day, value: 1, to: $0)!) })
-        case "reread":
-            // The iOS widget asks for its next timeline about an hour on, so a refused redraw cannot freeze it.
-            let now = Date(timeIntervalSince1970: 1_800_000_000)
-            precondition(UnreadList.nextReread(after: now).timeIntervalSince(now) == 3600, "The next re-read is an hour away")
         case "clear-wins":
             try fixture().write(root: root)
             try UnreadList.clear(root: root)

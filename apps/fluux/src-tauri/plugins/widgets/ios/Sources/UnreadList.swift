@@ -220,13 +220,6 @@ extension UnreadList {
         return (1...count).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
     }
 
-    /// How long the iOS widget goes without re-reading its shared file. The system rations timeline reloads and may
-    /// refuse the app's redraw request, so the widget asks for its own, about once an hour.
-    static let rereadInterval: TimeInterval = 3600
-
-    /// When the timeline asks to be built again, so the file is re-read even if no redraw request is honored.
-    static func nextReread(after date: Date) -> Date { date.addingTimeInterval(rereadInterval) }
-
     /// The time today, "Yesterday", the weekday within a week, then the date. Everything is measured
     /// against `now`, never the clock, so a timeline entry drawn ahead of time labels its day correctly.
     static func when(_ date: Date, now: Date = Date(), calendar: Calendar = .current, locale: Locale = .current) -> String {

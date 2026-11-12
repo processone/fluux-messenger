@@ -31,7 +31,9 @@ struct LabHost: App {
             if arguments.contains("-seed") { try seed(root) }
             if arguments.contains("-push") { pushed = await push(root) }
             if arguments.contains("-signout") { try signOut(root) }
-            WidgetCenter.shared.reloadAllTimelines()
+            // -silentchange rewrites the list the way the app does but asks for no redraw, so only the widget's own
+            // timeline can pick it up.
+            if arguments.contains("-silentchange") { try silentChange(root) } else { WidgetCenter.shared.reloadAllTimelines() }
             status = "ready"
         } catch { status = "ready error \(error)" }
     }
@@ -62,6 +64,15 @@ func seed(_ root: URL) throws {
     let now = Date().timeIntervalSince1970 * 1000
     try UnreadList(account: labAccount, total: 1,
                    rows: [.init(id: "alice@lab.test", kind: "chat", name: "Alice Lab", unread: 1, mentions: 0, last: now)],
+                   updated: now).write(root: root)
+}
+
+/// A second conversation appears in the list with no redraw request.
+func silentChange(_ root: URL) throws {
+    let now = Date().timeIntervalSince1970 * 1000
+    try UnreadList(account: labAccount, total: 2,
+                   rows: [.init(id: "alice@lab.test", kind: "chat", name: "Alice Lab", unread: 1, mentions: 0, last: now),
+                          .init(id: "carol@lab.test", kind: "chat", name: "Carol Lab", unread: 1, mentions: 0, last: now - 1000)],
                    updated: now).write(root: root)
 }
 

@@ -123,7 +123,7 @@ test('iOS unread widget list follows the badge and holds no message text', { ski
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-unread-widget-'))
   try {
     const binary = compileNotificationTests(scratch, 'UnreadListTests.swift')
-    for (const scenario of ['badge-write-observations', 'round-trip', 'no-message-text', 'push-adds-row', 'push-events', 'write-failure', 'room-rule', 'other-account', 'cap', 'concurrent-pushes', 'latest-total-wins', 'app-file-authority', 'queued-app-frame', 'clock-rollback', 'membership-reconcile', 'read-wins', 'lock-refused', 'labels-follow-entry-date', 'mismatched-owner', 'midnights', 'reread', 'clear-wins', 'clear']) {
+    for (const scenario of ['badge-write-observations', 'round-trip', 'no-message-text', 'push-adds-row', 'push-events', 'write-failure', 'room-rule', 'other-account', 'cap', 'concurrent-pushes', 'latest-total-wins', 'app-file-authority', 'queued-app-frame', 'clock-rollback', 'membership-reconcile', 'read-wins', 'lock-refused', 'labels-follow-entry-date', 'mismatched-owner', 'midnights', 'clear-wins', 'clear']) {
       await t.test(scenario, () => {
         const output = execFileSync(binary, [scenario]).toString()
         assert.match(output, /passed/)

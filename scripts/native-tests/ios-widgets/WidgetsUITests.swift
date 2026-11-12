@@ -137,4 +137,37 @@ final class WidgetsUITests: XCTestCase {
         XCTAssertNil(onHome("Alice Lab", timeout: 2), "no row remains")
         XCTAssertNil(onHome("Bob Lab", timeout: 1), "no pushed row remains")
     }
+
+    /// The iOS timeline asks to be built again about an hour on. The list changes with no redraw request;
+    /// the widget must show the change by itself within the hour plus the system's slack (it takes about an hour).
+    func test5WidgetRereadsFileAboutHourlyWithoutRedrawRequest() throws {
+        launchHost("-seed")
+        XCUIDevice.shared.press(.home)
+        sleep(3)
+        XCTAssertNotNil(onHome("Alice Lab", timeout: 20), "the seeded row is shown before the silent change")
+        XCTAssertNil(onHome("Carol Lab", timeout: 1))
+        launchHost("-silentchange")
+        app.terminate()
+        let changedAt = Date()
+        XCUIDevice.shared.press(.home)
+        shot("13-silent-change-written")
+        // Control: with no redraw request the widget still shows the old list a few minutes later.
+        sleep(180)
+        XCUIDevice.shared.press(.home)
+        XCTAssertNil(onHome("Carol Lab", timeout: 2), "no redraw was requested, so the change is not shown yet")
+        shot("14-before-hourly-reread")
+        var minutes = 3
+        while Date().timeIntervalSince(changedAt) < 80 * 60 {
+            XCUIDevice.shared.press(.home)
+            if onHome("Carol Lab", timeout: 5) != nil {
+                shot("15-after-hourly-reread")
+                add(XCTAttachment(string: "Carol Lab shown \(Int(Date().timeIntervalSince(changedAt) / 60)) minutes after the silent change"))
+                return
+            }
+            sleep(60)
+            minutes += 1
+        }
+        shot("15-no-reread")
+        XCTFail("the widget did not show the silent change within 80 minutes (\(minutes) polls)")
+    }
 }

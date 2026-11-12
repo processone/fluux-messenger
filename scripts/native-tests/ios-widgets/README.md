@@ -15,6 +15,8 @@ It proves, on a disposable simulator:
    simulator never wakes a notification service extension (checked on iOS 26.5 and 27.0).
 5. **Sign-out**: after the production sign-out writes (empty names, no list), the widget shows
    "Sign in to Fluux" and no row.
+6. **Hourly re-read**: the list changes with no redraw request; the widget shows the change by itself about an hour
+   later (the iOS timeline policy). This step waits up to 80 minutes.
 
 ```sh
 FLUUX_WIDGETS_RESULTS=/absolute/path/outside/project/widgets-results npm run test:ios-widgets
@@ -27,5 +29,5 @@ own simulator. `npm run test:local` plans this lab whenever widget, `UnreadList`
 or push extension sources, or the lab itself, change. Labels are matched in English.
 
 **Not proven here** (needs a real device): APNs waking the suspended extension, its memory limit, a
-locked phone, iOS redraw rationing, the host app's own routing from the link, and the signed build's
+locked phone, iOS redraw rationing on a device, the host app's own routing from the link, and the signed build's
 App ID, provisioning profile and App Group.

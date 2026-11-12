@@ -55,7 +55,7 @@ struct UnreadProvider: TimelineProvider {
         #else
         // iOS may refuse the app's redraw request, which would leave the counter frozen until the app opens.
         // Ask to be built again in about an hour, within the system's refresh budget.
-        completion(Timeline(entries: entries, policy: .after(UnreadList.nextReread(after: now.date))))
+        completion(Timeline(entries: entries, policy: .after(now.date.addingTimeInterval(3600))))
         #endif
     }
 
