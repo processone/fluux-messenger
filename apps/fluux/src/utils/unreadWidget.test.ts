@@ -150,18 +150,19 @@ describe('startUnreadWidgetPublisher', () => {
     } finally { stop() }
   })
 
-  it('keeps extension state until the session is online', async () => {
-    asStore(connectionStore).set({ jid: 'me@example.com/phone', status: 'connecting' })
-    startUnreadWidgetPublisher(() => 0)
-    await vi.advanceTimersByTimeAsync(600)
-    expect(mockInvoke).not.toHaveBeenCalled()
-    asStore(connectionStore).set({ jid: 'me@example.com/phone', status: 'online', isCatchingUp: false })
-    await vi.advanceTimersByTimeAsync(600)
-    expect(widgetCalls()).toHaveLength(1)
-  })
+  it.each([{ status: 'connecting' }, { isVerifying: true }, { replayOwners: 1 }])(
+    'keeps extension state until the session is online, verified and not replaying: %j', async (pending) => {
+      asStore(connectionStore).set({ jid: 'me@example.com/phone', status: 'online', ...pending })
+      startUnreadWidgetPublisher(() => 0)
+      await vi.advanceTimersByTimeAsync(600)
+      expect(mockInvoke).not.toHaveBeenCalled()
+      asStore(connectionStore).set({ jid: 'me@example.com/phone', status: 'online', isVerifying: false, replayOwners: 0, isCatchingUp: false })
+      await vi.advanceTimersByTimeAsync(600)
+      expect(widgetCalls()).toHaveLength(1)
+    })
 
   // FLM-59: the badge showed a number saved by a push while the app showed nothing unread, until catch-up ended.
-  it.each([{ isVerifying: true }, { isCatchingUp: true }, { replayOwners: 1 }])(
+  it.each([{ isCatchingUp: true }])(
     'replaces the saved count with the app count at once, without waiting for %j', async (pending) => {
       asStore(connectionStore).set({ jid: 'me@example.com/phone', status: 'online', ...pending })
       startUnreadWidgetPublisher(() => 0)

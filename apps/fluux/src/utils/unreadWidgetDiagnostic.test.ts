@@ -31,16 +31,18 @@ describe('closed widget diagnostic observations', () => {
       badgeCommand: 'unknown', badgeAcknowledgement: 'unknown' })
     expect(invoke).not.toHaveBeenCalled()
   })
-  it('samples real replay/catch-up store flags while publishing through them', async () => {
+  it('samples real replay/catch-up store flags; replay holds the write, catch-up does not', async () => {
     const endReplay = connectionStore.getState().beginReplay()
     const endCatchUp = connectionStore.getState().beginCatchUp()
     startUnreadWidgetPublisher(() => 0)
     await vi.advanceTimersByTimeAsync(600)
     expect(context()).toMatchObject({ online: true, verifying: false, catchingUp: true, replaying: true,
-      badgeCommand: 'emitted', badgeAcknowledgement: 'accepted' })
+      badgeCommand: 'unknown', badgeAcknowledgement: 'unknown' })
+    expect(commands()).toEqual([])
+    endReplay(); await vi.advanceTimersByTimeAsync(600)
+    expect(context()).toMatchObject({ catchingUp: true, replaying: false, badgeCommand: 'emitted', badgeAcknowledgement: 'accepted' })
     expect(commands()).toEqual(['plugin:push|set_badge', 'plugin:widgets|set_unread_list'])
-    endReplay(); endCatchUp(); await vi.advanceTimersByTimeAsync(600)
-    expect(context()).toMatchObject({ catchingUp: false, replaying: false, badgeCommand: 'emitted', badgeAcknowledgement: 'accepted' })
+    endCatchUp()
   })
   it('distinguishes an emitted command from its pending and accepted acknowledgement', async () => {
     let accept!: () => void

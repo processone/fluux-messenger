@@ -317,7 +317,7 @@ class PushPlugin: Plugin {
     }
 
     /// A wake reapplies the shared count. The store publisher replaces it with the app's own count
-    /// as soon as the session is online, without waiting for catch-up; until then retain the shared state.
+    /// once the session is online and verified, without waiting for archive catch-up; until then retain the shared state.
     @objc fileprivate func restoreBadge() {
         guard let owner = SharedNames.load().account else { applyBadgeCount(0); return }
         guard let badge = SharedBadge.load(), badge.account == owner else { return }

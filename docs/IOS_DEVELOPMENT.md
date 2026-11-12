@@ -428,7 +428,7 @@ The widget never connects to the server. It reads `UnreadWidget.json` from the A
   or reload; a changed snapshot is written and requests a redraw. It writes nothing off iOS
   (`publishesUnreadWidget`), and an empty list on sign-out.
 - One store publisher sends badge membership and widget rows from the same snapshot, including
-  same-total membership changes. It waits only for the session to be online, not for verification, replay or
+  same-total membership changes. It waits for the session to be online, verified and not replaying, but not for archive
   catch-up, so the app's own count replaces the saved one as soon as the app opens; it then
   waits for the badge write acknowledgement before publishing rows. A pending known snapshot is
   flushed when the webview hides. Waking the native app restores the saved badge until the first publication; until
