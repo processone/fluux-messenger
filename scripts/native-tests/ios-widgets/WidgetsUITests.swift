@@ -170,7 +170,7 @@ final class WidgetsUITests: XCTestCase {
         var lastDump = Date()
         while Date().timeIntervalSince(changedAt) < 80 * 60 {
             let onScreen = showWidgetPage("Alice Lab")
-            if onHome("Carol Lab", timeout: 5) != nil {
+            if onScreen && onHome("Carol Lab", timeout: 5) != nil {
                 let minutes = Int(Date().timeIntervalSince(changedAt) / 60)
                 dump("15-after-hourly-reread")
                 let note = XCTAttachment(string: "Carol Lab shown \(minutes) minutes after the silent change")
@@ -179,7 +179,11 @@ final class WidgetsUITests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(minutes, 55, "the row came from another reload, not the hourly re-read (\(minutes) minutes)")
                 return
             }
-            if Date().timeIntervalSince(lastDump) > 600 || !onScreen {
+            if !onScreen {
+                dump("14-widget-not-found")
+                XCTFail("the widget's page was not found, so the poll cannot judge the re-read")
+            }
+            if Date().timeIntervalSince(lastDump) > 600 {
                 dump("14-poll-\(Int(Date().timeIntervalSince(changedAt) / 60))min-widgetOnScreen-\(onScreen)")
                 lastDump = Date()
             }
