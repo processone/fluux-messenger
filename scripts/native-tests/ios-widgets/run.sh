@@ -30,6 +30,9 @@ XB=(xcodebuild -project "$LAB/WidgetsLab.xcodeproj" -scheme WidgetsLab -configur
   -destination "platform=iOS Simulator,id=$SIM" -derivedDataPath "$LAB/DerivedData"
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO)
 "${XB[@]}" build-for-testing > "$FLUUX_WIDGETS_RESULTS/build.log" 2>&1
+# The hourly re-read step waits up to 80 minutes: it runs only when FLUUX_WIDGETS_HOURLY=1 (xcodebuild hands
+# TEST_RUNNER_ variables to the tests).
+[[ "${FLUUX_WIDGETS_HOURLY:-}" == "1" ]] && export TEST_RUNNER_FLUUX_WIDGETS_HOURLY=1
 status=0
 "${XB[@]}" test-without-building -parallel-testing-enabled NO -collect-test-diagnostics never \
   -resultBundlePath "$FLUUX_WIDGETS_RESULTS/widgets.xcresult" > "$FLUUX_WIDGETS_RESULTS/test.log" 2>&1 || status=$?

@@ -16,10 +16,13 @@ It proves, on a disposable simulator:
 5. **Sign-out**: after the production sign-out writes (empty names, no list), the widget shows
    "Sign in to Fluux" and no row.
 6. **Hourly re-read**: the list changes with no redraw request; the widget shows the change by itself about an hour
-   later (the iOS timeline policy). This step waits up to 80 minutes.
+   later (the iOS timeline policy). This step waits up to 80 minutes, so it is skipped unless
+   `FLUUX_WIDGETS_HOURLY=1` is set; `test:local` does not set it.
 
 ```sh
 FLUUX_WIDGETS_RESULTS=/absolute/path/outside/project/widgets-results npm run test:ios-widgets
+# with the hourly re-read step (about an hour more):
+FLUUX_WIDGETS_HOURLY=1 FLUUX_WIDGETS_RESULTS=/absolute/path/outside/project/widgets-results npm run test:ios-widgets
 ```
 
 Requirements: macOS, Xcode with an iOS simulator runtime, Python 3, XcodeGen. Override the runtime with

@@ -141,6 +141,8 @@ final class WidgetsUITests: XCTestCase {
     /// The iOS timeline asks to be built again about an hour on. The list changes with no redraw request;
     /// the widget must show the change by itself within the hour plus the system's slack (it takes about an hour).
     func test5WidgetRereadsFileAboutHourlyWithoutRedrawRequest() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["FLUUX_WIDGETS_HOURLY"] == "1",
+                          "waits about an hour: set FLUUX_WIDGETS_HOURLY=1 to run it")
         launchHost("-seed")
         XCUIDevice.shared.press(.home)
         sleep(3)

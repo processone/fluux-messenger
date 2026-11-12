@@ -525,7 +525,8 @@ and `npm run test:ios-build-scripts` (the install and TestFlight scripts require
 its signature and group). `npm run test:ios-widgets` runs the unsigned simulator widget lab
 (`scripts/native-tests/ios-widgets`): gallery add, rows and avatar, a row tap, the production
 notification service run in-process, sign-out, and the hourly re-read (a list change with no redraw
-request must show about an hour later; this step waits up to 80 minutes). What still needs a signed build on a device (the
+request must show about an hour later; this step waits up to 80 minutes, so it runs only with
+`FLUUX_WIDGETS_HOURLY=1`, which `test:local` does not set). What still needs a signed build on a device (the
 phone-only list; simulators cannot show these, so the widget freeze reported on a phone stays open until
 a phone confirms it):
 
