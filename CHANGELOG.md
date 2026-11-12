@@ -5,15 +5,25 @@ All notable changes to Fluux Messenger are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.18.3] - Unreleased
+## [0.18.3] - 2026-11-12
 
 ### Added
 
-- macOS: message notifications can use the system’s communication presentation with sender and room information
+- macOS: a native desktop widget lists unread conversations with names, avatars, counts, mention markers and times, without message text. Clicking a row opens the conversation; an old saved list is marked when Fluux stops updating it
+- iOS: a new widget shows your unread conversations on the home screen. The lock screen shows the unread total. Tap a row to open that conversation. Message text is never shown
+- macOS: message notifications now show who wrote to you, with the sender and room details. They look like those of other chat apps
 
 ### Fixed
 
-- Importing an OpenPGP key file checks that the server backup contains the same identity, including separately encrypted and older exports. Earlier backup-status markers are reset because file imports could record an incorrect claim. An unconfirmed backup now has a neutral status and a replacement warning. Rotating a key refreshes an unconfirmed backup and replaces its code, even if another device created it
+- OpenPGP: importing a key file now checks that your server backup matches it. You see a clear status when the backup is not confirmed, and a warning before you replace it. Rotating a key refreshes the backup and gives you a new code
+- macOS: Fluux cleans up old keychain copies without asking for access again. Copies that differ are kept, so you never lose a secret
+- macOS: a keychain prompt waiting for your answer no longer blocks saving other secrets, such as your credentials, MCP token or encrypted OpenPGP key
+- iOS: room notifications show the room picture. The room name stays first, with the sender above the message
+- Scrolling up in conversations and rooms no longer jumps or skips messages when Fluux corrects its size estimate for older messages, for example after a long run of your own short replies
+- Scrolling back through a very long conversation or room no longer gets stuck or returns to the newest messages once you go past the latest 5,000 messages, so you can read back to the start
+- In long conversations and rooms, the messages you are reading no longer jump away when older messages finish loading while your pointer rests on a message or you keep scrolling
+- Reading stays put when a conversation or room grows, when media finishes loading, and while you keep scrolling. On iOS, pulling past the end of a conversation while it grows brings you back to its newest messages when you let go
+- macOS: reading a conversation or room now also clears its notifications that arrived before Fluux was last restarted
 
 ## [0.18.2] - 2026-11-05
 
