@@ -1,6 +1,6 @@
 import XCTest
 
-/// Steps run in order on one simulator (test1 ... test4); each one keeps the widget placed by test1.
+/// Steps run in order on one simulator (test1 ... test5); each one keeps the widget placed by test1.
 final class WidgetsUITests: XCTestCase {
     let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
     let app = XCUIApplication()
@@ -151,23 +151,23 @@ final class WidgetsUITests: XCTestCase {
         let changedAt = Date()
         XCUIDevice.shared.press(.home)
         shot("13-silent-change-written")
-        // Control: with no redraw request the widget still shows the old list a few minutes later.
-        sleep(180)
-        XCUIDevice.shared.press(.home)
-        XCTAssertNil(onHome("Carol Lab", timeout: 2), "no redraw was requested, so the change is not shown yet")
-        shot("14-before-hourly-reread")
-        var minutes = 3
+        XCTAssertNil(onHome("Carol Lab", timeout: 2), "no redraw was requested, so the change is not shown at once")
+        // The list changed with no redraw request: the row must not show before the timeline's own hour is up,
+        // so a reload from any other cause cannot pass as the hourly re-read.
         while Date().timeIntervalSince(changedAt) < 80 * 60 {
             XCUIDevice.shared.press(.home)
             if onHome("Carol Lab", timeout: 5) != nil {
+                let minutes = Int(Date().timeIntervalSince(changedAt) / 60)
                 shot("15-after-hourly-reread")
-                add(XCTAttachment(string: "Carol Lab shown \(Int(Date().timeIntervalSince(changedAt) / 60)) minutes after the silent change"))
+                let note = XCTAttachment(string: "Carol Lab shown \(minutes) minutes after the silent change")
+                note.lifetime = .keepAlways
+                add(note)
+                XCTAssertGreaterThanOrEqual(minutes, 55, "the row came from another reload, not the hourly re-read (\(minutes) minutes)")
                 return
             }
-            sleep(60)
-            minutes += 1
+            sleep(30)
         }
         shot("15-no-reread")
-        XCTFail("the widget did not show the silent change within 80 minutes (\(minutes) polls)")
+        XCTFail("the widget did not show the silent change within 80 minutes")
     }
 }
