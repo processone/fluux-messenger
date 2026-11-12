@@ -35,6 +35,7 @@ export const changelog: ChangelogEntry[] = [
         'In long conversations and rooms, the messages you are reading no longer jump away when older messages finish loading while your pointer rests on a message or you keep scrolling',
         'Reading stays put when a conversation or room grows, when media finishes loading, and while you keep scrolling. On iOS, pulling past the end of a conversation while it grows brings you back to its newest messages when you let go',
         'macOS: reading a conversation or room now also clears its notifications that arrived before Fluux was last restarted',
+        'iOS: the app icon badge now shows Fluux\'s own unread count as soon as the app is open and connected, instead of keeping an old saved number until the archive catch-up ends',
       ],
     }],
   },
