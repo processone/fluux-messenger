@@ -50,7 +50,13 @@ struct UnreadProvider: TimelineProvider {
         #endif
         let midnights = dates.sorted()
         let entries = [now] + midnights.map { UnreadEntry(date: $0, list: now.list, names: now.names, root: now.root) }
+        #if os(macOS)
         completion(Timeline(entries: entries, policy: .atEnd))
+        #else
+        // iOS may refuse the app's redraw request, which would leave the counter frozen until the app opens.
+        // Ask to be built again in about an hour, within the system's refresh budget.
+        completion(Timeline(entries: entries, policy: .after(now.date.addingTimeInterval(3600))))
+        #endif
     }
 
     private func current() -> UnreadEntry { shown().0 }
