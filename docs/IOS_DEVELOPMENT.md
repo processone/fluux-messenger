@@ -419,7 +419,7 @@ unread count, an `@` marker for a mention and the time of the last message, neve
 Tapping a row opens that conversation through the `net.processone.fluux://shortcut` link the Shortcuts
 actions already use.
 
-The widget never connects to the server. It reads `UnreadWidget.json` from the App Group folder:
+The widget never connects to the server. It reads `UnreadWidget.json` from the App Group folder, when the app or a push asks for a redraw and, on iOS, about once an hour on its own (the timeline policy `.after`; iOS may delay it):
 
 - The app writes it. `unreadConversations` (SDK) selects the rows by the app icon badge's rule, so a
   quiet room does not appear; `utils/unreadWidget.ts` builds the list, with `total` equal to the badge,
@@ -530,7 +530,7 @@ a phone confirms it):
 
 - APNs waking the suspended notification extension, and that extension's memory limit.
 - A locked phone.
-- iOS rationing widget redraw requests (a refused redraw leaves the widget unchanged until the app opens).
+- iOS rationing widget redraw requests (a refused redraw leaves the widget unchanged until the app opens or the widget's own re-read, about an hour later, which iOS may also delay).
 - The signed install's App ID, provisioning profile and App Group.
 
 ## Receive a shared link, document, or image

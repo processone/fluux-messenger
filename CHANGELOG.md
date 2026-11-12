@@ -15,7 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- iOS: the unread widget now asks the system to refresh itself about once an hour and re-reads its list, instead of relying only on redraw requests from the app
 - OpenPGP: importing a key file now checks that your server backup matches it. You see a clear status when the backup is not confirmed, and a warning before you replace it. Rotating a key refreshes the backup and gives you a new code
 - macOS: Fluux cleans up old keychain copies without asking for access again. Copies that differ are kept, so you never lose a secret
 - macOS: a keychain prompt waiting for your answer no longer blocks saving other secrets, such as your credentials, MCP token or encrypted OpenPGP key
@@ -26,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reading stays put when a conversation or room grows, when media finishes loading, and while you keep scrolling. On iOS, pulling past the end of a conversation while it grows brings you back to its newest messages when you let go
 - macOS: reading a conversation or room now also clears its notifications that arrived before Fluux was last restarted
 - iOS: the app icon badge now shows Fluux's own unread count as soon as the app is open and connected, instead of keeping an old saved number until the archive catch-up ends
+- iOS: the unread widget now asks the system to refresh itself about once an hour and re-reads its list, instead of relying only on redraw requests from the app
 
 ## [0.18.2] - 2026-11-05
 
