@@ -195,7 +195,7 @@ webkit2gtk = { version = "=2.0.2", features = ["v2_32"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 # Reuse the vendored runtime dependency; its narrow startup termination gate
 # preserves Wry's navigation delegate and default behavior after startup.
-wry = { version = "=0.57.0", default-features = false, features = ["fluux-startup-recovery"] }
+wry = { version = "=0.57.2", default-features = false, features = ["fluux-startup-recovery"] }
 # Same Security framework wrapper used by iOS; macOS retains file-based items.
 security-framework = "3"
 # Exact native references for interruption-safe retirement of legacy copies.
