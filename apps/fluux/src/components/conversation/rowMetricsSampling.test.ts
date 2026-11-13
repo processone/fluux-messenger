@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
-import { pickWidthSampleEl, pickChromeSampleEl } from './useRowMetrics'
+import { pickWidthSampleEl, pickChromeSampleEl, realContentWidthPx } from './useRowMetrics'
 
 function el(html: string): HTMLElement {
   const root = document.createElement('div')
@@ -41,6 +41,24 @@ describe('pickWidthSampleEl', () => {
 
   it('returns null when nothing is mounted', () => {
     expect(pickWidthSampleEl(el(''))).toBeNull()
+  })
+})
+
+describe('realContentWidthPx', () => {
+  // The height cache's width tag follows this value, so a hugged own text box must never pass
+  // for the real width (the tag would move and wipe the conversation's heights). A renderer
+  // without the content column marker keeps the full-width text box as the real width.
+  // Widths are the demo app's at 1280px wide in Chromium.
+  it('outside a content column, trusts only a full-width text box', () => {
+    const root = el(`
+      <div data-msg-chrome="cont" data-msg-own><div data-msg-text>short own reply</div></div>
+      <div data-msg-chrome="cont"><div data-msg-text>a longer peer message</div></div>
+    `)
+    const [own, peer] = Array.from(root.querySelectorAll<HTMLElement>('[data-msg-text]'))
+    setWidth(own, 142)
+    setWidth(peer, 888)
+    expect(realContentWidthPx(own)).toBeUndefined()
+    expect(realContentWidthPx(peer)).toBe(888)
   })
 })
 

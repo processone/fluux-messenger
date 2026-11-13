@@ -52,7 +52,7 @@ import {
   type ActiveMessageListController,
 } from './activeMessageListController'
 import { MessageTargetProvider } from './messageTargetContext'
-import { useRowMetrics, ROW_METRICS_FALLBACK } from './useRowMetrics'
+import { useRowMetrics } from './useRowMetrics'
 import { estimateRowHeight } from './rowHeightEstimator'
 import { computeRowGrowthSignature } from './rowGrowthSignature'
 import { isEstimateDebugEnabled, estimateDebugLog } from '@/utils/scrollDebug'
@@ -199,6 +199,17 @@ export interface MessageListProps<T extends BaseMessage> {
    * date separators into separate windowed items the pure-DOM copy can't follow).
    */
   formatMessageForCopy?: (message: T) => CopyMessageMeta
+}
+
+/**
+ * Tag a conversation's cached heights with the real content width they were measured at, in
+ * 20px buckets that absorb subpixel jitter. Nothing is noted until a sample has read a real
+ * width (useRowMetrics' realWidthPxRef), so neither the mount-time fallback nor the own-bubble
+ * lower bound can wipe the cache.
+ */
+function noteRealWidthBucket(conversationId: string, realWidthPx: number | undefined): void {
+  if (realWidthPx === undefined) return
+  noteConversationWidthBucket(conversationId, Math.round(realWidthPx / 20) * 20)
 }
 
 // ============================================================================
@@ -382,7 +393,7 @@ export function MessageList<T extends BaseMessage>({
   // its spacer commits before the divider is re-asserted. Later ones are batched: a synchronous
   // re-render re-windows the list, and the rows it mounts queue the next sample. The adapter
   // still commits a later one at once when keeping the reader in place moved the scroll offset.
-  const { metricsRef: rowMetricsRef, sample: sampleRowMetrics } = useRowMetrics(scrollContainerRef, first => {
+  const { metricsRef: rowMetricsRef, realWidthPxRef: rowRealWidthPxRef, sample: sampleRowMetrics } = useRowMetrics(scrollContainerRef, first => {
     virtualizer.refreshEstimates?.(first)
     if (first) reassertUnreadMarker()
   })
@@ -471,13 +482,13 @@ export function MessageList<T extends BaseMessage>({
     conversationId: string,
     heightDelta: number,
   ) => void>(() => {})
-  const onMeasuredParamsRef = useRef({ conversationId, scalePct, rowMetricsRef, indexById, virtualItems })
-  onMeasuredParamsRef.current = { conversationId, scalePct, rowMetricsRef, indexById, virtualItems }
+  const onMeasuredParamsRef = useRef({ conversationId, scalePct, rowMetricsRef, rowRealWidthPxRef, indexById, virtualItems })
+  onMeasuredParamsRef.current = { conversationId, scalePct, rowMetricsRef, rowRealWidthPxRef, indexById, virtualItems }
   const onMeasured = useMemo(
     () =>
       virtualized
         ? (key: string, size: number) => {
-            const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef, indexById: idMap, virtualItems: items } = onMeasuredParamsRef.current
+            const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef, rowRealWidthPxRef: realWidthRef, indexById: idMap, virtualItems: items } = onMeasuredParamsRef.current
             const idx = idMap.get(key)
             const item = idx != null ? items[idx] : undefined
             const measuredGrowth = measuredRowSizesRef.current.observe(cid, scale, key, size)
@@ -489,11 +500,10 @@ export function MessageList<T extends BaseMessage>({
             if (!(item?.kind === 'message' && item.isFirstNew)) {
               recordMeasuredHeight(cid, heightCacheKey(key, scale), size)
             }
-            // Note the width-validity tag only once the REAL width has been sampled — the
-            // mount-time fallback must never wipe (or masquerade as) a real bucket.
-            if (metricsRef.current !== ROW_METRICS_FALLBACK) {
-              noteConversationWidthBucket(cid, Math.round(metricsRef.current.contentWidthPx / 20) * 20)
-            }
+            // Note the width-validity tag only once the REAL content width has been read — the
+            // mount-time fallback, and the own-bubble lower bound the estimator samples when only
+            // own rows are mounted, must never wipe (or masquerade as) a real bucket.
+            noteRealWidthBucket(cid, realWidthRef.current)
             // Estimate-accuracy trace (estimate-debug only): predicted vs first-measured per row.
             // Gated up front so the predict (which may call pretext) is skipped when debug is off.
             if (isEstimateDebugEnabled()) {
@@ -541,14 +551,11 @@ export function MessageList<T extends BaseMessage>({
     const scroller = scrollContainerRef.current
     const snapshotSettledRows = () => {
       if (!scroller) return
-      const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef, virtualItems: items } = onMeasuredParamsRef.current
+      const { conversationId: cid, scalePct: scale, rowRealWidthPxRef: realWidthRef, virtualItems: items } = onMeasuredParamsRef.current
       // Note the width-validity tag BEFORE recording, so a genuine width change wipes the
-      // stale map first and the snapshot lands under the new tag. Only from a real sample —
-      // the mount-time fallback must never wipe a real bucket.
-      const sampled = metricsRef.current !== ROW_METRICS_FALLBACK
-      if (sampled) {
-        noteConversationWidthBucket(cid, Math.round(metricsRef.current.contentWidthPx / 20) * 20)
-      }
+      // stale map first and the snapshot lands under the new tag. Only from a real content
+      // width — the mount-time fallback must never wipe a real bucket.
+      noteRealWidthBucket(cid, realWidthRef.current)
       const settled = collectSettledRowHeights(scroller, items, scale)
       for (const [key, height] of settled) {
         recordMeasuredHeight(cid, key, height)

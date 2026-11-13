@@ -678,7 +678,9 @@ export const MessageBubble = memo(function MessageBubble({
           mismatch the fill and knock the side borders 8px out of alignment with
           the incoming rows — shattering the single "private with X" card. The
           name header already carries the own-vs-counterpart distinction. */}
-      <div className="relative flex-1 min-w-0">
+      {/* The content column spans the conversation's real content width whatever the row
+          holds, so useRowMetrics reads it even when only hug-width own bubbles are mounted. */}
+      <div className="relative flex-1 min-w-0" data-msg-column="">
       <div
         ref={ownGroupRef}
         // Opacity keeps the previous focus target available while the overlay captures and restores focus.

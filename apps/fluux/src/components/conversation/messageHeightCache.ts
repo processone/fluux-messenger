@@ -25,8 +25,10 @@ const MAX_ENTRIES_PER_CONVERSATION = 6000
 const cache = new Map<string, Map<string, number>>()
 
 /**
- * The real width bucket (px) each conversation's entries are valid for. Written when a REAL
- * (non-fallback) sample is available; a change wipes the conversation's heights (see above).
+ * The real width bucket (px) each conversation's entries are valid for. Written from the REAL
+ * content width (the message column, see realContentWidthPx in useRowMetrics), never from the
+ * mount-time fallback or the own-bubble lower bound; a change wipes the conversation's heights
+ * (see above).
  */
 const widthBucketByConversation = new Map<string, number>()
 
