@@ -25,7 +25,7 @@ beforeEach(() => {
   connectionStore.getState().setJid('alice@example.org/web')
   connectionStore.getState().setStatus('online')
   bridge.mockResolvedValue(undefined)
-  locate.mockResolvedValue({ kind: 'found', message })
+  locate.mockResolvedValue({ kind: 'found', message, source: 'resident' })
 })
 afterEach(() => { roomStore.getState().reset(); connectionStore.getState().setJid(null); connectionStore.getState().setStatus('disconnected'); vi.restoreAllMocks() })
 
@@ -43,6 +43,21 @@ describe('room message link navigation', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(link.roomJid, expect.objectContaining({ id: message.id, stanzaId: link.stanzaId })))
     expect(locate).toHaveBeenCalledTimes(1)
     expect(bridge).not.toHaveBeenCalled()
+  })
+
+  // A conservative gap can survive a completed bridge. Local targets must not
+  // repeat that archive walk on later opens; only fresh archive context needs it.
+  it.each(['resident', 'cache', 'archive'] as const)('bridges only archive-fetched targets when a gap remains: %s', async source => {
+    locate.mockResolvedValue({ kind: 'found', message, source })
+    const { result } = renderHook(useRoomMessageLink)
+    act(() => result.current(link))
+    act(() => {
+      roomStore.setState({ roomGaps: new Map([[link.roomJid, [{ start: +message.timestamp, startId: link.stanzaId }]]]) })
+      roomStore.getState().addRoom({ ...roomStore.getState().rooms.get(link.roomJid)!, joined: true })
+    })
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(link.roomJid, expect.objectContaining({ stanzaId: link.stanzaId })))
+    expect(bridge).toHaveBeenCalledTimes(source === 'archive' ? 1 : 0)
+    if (source === 'archive') expect(bridge).toHaveBeenCalledWith(link.roomJid, message.timestamp.toISOString())
   })
 
   it.each([
@@ -81,7 +96,7 @@ describe('room message link navigation', () => {
   })
 
   it('ignores an old account result', async () => {
-    let finish!: (value: { kind: 'found'; message: RoomMessage }) => void
+    let finish!: (value: { kind: 'found'; message: RoomMessage; source: 'resident' }) => void
     locate.mockImplementation(() => new Promise(resolve => { finish = resolve }))
     const { result } = renderHook(useRoomMessageLink)
     act(() => result.current(link))
@@ -89,7 +104,7 @@ describe('room message link navigation', () => {
     navigate.mockClear()
     await act(async () => {
       connectionStore.getState().setJid('carol@example.org/web')
-      finish({ kind: 'found', message })
+      finish({ kind: 'found', message, source: 'resident' })
     })
     expect(navigate).not.toHaveBeenCalled()
     expect(toast).not.toHaveBeenCalled()

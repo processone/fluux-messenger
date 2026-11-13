@@ -28,9 +28,9 @@ export function useRoomMessageLink() {
       if (result.kind === 'found') {
         pending.current = null
         live.current.navigateToRoom(target.roomJid, messageRowRef(result.message))
-        // As for search navigation, fill the seam separately from the target jump.
-        // A bounded walk may leave a gap marker; it never retries indefinitely.
-        if (roomStore.getState().roomGaps.get(target.roomJid)?.length) {
+        // Only freshly fetched archive context needs a seam walk. A held gap
+        // must not make resident/cache hits download the same history again.
+        if (result.source === 'archive' && roomStore.getState().roomGaps.get(target.roomJid)?.length) {
           void live.current.client.messages.catchUpTo(target.roomJid, result.message.timestamp.toISOString())
             .catch(error => console.warn('Could not bridge room message history', error))
         }

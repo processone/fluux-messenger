@@ -3464,9 +3464,10 @@ export class MAM extends BaseModule {
    * Locate a linked room archive entry without publishing it as a live arrival.
    * Context pages are bounded, id-exact and persisted as a separate cache stretch.
    * A transport failure is unknown, never evidence that the message was removed.
+   * The lookup source tells callers whether newly fetched context needs bridging.
    */
   async locateRoomMessage(roomJid: string, stanzaId: string): Promise<
-    { kind: 'found'; message: RoomMessage } | { kind: 'absent' | 'unknown' }
+    { kind: 'found'; message: RoomMessage; source: 'resident' | 'cache' | 'archive' } | { kind: 'absent' | 'unknown' }
   > {
     const session = this.captureQuery()
     if (!this.deps.stores?.room.getRoom(roomJid)?.joined) return { kind: 'unknown' }
@@ -3475,10 +3476,10 @@ export class MAM extends BaseModule {
     session.assertCurrent()
     if (!this.deps.stores.room.getRoom(roomJid)?.joined) return { kind: 'unknown' }
     const resident = this.deps.stores.room.getMessage(roomJid, stanzaId)
-    if (resident?.stanzaId === stanzaId && !resident.isPrivate) return resident.isRetracted ? { kind: 'absent' } : { kind: 'found', message: resident }
+    if (resident?.stanzaId === stanzaId && !resident.isPrivate) return resident.isRetracted ? { kind: 'absent' } : { kind: 'found', message: resident, source: 'resident' }
     const cached = await this.deps.stores.room.getMessageByArchiveId?.(roomJid, stanzaId)
     session.assertCurrent()
-    if (cached && !cached.isPrivate) return cached.isRetracted ? { kind: 'absent' } : { kind: 'found', message: cached }
+    if (cached && !cached.isPrivate) return cached.isRetracted ? { kind: 'absent' } : { kind: 'found', message: cached, source: 'cache' }
 
     const found = await this.findArchivedEntry(roomJid, true, stanzaId)
     session.assertCurrent()
@@ -3509,7 +3510,7 @@ export class MAM extends BaseModule {
     if (!target || target.isRetracted) return { kind: 'absent' }
     if (!await this.deps.stores.room.saveMessageLinkContext?.(roomJid, reconciled)) return { kind: 'unknown' }
     session.assertCurrent()
-    return { kind: 'found', message: target }
+    return { kind: 'found', message: target, source: 'archive' }
   }
 
   /**
