@@ -6,5 +6,8 @@ export function roomMessageLinkFor(message: BaseMessage, supportsMAM: boolean): 
   const roomMessage = message as RoomMessage
   if (roomMessage.isPrivate) return undefined
   const stanzaId = getRoomModerationId(roomMessage)
-  return stanzaId ? buildRoomMessageLink(roomMessage.roomJid, stanzaId) : undefined
+  if (!stanzaId) return undefined
+  // Invalid cached identity must hide the action, never break message rendering.
+  try { return buildRoomMessageLink(roomMessage.roomJid, stanzaId) }
+  catch { return undefined }
 }

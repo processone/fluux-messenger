@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { formatMessagePreview } from '@fluux/sdk'
 import { LiveEdgeGrowthContext } from '@/components/conversation/liveEdgeGrowthContext'
 import { useWrappedCodeBlocksStore } from '@/stores/wrappedCodeBlocksStore'
-import { renderStyledMessage, renderQuotePreview } from './messageStyles'
+import { extractLinks, renderStyledMessage, renderQuotePreview } from './messageStyles'
 
 describe('renderStyledMessage', () => {
   // Helper to render and get text content
@@ -603,6 +603,15 @@ Steps to follow:
       const links = container.querySelectorAll('a')
       expect([...links].map(link => link.getAttribute('href'))).toEqual([uri, 'https://example.org'])
       expect(links[0].textContent).toBe(uri)
+    })
+
+    // Namespace identifiers are ordinary XMPP-room text, not navigation links.
+    // The shared matcher also supplies the mobile Copy link list.
+    it.each(['urn:xmpp:mam:2', 'xmpp:mam:2', 'prefixxmpp:alice@example.org', 'urn:xmpp:alice@example.org'])('keeps a namespace or embedded scheme as text: %s', text => {
+      const container = renderText(text)
+      expect(container.textContent).toBe(text)
+      expect(container.querySelector('a')).toBeNull()
+      expect(extractLinks(text)).toEqual([])
     })
 
     it('renders URLs as links', () => {

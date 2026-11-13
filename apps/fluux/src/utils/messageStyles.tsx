@@ -29,7 +29,7 @@ import { getConsistentTextColor } from '../components/Avatar'
 import { MessageLink } from '../components/conversation/MessageLink'
 
 // URL regex pattern - excludes < and > to handle angle-bracketed URLs like <https://example.com>
-const URL_REGEX = /((?:https?:\/\/|xmpp:)[^\s<>]+[^\s<>.,;:!?)"'\]])/g
+const URL_REGEX = /((?:https?:\/\/|(?<![\w:])xmpp:(?=[^\s<>@/?]+@[^\s<>@/?]+))[^\s<>]+[^\s<>.,;:!?)"'\]])/g
 
 /**
  * Return every http(s) or XMPP URL found in `text`, in document order, de-duplicated.

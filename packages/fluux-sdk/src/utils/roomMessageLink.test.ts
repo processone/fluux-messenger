@@ -11,6 +11,14 @@ describe('room message links', () => {
     expect(parseRoomMessageLink(link)).toEqual({ roomJid, stanzaId })
   })
 
+  // IRC gateway room addresses are supported by MUC discovery (isIrcGateway).
+  it.each(['#chan%irc.example.org@biboumi.example.org', '#chan?topic%irc.example.org@biboumi.example.org'])('round-trips a gateway room address: %s', roomJid => {
+    const stanzaId = '1731490000123456'
+    const link = buildRoomMessageLink(roomJid, stanzaId)
+    expect(link).toBe(`xmpp:${encodeURIComponent(roomJid).replace(/%40/g, '@')}?join;msg=${stanzaId}`)
+    expect(parseRoomMessageLink(link)).toEqual({ roomJid, stanzaId })
+  })
+
   it('escapes punctuation that message text would otherwise trim from a URL', () => {
     const stanzaId = "opaque!'()*"
     const link = buildRoomMessageLink('team@conference.example.org', stanzaId)
@@ -22,6 +30,7 @@ describe('room message links', () => {
     'xmpp:team@conference.example.org?join',
     'xmpp:team@conference.example.org?join;msg=',
     'xmpp:team@conference.example.org/nick?join;msg=id',
+    'xmpp:team%40other@conference.example.org?join;msg=id',
     'xmpp:team@conference.example.org?message;msg=id',
     'xmpp:team@conference.example.org?join;msg=%ZZ',
     'https://example.org/?join;msg=id',

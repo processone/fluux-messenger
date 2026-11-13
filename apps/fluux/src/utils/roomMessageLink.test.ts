@@ -22,6 +22,14 @@ describe('room message link eligibility', () => {
     expect(roomMessageLinkFor({ ...message, ...change }, true)).toBeUndefined()
   })
 
+  // Link actions run during MessageBubble rendering, so bad stored addresses
+  // must not escape into the app's error boundary.
+  it('omits the action for a malformed cached room address without throwing', () => {
+    const roomJid = 'team@other@conference.example.org'
+    const cached: RoomMessage = { ...message, roomJid, from: `${roomJid}/Bob` }
+    expect(roomMessageLinkFor(cached, true)).toBeUndefined()
+  })
+
   it('does not offer a link for rooms without an archive or direct messages', () => {
     expect(roomMessageLinkFor(message, false)).toBeUndefined()
     expect(roomMessageLinkFor({ ...message, type: 'chat' }, true)).toBeUndefined()

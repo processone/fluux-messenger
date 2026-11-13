@@ -7,7 +7,7 @@ export interface RoomMessageLink {
 }
 
 function isRoomAddress(jid: string): boolean {
-  return /^[^\s@/?#]+@[^\s@/?#]+$/.test(jid)
+  return /^[^\s@/]+@[^\s@/]+$/.test(jid)
 }
 
 function encodePart(value: string): string {
