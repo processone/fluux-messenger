@@ -42,7 +42,8 @@ export const ROW_METRICS_FALLBACK: RowEstimatorContext = {
  * cache's width-bucket validity tag) with an essentially random value. Whisper cards have their
  * own inset and padding, so neither their width nor chrome calibrates ordinary rows. Prefer the first text
  * element OUTSIDE `[data-msg-own]`; if only own rows are mounted, the widest own text box is
- * the best available lower bound.
+ * the best available lower bound for the estimator. The height cache's width tag must not
+ * follow that lower bound: it reads {@link realContentWidthPx} instead.
  */
 export function pickWidthSampleEl(root: HTMLElement): HTMLElement | null {
   const all = root.querySelectorAll<HTMLElement>('[data-msg-text]')
@@ -53,6 +54,20 @@ export function pickWidthSampleEl(root: HTMLElement): HTMLElement | null {
     if (!widestOwn || el.clientWidth > widestOwn.clientWidth) widestOwn = el
   }
   return widestOwn
+}
+
+/**
+ * The conversation's REAL content width for a picked width sample: the width of the content
+ * column (`[data-msg-column]`) its row sits in. Own and incoming rows share that column, so the
+ * value is the same whether the mounted window holds only hug-width own bubbles or full-width
+ * rows, and it changes only when the layout really does (such as the window or reading width).
+ * A full-width text box outside a marked column is itself that width; an own text box outside
+ * one is only a lower bound, so it yields undefined.
+ */
+export function realContentWidthPx(textEl: HTMLElement): number | undefined {
+  const column = textEl.closest<HTMLElement>('[data-msg-column]')
+  if (column) return column.clientWidth > 0 ? column.clientWidth : undefined
+  return textEl.closest('[data-msg-own]') ? undefined : textEl.clientWidth
 }
 
 /**
@@ -126,6 +141,11 @@ export const MAX_CALIBRATIONS_PER_GEOMETRY = 3
 export interface RowMetrics {
   /** The latest sample; estimates read it without requiring hook state updates. */
   metricsRef: React.RefObject<RowEstimatorContext>
+  /**
+   * The latest real content width ({@link realContentWidthPx}), undefined until a sample reads
+   * one. The height cache's width tag follows it, never the estimator's sampled width.
+   */
+  realWidthPxRef: React.RefObject<number | undefined>
   sample: () => void
 }
 
@@ -137,7 +157,9 @@ export interface RowMetrics {
  * MAX_COLLAPSED_HEIGHT, so an uncapped prediction stays bounded and collapse or extrapolation
  * cannot inflate the chrome delta. An unusable candidate preserves that shape's previous chrome
  * value (or its fallback); see useRowMetrics.test.tsx for collapsed and expanded cases.
- * Returns the metrics ref and a sampler called by mounted-row measurement and the width signal.
+ * Returns the metrics ref, the real content width ref and a sampler called by mounted-row
+ * measurement and the width signal. A sample that reads a different real content width calls
+ * onRealWidthChange after updating its ref, whatever the estimator geometry does.
  * Before the first positive-width text sample, metrics retain the fallback. The first successful sample
  * and subsequent metric changes notify onCalibrated after updating the ref; identical samples do not,
  * and neither do chrome-only changes past MAX_CALIBRATIONS_PER_GEOMETRY. `first` marks the first
@@ -146,17 +168,28 @@ export interface RowMetrics {
 export function useRowMetrics(
   scrollRef: React.RefObject<HTMLElement | null>,
   onCalibrated?: (first: boolean) => void,
+  onRealWidthChange?: (realWidthPx: number) => void,
 ): RowMetrics {
   const ctxRef = useRef<RowEstimatorContext>(ROW_METRICS_FALLBACK)
+  const realWidthPxRef = useRef<number | undefined>(undefined)
   const calibrationsRef = useRef(0)
   const onCalibratedRef = useRef(onCalibrated)
   onCalibratedRef.current = onCalibrated
+  const onRealWidthChangeRef = useRef(onRealWidthChange)
+  onRealWidthChangeRef.current = onRealWidthChange
 
   const sample = useCallback(() => {
     const root = scrollRef.current
     if (!root) return
     const textEl = pickWidthSampleEl(root)
     if (!textEl || textEl.clientWidth <= 0) return
+    // Read before the unchanged-geometry return below: an own-only window keeps the same text
+    // sample when the window is resized, but its column (the real width) still moves.
+    const realWidthPx = realContentWidthPx(textEl)
+    if (realWidthPx !== undefined && realWidthPx !== realWidthPxRef.current) {
+      realWidthPxRef.current = realWidthPx
+      onRealWidthChangeRef.current?.(realWidthPx)
+    }
     const fontSpec = fontSpecFrom(textEl)
     const contentWidthPx = textEl.clientWidth
 
@@ -219,5 +252,5 @@ export function useRowMetrics(
 
   useRemeasureOnWidthChange(sample)
 
-  return { metricsRef: ctxRef, sample }
+  return { metricsRef: ctxRef, realWidthPxRef, sample }
 }

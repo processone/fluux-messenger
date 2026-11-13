@@ -25,8 +25,10 @@ const MAX_ENTRIES_PER_CONVERSATION = 6000
 const cache = new Map<string, Map<string, number>>()
 
 /**
- * The real width bucket (px) each conversation's entries are valid for. Written when a REAL
- * (non-fallback) sample is available; a change wipes the conversation's heights (see above).
+ * The real width bucket (px) each conversation's entries are valid for. Written from the REAL
+ * content width (the message column, see realContentWidthPx in useRowMetrics), never from the
+ * mount-time fallback or the own-bubble lower bound; a change wipes the conversation's heights
+ * (see above).
  */
 const widthBucketByConversation = new Map<string, number>()
 
@@ -83,14 +85,15 @@ export function recordMeasuredHeight(
  * Record the REAL width bucket (px) a conversation's heights are valid for. A CHANGED bucket
  * wipes that conversation's heights: they were measured at a different content width and
  * would otherwise linger as stale seeds (the immortal-poison re-open blink). Call only with a
- * bucket derived from a real sample, never from the mount-time fallback.
+ * bucket derived from a real sample, never from the mount-time fallback. Returns true when the
+ * change wiped the conversation's heights.
  */
-export function noteConversationWidthBucket(conversationId: string, widthBucketPx: number): void {
+export function noteConversationWidthBucket(conversationId: string, widthBucketPx: number): boolean {
   const prev = widthBucketByConversation.get(conversationId)
-  if (prev !== undefined && prev !== widthBucketPx) {
-    cache.get(conversationId)?.clear()
-  }
   widthBucketByConversation.set(conversationId, widthBucketPx)
+  if (prev === undefined || prev === widthBucketPx) return false
+  cache.get(conversationId)?.clear()
+  return true
 }
 
 /**
