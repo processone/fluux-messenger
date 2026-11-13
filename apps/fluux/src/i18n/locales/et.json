@@ -1199,6 +1199,7 @@
         "passwordsDoNotMatch": "Paroolid ei kattu",
         "passwordTooShort": "Parool peab olema vähemalt 6 tähemärki",
         "failedToChangePassword": "Parooli muutmine ebaõnnestus",
+        "newPasswordNotSaved": "Parool muudeti, kuid uut parooli ei õnnestunud süsteemi võtmehoidlasse salvestada.",
         "passwordChangeNotSupported": "See server ei toeta parooli muutmist",
         "priority": "Prioriteet",
         "offlineNotice": "Profiili muutmine pole võrgust väljas olles saadaval",

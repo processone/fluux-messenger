@@ -1197,6 +1197,7 @@
         "passwordsDoNotMatch": "Adgangskoderne matcher ikke",
         "passwordTooShort": "Adgangskode skal være mindst 6 tegn",
         "failedToChangePassword": "Kunne ikke ændre adgangskode",
+        "newPasswordNotSaved": "Din adgangskode blev ændret, men den nye adgangskode kunne ikke gemmes i systemnøgleringen.",
         "passwordChangeNotSupported": "Adgangskodeændring understøttes ikke af denne server",
         "priority": "Prioritet",
         "offlineNotice": "Profilredigering er utilgængelig offline",

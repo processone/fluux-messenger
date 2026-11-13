@@ -1201,6 +1201,7 @@
         "passwordsDoNotMatch": "Les contrasenyes no coincideixen",
         "passwordTooShort": "La contrasenya ha de tenir almenys 6 caràcters",
         "failedToChangePassword": "No s'ha pogut canviar el mot de pas",
+        "newPasswordNotSaved": "La contrasenya s'ha canviat, però la nova contrasenya no s'ha pogut desar al clauer del sistema.",
         "passwordChangeNotSupported": "Aquest servidor no permet el canvi de contrasenya",
         "priority": "Prioritat",
         "offlineNotice": "L'edició del perfil no està disponible mentre estàs fora de línia",

@@ -1201,6 +1201,7 @@
         "passwordsDoNotMatch": "Slaptažodžiai nesutampa",
         "passwordTooShort": "Slaptažodis turi būti bent 6 simbolių",
         "failedToChangePassword": "Nepavyko pakeisti slaptažodžio",
+        "newPasswordNotSaved": "Slaptažodis pakeistas, bet naujo slaptažodžio nepavyko išsaugoti sistemos raktų saugykloje.",
         "passwordChangeNotSupported": "Šis serveris nepalaiko slaptažodžio keitimo",
         "priority": "Prioritetas",
         "offlineNotice": "Profilio redagavimas nepasiekiamas atsijungus",

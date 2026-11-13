@@ -1203,6 +1203,7 @@
         "passwordsDoNotMatch": "Níl na pasfhocail ag teacht le chéile",
         "passwordTooShort": "Caithfidh an pasfhocal a bheith 6 charachtar ar a laghad",
         "failedToChangePassword": "Theip ar athrú pasfhocail",
+        "newPasswordNotSaved": "Athraíodh do phasfhocal, ach níorbh fhéidir an pasfhocal nua a shábháil i bhfáinne eochracha an chórais.",
         "passwordChangeNotSupported": "Ní thacaíonn an freastalaí seo le hathrú pasfhocail",
         "priority": "Tosaíocht",
         "offlineNotice": "Níl eagarthóireacht próifíle ar fáil as líne",

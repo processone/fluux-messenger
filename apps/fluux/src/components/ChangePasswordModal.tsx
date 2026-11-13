@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useConnection } from '@fluux/sdk'
 import { useModalInput } from '@/hooks'
 import { ModalShell } from './ModalShell'
-import { hasSavedCredentials, saveCredentials } from '@/utils/keychain'
+import { forgetStaleSavedCredentials, hasSavedCredentials, saveCredentials } from '@/utils/keychain'
+import { useToastStore } from '@/stores/toastStore'
 
 interface ChangePasswordModalProps {
   onClose: () => void
@@ -38,16 +39,28 @@ export function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
     setSaving(true)
     try {
       await changePassword(newPassword)
-      // Update keychain if "Remember me" was used at login
-      if (jid && hasSavedCredentials()) {
-        await saveCredentials(jid, newPassword, null)
-      }
-      onClose()
     } catch {
       setError(t('profile.failedToChangePassword'))
-    } finally {
       setSaving(false)
+      return
     }
+
+    // The server has the new password from here on, so the change succeeded
+    // whatever the keychain does. Update it if "Remember me" was used at login.
+    if (jid && hasSavedCredentials()) {
+      try {
+        await saveCredentials(jid, newPassword, null)
+      } catch (err) {
+        console.error('Failed to save the new password to the keychain:', err)
+        // The keychain still holds the old password, which no longer signs in:
+        // stop using it, and say the new one was not saved. The dialog closes,
+        // so a toast says it, and stays until dismissed.
+        forgetStaleSavedCredentials()
+        useToastStore.getState().addToast('error', t('profile.newPasswordNotSaved'), 0)
+      }
+    }
+    setSaving(false)
+    onClose()
   }
 
   return (

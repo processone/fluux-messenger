@@ -1197,6 +1197,7 @@
         "passwordsDoNotMatch": "Wachtwoorden komen niet overeen",
         "passwordTooShort": "Wachtwoord moet minimaal 6 tekens zijn",
         "failedToChangePassword": "Wachtwoord wijzigen mislukt",
+        "newPasswordNotSaved": "Je wachtwoord is gewijzigd, maar het nieuwe wachtwoord kon niet in de systeemsleutelbos worden opgeslagen.",
         "passwordChangeNotSupported": "Wachtwoord wijzigen wordt niet ondersteund door deze server",
         "priority": "Prioriteit",
         "offlineNotice": "Profielbewerking is niet beschikbaar terwijl u offline bent",

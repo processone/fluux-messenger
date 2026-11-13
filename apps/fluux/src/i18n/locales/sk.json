@@ -1202,6 +1202,7 @@
         "passwordsDoNotMatch": "Heslá sa nezhodujú",
         "passwordTooShort": "Heslo musí mať aspoň 6 znakov",
         "failedToChangePassword": "Nepodarilo sa zmeniť heslo",
+        "newPasswordNotSaved": "Heslo bolo zmenené, ale nové heslo sa nepodarilo uložiť do systémového zväzku kľúčov.",
         "passwordChangeNotSupported": "Zmena hesla nie je podporovaná týmto serverom",
         "priority": "Priorita",
         "offlineNotice": "Úprava profilu nie je dostupná offline",

@@ -1197,6 +1197,7 @@
         "passwordsDoNotMatch": "비밀번호가 일치하지 않습니다",
         "passwordTooShort": "비밀번호는 6자 이상이어야 합니다",
         "failedToChangePassword": "비밀번호 변경 실패",
+        "newPasswordNotSaved": "비밀번호가 변경되었지만 새 비밀번호를 시스템 키체인에 저장하지 못했습니다.",
         "passwordChangeNotSupported": "이 서버에서는 비밀번호 변경이 지원되지 않습니다",
         "priority": "우선순위",
         "offlineNotice": "오프라인 상태에서는 프로필 편집을 사용할 수 없습니다",

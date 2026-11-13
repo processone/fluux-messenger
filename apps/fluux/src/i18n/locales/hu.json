@@ -1197,6 +1197,7 @@
         "passwordsDoNotMatch": "A jelszavak nem egyeznek",
         "passwordTooShort": "A jelszónak legalább 6 karakter hosszúnak kell lennie",
         "failedToChangePassword": "Nem sikerült megváltoztatni a jelszót",
+        "newPasswordNotSaved": "A jelszó megváltozott, de az új jelszót nem sikerült elmenteni a rendszerkulcstartóba.",
         "passwordChangeNotSupported": "A szerver nem támogatja a jelszómódosítást",
         "priority": "Prioritás",
         "offlineNotice": "A profil szerkesztése offline módban nem érhető el",

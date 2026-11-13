@@ -1200,6 +1200,7 @@
         "passwordsDoNotMatch": "Paroles nesakrīt",
         "passwordTooShort": "Parolei jābūt vismaz 6 rakstzīmēm",
         "failedToChangePassword": "Neizdevās mainīt paroli",
+        "newPasswordNotSaved": "Parole tika mainīta, bet jauno paroli neizdevās saglabāt sistēmas atslēgu saišķī.",
         "passwordChangeNotSupported": "Šis serveris neatbalsta paroles maiņu",
         "priority": "Prioritāte",
         "offlineNotice": "Profila rediģēšana nav pieejama bezsaistē",

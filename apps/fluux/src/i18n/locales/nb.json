@@ -1197,6 +1197,7 @@
         "passwordsDoNotMatch": "Passordene stemmer ikke",
         "passwordTooShort": "Passordet må være minst 6 tegn",
         "failedToChangePassword": "Kunne ikke endre passord",
+        "newPasswordNotSaved": "Passordet ble endret, men det nye passordet kunne ikke lagres i systemnøkkelringen.",
         "passwordChangeNotSupported": "Passordendring støttes ikke av denne serveren",
         "priority": "Prioritet",
         "offlineNotice": "Profilredigering er utilgjengelig når du er frakoblet",

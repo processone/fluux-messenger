@@ -1197,6 +1197,7 @@
         "passwordsDoNotMatch": "密码不匹配",
         "passwordTooShort": "密码必须至少包含 6 个字符",
         "failedToChangePassword": "无法更改密码",
+        "newPasswordNotSaved": "密码已更改，但无法将新密码保存到系统密钥串。",
         "passwordChangeNotSupported": "此服务器不支持密码更改",
         "priority": "优先级",
         "offlineNotice": "离线时无法编辑个人资料",

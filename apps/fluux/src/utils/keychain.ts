@@ -84,6 +84,18 @@ export async function saveCredentials(
 }
 
 /**
+ * Stop using the saved password, without asking the keychain again.
+ *
+ * For when a new password could not be saved over it: the keychain then still
+ * holds the old password, which no longer signs in. With the flag cleared,
+ * startup and the login form no longer read it, so nothing tries it; the next
+ * successful save replaces it.
+ */
+export function forgetStaleSavedCredentials(): void {
+  localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)
+}
+
+/**
  * Get credentials from the OS keychain (native apps only)
  * Returns null if no credentials are stored or if no keychain is available
  */

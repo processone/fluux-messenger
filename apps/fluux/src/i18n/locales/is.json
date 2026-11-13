@@ -1197,6 +1197,7 @@
         "passwordsDoNotMatch": "Lykilorð passa ekki saman",
         "passwordTooShort": "Lykilorð verður að vera að minnsta kosti 6 stafir",
         "failedToChangePassword": "Ekki tókst að breyta lykilorði",
+        "newPasswordNotSaved": "Lykilorðinu þínu var breytt, en ekki tókst að vista nýja lykilorðið í kerfislyklakippuna.",
         "passwordChangeNotSupported": "Lykilorðabreyting er ekki studd af þessum þjóni",
         "priority": "Forgangur",
         "offlineNotice": "Prófílbreyting er ekki tiltæk þegar þú ert ónettengdur",

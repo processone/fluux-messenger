@@ -1205,6 +1205,7 @@
         "passwordsDoNotMatch": "Il-passwords ma jaqblux",
         "passwordTooShort": "Il-password għandu jkollha mill-inqas 6 karattri",
         "failedToChangePassword": "Ma rnexxiex tibdel il-password",
+        "newPasswordNotSaved": "Il-password tiegħek inbidlet, iżda l-password il-ġdida ma setgħetx tiġi salvata fil-keychain tas-sistema.",
         "passwordChangeNotSupported": "Bidla tal-password mhix appoġġjata minn dan is-server",
         "priority": "Prijorità",
         "offlineNotice": "L-editjar tal-profil mhux disponibbli meta tkun offline",

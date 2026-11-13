@@ -1197,6 +1197,7 @@
         "passwordsDoNotMatch": "Passwords do not match",
         "passwordTooShort": "Password must be at least 6 characters",
         "failedToChangePassword": "Failed to change password",
+        "newPasswordNotSaved": "Your password was changed, but the new password could not be saved to the system keychain.",
         "passwordChangeNotSupported": "Password change is not supported by this server",
         "priority": "Priority",
         "offlineNotice": "Profile editing is unavailable while offline",

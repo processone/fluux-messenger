@@ -20,6 +20,7 @@
 - iOS: the app icon badge now shows Fluux's own unread count as soon as the app is open and connected, instead of keeping an old saved number until the archive catch-up ends
 - iOS: the unread widget now asks the system to refresh itself about once an hour and re-reads its list, instead of relying only on redraw requests from the app
 - When the system keychain is locked or unavailable as you sign in with Remember me, Fluux now tells you your password was not saved instead of failing silently. On Linux, a keyring still locked at startup no longer makes Fluux forget your saved password, so the next start with the keyring unlocked signs you in
+- Changing your password no longer reports a failure when the server accepted the new password but the system keychain could not save it. Fluux now tells you the new password was not saved, and the next start no longer tries the old saved password
 
 ---
 [Full Changelog](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md)
