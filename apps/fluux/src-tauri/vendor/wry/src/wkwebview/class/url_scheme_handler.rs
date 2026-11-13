@@ -4,20 +4,20 @@
 
 use std::{
   borrow::Cow,
-  ffi::{c_char, CStr},
+  ffi::{CStr, c_char},
   panic::AssertUnwindSafe,
   ptr::NonNull,
 };
 
 use dispatch2::{DispatchQueue, MainThreadBound};
 use http::{
-  header::{CONTENT_LENGTH, CONTENT_TYPE},
   Request, Response as HttpResponse, StatusCode, Version,
+  header::{CONTENT_LENGTH, CONTENT_TYPE},
 };
 use objc2::{
+  AllocAnyThread, ClassType, MainThreadMarker, Message,
   rc::Retained,
   runtime::{AnyClass, AnyObject, ClassBuilder, ProtocolObject},
-  AllocAnyThread, ClassType, MainThreadMarker, Message,
 };
 use objc2_foundation::{
   NSData, NSHTTPURLResponse, NSMutableDictionary, NSObject, NSObjectProtocol, NSString, NSURL,
@@ -25,7 +25,7 @@ use objc2_foundation::{
 };
 use objc2_web_kit::{WKURLSchemeHandler, WKURLSchemeTask};
 
-use crate::{wkwebview::WEBVIEW_STATE, RequestAsyncResponder, WryWebView};
+use crate::{RequestAsyncResponder, WryWebView, wkwebview::WEBVIEW_STATE};
 
 /// Keeps main-thread-only values safe to send without synchronously blocking
 /// the dropping thread when the value is abandoned there.

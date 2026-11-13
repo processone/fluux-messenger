@@ -1,14 +1,15 @@
-# Vendored wry 0.57.0
+# Vendored wry 0.57.2
 
-This is the crates.io release of `wry` 0.57.0 with two modifications: the
+This is the crates.io release of `wry` 0.57.2 with two modifications: the
 [tauri-apps/wry#1856](https://github.com/tauri-apps/wry/pull/1856) backport and a
 Fluux-only macOS startup termination gate. The copy is selected through
 `[patch.crates-io]` in `apps/fluux/src-tauri/Cargo.toml`.
 
-Release base: `wry-v0.57.0`, upstream commit
-`792d0359ba6501a4fc360ece17de2ae42329a47c` (also recorded in the crate archive).
-The backport is from #1856 at `a1e9973c44f1e6ccb6a1f17a16ded28be26d3ff1`;
-only the import hunk is reordered to match the release source.
+Release base: `wry-v0.57.2`, upstream commit
+`bbba6b6312af92fbb969789a63768f4b4bb6d268` (also recorded in the crate archive).
+The backport is from #1856 at `a1e9973c44f1e6ccb6a1f17a16ded28be26d3ff1`,
+applied unchanged: the release's `url_scheme_handler.rs` is identical to that
+pull request's base, so the vendored file is the pull request's version.
 
 ## Why
 
@@ -31,7 +32,7 @@ The vendored `Cargo.toml` also allows the Rust lints `deprecated`,
 `unused_variables`, `unused_unsafe`, and `unexpected_cfgs` for this crate. Cargo
 caps diagnostics for registry dependencies, but exposes these upstream warnings
 for a local path dependency. These crate-wide allowances keep the Rust sources
-at 0.57.0 plus the backport; they also suppress future warnings in those categories
+at 0.57.2 plus the backport; they also suppress future warnings in those categories
 within wry. Fluux's own lint settings are unchanged.
 
 ## Manual macOS check
@@ -54,6 +55,18 @@ normal behavior. Other Wry consumers and iOS do not enable this feature.
 The gate does not replace Wry's navigation delegate or change IPC, navigation,
 downloads or custom-protocol dispatch. Page-initiated reloads remain allowed;
 they are not intercepted by this patch.
+
+## Moving to a newer wry release
+
+The macOS dependency in `apps/fluux/src-tauri/Cargo.toml` pins `wry` to this
+copy's exact version. A Renovate pull request that raises that pin alone fails
+to resolve (`wry` does not have the `fluux-startup-recovery` feature) until this
+directory moves to the same release. To move it: unpack the new crates.io
+archive, leave out the files this directory omits (`.cargo/`,
+`.cargo_vcs_info.json`, `.license_template`, `CHANGELOG.md`, `Cargo.lock`,
+`Cargo.toml.orig`, `MOBILE.md`, `SECURITY.md`, `renovate.json`), re-apply both
+modifications and the `Cargo.toml` changes above, update the release base here
+and the pin, then run the manual macOS check.
 
 ## Removing it
 
