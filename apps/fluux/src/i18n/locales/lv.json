@@ -38,6 +38,7 @@
         "storedInKeychain": "(saglabāts Keychain)",
         "staySignedIn": "(palikt pieslēgtam)",
         "credentialsLoaded": "Akreditācijas dati ielādēti no Keychain",
+        "keychainSaveFailed": "Parole netika saglabāta, jo sistēmas atslēgu saišķis ir bloķēts vai nav pieejams.",
         "connecting": "Savienojas...",
         "connect": "Savienoties",
         "showPassword": "Rādīt paroli",

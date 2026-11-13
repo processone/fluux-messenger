@@ -38,6 +38,7 @@
         "storedInKeychain": "(uloženo v Klíčence)",
         "staySignedIn": "(zůstat přihlášen)",
         "credentialsLoaded": "Přihlašovací údaje načteny z Klíčenky",
+        "keychainSaveFailed": "Heslo nebylo uloženo, protože systémová klíčenka je zamčená nebo nedostupná.",
         "connecting": "Připojování...",
         "connect": "Připojit",
         "showPassword": "Zobrazit heslo",

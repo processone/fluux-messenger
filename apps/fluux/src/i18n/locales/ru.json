@@ -38,6 +38,7 @@
         "storedInKeychain": "(сохранено в Keychain)",
         "staySignedIn": "(оставаться в системе)",
         "credentialsLoaded": "Учётные данные загружены из Keychain",
+        "keychainSaveFailed": "Пароль не сохранён, так как системная связка ключей заблокирована или недоступна.",
         "connecting": "Подключение...",
         "connect": "Подключиться",
         "showPassword": "Показать пароль",

@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - macOS: reading a conversation or room now also clears its notifications that arrived before Fluux was last restarted
 - iOS: the app icon badge now shows Fluux's own unread count as soon as the app is open and connected, instead of keeping an old saved number until the archive catch-up ends
 - iOS: the unread widget now asks the system to refresh itself about once an hour and re-reads its list, instead of relying only on redraw requests from the app
+- When the system keychain is locked or unavailable as you sign in with Remember me, Fluux now tells you your password was not saved instead of failing silently. On Linux, a keyring still locked at startup no longer makes Fluux forget your saved password, so the next start with the keyring unlocked signs you in
 
 ## [0.18.2] - 2026-11-05
 

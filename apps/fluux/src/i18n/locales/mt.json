@@ -38,6 +38,7 @@
         "storedInKeychain": "(maħżun fil-Keychain)",
         "staySignedIn": "(ibqa' konness)",
         "credentialsLoaded": "Kredenzjali mgħobbija mill-Keychain",
+        "keychainSaveFailed": "Il-password tiegħek ma ġietx salvata għax il-keychain tas-sistema hija msakkra jew mhix disponibbli.",
         "connecting": "Qed jikkonnettja...",
         "connect": "Ikkonnettja",
         "showPassword": "Uri password",

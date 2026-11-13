@@ -38,6 +38,7 @@
         "storedInKeychain": "（存储在密钥链中）",
         "staySignedIn": "（保持登录）",
         "credentialsLoaded": "从密钥链加载凭据",
+        "keychainSaveFailed": "系统密钥串已锁定或不可用，因此未保存您的密码。",
         "connecting": "正在连接…",
         "connect": "连接",
         "showPassword": "显示密码",

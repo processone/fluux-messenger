@@ -38,6 +38,7 @@
         "storedInKeychain": "(stocké dans le Trousseau)",
         "staySignedIn": "(rester connecté)",
         "credentialsLoaded": "Identifiants chargés depuis le Trousseau",
+        "keychainSaveFailed": "Votre mot de passe n'a pas été enregistré, car le trousseau système est verrouillé ou indisponible.",
         "connecting": "Connexion...",
         "connect": "Se connecter",
         "showPassword": "Afficher le mot de passe",

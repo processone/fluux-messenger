@@ -38,6 +38,7 @@
         "storedInKeychain": "(키체인에 저장됨)",
         "staySignedIn": "(로그인 상태 유지)",
         "credentialsLoaded": "키체인에서 인증 정보를 불러왔습니다",
+        "keychainSaveFailed": "시스템 키체인이 잠겨 있거나 사용할 수 없어 비밀번호가 저장되지 않았습니다.",
         "connecting": "연결 중...",
         "connect": "연결",
         "showPassword": "비밀번호 표시",

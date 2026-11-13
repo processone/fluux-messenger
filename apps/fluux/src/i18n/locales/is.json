@@ -38,6 +38,7 @@
         "storedInKeychain": "(vistað í lyklakippu)",
         "staySignedIn": "(vera áfram innskráður)",
         "credentialsLoaded": "Skilríki hlaðin úr lyklakippu",
+        "keychainSaveFailed": "Lykilorðið þitt var ekki vistað því kerfislyklakippan er læst eða ekki tiltæk.",
         "connecting": "Tengist...",
         "connect": "Tengjast",
         "showPassword": "Sýna lykilorð",

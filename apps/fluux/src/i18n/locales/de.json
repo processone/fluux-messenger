@@ -38,6 +38,7 @@
         "storedInKeychain": "(im Schlüsselbund gespeichert)",
         "staySignedIn": "(angemeldet bleiben)",
         "credentialsLoaded": "Anmeldedaten aus Schlüsselbund geladen",
+        "keychainSaveFailed": "Dein Passwort wurde nicht gespeichert, weil der System-Schlüsselbund gesperrt oder nicht verfügbar ist.",
         "connecting": "Verbinden...",
         "connect": "Verbinden",
         "showPassword": "Passwort anzeigen",

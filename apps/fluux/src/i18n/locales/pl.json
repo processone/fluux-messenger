@@ -38,6 +38,7 @@
         "storedInKeychain": "(przechowywane w pęku kluczy)",
         "staySignedIn": "(pozostań zalogowany)",
         "credentialsLoaded": "Dane logowania załadowane z pęku kluczy",
+        "keychainSaveFailed": "Hasło nie zostało zapisane, ponieważ systemowy pęk kluczy jest zablokowany lub niedostępny.",
         "connecting": "Łączenie...",
         "connect": "Połącz",
         "showPassword": "Pokaż hasło",

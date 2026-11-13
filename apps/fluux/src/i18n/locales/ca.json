@@ -38,6 +38,7 @@
         "storedInKeychain": "(desat al clauer)",
         "staySignedIn": "(mantenir la sessió)",
         "credentialsLoaded": "Credencials carregades del clauer",
+        "keychainSaveFailed": "La contrasenya no s'ha desat perquè el clauer del sistema està bloquejat o no està disponible.",
         "connecting": "Connectant...",
         "connect": "Connecta",
         "showPassword": "Mostra el mot de pas",

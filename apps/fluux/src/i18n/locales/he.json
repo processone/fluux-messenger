@@ -38,6 +38,7 @@
         "storedInKeychain": "(שמור ב-Keychain)",
         "staySignedIn": "(הישאר מחובר)",
         "credentialsLoaded": "פרטי התחברות נטענו מ-Keychain",
+        "keychainSaveFailed": "הסיסמה שלך לא נשמרה כי צרור המפתחות של המערכת נעול או לא זמין.",
         "connecting": "מתחבר...",
         "connect": "התחבר",
         "showPassword": "הצג סיסמה",

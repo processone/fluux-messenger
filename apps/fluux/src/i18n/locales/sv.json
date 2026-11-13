@@ -38,6 +38,7 @@
         "storedInKeychain": "(lagrat i nyckelringen)",
         "staySignedIn": "(förbli inloggad)",
         "credentialsLoaded": "Inloggningsuppgifter laddade från nyckelringen",
+        "keychainSaveFailed": "Lösenordet sparades inte eftersom systemnyckelringen är låst eller inte tillgänglig.",
         "connecting": "Ansluter...",
         "connect": "Anslut",
         "showPassword": "Visa lösenord",

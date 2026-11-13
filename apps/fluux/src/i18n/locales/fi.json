@@ -38,6 +38,7 @@
         "storedInKeychain": "(tallennettu avainnippuun)",
         "staySignedIn": "(pysy kirjautuneena)",
         "credentialsLoaded": "Tunnukset ladattu avainnipusta",
+        "keychainSaveFailed": "Salasanaasi ei tallennettu, koska järjestelmän avainnippu on lukittu tai ei käytettävissä.",
         "connecting": "Yhdistetään...",
         "connect": "Yhdistä",
         "showPassword": "Näytä salasana",

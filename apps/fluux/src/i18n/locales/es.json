@@ -38,6 +38,7 @@
         "storedInKeychain": "(almacenado en Llavero)",
         "staySignedIn": "(mantener sesión iniciada)",
         "credentialsLoaded": "Credenciales cargadas del Llavero",
+        "keychainSaveFailed": "Tu contraseña no se guardó porque el llavero del sistema está bloqueado o no está disponible.",
         "connecting": "Conectando...",
         "connect": "Conectar",
         "showPassword": "Mostrar contraseña",

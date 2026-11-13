@@ -38,6 +38,7 @@
         "storedInKeychain": "(memorizzato nel portachiavi)",
         "staySignedIn": "(resta connesso)",
         "credentialsLoaded": "Credenziali caricate dal portachiavi",
+        "keychainSaveFailed": "La password non è stata salvata perché il portachiavi di sistema è bloccato o non disponibile.",
         "connecting": "Connessione...",
         "connect": "Connetti",
         "showPassword": "Mostra password",

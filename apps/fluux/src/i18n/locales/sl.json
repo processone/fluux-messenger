@@ -38,6 +38,7 @@
         "storedInKeychain": "(shranjeno v obesku za ključe)",
         "staySignedIn": "(ostani prijavljen)",
         "credentialsLoaded": "Poverilnice naložene iz obeska za ključe",
+        "keychainSaveFailed": "Geslo ni bilo shranjeno, ker je sistemska zbirka ključev zaklenjena ali nedosegljiva.",
         "connecting": "Povezovanje...",
         "connect": "Poveži se",
         "showPassword": "Prikaži geslo",

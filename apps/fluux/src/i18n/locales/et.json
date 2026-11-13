@@ -38,6 +38,7 @@
         "storedInKeychain": "(salvestatud võtmehoidlasse)",
         "staySignedIn": "(jää sisselogituks)",
         "credentialsLoaded": "Mandaadid laaditud võtmehoidlast",
+        "keychainSaveFailed": "Parooli ei salvestatud, sest süsteemi võtmehoidla on lukus või pole saadaval.",
         "connecting": "Ühendamine...",
         "connect": "Ühenda",
         "showPassword": "Näita parooli",

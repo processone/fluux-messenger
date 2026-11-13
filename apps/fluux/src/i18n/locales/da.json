@@ -38,6 +38,7 @@
         "storedInKeychain": "(gemt i nøglering)",
         "staySignedIn": "(forbliv logget ind)",
         "credentialsLoaded": "Legitimationsoplysninger indlæst fra nøglering",
+        "keychainSaveFailed": "Din adgangskode blev ikke gemt, fordi systemnøgleringen er låst eller utilgængelig.",
         "connecting": "Opretter forbindelse...",
         "connect": "Opret forbindelse",
         "showPassword": "Vis adgangskode",
