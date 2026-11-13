@@ -28,6 +28,8 @@ export interface MessageActionSheetProps {
   onReply: () => void
   onEdit: () => void
   onDelete: () => void | Promise<void>
+  /** Copies the message's room location, not a URL in its body. */
+  onCopyMessageLink?: () => void | Promise<void>
   /** Saves or shares the message's attachment; undefined hides the action. */
   onSaveAttachment?: () => void | Promise<void>
   canReply: boolean
@@ -46,6 +48,7 @@ export function MessageActionSheet({
   onReply,
   onEdit,
   onDelete,
+  onCopyMessageLink,
   onSaveAttachment,
   canReply,
   canEdit,
@@ -179,6 +182,14 @@ export function MessageActionSheet({
                 onClick={copyBody}
                 icon={<Copy className="size-5" />}
                 label={t('chat.copyMessage')}
+                className="py-3"
+              />
+            )}
+            {onCopyMessageLink && (
+              <MenuButton
+                onClick={() => runAction(onCopyMessageLink)}
+                icon={<Link2 className="size-5" />}
+                label={t('chat.copyMessageLink')}
                 className="py-3"
               />
             )}

@@ -29,10 +29,10 @@ import { getConsistentTextColor } from '../components/Avatar'
 import { MessageLink } from '../components/conversation/MessageLink'
 
 // URL regex pattern - excludes < and > to handle angle-bracketed URLs like <https://example.com>
-const URL_REGEX = /(https?:\/\/[^\s<>]+[^\s<>.,;:!?)"'\]])/g
+const URL_REGEX = /((?:https?:\/\/|xmpp:)[^\s<>]+[^\s<>.,;:!?)"'\]])/g
 
 /**
- * Return every http(s) URL found in `text`, in document order, de-duplicated.
+ * Return every http(s) or XMPP URL found in `text`, in document order, de-duplicated.
  * Shares URL_REGEX with the message renderer so URLs are detected the same way.
  * Note: this scans the raw body, so a URL inside an inline-code span or code
  * fence (which the renderer shows as non-clickable text) is still returned here

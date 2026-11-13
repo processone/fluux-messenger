@@ -42,6 +42,8 @@ import { MessageActionSheet } from './MessageActionSheet'
 import { computeMessageActions } from './messageActionCapabilities'
 import { MessageInteractionContext, useMessageInteractionHeld } from './useMessageInteractionHold'
 import { downloadAttachment } from '@/utils/download'
+import { roomMessageLinkFor } from '@/utils/roomMessageLink'
+import { copyToClipboard } from '@/utils/clipboard'
 
 type ReplyQuoteCardStyle = CSSProperties & {
   '--fluux-quote-frame-color': string
@@ -155,6 +157,8 @@ export interface MessageBubbleProps {
   // Room-specific: true for IRC gateway channels (Biboumi). IRC has no concept of
   // retractions/corrections, so the edit + delete affordances are hidden. See #228.
   isIrcGateway?: boolean
+  /** Whether the containing room archives its public messages. */
+  supportsMAM?: boolean
 
   // Right-click / long-press context menu on nick/avatar (for room occupant actions)
   onNickContextMenu?: (e: React.MouseEvent) => void
@@ -291,6 +295,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
 
   // IRC-gateway flag gates edit/delete affordances
   if (prev.isIrcGateway !== next.isIrcGateway) return false
+  if (prev.supportsMAM !== next.supportsMAM) return false
 
   // Mentions - compare by reference (parent should memoize)
   if (prev.mentions !== next.mentions) return false
@@ -362,6 +367,7 @@ export const MessageBubble = memo(function MessageBubble({
   mentionColors,
   canModerate,
   isIrcGateway,
+  supportsMAM = false,
   onPollVote,
   onClosePoll,
   onNickContextMenu,
@@ -559,13 +565,15 @@ export const MessageBubble = memo(function MessageBubble({
   }
 
   const { canReply, canEdit, canDelete } = actions
+  const messageLink = roomMessageLinkFor(message, supportsMAM)
+  const onCopyMessageLink = messageLink ? () => { void copyToClipboard(messageLink) } : undefined
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   const saveableAttachment = !message.isRetracted && !message.encryptedPayload ? message.attachment : undefined
   const hasViewableReactions = !message.isRetracted && Object.keys(filteredReactions).length > 0
   useEffect(() => {
     if (!hasViewableReactions) setReactorEmoji(null)
   }, [hasViewableReactions])
-  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody || !!saveableAttachment || hasViewableReactions)
+  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody || !!saveableAttachment || hasViewableReactions || !!messageLink)
 
   // Long-press (touch) → open the action menu; scrolling (touchmove) or lifting
   // before the threshold cancels it. longPressFired suppresses the click that a
@@ -654,6 +662,7 @@ export const MessageBubble = memo(function MessageBubble({
           onReply={onReply}
           onEdit={onEdit}
           onDelete={onDelete}
+          onCopyMessageLink={onCopyMessageLink}
           myReactions={reactionsEnabled ? myReactions : []}
           canReply={canReply}
           canEdit={canEdit}
@@ -944,6 +953,7 @@ export const MessageBubble = memo(function MessageBubble({
           onReply={onReply}
           onEdit={onEdit}
           onDelete={onDelete}
+          onCopyMessageLink={onCopyMessageLink}
           onSaveAttachment={saveableAttachment
             ? () => downloadAttachment(saveableAttachment, { errorMessage: t('common.downloadFailed') })
             : undefined}

@@ -96,6 +96,21 @@ function createDefaultProps(overrides: Partial<MessageBubbleProps> = {}): Messag
 }
 
 describe('MessageBubble', () => {
+  it('refreshes the message-link action when room archive support is discovered', () => {
+    const roomJid = 'team@conference.example.org'
+    const message = roomMessageFixture({ ...createTestMessage(), type: 'groupchat', roomJid,
+      from: `${roomJid}/Alice`, nick: 'Alice', occupantId: 'alice', stanzaId: '1731490000123456' })
+    const props = createDefaultProps({ message, supportsMAM: false })
+    const view = render(<MessageBubble {...props} />)
+    expect(screen.getByLabelText('chat.moreOptions')).toBeDisabled()
+    view.rerender(<MessageBubble {...props} supportsMAM />)
+    const more = screen.getByLabelText('chat.moreOptions')
+    expect(more).not.toBeDisabled()
+    fireEvent.click(more)
+    expect(screen.getByText('chat.copyMessageLink')).toBeInTheDocument()
+    expect(screen.queryByText('chat.deleteMessage')).not.toBeInTheDocument()
+  })
+
   it('FLM-229 refreshes action identity when a message receives its archive id', () => {
     const original = createTestMessage()
     const targets: BaseMessage[] = []

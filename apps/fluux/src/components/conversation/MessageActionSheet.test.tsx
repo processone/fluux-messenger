@@ -16,6 +16,7 @@ vi.mock('react-i18next', () => ({
         'chat.moreReactions': 'More reactions',
         'chat.moreOptions': 'More options',
         'chat.copyLink': 'Copy link',
+        'chat.copyMessageLink': 'Copy message link',
         'chat.copyLinkChoose': 'Copy which link?',
       }
       return map[key] ?? key
@@ -41,6 +42,8 @@ const baseProps = {
 }
 
 describe('MessageActionSheet', () => {
+  beforeEach(() => vi.clearAllMocks())
+
   it('shows the selected message between separate reactions and actions', () => {
     const anchor = document.createElement('div')
     anchor.textContent = 'The selected message'
@@ -82,6 +85,17 @@ describe('MessageActionSheet', () => {
     expect(screen.queryByText('Delete message')).toBeNull()
     expect(screen.queryByText('Copy text')).toBeNull()
     expect(screen.getByText('Reply')).toBeTruthy()
+  })
+
+  it('copies the message location separately from a URL in its text', () => {
+    const onCopyMessageLink = vi.fn()
+    const onClose = vi.fn()
+    render(<MessageActionSheet {...baseProps} body="See https://example.org/update" canDelete={false} onCopyMessageLink={onCopyMessageLink} onClose={onClose} />)
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Copy message link' }))
+    expect(onCopyMessageLink).toHaveBeenCalledOnce()
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(copyMock).not.toHaveBeenCalled()
   })
 
   it('invokes the action and closes when an action row is tapped', () => {

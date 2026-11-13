@@ -46,7 +46,7 @@ import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
 import * as mamState from './shared/mamState'
 import type { HistoryQueryDirection } from './shared/mamState'
-import { serializeGaps, deserializeGaps, type GapMap } from './shared/mamGap'
+import { serializeGaps, deserializeGaps, setGapList, getGapList, type GapMap } from './shared/mamGap'
 import {
   isCaughtUpForCounting,
   serializeCoverage,
@@ -1130,6 +1130,10 @@ export interface RoomState {
   updateReactions: (roomJid: string, messageId: string, reactorNick: string, emojis: string[]) => void
   resolveCorrectionReferences: (roomJid: string, targetId: string, actor: MessageActor) => Promise<CorrectionReferences | null | undefined>
   reconcileHistoryMessages: (messages: RoomMessage[], options?: { retractionsOnly?: boolean }) => Promise<RoomMessage[]>
+  /** Room-scoped archive lookup for message links, without hydrating a resident window. */
+  getMessageByArchiveId: (roomJid: string, stanzaId: string) => Promise<RoomMessage | null>
+  /** Persist bounded context without changing live history, previews or read state. */
+  saveMessageLinkContext: (roomJid: string, messages: RoomMessage[]) => Promise<boolean>
   updateMessage: (
     roomJid: string,
     messageId: string,
@@ -3015,6 +3019,44 @@ export const roomStore = createStore<RoomState>()(
   },
 
   resolvePendingRemoteDisplayedFromCache: (roomJid) => roomReadTracker.resolvePendingFromCache(roomJid),
+
+  getMessageByArchiveId: async (roomJid, stanzaId) => {
+    const current = captureRoomCacheRead(roomJid)
+    const message = await messageCache.getRoomMessageByStanzaId(roomJid, stanzaId)
+    if (!message || !current()) return null
+    const [reconciled] = await get().reconcileHistoryMessages([message], { retractionsOnly: true })
+    return current() ? reconciled : null
+  },
+
+  saveMessageLinkContext: async (roomJid, messages) => {
+    const current = captureRoomCacheRead(roomJid)
+    const rows = sortMessagesByTimestamp(messages, 'room')
+    const first = rows[0]
+    const last = rows.at(-1)
+    if (!first || !last || rows.some(row => row.roomJid !== roomJid || row.isPrivate)) return false
+    const [older, newer, heldFirst, heldLast] = await Promise.all([
+      messageCache.getRoomMessages(roomJid, { before: first.timestamp, limit: 1 }),
+      messageCache.getRoomMessages(roomJid, { after: last.timestamp, limit: 1 }),
+      messageCache.getRoomMessageByStanzaId(roomJid, first.stanzaId ?? ''),
+      messageCache.getRoomMessageByStanzaId(roomJid, last.stanzaId ?? ''),
+    ])
+    if (!current()) return false
+    // Record uncertain seams BEFORE the cache island becomes visible. A crash can
+    // leave a conservative extra gap, never a false claim of contiguous history.
+    set(state => {
+      if (!current()) return state
+      const gaps = [...getGapList(state.roomGaps, roomJid)]
+      const lower = older.at(-1)
+      if (lower && !heldFirst) gaps.push({ start: +lower.timestamp, end: +first.timestamp, startId: lower.stanzaId, endId: first.stanzaId })
+      if (!heldLast) gaps.push({ start: +last.timestamp, end: newer[0] ? +newer[0].timestamp : undefined, startId: last.stanzaId, endId: newer[0]?.stanzaId })
+      const roomGaps = setGapList(state.roomGaps, roomJid, gaps)
+      saveGapsToStorage(roomGaps)
+      return { roomGaps }
+    })
+    if (!current() || !await messageCache.saveRoomMessages(rows) || !current()) return false
+    await searchIndex.indexMessages(rows)
+    return current()
+  },
 
   placeRemoteDisplayedRow: async (roomJid, stanzaId, row) => {
     const stillCurrent = captureRoomCacheRead(roomJid)

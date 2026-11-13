@@ -40,6 +40,15 @@ describe('LinkContextMenu', () => {
     expect(copyMock).toHaveBeenCalledWith('https://x.com')
   })
 
+  it('copies an XMPP link without offering an operating-system browser action', () => {
+    const uri = 'xmpp:team@conference.example.org?join;msg=1731490000123456'
+    render(<LinkContextMenu url={uri} menu={makeMenu(true)} />)
+    expect(screen.queryByText('Open in browser')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Copy link'))
+    expect(copyMock).toHaveBeenCalledWith(uri)
+    expect(openMock).not.toHaveBeenCalled()
+  })
+
   it('opens the link in the browser', () => {
     render(<LinkContextMenu url="https://x.com" menu={makeMenu(true)} />)
     fireEvent.click(screen.getByText('Open in browser'))

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // The handler dynamically imports the Tauri shell plugin; capture the mock.
+const routeMock = vi.hoisted(() => vi.fn())
+vi.mock('./deepLinkRouter', () => ({ routeDeepLink: routeMock }))
 const openMock = vi.hoisted(() => vi.fn())
 vi.mock('@tauri-apps/plugin-shell', () => ({ open: openMock }))
 const openUrlMock = vi.hoisted(() => vi.fn())
@@ -18,10 +20,11 @@ describe('setupExternalLinkHandler', () => {
   let restorePlatform: () => void
 
   beforeEach(() => {
-    // The handler only registers where in-app navigation is intercepted.
+    // Native HTTP links use the system browser; XMPP links stay in the app.
     restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
     openMock.mockClear()
     openUrlMock.mockClear()
+    routeMock.mockClear()
     cleanup = setupExternalLinkHandler()
   })
 
@@ -29,6 +32,39 @@ describe('setupExternalLinkHandler', () => {
     cleanup?.()
     restorePlatform()
     document.body.innerHTML = ''
+  })
+
+  it.each(['web', 'desktop', 'mobile'] as const)('routes an XMPP message link in the app on %s', shell => {
+    cleanup?.()
+    restorePlatform()
+    restorePlatform = setPlatformForTesting(shell === 'web' ? { shell } : { shell, os: shell === 'mobile' ? 'ios' : 'macos' })
+    cleanup = setupExternalLinkHandler()
+    const uri = 'xmpp:team@conference.example.org?join;msg=1731490000123456'
+    document.body.innerHTML = `<a href="${uri}"><span>Team update</span></a>`
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+    document.querySelector('span')!.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(routeMock).toHaveBeenCalledWith(uri)
+    expect(openMock).not.toHaveBeenCalled()
+    expect(openUrlMock).not.toHaveBeenCalled()
+  })
+
+  it('leaves ordinary HTTP links to the browser on web', () => {
+    cleanup?.()
+    restorePlatform()
+    restorePlatform = setPlatformForTesting({ shell: 'web' })
+    cleanup = setupExternalLinkHandler()
+    document.body.innerHTML = '<a href="https://example.org">Website</a>'
+    let intercepted: boolean | undefined
+    const anchor = document.querySelector('a')!
+    anchor.addEventListener('click', event => {
+      intercepted = event.defaultPrevented
+      event.preventDefault() // jsdom cannot perform the browser's navigation.
+    })
+    anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    expect(intercepted).toBe(false)
+    expect(routeMock).not.toHaveBeenCalled()
+    expect(openMock).not.toHaveBeenCalled()
   })
 
   it('opens an external link in the system browser', async () => {

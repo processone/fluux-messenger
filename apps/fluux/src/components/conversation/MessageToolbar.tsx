@@ -2,7 +2,7 @@ import { useCallback, useRef, memo, Suspense, lazy, useState, useEffect } from '
 import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import { useTranslation } from 'react-i18next'
-import { SmilePlus, Pencil, Forward, MoreHorizontal, Reply, Trash2 } from 'lucide-react'
+import { SmilePlus, Pencil, Forward, MoreHorizontal, Reply, Trash2, Link2 } from 'lucide-react'
 import { useClickOutside } from '@/hooks'
 import { Tooltip } from '../Tooltip'
 import { ReactionBurst } from './ReactionBurst'
@@ -26,13 +26,15 @@ export interface MessageToolbarProps {
   onEdit: () => void
   /** Handler for delete button click */
   onDelete: () => void
+  /** Available only for a confirmed public message in an archived room. */
+  onCopyMessageLink?: () => void
   /** Emojis the current user has already reacted with */
   myReactions: string[]
   /** Whether the reply button should be shown */
   canReply: boolean
   /** Whether the edit button should be shown */
   canEdit: boolean
-  /** Whether the delete/more options should be enabled */
+  /** Whether deletion is permitted (independent of copying a message link). */
   canDelete: boolean
   /** Whether toolbar is visible (handles hiding during composition) */
   isHidden: boolean
@@ -66,6 +68,7 @@ export const MessageToolbar = memo(function MessageToolbar({
   onReply,
   onEdit,
   onDelete,
+  onCopyMessageLink,
   myReactions,
   canReply,
   canEdit,
@@ -103,9 +106,10 @@ export const MessageToolbar = memo(function MessageToolbar({
   const updateActionFocus = (target: EventTarget | null) => {
     setActionFocused(keyboardFocus.current && target instanceof Element && target.matches(':focus-visible'))
   }
-  const slotsRef = useRef({ reactions: !!onReaction, reply: canReply, edit: canEdit })
-  if (!interactionHeld) slotsRef.current = { reactions: !!onReaction, reply: canReply, edit: canEdit }
+  const slotsRef = useRef({ reactions: !!onReaction, reply: canReply, edit: canEdit, delete: canDelete, copy: !!onCopyMessageLink })
+  if (!interactionHeld) slotsRef.current = { reactions: !!onReaction, reply: canReply, edit: canEdit, delete: canDelete, copy: !!onCopyMessageLink }
   const slots = slotsRef.current
+  const canOpenMore = (slots.delete && canDelete) || (slots.copy && !!onCopyMessageLink)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const moreMenuRef = useRef<HTMLDivElement>(null)
   const reactionButtonRef = useRef<HTMLButtonElement>(null)
@@ -344,18 +348,29 @@ export const MessageToolbar = memo(function MessageToolbar({
               }
               setShowMoreMenu(!showMoreMenu)
             }}
-            className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'} ${!canDelete ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'} ${!canOpenMore ? 'opacity-50 cursor-not-allowed' : ''}`}
             aria-label={t('chat.moreOptions')}
-            disabled={!canDelete}
+            disabled={!canOpenMore}
           >
             <MoreHorizontal className="size-4 text-fluux-muted" />
           </button>
         </Tooltip>
 
         {/* More options dropdown menu */}
-        {showMoreMenu && (canDelete || interactionHeld) && (
-          <div ref={morePanelRef} data-message-panel="more" className={`absolute end-0 min-w-[160px] fluux-popover rounded-lg z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
-            <button
+        {showMoreMenu && (slots.delete || slots.copy) && (
+          <div ref={morePanelRef} data-message-panel="more" className={`absolute end-0 ${slots.copy ? 'min-w-[224px]' : 'min-w-[160px]'} fluux-popover rounded-lg z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+            {slots.copy && (
+              <button
+                type="button"
+                disabled={!onCopyMessageLink}
+                onClick={() => { onCopyMessageLink?.(); setShowMoreMenu(false) }}
+                className="w-full px-3 py-2 text-sm text-start hover:bg-fluux-hover transition-colors flex items-center gap-2"
+              >
+                <Link2 className="size-4" />
+                {t('chat.copyMessageLink')}
+              </button>
+            )}
+            {slots.delete && <button
               type="button"
               onClick={handleDelete}
               disabled={!canDelete}
@@ -363,7 +378,7 @@ export const MessageToolbar = memo(function MessageToolbar({
             >
               <Trash2 className="size-4" />
               {t('chat.deleteMessage')}
-            </button>
+            </button>}
           </div>
         )}
       </div>

@@ -125,6 +125,8 @@ export const eventsBindingMethodKeys = [
 ] as const satisfies readonly (keyof StoreBindings['events'])[]
 
 export const roomBindingMethodKeys = [
+  'getMessageByArchiveId',
+  'saveMessageLinkContext',
   'addRoom',
   'updateRoom',
   'removeRoom',

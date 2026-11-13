@@ -1726,6 +1726,11 @@ export class Chat extends BaseModule {
     return this.mamModule.queryRoomArchive(options)
   }
 
+  /** Resolve a joined room's message link from resident history, cache, then bounded archive context. */
+  async locateRoomMessage(roomJid: string, stanzaId: string) {
+    return this.mamModule.locateRoomMessage(roomJid, stanzaId)
+  }
+
   /** Reconcile a conversation's cached history with the server archive. */
   async refreshHistory(
     conversationId: string,

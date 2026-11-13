@@ -39,11 +39,13 @@ export function LinkContextMenu({ url, menu }: LinkContextMenuProps) {
       style={{ left: menu.position.x, top: menu.position.y }}
     >
       <MenuButton onClick={handleCopy} icon={<Copy className="size-4" />} label={t('chat.copyLink')} />
-      <MenuButton
-        onClick={handleOpen}
-        icon={<ExternalLink className="size-4" />}
-        label={t('chat.openInBrowser')}
-      />
+      {!url.startsWith('xmpp:') && (
+        <MenuButton
+          onClick={handleOpen}
+          icon={<ExternalLink className="size-4" />}
+          label={t('chat.openInBrowser')}
+        />
+      )}
     </div>
   )
 }

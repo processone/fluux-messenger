@@ -1,0 +1,97 @@
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
+import { connectionStore, roomStore, type RoomMessage } from '@fluux/sdk'
+import { useRoomMessageLink } from './useRoomMessageLink'
+
+const { locate, bridge, navigate, toast } = vi.hoisted(() => ({
+  locate: vi.fn(), bridge: vi.fn(), navigate: vi.fn(), toast: vi.fn(),
+}))
+vi.mock('@fluux/sdk', async importOriginal => ({
+  ...await importOriginal<typeof import('@fluux/sdk')>(),
+  useXMPPContext: () => ({ client: { messages: { locateRoomMessage: locate, catchUpTo: bridge } } }),
+}))
+vi.mock('./useNavigateToTarget', () => ({ useNavigateToTarget: () => ({ navigateToRoom: navigate }) }))
+vi.mock('@/stores/toastStore', () => ({ useToastStore: (select: (state: { addToast: typeof toast }) => unknown) => select({ addToast: toast }) }))
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (_key: string, fallback: string) => fallback }) }))
+
+const link = { roomJid: 'team@conference.example.org', stanzaId: '1731490000123456' }
+const message: RoomMessage = { type: 'groupchat', roomJid: link.roomJid, id: 'team-update', stanzaId: link.stanzaId,
+  originId: undefined, from: `${link.roomJid}/Bob`, nick: 'Bob', occupantId: 'bob', body: 'Team update',
+  timestamp: new Date('2026-05-01T10:00:00Z'), isOutgoing: false }
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  roomStore.getState().reset()
+  connectionStore.getState().setJid('alice@example.org/web')
+  connectionStore.getState().setStatus('online')
+  bridge.mockResolvedValue(undefined)
+  locate.mockResolvedValue({ kind: 'found', message })
+})
+afterEach(() => { roomStore.getState().reset(); connectionStore.getState().setJid(null); connectionStore.getState().setStatus('disconnected'); vi.restoreAllMocks() })
+
+// Room links (docs/URL_SCHEMES.md): do not join on a shared link; resume after a deliberate
+// join, preserve opaque row identity, distinguish absence from failure, and
+// never let a previous account's async resolution navigate the new account.
+describe('room message link navigation', () => {
+  it('opens an unknown room with Join, without archive lookup, then resumes after joining', async () => {
+    const { result } = renderHook(useRoomMessageLink)
+    act(() => result.current(link))
+    expect(navigate).toHaveBeenCalledWith(link.roomJid)
+    expect(roomStore.getState().rooms.get(link.roomJid)?.joined).toBe(false)
+    expect(locate).not.toHaveBeenCalled()
+    act(() => roomStore.getState().addRoom({ ...roomStore.getState().rooms.get(link.roomJid)!, joined: true }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(link.roomJid, expect.objectContaining({ id: message.id, stanzaId: link.stanzaId })))
+    expect(locate).toHaveBeenCalledTimes(1)
+    expect(bridge).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['absent', 'This message is no longer available'],
+    ['unknown', 'Could not load this message'],
+  ])('settles a %s target with the correct notice and no repeated lookup', async (kind, notice) => {
+    const { result } = renderHook(useRoomMessageLink)
+    act(() => result.current(link))
+    locate.mockResolvedValue({ kind })
+    vi.spyOn(roomStore.getState(), 'recenterToLatest').mockResolvedValue(undefined)
+    act(() => roomStore.getState().addRoom({ ...roomStore.getState().rooms.get(link.roomJid)!, joined: true }))
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('error', notice))
+    act(() => roomStore.setState({ activeRoomJid: link.roomJid }))
+    expect(locate).toHaveBeenCalledTimes(1)
+    expect(bridge).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed archive lookup after network membership resets, without retrying after reconnect', async () => {
+    let finish!: (value: { kind: 'unknown' }) => void
+    locate.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    vi.spyOn(roomStore.getState(), 'recenterToLatest').mockResolvedValue(undefined)
+    const { result } = renderHook(useRoomMessageLink)
+    act(() => result.current(link))
+    act(() => roomStore.getState().addRoom({ ...roomStore.getState().rooms.get(link.roomJid)!, joined: true }))
+    await act(async () => {
+      connectionStore.getState().setStatus('disconnected')
+      roomStore.getState().addRoom({ ...roomStore.getState().rooms.get(link.roomJid)!, joined: false })
+      finish({ kind: 'unknown' })
+    })
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('error', 'Could not load this message'))
+    act(() => {
+      connectionStore.getState().setStatus('online')
+      roomStore.getState().addRoom({ ...roomStore.getState().rooms.get(link.roomJid)!, joined: true })
+    })
+    expect(locate).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores an old account result', async () => {
+    let finish!: (value: { kind: 'found'; message: RoomMessage }) => void
+    locate.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const { result } = renderHook(useRoomMessageLink)
+    act(() => result.current(link))
+    act(() => roomStore.getState().addRoom({ ...roomStore.getState().rooms.get(link.roomJid)!, joined: true }))
+    navigate.mockClear()
+    await act(async () => {
+      connectionStore.getState().setJid('carol@example.org/web')
+      finish({ kind: 'found', message })
+    })
+    expect(navigate).not.toHaveBeenCalled()
+    expect(toast).not.toHaveBeenCalled()
+  })
+})
