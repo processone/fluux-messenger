@@ -158,7 +158,8 @@ export interface RowMetrics {
  * cannot inflate the chrome delta. An unusable candidate preserves that shape's previous chrome
  * value (or its fallback); see useRowMetrics.test.tsx for collapsed and expanded cases.
  * Returns the metrics ref, the real content width ref and a sampler called by mounted-row
- * measurement and the width signal.
+ * measurement and the width signal. A sample that reads a different real content width calls
+ * onRealWidthChange after updating its ref, whatever the estimator geometry does.
  * Before the first positive-width text sample, metrics retain the fallback. The first successful sample
  * and subsequent metric changes notify onCalibrated after updating the ref; identical samples do not,
  * and neither do chrome-only changes past MAX_CALIBRATIONS_PER_GEOMETRY. `first` marks the first
@@ -167,12 +168,15 @@ export interface RowMetrics {
 export function useRowMetrics(
   scrollRef: React.RefObject<HTMLElement | null>,
   onCalibrated?: (first: boolean) => void,
+  onRealWidthChange?: (realWidthPx: number) => void,
 ): RowMetrics {
   const ctxRef = useRef<RowEstimatorContext>(ROW_METRICS_FALLBACK)
   const realWidthPxRef = useRef<number | undefined>(undefined)
   const calibrationsRef = useRef(0)
   const onCalibratedRef = useRef(onCalibrated)
   onCalibratedRef.current = onCalibrated
+  const onRealWidthChangeRef = useRef(onRealWidthChange)
+  onRealWidthChangeRef.current = onRealWidthChange
 
   const sample = useCallback(() => {
     const root = scrollRef.current
@@ -182,7 +186,10 @@ export function useRowMetrics(
     // Read before the unchanged-geometry return below: an own-only window keeps the same text
     // sample when the window is resized, but its column (the real width) still moves.
     const realWidthPx = realContentWidthPx(textEl)
-    if (realWidthPx !== undefined) realWidthPxRef.current = realWidthPx
+    if (realWidthPx !== undefined && realWidthPx !== realWidthPxRef.current) {
+      realWidthPxRef.current = realWidthPx
+      onRealWidthChangeRef.current?.(realWidthPx)
+    }
     const fontSpec = fontSpecFrom(textEl)
     const contentWidthPx = textEl.clientWidth
 

@@ -85,14 +85,15 @@ export function recordMeasuredHeight(
  * Record the REAL width bucket (px) a conversation's heights are valid for. A CHANGED bucket
  * wipes that conversation's heights: they were measured at a different content width and
  * would otherwise linger as stale seeds (the immortal-poison re-open blink). Call only with a
- * bucket derived from a real sample, never from the mount-time fallback.
+ * bucket derived from a real sample, never from the mount-time fallback. Returns true when the
+ * change wiped the conversation's heights.
  */
-export function noteConversationWidthBucket(conversationId: string, widthBucketPx: number): void {
+export function noteConversationWidthBucket(conversationId: string, widthBucketPx: number): boolean {
   const prev = widthBucketByConversation.get(conversationId)
-  if (prev !== undefined && prev !== widthBucketPx) {
-    cache.get(conversationId)?.clear()
-  }
   widthBucketByConversation.set(conversationId, widthBucketPx)
+  if (prev === undefined || prev === widthBucketPx) return false
+  cache.get(conversationId)?.clear()
+  return true
 }
 
 /**

@@ -119,13 +119,16 @@ function itemIndices(own: boolean): number[] {
   })
 }
 
-/** Mount a window the way the adapter does: the sampler reads the new rows, then their sizes arrive. */
+/**
+ * Mount (or re-measure) a window in the adapter's order: each row's measurement arrives first,
+ * then the sampler runs once for the batch (the adapter queues it in a microtask).
+ */
 function showWindow(view: ReturnType<typeof render>, indices: number[], heightPx: number): void {
   const visible = new Set(indices)
   isMounted = index => visible.has(index)
   view.rerender(list())
-  adapter.sampleEstimateMetrics!()
   for (const index of indices) adapter.onMeasured!(adapter.items[index].key, heightPx)
+  adapter.sampleEstimateMetrics!()
 }
 
 describe('MessageList height cache width tag', () => {
@@ -142,6 +145,8 @@ describe('MessageList height cache width tag', () => {
   })
 
   it('keeps heights while the window moves between own-only and full-width rows, and clears them when the column narrows', () => {
+    // The re-tag after a resize records the mounted rows' settled heights again.
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(OWN_ROW_PX)
     const view = render(list())
     const scale = useSettingsStore.getState().fontSize
     const incoming = itemIndices(false).slice(0, 19)
@@ -160,7 +165,9 @@ describe('MessageList height cache width tag', () => {
     expect(getConversationWidthBucket(CONVERSATION)).toBe(880)
     expect(getCachedHeight(CONVERSATION, lastOwnKey, scale)).toBe(OWN_ROW_PX)
 
-    // Narrowing the window: the own replies still hug the same 142px, but the column moved.
+    // Narrowing the window: the own replies still hug the same 142px, but the column moved. The
+    // rows re-measure at the new width, then the sampler reads it: the tag moves at that sample,
+    // before any further measurement or teardown, and the rows just measured keep their heights.
     showWindow(view, own, OWN_ROW_PX)
     columnPx = COLUMN_AT_1000_PX
     showWindow(view, own, OWN_ROW_PX)
@@ -178,7 +185,8 @@ describe('MessageList height cache width tag', () => {
     const firstIncomingKey = adapter.items[incoming[0]].key
 
     showWindow(view, incoming, INCOMING_ROW_PX)
-    // An own-only window that is sampled but not yet measured: only the unmount snapshot tags it.
+    // An own-only window that is sampled but not yet measured, then left: the snapshot taken on
+    // unmount persists it under the real width.
     isMounted = index => own.includes(index)
     view.rerender(list())
     adapter.sampleEstimateMetrics!()

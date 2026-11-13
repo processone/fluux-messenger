@@ -205,11 +205,11 @@ export interface MessageListProps<T extends BaseMessage> {
  * Tag a conversation's cached heights with the real content width they were measured at, in
  * 20px buckets that absorb subpixel jitter. Nothing is noted until a sample has read a real
  * width (useRowMetrics' realWidthPxRef), so neither the mount-time fallback nor the own-bubble
- * lower bound can wipe the cache.
+ * lower bound can wipe the cache. Returns true when a changed tag wiped the heights.
  */
-function noteRealWidthBucket(conversationId: string, realWidthPx: number | undefined): void {
-  if (realWidthPx === undefined) return
-  noteConversationWidthBucket(conversationId, Math.round(realWidthPx / 20) * 20)
+function noteRealWidthBucket(conversationId: string, realWidthPx: number | undefined): boolean {
+  if (realWidthPx === undefined) return false
+  return noteConversationWidthBucket(conversationId, Math.round(realWidthPx / 20) * 20)
 }
 
 // ============================================================================
@@ -393,9 +393,21 @@ export function MessageList<T extends BaseMessage>({
   // its spacer commits before the divider is re-asserted. Later ones are batched: a synchronous
   // re-render re-windows the list, and the rows it mounts queue the next sample. The adapter
   // still commits a later one at once when keeping the reader in place moved the scroll offset.
+  //
+  // A new real content width retags the height cache at once (virtualized path only). The adapter
+  // samples after a measurement batch, so those rows were already measured at the new width; a
+  // changed tag wipes them with the stale heights, and their settled heights are recorded again.
   const { metricsRef: rowMetricsRef, realWidthPxRef: rowRealWidthPxRef, sample: sampleRowMetrics } = useRowMetrics(scrollContainerRef, first => {
     virtualizer.refreshEstimates?.(first)
     if (first) reassertUnreadMarker()
+  }, realWidthPx => {
+    if (!virtualized) return
+    const { conversationId: cid, scalePct: scale, virtualItems: items } = onMeasuredParamsRef.current
+    const scroller = scrollContainerRef.current
+    if (!noteRealWidthBucket(cid, realWidthPx) || !scroller) return
+    for (const [key, height] of collectSettledRowHeights(scroller, items, scale)) {
+      recordMeasuredHeight(cid, key, height)
+    }
   })
 
   // --------------------------------------------------------------------------
@@ -488,7 +500,7 @@ export function MessageList<T extends BaseMessage>({
     () =>
       virtualized
         ? (key: string, size: number) => {
-            const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef, rowRealWidthPxRef: realWidthRef, indexById: idMap, virtualItems: items } = onMeasuredParamsRef.current
+            const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef, indexById: idMap, virtualItems: items } = onMeasuredParamsRef.current
             const idx = idMap.get(key)
             const item = idx != null ? items[idx] : undefined
             const measuredGrowth = measuredRowSizesRef.current.observe(cid, scale, key, size)
@@ -500,10 +512,9 @@ export function MessageList<T extends BaseMessage>({
             if (!(item?.kind === 'message' && item.isFirstNew)) {
               recordMeasuredHeight(cid, heightCacheKey(key, scale), size)
             }
-            // Note the width-validity tag only once the REAL content width has been read — the
-            // mount-time fallback, and the own-bubble lower bound the estimator samples when only
-            // own rows are mounted, must never wipe (or masquerade as) a real bucket.
-            noteRealWidthBucket(cid, realWidthRef.current)
+            // The width-validity tag is not noted here: the adapter samples AFTER a measurement
+            // batch, so the real width of this row's layout is not read yet. The sampler's
+            // real-width callback (useRowMetrics, above) retags instead.
             // Estimate-accuracy trace (estimate-debug only): predicted vs first-measured per row.
             // Gated up front so the predict (which may call pretext) is skipped when debug is off.
             if (isEstimateDebugEnabled()) {
