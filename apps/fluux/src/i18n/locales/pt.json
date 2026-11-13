@@ -1201,6 +1201,7 @@
         "passwordsDoNotMatch": "As palavras-passe não coincidem",
         "passwordTooShort": "A palavra-passe deve ter pelo menos 6 caracteres",
         "failedToChangePassword": "Falha ao alterar palavra-passe",
+        "newPasswordNotSaved": "A sua palavra-passe foi alterada, mas não foi possível guardar a nova no porta-chaves do sistema.",
         "passwordChangeNotSupported": "A alteração de palavra-passe não é suportada por este servidor",
         "priority": "Prioridade",
         "offlineNotice": "A edição do perfil não está disponível offline",

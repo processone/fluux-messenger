@@ -1205,6 +1205,7 @@
         "passwordsDoNotMatch": "كلمتا المرور غير متطابقتين",
         "passwordTooShort": "يجب أن تكون كلمة المرور 6 أحرف على الأقل",
         "failedToChangePassword": "فشل تغيير كلمة المرور",
+        "newPasswordNotSaved": "تم تغيير كلمة المرور، لكن تعذّر حفظ كلمة المرور الجديدة في سلسلة مفاتيح النظام.",
         "passwordChangeNotSupported": "تغيير كلمة المرور غير مدعوم من هذا الخادم",
         "priority": "الأولوية",
         "offlineNotice": "تعديل الملف الشخصي غير متاح أثناء عدم الاتصال",

@@ -1197,6 +1197,7 @@
         "passwordsDoNotMatch": "Lösenorden matchar inte",
         "passwordTooShort": "Lösenordet måste vara minst 6 tecken",
         "failedToChangePassword": "Kunde inte ändra lösenord",
+        "newPasswordNotSaved": "Lösenordet har ändrats, men det nya lösenordet kunde inte sparas i systemnyckelringen.",
         "passwordChangeNotSupported": "Lösenordsändring stöds inte av denna server",
         "priority": "Prioritet",
         "offlineNotice": "Profilredigering är inte tillgänglig offline",

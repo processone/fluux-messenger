@@ -1200,6 +1200,7 @@
         "passwordsDoNotMatch": "Les mots de passe ne correspondent pas",
         "passwordTooShort": "Le mot de passe doit contenir au moins 6 caractères",
         "failedToChangePassword": "Échec du changement de mot de passe",
+        "newPasswordNotSaved": "Votre mot de passe a été modifié, mais le nouveau n'a pas pu être enregistré dans le trousseau système.",
         "passwordChangeNotSupported": "Le changement de mot de passe n'est pas pris en charge par ce serveur",
         "priority": "Priorité",
         "offlineNotice": "La modification du profil n'est pas disponible hors ligne",

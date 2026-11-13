@@ -1201,6 +1201,7 @@
         "passwordsDoNotMatch": "Parolele nu se potrivesc",
         "passwordTooShort": "Parola trebuie să aibă cel puțin 6 caractere",
         "failedToChangePassword": "Schimbarea parolei a eșuat",
+        "newPasswordNotSaved": "Parola a fost schimbată, dar noua parolă nu a putut fi salvată în inelul de chei al sistemului.",
         "passwordChangeNotSupported": "Schimbarea parolei nu este suportată de acest server",
         "priority": "Prioritate",
         "offlineNotice": "Editarea profilului este indisponibilă în modul offline",

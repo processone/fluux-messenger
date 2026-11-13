@@ -1203,6 +1203,7 @@
         "passwordsDoNotMatch": "Gesli se ne ujemata",
         "passwordTooShort": "Geslo mora imeti vsaj 6 znakov",
         "failedToChangePassword": "Spreminjanje gesla ni uspelo",
+        "newPasswordNotSaved": "Geslo je bilo spremenjeno, vendar novega gesla ni bilo mogoče shraniti v sistemsko zbirko ključev.",
         "passwordChangeNotSupported": "Ta strežnik ne podpira spreminjanja gesla",
         "priority": "Prioriteta",
         "offlineNotice": "Urejanje profila ni na voljo brez povezave",

@@ -1197,6 +1197,7 @@
         "passwordsDoNotMatch": "Salasanat eivät täsmää",
         "passwordTooShort": "Salasanan täytyy olla vähintään 6 merkkiä",
         "failedToChangePassword": "Salasanan vaihto epäonnistui",
+        "newPasswordNotSaved": "Salasanasi vaihdettiin, mutta uutta salasanaa ei voitu tallentaa järjestelmän avainnippuun.",
         "passwordChangeNotSupported": "Tämä palvelin ei tue salasanan vaihtoa",
         "priority": "Prioriteetti",
         "offlineNotice": "Profiilin muokkaus ei ole käytettävissä offline-tilassa",

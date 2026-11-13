@@ -1199,6 +1199,7 @@
         "passwordsDoNotMatch": "Lozinke se ne podudaraju",
         "passwordTooShort": "Lozinka mora imati najmanje 6 znakova",
         "failedToChangePassword": "Promjena lozinke nije uspjela",
+        "newPasswordNotSaved": "Vaša lozinka je promijenjena, ali nova lozinka nije mogla biti spremljena u sustavski svežanj ključeva.",
         "passwordChangeNotSupported": "Promjena lozinke nije podržana od ovog poslužitelja",
         "priority": "Prioritet",
         "offlineNotice": "Uređivanje profila nije dostupno izvan mreže",

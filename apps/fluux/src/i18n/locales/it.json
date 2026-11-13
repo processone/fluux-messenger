@@ -1201,6 +1201,7 @@
         "passwordsDoNotMatch": "Le password non corrispondono",
         "passwordTooShort": "La password deve avere almeno 6 caratteri",
         "failedToChangePassword": "Impossibile cambiare la password",
+        "newPasswordNotSaved": "La password è stata cambiata, ma non è stato possibile salvare la nuova password nel portachiavi di sistema.",
         "passwordChangeNotSupported": "Il cambio password non e supportato da questo server",
         "priority": "Priorita",
         "offlineNotice": "La modifica del profilo non è disponibile offline",

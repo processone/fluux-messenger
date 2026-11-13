@@ -1199,6 +1199,7 @@
         "passwordsDoNotMatch": "הסיסמאות אינן תואמות",
         "passwordTooShort": "הסיסמה חייבת להכיל לפחות 6 תווים",
         "failedToChangePassword": "שינוי הסיסמה נכשל",
+        "newPasswordNotSaved": "הסיסמה שלך שונתה, אך לא ניתן היה לשמור את הסיסמה החדשה בצרור המפתחות של המערכת.",
         "passwordChangeNotSupported": "שינוי סיסמה אינו נתמך בשרת זה",
         "priority": "עדיפות",
         "offlineNotice": "עריכת הפרופיל אינה זמינה במצב מנותק",

@@ -1201,6 +1201,7 @@
         "passwordsDoNotMatch": "Las contraseñas no coinciden",
         "passwordTooShort": "La contraseña debe tener al menos 6 caracteres",
         "failedToChangePassword": "Error al cambiar contraseña",
+        "newPasswordNotSaved": "Tu contraseña se cambió, pero la nueva contraseña no se pudo guardar en el llavero del sistema.",
         "passwordChangeNotSupported": "El cambio de contraseña no es compatible con este servidor",
         "priority": "Prioridad",
         "offlineNotice": "La edición del perfil no está disponible sin conexión",

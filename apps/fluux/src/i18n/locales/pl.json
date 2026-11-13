@@ -1203,6 +1203,7 @@
         "passwordsDoNotMatch": "Hasła nie są zgodne",
         "passwordTooShort": "Hasło musi mieć co najmniej 6 znaków",
         "failedToChangePassword": "Nie udało się zmienić hasła",
+        "newPasswordNotSaved": "Hasło zostało zmienione, ale nie udało się zapisać nowego hasła w systemowym pęku kluczy.",
         "passwordChangeNotSupported": "Zmiana hasła nie jest obsługiwana przez ten serwer",
         "priority": "Priorytet",
         "offlineNotice": "Edycja profilu jest niedostępna w trybie offline",
