@@ -12,6 +12,7 @@ export function useRoomMessageLink() {
   const addToast = useToastStore(state => state.addToast)
   const pending = useRef<(RoomMessageLink & { account: string; running: boolean }) | null>(null)
   const mounted = useRef(false)
+  const bridges = useRef(new Map<string, Promise<void>>())
   const live = useRef({ client, navigateToRoom, t, addToast })
   live.current = { client, navigateToRoom, t, addToast }
 
@@ -22,7 +23,13 @@ export function useRoomMessageLink() {
     if (account() !== target.account) { pending.current = null; return }
     target.running = true
     const current = () => mounted.current && pending.current === target && account() === target.account
+    const bridgeKey = JSON.stringify([target.account, target.roomJid])
     try {
+      // An earlier archive link may still be filling this room. Position the
+      // next target only after those pages, rather than letting them displace it.
+      const earlierBridge = bridges.current.get(bridgeKey)
+      if (earlierBridge) await earlierBridge
+      if (!current()) return
       const result = await live.current.client.messages.locateRoomMessage(target.roomJid, target.stanzaId)
       if (!current()) return
       if (result.kind === 'found') {
@@ -31,8 +38,12 @@ export function useRoomMessageLink() {
         // Only freshly fetched archive context needs a seam walk. A held gap
         // must not make resident/cache hits download the same history again.
         if (result.source === 'archive' && roomStore.getState().roomGaps.get(target.roomJid)?.length) {
-          void live.current.client.messages.catchUpTo(target.roomJid, result.message.timestamp.toISOString())
+          const bridge = live.current.client.messages.catchUpTo(target.roomJid, result.message.timestamp.toISOString())
             .catch(error => console.warn('Could not bridge room message history', error))
+          bridges.current.set(bridgeKey, bridge)
+          void bridge.finally(() => {
+            if (bridges.current.get(bridgeKey) === bridge) bridges.current.delete(bridgeKey)
+          })
         }
       } else {
         roomStore.getState().setTargetMessageId(null)

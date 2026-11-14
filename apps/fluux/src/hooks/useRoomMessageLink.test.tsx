@@ -20,7 +20,7 @@ const message: RoomMessage = { type: 'groupchat', roomJid: link.roomJid, id: 'te
   timestamp: new Date('2026-05-01T10:00:00Z'), isOutgoing: false }
 
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
   roomStore.getState().reset()
   connectionStore.getState().setJid('alice@example.org/web')
   connectionStore.getState().setStatus('online')
@@ -58,6 +58,33 @@ describe('room message link navigation', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(link.roomJid, expect.objectContaining({ stanzaId: link.stanzaId })))
     expect(bridge).toHaveBeenCalledTimes(source === 'archive' ? 1 : 0)
     if (source === 'archive') expect(bridge).toHaveBeenCalledWith(link.roomJid, message.timestamp.toISOString())
+  })
+
+  it.each([false, true])('waits for the earlier bridge and keeps account authority: account changes %s', async accountChanges => {
+    // Real archive proof: an older link starts a bridge, then a new live row is
+    // linked before it finishes. Its late pages must not displace the new target.
+    let finishBridge!: () => void
+    bridge.mockReturnValueOnce(new Promise<void>(resolve => { finishBridge = resolve }))
+    const newer = { ...message, id: 'body-link-note', stanzaId: 'newer-room-entry',
+      body: 'Reference: xmpp:team@conference.example.org?join;msg=earlier-entry',
+      timestamp: new Date(message.timestamp.getTime() + 1000) }
+    locate.mockResolvedValueOnce({ kind: 'found', message, source: 'archive' })
+      .mockResolvedValueOnce({ kind: 'found', message: newer, source: 'resident' })
+    const { result } = renderHook(useRoomMessageLink)
+    act(() => result.current(link))
+    act(() => {
+      roomStore.setState({ roomGaps: new Map([[link.roomJid, [{ start: +message.timestamp, startId: link.stanzaId }]]]) })
+      roomStore.getState().addRoom({ ...roomStore.getState().rooms.get(link.roomJid)!, joined: true })
+    })
+    await waitFor(() => expect(bridge).toHaveBeenCalledTimes(1))
+    navigate.mockClear()
+    await act(async () => result.current({ roomJid: link.roomJid, stanzaId: newer.stanzaId }))
+    if (accountChanges) act(() => connectionStore.getState().setJid('carol@example.org/web'))
+    try { expect(navigate).not.toHaveBeenCalled() }
+    finally { await act(async () => finishBridge()) }
+    if (accountChanges) expect(navigate).not.toHaveBeenCalled()
+    else await waitFor(() => expect(navigate).toHaveBeenCalledWith(link.roomJid, expect.objectContaining({ stanzaId: newer.stanzaId })))
+    expect(bridge).toHaveBeenCalledTimes(1)
   })
 
   it.each([
