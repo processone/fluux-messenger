@@ -20,8 +20,8 @@ export interface ContextMenuState {
   handleContextMenu: (e: React.MouseEvent) => void
   /** Handler for touch start (long-press detection) */
   handleTouchStart: (e: React.TouchEvent) => void
-  /** Handler for touch end/move (cancel long-press) */
-  handleTouchEnd: () => void
+  /** Cancel a pending hold; consume the opening release after a long press. */
+  handleTouchEnd: (event?: React.TouchEvent) => void
 }
 
 interface UseContextMenuOptions {
