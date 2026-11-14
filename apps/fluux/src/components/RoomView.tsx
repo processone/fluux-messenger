@@ -1080,7 +1080,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   membershipPhase: ReturnType<typeof selectRoomMembershipPhase>
   isDarkMode?: boolean
   onScrollToTop?: () => void
-  onLoadAround?: (anchorRow: MessageRowRef) => Promise<unknown> | void
+  onLoadAround?: (anchorRow: MessageRowRef, signal?: AbortSignal) => Promise<unknown> | void
   isLoadingOlder?: boolean
   onLoadNewer?: () => void
   windowAtLiveEdge?: boolean

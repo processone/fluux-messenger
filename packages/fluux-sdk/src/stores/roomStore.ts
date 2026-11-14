@@ -1279,9 +1279,10 @@ export interface RoomState {
   loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions & { peek?: boolean; oldest?: boolean }) => Promise<RoomMessage[]>
   /**
    * Room counterpart of {@link ChatState.loadMessagesAroundFromCache}, preserving the exact
-   * anchor row through {@link timeline.aroundSlice}.
+   * anchor row through {@link timeline.aroundSlice}. A cancelled positioning request leaves
+   * the resident window unchanged.
    */
-  loadMessagesAroundFromCache: (roomJid: string, anchorRow: MessageRowRef, options?: { before?: number; after?: number }) => Promise<RoomMessage[]>
+  loadMessagesAroundFromCache: (roomJid: string, anchorRow: MessageRowRef, options?: { before?: number; after?: number }, signal?: AbortSignal) => Promise<RoomMessage[]>
   loadOlderMessagesFromCache: (roomJid: string, limit?: number) => Promise<RoomMessage[]>
   /**
    * Mirror of {@link loadOlderMessagesFromCache} for the opposite direction: loads the next-newer
@@ -3429,20 +3430,21 @@ export const roomStore = createStore<RoomState>()(
     })
   },
 
-  loadMessagesAroundFromCache: async (roomJid, anchorRow, options = {}) => {
+  loadMessagesAroundFromCache: async (roomJid, anchorRow, options = {}, signal) => {
     const isCurrent = captureRoomCacheRead(roomJid)
+    const canPublish = () => !signal?.aborted && isCurrent()
     return withMessageCacheOperation('room', roomJid, async () => {
-      if (!isCurrent()) return []
+      if (!canPublish()) return []
       if (!messageCache.isMessageCacheAvailable()) {
         return []
       }
 
       try {
-        const slice = await messageCache.getRoomMessagesAround(roomJid, anchorRow, options).then(messages => refreshCachedCorrections(messages, isCurrent))
-        if (!isCurrent()) return []
+        const slice = await messageCache.getRoomMessagesAround(roomJid, anchorRow, options).then(messages => refreshCachedCorrections(messages, canPublish))
+        if (!canPublish()) return []
         if (slice.length > 0) {
           flushPendingRoomOccupants(roomJid)
-          set((state) => mergeCachedRoomAround(state, roomJid, slice, anchorRow,
+          set((state) => !canPublish() ? state : mergeCachedRoomAround(state, roomJid, slice, anchorRow,
             options.before ?? messageCache.AROUND_CONTEXT_BEFORE) ?? state)
         }
         return slice

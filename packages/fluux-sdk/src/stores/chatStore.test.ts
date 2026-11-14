@@ -1273,6 +1273,22 @@ describe('chatStore', () => {
       }
     }
 
+    it('does not publish a saved-anchor slice after its positioning request is cancelled', async () => {
+      const A = 'alice@example.com'
+      chatStore.getState().addConversation(createConversation(A))
+      const latest = msgAt(A, 'newer-5', 5)
+      chatStore.setState({ activeConversationId: A, messages: new Map([[A, [latest]]]) })
+      let finish!: (rows: Message[]) => void
+      vi.mocked(messageCache.getMessagesAround).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      const request = new AbortController()
+      const pending = chatStore.getState().loadMessagesAroundFromCache(A, { id: 'anchor' }, undefined, request.signal)
+      await vi.waitFor(() => expect(messageCache.getMessagesAround).toHaveBeenCalledTimes(1))
+      request.abort()
+      finish([msgAt(A, 'old-3', 3), msgAt(A, 'anchor', 4), latest])
+      await pending
+      expect(chatStore.getState().messages.get(A)?.map(row => row.id)).toEqual([latest.id])
+    })
+
     it('hydrates the resident array with the cache slice that contains the anchor', async () => {
       const A = 'alice@example.com'
       chatStore.getState().addConversation(createConversation(A))

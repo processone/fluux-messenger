@@ -382,10 +382,10 @@ export function useRoomActive() {
   // restore / search navigation when the target/anchor isn't in the latest-N slice. Bound to the
   // currently-active room (the one being viewed when restore runs).
   const loadMessagesAround = useCallback(
-    (anchorRow: MessageRowRef) => {
+    (anchorRow: MessageRowRef, signal?: AbortSignal) => {
       const id = roomStore.getState().activeRoomJid
       if (!id) return Promise.resolve([])
-      return roomStore.getState().loadMessagesAroundFromCache(id, anchorRow)
+      return roomStore.getState().loadMessagesAroundFromCache(id, anchorRow, undefined, signal)
     },
     []
   )
