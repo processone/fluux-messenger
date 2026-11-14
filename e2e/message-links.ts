@@ -54,3 +54,51 @@ test('copy a room message link and jump to it from another chat', async ({ page 
   await expect(highlighted).toHaveCount(1)
   expect(page.context().pages()).toHaveLength(1)
 })
+
+test.describe('mobile message links', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
+
+  test('releasing the opening touch leaves Copy message link ready for a deliberate tap', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'Browser-native held touch requires Chromium input dispatch; geometry is covered in both engines.')
+    let copied = ''
+    await page.exposeFunction('__captureMessageLink', (value: string) => { copied = value })
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+        writeText: (text: string) => (window as unknown as { __captureMessageLink: (text: string) => Promise<void> }).__captureMessageLink(text),
+      } })
+      localStorage.setItem('i18nextLng', 'en')
+    })
+    await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(ROOM)}`)
+    const targetId = 'demo-room-whisper-pub'
+    const stanzaId = await page.evaluate(async ({ roomJid, targetId }) => {
+      const scope = window as unknown as { __demoClient: DemoClient; __roomStore: typeof roomStore }
+      scope.__demoClient.stopAnimation()
+      await scope.__roomStore.getState().activateRoom(roomJid)
+      return scope.__roomStore.getState().messages.get(roomJid)!.find(row => row.id === targetId)!.stanzaId!
+    }, { roomJid: ROOM, targetId })
+    const row = page.locator(`[data-message-id="${targetId}"][data-message-body]`)
+    await row.scrollIntoViewIfNeeded()
+    const content = row.locator('[class~="touch:select-none"]').first()
+    // A low message forces the portal upward, potentially beneath the finger.
+    await content.evaluate(element => {
+      const list = element.closest('[data-message-list]')!
+      const box = element.getBoundingClientRect()
+      list.scrollTop += box.y + box.height / 2 - (list.getBoundingClientRect().bottom - 22)
+    })
+    const box = (await content.boundingBox())!
+    const touch = await page.context().newCDPSession(page)
+    const sheet = page.getByRole('dialog', { name: 'More options', exact: true })
+    try {
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }] })
+      await expect(sheet).toBeVisible()
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+      await expect(sheet).toBeVisible()
+      expect(copied).toBe('')
+      await sheet.getByRole('button', { name: 'Copy message link', exact: true }).tap()
+      await expect.poll(() => copied).toBe(`xmpp:${ROOM}?join;msg=${encodeURIComponent(stanzaId)}`)
+      await expect(sheet).toBeHidden()
+    } finally {
+      await touch.detach()
+    }
+  })
+})

@@ -591,7 +591,9 @@ export const MessageBubble = memo(function MessageBubble({
       iosHaptic('contextMenu')
     }, 500)
   }
-  const cancelLongPress = () => {
+  const cancelLongPress = (event?: React.TouchEvent) => {
+    // Consume release before its click can target an action portaled under the finger.
+    if (event?.type === 'touchend' && longPressFired.current) event.preventDefault()
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null

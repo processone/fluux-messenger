@@ -134,7 +134,9 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
   }, [longPressDuration])
 
   // Cancel long-press on move or end
-  const handleTouchEnd = useCallback(() => {
+  const handleTouchEnd = useCallback((event?: React.TouchEvent) => {
+    // Consume release before its click can target an action portaled under the finger.
+    if (event?.type === 'touchend' && longPressTriggered.current) event.preventDefault()
     if (longPressTimeout.current) {
       clearTimeout(longPressTimeout.current)
       longPressTimeout.current = null
