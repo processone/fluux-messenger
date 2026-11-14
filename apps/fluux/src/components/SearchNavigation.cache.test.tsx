@@ -23,8 +23,8 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 const originalScrollIntoView = Element.prototype.scrollIntoView
 const ROOM = 'navigation@conference.example.com'
 const EMPTY: RoomMessage[] = []
-const loadAround = vi.fn((ref: Parameters<ReturnType<typeof roomStore.getState>['loadMessagesAroundFromCache']>[1]) =>
-  roomStore.getState().loadMessagesAroundFromCache(ROOM, ref, { before: 1, after: 1 }))
+const loadAround = vi.fn((ref: Parameters<ReturnType<typeof roomStore.getState>['loadMessagesAroundFromCache']>[1], signal?: AbortSignal) =>
+  roomStore.getState().loadMessagesAroundFromCache(ROOM, ref, { before: 1, after: 1 }, signal))
 function LiveList({ literal }: { literal?: string }) {
   const messages = useRoomStore(state => state.messages.get(ROOM) ?? EMPTY)
   const targetMessageId = useRoomStore(state => state.targetMessageId)
@@ -69,7 +69,7 @@ it('loads an evicted search result through navigation and highlights its confirm
   expect(live.textContent).not.toContain(target.body)
   fireEvent.click(screen.getByText('search.goToMessage'))
   await waitFor(() => expect(live.textContent).toContain(target.body))
-  expect(loadAround).toHaveBeenCalledWith(messageRowRef(target))
+  expect(loadAround).toHaveBeenCalledWith(messageRowRef(target), expect.any(AbortSignal))
   await waitFor(() => {
     const highlighted = live.querySelector<HTMLElement>('.message-highlight')
     expect(highlighted?.dataset.messageRowId).toBe(messageRowId(target))
@@ -87,7 +87,7 @@ it.each(['occupant-row:["wire","peer"]', 'archive-row:["wire","peer","archive"]'
     fireEvent.click(screen.getByText('Open literal'))
     const live = screen.getByTestId('live-list')
     await waitFor(() => expect(live.textContent).toContain(target.body))
-    expect(loadAround).toHaveBeenCalledWith({ id: literal })
+    expect(loadAround).toHaveBeenCalledWith({ id: literal }, expect.any(AbortSignal))
     await waitFor(() => expect(live.querySelector<HTMLElement>('.message-highlight')?.dataset.messageId).toBe(literal))
   },
 )
