@@ -1,33 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
+import { navigateToStressRoom } from './harness/scrollHarness'
 
 const DEMO_ROOM_JID = 'team@conference.fluux.chat'
 
-/**
- * Open a room in demo mode.
- *
- * Activated through the store before the hash flips, mirroring the scroll suite: the
- * rooms sidebar auto-selects, and a click races that. Waiting for a mounted row is
- * what proves the list is live, which the sampler needs.
- */
+/** Open the demo room through the shared route/activation contract, with either row renderer. */
 async function openDemoRoom(page: Page): Promise<void> {
-  await page.evaluate(
-    (jid) =>
-      (window as unknown as { __roomStore?: { getState(): { activateRoom(j: string): unknown } } })
-        .__roomStore?.getState()
-        .activateRoom(jid),
-    DEMO_ROOM_JID,
-  )
-  await page.waitForFunction(
-    (jid) =>
-      (window as unknown as { __roomStore?: { getState(): { activeRoomJid?: string } } })
-        .__roomStore?.getState().activeRoomJid === jid,
-    DEMO_ROOM_JID,
-    { timeout: 15_000 },
-  )
-  await page.evaluate((jid) => {
-    window.location.hash = '#/rooms/' + encodeURIComponent(jid)
-  }, DEMO_ROOM_JID)
-  await page.waitForSelector('[data-index], .message-row', { timeout: 15_000 })
+  await navigateToStressRoom(page, false, DEMO_ROOM_JID)
 }
 
 /**

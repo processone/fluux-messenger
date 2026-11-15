@@ -2414,17 +2414,7 @@ test.describe('New-message divider label', () => {
   const AWAY_COUNT = 30
 
   async function openRoom(page: Page): Promise<void> {
-    await page.evaluate((jid) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (window as any).__roomStore.getState().activateRoom(jid)
-    }, ROOM_JID)
-    await page.waitForFunction((jid) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (window as any).__roomStore.getState().activeRoomJid === jid
-    }, ROOM_JID)
-    await page.evaluate((jid) => { window.location.hash = '#/rooms/' + encodeURIComponent(jid) }, ROOM_JID)
-    await page.waitForSelector('[data-index]', { timeout: 15_000 })
-    await settle(page)
+    await navigateToStressRoom(page, true, ROOM_JID)
   }
 
   interface DividerObservation {
