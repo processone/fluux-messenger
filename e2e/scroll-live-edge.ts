@@ -767,54 +767,67 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     // a touch, since desktop WebKit has no Touch constructor; the list reads nothing else.
     const DRAG_PX = 60
     await enterAtBottom(page)
-    // This models a short gesture, not the lost-touchend expiry. Loaded protocol trips and the
-    // two settlement waits must not age the held-input lease; timers and real layout still run.
-    const gestureClock = await page.evaluate(() => ({ date: Date.now(), started: performance.now() }))
-    await page.clock.setFixedTime(gestureClock.date)
+    // Only Date.now is fixed: native timers, performance readings and compositor frames survive.
+    // This short gesture must not age into the unrelated lost-touchend expiry under runner load.
+    const nativeDateNow = await page.evaluateHandle(() => Date.now)
+    try {
+      const gestureClock = await page.evaluate(() => {
+        const date = Date.now()
+        Date.now = () => date
+        return { date, started: performance.now() }
+      })
 
-    const touch = (type: string, clientY: number | null) => page.evaluate(([kind, y]) => {
-      const s = document.querySelector('[data-message-list]') as HTMLElement
-      const row = s.querySelector('[data-message-id]') ?? s
-      const touches = y === null ? [] : [{ identifier: 1, clientX: 200, clientY: y }]
-      const event = new Event(kind as string, { bubbles: true, cancelable: false })
-      Object.defineProperty(event, 'touches', { value: touches })
-      Object.defineProperty(event, 'changedTouches', { value: touches })
-      ;(kind === 'touchend' ? window : row).dispatchEvent(event)
-    }, [type, clientY] as const)
+      const touch = (type: string, clientY: number | null) => page.evaluate(([kind, y]) => {
+        const s = document.querySelector('[data-message-list]') as HTMLElement
+        const row = s.querySelector('[data-message-id]') ?? s
+        const touches = y === null ? [] : [{ identifier: 1, clientX: 200, clientY: y }]
+        const event = new Event(kind as string, { bubbles: true, cancelable: false })
+        Object.defineProperty(event, 'touches', { value: touches })
+        Object.defineProperty(event, 'changedTouches', { value: touches })
+        ;(kind === 'touchend' ? window : row).dispatchEvent(event)
+      }, [type, clientY] as const)
 
-    await touch('touchstart', 400)
-    await page.evaluate((px) => {
-      const s = document.querySelector('[data-message-list]') as HTMLElement
-      s.scrollTop -= px
-    }, DRAG_PX)
-    await touch('touchmove', 400 + DRAG_PX)
-    await settle(page)
-    const held = await readGeometry(page)
-    expect(held.distFromBottom, 'precondition: dragged inside the at-bottom band').toBeGreaterThan(PIN_TOLERANCE_PX)
-    expect(held.distFromBottom, 'precondition: dragged inside the at-bottom band').toBeLessThan(AT_BOTTOM_OK_PX)
+      await touch('touchstart', 400)
+      await page.evaluate((px) => {
+        const s = document.querySelector('[data-message-list]') as HTMLElement
+        s.scrollTop -= px
+      }, DRAG_PX)
+      await touch('touchmove', 400 + DRAG_PX)
+      await settle(page)
+      const held = await readGeometry(page)
+      expect(held.distFromBottom, 'precondition: dragged inside the at-bottom band').toBeGreaterThan(PIN_TOLERANCE_PX)
+      expect(held.distFromBottom, 'precondition: dragged inside the at-bottom band').toBeLessThan(AT_BOTTOM_OK_PX)
 
-    await setTyping(page, true)
-    await page.waitForSelector('[data-typing-pill]', { timeout: 5_000 })
-    await settle(page)
-    const underFinger = await readGeometry(page)
-    expect(
-      Math.abs(underFinger.scrollTop - held.scrollTop),
-      'an ambient re-pin moved the view under the reader\'s finger',
-    ).toBeLessThanOrEqual(2)
+      await setTyping(page, true)
+      await page.waitForSelector('[data-typing-pill]', { timeout: 5_000 })
+      await settle(page)
+      const underFinger = await readGeometry(page)
+      expect(
+        Math.abs(underFinger.scrollTop - held.scrollTop),
+        'an ambient re-pin moved the view under the reader\'s finger',
+      ).toBeLessThanOrEqual(2)
 
-    await touch('touchend', null)
-    await settle(page)
-    const released = await readGeometry(page)
-    await testInfo.attach('held-touch-geometry', {
-      body: JSON.stringify({ held, underFinger, released, clock: await page.evaluate(start => ({
-        gestureElapsedMs: Date.now() - start.date,
-        realElapsedMs: performance.now() - start.started,
-      }), gestureClock) }), contentType: 'application/json',
-    })
-    expect(
-      released.distFromBottom,
-      'the re-pin refused under the finger was not replayed when it lifted inside the band',
-    ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
+      await touch('touchend', null)
+      await settle(page)
+      const released = await readGeometry(page)
+      await testInfo.attach('held-touch-geometry', {
+        body: JSON.stringify({ held, underFinger, released, clock: {
+          dateNowFixedAtMs: gestureClock.date,
+          elapsedTimeBase: 'native-performance',
+          realElapsedMs: await page.evaluate(start => performance.now() - start, gestureClock.started),
+        } }), contentType: 'application/json',
+      })
+      expect(
+        released.distFromBottom,
+        'the re-pin refused under the finger was not replayed when it lifted inside the band',
+      ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
+    } finally {
+      try {
+        await nativeDateNow.evaluate(original => { Date.now = original })
+      } finally {
+        await nativeDateNow.dispose()
+      }
+    }
   })
 
   test('never re-pins a reader who deliberately scrolled up', async ({ page }) => {
@@ -2438,43 +2451,46 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
     await enableScrollTrace(page)
     const id = `early-preview-${Date.now()}`
     const url = `https://example.invalid/${id}`
-    const result = withPinWindow(page, {
-      trigger: 'new-message', messageId: id, controlledFrames: true,
-      steps: [
-        {
-          label: 'preview committed', afterFrames: 1,
-          commitSelector: `a[href="${url}"]`,
-          sdkUpdate: {
-            conversationId: AVA, messageId: id,
-            updates: { linkPreview: { url, title: 'Preview closure fixture', siteName: 'example.invalid' } },
-          },
-        },
-        {
-          label: 'reaction committed', afterFrames: 1,
-          commitSelector: '[data-reaction-emoji]',
-          sdkUpdate: {
-            conversationId: AVA, messageId: id,
-            updates: { reactions: { '\u{1F44D}': ['someone@fluux.chat'] } },
-          },
-        },
-      ],
-    }, () => page.evaluate(async ({ conversationId, messageId, url }) => {
+    const originalEmit = await page.evaluateHandle(() => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const w = window as any
-      const originalEmit = w.__demoClient.emitSDK.bind(w.__demoClient)
-      w.__reactionDeliveries = 0
-      w.__demoClient.emitSDK = (event: string, data: { messageId?: string; updates?: { reactions?: unknown } }) => {
-        if (data.messageId === messageId && data.updates?.reactions) w.__reactionDeliveries += 1
-        return originalEmit(event, data)
-      }
-      await new Promise<void>(resolve => {
+      return (window as any).__demoClient.emitSDK
+    })
+    try {
+      const result = withPinWindow(page, {
+        trigger: 'new-message', messageId: id, controlledFrames: true,
+        steps: [
+          {
+            label: 'preview committed', afterFrames: 1,
+            commitSelector: `a[href="${url}"]`,
+            sdkUpdate: {
+              conversationId: AVA, messageId: id,
+              updates: { linkPreview: { url, title: 'Preview closure fixture', siteName: 'example.invalid' } },
+            },
+          },
+          {
+            label: 'reaction committed', afterFrames: 1,
+            commitSelector: '[data-reaction-emoji]',
+            sdkUpdate: {
+              conversationId: AVA, messageId: id,
+              updates: { reactions: { '\u{1F44D}': ['someone@fluux.chat'] } },
+            },
+          },
+        ],
+      }, () => page.evaluate(({ conversationId, messageId, url }) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = window as any
+        const originalEmit = w.__demoClient.emitSDK.bind(w.__demoClient)
+        w.__reactionDeliveries = 0
+        w.__demoClient.emitSDK = (event: string, data: { messageId?: string; updates?: { reactions?: unknown } }) => {
+          if (data.messageId === messageId && data.updates?.reactions) w.__reactionDeliveries += 1
+          return originalEmit(event, data)
+        }
         const observer = new MutationObserver(() => {
           if (!document.querySelector(`[data-message-id="${CSS.escape(messageId)}"] a[href="${url}"]`)) return
           observer.disconnect()
           w.__fluuxPinModelObserve(['[Scroll] PIN completed', {
             trigger: 'new-message', outcome: 'settled', distFromBottom: 0,
           }])
-          requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
         })
         observer.observe(document.querySelector('[data-message-list]')!, { childList: true, subtree: true })
         originalEmit('chat:message', {
@@ -2484,17 +2500,29 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
             timestamp: new Date(), isOutgoing: false,
           },
         })
-      })
-      w.__demoClient.emitSDK = originalEmit
-    }, { conversationId: AVA, messageId: id, url }))
-    await expect(result).rejects.toThrow(/pin-window premise:.*after only 1\/2 modelled steps/)
-    await expect(page.locator(`[data-message-id="${id}"] a[href="${url}"]`)).toHaveCount(1)
-    await expect(page.locator(`[data-message-id="${id}"] [data-reaction-emoji]`)).toHaveCount(0)
-    expect(await page.evaluate(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const w = window as any
-      return { deliveries: w.__reactionDeliveries, steps: w.__fluuxPinModel.stepsRun, completion: w.__fluuxPinModel.completion }
-    })).toEqual({ deliveries: 0, steps: ['preview committed'], completion: null })
+      }, { conversationId: AVA, messageId: id, url }))
+      await expect(result).rejects.toThrow(/pin-window premise:.*after only 1\/2 modelled steps/)
+      // withPinWindow has resumed the clock. Let canceled queued deliveries have their chance.
+      await page.evaluate(() => new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+      }))
+      await expect(page.locator(`[data-message-id="${id}"] a[href="${url}"]`)).toHaveCount(1)
+      await expect(page.locator(`[data-message-id="${id}"] [data-reaction-emoji]`)).toHaveCount(0)
+      expect(await page.evaluate(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = window as any
+        return { deliveries: w.__reactionDeliveries, steps: w.__fluuxPinModel.stepsRun, completion: w.__fluuxPinModel.completion }
+      })).toEqual({ deliveries: 0, steps: ['preview committed'], completion: null })
+    } finally {
+      try {
+        await originalEmit.evaluate(emit => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(window as any).__demoClient.emitSDK = emit
+        })
+      } finally {
+        await originalEmit.dispose()
+      }
+    }
   })
 
   test('an active pin loop absorbs a burst of in-place changes on the same row', async ({ page }, testInfo) => {
@@ -2506,7 +2534,7 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
     const id = `pending-${Date.now()}`
     const url = `https://example.invalid/${id}`
     await enableScrollTrace(page)
-    await armPinBurst(page, id, url)
+    await armPinBurst(page, id, url, 'playwright-controlled-performance')
     try {
       await withPinWindow(page, {
         trigger: 'new-message', messageId: id, controlledFrames: true,

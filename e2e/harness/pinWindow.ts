@@ -85,11 +85,9 @@ interface PinModelState {
 }
 
 /**
- * Budget for a pin to start and finish once the stimulus has been applied. The wait it bounds is
- * frame-counted (60 re-assert frames at most), so this only has to cover those frames at a very
- * low frame rate — 30s is 60 frames at 2fps, far below any healthy runner. It is a hang ceiling,
- * not a convergence allowance: every premise breach below throws immediately instead of burning it,
- * and reaching it means no pin ever started or none ever ended, both of which are reported as such.
+ * Hang ceiling after the stimulus returns, not a convergence allowance. Native models wait on
+ * browser frames; controlled SDK models also spend this budget waiting for real DOM commits while
+ * frames are paused. Every observed premise breach still throws immediately.
  */
 const PIN_TERMINAL_TIMEOUT_MS = 30_000
 
@@ -387,7 +385,6 @@ export async function withPinWindow(
   spec: PinModelSpec,
   stimulus: () => Promise<void>,
 ): Promise<PinOutcome> {
-  let applying: Promise<void> | undefined
   try {
     if (spec.controlledFrames) {
       // Freeze Date first so the pause target cannot fall behind during a loaded protocol trip.
@@ -397,37 +394,20 @@ export async function withPinWindow(
       await page.clock.pauseAt(now)
     }
     await armPinModel(page, spec)
-    let stimulusDone = false
-    let stimulusFailed = false
-    let stimulusError: unknown
-    // A stimulus may itself await frames (the early-closure negative control does). Drive it and
-    // the probe together, retaining its error immediately so it can never be an unhandled rejection.
-    applying = Promise.resolve().then(stimulus).then(() => {
-      stimulusDone = true
-    }, error => {
-      stimulusFailed = true
-      stimulusError = error
-      stimulusDone = true
-    })
-    // Preserve native callers' original sequencing; only the controlled mode must drive frames
-    // while the stimulus is still pending.
-    if (!spec.controlledFrames) await applying
+    // The stimulus applies the event; frame waits belong to the model or to the caller afterward.
+    await stimulus()
     const deadline = Date.now() + PIN_TERMINAL_TIMEOUT_MS
     for (;;) {
-      if (stimulusFailed) throw stimulusError
       const state = await readPinModel(page)
       const diagnosis = diagnose(state, spec)
-      if (diagnosis.kind === 'terminal' && stimulusDone) {
+      if (diagnosis.kind === 'terminal') {
         return diagnosis.completion.outcome as PinOutcome
       }
       if (diagnosis.kind === 'premise') {
         throw new Error(`pin-window premise: ${diagnosis.message}`)
       }
       if (Date.now() >= deadline) {
-        const message = diagnosis.kind === 'terminal'
-          ? 'the pin finished but the stimulus did not'
-          : diagnosis.message
-        throw new Error(`pin-window timeout after ${PIN_TERMINAL_TIMEOUT_MS}ms: ${message}`)
+        throw new Error(`pin-window timeout after ${PIN_TERMINAL_TIMEOUT_MS}ms: ${diagnosis.message}`)
       }
       if (spec.controlledFrames && !state?.waitingForCommit) {
         // One clock frame; actual IndexedDB, React commits and browser layout remain native.
@@ -444,6 +424,5 @@ export async function withPinWindow(
       await page.clock.setSystemTime(await page.evaluate(() => Date.now()))
       await page.clock.resume()
     }
-    await applying
   }
 }
