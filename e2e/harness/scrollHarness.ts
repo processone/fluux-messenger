@@ -190,13 +190,14 @@ export async function assertScrollShadow({ page }: { page: Page }): Promise<void
  *
  * Use the test's budget for convergence under load, and require rendered messages from the
  * requested room: an old chat's rows do not prove that React has shown the room yet.
+ * Other room fixtures can supply their destination instead of the default stress room.
  */
-export async function navigateToStressRoom(page: Page, virtualized = true): Promise<void> {
+export async function navigateToStressRoom(page: Page, virtualized = true, roomJid = STRESS_ROOM_JID): Promise<void> {
   await page.evaluate((jid) => {
     const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
     void store.getState().activateRoom(jid)
     window.location.hash = '#/rooms/' + encodeURIComponent(jid)
-  }, STRESS_ROOM_JID)
+  }, roomJid)
 
   await page.waitForFunction(({ jid, virtualized }) => {
     const state = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
@@ -212,7 +213,7 @@ export async function navigateToStressRoom(page: Page, virtualized = true): Prom
       return ids.has(row.dataset.messageId!) && rect.width > 0 && rect.height > 0 &&
         rect.bottom > bounds.top && rect.top < bounds.bottom
     })
-  }, { jid: STRESS_ROOM_JID, virtualized }, { timeout: 0 })
+  }, { jid: roomJid, virtualized }, { timeout: 0 })
   await settle(page)
 }
 
