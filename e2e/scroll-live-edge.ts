@@ -760,13 +760,17 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     await expect(list).not.toHaveAttribute('data-message-interaction')
   })
 
-  test('a finger on the list holds the view until it lifts, then the band re-pins', async ({ page }) => {
+  test('a finger on the list holds the view until it lifts, then the band re-pins', async ({ page }, testInfo) => {
     // A reader who puts a finger down at the edge and drags a little is still inside the at-bottom
     // band, where every ambient stimulus re-pins. Under the finger that re-pin is a fight: the view
     // snaps back each time a row changes height. Plain events carrying a `touches` list stand in for
     // a touch, since desktop WebKit has no Touch constructor; the list reads nothing else.
     const DRAG_PX = 60
     await enterAtBottom(page)
+    // This models a short gesture, not the lost-touchend expiry. Loaded protocol trips and the
+    // two settlement waits must not age the held-input lease; timers and real layout still run.
+    const gestureClock = await page.evaluate(() => ({ date: Date.now(), started: performance.now() }))
+    await page.clock.setFixedTime(gestureClock.date)
 
     const touch = (type: string, clientY: number | null) => page.evaluate(([kind, y]) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement
@@ -792,15 +796,23 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     await setTyping(page, true)
     await page.waitForSelector('[data-typing-pill]', { timeout: 5_000 })
     await settle(page)
+    const underFinger = await readGeometry(page)
     expect(
-      Math.abs((await readGeometry(page)).scrollTop - held.scrollTop),
+      Math.abs(underFinger.scrollTop - held.scrollTop),
       'an ambient re-pin moved the view under the reader\'s finger',
     ).toBeLessThanOrEqual(2)
 
     await touch('touchend', null)
     await settle(page)
+    const released = await readGeometry(page)
+    await testInfo.attach('held-touch-geometry', {
+      body: JSON.stringify({ held, underFinger, released, clock: await page.evaluate(start => ({
+        gestureElapsedMs: Date.now() - start.date,
+        realElapsedMs: performance.now() - start.started,
+      }), gestureClock) }), contentType: 'application/json',
+    })
     expect(
-      (await readGeometry(page)).distFromBottom,
+      released.distFromBottom,
       'the re-pin refused under the finger was not replayed when it lifted inside the band',
     ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
   })
@@ -2419,6 +2431,7 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
   const AVA = 'ava@fluux.chat'
 
   test('pin-window rejects closure during the preview commit and cancels the reaction', async ({ page }) => {
+    await page.clock.install()
     await loadDemo(page)
     await activateChat(page, AVA)
     await scrollToBottom(page)
@@ -2426,7 +2439,7 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
     const id = `early-preview-${Date.now()}`
     const url = `https://example.invalid/${id}`
     const result = withPinWindow(page, {
-      trigger: 'new-message', messageId: id,
+      trigger: 'new-message', messageId: id, controlledFrames: true,
       steps: [
         {
           label: 'preview committed', afterFrames: 1,
@@ -2485,6 +2498,7 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
   })
 
   test('an active pin loop absorbs a burst of in-place changes on the same row', async ({ page }, testInfo) => {
+    await page.clock.install()
     await loadDemo(page)
     await activateChat(page, AVA)
     await scrollToBottom(page)
@@ -2495,7 +2509,7 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
     await armPinBurst(page, id, url)
     try {
       await withPinWindow(page, {
-        trigger: 'new-message', messageId: id,
+        trigger: 'new-message', messageId: id, controlledFrames: true,
         steps: [
           {
             label: 'preview committed', afterFrames: 1,
