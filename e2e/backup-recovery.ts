@@ -85,13 +85,13 @@ async function waitingMessageState(page: Page) {
   })
 }
 
-/** Key installation closes the dialog before its automatic deferred decrypt
- * finishes. Observe that transition on the fixture message, not on the dialog
- * or an unrelated plaintext row; only rendering then uses the assertion budget. */
+/** Restoring or unlocking the key starts an automatic deferred decrypt that
+ * may outlast the initiating dialog. Observe the fixture message's transition,
+ * not the dialog or an unrelated plaintext row, before checking rendering. */
 async function expectWaitingMessageDecrypted(page: Page) {
-  await test.step('Wait for the restored key to decrypt recovery-waiting', async () => {
+  await test.step('Wait for the available key to decrypt recovery-waiting', async () => {
     await expect.poll(() => waitingMessageState(page), {
-      timeout: 30_000, message: 'The restored key must automatically decrypt the waiting message',
+      timeout: 30_000, message: 'The available key must automatically decrypt the waiting message',
     }).toEqual({ body: meta.plaintext, pending: false })
     await expect(page.locator('[data-message-id="recovery-waiting"]').getByText(meta.plaintext, { exact: true })).toBeVisible()
   })
@@ -557,7 +557,7 @@ test('a real multi-key backup requires the intended fingerprint before installat
   await capture(page, 'multi-key-confirmation.png')
   await page.getByRole('button', { name: 'Use this key', exact: true }).click()
   await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
-  await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
+  await expectWaitingMessageDecrypted(page)
   expect((await audit(page)).commands.filter((cmd: string) => cmd === 'openpgp_backup_import_selected')).toHaveLength(1)
 })
 
@@ -668,7 +668,7 @@ test('the advanced keychain retry asks macOS only on request and unlocks the sam
   expect(await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').getOwnFingerprint())).toBe(fingerprint)
 
   await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
-  await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
+  await expectWaitingMessageDecrypted(page)
   await capture(page, 'after-keychain-decrypted-message.png')
 
   await reloadDemo(page)
@@ -770,7 +770,7 @@ for (const entry of ['startup', 'Settings']) {
       await capture(page, 'after-desync-keychain-unlocked-settings.png')
     } else {
       await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
-      await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
+      await expectWaitingMessageDecrypted(page)
       await capture(page, 'after-desync-keychain-decrypted-message.png')
     }
   })
