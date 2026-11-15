@@ -77,6 +77,26 @@ async function previewServer(page: Page) {
   await expect(page.getByText(fingerprint, { exact: true })).toBeVisible()
 }
 
+async function waitingMessageState(page: Page) {
+  return page.evaluate(() => {
+    const message = (window as any).__chatStore.getState().messages.get('ava@fluux.chat')
+      ?.find((message: { id: string }) => message.id === 'recovery-waiting')
+    return message ? { body: message.body, pending: !!message.encryptedPayload } : null
+  })
+}
+
+/** Restoring or unlocking the key starts an automatic deferred decrypt that
+ * may outlast the initiating dialog. Observe the fixture message's transition,
+ * not the dialog or an unrelated plaintext row, before checking rendering. */
+async function expectWaitingMessageDecrypted(page: Page) {
+  await test.step('Wait for the available key to decrypt recovery-waiting', async () => {
+    await expect.poll(() => waitingMessageState(page), {
+      timeout: 30_000, message: 'The available key must automatically decrypt the waiting message',
+    }).toEqual({ body: meta.plaintext, pending: false })
+    await expect(page.locator('[data-message-id="recovery-waiting"]').getByText(meta.plaintext, { exact: true })).toBeVisible()
+  })
+}
+
 for (const source of ['server', 'file']) {
   test(`guided ${source} restore previews, confirms and refreshes Settings without replacing its backup`, async ({ page }) => {
     await openRecovery(page)
@@ -114,7 +134,7 @@ for (const source of ['server', 'file']) {
     await page.getByRole('button', { name: 'Use this key', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Confirm restored key', exact: true })).toBeHidden()
     await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
-    await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
+    await expectWaitingMessageDecrypted(page)
     await capture(page, `after-${source}-decrypted-message.png`)
     expect((await audit(page)).commands.filter((cmd: string) => cmd === 'openpgp_backup_import_selected')).toHaveLength(1)
     expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
@@ -130,7 +150,7 @@ for (const source of ['server', 'file']) {
     await page.evaluate(() => { location.hash = '/settings/encryption' })
     await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()
     await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
-    await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
+    await expectWaitingMessageDecrypted(page)
     expect((await audit(page)).commands).not.toContain('openpgp_backup_import_selected')
   })
 }
@@ -494,7 +514,7 @@ test('a real multi-key backup requires the intended fingerprint before installat
   await capture(page, 'multi-key-confirmation.png')
   await page.getByRole('button', { name: 'Use this key', exact: true }).click()
   await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
-  await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
+  await expectWaitingMessageDecrypted(page)
   expect((await audit(page)).commands.filter((cmd: string) => cmd === 'openpgp_backup_import_selected')).toHaveLength(1)
 })
 
@@ -605,7 +625,7 @@ test('the advanced keychain retry asks macOS only on request and unlocks the sam
   expect(await page.evaluate(() => (window as any).__demoClient.e2ee.getPlugin('openpgp').getOwnFingerprint())).toBe(fingerprint)
 
   await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
-  await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
+  await expectWaitingMessageDecrypted(page)
   await capture(page, 'after-keychain-decrypted-message.png')
 
   await reloadDemo(page)
@@ -707,7 +727,7 @@ for (const entry of ['startup', 'Settings']) {
       await capture(page, 'after-desync-keychain-unlocked-settings.png')
     } else {
       await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
-      await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
+      await expectWaitingMessageDecrypted(page)
       await capture(page, 'after-desync-keychain-decrypted-message.png')
     }
   })
