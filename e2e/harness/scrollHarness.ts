@@ -183,39 +183,36 @@ export async function assertScrollShadow({ page }: { page: Page }): Promise<void
   ).toBe(0)
 }
 
-/** Navigate to the stress room and wait for virtual rows to appear.
+/**
+ * Publish room activation and its route in the same task, as activateChat does. Awaiting
+ * hydration on the old Messages route lets a delayed URL sync cancel the pending room,
+ * leaving the helper waiting for an activation that no longer owns the store.
  *
- * Race-condition note: the hash change to `#/rooms/<jid>` fires ChatLayout's
- * auto-select-first-room effect (which sees `activeRoomJid=null` while our
- * `activateRoom` awaits `loadMessagesFromCache`) and the auto-select picks a
- * different room with a higher `activationToken`.
- *
- * Fix: pre-activate the room WHILE still in the messages sidebar (sidebarView=
- * 'messages'), so the rooms auto-select guard fires with `activeRoomJid` already
- * set when we later flip the hash.
+ * Use the test's budget for convergence under load, and require rendered messages from the
+ * requested room: an old chat's rows do not prove that React has shown the room yet.
  */
 export async function navigateToStressRoom(page: Page, virtualized = true): Promise<void> {
-  // Step 1: activate while sidebarView='messages' (auto-select for rooms won't race)
   await page.evaluate((jid) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (window as any).__roomStore?.getState?.()?.activateRoom(jid)
-  }, STRESS_ROOM_JID)
-
-  // Step 2: confirm activation before switching to the rooms sidebar
-  await page.waitForFunction((jid) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (window as any).__roomStore?.getState?.()?.activeRoomJid === jid
-  }, STRESS_ROOM_JID, { timeout: 10_000 })
-
-  // Step 3: now flip the hash — auto-select sees activeRoomJid set and bails
-  await page.evaluate((jid) => {
+    const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+    void store.getState().activateRoom(jid)
     window.location.hash = '#/rooms/' + encodeURIComponent(jid)
   }, STRESS_ROOM_JID)
 
-  await page.waitForSelector(
-    virtualized ? '[data-index]' : '.message-row[data-message-id]',
-    { timeout: 15_000 },
-  )
+  await page.waitForFunction(({ jid, virtualized }) => {
+    const state = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
+    if (state.activeRoomJid !== jid || state.activationPending ||
+      window.location.hash !== '#/rooms/' + encodeURIComponent(jid)) return false
+    const list = document.querySelector('[data-message-list]')
+    const bounds = list?.getBoundingClientRect()
+    if (!list || !bounds || bounds.width <= 0 || bounds.height <= 0) return false
+    const ids = new Set(state.messages.get(jid)?.map(message => message.id))
+    const selector = virtualized ? '[data-index] .message-row[data-message-id]' : '.message-row[data-message-id]'
+    return Array.from(list.querySelectorAll<HTMLElement>(selector)).some(row => {
+      const rect = row.getBoundingClientRect()
+      return ids.has(row.dataset.messageId!) && rect.width > 0 && rect.height > 0 &&
+        rect.bottom > bounds.top && rect.top < bounds.bottom
+    })
+  }, { jid: STRESS_ROOM_JID, virtualized }, { timeout: 0 })
   await settle(page)
 }
 
