@@ -77,6 +77,26 @@ async function previewServer(page: Page) {
   await expect(page.getByText(fingerprint, { exact: true })).toBeVisible()
 }
 
+async function waitingMessageState(page: Page) {
+  return page.evaluate(() => {
+    const message = (window as any).__chatStore.getState().messages.get('ava@fluux.chat')
+      ?.find((message: { id: string }) => message.id === 'recovery-waiting')
+    return message ? { body: message.body, pending: !!message.encryptedPayload } : null
+  })
+}
+
+/** Key installation closes the dialog before its automatic deferred decrypt
+ * finishes. Observe that transition on the fixture message, not on the dialog
+ * or an unrelated plaintext row; only rendering then uses the assertion budget. */
+async function expectWaitingMessageDecrypted(page: Page) {
+  await test.step('Wait for the restored key to decrypt recovery-waiting', async () => {
+    await expect.poll(() => waitingMessageState(page), {
+      timeout: 30_000, message: 'The restored key must automatically decrypt the waiting message',
+    }).toEqual({ body: meta.plaintext, pending: false })
+    await expect(page.locator('[data-message-id="recovery-waiting"]').getByText(meta.plaintext, { exact: true })).toBeVisible()
+  })
+}
+
 for (const source of ['server', 'file']) {
   test(`guided ${source} restore previews, confirms and refreshes Settings without replacing its backup`, async ({ page }) => {
     await openRecovery(page)
@@ -114,7 +134,7 @@ for (const source of ['server', 'file']) {
     await page.getByRole('button', { name: 'Use this key', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Confirm restored key', exact: true })).toBeHidden()
     await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
-    await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
+    await expectWaitingMessageDecrypted(page)
     await capture(page, `after-${source}-decrypted-message.png`)
     expect((await audit(page)).commands.filter((cmd: string) => cmd === 'openpgp_backup_import_selected')).toHaveLength(1)
     expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
@@ -130,10 +150,53 @@ for (const source of ['server', 'file']) {
     await page.evaluate(() => { location.hash = '/settings/encryption' })
     await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()
     await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
-    await expect(page.getByText(meta.plaintext, { exact: true }).last()).toBeVisible()
+    await expectWaitingMessageDecrypted(page)
     expect((await audit(page)).commands).not.toContain('openpgp_backup_import_selected')
   })
 }
+
+test('guided server restore waits for a deferred decrypt longer than the default assertion budget', async ({ page }) => {
+  await openRecovery(page)
+  await previewServer(page)
+  await page.evaluate(() => {
+    const w = window as any, plugin = w.__demoClient.e2ee.getPlugin('openpgp')
+    const invoke = plugin.invoke.bind(plugin)
+    const held = new Promise<void>(resolve => { w.__releaseRecoveryDecrypt = resolve })
+    plugin.invoke = async (cmd: string, args: unknown) => {
+      if (cmd === 'openpgp_decrypt') {
+        w.__recoveryDecryptHeld = true
+        await held
+      }
+      return invoke(cmd, args)
+    }
+  })
+  await page.getByRole('button', { name: 'Use this key', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Confirm restored key', exact: true })).toBeHidden()
+  await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
+  await expect.poll(() => page.evaluate(() => (window as any).__recoveryDecryptHeld), { timeout: 30_000 }).toBe(true)
+
+  const started = Date.now()
+  let settled = false
+  const waiting = expectWaitingMessageDecrypted(page).then(
+    () => { settled = true; return null },
+    error => { settled = true; return error as Error },
+  )
+  // Deliberate fault-injection latency, not a settling sleep: the automatic
+  // decrypt is held past Playwright's five-second assertion default.
+  await new Promise(resolve => setTimeout(resolve, 6_000))
+  expect(settled, 'The wait must stay pending while decryption is held').toBe(false)
+  expect(await waitingMessageState(page)).toEqual({ body: '[could not decrypt]', pending: true })
+  await expect(page.locator('[data-message-id="recovery-waiting"]').getByText(meta.plaintext, { exact: true })).toBeHidden()
+  const heldMs = Date.now() - started
+  await page.evaluate(() => (window as any).__releaseRecoveryDecrypt())
+  const failure = await waiting
+  if (failure) throw failure
+  expect((await audit(page)).commands.filter((cmd: string) => cmd === 'openpgp_backup_import_selected')).toHaveLength(1)
+  expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
+  await test.info().attach('delayed-decrypt-observation', { contentType: 'application/json', body: JSON.stringify({
+    heldMs, pendingWhileHeld: true, automaticallyDecrypted: true, messageId: 'recovery-waiting',
+  }) })
+})
 
 /** R1: demo.tsx clears every fluux:* marker on reload, while the fixture
  * retains its installed key and encrypted server backup. This is a reset,
