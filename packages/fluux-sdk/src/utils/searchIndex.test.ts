@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi, expectTypeOf } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, onTestFinished, vi, expectTypeOf } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { openDB } from 'idb'
@@ -1181,6 +1181,7 @@ describe('searchIndex', () => {
         if (++calls === failAt) return Promise.reject(new Error('transient lookup failure'))
         return resolve(...args)
       })
+      onTestFinished(() => { fault.mockRestore() })
       const progress: number[] = []
       const operation = mode === 'backfill' ? backfillFromMessageCache() : rebuildSearchIndex(p => progress.push(p.indexed))
       await expect(operation).rejects.toThrow('transient lookup failure')
@@ -1189,7 +1190,6 @@ describe('searchIndex', () => {
       try { expect(await db.get('search-meta', 'backfill-complete')).toBeUndefined() }
       finally { db.close() }
       expect(await search('searchable', { limit: 1000 })).toHaveLength(failAt === 11 ? 500 : 0)
-      fault.mockRestore()
       await closeSearchIndex(); _resetMessageCacheDB()
       await backfillFromMessageCache()
       expect(await search('searchable', { limit: 1000 })).toHaveLength(552)
