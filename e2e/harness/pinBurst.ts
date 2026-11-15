@@ -1,8 +1,16 @@
 import type { Page, TestInfo } from '@playwright/test'
 
-/** Capture SDK emissions, DOM commits and the pin's scroll-decision trace. */
-export async function armPinBurst(page: Page, messageId: string, previewUrl: string): Promise<void> {
-  await page.evaluate(({ messageId, previewUrl }) => {
+/**
+ * Capture SDK emissions, DOM commits and scroll decisions. Every `at` uses page performance time;
+ * a controlled clock pauses between model frames, so those timestamps are not wall-clock latency.
+ */
+export async function armPinBurst(
+  page: Page,
+  messageId: string,
+  previewUrl: string,
+  clockDomain: 'native-performance' | 'playwright-controlled-performance',
+): Promise<void> {
+  await page.evaluate(({ messageId, previewUrl, clockDomain }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any
     const events: Array<Record<string, unknown>> = []
@@ -73,6 +81,7 @@ export async function armPinBurst(page: Page, messageId: string, previewUrl: str
     const observer = new MutationObserver(scanCommits)
     observer.observe(document.querySelector('[data-message-list]')!, { childList: true, subtree: true, attributes: true })
     w.__fluuxPinBurst = {
+      clockDomain,
       events,
       stop: () => {
         record('pin model', w.__fluuxPinModel)
@@ -83,18 +92,19 @@ export async function armPinBurst(page: Page, messageId: string, previewUrl: str
       },
     }
     record('armed')
-  }, { messageId, previewUrl })
+  }, { messageId, previewUrl, clockDomain })
 }
 
 export async function finishPinBurst(page: Page, testInfo: TestInfo): Promise<void> {
-  const events = await page.evaluate(() => {
+  const trace = await page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const probe = (window as any).__fluuxPinBurst
     probe.stop()
-    return probe.events as Array<{ event: string; active: boolean }>
+    return { clockDomain: probe.clockDomain as string, timestampUnit: 'milliseconds',
+      events: probe.events as Array<{ event: string; active: boolean }> }
   })
   await testInfo.attach('pin-burst-scroll-trace', {
-    body: JSON.stringify(events, null, 2), contentType: 'application/json',
+    body: JSON.stringify(trace, null, 2), contentType: 'application/json',
   })
-  if (events.some(event => event.event === 'probe error')) throw new Error('pin-burst scroll trace could not be captured')
+  if (trace.events.some(event => event.event === 'probe error')) throw new Error('pin-burst scroll trace could not be captured')
 }

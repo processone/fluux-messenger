@@ -50,6 +50,12 @@ export interface PinModelSpec {
   messageId?: string
   /** Empty (the default) simply waits out the pin without modelling anything. */
   steps?: PinGrowthStep[]
+  /**
+   * Pace this SDK model one clock frame at a time, leaving frames paused while a real DOM commit
+   * is pending. Install page.clock before loading the demo. Ordinary engine-event models keep
+   * native timing; this mode isolates pin overlap from asynchronous cache-persistence latency.
+   */
+  controlledFrames?: boolean
 }
 
 interface PinCompletionRecord {
@@ -68,6 +74,8 @@ interface PinModelState {
   supersededCount: number
   stepsRun: string[]
   stepsTotal: number
+  /** SDK delivery is in flight; do not advance the controlled model's next frame until it commits. */
+  waitingForCommit: boolean
   /** Set when a step could not be applied at all (scroller or row gone). */
   failedStep: string | null
   /** The pin ended while the model still had steps left — the window closed under the model. */
@@ -77,11 +85,9 @@ interface PinModelState {
 }
 
 /**
- * Budget for a pin to start and finish once the stimulus has been applied. The wait it bounds is
- * frame-counted (60 re-assert frames at most), so this only has to cover those frames at a very
- * low frame rate — 30s is 60 frames at 2fps, far below any healthy runner. It is a hang ceiling,
- * not a convergence allowance: every premise breach below throws immediately instead of burning it,
- * and reaching it means no pin ever started or none ever ended, both of which are reported as such.
+ * Hang ceiling after the stimulus returns, not a convergence allowance. Native models wait on
+ * browser frames; controlled SDK models also spend this budget waiting for real DOM commits while
+ * frames are paused. Every observed premise breach still throws immediately.
  */
 const PIN_TERMINAL_TIMEOUT_MS = 30_000
 
@@ -108,6 +114,7 @@ async function armPinModel(page: Page, spec: PinModelSpec): Promise<void> {
       supersededCount: 0,
       stepsRun: [] as string[],
       stepsTotal: steps.length,
+      waitingForCommit: false,
       failedStep: null as string | null,
       earlyCompletion: null as PinCompletionRecord | null,
       completion: null as PinCompletionRecord | null,
@@ -183,11 +190,13 @@ async function armPinModel(page: Page, spec: PinModelSpec): Promise<void> {
             pendingObserver?.disconnect()
             pendingObserver = null
             pendingCommit = null
+            state.waitingForCommit = false
             state.stepsRun.push(step.label)
             runStep(index + 1)
             return true
           }
           pendingCommit = committed
+          state.waitingForCommit = true
           pendingObserver = new MutationObserver(committed)
           pendingObserver.observe(s, { childList: true, subtree: true })
           w.__demoClient.emitSDK('chat:message-updated', step.sdkUpdate)
@@ -376,12 +385,21 @@ export async function withPinWindow(
   spec: PinModelSpec,
   stimulus: () => Promise<void>,
 ): Promise<PinOutcome> {
-  await armPinModel(page, spec)
   try {
+    if (spec.controlledFrames) {
+      // Freeze Date first so the pause target cannot fall behind during a loaded protocol trip.
+      // The clock was installed before navigation, so no application timer is orphaned.
+      const now = await page.evaluate(() => Date.now())
+      await page.clock.setFixedTime(now)
+      await page.clock.pauseAt(now)
+    }
+    await armPinModel(page, spec)
+    // The stimulus applies the event; frame waits belong to the model or to the caller afterward.
     await stimulus()
     const deadline = Date.now() + PIN_TERMINAL_TIMEOUT_MS
     for (;;) {
-      const diagnosis = diagnose(await readPinModel(page), spec)
+      const state = await readPinModel(page)
+      const diagnosis = diagnose(state, spec)
       if (diagnosis.kind === 'terminal') {
         return diagnosis.completion.outcome as PinOutcome
       }
@@ -389,13 +407,22 @@ export async function withPinWindow(
         throw new Error(`pin-window premise: ${diagnosis.message}`)
       }
       if (Date.now() >= deadline) {
-        throw new Error(
-          `pin-window timeout after ${PIN_TERMINAL_TIMEOUT_MS}ms: ${diagnosis.message}`,
-        )
+        throw new Error(`pin-window timeout after ${PIN_TERMINAL_TIMEOUT_MS}ms: ${diagnosis.message}`)
+      }
+      if (spec.controlledFrames && !state?.waitingForCommit) {
+        // One clock frame; actual IndexedDB, React commits and browser layout remain native.
+        // In particular, an SDK emission is not credited as a DOM commit and an early completion
+        // still fails diagnose(). No application callback or completion is intercepted here.
+        await page.clock.runFor(16)
       }
       await page.waitForTimeout(PIN_POLL_INTERVAL_MS)
     }
   } finally {
     await disarmPinModel(page).catch(() => {})
+    if (spec.controlledFrames) {
+      // Restore a progressing Date as well as timers before the caller's remaining assertions.
+      await page.clock.setSystemTime(await page.evaluate(() => Date.now()))
+      await page.clock.resume()
+    }
   }
 }
