@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi, expectTypeOf } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, onTestFinished, vi, expectTypeOf } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { openDB } from 'idb'
@@ -1169,32 +1169,40 @@ describe('searchIndex', () => {
   })
 
   describe.each(['chat', 'room'] as const)('%s failed search resolution', kind => {
-    it.each(['backfill', 'rebuild'].flatMap(mode => [1, 11].map(failAt => ({ mode, failAt }))))('retries $mode after lookup batch $failAt fails', async ({ mode, failAt }) => {
-      const rows = Array.from({ length: 552 }, (_, i) => kind === 'chat'
-        ? createChatMessage('peer@example.com', { id: `m-${String(i).padStart(3, '0')}`, body: 'searchable fixture', timestamp: new Date(i) })
-        : createRoomMessage('room@example.com', { id: `m-${String(i).padStart(3, '0')}`, body: 'searchable fixture', timestamp: new Date(i) }))
-      if (kind === 'chat') await messageCache.saveMessages(rows as StoredMessage[])
-      else await messageCache.saveRoomMessages(rows as RoomMessage[])
-      const resolve = messageCache.resolveMessagesForIndex
-      let calls = 0
-      const fault = vi.spyOn(messageCache, 'resolveMessagesForIndex').mockImplementation((...args) => {
-        if (++calls === failAt) return Promise.reject(new Error('transient lookup failure'))
-        return resolve(...args)
-      })
-      const progress: number[] = []
-      const operation = mode === 'backfill' ? backfillFromMessageCache() : rebuildSearchIndex(p => progress.push(p.indexed))
-      await expect(operation).rejects.toThrow('transient lookup failure')
-      expect(progress).toEqual(mode === 'rebuild' && failAt === 11 ? [500] : [])
-      const db = await openDB('fluux-search-index:test@example.com')
-      try { expect(await db.get('search-meta', 'backfill-complete')).toBeUndefined() }
-      finally { db.close() }
-      expect(await search('searchable', { limit: 1000 })).toHaveLength(failAt === 11 ? 500 : 0)
-      fault.mockRestore()
-      await closeSearchIndex(); _resetMessageCacheDB()
-      await backfillFromMessageCache()
-      expect(await search('searchable', { limit: 1000 })).toHaveLength(552)
-      setStorageScopeJid('other@example.com')
-      expect(await search('searchable')).toEqual([])
+    let pending: Promise<void> | undefined
+    // A test timeout does not stop its body; drain it before the next case resets shared storage.
+    // Vitest's existing hook timeout bounds the wait and reports a body that never settles.
+    afterEach(async () => { await pending?.catch(() => {}) })
+
+    it.each(['backfill', 'rebuild'].flatMap(mode => [1, 11].map(failAt => ({ mode, failAt }))))('retries $mode after lookup batch $failAt fails', ({ mode, failAt }) => {
+      pending = (async () => {
+        const rows = Array.from({ length: 552 }, (_, i) => kind === 'chat'
+          ? createChatMessage('peer@example.com', { id: `m-${String(i).padStart(3, '0')}`, body: 'searchable fixture', timestamp: new Date(i) })
+          : createRoomMessage('room@example.com', { id: `m-${String(i).padStart(3, '0')}`, body: 'searchable fixture', timestamp: new Date(i) }))
+        if (kind === 'chat') await messageCache.saveMessages(rows as StoredMessage[])
+        else await messageCache.saveRoomMessages(rows as RoomMessage[])
+        const resolve = messageCache.resolveMessagesForIndex
+        let calls = 0
+        const fault = vi.spyOn(messageCache, 'resolveMessagesForIndex').mockImplementation((...args) => {
+          if (++calls === failAt) return Promise.reject(new Error('transient lookup failure'))
+          return resolve(...args)
+        })
+        onTestFinished(() => { fault.mockRestore() })
+        const progress: number[] = []
+        const operation = mode === 'backfill' ? backfillFromMessageCache() : rebuildSearchIndex(p => progress.push(p.indexed))
+        await expect(operation).rejects.toThrow('transient lookup failure')
+        expect(progress).toEqual(mode === 'rebuild' && failAt === 11 ? [500] : [])
+        const db = await openDB('fluux-search-index:test@example.com')
+        try { expect(await db.get('search-meta', 'backfill-complete')).toBeUndefined() }
+        finally { db.close() }
+        expect(await search('searchable', { limit: 1000 })).toHaveLength(failAt === 11 ? 500 : 0)
+        await closeSearchIndex(); _resetMessageCacheDB()
+        await backfillFromMessageCache()
+        expect(await search('searchable', { limit: 1000 })).toHaveLength(552)
+        setStorageScopeJid('other@example.com')
+        expect(await search('searchable')).toEqual([])
+      })()
+      return pending
     })
   })
 
