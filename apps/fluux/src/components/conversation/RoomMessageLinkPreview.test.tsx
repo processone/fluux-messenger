@@ -244,6 +244,25 @@ describe('room link reader previews', () => {
     expect(screen.queryByText(target.body)).toBeNull()
   })
 
+  it('keeps the winning correction when an older canonical copy arrives after an unknown lookup', async () => {
+    roomStore.getState().addRoom(room)
+    const newer = { ...target, body: 'Latest verified quote', isEdited: true,
+      correctionTimestamp: Date.parse('2026-05-01T10:02:00Z'), correctionTimestampSource: 'delay',
+      correctionRevision: { ids: ['origin:newer-edit'], supersedes: [] } }
+    const older = { ...target, body: 'Older canonical quote', isEdited: true,
+      correctionTimestamp: Date.parse('2026-05-01T10:01:00Z'), correctionTimestampSource: 'delay',
+      correctionRevision: { ids: ['origin:older-edit'], supersedes: [] } }
+    read.mockResolvedValue({ kind: 'found', message: newer })
+    show()
+    await screen.findByText(newer.body)
+    resolveTarget.mockResolvedValueOnce({ kind: 'unknown' })
+    await act(async () => events.emit('room:message-updated', { roomJid: jid, messageId: target.id, updates: { body: 'Unconfirmed text', isEdited: true } }))
+    expect(screen.queryByText(newer.body)).toBeNull()
+    act(() => emitMessageCacheUpdate({ kind: 'room', conversationId: jid, account: 'alice@example.org', target: older }))
+    expect(await screen.findByText(newer.body)).toBeTruthy()
+    expect(screen.queryByText(older.body)).toBeNull()
+  })
+
   it('reestablishes a target from a matching canonical row after the initial read fails', async () => {
     roomStore.getState().addRoom(room)
     read.mockRejectedValueOnce(new Error('Archive lookup failed'))

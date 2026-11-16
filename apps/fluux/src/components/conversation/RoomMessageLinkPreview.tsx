@@ -76,7 +76,7 @@ function ReaderQuote({ target, formatTime, isDarkMode }: {
           if (!identity) continue
           if (result.kind === 'unknown') {
             if (event.canonicalTarget?.stanzaId !== target.stanzaId || event.canonicalTarget.roomJid !== target.roomJid) continue
-            result = { kind: 'found', message: event.canonicalTarget }
+            result = { kind: 'found', message: applyRoomMessagePreviewUpdate(identity, event, account, event.canonicalTarget) }
           } else result = await project(identity, event, controller.signal)
           if (result.kind === 'found') identity = result.message
         }
@@ -114,9 +114,11 @@ function ReaderQuote({ target, formatTime, isDarkMode }: {
         if (!current || !snapshot.current) return
         if (uncertain.current) {
           if (event.canonicalTarget?.stanzaId !== target.stanzaId || event.canonicalTarget.roomJid !== target.roomJid) return
-          snapshot.current = event.canonicalTarget
+          const restored = applyRoomMessagePreviewUpdate(snapshot.current, event, account, event.canonicalTarget)
+          if (restored === snapshot.current) return
+          snapshot.current = restored
           uncertain.current = false
-          setResolved({ account, result: event.canonicalTarget.isRetracted ? { kind: 'absent' } : { kind: 'found', message: event.canonicalTarget } })
+          setResolved({ account, result: restored.isRetracted ? { kind: 'absent' } : { kind: 'found', message: restored } })
           return
         }
         const result = await project(snapshot.current, event, controller.signal)
