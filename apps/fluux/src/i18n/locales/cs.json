@@ -1226,6 +1226,8 @@
         "title": "Konzole XMPP",
         "clear": "Vymazat záznamy",
         "export": "Exportovat log",
+        "exportBadgeDiagnostics": "Exportovat diagnostiku počítadel oznámení",
+        "exportBadgeDiagnosticsFailed": "Diagnostiku počítadel oznámení se nepodařilo uložit",
         "serverInfo": "Informace o serveru",
         "serverInformation": "Informace o serveru",
         "close": "Zavřít konzoli",

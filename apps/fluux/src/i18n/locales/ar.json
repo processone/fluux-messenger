@@ -1228,6 +1228,8 @@
         "title": "وحدة تحكم XMPP",
         "clear": "مسح السجلات",
         "export": "تصدير السجل",
+        "exportBadgeDiagnostics": "تصدير تشخيص شارات الإشعارات",
+        "exportBadgeDiagnosticsFailed": "تعذّر حفظ تشخيص شارات الإشعارات",
         "serverInfo": "معلومات الخادم",
         "serverInformation": "معلومات الخادم",
         "close": "إغلاق وحدة التحكم",

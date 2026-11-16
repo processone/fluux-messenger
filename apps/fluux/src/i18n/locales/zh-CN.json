@@ -1220,6 +1220,8 @@
         "title": "XMPP 控制台",
         "clear": "清除条目",
         "export": "导出日志",
+        "exportBadgeDiagnostics": "导出角标诊断",
+        "exportBadgeDiagnosticsFailed": "无法保存角标诊断",
         "serverInfo": "服务器信息",
         "serverInformation": "服务器信息",
         "close": "关闭控制台",

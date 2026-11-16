@@ -1226,6 +1226,8 @@
         "title": "Consól XMPP",
         "clear": "Glan iontrálacha",
         "export": "Easpórtáil logáil",
+        "exportBadgeDiagnostics": "Easpórtáil diagnóisic na suaitheantas",
+        "exportBadgeDiagnosticsFailed": "Níorbh fhéidir diagnóisic na suaitheantas a shábháil",
         "serverInfo": "Faisnéis freastalaí",
         "serverInformation": "Faisnéis an Fhreastalaí",
         "close": "Dún consól",

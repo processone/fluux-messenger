@@ -1220,6 +1220,8 @@
         "title": "XMPP 콘솔",
         "clear": "항목 지우기",
         "export": "로그 내보내기",
+        "exportBadgeDiagnostics": "배지 진단 내보내기",
+        "exportBadgeDiagnosticsFailed": "배지 진단을 저장할 수 없습니다",
         "serverInfo": "서버 정보",
         "serverInformation": "서버 정보",
         "close": "콘솔 닫기",

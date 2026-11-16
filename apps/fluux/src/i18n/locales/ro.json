@@ -1224,6 +1224,8 @@
         "title": "Consolă XMPP",
         "clear": "Șterge intrările",
         "export": "Exportă jurnalul",
+        "exportBadgeDiagnostics": "Exportă diagnosticul insignelor",
+        "exportBadgeDiagnosticsFailed": "Nu s-a putut salva diagnosticul insignelor",
         "serverInfo": "Info server",
         "serverInformation": "Informații server",
         "close": "Închide consola",

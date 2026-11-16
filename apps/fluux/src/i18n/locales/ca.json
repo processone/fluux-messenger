@@ -1224,6 +1224,8 @@
         "title": "Consola XMPP",
         "clear": "Neteja les entrades",
         "export": "Exporta el registre",
+        "exportBadgeDiagnostics": "Exporta el diagnòstic de les insígnies",
+        "exportBadgeDiagnosticsFailed": "No s’ha pogut desar el diagnòstic de les insígnies",
         "serverInfo": "Informació del servidor",
         "serverInformation": "Informació del servidor",
         "close": "Tanca la consola",

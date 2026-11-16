@@ -1224,6 +1224,8 @@
         "title": "XMPP konsolė",
         "clear": "Išvalyti įrašus",
         "export": "Eksportuoti žurnalą",
+        "exportBadgeDiagnostics": "Eksportuoti ženklelių diagnostiką",
+        "exportBadgeDiagnosticsFailed": "Nepavyko išsaugoti ženklelių diagnostikos",
         "serverInfo": "Serverio informacija",
         "serverInformation": "Serverio informacija",
         "close": "Uždaryti konsolę",

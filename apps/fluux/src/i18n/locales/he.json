@@ -1222,6 +1222,8 @@
         "title": "קונסולת XMPP",
         "clear": "ניקוי רשומות",
         "export": "ייצוא יומן",
+        "exportBadgeDiagnostics": "ייצוא אבחון תגי התראות",
+        "exportBadgeDiagnosticsFailed": "לא ניתן לשמור את אבחון תגי ההתראות",
         "serverInfo": "פרטי שרת",
         "serverInformation": "מידע על השרת",
         "close": "סגור קונסולה",
