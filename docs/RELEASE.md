@@ -34,7 +34,10 @@ After the existing signing/notarization action, each macOS job downloads its exa
 uploaded `.app.tar.gz` and runs `scripts/verify-macos-release.mjs`. This verifies
 strict signatures, communication/application/team entitlements covered by the
 embedded profile, signing-certificate membership, the unchanged 0.18.1 designated
-requirement, stapled notarization and `INSendMessageIntent`. It also requires the
+requirement, stapled notarization and `INSendMessageIntent`. The widget and Share
+extensions and `libFluuxWidgets.dylib` must be present, built for the archive's
+architecture, signed by the team's Developer ID with a timestamp and the hardened
+runtime, and both extensions must be sandboxed in the host's App Group. It also requires the
 main executable to survive ten seconds where the runner can execute the archive's
 architecture; otherwise it explicitly reports runtime proof missing. The verifier
 uses disposable extraction/home folders and never installs the app. Its `--launch`
@@ -43,6 +46,12 @@ verification omits that option: a scratch HOME does not isolate personal keychai
 fails the macOS job; `rename-assets` cannot update `latest.json` because it needs
 all build jobs to succeed. Uploaded downloads can already exist before this check;
 this gate protects updater metadata, not release-page visibility.
+
+The bundler notarizes the app but only signs the `.dmg` around it. Each macOS job
+then downloads its uploaded disk image, notarizes it with `notarytool` using the
+same `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID` secrets, staples the ticket,
+checks it with `stapler validate` and Gatekeeper (`spctl`), and re-uploads it in place.
+A rejected submission fails the job before the image is replaced.
 
 The feature is marked **Unreleased** until the next release is cut. Perform the
 local signed test before tagging the first release that carries the communication
