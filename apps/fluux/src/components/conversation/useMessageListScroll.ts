@@ -1176,8 +1176,9 @@ export function useMessageListScroll({
     const viewportRect = scroller.getBoundingClientRect()
     const rowRect = row.getBoundingClientRect()
     // Acquisition clears the bottom ref, so transfers must read the unchanged live geometry.
-    // The row's bottom can be visible even when a long message extends above the scrollport.
-    const keepTailVisible = windowAtLiveEdge !== false && getDistanceFromBottom(scroller) < 1 &&
+    // Include the same one-pixel endpoint as the interaction FAB: fractional WebKit layout can
+    // leave a pinned view there. A long row may extend above the scrollport while its bottom fits.
+    const keepTailVisible = windowAtLiveEdge !== false && getDistanceFromBottom(scroller) <= 1 &&
       rowId === lastMessageId && rowRect.bottom > viewportRect.top && rowRect.bottom <= viewportRect.bottom
     const request = controller.beginInteractionHold({
       conversationId,

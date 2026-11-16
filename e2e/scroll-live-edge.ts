@@ -2681,6 +2681,16 @@ test.describe('Incoming reaction under a stationary pointer', () => {
         }, { kind, jid, reading, mode })
         await scrollToBottom(page)
         await expect(page.locator(`.message-row[data-message-id="${lastId}"]`)).toBeInViewport()
+        // Replay the captured WebKit endpoint: a fractional row measurement left exactly one
+        // CSS pixel below the viewport, before pointer acquisition and without reader input.
+        const bottomReplay = mode === 'tall' ? await page.evaluate(async () => {
+          await document.fonts.ready
+          const list = document.querySelector<HTMLElement>('[data-message-list]')!
+          list.scrollTop = list.scrollHeight - list.clientHeight - 1
+          return { top: list.scrollTop, height: list.scrollHeight, client: list.clientHeight,
+            distance: list.scrollHeight - list.scrollTop - list.clientHeight }
+        }) : null
+        if (bottomReplay) expect(bottomReplay.distance).toBe(1)
         if (reading) await wheelAwayFromBottom(page, 150, -400)
         const targetId = reading ? await page.evaluate(() => {
           const list = document.querySelector('[data-message-list]')!
@@ -2777,7 +2787,7 @@ test.describe('Incoming reaction under a stationary pointer', () => {
             : { conversationId: jid, messageId: targetId, reactorJid: 'emma@fluux.chat', emojis: ['👍'], isLive: true })
         }), { kind, jid, targetId })
         await testInfo.attach('after-reaction', { body: await page.screenshot(), contentType: 'image/png' })
-        await testInfo.attach('reaction-frames', { body: JSON.stringify({ beforeTop, samples, trace }), contentType: 'application/json' })
+        await testInfo.attach('reaction-frames', { body: JSON.stringify({ bottomReplay, beforeTop, samples, trace }), contentType: 'application/json' })
         expect(samples).toHaveLength(20)
         if (reading) {
           expect(Math.max(...samples.map(s => Math.abs(s.top - beforeTop))), 'reaction arrival must preserve the pre-arrival reading anchor').toBeLessThanOrEqual(1)

@@ -392,8 +392,10 @@ Row-local subscriptions expose held membership without broadcasting each target 
 
 An `interaction` request holds the original row handle and the message body's top offset through
 the existing anchor executor and bounded controller frame loop. When the hold starts on a final
-row whose bottom is visible at the live bottom, it also captures that row's height. This includes
-rows taller than the scrollport and transfers from another held row at unchanged bottom geometry.
+row whose bottom is visible at the live bottom, it also captures that row's height. Acquisition
+includes the one-CSS-pixel endpoint, matching interaction jump-button visibility and integer
+rounding of fractional browser layout. This includes rows taller than the scrollport and transfers
+from another held row at unchanged bottom geometry.
 Growth of the held row (such as an incoming reaction) moves its top upward by that growth, keeping
 its bottom content visible before pointer departure. Viewport shrink alone does not move the
 held body. This still anchors the original row, not newly arriving messages; holds acquired while
