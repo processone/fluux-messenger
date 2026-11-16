@@ -390,8 +390,8 @@ export interface RoomBindings {
   reconcileHistoryMessages?: (messages: RoomMessage[], options?: { retractionsOnly?: boolean }) => Promise<RoomMessage[]>
   /** Lookup by the room's archive id without hydrating its resident window. */
   getMessageByArchiveId?: (roomJid: string, stanzaId: string) => Promise<RoomMessage | null>
-  /** Resolve the highest identity tier across resident, cached and detached copies. */
-  getMessageByReference?: (roomJid: string, reference: string, additional: readonly RoomMessage[]) => Promise<RoomMessage | null>
+  /** Resolve the highest identity tier across resident, cached and detached copies; qualify sender ids by from. */
+  getMessageByReference?: (roomJid: string, reference: string, additional: readonly RoomMessage[], from: string) => Promise<RoomMessage | null>
   /** Cache a bounded message-link context without advancing live coverage or read state. */
   saveMessageLinkContext?: (roomJid: string, messages: RoomMessage[]) => Promise<boolean>
   updateMessage: (roomJid: string, messageId: string, updates: Partial<RoomMessage>) => void

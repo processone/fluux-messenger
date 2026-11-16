@@ -37,7 +37,7 @@ afterEach(() => { roomStore.getState().reset(); setStorageScopeJid(null); vi.res
 
 // XEP-0313/RSM server boundary, shared by id lookup and context pages. The real
 // stores/cache own placement and read state; this stand-in owns only IQ replies.
-function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modification?: 'correction' | 'retraction', history = rows, targetReference?: string) {
+function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modification?: 'correction' | 'retraction' | 'correction-retraction', history = rows, targetReference?: string) {
   let collect: ((stanza: Element) => void) | undefined
   const emitSDK = vi.fn()
   const sendIQ = vi.fn(async (iq: Element) => {
@@ -61,9 +61,11 @@ function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modificati
           xml('message', { type: 'groupchat', from: row.from, id: row.id }, xml('body', {}, row.body),
             ...(row.originId ? [xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id: row.originId })] : []),
             ...(sharedLink ? [xml('reference', { xmlns: 'urn:xmpp:reference:0', type: 'data', uri: sharedLink })] : []),
-            ...(row === history[70] && modification ? [modification === 'correction'
+            ...(row === history[modification === 'correction-retraction' ? 60 : 70] && modification ? [modification !== 'retraction'
               ? xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: targetReference ?? history[40].id })
-              : xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: targetReference ?? history[40].stanzaId })] : []))))))
+              : xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: targetReference ?? history[40].stanzaId })] : []),
+            ...(modification === 'correction-retraction' && row === history[70]
+              ? [xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: history[60].stanzaId })] : []))))))
     const complete = before !== undefined ? page[0] === history[0] : page.at(-1) === history.at(-1)
     return xml('iq', { type: 'result' }, xml('fin', { xmlns: MAM_NS, complete: String(complete) },
       xml('set', { xmlns: RSM_NS }, xml('first', {}, page[0]?.stanzaId ?? ''), xml('last', {}, page.at(-1)?.stanzaId ?? ''))))
@@ -78,6 +80,40 @@ function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modificati
 // Intent: docs/URL_SCHEMES.md — locate order, bounded separate
 // archive stretch, absent versus failed outcomes and membership privacy.
 describe('linked room message lookup', () => {
+  it.each(['client', 'origin'] as const)('resolves a unique uncached %s reference through the actual sender-qualified reader', async tier => {
+    const quote = { ...rows[40], originId: 'team-update-origin' }
+    const reference = tier === 'client' ? quote.id : quote.originId
+    const h = harness()
+    expect(await h.mam.resolveRoomMessagePreviewTarget(quote, reference)).toMatchObject({ kind: 'found', message: { id: quote.id, stanzaId: quote.stanzaId } })
+    expect(await cache.getRoomMessages(ROOM)).toEqual([])
+    expect(h.emitSDK).not.toHaveBeenCalled()
+  })
+
+  it('resolves a known correction archive alias back to its original for live updates', async () => {
+    const h = harness(undefined, undefined, 'correction')
+    const quote = await h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)
+    expect(quote.kind).toBe('found')
+    if (quote.kind !== 'found') throw new Error('Expected reconstructed quote')
+    const canonical = await h.mam.resolveRoomMessagePreviewTarget(quote.message, rows[70].stanzaId)
+    expect(canonical).toMatchObject({ kind: 'found', message: { stanzaId: rows[40].stanzaId } })
+    if (canonical.kind !== 'found') throw new Error('Expected original target')
+    expect(applyRoomMessagePreviewUpdate(quote.message, { roomJid: ROOM, targetId: rows[70].stanzaId,
+      actorJid: rows[40].from }, ACCOUNT, canonical.message).isRetracted).toBe(true)
+  })
+
+  it('applies an archived retraction naming a correction alias from an earlier page', async () => {
+    const h = harness(undefined, undefined, 'correction-retraction')
+    expect(await h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toEqual({ kind: 'absent' })
+    expect(h.emitSDK).not.toHaveBeenCalled()
+    expect(await cache.getRoomMessages(ROOM)).toEqual([])
+  })
+
+  it('does not demote an unknown correction archive alias to a coincidentally equal client id', async () => {
+    const quote = { ...rows[40], id: rows[70].stanzaId }
+    const h = harness(undefined, undefined, 'correction', rows, rows[60].id)
+    expect(await h.mam.resolveRoomMessagePreviewTarget(quote, quote.id)).toEqual({ kind: 'unknown' })
+  })
+
   it.each(['cache', 'archive'] as const)('resolves a live reference against the %s archive tier before a detached client-id alias', async source => {
     const quote = { ...rows[40], id: rows[60].stanzaId }
     const other = rows[60]

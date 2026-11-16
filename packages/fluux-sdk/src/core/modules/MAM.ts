@@ -3494,11 +3494,15 @@ export class MAM extends BaseModule {
       await this.decryptArchiveEntryIfNeeded(entry.messageEl, roomJid, 'room', this.extractForwardedTimestamp(entry.forwarded), entry.archiveId)
       if (!current()) return { kind: 'unknown' }
       const target = this.parseRoomArchiveMessage(entry.forwarded, roomJid, roomSelf(this.deps.stores?.room.getRoom(roomJid)), entry.archiveId)
-      return target ? { kind: 'found', message: target } : { kind: 'unknown' }
+      if (target) return { kind: 'found', message: target }
+      if (!parseCorrectionSignal(entry.messageEl)) return { kind: 'unknown' }
     }
     if (!this.deps.stores?.room.getMessageByReference) return { kind: 'unknown' }
-    const target = await this.deps.stores.room.getMessageByReference(roomJid, reference, [message])
+    const target = await this.deps.stores.room.getMessageByReference(roomJid, reference, [message], message.from)
     if (!current()) return { kind: 'unknown' }
+    // A correction signal proves an archive-tier alias exists; do not demote
+    // that evidence to a coincidentally equal sender id on the detached quote.
+    if (found.kind === 'found' && (!target || !getCorrectionStanzaIds(target)?.includes(reference))) return { kind: 'unknown' }
     return target ? { kind: 'found', message: target } : { kind: 'absent' }
   }
 

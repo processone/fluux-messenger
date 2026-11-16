@@ -207,6 +207,55 @@ describe('room link reader previews', () => {
     expect(screen.queryByText(target.body)).toBeNull()
   })
 
+  it.each([
+    ['unknown', 'correction'], ['unknown', 'retraction'], ['rejected', 'correction'], ['rejected', 'retraction'],
+  ])('recovers after an %s update lookup through a committed %s', async (failure, recovery) => {
+    roomStore.getState().addRoom(room)
+    show()
+    await screen.findByText(target.body)
+    if (failure === 'unknown') resolveTarget.mockResolvedValueOnce({ kind: 'unknown' })
+    else resolveTarget.mockRejectedValueOnce(new Error('Archive lookup failed'))
+    await act(async () => events.emit('room:message-updated', { roomJid: jid, messageId: target.id,
+      updates: { body: 'Unconfirmed text', isEdited: true } }))
+    expect(screen.getByText('Open message in room')).toBeTruthy()
+    expect(screen.queryByText(target.body)).toBeNull()
+    await act(async () => events.emit('room:message-updated', { roomJid: jid, messageId: 'another-update', updates: { body: 'Unrelated text' } }))
+    expect(screen.queryByText(target.body)).toBeNull()
+    const committed = { ...target, body: recovery === 'correction' ? 'Confirmed replacement' : '',
+      isEdited: recovery === 'correction', isRetracted: recovery === 'retraction' }
+    act(() => emitMessageCacheUpdate({ kind: 'room', conversationId: jid, account: 'alice@example.org', target: committed }))
+    expect(await screen.findByText(recovery === 'correction' ? committed.body : 'Message deleted')).toBeTruthy()
+    expect(screen.queryByText('Unconfirmed text')).toBeNull()
+  })
+
+  it.each(['correction', 'retraction'])('retains an already queued canonical %s after a lookup becomes unknown', async recovery => {
+    roomStore.getState().addRoom(room)
+    show()
+    await screen.findByText(target.body)
+    let finish!: (result: { kind: 'unknown' }) => void
+    resolveTarget.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    act(() => events.emit('room:message-updated', { roomJid: jid, messageId: target.id, updates: { body: 'Unconfirmed text', isEdited: true } }))
+    await waitFor(() => expect(resolveTarget).toHaveBeenCalledTimes(1))
+    const committed = { ...target, body: recovery === 'correction' ? 'Queued committed replacement' : '',
+      isEdited: recovery === 'correction', isRetracted: recovery === 'retraction' }
+    act(() => emitMessageCacheUpdate({ kind: 'room', conversationId: jid, account: 'alice@example.org', target: committed }))
+    await act(async () => finish({ kind: 'unknown' }))
+    expect(await screen.findByText(recovery === 'correction' ? committed.body : 'Message deleted')).toBeTruthy()
+    expect(screen.queryByText(target.body)).toBeNull()
+  })
+
+  it('reestablishes a target from a matching canonical row after the initial read fails', async () => {
+    roomStore.getState().addRoom(room)
+    read.mockRejectedValueOnce(new Error('Archive lookup failed'))
+    show()
+    await act(async () => {})
+    const other = { ...target, stanzaId: '1731490000123500', body: 'Another target' }
+    act(() => emitMessageCacheUpdate({ kind: 'room', conversationId: jid, account: 'alice@example.org', target: other }))
+    expect(screen.queryByText(other.body)).toBeNull()
+    act(() => emitMessageCacheUpdate({ kind: 'room', conversationId: jid, account: 'alice@example.org', target: { ...target, body: 'Recovered canonical target' } }))
+    expect(await screen.findByText('Recovered canonical target')).toBeTruthy()
+  })
+
   it('ignores updates for other targets and retractions from a different author', async () => {
     roomStore.getState().addRoom(room)
     show()
