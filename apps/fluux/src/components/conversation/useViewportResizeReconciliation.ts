@@ -69,8 +69,9 @@ export function useViewportResizeReconciliation({
     }
   }, [staticMode])
 
-  // Composer height and conversation-column width changes arrive through ResizeObserver. Coalesce
-  // every burst into one frame so reconciliation never runs inside the observer delivery cycle.
+  // Composer height and conversation-column width changes arrive through ResizeObserver.
+  // Same-width shrink correction must finish before paint: deferring it to the next frame
+  // clips the latest text for one paint. Other changes remain frame-coalesced.
   // A settled message target keeps its own position when shrinking would clip it at the bottom.
   useEffect(() => {
     const scroller = portsRef.current.getScroller()
@@ -173,7 +174,12 @@ export function useViewportResizeReconciliation({
 
       pendingHeight = entries[0].contentRect.height
       pendingWidth = entries[0].contentRect.width
-      if (!scheduled) {
+      if (lastHeight !== null && pendingHeight < lastHeight && pendingWidth === lastWidth) {
+        // Use the existing controller, including its overflow/padding maintenance.
+        // Only same-width shrinks bypass coalescing; retain its ownership/reader vetoes.
+        if (rafId !== null) cancelAnimationFrame(rafId)
+        runCorrection()
+      } else if (!scheduled) {
         scheduled = true
         rafId = requestAnimationFrame(runCorrection)
       }

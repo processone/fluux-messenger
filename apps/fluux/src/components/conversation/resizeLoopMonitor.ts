@@ -10,9 +10,9 @@
  * logs.
  *
  * This monitor makes that failure mode VISIBLE. It does NOT break the loop
- * (no `disconnect()`); the rAF-coalescing of the correction already bounds the
- * expensive work to once per frame. It only emits a single, rate-limited log
- * line so the loop class finally shows up in `fluux.log`.
+ * (no `disconnect()`). Content and width corrections are frame-coalesced;
+ * same-width viewport shrinks reconcile before paint. This monitor emits a
+ * rate-limited log line for either path so feedback remains visible in `fluux.log`.
  *
  * Implemented as a pure, O(1)-per-fire fixed-window counter (no allocation on
  * the hot path — important, since it runs precisely when something is already
@@ -24,9 +24,8 @@ import type { AnomalySignal } from '@/utils/anomalySignal'
 /**
  * A detected runaway.
  *
- * `message` is the prose line, assembled here so it stays byte-identical to what
- * `fluux.log` has always carried; the numeric fields ride alongside it so the
- * dev-only anomaly log can record the observation structurally without re-parsing
+ * `message` is the prose line shared with `fluux.log`; the numeric fields ride
+ * alongside it so the dev-only anomaly log can record the observation without re-parsing
  * the prose. See `src/utils/anomalySignal.ts`.
  */
 export interface ResizeLoopWarning {
@@ -86,7 +85,7 @@ export function createResizeLoopMonitor(opts: ResizeLoopMonitorOptions = {}): Re
           message:
             `[ScrollResizeLoop] message-list ResizeObserver fired ${count} times in ${elapsed}ms ` +
             `(threshold ${threshold}/${windowMs}ms) — likely a WebKitGTK scroll-correction feedback loop. ` +
-            `Scroll correction is rAF-coalesced; this log is a diagnostic only.`,
+            `This log is a diagnostic only.`,
           fires: count,
           threshold,
           elapsedMs: elapsed,
@@ -102,9 +101,8 @@ export function createResizeLoopMonitor(opts: ResizeLoopMonitorOptions = {}): Re
  *
  * Lives here rather than at the call site because there are TWO observers using
  * this monitor — the content one and the scroller one — and a mapping written
- * twice is a mapping that can disagree with itself. It is also the only way this
- * translation gets a unit test at all: the call sites are buried inside rAF
- * loops in `useScrollContainerBinding` and `useMessageListScroll`.
+ * twice is a mapping that can disagree with itself. This also lets the translation
+ * have a unit test independent of the observers' scheduling and positioning work.
  */
 export function resizeLoopSignal(warning: ResizeLoopWarning): AnomalySignal {
   return {
