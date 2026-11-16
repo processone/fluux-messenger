@@ -17,7 +17,7 @@ for (const view of ['room', 'chat'] as const) {
       })
       await bootDemo(page, '/demo.html?tutorial=false&virt=1')
       await page.evaluate(() => {
-        const client = (window as Window & {
+        const client = (window as unknown as Window & {
           __demoClient: { stopAnimation(): void; messages: { sendChatState(): Promise<void> } }
         }).__demoClient
         client.stopAnimation()
@@ -103,7 +103,7 @@ for (const view of ['room', 'chat'] as const) {
       await page.evaluate(() => new Promise<void>(resolve =>
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
       const samples = await page.evaluate(() => {
-        const probe = (window as Window & { __composerTransition: {
+        const probe = (window as unknown as Window & { __composerTransition: {
           samples: { height: number; clearance: number; top: number; viewport: number; time: number }[]; stop(): void
         } }).__composerTransition
         probe.stop()

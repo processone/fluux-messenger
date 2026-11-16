@@ -168,7 +168,7 @@ export default defineConfig({
     ...SUITES.flatMap(suite =>
       ENGINES.map(engine => ({
         name: `${suite.name}-${engine.name}`,
-        testMatch: suite.testMatch,
+        testMatch: typeof suite.testMatch === 'string' ? suite.testMatch : [...suite.testMatch],
         use: { ...engine.use },
       })),
     ),
