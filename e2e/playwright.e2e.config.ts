@@ -43,6 +43,7 @@ const BASE_URL = isolatedPort !== null
  */
 
 const SUITES = [
+  { name: 'badge-diagnostics', testMatch: 'badge-diagnostics.ts' },
   { name: 'backup-recovery', testMatch: 'backup-recovery.ts' },
   { name: 'archiving', testMatch: 'archiving-preferences.ts' },
   { name: 'message-updates', testMatch: 'message-updates.ts' },

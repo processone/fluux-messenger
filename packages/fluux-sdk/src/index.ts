@@ -121,6 +121,7 @@ export { getRoomModerationId, roomStanzaIdsMergeable } from './utils/roomStanzaI
 // than another export. See `diagnostics/channel.ts` for the contract.
 export { subscribeDiagnostics } from './diagnostics/channel'
 export type {
+  BadgeDecisionDiagnostic,
   DiagnosticEvent,
   DiagnosticHandler,
   DiagnosticKind,

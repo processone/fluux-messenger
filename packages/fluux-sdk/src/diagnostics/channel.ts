@@ -242,7 +242,29 @@ export interface RetractionLedgerEvictedDiagnostic {
   remaining: number
 }
 
+/** Badge pipeline observations. Raw identities are for in-process consumers only. */
+export interface BadgeDecisionDiagnostic {
+  kind: 'badge-decision'
+  phase: 'decrypt-start' | 'decrypt-complete' | 'arrival' | 'storage' | 'read-decision'
+  status: 'pending' | 'succeeded' | 'failed' | 'unavailable' | 'unsupported' | 'accepted' | 'refused' | 'stale' | 'observed'
+  entityKind: 'chat' | 'room'
+  entityId: string
+  messageId?: string
+  accountScope?: string
+  source?: 'live' | 'archive'
+  active?: boolean
+  visible?: boolean
+  viewportAtEdge?: boolean
+  outgoing?: boolean
+  delayed?: boolean
+  retryPayloadRetained?: boolean
+  unreadBefore?: number
+  unreadAfter?: number
+  pointerChanged?: boolean
+}
+
 export type DiagnosticEvent =
+  | BadgeDecisionDiagnostic
   | ApplicationStanzaOutDiagnostic
   | ArchiveMergeDiagnostic
   | UnreadRecountDiagnostic
@@ -261,6 +283,7 @@ type DiagnosticIsolators = {
 }
 
 const diagnosticIsolators: DiagnosticIsolators = {
+  'badge-decision': (event) => ({ ...event }),
   'application-stanza-out': (event) => ({
     kind: event.kind,
     stanza: dataToElement(elementToData(event.stanza)),
@@ -301,6 +324,7 @@ function createDiagnosticRegistry(): DiagnosticRegistry {
   return {
     catchAll: new Set(),
     byKind: {
+      'badge-decision': new Set(),
       'application-stanza-out': new Set(),
       'archive-merge': new Set(),
       'unread-recount': new Set(),
@@ -315,6 +339,8 @@ const registry = (diagnosticsGlobal[diagnosticHandlersKey] ??=
 
 function isolateDiagnostic(event: DiagnosticEvent): DiagnosticEvent {
   switch (event.kind) {
+    case 'badge-decision':
+      return diagnosticIsolators[event.kind](event)
     case 'application-stanza-out':
       return diagnosticIsolators[event.kind](event)
     case 'archive-merge':

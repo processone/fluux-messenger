@@ -1,3 +1,4 @@
+import { publishDiagnostic } from '../../diagnostics/channel'
 import { emitLocalRead, hasLocalReadListeners } from '../localReadEvents'
 import { emitSettledRead } from '../settledReadEvents'
 import { getStorageScopeJid } from '../../utils/storageScope'
@@ -139,6 +140,8 @@ export interface PublishPosition {
  */
 export interface ArrivalNote {
   readonly entityId: string
+  readonly diagnosticMessageId?: string
+  readonly diagnosticUnreadBefore?: number
   readonly pointerBefore?: ReadPointer
   /** How much the transient overlay grew: this arrival's contribution to the count. */
   readonly unreadDelta: number
@@ -583,6 +586,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
      * live edge. The divider stays: it marks where this visit's unread began.
      */
     markAsRead(entityId: string): void {
+      const diagnosticBefore = ports.storage.read(entityId)
       const before = readPointerForLocalReport(entityId)
       // Published after the update, never from inside the store transaction.
       let clearedFrom: number | undefined
@@ -614,6 +618,14 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
           mentionsCount: updated.mentionsCount,
         }
       })
+      const diagnosticAfter = ports.storage.read(entityId)
+      publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', phase: 'read-decision', status: 'observed',
+        entityKind: kind, entityId, accountScope: currentStorageScope() ?? '',
+        active: diagnosticBefore?.isActive, visible: connectionStore.getState().windowVisible,
+        viewportAtEdge: currentViewportEvidence(scopeKey(entityId)) === 'at-edge',
+        unreadBefore: diagnosticBefore?.unreadCount, unreadAfter: diagnosticAfter?.unreadCount,
+        pointerChanged: diagnosticBefore?.readPointer !== diagnosticAfter?.readPointer,
+      }), undefined)
       reportLocalRead(entityId, before)
       if (clearedFrom !== undefined) reportUnreadCleared(kind, entityId, clearedFrom)
     },
@@ -913,6 +925,15 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
     ): ArrivalNote {
       bumpUnreadInputVersion(entityId)
       const view = ports.storage.read(entityId)
+      const diagnosticNote = { diagnosticMessageId: message.id, diagnosticUnreadBefore: view?.unreadCount }
+      publishDiagnostic('badge-decision', () => ({
+        kind: 'badge-decision', phase: 'arrival', status: 'pending', entityKind: kind,
+        entityId, messageId: message.id, accountScope: currentStorageScope() ?? '',
+        active: evidence.isActive, visible: evidence.windowVisible,
+        viewportAtEdge: currentViewportEvidence(scopeKey(entityId)) === 'at-edge',
+        outgoing: message.isOutgoing, delayed: !!message.isDelayed,
+        retryPayloadRetained: !!message.encryptedPayload, unreadBefore: view?.unreadCount,
+      }), undefined)
       // The same evidence `onMessageReceived` reads below, so "unseen" here means what "seen"
       // means there: an entity that is open and focused but scrolled up has NOT seen it.
       const unseen = isUnseenIncomingMessage(
@@ -926,7 +947,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       )
       const noted = (options.increment ?? true) && unseen && isRenderableStoredMessage(message)
         && (!ports.shouldCountMessage || ports.shouldCountMessage(entityId, message))
-      if (!noted || !view) return { entityId, pointerBefore: view?.readPointer, unreadDelta: 0, requiresRecount: false, noted: false }
+      if (!noted || !view) return { entityId, ...diagnosticNote, pointerBefore: view?.readPointer, unreadDelta: 0, requiresRecount: false, noted: false }
 
       const key = scopeKey(entityId)
       // No boundary: the arrival is already established as unread, so only the delta matters.
@@ -937,7 +958,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       const unreadDelta = result.added
         ? Math.max(0, transientCounts(key, undefined).unread - before)
         : 0
-      return { entityId, pointerBefore: view.readPointer, unreadDelta, requiresRecount: result.requiresRecount, noted: true, settlementKey: result.settlementKey }
+      return { entityId, ...diagnosticNote, pointerBefore: view.readPointer, unreadDelta, requiresRecount: result.requiresRecount, noted: true, settlementKey: result.settlementKey }
     },
 
     /**
@@ -999,6 +1020,29 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
      */
     endArrival(note: ArrivalNote, outcome: { accepted: boolean; durableWrite?: Promise<boolean> }): void {
       const key = scopeKey(note.entityId)
+      const view = ports.storage.read(note.entityId)
+      const identity = { entityKind: kind, entityId: note.entityId,
+        messageId: note.diagnosticMessageId, accountScope: currentStorageScope() ?? '' }
+      publishDiagnostic('badge-decision', () => ({
+        kind: 'badge-decision', ...identity, phase: 'arrival',
+        status: outcome.accepted ? 'accepted' : 'refused',
+        unreadBefore: note.diagnosticUnreadBefore, unreadAfter: view?.unreadCount,
+        pointerChanged: view?.readPointer !== note.pointerBefore,
+      }), undefined)
+      if (outcome.accepted) {
+        if (outcome.durableWrite) {
+          void outcome.durableWrite.then((saved) => {
+            publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', ...identity,
+              phase: 'storage', status: saved ? 'succeeded' : 'failed' }), undefined)
+          }, () => {
+            publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', ...identity,
+              phase: 'storage', status: 'failed' }), undefined)
+          })
+        } else {
+          publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', ...identity,
+            phase: 'storage', status: 'unavailable' }), undefined)
+        }
+      }
       if (!outcome.accepted) {
         if (note.unreadDelta > 0 && note.settlementKey) removeTransient(key, note.settlementKey)
       } else if (outcome.durableWrite) {

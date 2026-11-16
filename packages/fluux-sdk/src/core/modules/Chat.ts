@@ -1,3 +1,5 @@
+import { publishDiagnostic } from '../../diagnostics/channel'
+import { getStorageScopeJid } from '../../utils/storageScope'
 import { attachmentElements } from './attachmentElements'
 import { isOwnRoomMessage, roomSelf } from '../../utils/roomSelf'
 import { parseModerationSignal } from '../moderation'
@@ -501,8 +503,17 @@ export class Chat extends BaseModule {
     context: MessageEnvelopeContext,
   ): boolean {
     const manager = this.deps.getE2EEManager?.()
-    if (!manager) return false
-    if (!stanzaHasE2EEClaim(stanza, manager)) return false
+    if (!manager || !stanzaHasE2EEClaim(stanza, manager)) {
+      if (stanzaHasEMEHint(stanza) && !readStashedSecurityContext(stanza)) {
+        const { peer } = deriveConversationContext(stanza, getBareJid(this.deps.getCurrentJid() ?? ''))
+        publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', phase: 'decrypt-complete',
+          status: readStashedUnsupportedEncryption(stanza) ? 'unsupported' : 'unavailable',
+          entityKind: stanza.attrs.type === 'groupchat' ? 'room' : 'chat', entityId: peer,
+          messageId: stanza.attrs.id, accountScope: getStorageScopeJid() ?? '', source: 'live',
+        }), undefined)
+      }
+      return false
+    }
     const pending = this.decryptAndReprocess(manager, stanza, context)
     this.liveDecrypts.add(pending)
     const settle = () => { this.liveDecrypts.delete(pending) }

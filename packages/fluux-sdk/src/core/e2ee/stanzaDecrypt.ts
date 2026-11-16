@@ -17,6 +17,8 @@
  * - stash the resulting security context on the stanza so downstream
  *   parsers can attach it to the emitted {@link Message}.
  */
+import { publishDiagnostic, type BadgeDecisionDiagnostic } from '../../diagnostics/channel'
+import { getStorageScopeJid } from '../../utils/storageScope'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { elementToData } from './stanzaAdapter'
@@ -203,6 +205,15 @@ export async function decryptStanzaInPlace(
   source: InboundSource = 'live',
   options?: { isSelfOutgoing?: boolean; archiveTimestamp?: Date },
 ): Promise<DecryptInPlaceResult> {
+  // Observe the existing claim/decrypt path without calling plugins again or
+  // adding another asynchronous layer around their result.
+  const accountScope = getStorageScopeJid() ?? ''
+  const report = (phase: BadgeDecisionDiagnostic['phase'], status: BadgeDecisionDiagnostic['status']) => {
+    publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', phase, status,
+      entityKind: stanza.attrs.type === 'groupchat' ? 'room' : 'chat', entityId: senderPeer,
+      messageId: stanza.attrs.id, accountScope, source,
+    }), undefined)
+  }
   const marked = stanza as unknown as {
     [DECRYPTED_MARKER]?: boolean
     [SECURITY_CONTEXT_STASH]?: SecurityContext
@@ -239,13 +250,17 @@ export async function decryptStanzaInPlace(
     // sender's XEP-0380 fallback <body> with an unsupported-method tag).
     const disposition = recordUnclaimedEME(stanza, manager)
     if (disposition.kind === 'retry') {
+      report('decrypt-complete', 'unavailable')
       return { attempted: false, encryptedPayloadXml: disposition.encryptedPayloadXml }
     }
     if (disposition.kind === 'unsupported') {
+      report('decrypt-complete', 'unsupported')
       return { attempted: false, unsupportedEncryption: disposition.info }
     }
     return { attempted: false }
   }
+
+  report('decrypt-start', 'pending')
 
   // Serialize BEFORE any mutation — the encrypted element will be stripped
   // below regardless of success/failure. The full stanza is what gets
@@ -469,6 +484,7 @@ export async function decryptStanzaInPlace(
     marked[AUTHORED_AT_STASH] = authoredAt
   }
   marked[DECRYPTED_MARKER] = true
+  report('decrypt-complete', failureReason !== null || securityContext?.trust === 'rejected' ? 'failed' : 'succeeded')
 
   return {
     attempted: true,

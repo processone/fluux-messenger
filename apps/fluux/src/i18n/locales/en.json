@@ -1220,6 +1220,8 @@
         "title": "XMPP Console",
         "clear": "Clear entries",
         "export": "Export log",
+        "exportBadgeDiagnostics": "Export badge diagnostics",
+        "exportBadgeDiagnosticsFailed": "Could not save badge diagnostics",
         "serverInfo": "Server info",
         "serverInformation": "Server Information",
         "close": "Close console",

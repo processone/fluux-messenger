@@ -1,3 +1,4 @@
+import { startBadgeDiagnostics } from './utils/badgeDiagnostics'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router'
@@ -42,6 +43,7 @@ import { installKeychainFastTokens } from './utils/keychainFastTokenStorage'
 if (platform().shell === 'desktop') document.documentElement.dataset.tauri = 'true'
 void detectWindowChrome()
 installMobileViewport()
+startBadgeDiagnostics()
 
 // Enable native TCP/TLS proxy in Tauri unless explicitly disabled
 const disableTcpProxy = localStorage.getItem('fluux:disable-tcp-proxy') === 'true'
