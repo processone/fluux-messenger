@@ -35,7 +35,7 @@
   .widget { position: absolute; border-radius: 24px; color: #f2f4ff;
     background: linear-gradient(160deg, #262c45f2, #1a1f33f2);
     box-shadow: 0 30px 90px #0009, 0 0 0 1px #ffffff1a, inset 0 1px 0 #ffffff14; }
-  .large { left: 566px; top: 128px; width: 372px; height: 390px; padding: 22px 22px 18px; }
+  .large { left: 560px; top: 164px; width: 372px; height: 390px; padding: 22px 22px 18px; }
   .w-caption { color: #9aa3c4; font-size: 14px; font-weight: 700; }
   .rows { margin-top: 12px; display: flex; flex-direction: column; gap: 13px; }
   .row { display: flex; align-items: center; gap: 12px; }
@@ -49,11 +49,20 @@
   .time { font-size: 12px; color: #9aa3c4; }
   .more { position: absolute; left: 22px; bottom: 16px; font-size: 12px; color: #9aa3c4; }
 
-  .small { left: 966px; top: 348px; width: 170px; height: 170px; padding: 16px 16px 14px;
-    display: flex; flex-direction: column; }
-  .total { font-size: 50px; font-weight: 700; line-height: 1; margin-top: 4px; letter-spacing: -0.02em; }
-  .unread { font-size: 13px; color: #9aa3c4; }
-  .small .names { margin-top: auto; font-size: 13px; line-height: 1.45; }
+  .phone { position: absolute; left: 962px; top: 128px; width: 196px; height: 426px;
+    border-radius: 30px; overflow: hidden; border: 5px solid #242a40;
+    box-shadow: 0 24px 70px #000b; background: #0b1020; }
+  .phone img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+  /* iOS banner: app icon, conversation title, sender above the message (0.18.3 room layout). */
+  .push { position: absolute; left: 918px; top: 172px; width: 254px; padding: 11px 13px;
+    display: flex; gap: 11px; border-radius: 20px; z-index: 4;
+    background: #2c3352f0; backdrop-filter: blur(18px);
+    box-shadow: 0 18px 50px #000a, 0 0 0 1px #ffffff1f; color: #f2f4ff; }
+  .push img { width: 34px; height: 34px; border-radius: 8px; flex: none; }
+  .push .body { flex: 1; min-width: 0; font-size: 13px; line-height: 1.3; }
+  .push .top { display: flex; justify-content: space-between; font-weight: 700; }
+  .push .top i { font-style: normal; font-weight: 400; color: #9aa3c4; font-size: 12px; }
+  .push .who { color: #c9d0ff; font-weight: 600; }
 
   .label { position: absolute; color: #bdc6e8; font-size: 14px; font-weight: 600; text-align: center; }
 </style>
@@ -65,7 +74,7 @@
     <img class="logo" src="../../assets/readme/fluux-logo.svg" alt="Fluux">
     <div class="badges"><div class="version">0.18.3</div><div class="beta">Join the iOS beta</div></div>
     <h1>Unreads,<br><span>at a glance</span></h1>
-    <p class="summary">New widgets on macOS and iOS.<br>Names and counts, never message text.</p>
+    <p class="summary">Unread widgets on macOS and iOS.<br>Push notifications on iPhone.</p>
     <div class="fixes"><b>15 fixes</b><span>Steadier scrolling, keychain<br>and notification reliability</span></div>
   </div>
 
@@ -87,15 +96,18 @@
     </div>
     <div class="more">+1</div>
   </div>
-  <div class="label" style="left: 566px; top: 536px; width: 372px;">macOS desktop widget</div>
+  <div class="label" style="left: 566px; top: 566px; width: 372px;">Unread widget, macOS and iOS</div>
 
-  <div class="widget small" aria-label="iOS small unread widget">
-    <div class="w-caption">Fluux</div>
-    <div class="total">7</div>
-    <div class="unread">unread</div>
-    <div class="names">Emma Wilson<br>Team Chat<span class="at">@</span></div>
+  <div class="phone"><img src="../../screenshots/release-0.18.0-ios-chat.png" alt="Fluux on iPhone"></div>
+  <div class="push" aria-label="iOS push notification">
+    <img src="../../apps/fluux/public/icon-192.png" alt="">
+    <div class="body">
+      <div class="top"><span>Team Chat</span><i>now</i></div>
+      <div class="who">Mia</div>
+      <div>Release notes are ready!</div>
+    </div>
   </div>
-  <div class="label" style="left: 966px; top: 536px; width: 170px;">iOS beta home screen</div>
+  <div class="label" style="left: 962px; top: 566px; width: 196px;">iOS beta, with push</div>
 </main>
 </body>
 </html>
