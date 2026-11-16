@@ -171,6 +171,10 @@ selected job; this local command does not narrow CI. Browser/native checks remai
 required when their surfaces change. A skipped native test due to missing tools
 or fixtures is missing evidence, not successful validation.
 
+For optional offloading of heavy unit/browser sweeps, see
+[Requesting heavy tests on Windows](docs/WINDOWS_HEAVY_TESTS.md). Results are
+Windows evidence only and do not replace existing CI or Mac/device proof.
+
 ### 4. Commit Your Changes
 
 Write clear commit messages:

@@ -31,6 +31,12 @@ scenario even when `nativeXmppProxy` itself is unchanged.
 | Android | Debug arm64 APK build | Real device: trust, lifecycle, keyboard, touch |
 | Web | Chromium/WebKit invariants on Linux; shared contracts | Firefox, Safari, mobile browsers, installed PWA |
 
+Optional [Windows heavy-test dispatcher results](WINDOWS_HEAVY_TESTS.md) add
+shared unit/browser evidence only; they do not replace any existing check or
+qualification cell. Windows WebKit is neither Safari nor Apple's WKWebView,
+and a headless browser sweep does not qualify the Windows WebView2 app.
+Keep macOS Rust, keychain, notifications, Xcode and iOS/device proof separate.
+
 The `Platform contracts` CI job runs `npm run test:platform` for either JavaScript
 or Rust changes, including native-only PRs. It reports its own failing status if a
 capability, connection contract or qualification-policy test fails. It does not

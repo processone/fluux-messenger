@@ -50,6 +50,15 @@ Open http://localhost:5173 and connect with your XMPP credentials.
 | `npm run tauri:install` | Build + install the desktop app into `/Applications` (macOS) |
 | `npm run screenshots`   | Generate demo screenshots (see below)                        |
 
+### Heavy tests on the Windows runner
+
+A private manual dispatcher can run Fluux's complete workspace unit suites and
+Chromium/WebKit browser sweeps on Windows. See
+[Requesting heavy tests on Windows](WINDOWS_HEAVY_TESTS.md) for profiles, the
+exact-version request through the first mate, and the evidence handoff.
+This does not change the existing gate: Windows WebKit is neither Safari nor
+WKWebView, and does not validate Fluux's Windows WebView2 shell.
+
 ### Targeted local tests
 
 During iteration, use `npm run test:local` from the project root. With no arguments
