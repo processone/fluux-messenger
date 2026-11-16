@@ -10,7 +10,7 @@
  *   npm run dev          (auto-started by Playwright if not running)
  */
 
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Browser, type Page } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'fs'
 
 const DEMO_URL = '/demo.html?tutorial=false'
@@ -366,20 +366,31 @@ test('22 — Chat (Hebrew, RTL)', async ({ page }) => {
 
 // ── Composite Screenshots ─────────────────────────────────────────
 
-/** Capture the 1:1 chat view and return a PNG buffer. */
-async function captureChatBuffer(page: Page, colorScheme: 'dark' | 'light'): Promise<Buffer> {
-  await waitForDemoReady(page, colorScheme)
-  await navigateTo(page, 'messages')
-  await selectItem(page, 'Emma Wilson')
-  await clearHover(page)
-  await waitForFloatingDateToFade(page)
-  return Buffer.from(await page.screenshot({ type: 'png' }))
+/**
+ * Capture the 1:1 chat view and return a PNG buffer.
+ *
+ * Each theme runs in its own browser context: the demo persists read state across
+ * reloads, so a second capture in the same context opens the conversation with the
+ * read pointer already advanced and the "new messages" divider in a different place.
+ */
+async function captureChatBuffer(browser: Browser, colorScheme: 'dark' | 'light'): Promise<Buffer> {
+  const context = await browser.newContext()
+  try {
+    const page = await context.newPage()
+    await waitForDemoReady(page, colorScheme)
+    await navigateTo(page, 'messages')
+    await selectItem(page, 'Emma Wilson')
+    await clearHover(page)
+    await waitForFloatingDateToFade(page)
+    return Buffer.from(await page.screenshot({ type: 'png' }))
+  } finally {
+    await context.close()
+  }
 }
 
-test('23 — Light/Dark Composite', async ({ page }) => {
-  // Capture both themes
-  const lightBuf = await captureChatBuffer(page, 'light')
-  const darkBuf = await captureChatBuffer(page, 'dark')
+test('23 — Light/Dark Composite', async ({ browser, page }) => {
+  const lightBuf = await captureChatBuffer(browser, 'light')
+  const darkBuf = await captureChatBuffer(browser, 'dark')
 
   // Composite via an in-browser canvas (no extra npm deps)
   const lightB64 = lightBuf.toString('base64')

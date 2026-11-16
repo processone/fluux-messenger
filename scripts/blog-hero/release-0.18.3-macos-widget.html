@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!-- Render with: node scripts/blog-hero/render.mjs release-0.18.3-macos -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fluux 0.18.3 macOS unread widget</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  /* A desktop wallpaper stand-in; the widgets are renders of the production SwiftUI view. */
+  body { background: #0b1020; }
+  .wall { position: absolute; inset: 0;
+    background: radial-gradient(900px 600px at 15% 10%, #1f6f6a 0%, transparent 60%),
+                radial-gradient(900px 700px at 90% 100%, #4b3d8f 0%, transparent 60%),
+                linear-gradient(160deg, #10182e, #0b1020); }
+  .menubar { position: absolute; left: 0; right: 0; top: 0; height: 28px; background: #0b10208c;
+    backdrop-filter: blur(20px); display: flex; align-items: center; gap: 20px; padding: 0 18px;
+    color: #e6e9f5; font-size: 13px; font-weight: 500; }
+  .menubar b { font-weight: 700; }
+  .menubar .clock { margin-left: auto; }
+  .w { position: absolute; filter: drop-shadow(0 18px 40px #0008); }
+  .large { left: 625px; top: 172px; width: 344px; }
+  .medium { left: 231px; top: 172px; width: 344px; }
+  .small { left: 231px; top: 362px; width: 170px; }
+</style>
+</head>
+<body>
+<main class="frame">
+  <div class="wall"></div>
+  <div class="menubar"><b>Fluux</b><span>File</span><span>Edit</span><span>View</span><span>Window</span><span>Help</span><span class="clock">Mon 5:54 PM</span></div>
+  <img class="w medium" src="../../screenshots/release-0.18.3-macos-widget-medium.png" alt="Medium unread widget">
+  <img class="w small" src="../../screenshots/release-0.18.3-macos-widget-small.png" alt="Small unread widget">
+  <img class="w large" src="../../screenshots/release-0.18.3-macos-widget-large.png" alt="Large unread widget">
+</main>
+</body>
+</html>
