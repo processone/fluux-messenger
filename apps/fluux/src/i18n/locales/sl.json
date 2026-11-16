@@ -550,6 +550,8 @@
         "previewUnavailable": "Predogled ni na voljo",
         "truncated": "skrajšano",
         "messageDeleted": "Sporočilo izbrisano",
+        "joinRoomToSeeMessage": "Pridružite se sobi za ogled sporočila",
+        "linkedMessagePreview": "Odpri sporočilo v sobi",
         "messageModerated": "Sporočilo odstranil/a {{moderator}}",
         "deleteMessage": "Izbriši sporočilo",
         "deleteMessageConfirm": "To bo izbrisalo to sporočilo. Tega dejanja ni mogoče razveljaviti.",

@@ -547,6 +547,8 @@
         "previewUnavailable": "Priekšskatījums nav pieejams",
         "truncated": "saīsināts",
         "messageDeleted": "Ziņojums dzēsts",
+        "joinRoomToSeeMessage": "Pievienojieties istabai, lai redzētu ziņojumu",
+        "linkedMessagePreview": "Atvērt ziņojumu istabā",
         "messageModerated": "Ziņojumu noņēma {{moderator}}",
         "deleteMessage": "Dzēst ziņojumu",
         "deleteMessageConfirm": "Šis ziņojums tiks dzēsts. Šo darbību nevar atsaukt.",

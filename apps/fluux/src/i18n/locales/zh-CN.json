@@ -544,6 +544,8 @@
         "previewUnavailable": "预览不可用",
         "truncated": "已截断",
         "messageDeleted": "消息已删除",
+        "joinRoomToSeeMessage": "加入聊天室以查看消息",
+        "linkedMessagePreview": "在聊天室中打开消息",
         "messageModerated": "消息已被 {{moderator}} 移除",
         "deleteMessage": "删除消息",
         "deleteMessageConfirm": "这将删除此消息。此操作无法撤销。",

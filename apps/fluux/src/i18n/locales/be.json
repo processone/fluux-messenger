@@ -548,6 +548,8 @@
         "previewUnavailable": "Папярэдні прагляд недаступны",
         "truncated": "абрэзана",
         "messageDeleted": "Паведамленне выдалена",
+        "joinRoomToSeeMessage": "Далучыцеся да пакоя, каб убачыць паведамленне",
+        "linkedMessagePreview": "Адкрыць паведамленне ў пакоі",
         "messageModerated": "Паведамленне выдалена мадэратарам {{moderator}}",
         "deleteMessage": "Выдаліць паведамленне",
         "deleteMessageConfirm": "Гэта выдаліць гэтае паведамленне. Гэта дзеянне нельга адмяніць.",

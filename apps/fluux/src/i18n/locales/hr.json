@@ -546,6 +546,8 @@
         "previewUnavailable": "Pregled nije dostupan",
         "truncated": "skraćeno",
         "messageDeleted": "Poruka obrisana",
+        "joinRoomToSeeMessage": "Pridružite se sobi da biste vidjeli poruku",
+        "linkedMessagePreview": "Otvori poruku u sobi",
         "messageModerated": "Poruku uklonio/la {{moderator}}",
         "deleteMessage": "Obriši poruku",
         "deleteMessageConfirm": "Ovo će obrisati ovu poruku. Ova radnja se ne može poništiti.",

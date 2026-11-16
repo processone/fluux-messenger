@@ -544,6 +544,8 @@
         "previewUnavailable": "Forhåndsvisning ikke tilgængelig",
         "truncated": "afkortet",
         "messageDeleted": "Besked slettet",
+        "joinRoomToSeeMessage": "Deltag i rummet for at se beskeden",
+        "linkedMessagePreview": "Åbn beskeden i rummet",
         "messageModerated": "Besked fjernet af {{moderator}}",
         "deleteMessage": "Slet besked",
         "deleteMessageConfirm": "Dette vil slette denne besked. Denne handling kan ikke fortrydes.",

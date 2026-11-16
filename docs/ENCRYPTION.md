@@ -140,6 +140,7 @@ On Linux and Windows the secret key falls back to a file with restricted permiss
 **Protected**
 
 - Message content (text, formatting, replies) while in transit.
+- Mention and room-message link references in encrypted one-to-one chats. Their addresses and archive ids stay inside the encrypted envelope, alongside the body.
 - Message content stored on your server's archive.
 - Message content stored at your contact's server.
 - **Reactions, edits, retractions, link previews, and fun animations** in one-to-one chats. These ride inside the same encrypted envelope as the message body, so the server cannot see which emoji you reacted with, what you edited a message to say, which message you deleted, or which links you shared a preview of.

@@ -92,6 +92,26 @@ describe('DeferredDecryptEngine', () => {
     })
   })
 
+  // Approved room-link sharing: after a key becomes available, the reader must
+  // retain the protected resource reference, not only the recovered body.
+  it('retains a data reference recovered from a pending encrypted envelope', async () => {
+    const uri = 'xmpp:team@conference.example.org?join;msg=1731490000123456'
+    const envelope = serializePayloadEnvelope([
+      xml('body', {}, 'See the room update'),
+      xml('reference', { xmlns: 'urn:xmpp:reference:0', type: 'data', uri }),
+    ])
+    const pending: Message = {
+      type: 'chat', id: 'shared-room-link', stanzaId: undefined, originId: undefined,
+      conversationId: 'bob@example.com', from: 'bob@example.com',
+      body: '[dummy-plaintext payload]', timestamp: new Date(), isOutgoing: false,
+      encryptedPayload: xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(envelope).toString('base64')).toString(),
+    }
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [pending] }])
+    await engine.retryPending()
+    expect(stores.chat.updateMessage).toHaveBeenCalledWith('bob@example.com', pending,
+      expect.objectContaining({ body: 'See the room update', references: [{ type: 'data', uri }] }))
+  })
+
   it('decrypts a pending chat payload and writes back through the injected bindings', async () => {
     // Verified so the outcome is committed (untrusted defers verification).
     vi.spyOn(manager, 'decryptArchive').mockResolvedValue({

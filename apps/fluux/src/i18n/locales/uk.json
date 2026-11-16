@@ -548,6 +548,8 @@
         "previewUnavailable": "Попередній перегляд недоступний",
         "truncated": "обрізано",
         "messageDeleted": "Повідомлення видалено",
+        "joinRoomToSeeMessage": "Приєднайтеся до кімнати, щоб побачити повідомлення",
+        "linkedMessagePreview": "Відкрити повідомлення в кімнаті",
         "messageModerated": "Повідомлення видалено модератором {{moderator}}",
         "deleteMessage": "Видалити повідомлення",
         "deleteMessageConfirm": "Це видалить це повідомлення. Цю дію не можна скасувати.",

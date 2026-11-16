@@ -545,6 +545,8 @@
         "previewUnavailable": "Η προεπισκόπηση δεν είναι διαθέσιμη",
         "truncated": "περικομμένο",
         "messageDeleted": "Το μήνυμα διαγράφηκε",
+        "joinRoomToSeeMessage": "Μπείτε στο δωμάτιο για να δείτε το μήνυμα",
+        "linkedMessagePreview": "Άνοιγμα μηνύματος στο δωμάτιο",
         "messageModerated": "Το μήνυμα αφαιρέθηκε από {{moderator}}",
         "deleteMessage": "Διαγραφή μηνύματος",
         "deleteMessageConfirm": "Αυτό θα διαγράψει αυτό το μήνυμα. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",

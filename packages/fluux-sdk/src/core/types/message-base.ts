@@ -7,7 +7,7 @@
 
 import type { FileAttachment } from './upload'
 import type { LinkPreview } from './media'
-import type { ReplyInfo } from './chat'
+import type { ReplyInfo, MessageReference } from './chat'
 import type { XMPPStanzaError } from '../../utils/xmppError'
 import type { MessageRowRef } from './messageRow'
 
@@ -95,6 +95,8 @@ export interface PollClosedData {
  * @category Chat
  */
 export interface BaseMessage {
+  /** XEP-0372 references, retained for live delivery and archived history. */
+  references?: MessageReference[]
   /** Validated local alias retained after room identity confirmation; never a wire reference. */
   localRowRef?: MessageRowRef
   /** Message type discriminator */

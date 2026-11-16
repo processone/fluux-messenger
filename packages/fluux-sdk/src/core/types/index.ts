@@ -24,6 +24,8 @@ export type {
   ReplyTarget,
   SendMessageOptions,
   MentionReference,
+  DataReference,
+  MessageReference,
   Message,
   ChatMessageTarget,
   ConversationEntity,

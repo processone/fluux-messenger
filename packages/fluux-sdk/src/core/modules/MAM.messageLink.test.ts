@@ -36,7 +36,7 @@ afterEach(() => { roomStore.getState().reset(); setStorageScopeJid(null); vi.res
 
 // XEP-0313/RSM server boundary, shared by id lookup and context pages. The real
 // stores/cache own placement and read state; this stand-in owns only IQ replies.
-function harness(failure?: 'network' | 'no-fin') {
+function harness(failure?: 'network' | 'no-fin', sharedLink?: string) {
   let collect: ((stanza: Element) => void) | undefined
   const emitSDK = vi.fn()
   const sendIQ = vi.fn(async (iq: Element) => {
@@ -57,7 +57,8 @@ function harness(failure?: 'network' | 'no-fin') {
       xml('result', { xmlns: MAM_NS, queryid: query.attrs.queryid, id: row.stanzaId },
         xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
           xml('delay', { xmlns: 'urn:xmpp:delay', stamp: row.timestamp.toISOString() }),
-          xml('message', { type: 'groupchat', from: row.from, id: row.id }, xml('body', {}, row.body))))))
+          xml('message', { type: 'groupchat', from: row.from, id: row.id }, xml('body', {}, row.body),
+            ...(sharedLink ? [xml('reference', { xmlns: 'urn:xmpp:reference:0', type: 'data', uri: sharedLink })] : []))))))
     const complete = before !== undefined ? page[0] === rows[0] : page.at(-1) === rows.at(-1)
     return xml('iq', { type: 'result' }, xml('fin', { xmlns: MAM_NS, complete: String(complete) },
       xml('set', { xmlns: RSM_NS }, xml('first', {}, page[0]?.stanzaId ?? ''), xml('last', {}, page.at(-1)?.stanzaId ?? ''))))
@@ -72,6 +73,41 @@ function harness(failure?: 'network' | 'no-fin') {
 // Intent: docs/URL_SCHEMES.md — locate order, bounded separate
 // archive stretch, absent versus failed outcomes and membership privacy.
 describe('linked room message lookup', () => {
+  // Approved chat-preview piece: resolve through the reader's access without
+  // changing timeline placement, read state, coverage or arrival signals.
+  it('retains a data reference when reading archived room history', async () => {
+    const uri = `xmpp:${ROOM}?join;msg=${rows[10].stanzaId}`
+    const result = await harness(undefined, uri).mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)
+    expect(result).toMatchObject({ kind: 'found', message: { references: [{ type: 'data', uri }] } })
+  })
+
+  it('reads an archived quote without saving a context stretch or publishing messages', async () => {
+    roomStore.getState().addRoom(room, [rows.at(-1)!])
+    const before = roomStore.getState()
+    const h = harness()
+    expect(await h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toMatchObject({ kind: 'found', message: { body: rows[40].body, stanzaId: rows[40].stanzaId } })
+    expect(roomStore.getState()).toBe(before)
+    expect(await cache.getRoomMessages(ROOM)).toEqual([])
+    expect(h.emitSDK).not.toHaveBeenCalled()
+    expect(h.sendIQ.mock.calls.map(([iq]) => Number(iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max')))).toEqual([1, 1])
+  })
+
+  it.each(['resident', 'cache'] as const)('reads a %s quote and hides it after membership is lost', async source => {
+    if (source === 'resident') roomStore.getState().addRoom(room, [rows[40]])
+    else await cache.saveRoomMessages([rows[40]])
+    const h = harness()
+    expect(await h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toMatchObject({ kind: 'found', message: rows[40] })
+    roomStore.getState().addRoom({ ...room, joined: false })
+    expect(await h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(h.sendIQ).not.toHaveBeenCalled()
+  })
+
+  it('does not confuse a deleted quote with a failed archive request', async () => {
+    await cache.saveRoomMessages([{ ...rows[40], isRetracted: true, body: '' }])
+    expect(await harness().mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toEqual({ kind: 'absent' })
+    expect(await harness('network').mam.readRoomMessagePreview(ROOM, rows[41].stanzaId)).toEqual({ kind: 'unknown' })
+  })
+
   it('checks membership before even reading a cached message', async () => {
     await cache.saveRoomMessages([rows[40]])
     roomStore.getState().addRoom({ ...room, joined: false })

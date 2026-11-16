@@ -548,6 +548,8 @@
         "previewUnavailable": "Peržiūra negalima",
         "truncated": "sutrumpinta",
         "messageDeleted": "Žinutė ištrinta",
+        "joinRoomToSeeMessage": "Prisijunkite prie kambario, kad pamatytumėte žinutę",
+        "linkedMessagePreview": "Atidaryti žinutę kambaryje",
         "messageModerated": "Pranešimą pašalino {{moderator}}",
         "deleteMessage": "Ištrinti žinutę",
         "deleteMessageConfirm": "Tai ištrins šią žinutę. Šio veiksmo negalima atšaukti.",

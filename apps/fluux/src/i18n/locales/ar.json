@@ -552,6 +552,8 @@
         "previewUnavailable": "المعاينة غير متاحة",
         "truncated": "مقتطع",
         "messageDeleted": "تم حذف الرسالة",
+        "joinRoomToSeeMessage": "انضم إلى الغرفة لرؤية الرسالة",
+        "linkedMessagePreview": "فتح الرسالة في الغرفة",
         "messageModerated": "تمت إزالة الرسالة بواسطة {{moderator}}",
         "deleteMessage": "حذف الرسالة",
         "deleteMessageConfirm": "سيتم حذف هذه الرسالة. لا يمكن التراجع عن هذا الإجراء.",

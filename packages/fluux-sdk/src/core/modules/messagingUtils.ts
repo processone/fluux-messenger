@@ -15,6 +15,7 @@ import { getBareJid } from '../jid'
 import { readStashedEncryptedPayload } from '../e2ee/stanzaDecrypt'
 import {
   NS_DELAY,
+  NS_REFERENCE,
   NS_REPLY,
   NS_OOB,
   NS_THUMBS,
@@ -26,10 +27,11 @@ import {
   NS_RETRACT,
   NS_CORRECTION,
 } from '../namespaces'
-import type { FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
+import type { MessageReference, FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
 import { processFallback } from '../../utils/fallbackUtils'
 import { CHAT_FALLBACK_TARGETS, ROOM_FALLBACK_TARGETS } from '../../utils/fallbackRegistry'
 import { isAesgcmUri, parse as parseAesgcmUri } from './AesgcmUri'
+import { fromCodePointOffset } from '../../utils/xep0426'
 import { logWarn } from '../logger'
 
 /**
@@ -343,6 +345,25 @@ export interface ParseMessageContentOptions {
  */
 export type MessageTimestampSource = 'authored' | 'delay' | 'received'
 
+/** Retain mention and data references without treating resource links as mentions. */
+export function parseMessageReferences(stanza: Element): MessageReference[] | undefined {
+  const body = stanza.getChildText('body') ?? ''
+  const references: MessageReference[] = []
+  for (const ref of stanza.getChildren('reference', NS_REFERENCE)) {
+    const { type, uri, begin, end } = ref.attrs
+    if ((type !== 'mention' && type !== 'data') || !uri) continue
+    if (begin === undefined && end === undefined && type === 'data') {
+      references.push({ type, uri })
+      continue
+    }
+    if (!/^\d+$/.test(begin ?? '') || !/^\d+$/.test(end ?? '')) continue
+    const start = Number(begin), stop = Number(end)
+    if (start >= stop || stop > Array.from(body).length) continue
+    references.push({ type, uri, begin: fromCodePointOffset(body, start), end: fromCodePointOffset(body, stop) })
+  }
+  return references.length ? references : undefined
+}
+
 /** Result from parseMessageContent. */
 export interface ParsedMessageContent {
   timestamp: Date
@@ -359,6 +380,7 @@ export interface ParsedMessageContent {
   replyTo?: ReplyInfo
   attachment?: FileAttachment
   processedBody: string
+  references?: MessageReference[]
 }
 
 /**
@@ -467,6 +489,7 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     replyTo,
     attachment,
     processedBody: finalBody,
+    references: parseMessageReferences(messageEl),
   }
 }
 
@@ -541,6 +564,7 @@ export function correctionMarks(parsed: ParsedMessageContent): MessageImplState 
  * Result of applying a correction to a message.
  */
 export interface CorrectionResult extends MessageImplState {
+  references?: MessageReference[]
   body: string
   isEdited: true
   originalBody: string
@@ -588,6 +612,7 @@ export function applyCorrection(
   })
   return {
     body: parsed.processedBody,
+    references: parsed.references,
     ...correctionMarks(parsed),
     originalBody,
     ...(parsed.attachment && { attachment: parsed.attachment }),

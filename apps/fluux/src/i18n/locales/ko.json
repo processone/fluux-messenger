@@ -544,6 +544,8 @@
         "previewUnavailable": "미리보기 사용 불가",
         "truncated": "잘림",
         "messageDeleted": "메시지가 삭제되었습니다",
+        "joinRoomToSeeMessage": "메시지를 보려면 채팅방에 참여하세요",
+        "linkedMessagePreview": "채팅방에서 메시지 열기",
         "messageModerated": "{{moderator}}이(가) 제거한 메시지",
         "deleteMessage": "메시지 삭제",
         "deleteMessageConfirm": "이 메시지를 삭제합니다. 이 작업은 취소할 수 없습니다.",

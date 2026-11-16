@@ -24,6 +24,7 @@ export const changelog: ChangelogEntry[] = [
         'iOS: a new widget shows your unread conversations on the home screen. The lock screen shows the unread total. Tap a row to open that conversation. Message text is never shown',
         'macOS: message notifications now show who wrote to you, with the sender and room details. They look like those of other chat apps',
         'Room messages: copy a link to an archived message from its More menu or mobile actions. Opening it in Fluux takes you to that message; rooms you have not joined ask you to join first',
+        'Shared room message links show a quote from your own room history when you have joined the room, or a Join prompt otherwise. Sharing sends only the link, not a copy of the room message',
       ],
     }, {
       type: 'fixed',

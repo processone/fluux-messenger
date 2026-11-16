@@ -544,6 +544,8 @@
         "previewUnavailable": "Förhandsgranskning ej tillgänglig",
         "truncated": "avkortat",
         "messageDeleted": "Meddelande borttaget",
+        "joinRoomToSeeMessage": "Gå med i rummet för att se meddelandet",
+        "linkedMessagePreview": "Öppna meddelandet i rummet",
         "messageModerated": "Meddelande borttaget av {{moderator}}",
         "deleteMessage": "Ta bort meddelande",
         "deleteMessageConfirm": "Detta kommer att ta bort detta meddelande. Denna åtgärd kan inte ångras.",

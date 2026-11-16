@@ -544,6 +544,8 @@
         "previewUnavailable": "Esikatselu ei saatavilla",
         "truncated": "lyhennetty",
         "messageDeleted": "Viesti poistettu",
+        "joinRoomToSeeMessage": "Liity huoneeseen nähdäksesi viestin",
+        "linkedMessagePreview": "Avaa viesti huoneessa",
         "messageModerated": "Viesti poistettu käyttäjän {{moderator}} toimesta",
         "deleteMessage": "Poista viesti",
         "deleteMessageConfirm": "Tämä poistaa tämän viestin. Tätä toimintoa ei voi kumota.",

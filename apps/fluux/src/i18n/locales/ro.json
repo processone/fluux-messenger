@@ -548,6 +548,8 @@
         "previewUnavailable": "Previzualizare indisponibilă",
         "truncated": "trunchiat",
         "messageDeleted": "Mesaj șters",
+        "joinRoomToSeeMessage": "Alătură-te camerei pentru a vedea mesajul",
+        "linkedMessagePreview": "Deschide mesajul în cameră",
         "messageModerated": "Mesaj eliminat de {{moderator}}",
         "deleteMessage": "Șterge mesajul",
         "deleteMessageConfirm": "Acest mesaj va fi șters. Această acțiune nu poate fi anulată.",

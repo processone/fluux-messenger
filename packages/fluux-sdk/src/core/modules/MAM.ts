@@ -3189,6 +3189,7 @@ export class MAM extends BaseModule {
       conversationId,
       from: bareFrom,
       body: parsed.processedBody,
+      ...(parsed.references && { references: parsed.references }),
       timestamp: parsed.timestamp,
       isOutgoing,
       isDelayed: true,
@@ -3321,6 +3322,7 @@ export class MAM extends BaseModule {
       from,
       nick,
       body: parsed.processedBody,
+      ...(parsed.references && { references: parsed.references }),
       timestamp: parsed.timestamp,
       receivedAt: new Date(),
       isOutgoing,
@@ -3458,6 +3460,41 @@ export class MAM extends BaseModule {
     }
     if (!session.isCurrent() || !response?.getChild('fin', NS_MAM)) return { kind: 'unknown' }
     return { kind: 'page', entries }
+  }
+
+  /** Read a linked quote without publishing arrivals, moving windows or claiming coverage. */
+  async readRoomMessagePreview(roomJid: string, stanzaId: string): Promise<
+    { kind: 'found'; message: RoomMessage } | { kind: 'absent' | 'unknown' }
+  > {
+    const session = this.captureQuery()
+    const joined = () => !!this.deps.stores?.room.getRoom(roomJid)?.joined
+    if (!joined()) return { kind: 'unknown' }
+    const pending = this.deps.stores?.room.waitForMessageArrivals?.(roomJid)
+    if (pending && !await pending) return { kind: 'unknown' }
+    session.assertCurrent()
+    if (!joined()) return { kind: 'unknown' }
+    let message = this.deps.stores?.room.getMessage(roomJid, stanzaId)
+    if (message?.stanzaId !== stanzaId || message.isPrivate) message = undefined
+    message ??= await this.deps.stores?.room.getMessageByArchiveId?.(roomJid, stanzaId) ?? undefined
+    session.assertCurrent()
+    if (!joined()) return { kind: 'unknown' }
+    if (!message) {
+      const found = await this.findArchivedEntry(roomJid, true, stanzaId)
+      session.assertCurrent()
+      if (!joined()) return { kind: 'unknown' }
+      if (found.kind !== 'found') return found
+      const { forwarded, messageEl, archiveId } = found.entry
+      await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, 'room', this.extractForwardedTimestamp(forwarded), archiveId)
+      session.assertCurrent()
+      message = this.parseRoomArchiveMessage(forwarded, roomJid, roomSelf(this.deps.stores?.room.getRoom(roomJid)), archiveId) ?? undefined
+    }
+    if (message) {
+      const reconciled = await this.deps.stores?.room.reconcileHistoryMessages?.([message])
+      session.assertCurrent()
+      message = reconciled?.[0] ?? message
+    }
+    if (!joined()) return { kind: 'unknown' }
+    return !message || message.isRetracted || message.isPrivate ? { kind: 'absent' } : { kind: 'found', message }
   }
 
   /**

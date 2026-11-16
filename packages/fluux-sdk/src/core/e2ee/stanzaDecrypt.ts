@@ -31,6 +31,7 @@ import { getBareJid, getDomain } from '../jid'
 import { logInfo } from '../logger'
 import {
   NS_EME,
+  NS_REFERENCE,
   NS_OOB,
   NS_FILE_METADATA,
   NS_REACTIONS,
@@ -89,6 +90,7 @@ export function decryptFailureReasonFor(code: string | undefined): DecryptFailur
 // sender and conversation checks as a cleartext one, because both take the
 // sender from the stanza envelope rather than from the payload.
 const ALLOWED_PAYLOAD_CHILDREN = new Set([
+  `reference\0${NS_REFERENCE}`,
   `x\0${NS_OOB}`,
   `file\0${NS_FILE_METADATA}`,
   `reactions\0${NS_REACTIONS}`,
