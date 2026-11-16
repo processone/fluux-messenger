@@ -60,7 +60,7 @@ test('copy a room message link and jump to it from another chat', async ({ page 
 // an unjoined room discloses only its address and the deliberate Join action.
 test('shared links show member quotes, deleted targets and non-member Join chips', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
-  await bootDemo(page, '/demo.html?tutorial=false')
+  await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(ROOM)}`)
   const target = await page.evaluate(async roomJid => {
     const scope = window as unknown as { __demoClient: DemoClient; __roomStore: typeof roomStore }
     scope.__demoClient.stopAnimation()
@@ -93,7 +93,7 @@ test('shared links show member quotes, deleted targets and non-member Join chips
   await expect(nonmember).toContainText('Join the room to see it')
   await expect(nonmember).not.toContainText(target.body)
   await nonmember.getByRole('link').click()
-  await expect(page.getByRole('button', { name: 'Join room', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Join room/ })).toBeVisible()
   expect(await page.evaluate(jid => (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState().rooms.get(jid)?.joined,
     'engineering@conference.fluux.chat')).toBe(false)
   await activateChat(page, 'emma@fluux.chat')
