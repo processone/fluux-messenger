@@ -90,6 +90,32 @@ describe('room link reader previews', () => {
     expect(screen.getByText('Join the room to see it')).toBeTruthy()
   })
 
+  it.each(['lookup', 'canonical', 'in-flight'])('keeps confirmed %s absence after delayed canonical and resident copies arrive', async source => {
+    roomStore.getState().addRoom(room)
+    let finish!: (result: { kind: 'absent' }) => void
+    if (source === 'lookup') read.mockResolvedValueOnce({ kind: 'absent' })
+    if (source === 'in-flight') read.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    show()
+    if (source === 'canonical') {
+      await screen.findByText(target.body)
+      act(() => emitMessageCacheUpdate({ kind: 'room', conversationId: jid, account: 'alice@example.org',
+        target: { ...target, isRetracted: true, body: '' } }))
+    }
+    if (source === 'in-flight') {
+      await waitFor(() => expect(read).toHaveBeenCalledTimes(1))
+      act(() => emitMessageCacheUpdate({ kind: 'room', conversationId: jid, account: 'alice@example.org', target }))
+      await screen.findByText(target.body)
+      await act(async () => finish({ kind: 'absent' }))
+    }
+    await screen.findByText('Message deleted')
+    await act(async () => emitMessageCacheUpdate({ kind: 'room', conversationId: jid, account: 'alice@example.org', target }))
+    expect(screen.getByText('Message deleted')).toBeTruthy()
+    expect(screen.queryByText(target.body)).toBeNull()
+    act(() => roomStore.getState().addRoom(room, [target]))
+    expect(screen.getByText('Message deleted')).toBeTruthy()
+    expect(screen.queryByText(target.body)).toBeNull()
+  })
+
   it.each([['absent', 'Message deleted'], ['unknown', 'Open message in room']])('distinguishes %s from other lookup outcomes', async (kind, notice) => {
     roomStore.getState().addRoom(room)
     read.mockResolvedValue({ kind })
