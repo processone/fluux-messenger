@@ -123,7 +123,7 @@
     "fake-indexeddb": "^6.2.5",
     "fast-check": "^4.9.0",
     "happy-dom": "^21.0.0",
-    "jsdom": "^30.0.0",
+    "jsdom": "^31.0.0",
     "react": "^19.3.1",
     "tsup": "^9.0.0",
     "typedoc": "^0.28.16",
