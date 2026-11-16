@@ -15,7 +15,7 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '0.18.3',
-    date: '2026-11-12',
+    date: '2026-11-16',
     sections: [{
       type: 'added',
       items: [
@@ -35,6 +35,8 @@ export const changelog: ChangelogEntry[] = [
         'Scrolling back through a very long conversation or room no longer gets stuck or returns to the newest messages once you go past the latest 5,000 messages, so you can read back to the start',
         'In long conversations and rooms, the messages you are reading no longer jump away when older messages finish loading while your pointer rests on a message or you keep scrolling',
         'Reading stays put when a conversation or room grows, when media finishes loading, and while you keep scrolling. On iOS, pulling past the end of a conversation while it grows brings you back to its newest messages when you let go',
+        'When the message box grows as you type a longer message, the latest message stays visible above it, in conversations and rooms',
+        'A reaction added to the last message now shows right away, even while your pointer rests on that message or you use it from the keyboard',
         'macOS: reading a conversation or room now also clears its notifications that arrived before Fluux was last restarted',
         'iOS: the app icon badge now shows Fluux\'s own unread count as soon as the app is open and connected, instead of keeping an old saved number until the archive catch-up ends',
         'iOS: the unread widget now asks the system to refresh itself about once an hour and re-reads its list, instead of relying only on redraw requests from the app',
