@@ -1224,6 +1224,8 @@
         "title": "Console XMPP",
         "clear": "Cancella voci",
         "export": "Esporta log",
+        "exportBadgeDiagnostics": "Esporta diagnostica dei badge",
+        "exportBadgeDiagnosticsFailed": "Impossibile salvare la diagnostica dei badge",
         "serverInfo": "Info server",
         "serverInformation": "Informazioni server",
         "close": "Chiudi console",

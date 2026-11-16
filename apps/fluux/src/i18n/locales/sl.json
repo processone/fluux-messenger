@@ -1226,6 +1226,8 @@
         "title": "XMPP konzola",
         "clear": "Počisti vnose",
         "export": "Izvozi dnevnik",
+        "exportBadgeDiagnostics": "Izvozi diagnostiko značk",
+        "exportBadgeDiagnosticsFailed": "Diagnostike značk ni bilo mogoče shraniti",
         "serverInfo": "Info o strežniku",
         "serverInformation": "Informacije o strežniku",
         "close": "Zapri konzolo",

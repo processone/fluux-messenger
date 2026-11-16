@@ -1225,6 +1225,8 @@
         "title": "XMPP konzola",
         "clear": "Vymazať záznamy",
         "export": "Exportovať log",
+        "exportBadgeDiagnostics": "Exportovať diagnostiku odznakov",
+        "exportBadgeDiagnosticsFailed": "Diagnostiku odznakov sa nepodarilo uložiť",
         "serverInfo": "Info o serveri",
         "serverInformation": "Informácie o serveri",
         "close": "Zavrieť konzolu",

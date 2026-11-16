@@ -1220,6 +1220,8 @@
         "title": "XMPP-console",
         "clear": "Items wissen",
         "export": "Log exporteren",
+        "exportBadgeDiagnostics": "Badgediagnostiek exporteren",
+        "exportBadgeDiagnosticsFailed": "Kan badgediagnostiek niet opslaan",
         "serverInfo": "Serverinfo",
         "serverInformation": "Serverinformatie",
         "close": "Console sluiten",

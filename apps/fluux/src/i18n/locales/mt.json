@@ -1228,6 +1228,8 @@
         "title": "Console XMPP",
         "clear": "Imsaħ entries",
         "export": "Esporta log",
+        "exportBadgeDiagnostics": "Esporta d-dijanjostika tal-badges",
+        "exportBadgeDiagnosticsFailed": "Ma setgħetx tiġi ssejvjata d-dijanjostika tal-badges",
         "serverInfo": "Info tas-server",
         "serverInformation": "Informazzjoni tas-Server",
         "close": "Agħlaq console",

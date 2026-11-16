@@ -123,6 +123,7 @@ export interface TrafficClient {
  * fails to compile rather than going unobserved.
  */
 export type DiagnosticObservation =
+  | { kind: 'badge-decision' } // Always-shipped journal owns these observations.
   | { kind: 'application-stanza-out'; stanza: ElementLike }
   | { kind: 'archive-merge'; report: ArchiveMergeReport }
   | {

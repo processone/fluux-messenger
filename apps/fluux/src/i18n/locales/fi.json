@@ -1220,6 +1220,8 @@
         "title": "XMPP-konsoli",
         "clear": "Tyhjennä merkinnät",
         "export": "Vie loki",
+        "exportBadgeDiagnostics": "Vie ilmoitusmerkkien diagnostiikka",
+        "exportBadgeDiagnosticsFailed": "Ilmoitusmerkkien diagnostiikkaa ei voitu tallentaa",
         "serverInfo": "Palvelimen tiedot",
         "serverInformation": "Palvelimen tiedot",
         "close": "Sulje konsoli",

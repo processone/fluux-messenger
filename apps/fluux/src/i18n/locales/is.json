@@ -1220,6 +1220,8 @@
         "title": "XMPP stjórnborð",
         "clear": "Hreinsa færslur",
         "export": "Flytja út annál",
+        "exportBadgeDiagnostics": "Flytja út greiningu tilkynningamerkja",
+        "exportBadgeDiagnosticsFailed": "Ekki tókst að vista greiningu tilkynningamerkja",
         "serverInfo": "Upplýsingar um þjón",
         "serverInformation": "Upplýsingar um þjón",
         "close": "Loka stjórnborði",

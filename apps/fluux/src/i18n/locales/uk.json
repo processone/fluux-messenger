@@ -1224,6 +1224,8 @@
         "title": "XMPP консоль",
         "clear": "Очистити записи",
         "export": "Експортувати журнал",
+        "exportBadgeDiagnostics": "Експортувати діагностику значків",
+        "exportBadgeDiagnosticsFailed": "Не вдалося зберегти діагностику значків",
         "serverInfo": "Інформація про сервер",
         "serverInformation": "Інформація про сервер",
         "close": "Закрити консоль",

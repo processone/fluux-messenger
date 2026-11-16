@@ -1224,6 +1224,8 @@
         "title": "Consola XMPP",
         "clear": "Limpiar entradas",
         "export": "Exportar registro",
+        "exportBadgeDiagnostics": "Exportar diagnóstico de insignias",
+        "exportBadgeDiagnosticsFailed": "No se pudo guardar el diagnóstico de insignias",
         "serverInfo": "Info del servidor",
         "serverInformation": "Información del Servidor",
         "close": "Cerrar consola",

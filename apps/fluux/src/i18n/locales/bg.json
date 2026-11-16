@@ -1220,6 +1220,8 @@
         "title": "XMPP конзола",
         "clear": "Изчисти записи",
         "export": "Експортирай лог",
+        "exportBadgeDiagnostics": "Експортиране на диагностиката на значките",
+        "exportBadgeDiagnosticsFailed": "Неуспешно запазване на диагностиката на значките",
         "serverInfo": "Информация за сървъра",
         "serverInformation": "Информация за сървъра",
         "close": "Затвори конзола",

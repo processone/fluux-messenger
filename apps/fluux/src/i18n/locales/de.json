@@ -1222,6 +1222,8 @@
         "title": "XMPP-Konsole",
         "clear": "Einträge löschen",
         "export": "Protokoll exportieren",
+        "exportBadgeDiagnostics": "Diagnose der Benachrichtigungszähler exportieren",
+        "exportBadgeDiagnosticsFailed": "Diagnose der Benachrichtigungszähler konnte nicht gespeichert werden",
         "serverInfo": "Server-Info",
         "serverInformation": "Server-Informationen",
         "close": "Konsole schließen",

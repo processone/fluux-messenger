@@ -1222,6 +1222,8 @@
         "title": "XMPP konsool",
         "clear": "Tühjenda kirjed",
         "export": "Ekspordi logi",
+        "exportBadgeDiagnostics": "Ekspordi märgiste diagnostika",
+        "exportBadgeDiagnosticsFailed": "Märgiste diagnostikat ei saanud salvestada",
         "serverInfo": "Serveri teave",
         "serverInformation": "Serveri teave",
         "close": "Sulge konsool",

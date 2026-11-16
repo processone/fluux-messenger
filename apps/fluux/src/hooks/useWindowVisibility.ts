@@ -1,3 +1,4 @@
+import { recordBadgeDiagnostic } from '@/utils/badgeDiagnostics'
 import { useEffect } from 'react'
 import { connectionStore, chatStore, roomStore } from '@fluux/sdk'
 import { dismissNotification } from '@/utils/dismissNotification'
@@ -31,6 +32,9 @@ export function useWindowVisibility(): void {
       // and its notifications suppressed.
       const isFocused = document.hasFocus() && document.visibilityState === 'visible'
 
+      recordBadgeDiagnostic({ phase: 'visibility', status: 'observed', visible: isFocused,
+        focused: document.hasFocus(), pageVisible: document.visibilityState === 'visible' })
+
       // Update store directly without going through React state
       connectionStore.getState().setWindowVisible(isFocused)
 
@@ -49,14 +53,18 @@ export function useWindowVisibility(): void {
       if (!wasFocused && isFocused) {
         const activeConversationId = chatStore.getState().activeConversationId
         if (activeConversationId) {
-          if (isViewportAtBottom('conversation', activeConversationId)) {
+          const atEdge = isViewportAtBottom('conversation', activeConversationId)
+          recordBadgeDiagnostic({ phase: 'visibility', status: 'observed', entityKind: 'chat', entityId: activeConversationId, active: true, visible: isFocused, viewportAtEdge: atEdge })
+          if (atEdge) {
             chatStore.getState().markAsRead(activeConversationId)
           }
           void dismissNotification('conversation', activeConversationId)
         }
         const activeRoomJid = roomStore.getState().activeRoomJid
         if (activeRoomJid) {
-          if (isViewportAtBottom('room', activeRoomJid)) {
+          const atEdge = isViewportAtBottom('room', activeRoomJid)
+          recordBadgeDiagnostic({ phase: 'visibility', status: 'observed', entityKind: 'room', entityId: activeRoomJid, active: true, visible: isFocused, viewportAtEdge: atEdge })
+          if (atEdge) {
             roomStore.getState().markAsRead(activeRoomJid)
           }
           void dismissNotification('room', activeRoomJid)

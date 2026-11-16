@@ -1,3 +1,4 @@
+import { badgeMessageKey } from '../../diagnostics/badgeIdentity'
 /**
  * Deferred-decrypt engine.
  *
@@ -24,7 +25,7 @@ import { decryptStanzaInPlace, COULD_NOT_DECRYPT_BODY, MESSAGE_REJECTED_BODY } f
 import { parseMessageContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, applyCorrection, parseOgpFastening, isMessageSignal } from '../modules/messagingUtils'
 import { getBareJid, getDomain } from '../jid'
 import { logDebug, logInfo, logWarn } from '../logger'
-import type { StoreBindings, MessageSecurityContext, FileAttachment, Message } from '../types'
+import type { StoreBindings, MessageSecurityContext, FileAttachment, Message, RoomMessage } from '../types'
 import { captureContentSource, resolveCorrectionUpdates, compareCorrectionRevisions, sameCorrection, type MessageImplState, type CorrectionUpdates, type StoredMessage, type StoredRoomMessage } from '../types/message-internal'
 import { captureStorageScope } from '../../utils/storageScope'
 import type { ArchiveSignal } from '../../utils/archiveSignal'
@@ -258,7 +259,7 @@ export class DeferredDecryptEngine {
         if (peer && (room || conversationId !== peer)) continue
         if (room) handledRoomKeys.add(JSON.stringify([message.roomJid, message.stanzaId ?? message.id, message.from, message.occupantId]))
         else handledChatKeys.add(chatCacheKey(message))
-        const outcome = unlessShown(message, await this.decryptSingle(manager, message.encryptedPayload!, message.from, conversationId, room ? 'room' : 'chat', room ? undefined : message as StoredMessage))
+        const outcome = unlessShown(message, await this.decryptSingle(manager, message.encryptedPayload!, message.from, conversationId, room ? 'room' : 'chat', room ? undefined : message as StoredMessage, message))
         if (accountChanged()) return decryptedCount
         if (this.correctionRecoveries.get(key) !== request) continue
         if (!request.isCurrent()) { this.correctionRecoveries.delete(key); continue }
@@ -322,7 +323,7 @@ export class DeferredDecryptEngine {
         for (const msg of messages) {
           if (!msg.encryptedPayload || handledRoomKeys.has(JSON.stringify([roomJid, msg.stanzaId ?? msg.id, msg.from, msg.occupantId]))) continue
           const outcome = unlessShown(msg, await this.decryptSingle(
-            manager, msg.encryptedPayload, msg.from, roomJid, 'room',
+            manager, msg.encryptedPayload, msg.from, roomJid, 'room', undefined, msg,
           ))
           if (accountChanged()) return decryptedCount
           if (outcome.kind === 'decrypted') {
@@ -583,6 +584,7 @@ export class DeferredDecryptEngine {
     peer: string,
     messageContext: 'chat' | 'room' = 'chat',
     archiveMessage?: StoredMessage,
+    diagnosticMessage: Message | RoomMessage | undefined = archiveMessage,
   ): Promise<RetryOutcome> {
     const scope = captureStorageScope()
     const stores = this.deps.getStores()
@@ -598,6 +600,7 @@ export class DeferredDecryptEngine {
           ? parsedPayload
           : (xml('message', { from: senderJid }, parsedPayload) as Element)
       if (!stanza.attrs.from) stanza.attrs.from = senderJid
+      if (diagnosticMessage) badgeMessageKey(diagnosticMessage, stanza)
 
       // Detect self-outgoing (sent carbon or MAM self-replay): when the
       // sender's bare JID equals our own, the signcrypt envelope's <to/>
@@ -608,10 +611,14 @@ export class DeferredDecryptEngine {
 
       // A late result is dropped with the abandoned call: `stanza` is a local
       // parse, and nothing below runs for it. The stash stays for a later pass.
-      const result = await settleWithin(decryptStanzaInPlace(
+      const pending = decryptStanzaInPlace(
         stanza, manager, peer, 'archive',
-        isSelfOutgoing ? { isSelfOutgoing: true } : undefined,
-      ), this.deps.decryptTimeoutMs ?? DEFAULT_DECRYPT_TIMEOUT_MS)
+        { isSelfOutgoing, entityKind: messageContext },
+      )
+      // A subscribed publisher may have minted the key during the synchronous
+      // start of this call; carry it back to a previously unobserved source row.
+      if (diagnosticMessage) badgeMessageKey(diagnosticMessage, stanza)
+      const result = await settleWithin(pending, this.deps.decryptTimeoutMs ?? DEFAULT_DECRYPT_TIMEOUT_MS)
       if (result === TIMED_OUT) {
         logWarn(`E2EE deferred decrypt timed out for message from ${getDomain(senderJid)}; leaving it pending`)
         return { kind: 'pending' }

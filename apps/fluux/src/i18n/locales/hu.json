@@ -1220,6 +1220,8 @@
         "title": "XMPP konzol",
         "clear": "Bejegyzések törlése",
         "export": "Napló exportálása",
+        "exportBadgeDiagnostics": "Értesítési jelvények diagnosztikájának exportálása",
+        "exportBadgeDiagnosticsFailed": "Nem sikerült menteni az értesítési jelvények diagnosztikáját",
         "serverInfo": "Szerver információ",
         "serverInformation": "Szerver információ",
         "close": "Konzol bezárása",

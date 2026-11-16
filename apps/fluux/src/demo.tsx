@@ -1,3 +1,4 @@
+import { startBadgeDiagnostics } from './utils/badgeDiagnostics'
 import { ShareInbox } from './components/ShareInbox'
 import { demoShareInbox } from './demo/shareInbox'
 /**
@@ -61,6 +62,8 @@ for (const key of Object.keys(localStorage)) {
     localStorage.removeItem(key)
   }
 }
+startBadgeDiagnostics()
+
 // Query-param seam: ?virt=1 re-sets the virtualization flag AFTER the clear above.
 // The production default is ON, but demo.tsx clears all fluux:* keys on init, so the
 // Playwright harness passes ?virt=1 to explicitly re-enable it in the cleared environment.

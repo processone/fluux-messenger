@@ -1220,6 +1220,8 @@
         "title": "XMPP-konsoll",
         "clear": "Tøm oppføringer",
         "export": "Eksporter logg",
+        "exportBadgeDiagnostics": "Eksporter merkediagnostikk",
+        "exportBadgeDiagnosticsFailed": "Kunne ikke lagre merkediagnostikk",
         "serverInfo": "Serverinfo",
         "serverInformation": "Serverinformasjon",
         "close": "Lukk konsoll",

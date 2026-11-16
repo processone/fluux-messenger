@@ -1,7 +1,8 @@
+import { saveBadgeDiagnostics } from '@/utils/badgeDiagnosticsExport'
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
-import { X, Trash2, Send, ChevronDown, ChevronUp, Search, Download, Server, ArrowDownToLine } from 'lucide-react'
+import { X, Trash2, Send, ChevronDown, ChevronUp, Search, Download, Bug, Server, ArrowDownToLine } from 'lucide-react'
 import { useConsole, useXMPP, type XmppPacket } from '@fluux/sdk'
 import { readRecountDeferrals } from '@/utils/recountDeferralTally'
 import { useConnectionStore } from '@fluux/sdk/react'
@@ -596,6 +597,16 @@ export function XmppConsole() {
               aria-label={t('console.export')}
             >
               <Download className="size-4" />
+            </button>
+          </Tooltip>
+          <Tooltip content={t('console.exportBadgeDiagnostics')} position="bottom">
+            <button
+              type="button"
+              onClick={() => { void saveBadgeDiagnostics(t('console.exportBadgeDiagnosticsFailed')) }}
+              className="p-1.5 text-fluux-muted hover:text-fluux-text hover:bg-fluux-bg/50 rounded"
+              aria-label={t('console.exportBadgeDiagnostics')}
+            >
+              <Bug className="size-4" />
             </button>
           </Tooltip>
           <Tooltip content={t('console.clear')} position="bottom">

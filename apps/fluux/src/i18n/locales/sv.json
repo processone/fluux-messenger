@@ -1220,6 +1220,8 @@
         "title": "XMPP-konsol",
         "clear": "Rensa poster",
         "export": "Exportera logg",
+        "exportBadgeDiagnostics": "Exportera diagnostik för aviseringsmärken",
+        "exportBadgeDiagnosticsFailed": "Det gick inte att spara diagnostik för aviseringsmärken",
         "serverInfo": "Serverinfo",
         "serverInformation": "Serverinformation",
         "close": "Stäng konsol",

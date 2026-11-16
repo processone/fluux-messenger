@@ -1223,6 +1223,8 @@
         "title": "XMPP konsole",
         "clear": "Notīrīt ierakstus",
         "export": "Eksportēt žurnālu",
+        "exportBadgeDiagnostics": "Eksportēt nozīmīšu diagnostiku",
+        "exportBadgeDiagnosticsFailed": "Neizdevās saglabāt nozīmīšu diagnostiku",
         "serverInfo": "Servera informācija",
         "serverInformation": "Servera informācija",
         "close": "Aizvērt konsoli",

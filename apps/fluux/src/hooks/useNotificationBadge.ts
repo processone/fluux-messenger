@@ -1,3 +1,4 @@
+import { recordBadgeDiagnostic } from '@/utils/badgeDiagnostics'
 import { useEffect, useRef } from 'react'
 import { useEvents, computeBadgeCount, chatStore, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
@@ -8,7 +9,7 @@ import { DESKTOP_WIDGET_HEARTBEAT_MS, startUnreadWidgetPublisher } from '@/utils
 import { platform } from '@/platform'
 
 // Set Tauri dock/taskbar badge
-async function setTauriBadge(count: number): Promise<void> {
+async function setTauriBadge(count: number, requestId: string): Promise<void> {
   if (!platform().hasNativeAppBadge) return
 
   try {
@@ -16,10 +17,14 @@ async function setTauriBadge(count: number): Promise<void> {
     const window = getCurrentWindow()
     // Pass undefined to clear badge, number to set it
     await window.setBadgeCount(count > 0 ? count : undefined)
+    recordBadgeDiagnostic({ phase: 'badge-result', status: 'succeeded', count, requestId, badgeTarget: 'desktop-native' })
   } catch {
+    recordBadgeDiagnostic({ phase: 'badge-result', status: 'failed', count, requestId, badgeTarget: 'desktop-native' })
     // Badge API may not be available on all platforms
   }
 }
+
+let badgeRequestSequence = 0
 
 // Browser favicon badge implementation
 class FaviconBadge {
@@ -165,8 +170,12 @@ export function useNotificationBadge(): void {
       },
     })
 
+    const requestId = String(++badgeRequestSequence)
+    recordBadgeDiagnostic({ phase: 'badge-request', status: 'pending', requestId, count: totalCount,
+      chats: conversationsUnreadCount, rooms: roomsWithUnreadCount, events: eventsPendingCount,
+      badgeTarget: platform().hasNativeAppBadge ? 'desktop-native' : platform().publishesUnreadWidget ? 'widget-publisher' : platform().usesNativePush ? 'native-push' : 'web' })
     if (platform().hasNativeAppBadge) {
-      void setTauriBadge(totalCount)
+      void setTauriBadge(totalCount, requestId)
     } else if (platform().publishesUnreadWidget) {
       // The store publisher sends badge membership and widget rows from the same snapshot,
       // including same-total membership changes and the end of wake catch-up.

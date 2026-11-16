@@ -1223,6 +1223,8 @@
         "title": "Console XMPP",
         "clear": "Effacer les entrées",
         "export": "Exporter le journal",
+        "exportBadgeDiagnostics": "Exporter le diagnostic des badges",
+        "exportBadgeDiagnosticsFailed": "Impossible d’enregistrer le diagnostic des badges",
         "serverInfo": "Infos serveur",
         "serverInformation": "Informations du serveur",
         "close": "Fermer la console",

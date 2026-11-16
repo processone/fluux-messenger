@@ -1226,6 +1226,8 @@
         "title": "Konsola XMPP",
         "clear": "Wyczyść wpisy",
         "export": "Eksportuj log",
+        "exportBadgeDiagnostics": "Eksportuj diagnostykę plakietek",
+        "exportBadgeDiagnosticsFailed": "Nie udało się zapisać diagnostyki plakietek",
         "serverInfo": "Informacje o serwerze",
         "serverInformation": "Informacje o serwerze",
         "close": "Zamknij konsolę",

@@ -1,3 +1,4 @@
+import { createBadgeMessageKey } from '../../diagnostics/badgeIdentity'
 /**
  * Shared inbound-decrypt step for any message source.
  *
@@ -17,6 +18,8 @@
  * - stash the resulting security context on the stanza so downstream
  *   parsers can attach it to the emitted {@link Message}.
  */
+import { publishDiagnostic, type BadgeDecisionDiagnostic } from '../../diagnostics/channel'
+import { getStorageScopeJid } from '../../utils/storageScope'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { elementToData } from './stanzaAdapter'
@@ -201,8 +204,18 @@ export async function decryptStanzaInPlace(
   manager: E2EEManager,
   senderPeer: string,
   source: InboundSource = 'live',
-  options?: { isSelfOutgoing?: boolean; archiveTimestamp?: Date },
+  options?: { isSelfOutgoing?: boolean; archiveTimestamp?: Date; entityKind?: 'chat' | 'room' },
 ): Promise<DecryptInPlaceResult> {
+  // Observe the existing claim/decrypt path without calling plugins again or
+  // adding another asynchronous layer around their result.
+  const accountScope = getStorageScopeJid() ?? ''
+  const entityKind = options?.entityKind ?? (stanza.attrs.type === 'groupchat' ? 'room' : 'chat')
+  const report = (phase: BadgeDecisionDiagnostic['phase'], status: BadgeDecisionDiagnostic['status']) => {
+    publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', phase, status,
+      entityKind, entityId: senderPeer,
+      messageKey: createBadgeMessageKey(stanza), accountScope, source,
+    }), undefined)
+  }
   const marked = stanza as unknown as {
     [DECRYPTED_MARKER]?: boolean
     [SECURITY_CONTEXT_STASH]?: SecurityContext
@@ -237,7 +250,7 @@ export async function decryptStanzaInPlace(
     // (no plugin registered — stash for deferred retry) from "protocol we have
     // no plugin for" (e.g. OMEMO when only OpenPGP is wired — surface the
     // sender's XEP-0380 fallback <body> with an unsupported-method tag).
-    const disposition = recordUnclaimedEME(stanza, manager)
+    const disposition = recordUnclaimedEME(stanza, manager, { peer: senderPeer, source, entityKind })
     if (disposition.kind === 'retry') {
       return { attempted: false, encryptedPayloadXml: disposition.encryptedPayloadXml }
     }
@@ -246,6 +259,8 @@ export async function decryptStanzaInPlace(
     }
     return { attempted: false }
   }
+
+  report('decrypt-start', 'pending')
 
   // Serialize BEFORE any mutation — the encrypted element will be stripped
   // below regardless of success/failure. The full stanza is what gets
@@ -469,6 +484,7 @@ export async function decryptStanzaInPlace(
     marked[AUTHORED_AT_STASH] = authoredAt
   }
   marked[DECRYPTED_MARKER] = true
+  report('decrypt-complete', failureReason !== null || securityContext?.trust === 'rejected' ? 'failed' : 'succeeded')
 
   return {
     attempted: true,
@@ -701,13 +717,21 @@ function isEmptyOmemoElement(namespace: string, child: Element | null): boolean 
 export function recordUnclaimedEME(
   stanza: Element,
   pluginState: UnclaimedEMEPluginState,
+  diagnostic?: { peer: string; source: InboundSource; entityKind: 'chat' | 'room' },
 ): UnclaimedEMEDisposition {
+  const report = (status: BadgeDecisionDiagnostic['status']) => {
+    if (diagnostic) publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', phase: 'decrypt-complete', status,
+      entityKind: diagnostic.entityKind, entityId: diagnostic.peer,
+      messageKey: createBadgeMessageKey(stanza), accountScope: getStorageScopeJid() ?? '', source: diagnostic.source,
+    }), undefined)
+  }
   const target = findEncryptionTarget(stanza)
   if (!target) return { kind: 'none' }
 
   // Session bookkeeping, not a message — drop before either branch below can
   // turn it into a placeholder. See {@link isEmptyOmemoElement}.
   if (isEmptyOmemoElement(target.namespace, target.child)) {
+    report('discarded')
     logInfo(`E2EE: dropped empty OMEMO message (ns=${target.namespace})`)
     return { kind: 'none' }
   }
@@ -717,6 +741,7 @@ export function recordUnclaimedEME(
     const info: EMEIdentity = { namespace: target.namespace, name }
     ;(stanza as unknown as Record<string, EMEIdentity>)[UNSUPPORTED_ENC_STASH] = info
     logInfo(`E2EE: message uses unsupported encryption (${name} / ${target.namespace})`)
+    report('unsupported')
     return { kind: 'unsupported', info }
   }
 
@@ -727,6 +752,7 @@ export function recordUnclaimedEME(
   const payloadXml = stanza.toString()
   stashPayload(stanza, payloadXml)
   logInfo(`E2EE: stashed encrypted payload (ns=${target.namespace}) for deferred decrypt`)
+  report('unavailable')
   return { kind: 'retry', encryptedPayloadXml: payloadXml }
 }
 
