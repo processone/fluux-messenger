@@ -175,8 +175,8 @@ export function useViewportResizeReconciliation({
       pendingHeight = entries[0].contentRect.height
       pendingWidth = entries[0].contentRect.width
       if (lastHeight !== null && pendingHeight < lastHeight && pendingWidth === lastWidth) {
-        // The controller writes only scroll position, not the observed viewport size.
-        // Keep its ownership/reader eligibility checks, but do not defer this shrink.
+        // Use the existing controller, including its overflow/padding maintenance.
+        // Only same-width shrinks bypass coalescing; retain its ownership/reader vetoes.
         if (rafId !== null) cancelAnimationFrame(rafId)
         runCorrection()
       } else if (!scheduled) {
