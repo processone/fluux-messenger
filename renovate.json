@@ -49,7 +49,7 @@
       "enabled": false
     },
     {
-      "description": "zbus 6 breaks Flatpak D-Bus with xdg-dbus-proxy before 0.1.6 on Ubuntu 22.04/24.04; notify-rust and Tauri plugins still use zbus 5. Remove once supported Ubuntu LTS releases ship xdg-dbus-proxy 0.1.6 or later and notify-rust and the Tauri plugins require zbus 6.",
+      "description": "zbus 6 breaks Flatpak D-Bus with xdg-dbus-proxy before 0.1.6 on Ubuntu 22.04/24.04. This keeps the app's own zbus dependency (Linux tray probe and notification dismissal) on zbus 5, which the Tauri plugins also use. notify-rust 4.19 and later require zbus 6 and add it as a second copy for sending notifications; that copy is accepted. Remove once supported Ubuntu LTS releases ship xdg-dbus-proxy 0.1.6 or later and the Tauri plugins require zbus 6.",
       "matchManagers": ["cargo"],
       "matchPackageNames": ["zbus"],
       "matchUpdateTypes": ["major"],
