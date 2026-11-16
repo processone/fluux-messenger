@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight } from 'lucide-react'
 import { applyRoomMessagePreviewUpdate, buildRoomMessageLink, findRoomMessageLink, getBareJid, getLocalPart, subscribeMessageCacheUpdates, useXMPPContext, type BaseMessage, type RoomMessage, type RoomMessageLink } from '@fluux/sdk'
@@ -9,7 +9,7 @@ import { MessageLink } from './MessageLink'
 import { renderQuotePreview } from '@/utils/messageStyles'
 
 type PreviewResult = { kind: 'found'; message: RoomMessage } | { kind: 'absent' | 'unknown' }
-type QuoteUpdate = Parameters<typeof applyRoomMessagePreviewUpdate>[1]
+type QuoteUpdate = Parameters<typeof applyRoomMessagePreviewUpdate>[1] & { canonicalTarget?: RoomMessage }
 
 /** Never render a quote from sender-supplied text: the reader resolves its own copy. */
 export function RoomMessageLinkPreview({ message, formatTime, isDarkMode }: {
@@ -40,6 +40,14 @@ function ReaderQuote({ target, formatTime, isDarkMode }: {
   const generation = useRef(0)
   const [resolved, setResolved] = useState<{ account: string; result: PreviewResult } | null>(null)
 
+  const project = useCallback(async (message: RoomMessage, event: QuoteUpdate, signal: AbortSignal): Promise<PreviewResult> => {
+    const target = event.canonicalTarget ? { kind: 'found' as const, message: event.canonicalTarget }
+      : await client.messages.resolveRoomMessagePreviewTarget(message, 'updates' in event ? event.messageId : event.targetId, signal)
+    if (target.kind === 'unknown') return target
+    return { kind: 'found', message: target.kind === 'found'
+      ? applyRoomMessagePreviewUpdate(message, event, account, target.message) : message }
+  }, [client, account])
+
   useEffect(() => {
     let current = true
     if (!joined || !account) return
@@ -48,52 +56,61 @@ function ReaderQuote({ target, formatTime, isDarkMode }: {
       setResolved({ account, result: resident.isRetracted ? { kind: 'absent' } : { kind: 'found', message: resident } })
       return
     }
+    const controller = new AbortController()
     const request = generation.current
     const queued: QuoteUpdate[] = []
     pendingUpdates.current = queued
-    void client.messages.readRoomMessagePreview(target.roomJid, target.stanzaId).then(result => {
+    void client.messages.readRoomMessagePreview(target.roomJid, target.stanzaId, controller.signal).then(async result => {
       if (current && request === generation.current) {
         if (result.kind === 'found' && snapshot.current) {
           const message = applyRoomMessagePreviewUpdate(snapshot.current, {
             roomJid: target.roomJid, messageId: target.stanzaId, updates: result.message,
-          }, account)
+          }, account, result.message)
           result = message.isRetracted ? { kind: 'absent' } : { kind: 'found', message }
         }
-        if (result.kind === 'found') {
-          let message = result.message
-          for (const event of queued) message = applyRoomMessagePreviewUpdate(message, event, account)
-          result = message.isRetracted ? { kind: 'absent' } : { kind: 'found', message }
+        for (const event of queued) {
+          if (result.kind !== 'found') break
+          result = await project(result.message, event, controller.signal)
         }
+        if (!current || request !== generation.current) return
+        if (result.kind === 'found' && result.message.isRetracted) result = { kind: 'absent' }
         snapshot.current = result.kind === 'found' ? result.message : undefined
         setResolved({ account, result })
       }
     }).catch(() => {
       if (current && request === generation.current) setResolved({ account, result: { kind: 'unknown' } })
     }).finally(() => { if (pendingUpdates.current === queued) pendingUpdates.current = null })
-    return () => { current = false; if (pendingUpdates.current === queued) pendingUpdates.current = null }
-  }, [client, account, joined, target.roomJid, target.stanzaId, resident])
+    return () => { current = false; controller.abort(); if (pendingUpdates.current === queued) pendingUpdates.current = null }
+  }, [client, account, joined, target.roomJid, target.stanzaId, resident, project])
 
   useEffect(() => {
     if (!joined) { snapshot.current = undefined; setResolved(null); return }
+    const controller = new AbortController()
+    let current = true
+    let changes = Promise.resolve()
     const update = (event: QuoteUpdate) => {
       if (event.roomJid !== target.roomJid) return
-      const held = snapshot.current
-      if (!held) { pendingUpdates.current?.push(event); return }
-      const message = applyRoomMessagePreviewUpdate(held, event, account)
-      if (message === held) return
-      // A read started before this event must not replace the new content.
+      if (!snapshot.current) { pendingUpdates.current?.push(event); return }
+      // Canonical target reads are ordered like the SDK events they resolve.
       generation.current++
-      snapshot.current = message
-      setResolved({ account, result: message.isRetracted ? { kind: 'absent' } : { kind: 'found', message } })
+      changes = changes.then(async () => {
+        if (!current || !snapshot.current) return
+        const result = await project(snapshot.current, event, controller.signal)
+        if (!current) return
+        snapshot.current = result.kind === 'found' ? result.message : undefined
+        setResolved({ account, result: result.kind === 'found' && result.message.isRetracted ? { kind: 'absent' } : result })
+      }).catch(() => {
+        if (current) { snapshot.current = undefined; setResolved({ account, result: { kind: 'unknown' } }) }
+      })
     }
     const unsubscribeUpdate = client.subscribe('room:message-updated', update)
     const unsubscribeRetraction = client.subscribe('room:retraction-pending', update)
     const unsubscribeCache = subscribeMessageCacheUpdates(event => {
       if (event.kind !== 'room' || event.target.type !== 'groupchat' || event.account !== account || event.conversationId !== target.roomJid) return
-      update({ roomJid: target.roomJid, messageId: event.target.stanzaId ?? event.target.id, updates: event.target })
+      update({ roomJid: target.roomJid, messageId: event.target.stanzaId ?? event.target.id, updates: event.target, canonicalTarget: event.target })
     })
-    return () => { unsubscribeUpdate(); unsubscribeRetraction(); unsubscribeCache() }
-  }, [client, account, joined, target.roomJid])
+    return () => { current = false; controller.abort(); unsubscribeUpdate(); unsubscribeRetraction(); unsubscribeCache() }
+  }, [client, account, joined, target.roomJid, project])
 
   const result: PreviewResult | undefined = resident
     ? resident.isRetracted ? { kind: 'absent' } : { kind: 'found', message: resident }

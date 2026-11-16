@@ -1132,6 +1132,7 @@ export interface RoomState {
   reconcileHistoryMessages: (messages: RoomMessage[], options?: { retractionsOnly?: boolean }) => Promise<RoomMessage[]>
   /** Room-scoped archive lookup for message links, without hydrating a resident window. */
   getMessageByArchiveId: (roomJid: string, stanzaId: string) => Promise<RoomMessage | null>
+  getMessageByReference: (roomJid: string, reference: string, additional: readonly RoomMessage[]) => Promise<RoomMessage | null>
   /** Persist bounded context without changing live history, previews or read state. */
   saveMessageLinkContext: (roomJid: string, messages: RoomMessage[]) => Promise<boolean>
   updateMessage: (
@@ -3020,6 +3021,13 @@ export const roomStore = createStore<RoomState>()(
   },
 
   resolvePendingRemoteDisplayedFromCache: (roomJid) => roomReadTracker.resolvePendingFromCache(roomJid),
+
+  getMessageByReference: async (roomJid, reference, additional) => {
+    const current = captureRoomCacheRead(roomJid)
+    const message = await messageCache.getRoomMessageByReference(roomJid, reference, undefined,
+      [...(get().messages.get(roomJid) ?? []), ...additional])
+    return current() ? message : null
+  },
 
   getMessageByArchiveId: async (roomJid, stanzaId) => {
     const current = captureRoomCacheRead(roomJid)

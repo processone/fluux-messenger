@@ -1754,8 +1754,13 @@ export class Chat extends BaseModule {
   }
 
   /** Resolve a reader-built quote without changing the room timeline. */
-  async readRoomMessagePreview(roomJid: string, stanzaId: string) {
-    return this.mamModule.readRoomMessagePreview(roomJid, stanzaId)
+  async readRoomMessagePreview(roomJid: string, stanzaId: string, signal?: AbortSignal) {
+    return this.mamModule.readRoomMessagePreview(roomJid, stanzaId, signal)
+  }
+
+  /** Resolve a detached quote update against canonical room/cache/archive identity. */
+  async resolveRoomMessagePreviewTarget(message: RoomMessage, reference: string, signal?: AbortSignal) {
+    return this.mamModule.resolveRoomMessagePreviewTarget(message, reference, signal)
   }
 
   /** Resolve a joined room's message link from resident history, cache, then bounded archive context. */

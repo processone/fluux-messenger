@@ -124,6 +124,7 @@ import {
   archiveReference,
   roomScope,
   sameLogicalMessage,
+  messageReferences,
   correctionReferences,
   archiveIdentityConflict,
   occupantConflict,
@@ -3403,13 +3404,15 @@ export class MAM extends BaseModule {
     entityId: string,
     isRoom: boolean,
     archiveId: string,
+    signal?: AbortSignal,
   ): Promise<{ kind: 'found'; entry: RawArchiveEntry; page: RawArchiveEntry[] } | { kind: 'absent' } | { kind: 'unknown' }> {
-    let result = await this.queryOneArchivedEntry(entityId, isRoom, { before: archiveId })
+    signal?.throwIfAborted()
+    let result = await this.queryOneArchivedEntry(entityId, isRoom, { before: archiveId }, 1, signal)
     if (result.kind !== 'page') return result
     // A server must not return the cursor itself for `before`, but when one does, it is the answer.
     if (!result.entries.some((e) => e.archiveId === archiveId)) {
       const predecessor = result.entries.at(-1)?.archiveId
-      result = await this.queryOneArchivedEntry(entityId, isRoom, predecessor ? { after: predecessor } : {})
+      result = await this.queryOneArchivedEntry(entityId, isRoom, predecessor ? { after: predecessor } : {}, 1, signal)
       // The predecessor itself vanished between the two queries: that says nothing about the target.
       if (result.kind !== 'page') return { kind: 'unknown' }
     }
@@ -3428,7 +3431,9 @@ export class MAM extends BaseModule {
     isRoom: boolean,
     cursor: { before?: string; after?: string },
     max = 1,
+    signal?: AbortSignal,
   ): Promise<{ kind: 'page'; entries: RawArchiveEntry[]; complete: boolean } | { kind: 'absent' } | { kind: 'unknown' }> {
+    signal?.throwIfAborted()
     const session = this.captureQuery()
     const queryId = `mam_${generateUUID()}`
     // No `with` filter: the account archive is ordered as a whole, so the
@@ -3450,8 +3455,11 @@ export class MAM extends BaseModule {
 
     let response: Element | undefined
     try {
+      signal?.throwIfAborted()
       response = await this.deps.sendIQ(iq)
+      signal?.throwIfAborted()
     } catch (error) {
+      signal?.throwIfAborted()
       return isItemNotFoundError(error) && (cursor.before ?? cursor.after) !== undefined
         ? { kind: 'absent' }
         : { kind: 'unknown' }
@@ -3462,29 +3470,66 @@ export class MAM extends BaseModule {
     return { kind: 'page', entries, complete: this.parseMAMResponse(response).complete }
   }
 
-  /** Read a linked quote without publishing arrivals, moving windows or claiming coverage. */
-  async readRoomMessagePreview(roomJid: string, stanzaId: string): Promise<
+  /** Resolve an update's archive tier before considering detached sender-id aliases. */
+  async resolveRoomMessagePreviewTarget(message: RoomMessage, reference: string, signal?: AbortSignal): Promise<
     { kind: 'found'; message: RoomMessage } | { kind: 'absent' | 'unknown' }
   > {
+    const session = this.captureQuery()
+    signal?.throwIfAborted()
+    const roomJid = message.roomJid
+    const current = () => { signal?.throwIfAborted(); session.assertCurrent(); return !!this.deps.stores?.room.getRoom(roomJid)?.joined }
+    if (!current()) return { kind: 'unknown' }
+    if (reference === message.stanzaId) return { kind: 'found', message }
+    // This only excludes unrelated updates; a matching alias still needs the
+    // canonical archive/cache lookup below before it can change the quote.
+    if (!resolveMessageReference([message], reference, 'archive-first')) return { kind: 'absent' }
+    const archived = await this.deps.stores?.room.getMessageByArchiveId?.(roomJid, reference)
+    if (!current()) return { kind: 'unknown' }
+    if (archived) return { kind: 'found', message: archived }
+    const found = await this.findArchivedEntry(roomJid, true, reference, signal)
+    if (!current()) return { kind: 'unknown' }
+    if (found.kind === 'unknown') return found
+    if (found.kind === 'found') {
+      const entry = found.entry
+      await this.decryptArchiveEntryIfNeeded(entry.messageEl, roomJid, 'room', this.extractForwardedTimestamp(entry.forwarded), entry.archiveId)
+      if (!current()) return { kind: 'unknown' }
+      const target = this.parseRoomArchiveMessage(entry.forwarded, roomJid, roomSelf(this.deps.stores?.room.getRoom(roomJid)), entry.archiveId)
+      return target ? { kind: 'found', message: target } : { kind: 'unknown' }
+    }
+    if (!this.deps.stores?.room.getMessageByReference) return { kind: 'unknown' }
+    const target = await this.deps.stores.room.getMessageByReference(roomJid, reference, [message])
+    if (!current()) return { kind: 'unknown' }
+    return target ? { kind: 'found', message: target } : { kind: 'absent' }
+  }
+
+  /** Read a linked quote without publishing arrivals, moving windows or claiming coverage. */
+  async readRoomMessagePreview(roomJid: string, stanzaId: string, signal?: AbortSignal): Promise<
+    { kind: 'found'; message: RoomMessage } | { kind: 'absent' | 'unknown' }
+  > {
+    signal?.throwIfAborted()
     const session = this.captureQuery()
     const joined = () => !!this.deps.stores?.room.getRoom(roomJid)?.joined
     if (!joined()) return { kind: 'unknown' }
     const pending = this.deps.stores?.room.waitForMessageArrivals?.(roomJid)
     if (pending && !await pending) return { kind: 'unknown' }
+    signal?.throwIfAborted()
     session.assertCurrent()
     if (!joined()) return { kind: 'unknown' }
     let message = this.deps.stores?.room.getMessage(roomJid, stanzaId)
     if (message?.stanzaId !== stanzaId || message.isPrivate) message = undefined
     message ??= await this.deps.stores?.room.getMessageByArchiveId?.(roomJid, stanzaId) ?? undefined
+    signal?.throwIfAborted()
     session.assertCurrent()
     if (!joined()) return { kind: 'unknown' }
     if (!message) {
-      const found = await this.findArchivedEntry(roomJid, true, stanzaId)
+      const found = await this.findArchivedEntry(roomJid, true, stanzaId, signal)
+      signal?.throwIfAborted()
       session.assertCurrent()
       if (!joined()) return { kind: 'unknown' }
       if (found.kind !== 'found') return found
       const { forwarded, messageEl, archiveId } = found.entry
       await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, 'room', this.extractForwardedTimestamp(forwarded), archiveId)
+      signal?.throwIfAborted()
       session.assertCurrent()
       message = this.parseRoomArchiveMessage(forwarded, roomJid, roomSelf(this.deps.stores?.room.getRoom(roomJid)), archiveId) ?? undefined
       if (message && !message.isRetracted) {
@@ -3494,17 +3539,35 @@ export class MAM extends BaseModule {
         const order = new Map<string, Set<CorrectionOrderGroup>>()
         let after = stanzaId
         while (joined()) {
-          const page = await this.queryOneArchivedEntry(roomJid, true, { after }, 100)
+          signal?.throwIfAborted()
+          const page = await this.queryOneArchivedEntry(roomJid, true, { after }, 100, signal)
+          signal?.throwIfAborted()
           session.assertCurrent()
           if (!joined() || page.kind !== 'page') return { kind: 'unknown' }
           const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
           for (const entry of page.entries) {
+            signal?.throwIfAborted()
             const delay = entry.forwarded.getChild('delay', NS_DELAY)
             await this.decryptArchiveEntryIfNeeded(entry.messageEl, roomJid, 'room', delayStamp(delay), entry.archiveId)
+            signal?.throwIfAborted()
             session.assertCurrent()
-            this.collectModification(entry.messageEl, modifications, from => from, delay, roomJid, entry.archiveId)
+            if (!this.collectModification(entry.messageEl, modifications, from => from, delay, roomJid, entry.archiveId)) {
+              const row = this.parseRoomArchiveMessage(entry.forwarded, roomJid, roomSelf(this.deps.stores?.room.getRoom(roomJid)), entry.archiveId)
+              // Keep only competing identities, not the entire room history.
+              if (row && !messages.some(candidate => candidate.stanzaId === row.stanzaId) && messageReferences(message, 'archive-first')
+                .some(reference => resolveMessageReference([row], reference, 'archive-first'))) messages.push(row)
+            }
+          }
+          // A sender id on the quote must not shadow another entry's archive id.
+          for (const reference of new Set([...modifications.corrections, ...modifications.retractions,
+            ...modifications.fastenings, ...modifications.reactions].map(change => change.targetId))) {
+            if (!resolveMessageReference([message], reference, 'archive-first')) continue
+            const canonical = await this.resolveRoomMessagePreviewTarget(message, reference, signal)
+            if (canonical.kind === 'unknown') return canonical
+            if (canonical.kind === 'found' && !messages.some(row => row.stanzaId === canonical.message.stanzaId)) messages.push(canonical.message)
           }
           await this.applyModifications(messages, modifications, roomMessageAuthor, undefined, order)
+          signal?.throwIfAborted()
           session.assertCurrent()
           if (messages[0].isRetracted || page.complete || !page.entries.length) break
           const next = page.entries.at(-1)!.archiveId
@@ -3516,6 +3579,7 @@ export class MAM extends BaseModule {
     }
     if (message) {
       const reconciled = await this.deps.stores?.room.reconcileHistoryMessages?.([message])
+      signal?.throwIfAborted()
       session.assertCurrent()
       message = reconciled?.[0] ?? message
     }

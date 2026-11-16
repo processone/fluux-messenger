@@ -3,6 +3,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { MAM } from './MAM'
+import { applyRoomMessagePreviewUpdate } from '../../stores/shared/correctionHandoff'
 import type { ModuleDependencies } from './BaseModule'
 import { createMockPresenceReader } from '../test-utils'
 import { createDefaultStoreBindings } from '../defaultStoreBindings'
@@ -36,7 +37,7 @@ afterEach(() => { roomStore.getState().reset(); setStorageScopeJid(null); vi.res
 
 // XEP-0313/RSM server boundary, shared by id lookup and context pages. The real
 // stores/cache own placement and read state; this stand-in owns only IQ replies.
-function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modification?: 'correction' | 'retraction') {
+function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modification?: 'correction' | 'retraction', history = rows, targetReference?: string) {
   let collect: ((stanza: Element) => void) | undefined
   const emitSDK = vi.fn()
   const sendIQ = vi.fn(async (iq: Element) => {
@@ -48,21 +49,22 @@ function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modificati
     const after = set.getChildText('after') ?? undefined
     const max = Number(set.getChildText('max'))
     const cursor = before ?? after
-    const at = before === '' ? rows.length : cursor === undefined ? 0 : rows.findIndex(row => row.stanzaId === cursor)
+    const at = before === '' ? history.length : cursor === undefined ? 0 : history.findIndex(row => row.stanzaId === cursor)
     if (at < 0) throw Object.assign(new Error('item-not-found'), { condition: 'item-not-found' })
     const pageMax = Math.min(max, 25)
-    const page = before !== undefined ? rows.slice(Math.max(0, at - pageMax), at)
-      : after !== undefined ? rows.slice(at + 1, at + 1 + pageMax) : rows.slice(0, pageMax)
+    const page = before !== undefined ? history.slice(Math.max(0, at - pageMax), at)
+      : after !== undefined ? history.slice(at + 1, at + 1 + pageMax) : history.slice(0, pageMax)
     for (const row of page) collect!(xml('message', { from: ROOM },
       xml('result', { xmlns: MAM_NS, queryid: query.attrs.queryid, id: row.stanzaId },
         xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
           xml('delay', { xmlns: 'urn:xmpp:delay', stamp: row.timestamp.toISOString() }),
           xml('message', { type: 'groupchat', from: row.from, id: row.id }, xml('body', {}, row.body),
+            ...(row.originId ? [xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id: row.originId })] : []),
             ...(sharedLink ? [xml('reference', { xmlns: 'urn:xmpp:reference:0', type: 'data', uri: sharedLink })] : []),
-            ...(row === rows[70] && modification ? [modification === 'correction'
-              ? xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: rows[40].id })
-              : xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: rows[40].stanzaId })] : []))))))
-    const complete = before !== undefined ? page[0] === rows[0] : page.at(-1) === rows.at(-1)
+            ...(row === history[70] && modification ? [modification === 'correction'
+              ? xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: targetReference ?? history[40].id })
+              : xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: targetReference ?? history[40].stanzaId })] : []))))))
+    const complete = before !== undefined ? page[0] === history[0] : page.at(-1) === history.at(-1)
     return xml('iq', { type: 'result' }, xml('fin', { xmlns: MAM_NS, complete: String(complete) },
       xml('set', { xmlns: RSM_NS }, xml('first', {}, page[0]?.stanzaId ?? ''), xml('last', {}, page.at(-1)?.stanzaId ?? ''))))
   })
@@ -76,6 +78,79 @@ function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modificati
 // Intent: docs/URL_SCHEMES.md — locate order, bounded separate
 // archive stretch, absent versus failed outcomes and membership privacy.
 describe('linked room message lookup', () => {
+  it.each(['cache', 'archive'] as const)('resolves a live reference against the %s archive tier before a detached client-id alias', async source => {
+    const quote = { ...rows[40], id: rows[60].stanzaId }
+    const other = rows[60]
+    if (source === 'cache') await cache.saveRoomMessages([other])
+    const h = harness()
+    const canonical = await h.mam.resolveRoomMessagePreviewTarget(quote, quote.id)
+    expect(canonical).toMatchObject({ kind: 'found', message: { stanzaId: other.stanzaId } })
+    if (canonical.kind !== 'found') throw new Error('Expected canonical target')
+    const result = applyRoomMessagePreviewUpdate(quote, { roomJid: ROOM, targetId: other.stanzaId,
+      actorJid: other.from, actorOccupantId: other.occupantId }, ACCOUNT, canonical.message)
+    expect(result).toBe(quote)
+    expect(result.isRetracted).not.toBe(true)
+  })
+
+  it.each(['correction', 'retraction'] as const)('does not apply an archived %s to a quote whose client id collides with another archive id', async modification => {
+    const history = rows.map((row, index) => index === 40 ? { ...row, id: rows[60].stanzaId } : row)
+    const h = harness(undefined, undefined, modification, history, history[60].stanzaId)
+    expect(await h.mam.readRoomMessagePreview(ROOM, history[40].stanzaId)).toMatchObject({
+      kind: 'found', message: { stanzaId: history[40].stanzaId, body: history[40].body },
+    })
+    expect(h.emitSDK).not.toHaveBeenCalled()
+  })
+
+  it('preserves an observed origin-id target ahead of the quote client-id fallback', async () => {
+    const reference = 'later-room-update'
+    const history = rows.map((row, index) => index === 40 ? { ...row, id: reference }
+      : index === 60 ? { ...row, originId: reference } : row)
+    const h = harness(undefined, undefined, 'retraction', history, reference)
+    expect(await h.mam.readRoomMessagePreview(ROOM, history[40].stanzaId)).toMatchObject({
+      kind: 'found', message: { stanzaId: history[40].stanzaId, body: history[40].body },
+    })
+  })
+
+  it.each(['lookup', 'scan'])('stops after the in-flight %s page when the reader is disposed', async stage => {
+    const h = harness()
+    const send = h.sendIQ.getMockImplementation()!
+    let entered!: () => void
+    let release!: () => void
+    const started = new Promise<void>(resolve => { entered = resolve })
+    const held = new Promise<void>(resolve => { release = resolve })
+    h.sendIQ.mockImplementation(async iq => {
+      const set = iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!
+      if (stage === 'lookup' && h.sendIQ.mock.calls.length === 1 || stage === 'scan' && set.getChildText('after') === rows[40].stanzaId) { entered(); await held }
+      return send(iq)
+    })
+    const controller = new AbortController()
+    const reading = h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId, controller.signal)
+    const cancelled = expect(reading).rejects.toMatchObject({ name: 'AbortError' })
+    await started
+    const requests = h.sendIQ.mock.calls.length
+    controller.abort()
+    release()
+    await cancelled
+    expect(h.sendIQ).toHaveBeenCalledTimes(requests)
+    expect(h.emitSDK).not.toHaveBeenCalled()
+  })
+
+  it('checks cancellation between entry decryptions and starts no later page', async () => {
+    const h = harness()
+    const controller = new AbortController()
+    type Decrypt = { decryptArchiveEntryIfNeeded: (message: Element, peer: string, kind: 'chat' | 'room', timestamp?: Date, archiveId?: string) => Promise<boolean> }
+    const surface = h.mam as unknown as Decrypt
+    const original = surface.decryptArchiveEntryIfNeeded.bind(h.mam)
+    const decrypt = vi.spyOn(surface, 'decryptArchiveEntryIfNeeded').mockImplementation(async (...args) => {
+      const result = await original(...args)
+      if (args[4] === rows[41].stanzaId) controller.abort()
+      return result
+    })
+    await expect(h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(decrypt.mock.calls.map(call => call[4])).toEqual([rows[40].stanzaId, rows[41].stanzaId])
+    expect(h.sendIQ.mock.calls.filter(([iq]) => Number(iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max')) === 100)).toHaveLength(1)
+  })
+
   // Approved chat-preview piece: resolve through the reader's access without
   // changing timeline placement, read state, coverage or arrival signals.
   it('retains a data reference when reading archived room history', async () => {

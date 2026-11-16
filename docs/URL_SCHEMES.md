@@ -69,7 +69,11 @@ cache or archive. `readRoomMessagePreview` performs this lookup without adding
 arrivals, moving a room's history window or claiming archive coverage. When the
 original comes from the archive, the lookup reads subsequent pages to apply
 separately archived edits and deletions before displaying its text. Live updates
-also reconcile quotes whose targets are no longer in the resident window. A deleted
+also reconcile quotes whose targets are no longer in the resident window. Update
+references resolve against canonical room/cache/archive targets, so a sender id
+cannot shadow another message's room-assigned id. Closing or unmounting a quote
+cancels further lookup pages and entry decryption; an already pending request may
+finish. A deleted
 target shows **Message deleted**; a failed lookup keeps an **Open message in
 room** link rather than claiming deletion. Undecryptable content is never quoted.
 

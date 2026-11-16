@@ -6,13 +6,13 @@ import { buildRoomMessageLink, connectionStore, roomStore, type BaseMessage, typ
 import { RoomMessageLinkPreview } from './RoomMessageLinkPreview'
 
 vi.unmock('@fluux/sdk/react')
-const { read } = vi.hoisted(() => ({ read: vi.fn() }))
+const { read, resolveTarget } = vi.hoisted(() => ({ read: vi.fn(), resolveTarget: vi.fn() }))
 vi.mock('@fluux/sdk', async original => ({
   ...await original<typeof import('@fluux/sdk')>(),
   useXMPPContext: () => ({ client: client }),
 }))
 const events = new EventEmitter()
-const client = { messages: { readRoomMessagePreview: read }, subscribe: (event: string, handler: (...args: unknown[]) => void) => {
+const client = { messages: { readRoomMessagePreview: read, resolveRoomMessagePreviewTarget: resolveTarget }, subscribe: (event: string, handler: (...args: unknown[]) => void) => {
   events.on(event, handler)
   return () => { events.off(event, handler) }
 } }
@@ -35,6 +35,10 @@ beforeEach(() => {
   roomStore.getState().reset()
   connectionStore.getState().setJid('alice@example.org/web')
   read.mockResolvedValue({ kind: 'found', message: target })
+  // The canonical lookup is a separate SDK boundary; its cache/archive collision
+  // behavior is exercised by MAM.messageLink.test.ts with the real reader port.
+  resolveTarget.mockImplementation(async (message: RoomMessage, reference: string) => reference === message.id || reference === message.stanzaId
+    ? { kind: 'found', message } : { kind: 'absent' })
 })
 afterEach(() => { roomStore.getState().reset(); connectionStore.getState().setJid(null) })
 
@@ -67,7 +71,7 @@ describe('room link reader previews', () => {
     const bodyLink = buildRoomMessageLink('design@conference.example.org', '550e8400-e29b-41d4-a716-446655440000')
     show({ ...shared, body: bodyLink, references: [{ type: 'data', uri: link }] })
     await screen.findByText(target.body)
-    expect(read).toHaveBeenCalledWith(jid, target.stanzaId)
+    expect(read).toHaveBeenCalledWith(jid, target.stanzaId, expect.any(AbortSignal))
     expect(screen.getByRole('link').getAttribute('href')).toBe(link)
   })
 
@@ -102,17 +106,17 @@ describe('room link reader previews', () => {
       correctionActor: { actorJid: target.from, actorOccupantId: target.occupantId },
       updates: { body: 'The release notes have been revised.', isEdited: true, liveCorrection: true,
         correctionRevision: { ids: ['origin:revision-one'], supersedes: [], receiveOrder: { session: 'room-preview', sequence: 1 } } } }))
-    expect(screen.getByText('The release notes have been revised.')).toBeTruthy()
+    expect(await screen.findByText('The release notes have been revised.')).toBeTruthy()
     expect(screen.queryByText(target.body)).toBeNull()
     act(() => events.emit('room:message-updated', { roomJid: jid, messageId: target.id,
       correctionActor: { actorJid: target.from, actorOccupantId: target.occupantId },
       updates: { body: 'The release notes are final.', isEdited: true, liveCorrection: true,
         correctionRevision: { ids: ['origin:revision-two'], supersedes: [], receiveOrder: { session: 'room-preview', sequence: 2 } } } }))
-    expect(screen.getByText('The release notes are final.')).toBeTruthy()
+    expect(await screen.findByText('The release notes are final.')).toBeTruthy()
     act(() => events.emit('room:retraction-pending', { roomJid: jid, targetId: target.stanzaId,
       actorJid: target.from, actorOccupantId: target.occupantId }))
+    expect(await screen.findByText('Message deleted')).toBeTruthy()
     expect(screen.queryByText('The release notes are final.')).toBeNull()
-    expect(screen.getByText('Message deleted')).toBeTruthy()
   })
 
   it.each(['correction', 'retraction'])('reconciles a %s received while the first quote read is pending', async kind => {
@@ -142,11 +146,55 @@ describe('room link reader previews', () => {
     act(() => events.emit('room:message-updated', { roomJid: jid, messageId: target.id,
       updates: { body: 'Revised after eviction', isEdited: true } }))
     await act(async () => finish({ kind: 'found', message: target }))
-    expect(screen.getByText('Revised after eviction')).toBeTruthy()
+    expect(await screen.findByText('Revised after eviction')).toBeTruthy()
     expect(screen.queryByText(target.body)).toBeNull()
     act(() => events.emit('room:message-updated', { roomJid: jid, messageId: target.stanzaId,
       updates: { isRetracted: true, body: '' } }))
-    expect(screen.getByText('Message deleted')).toBeTruthy()
+    expect(await screen.findByText('Message deleted')).toBeTruthy()
+  })
+
+  it('does not delete a detached quote when the canonical target is a different message by the same author', async () => {
+    roomStore.getState().addRoom(room)
+    const other = { ...target, id: 'later-update', stanzaId: '1731490000123500', body: 'Another room update' }
+    const quote = { ...target, id: other.stanzaId }
+    read.mockResolvedValue({ kind: 'found', message: quote })
+    resolveTarget.mockResolvedValue({ kind: 'found', message: other })
+    show()
+    await screen.findByText(quote.body)
+    await act(async () => events.emit('room:retraction-pending', { roomJid: jid, targetId: other.stanzaId,
+      actorJid: other.from, actorOccupantId: other.occupantId }))
+    expect(screen.getByText(quote.body)).toBeTruthy()
+    expect(screen.queryByText('Message deleted')).toBeNull()
+  })
+
+  it('aborts the reader request when its quote is unmounted', async () => {
+    roomStore.getState().addRoom(room)
+    let finish!: (result: { kind: 'found'; message: RoomMessage }) => void
+    read.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const view = show()
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1))
+    const signal = read.mock.calls[0][2] as AbortSignal
+    expect(signal.aborted).toBe(false)
+    view.unmount()
+    expect(signal.aborted).toBe(true)
+    await act(async () => finish({ kind: 'found', message: target }))
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('aborts a pending canonical-target lookup when the quote is unmounted', async () => {
+    roomStore.getState().addRoom(room)
+    let finish!: (result: { kind: 'found'; message: RoomMessage }) => void
+    resolveTarget.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const view = show()
+    await screen.findByText(target.body)
+    act(() => events.emit('room:message-updated', { roomJid: jid, messageId: target.id,
+      updates: { body: 'A later update', isEdited: true } }))
+    await waitFor(() => expect(resolveTarget).toHaveBeenCalledTimes(1))
+    const signal = resolveTarget.mock.calls[0][2] as AbortSignal
+    view.unmount()
+    expect(signal.aborted).toBe(true)
+    await act(async () => finish({ kind: 'found', message: target }))
+    expect(screen.queryByRole('link')).toBeNull()
   })
 
   it('reconciles a committed nonresident recovery without a message arrival or SDK update', async () => {
@@ -155,7 +203,7 @@ describe('room link reader previews', () => {
     await screen.findByText(target.body)
     act(() => emitMessageCacheUpdate({ kind: 'room', conversationId: jid, account: 'alice@example.org',
       target: { ...target, body: 'Recovered room content' } }))
-    expect(screen.getByText('Recovered room content')).toBeTruthy()
+    expect(await screen.findByText('Recovered room content')).toBeTruthy()
     expect(screen.queryByText(target.body)).toBeNull()
   })
 
@@ -163,7 +211,7 @@ describe('room link reader previews', () => {
     roomStore.getState().addRoom(room)
     show()
     await screen.findByText(target.body)
-    act(() => {
+    await act(async () => {
       events.emit('room:message-updated', { roomJid: jid, messageId: 'another-update', updates: { body: 'Unrelated update' } })
       events.emit('room:retraction-pending', { roomJid: jid, targetId: target.id, actorJid: `${jid}/Mallory`, actorOccupantId: 'mallory' })
     })

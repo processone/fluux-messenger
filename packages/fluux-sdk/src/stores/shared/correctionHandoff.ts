@@ -2,7 +2,7 @@ import type { RoomMessage } from '../../core/types/room'
 import type { SDKEvents } from '../../core/types/sdk-events'
 import { roomStanzaIdsMergeable } from '../../utils/roomStanzaId'
 import { resolveCorrectionUpdates, type StoredMessage, type StoredRoomMessage } from '../../core/types/message-internal'
-import { archiveIdentityConflict, chatArchiveConflict, CHAT_SCOPE, chatMessageAuthor, identityKeys, roomMessageAuthor, roomScope, resolveMessageReference, sameLogicalMessage } from '../../utils/messageIdentity'
+import { archiveIdentityConflict, chatArchiveConflict, CHAT_SCOPE, chatMessageAuthor, identityKeys, roomMessageAuthor, roomScope, sameLogicalMessage } from '../../utils/messageIdentity'
 import { reconcileChatHistoryMessages, reconcileRoomHistoryMessages } from '../../utils/messageCache'
 import { getStorageScopeJid } from '../../utils/storageScope'
 import { moderationMetadata } from '../../utils/moderation'
@@ -104,15 +104,15 @@ export async function refreshCachedCorrections<T extends Row>(cached: T[], isCur
   return isCurrent() ? reconcileCachedCorrections(cached, refreshed as T[], scope) : []
 }
 
-/** Project an SDK-validated room update onto a reader's nonresident quote copy. */
+/** Project onto a detached quote only after the reader resolves the canonical target. */
 export function applyRoomMessagePreviewUpdate(
   message: RoomMessage,
   event: SDKEvents['room:message-updated'] | SDKEvents['room:retraction-pending'],
   account: string,
+  canonicalTarget: RoomMessage,
 ): RoomMessage {
   if (message.isRetracted || event.roomJid !== message.roomJid) return message
-  const reference = 'updates' in event ? event.messageId : event.targetId
-  if (!resolveMessageReference([message], reference, 'archive-first')) return message
+  if (!matchesCorrectionTarget(message, canonicalTarget)) return message
   const actor = 'updates' in event ? event.correctionActor
     : { actorJid: event.actorJid, actorOccupantId: event.actorOccupantId }
   if (actor && !roomMessageAuthor(message, actor)) return message
