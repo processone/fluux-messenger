@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<!-- Render with: node scripts/blog-hero/render.mjs 0.18.3 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fluux Messenger 0.18.3 release thumbnail</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  body { background: #0b1020; }
+  .glow { position: absolute; width: 1000px; height: 1000px; pointer-events: none; }
+  .teal { left: -360px; top: -500px; background: radial-gradient(circle, #38e0c438, transparent 65%); }
+  .violet { right: -340px; bottom: -550px; background: radial-gradient(circle, #a78bfa38, transparent 65%); }
+  .copy { position: absolute; left: 64px; top: 96px; width: 460px; z-index: 3; }
+  .logo { width: 300px; height: auto; display: block; margin-bottom: 36px; }
+  .version { display: inline-block; padding: 5px 18px; border-radius: 999px; color: #0b1020;
+    background: linear-gradient(100deg, #38e0c4, #7c8cff); font-size: 22px; font-weight: 700; margin-bottom: 22px; }
+  h1 { color: #f2f4ff; font-family: 'Inter Tight', sans-serif; font-weight: 700;
+    font-size: 64px; line-height: 1.08; letter-spacing: -0.025em; }
+  h1 span { background: linear-gradient(100deg, #38e0c4, #7c8cff 65%, #a78bfa);
+    background-clip: text; -webkit-background-clip: text; color: transparent; }
+  .summary { margin-top: 24px; color: #bdc6e8; font-size: 19px; line-height: 1.5; max-width: 400px; }
+  .fixes { margin-top: 22px; display: flex; align-items: center; gap: 12px; }
+  .fixes b { padding: 5px 14px; border-radius: 999px; font-size: 16px; font-weight: 700; color: #f2f4ff;
+    background: #7c8cff2e; box-shadow: inset 0 0 0 1px #7c8cff66; white-space: nowrap; }
+  .fixes span { color: #9aa3c4; font-size: 15px; line-height: 1.35; }
+
+  /* Mock of the native WidgetKit view (UnreadWidgetView.swift): dark system material,
+     header count, 28 pt avatar rows with name, mention marker, unread count and time. */
+  .widget { position: absolute; border-radius: 24px; color: #f2f4ff;
+    background: linear-gradient(160deg, #262c45f2, #1a1f33f2);
+    box-shadow: 0 30px 90px #0009, 0 0 0 1px #ffffff1a, inset 0 1px 0 #ffffff14; }
+  .large { left: 566px; top: 128px; width: 372px; height: 390px; padding: 22px 22px 18px; }
+  .w-caption { color: #9aa3c4; font-size: 14px; font-weight: 700; }
+  .rows { margin-top: 12px; display: flex; flex-direction: column; gap: 13px; }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .av { width: 38px; height: 38px; border-radius: 50%; flex: none; object-fit: cover; }
+  .room { display: grid; place-items: center; background: #7c8cff40; color: #c9d0ff;
+    font-size: 16px; font-weight: 700; }
+  .name { flex: 1; min-width: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .at { color: #7c8cff; font-weight: 700; margin-left: 4px; }
+  .meta { text-align: right; line-height: 1.2; }
+  .count { font-size: 14px; font-weight: 700; }
+  .time { font-size: 12px; color: #9aa3c4; }
+  .more { position: absolute; left: 22px; bottom: 16px; font-size: 12px; color: #9aa3c4; }
+
+  .small { left: 966px; top: 348px; width: 170px; height: 170px; padding: 16px 16px 14px;
+    display: flex; flex-direction: column; }
+  .total { font-size: 50px; font-weight: 700; line-height: 1; margin-top: 4px; letter-spacing: -0.02em; }
+  .unread { font-size: 13px; color: #9aa3c4; }
+  .small .names { margin-top: auto; font-size: 13px; line-height: 1.45; }
+
+  .label { position: absolute; color: #bdc6e8; font-size: 14px; font-weight: 600; text-align: center; }
+</style>
+</head>
+<body>
+<main class="frame">
+  <div class="glow teal"></div><div class="glow violet"></div>
+  <div class="copy">
+    <img class="logo" src="../../assets/readme/fluux-logo.svg" alt="Fluux">
+    <div class="version">0.18.3</div>
+    <h1>Unreads,<br><span>at a glance</span></h1>
+    <p class="summary">New widgets on macOS and iOS.<br>Names and counts, never message text.</p>
+    <div class="fixes"><b>15 fixes</b><span>Steadier scrolling, keychain<br>and notification reliability</span></div>
+  </div>
+
+  <div class="widget large" aria-label="macOS unread conversations widget">
+    <div class="w-caption">7 unread</div>
+    <div class="rows">
+      <div class="row"><img class="av" src="../../apps/fluux/public/demo/avatar-emma.webp" alt="">
+        <div class="name">Emma Wilson</div><div class="meta"><div class="count">2</div><div class="time">5:52 PM</div></div></div>
+      <div class="row"><div class="av room">#</div>
+        <div class="name">Team Chat<span class="at">@</span></div><div class="meta"><div class="count">4</div><div class="time">5:41 PM</div></div></div>
+      <div class="row"><img class="av" src="../../apps/fluux/public/demo/avatar-mia.webp" alt="">
+        <div class="name">Mia Thompson</div><div class="meta"><div class="count">1</div><div class="time">4:18 PM</div></div></div>
+      <div class="row"><div class="av room">#</div>
+        <div class="name">Design Review</div><div class="meta"><div class="count">3</div><div class="time">3:05 PM</div></div></div>
+      <div class="row"><img class="av" src="../../apps/fluux/public/demo/avatar-james.webp" alt="">
+        <div class="name">James Chen</div><div class="meta"><div class="count">1</div><div class="time">1:12 PM</div></div></div>
+      <div class="row"><img class="av" src="../../apps/fluux/public/demo/avatar-sophia.webp" alt="">
+        <div class="name">Sophia Rodriguez</div><div class="meta"><div class="count">2</div><div class="time">Yesterday</div></div></div>
+    </div>
+    <div class="more">+1</div>
+  </div>
+  <div class="label" style="left: 566px; top: 536px; width: 372px;">macOS desktop widget</div>
+
+  <div class="widget small" aria-label="iOS small unread widget">
+    <div class="w-caption">Fluux</div>
+    <div class="total">7</div>
+    <div class="unread">unread</div>
+    <div class="names">Emma Wilson<br>Team Chat<span class="at">@</span></div>
+  </div>
+  <div class="label" style="left: 966px; top: 536px; width: 170px;">iOS home screen</div>
+</main>
+</body>
+</html>
