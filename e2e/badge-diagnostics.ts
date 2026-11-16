@@ -17,7 +17,7 @@ test('exports badge decisions separately from an empty XMPP console', async ({ p
     const peer = 'diagnostic-sender@example.test'
     client.emitSDK('chat:conversation', { conversation: { id: peer, name: 'Diagnostic fixture', type: 'chat', unreadCount: 0 } })
     client.emitSDK('chat:message', { message: {
-      id: 'diagnostic-private-message', conversationId: peer, from: peer,
+      id: 'diagnostic-private-message', stanzaId: undefined, originId: undefined, conversationId: peer, from: peer,
       body: 'Private diagnostic fixture content', timestamp: new Date(), type: 'chat', isOutgoing: false,
     }, isLiveArrival: true })
   })

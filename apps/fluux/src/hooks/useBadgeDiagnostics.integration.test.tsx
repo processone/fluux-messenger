@@ -252,6 +252,7 @@ describe('automatic badge diagnostics through message dispatch and stores', () =
     roomStore.getState().addRoom({ jid: room, name: 'Legacy', nickname: 'reader', joined: true,
       isBookmarked: false, occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set() })
     const pending = { type: 'groupchat' as const, roomJid: room, id: 'legacy-occurrence', from: room + '/writer', nick: 'writer',
+      stanzaId: undefined, originId: undefined, occupantId: undefined,
       body: 'Encrypted fallback', timestamp: new Date(), receivedAt: new Date(), isOutgoing: false,
       encryptedPayload: xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from('Recovered room text').toString('base64')).toString() }
     await act(async () => { await roomStore.getState().addMessage(room, pending) })
