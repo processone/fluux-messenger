@@ -113,9 +113,15 @@ export class AnchorPreservationBrowserAdapter {
       const scroller = this.options.getScroller()
       const row = scroller && findMessageRowElement(scroller, request.desired.messageId)
       const bubble = row?.querySelector<HTMLElement>('[data-message-body]') ?? row
-      if (!scroller || !bubble) return { kind: 'unavailable' }
-      const target = Math.max(0, scroller.scrollTop + bubble.getBoundingClientRect().top -
-        scroller.getBoundingClientRect().top - request.desired.placement.offsetPx)
+      if (!scroller || !row || !bubble) return { kind: 'unavailable' }
+      const viewportRect = scroller.getBoundingClientRect()
+      const { offsetPx, bottomClearancePx } = request.desired.placement
+      const topTarget = scroller.scrollTop + bubble.getBoundingClientRect().top - viewportRect.top - offsetPx
+      // Keep the held row, not the changing conversation tail, in view. Only a hold captured on a
+      // fully visible bottom row carries this clearance; historical reading keeps its exact top.
+      const bottomTarget = bottomClearancePx === undefined ? 0 :
+        scroller.scrollTop + row.getBoundingClientRect().bottom - viewportRect.bottom + bottomClearancePx
+      const target = Math.max(0, topTarget, bottomTarget)
       // A growing viewport can clamp away the held offset (for example when typing stops).
       // Reserve only the missing scroll range, under this same positioning lease.
       const padding = parseFloat(getComputedStyle(scroller).paddingBottom) || 0

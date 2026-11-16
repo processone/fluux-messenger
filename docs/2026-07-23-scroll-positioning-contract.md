@@ -391,7 +391,12 @@ hover-intent delay finishes; clearing keyboard-only visibility must not discard 
 Row-local subscriptions expose held membership without broadcasting each target change to every bubble.
 
 An `interaction` request holds the original row handle and the message body's top offset through
-the existing anchor executor and bounded controller frame loop. The virtualizer retains that row
+the existing anchor executor and bounded controller frame loop. When the hold starts on a fully
+visible final row at the live bottom, it also captures that row's bottom clearance. Growth of the
+held row (such as an incoming reaction) may move its top upward only enough to retain that clearance,
+so its content remains visible before pointer departure. This still anchors the original row, not
+newly arriving messages; holds acquired while reading history keep the exact top offset.
+The virtualizer retains that row
 and suspends independent measurement compensation. Recorded positioning writes and layout anchoring
 remain excluded from navigation attribution. Other scroll movement cancels the hold even without a
 wheel/key signal: selection-edge scrolling, native drag autoscroll, middle-click autoscroll and

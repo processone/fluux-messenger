@@ -2629,3 +2629,103 @@ test('Spam moderation removes rows without leaving an empty tail', async ({ page
     return (window as any).__roomStore.getState().messages.get(roomJid).length
   }, STRESS_ROOM_JID)).toBe(batch.count)
 })
+
+// Intent: a reaction is rendered immediately, and must not wait for pointer departure
+// to become fully visible. The reading case protects the existing interaction anchor.
+test.describe('Incoming reaction under a stationary pointer', () => {
+  test.use({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 })
+  for (const kind of ['room', 'chat'] as const) {
+    for (const reading of [false, true]) {
+      test(`${kind}: reaction growth ${reading ? 'preserves the reading anchor' : 'keeps the hovered last message fully visible'}`, async ({ page }, testInfo) => {
+        await loadDemo(page)
+        const jid = kind === 'room' ? 'team@conference.fluux.chat' : 'emma@fluux.chat'
+        await page.mouse.move(0, 0)
+        await page.evaluate(async ({ kind, jid }) => {
+          const scope = window as any
+          scope.__demoClient.stopAnimation()
+          scope.__fluuxScrollDebug?.(true)
+          const state = (kind === 'room' ? scope.__roomStore : scope.__chatStore).getState()
+          if (kind === 'room') await state.activateRoom(jid)
+          else await state.activateConversation(jid)
+          location.hash = `#/${kind === 'room' ? 'rooms' : 'messages'}/${encodeURIComponent(jid)}`
+        }, { kind, jid })
+        await page.waitForFunction(({ kind, jid }) => {
+          const scope = window as any
+          const state = (kind === 'room' ? scope.__roomStore : scope.__chatStore).getState()
+          return !state.activationPending && !!state.messages.get(jid)?.length
+        }, { kind, jid })
+        const lastId = await page.evaluate(({ kind, jid, reading }) => {
+          const scope = window as any
+          const messages = (kind === 'room' ? scope.__roomStore : scope.__chatStore).getState().messages.get(jid)
+          // Reuse real conversation wording and sender data from the built demo.
+          const sources = messages.filter((m: any) => !m.isOutgoing && !m.isPrivate && !m.poll && !m.attachment && !m.replyTo && !m.isRetracted && m.body?.length > 20 && m.body.length < 160)
+          if (!sources.length) throw new Error('No plain incoming demo message')
+          let id = ''
+          // Plain messages keep the reading control independent of the demo's tall media rows.
+          const now = Date.now()
+          for (let index = 0; index < (reading ? 16 : 1); index++) {
+            const source = sources[index % sources.length]
+            id = crypto.randomUUID()
+            const message = { id, from: source.from, body: source.body, timestamp: new Date(now + index), isOutgoing: false,
+              ...(kind === 'room' ? { type: 'groupchat', roomJid: jid, nick: source.nick, occupantId: source.occupantId } : { type: 'chat', conversationId: jid }) }
+            scope.__demoClient.emitSDK(kind === 'room' ? 'room:message' : 'chat:message', kind === 'room'
+              ? { roomJid: jid, message, isLiveArrival: true, incrementUnread: true }
+              : { message, isLiveArrival: true })
+          }
+          return id
+        }, { kind, jid, reading })
+        await scrollToBottom(page)
+        await expect(page.locator(`.message-row[data-message-id="${lastId}"]`)).toBeInViewport()
+        if (reading) await wheelAwayFromBottom(page, 150, -400)
+        const targetId = reading ? await page.evaluate(() => {
+          const list = document.querySelector('[data-message-list]')!
+          const bounds = list.getBoundingClientRect()
+          const rows = [...list.querySelectorAll<HTMLElement>('.message-row[data-message-id]')]
+          const row = rows.find(row => {
+            const rect = row.getBoundingClientRect()
+            return rect.top > bounds.top + 50 && rect.bottom < bounds.bottom - 80 && !row.querySelector('[data-reaction-emoji]')
+          })
+          if (!row) throw new Error('No fully visible unreacted reading row')
+          return row.dataset.messageId!
+        }) : lastId
+        const row = page.locator(`.message-row[data-message-id="${targetId}"]`)
+        await row.locator('[data-message-body]').first().hover()
+        await expect(page.locator('[data-message-list]')).toHaveAttribute('data-message-interaction')
+        const beforeTop = (await row.boundingBox())!.y
+        await testInfo.attach('before-reaction', { body: await page.screenshot(), contentType: 'image/png' })
+        const trace: string[] = []
+        page.on('console', message => { if (message.text().includes('[Scroll]')) trace.push(message.text()) })
+        const samples = await page.evaluate(({ kind, jid, targetId }) => new Promise<{ clipped: number; top: number; distance: number; fab: boolean }[]>((resolve, reject) => {
+          const scope = window as any
+          const list = document.querySelector<HTMLElement>('[data-message-list]')!
+          const row = list.querySelector<HTMLElement>(`.message-row[data-message-id="${CSS.escape(targetId)}"]`)!
+          const samples: { clipped: number; top: number; distance: number; fab: boolean }[] = []
+          let frames = 0
+          const sample = () => {
+            const chip = row.querySelector('[data-reaction-emoji]')
+            if (chip) samples.push({ clipped: chip.getBoundingClientRect().bottom - list.getBoundingClientRect().bottom,
+              top: row.getBoundingClientRect().top, distance: list.scrollHeight - list.scrollTop - list.clientHeight,
+              fab: document.querySelector<HTMLElement>('[data-fab="scroll-to-bottom"]')?.tabIndex === 0 })
+            if (samples.length >= 20) resolve(samples)
+            else if (++frames > 240) reject(new Error('Incoming reaction never rendered'))
+            else requestAnimationFrame(sample)
+          }
+          requestAnimationFrame(sample)
+          scope.__demoClient.emitSDK(kind === 'room' ? 'room:reactions' : 'chat:reactions', kind === 'room'
+            ? { roomJid: jid, messageId: targetId, reactorNick: 'Emma', emojis: ['👍'], isLive: true }
+            : { conversationId: jid, messageId: targetId, reactorJid: 'emma@fluux.chat', emojis: ['👍'], isLive: true })
+        }), { kind, jid, targetId })
+        await testInfo.attach('after-reaction', { body: await page.screenshot(), contentType: 'image/png' })
+        await testInfo.attach('reaction-frames', { body: JSON.stringify({ beforeTop, samples, trace }), contentType: 'application/json' })
+        expect(samples).toHaveLength(20)
+        if (reading) {
+          expect(Math.max(...samples.map(s => Math.abs(s.top - beforeTop))), 'reaction arrival must preserve the pre-arrival reading anchor').toBeLessThanOrEqual(1)
+          expect(Math.min(...samples.map(s => s.distance))).toBeGreaterThan(100)
+        } else {
+          expect(Math.max(...samples.map(s => s.clipped)), 'no painted reaction frame may be clipped while the pointer remains').toBeLessThanOrEqual(1)
+          expect(samples.some(s => s.fab), 'reaction growth must not expose the scroll-down button').toBe(false)
+        }
+      })
+    }
+  }
+})
