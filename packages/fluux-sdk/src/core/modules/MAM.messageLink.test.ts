@@ -36,7 +36,7 @@ afterEach(() => { roomStore.getState().reset(); setStorageScopeJid(null); vi.res
 
 // XEP-0313/RSM server boundary, shared by id lookup and context pages. The real
 // stores/cache own placement and read state; this stand-in owns only IQ replies.
-function harness(failure?: 'network' | 'no-fin', sharedLink?: string) {
+function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modification?: 'correction' | 'retraction') {
   let collect: ((stanza: Element) => void) | undefined
   const emitSDK = vi.fn()
   const sendIQ = vi.fn(async (iq: Element) => {
@@ -58,7 +58,10 @@ function harness(failure?: 'network' | 'no-fin', sharedLink?: string) {
         xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
           xml('delay', { xmlns: 'urn:xmpp:delay', stamp: row.timestamp.toISOString() }),
           xml('message', { type: 'groupchat', from: row.from, id: row.id }, xml('body', {}, row.body),
-            ...(sharedLink ? [xml('reference', { xmlns: 'urn:xmpp:reference:0', type: 'data', uri: sharedLink })] : []))))))
+            ...(sharedLink ? [xml('reference', { xmlns: 'urn:xmpp:reference:0', type: 'data', uri: sharedLink })] : []),
+            ...(row === rows[70] && modification ? [modification === 'correction'
+              ? xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: rows[40].id })
+              : xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: rows[40].stanzaId })] : []))))))
     const complete = before !== undefined ? page[0] === rows[0] : page.at(-1) === rows.at(-1)
     return xml('iq', { type: 'result' }, xml('fin', { xmlns: MAM_NS, complete: String(complete) },
       xml('set', { xmlns: RSM_NS }, xml('first', {}, page[0]?.stanzaId ?? ''), xml('last', {}, page.at(-1)?.stanzaId ?? ''))))
@@ -89,7 +92,19 @@ describe('linked room message lookup', () => {
     expect(roomStore.getState()).toBe(before)
     expect(await cache.getRoomMessages(ROOM)).toEqual([])
     expect(h.emitSDK).not.toHaveBeenCalled()
-    expect(h.sendIQ.mock.calls.map(([iq]) => Number(iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max')))).toEqual([1, 1])
+    // Subsequent archive pages reconstruct modifications without storing context.
+    expect(h.sendIQ.mock.calls.some(([iq]) => iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('after') === rows[40].stanzaId)).toBe(true)
+  })
+
+  it.each(['correction', 'retraction'] as const)('applies a separately archived %s beyond the first page without publishing arrivals', async modification => {
+    const before = roomStore.getState()
+    const h = harness(undefined, undefined, modification)
+    const result = await h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)
+    if (modification === 'correction') expect(result).toMatchObject({ kind: 'found', message: { body: rows[70].body, isEdited: true } })
+    else expect(result).toEqual({ kind: 'absent' })
+    expect(h.emitSDK).not.toHaveBeenCalled()
+    expect(roomStore.getState()).toBe(before)
+    expect(await cache.getRoomMessages(ROOM)).toEqual([])
   })
 
   it.each(['resident', 'cache'] as const)('reads a %s quote and hides it after membership is lost', async source => {

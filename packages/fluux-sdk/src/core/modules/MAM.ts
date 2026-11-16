@@ -3428,7 +3428,7 @@ export class MAM extends BaseModule {
     isRoom: boolean,
     cursor: { before?: string; after?: string },
     max = 1,
-  ): Promise<{ kind: 'page'; entries: RawArchiveEntry[] } | { kind: 'absent' } | { kind: 'unknown' }> {
+  ): Promise<{ kind: 'page'; entries: RawArchiveEntry[]; complete: boolean } | { kind: 'absent' } | { kind: 'unknown' }> {
     const session = this.captureQuery()
     const queryId = `mam_${generateUUID()}`
     // No `with` filter: the account archive is ordered as a whole, so the
@@ -3459,7 +3459,7 @@ export class MAM extends BaseModule {
       unregister()
     }
     if (!session.isCurrent() || !response?.getChild('fin', NS_MAM)) return { kind: 'unknown' }
-    return { kind: 'page', entries }
+    return { kind: 'page', entries, complete: this.parseMAMResponse(response).complete }
   }
 
   /** Read a linked quote without publishing arrivals, moving windows or claiming coverage. */
@@ -3487,6 +3487,32 @@ export class MAM extends BaseModule {
       await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, 'room', this.extractForwardedTimestamp(forwarded), archiveId)
       session.assertCurrent()
       message = this.parseRoomArchiveMessage(forwarded, roomJid, roomSelf(this.deps.stores?.room.getRoom(roomJid)), archiveId) ?? undefined
+      if (message && !message.isRetracted) {
+        const messages = [message]
+        // Edits and retractions may be separate entries arbitrarily far after
+        // the original. Walk to archive completion without publishing a page.
+        const order = new Map<string, Set<CorrectionOrderGroup>>()
+        let after = stanzaId
+        while (joined()) {
+          const page = await this.queryOneArchivedEntry(roomJid, true, { after }, 100)
+          session.assertCurrent()
+          if (!joined() || page.kind !== 'page') return { kind: 'unknown' }
+          const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+          for (const entry of page.entries) {
+            const delay = entry.forwarded.getChild('delay', NS_DELAY)
+            await this.decryptArchiveEntryIfNeeded(entry.messageEl, roomJid, 'room', delayStamp(delay), entry.archiveId)
+            session.assertCurrent()
+            this.collectModification(entry.messageEl, modifications, from => from, delay, roomJid, entry.archiveId)
+          }
+          await this.applyModifications(messages, modifications, roomMessageAuthor, undefined, order)
+          session.assertCurrent()
+          if (messages[0].isRetracted || page.complete || !page.entries.length) break
+          const next = page.entries.at(-1)!.archiveId
+          if (!next || next === after) return { kind: 'unknown' }
+          after = next
+        }
+        message = messages[0]
+      }
     }
     if (message) {
       const reconciled = await this.deps.stores?.room.reconcileHistoryMessages?.([message])

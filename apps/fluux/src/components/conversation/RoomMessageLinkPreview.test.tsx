@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events'
+import { emitMessageCacheUpdate } from '../../../../../packages/fluux-sdk/src/utils/messageCacheUpdates'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildRoomMessageLink, connectionStore, roomStore, type BaseMessage, type Room, type RoomMessage } from '@fluux/sdk'
@@ -9,7 +11,11 @@ vi.mock('@fluux/sdk', async original => ({
   ...await original<typeof import('@fluux/sdk')>(),
   useXMPPContext: () => ({ client: client }),
 }))
-const client = { messages: { readRoomMessagePreview: read } }
+const events = new EventEmitter()
+const client = { messages: { readRoomMessagePreview: read }, subscribe: (event: string, handler: (...args: unknown[]) => void) => {
+  events.on(event, handler)
+  return () => { events.off(event, handler) }
+} }
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string, fallback?: string) => fallback ?? ({ 'chat.messageDeleted': 'Message deleted' }[key] ?? key) }) }))
 
 const jid = 'team@conference.example.org'
@@ -25,6 +31,7 @@ function show(message = shared) { return render(<RoomMessageLinkPreview message=
 
 beforeEach(() => {
   vi.resetAllMocks()
+  events.removeAllListeners()
   roomStore.getState().reset()
   connectionStore.getState().setJid('alice@example.org/web')
   read.mockResolvedValue({ kind: 'found', message: target })
@@ -85,6 +92,82 @@ describe('room link reader previews', () => {
     show()
     await screen.findByText(notice)
     expect(screen.queryByText(target.body)).toBeNull()
+  })
+
+  it('updates a nonresident quote and clears it on an authorized pending retraction', async () => {
+    roomStore.getState().addRoom(room)
+    show()
+    await screen.findByText(target.body)
+    act(() => events.emit('room:message-updated', { roomJid: jid, messageId: target.id,
+      correctionActor: { actorJid: target.from, actorOccupantId: target.occupantId },
+      updates: { body: 'The release notes have been revised.', isEdited: true, liveCorrection: true,
+        correctionRevision: { ids: ['origin:revision-one'], supersedes: [], receiveOrder: { session: 'room-preview', sequence: 1 } } } }))
+    expect(screen.getByText('The release notes have been revised.')).toBeTruthy()
+    expect(screen.queryByText(target.body)).toBeNull()
+    act(() => events.emit('room:message-updated', { roomJid: jid, messageId: target.id,
+      correctionActor: { actorJid: target.from, actorOccupantId: target.occupantId },
+      updates: { body: 'The release notes are final.', isEdited: true, liveCorrection: true,
+        correctionRevision: { ids: ['origin:revision-two'], supersedes: [], receiveOrder: { session: 'room-preview', sequence: 2 } } } }))
+    expect(screen.getByText('The release notes are final.')).toBeTruthy()
+    act(() => events.emit('room:retraction-pending', { roomJid: jid, targetId: target.stanzaId,
+      actorJid: target.from, actorOccupantId: target.occupantId }))
+    expect(screen.queryByText('The release notes are final.')).toBeNull()
+    expect(screen.getByText('Message deleted')).toBeTruthy()
+  })
+
+  it.each(['correction', 'retraction'])('reconciles a %s received while the first quote read is pending', async kind => {
+    roomStore.getState().addRoom(room)
+    let finish!: (result: { kind: 'found'; message: RoomMessage }) => void
+    read.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    show()
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1))
+    act(() => {
+      if (kind === 'correction') events.emit('room:message-updated', { roomJid: jid, messageId: target.id,
+        updates: { body: 'Revised while loading', isEdited: true } })
+      else events.emit('room:retraction-pending', { roomJid: jid, targetId: target.id,
+        actorJid: target.from, actorOccupantId: target.occupantId })
+    })
+    await act(async () => finish({ kind: 'found', message: target }))
+    expect(screen.queryByText(target.body)).toBeNull()
+    expect(screen.getByText(kind === 'correction' ? 'Revised while loading' : 'Message deleted')).toBeTruthy()
+  })
+
+  it('preserves newer quote content when the resident row is evicted during an older cache read', async () => {
+    roomStore.getState().addRoom(room, [target])
+    let finish!: (result: { kind: 'found'; message: RoomMessage }) => void
+    read.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    show()
+    act(() => roomStore.setState({ messages: new Map() }))
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1))
+    act(() => events.emit('room:message-updated', { roomJid: jid, messageId: target.id,
+      updates: { body: 'Revised after eviction', isEdited: true } }))
+    await act(async () => finish({ kind: 'found', message: target }))
+    expect(screen.getByText('Revised after eviction')).toBeTruthy()
+    expect(screen.queryByText(target.body)).toBeNull()
+    act(() => events.emit('room:message-updated', { roomJid: jid, messageId: target.stanzaId,
+      updates: { isRetracted: true, body: '' } }))
+    expect(screen.getByText('Message deleted')).toBeTruthy()
+  })
+
+  it('reconciles a committed nonresident recovery without a message arrival or SDK update', async () => {
+    roomStore.getState().addRoom(room)
+    show()
+    await screen.findByText(target.body)
+    act(() => emitMessageCacheUpdate({ kind: 'room', conversationId: jid, account: 'alice@example.org',
+      target: { ...target, body: 'Recovered room content' } }))
+    expect(screen.getByText('Recovered room content')).toBeTruthy()
+    expect(screen.queryByText(target.body)).toBeNull()
+  })
+
+  it('ignores updates for other targets and retractions from a different author', async () => {
+    roomStore.getState().addRoom(room)
+    show()
+    await screen.findByText(target.body)
+    act(() => {
+      events.emit('room:message-updated', { roomJid: jid, messageId: 'another-update', updates: { body: 'Unrelated update' } })
+      events.emit('room:retraction-pending', { roomJid: jid, targetId: target.id, actorJid: `${jid}/Mallory`, actorOccupantId: 'mallory' })
+    })
+    expect(screen.getByText(target.body)).toBeTruthy()
   })
 
   it('reacts to target retraction and never exposes encrypted fallback text', () => {

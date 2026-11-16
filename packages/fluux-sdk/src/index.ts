@@ -600,6 +600,8 @@ export { discoSupportsPep } from './core/modules/Discovery'
 // XMPP URI utilities (RFC 5122)
 export { buildRoomMessageLink, parseRoomMessageLink, findRoomMessageLink, roomMessageLinkReferences } from './utils/roomMessageLink'
 export type { RoomMessageLink } from './utils/roomMessageLink'
+export { applyRoomMessagePreviewUpdate } from './stores/shared/correctionHandoff'
+export { subscribeMessageCacheUpdates } from './utils/messageCacheUpdates'
 export { parseXmppUri, isMucJid } from './utils/xmppUri'
 export type { XmppUri } from './utils/xmppUri'
 

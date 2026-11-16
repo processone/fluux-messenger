@@ -491,6 +491,7 @@ function scrubRetractedContent<T extends StoredMessage | StoredRoomMessage>(row:
   return {
     ...row,
     body: '',
+    references: undefined,
     correctionAlternatives: undefined,
     originalBody: undefined,
     attachment: undefined,
@@ -505,7 +506,7 @@ function scrubRetractedContent<T extends StoredMessage | StoredRoomMessage>(row:
 /** Whether a row flagged `isRetracted` still holds anything {@link scrubRetractedContent} removes. */
 function retainsRetractedContent(row: StoredMessage | StoredRoomMessage): boolean {
   return row.isRetracted === true && (!!row.body || !!row.correctionAlternatives?.length || !!row.originalBody
-    || !!row.attachment || !!row.linkPreview || !!row.poll || !!row.pollClosed
+    || !!row.references || !!row.attachment || !!row.linkPreview || !!row.poll || !!row.pollClosed
     || !!row.encryptedPayload || !!row.unsupportedEncryption)
 }
 
@@ -795,7 +796,7 @@ async function upsertStoredRoomRow(
   incoming: StoredRoomMessage,
   excludeKey?: string,
   scopeJid?: string | null
-): Promise<void> {
+): Promise<StoredRoomMessage> {
   const matches = await findRoomRowsByIdentity(store, incoming, excludeKey)
   let merged = incoming
   for (const row of matches) merged = mergeRoomRows(merged, row)
@@ -823,7 +824,9 @@ async function upsertStoredRoomRow(
   // rung. Two RE-deliveries that carry no occupant-id on either side remain
   // indistinguishable — there is no evidence to separate them, and inventing one
   // would need durable data the pre-XEP-0421 archive does not have.
-  await store.put(enforceRetraction(withoutLegacyRoomAuthority(merged), roomScopeOf(merged, scopeJid)))
+  const written = enforceRetraction(withoutLegacyRoomAuthority(merged), roomScopeOf(merged, scopeJid))
+  await store.put(written)
+  return written
 }
 
 /** Insert or merge a live-arriving message by identity (migration + archive write path). */
@@ -1288,6 +1291,7 @@ function reconcileHistoryRow<T extends (StoredMessage | StoredRoomMessage) & Can
     ...page,
     ...(owner.isEdited || owner !== page ? {
       body: owner.body,
+      references: owner.references,
       isEdited: owner.isEdited,
       originalBody: owner.originalBody,
       attachment: owner.attachment,
@@ -2376,6 +2380,7 @@ export async function applyChatCorrection(
     }
   }
   await completion
+  if (result) emitMessageCacheUpdate({ kind: 'chat', conversationId, account: scopeJid, target: result })
   return result
 }
 
@@ -2413,6 +2418,7 @@ export async function applyRoomCorrection(
     }
   }
   await completion
+  if (result) emitMessageCacheUpdate({ kind: 'room', conversationId: roomJid, account: scopeJid, target: result })
   return result
 }
 
@@ -2495,8 +2501,8 @@ export async function updateMessage(
     }
     await tx.done
     if (change) await reconcileChatIndexChanges([change], scopeJid)
-    if (['body', 'encryptedPayload', 'securityContext', 'attachment', 'isRetracted'].some(field => field in applicable)) {
-      emitMessageCacheUpdate({ kind: 'chat', conversationId, account: scopeJid, target: updated })
+    if (['body', 'references', 'encryptedPayload', 'securityContext', 'attachment', 'isRetracted'].some(field => field in applicable)) {
+      emitMessageCacheUpdate({ kind: 'chat', conversationId, account: scopeJid, target: deserializeMessage(written) })
     }
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -3302,13 +3308,15 @@ export async function updateRoomMessage(
     if (!applicable) { await tx.done; return }
     const updated = { ...deserializeRoomMessage(existing), ...applicable } as RoomMessage
     const serialized = serializeRoomMessage(updated)
+    let written: StoredRoomMessage
     serialized.identityKeys = reconciledRoomIdentityKeys({ ...serialized, identityKeys: unionSorted(existing.identityKeys, serialized.identityKeys) })
     // The in-place path requires both unchanged identity fields and an unchanged
     // serialized key. Either kind of change needs the merge/re-key path below.
     if (identityFieldsEqual(updated, existing) && serialized.cacheKey === existing.cacheKey) {
       const row = serialized
       row.ids = existing.ids
-      await store.put(enforceRetraction(row, roomScopeOf(row, scopeJid)))
+      written = enforceRetraction(row, roomScopeOf(row, scopeJid))
+      await store.put(written)
     } else {
       // An identity field changed. Union the existing row's accumulated aliases in
       // (do NOT delete-then-upsert — a deleted row cannot be rediscovered, and
@@ -3325,11 +3333,11 @@ export async function updateRoomMessage(
       // re-keys + deletes the stale row when it changed; either way the pre-update
       // copy is not merged back in. The finder uses row.identityKeys (revoked tier
       // absent), so a row legitimately still carrying that stanzaId is NOT pulled in.
-      await upsertStoredRoomRow(store as never, row, existing.cacheKey, scopeJid)
+      written = await upsertStoredRoomRow(store as never, row, existing.cacheKey, scopeJid)
     }
     await tx.done
-    if (['body', 'encryptedPayload', 'securityContext', 'attachment', 'isRetracted'].some(field => field in applicable)) {
-      emitMessageCacheUpdate({ kind: 'room', conversationId: roomJid, account: scopeJid, target: updated })
+    if (['body', 'references', 'encryptedPayload', 'securityContext', 'attachment', 'isRetracted'].some(field => field in applicable)) {
+      emitMessageCacheUpdate({ kind: 'room', conversationId: roomJid, account: scopeJid, target: deserializeRoomMessage(written) })
     }
   } catch (error) {
     if (isIndexedDBAvailable()) {
