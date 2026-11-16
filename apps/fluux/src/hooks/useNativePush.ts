@@ -2,6 +2,9 @@ import { useEffect } from 'react'
 import { connectionStore, consoleStore, generateUUID, useXMPPContext } from '@fluux/sdk'
 import type { PushAppServerRegistration, PushDeviceRegistrationRequest, PushDeviceUnregistrationRequest, PushStatus } from '@fluux/sdk'
 import { platform } from '@/platform'
+import { clearAppleConversationMirror } from '@/platform/apple/conversationMirror'
+import { purgeIOSNotificationPreviews } from '@/platform/ios/notificationPreviews'
+import { clearUnreadWidgetList } from '@/utils/unreadWidget'
 
 /** APNs environment a device token belongs to, as reported by the push plugin. */
 export type ApnsEnvironment = 'development' | 'production'
@@ -293,10 +296,6 @@ export async function endPushSession(push?: PushRegistrar): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     const revokeContent = async () => {
-      const [{ clearAppleConversationMirror }, { purgeIOSNotificationPreviews }, { clearUnreadWidgetList }] = await Promise.all([
-        import('@/platform/apple/conversationMirror'), import('@/platform/ios/notificationPreviews'),
-        import('@/utils/unreadWidget'),
-      ])
       await Promise.all([
         clearAppleConversationMirror().catch(() => {}),
         purgeIOSNotificationPreviews().catch(() => {}),
