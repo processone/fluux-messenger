@@ -1,3 +1,4 @@
+import { badgeMessageKey } from '../../diagnostics/badgeIdentity'
 import { publishDiagnostic } from '../../diagnostics/channel'
 import { emitLocalRead, hasLocalReadListeners } from '../localReadEvents'
 import { emitSettledRead } from '../settledReadEvents'
@@ -140,7 +141,7 @@ export interface PublishPosition {
  */
 export interface ArrivalNote {
   readonly entityId: string
-  readonly diagnosticMessageId?: string
+  readonly diagnosticMessageKey?: string
   readonly diagnosticUnreadBefore?: number
   readonly pointerBefore?: ReadPointer
   /** How much the transient overlay grew: this arrival's contribution to the count. */
@@ -921,14 +922,14 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       entityId: string,
       message: Message | RoomMessage,
       evidence: { isActive: boolean; windowVisible: boolean },
-      options: { increment?: boolean } = {},
+      options: { increment?: boolean; diagnosticKey?: string } = {},
     ): ArrivalNote {
       bumpUnreadInputVersion(entityId)
       const view = ports.storage.read(entityId)
-      const diagnosticNote = { diagnosticMessageId: message.id, diagnosticUnreadBefore: view?.unreadCount }
+      const diagnosticNote = { diagnosticMessageKey: options.diagnosticKey ?? badgeMessageKey(message), diagnosticUnreadBefore: view?.unreadCount }
       publishDiagnostic('badge-decision', () => ({
         kind: 'badge-decision', phase: 'arrival', status: 'pending', entityKind: kind,
-        entityId, messageId: message.id, accountScope: currentStorageScope() ?? '',
+        entityId, messageKey: diagnosticNote.diagnosticMessageKey, accountScope: currentStorageScope() ?? '',
         active: evidence.isActive, visible: evidence.windowVisible,
         viewportAtEdge: currentViewportEvidence(scopeKey(entityId)) === 'at-edge',
         outgoing: message.isOutgoing, delayed: !!message.isDelayed,
@@ -1022,7 +1023,7 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       const key = scopeKey(note.entityId)
       const view = ports.storage.read(note.entityId)
       const identity = { entityKind: kind, entityId: note.entityId,
-        messageId: note.diagnosticMessageId, accountScope: currentStorageScope() ?? '' }
+        messageKey: note.diagnosticMessageKey, accountScope: currentStorageScope() ?? '' }
       publishDiagnostic('badge-decision', () => ({
         kind: 'badge-decision', ...identity, phase: 'arrival',
         status: outcome.accepted ? 'accepted' : 'refused',

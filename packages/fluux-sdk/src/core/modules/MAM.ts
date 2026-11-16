@@ -1,3 +1,4 @@
+import { badgeMessageKey } from '../../diagnostics/badgeIdentity'
 /**
  * Message Archive Management (XEP-0313) module.
  *
@@ -3025,7 +3026,7 @@ export class MAM extends BaseModule {
       // live path's no-manager handling: stash an EME-tagged payload for
       // deferred retry so it self-heals (decrypts, or is tagged unsupported)
       // once a manager + plugin come online.
-      recordUnclaimedEME(messageEl, false)
+      recordUnclaimedEME(messageEl, false, { peer, source: 'archive' })
       return false
     }
     // Same helper the live path uses. The passed-in `peer` is kept as
@@ -3171,7 +3172,7 @@ export class MAM extends BaseModule {
 
     const securityContext = this.archiveSecurityContext(messageEl)
 
-    return {
+    const message: Message = {
       type: 'chat',
       id: messageId,
       stanzaId: stanzaId || undefined,
@@ -3191,6 +3192,8 @@ export class MAM extends BaseModule {
       ...(encryptedPayload && { encryptedPayload }),
       ...(unsupportedEncryption && { unsupportedEncryption }),
     }
+    badgeMessageKey(message, messageEl)
+    return message
   }
 
   private async resolveRoomArchiveEntries(entries: RawArchiveEntry[], roomJid: string, me: RoomSelf): Promise<RoomMessage[]> {
@@ -3244,6 +3247,7 @@ export class MAM extends BaseModule {
         ...tombstone,
       }
 
+      badgeMessageKey(message, messageEl)
       return message
     }
 
@@ -3337,6 +3341,7 @@ export class MAM extends BaseModule {
         message.pollClosed = pollClosedData
       }
     }
+    badgeMessageKey(message, messageEl)
     return message
   }
 

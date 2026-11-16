@@ -1,3 +1,4 @@
+import { badgeMessageKey } from '../diagnostics/badgeIdentity'
 import { reactionUpdate } from '../utils/reactions'
 import { handoffMessageUpdate, messageUpdateFields, withMessageCacheOperation } from './shared/messageUpdateHandoff'
 import { clearMessageIngressVersions } from './shared/messageIngress'
@@ -1866,6 +1867,7 @@ export const chatStore = createStore<ChatState>()(
             isActive: get().activeConversationId === msg.conversationId,
             windowVisible: connectionStore.getState().windowVisible,
           },
+          { diagnosticKey: badgeMessageKey(incoming) },
         )
         let acceptedMessage = false
 

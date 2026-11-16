@@ -246,10 +246,10 @@ export interface RetractionLedgerEvictedDiagnostic {
 export interface BadgeDecisionDiagnostic {
   kind: 'badge-decision'
   phase: 'decrypt-start' | 'decrypt-complete' | 'arrival' | 'storage' | 'read-decision'
-  status: 'pending' | 'succeeded' | 'failed' | 'unavailable' | 'unsupported' | 'accepted' | 'refused' | 'stale' | 'observed'
+  status: 'pending' | 'succeeded' | 'failed' | 'discarded' | 'unavailable' | 'unsupported' | 'accepted' | 'refused' | 'stale' | 'observed'
   entityKind: 'chat' | 'room'
   entityId: string
-  messageId?: string
+  messageKey?: string
   accountScope?: string
   source?: 'live' | 'archive'
   active?: boolean

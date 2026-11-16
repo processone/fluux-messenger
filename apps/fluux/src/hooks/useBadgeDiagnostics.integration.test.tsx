@@ -97,6 +97,11 @@ describe('automatic badge diagnostics through message dispatch and stores', () =
     expect(count()).toBe(1)
     expect(events()).toEqual(expect.arrayContaining([expect.objectContaining({ phase: 'decrypt-complete', status: 'succeeded' }), expect.objectContaining({ phase: 'arrival', status: 'accepted', unreadBefore: 0, unreadAfter: 1 }), expect.objectContaining({ phase: 'storage', status: 'succeeded' })]))
     await vi.waitFor(() => expect(native.badge).toHaveBeenCalledWith(1))
+    const message = events().find(event => event.phase === 'decrypt-start')?.message
+    expect(message).toBeDefined()
+    for (const phase of ['decrypt-complete', 'arrival', 'storage']) {
+      expect(events().filter(event => event.phase === phase).every(event => event.message === message)).toBe(true)
+    }
     trace('hidden success')
     await act(async () => { connectionStore.getState().setWindowVisible(true); chatStore.getState().markAsRead(PEER); })
     expect(count()).toBe(0)

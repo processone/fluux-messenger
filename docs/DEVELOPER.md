@@ -921,9 +921,9 @@ uploads nothing automatically.
 
 Retention is the most recent **1,000 events**, at most **one MiB**, with events older
 than **seven days** removed on startup, recording, export and scheduled idle expiry.
-The local journal survives ordinary restarts when storage is available. Clearing local
-app data removes it too. It cannot reconstruct events from before this feature or
-prove another device's behavior. Decryption algorithms, read-state policy and badge
+The local journal survives ordinary restarts when storage is available. An explicit
+full local-data wipe removes its saved and in-memory history too. It cannot reconstruct
+events from before this feature or prove another device's behavior. Decryption algorithms, read-state policy and badge
 counts are unchanged.
 
 For deep SDK connection/proxy tracing (high-volume logs such as machine transitions, disconnect phase timing, and proxy op lifecycle), enable the connection trace flag:

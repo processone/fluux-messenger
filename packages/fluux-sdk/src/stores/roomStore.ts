@@ -1,3 +1,4 @@
+import { badgeMessageKey } from '../diagnostics/badgeIdentity'
 import { handoffMessageUpdate, messageUpdateFields, withMessageCacheOperation } from './shared/messageUpdateHandoff'
 import { clearMessageIngressVersions } from './shared/messageIngress'
 import { isSpamModerated, moderationMetadata, roomRetractionAuthorized, type ModerationMetadata } from '../utils/moderation'
@@ -2196,7 +2197,7 @@ export const roomStore = createStore<RoomState>()(
       roomJid,
       messageToAdd,
       { isActive: get().activeRoomJid === roomJid, windowVisible: connectionStore.getState().windowVisible },
-      { increment: incrementUnread },
+      { increment: incrementUnread, diagnosticKey: badgeMessageKey(message) },
     )
     let acceptedMessage = false
 

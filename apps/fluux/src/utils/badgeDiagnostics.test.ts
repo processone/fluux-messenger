@@ -3,8 +3,8 @@ import { BadgeDiagnosticJournal, BADGE_DIAGNOSTICS_KEY, BADGE_DIAGNOSTICS_LIMITS
 
 // Intent: the accepted automatic diagnostic contract, not a general logging API.
 // Real journal reads/writes own privacy and retention; connected tests own badge decisions.
-afterEach(() => { resetBadgeDiagnosticsForTesting(); vi.useRealTimers(); localStorage.clear() })
-const arrival = { phase: 'arrival', status: 'accepted', entityKind: 'chat', entityId: 'sender@example.test', messageId: 'client-message-7', accountScope: 'receiver@example.test', unreadBefore: 0, unreadAfter: 1 } as const
+afterEach(() => { resetBadgeDiagnosticsForTesting(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear() })
+const arrival = { phase: 'arrival', status: 'accepted', entityKind: 'chat', entityId: 'sender@example.test', messageKey: 'client-message-7', accountScope: 'receiver@example.test', unreadBefore: 0, unreadAfter: 1 } as const
 function read(journal: BadgeDiagnosticJournal) { return JSON.parse(journal.export()) }
 
 describe('automatic private badge journal', () => {
@@ -96,4 +96,19 @@ describe('automatic private badge journal', () => {
     expect(JSON.parse(localStorage.getItem(BADGE_DIAGNOSTICS_KEY)!)).toEqual([])
     stop()
   })
+  it('starts and records on supported WebKit without randomUUID or Object.hasOwn', () => {
+    const randomValues = crypto.getRandomValues.bind(crypto)
+    vi.stubGlobal('crypto', { getRandomValues: randomValues })
+    vi.spyOn(Object, 'hasOwn').mockImplementation(() => { throw new Error('Unavailable API must not be called') })
+    expect(() => startBadgeDiagnostics()).not.toThrow()
+    recordBadgeDiagnostic({ phase: 'recount', status: 'pending', recountReason: 'cache-unavailable' })
+    expect(JSON.parse(exportBadgeDiagnostics()).events).toContainEqual(expect.objectContaining({ phase: 'recount', recountReason: 'cache-unavailable' }))
+  })
+
+  it('does not prevent startup when diagnostic identity initialization itself fails', () => {
+    vi.stubGlobal('crypto', { getRandomValues: () => { throw new Error('Disposable random source failure') } })
+    expect(() => startBadgeDiagnostics()).not.toThrow()
+    expect(() => recordBadgeDiagnostic(arrival)).not.toThrow()
+  })
+
 })

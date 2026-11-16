@@ -1,3 +1,4 @@
+import { purgeBadgeDiagnostics } from './badgeDiagnostics'
 import {
   chatStore,
   roomStore,
@@ -140,6 +141,7 @@ export async function clearLocalData(options: ClearLocalDataOptions = {}): Promi
     }
     console.log('[Fluux] clearLocalData: complete')
   } finally {
+    if (allAccounts) purgeBadgeDiagnostics()
     // 7. Reset URL to clear any stale conversation/room JID from the hash.
     // After clearing all data, the URL may still contain a JID (e.g., #/messages/user@example.com)
     // that no longer exists in the empty stores, causing a blank screen on re-login.

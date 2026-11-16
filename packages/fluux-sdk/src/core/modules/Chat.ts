@@ -1,5 +1,4 @@
-import { publishDiagnostic } from '../../diagnostics/channel'
-import { getStorageScopeJid } from '../../utils/storageScope'
+import { badgeMessageKey } from '../../diagnostics/badgeIdentity'
 import { attachmentElements } from './attachmentElements'
 import { isOwnRoomMessage, roomSelf } from '../../utils/roomSelf'
 import { parseModerationSignal } from '../moderation'
@@ -260,7 +259,8 @@ export class Chat extends BaseModule {
       !readStashedUnsupportedEncryption(stanza) &&
       stanzaHasEMEHint(stanza)
     ) {
-      recordUnclaimedEME(stanza, manager ?? false)
+      const { peer } = deriveConversationContext(stanza, getBareJid(this.deps.getCurrentJid() ?? ''))
+      recordUnclaimedEME(stanza, manager ?? false, { peer, source: 'live' })
     }
 
     const from = stanza.attrs.from
@@ -503,17 +503,8 @@ export class Chat extends BaseModule {
     context: MessageEnvelopeContext,
   ): boolean {
     const manager = this.deps.getE2EEManager?.()
-    if (!manager || !stanzaHasE2EEClaim(stanza, manager)) {
-      if (stanzaHasEMEHint(stanza) && !readStashedSecurityContext(stanza)) {
-        const { peer } = deriveConversationContext(stanza, getBareJid(this.deps.getCurrentJid() ?? ''))
-        publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', phase: 'decrypt-complete',
-          status: readStashedUnsupportedEncryption(stanza) ? 'unsupported' : 'unavailable',
-          entityKind: stanza.attrs.type === 'groupchat' ? 'room' : 'chat', entityId: peer,
-          messageId: stanza.attrs.id, accountScope: getStorageScopeJid() ?? '', source: 'live',
-        }), undefined)
-      }
-      return false
-    }
+    if (!manager) return false
+    if (!stanzaHasE2EEClaim(stanza, manager)) return false
     const pending = this.decryptAndReprocess(manager, stanza, context)
     this.liveDecrypts.add(pending)
     const settle = () => { this.liveDecrypts.delete(pending) }
@@ -2240,6 +2231,7 @@ export class Chat extends BaseModule {
       ...(encryptedPayload && { encryptedPayload }),
       ...(unsupportedEncryption && { unsupportedEncryption }),
     }
+    badgeMessageKey(message, stanza)
 
     if (!isOutgoing && this.deps.stores) {
       // Skip stranger message handling for MUC JIDs - they should never be treated as contacts
@@ -2330,6 +2322,7 @@ export class Chat extends BaseModule {
       ...(encryptedPayload && { encryptedPayload }),
       ...(unsupportedEncryption && { unsupportedEncryption }),
     }
+    badgeMessageKey(message, stanza)
 
     // Poll detection: check for <poll> or <poll-closed> elements
     const pollEl = stanza.getChild('poll', NS_POLL)
@@ -2442,7 +2435,7 @@ export class Chat extends BaseModule {
       ? room.occupants.get(whisperWith)?.occupantId
       : occupantId
 
-    return {
+    const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,
       // A private message carries no room-archive stanza-id: it was parsed without
@@ -2465,6 +2458,8 @@ export class Chat extends BaseModule {
       ...(parsed.attachment && { attachment: parsed.attachment }),
       occupantId: occupantId || undefined,
     }
+    badgeMessageKey(message, stanza)
+    return message
   }
 
   /**

@@ -1,3 +1,4 @@
+import { badgeStanzaKey } from '../../diagnostics/badgeIdentity'
 /**
  * Shared inbound-decrypt step for any message source.
  *
@@ -211,7 +212,7 @@ export async function decryptStanzaInPlace(
   const report = (phase: BadgeDecisionDiagnostic['phase'], status: BadgeDecisionDiagnostic['status']) => {
     publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', phase, status,
       entityKind: stanza.attrs.type === 'groupchat' ? 'room' : 'chat', entityId: senderPeer,
-      messageId: stanza.attrs.id, accountScope, source,
+      messageKey: badgeStanzaKey(stanza), accountScope, source,
     }), undefined)
   }
   const marked = stanza as unknown as {
@@ -248,13 +249,11 @@ export async function decryptStanzaInPlace(
     // (no plugin registered — stash for deferred retry) from "protocol we have
     // no plugin for" (e.g. OMEMO when only OpenPGP is wired — surface the
     // sender's XEP-0380 fallback <body> with an unsupported-method tag).
-    const disposition = recordUnclaimedEME(stanza, manager)
+    const disposition = recordUnclaimedEME(stanza, manager, { peer: senderPeer, source })
     if (disposition.kind === 'retry') {
-      report('decrypt-complete', 'unavailable')
       return { attempted: false, encryptedPayloadXml: disposition.encryptedPayloadXml }
     }
     if (disposition.kind === 'unsupported') {
-      report('decrypt-complete', 'unsupported')
       return { attempted: false, unsupportedEncryption: disposition.info }
     }
     return { attempted: false }
@@ -717,13 +716,21 @@ function isEmptyOmemoElement(namespace: string, child: Element | null): boolean 
 export function recordUnclaimedEME(
   stanza: Element,
   pluginState: UnclaimedEMEPluginState,
+  diagnostic?: { peer: string; source: InboundSource },
 ): UnclaimedEMEDisposition {
+  const report = (status: BadgeDecisionDiagnostic['status']) => {
+    if (diagnostic) publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', phase: 'decrypt-complete', status,
+      entityKind: stanza.attrs.type === 'groupchat' ? 'room' : 'chat', entityId: diagnostic.peer,
+      messageKey: badgeStanzaKey(stanza), accountScope: getStorageScopeJid() ?? '', source: diagnostic.source,
+    }), undefined)
+  }
   const target = findEncryptionTarget(stanza)
   if (!target) return { kind: 'none' }
 
   // Session bookkeeping, not a message — drop before either branch below can
   // turn it into a placeholder. See {@link isEmptyOmemoElement}.
   if (isEmptyOmemoElement(target.namespace, target.child)) {
+    report('discarded')
     logInfo(`E2EE: dropped empty OMEMO message (ns=${target.namespace})`)
     return { kind: 'none' }
   }
@@ -733,6 +740,7 @@ export function recordUnclaimedEME(
     const info: EMEIdentity = { namespace: target.namespace, name }
     ;(stanza as unknown as Record<string, EMEIdentity>)[UNSUPPORTED_ENC_STASH] = info
     logInfo(`E2EE: message uses unsupported encryption (${name} / ${target.namespace})`)
+    report('unsupported')
     return { kind: 'unsupported', info }
   }
 
@@ -743,6 +751,7 @@ export function recordUnclaimedEME(
   const payloadXml = stanza.toString()
   stashPayload(stanza, payloadXml)
   logInfo(`E2EE: stashed encrypted payload (ns=${target.namespace}) for deferred decrypt`)
+  report('unavailable')
   return { kind: 'retry', encryptedPayloadXml: payloadXml }
 }
 

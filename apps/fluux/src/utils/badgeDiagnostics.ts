@@ -1,9 +1,9 @@
-import { subscribeDiagnostics, chatStore, roomStore, connectionStore, getStorageScopeJid, type RecountDeferralReason } from '@fluux/sdk'
+import { subscribeDiagnostics, chatStore, roomStore, connectionStore, getStorageScopeJid, generateUUID, readStateGeneration, type RecountDeferralReason } from '@fluux/sdk'
 
 export const BADGE_DIAGNOSTICS_KEY = 'fluux:badge-diagnostics:v1'
 export const BADGE_DIAGNOSTICS_LIMITS = { events: 1000, bytes: 1024 * 1024, ageMs: 7 * 24 * 60 * 60 * 1000 } as const
 const phases = ['decrypt-start', 'decrypt-complete', 'arrival', 'storage', 'read-state', 'read-decision', 'visibility', 'badge-request', 'badge-result', 'recount'] as const
-const statuses = ['pending', 'succeeded', 'failed', 'unavailable', 'unsupported', 'accepted', 'refused', 'stale', 'changed', 'observed'] as const
+const statuses = ['pending', 'succeeded', 'failed', 'discarded', 'unavailable', 'unsupported', 'accepted', 'refused', 'stale', 'changed', 'observed'] as const
 const numbers = ['unreadBefore', 'unreadAfter', 'mentionsBefore', 'mentionsAfter', 'count', 'chats', 'rooms', 'events'] as const
 const booleans = ['active', 'visible', 'focused', 'pageVisible', 'viewportAtEdge', 'outgoing', 'delayed', 'retryPayloadRetained', 'pointerChanged', 'joined', 'notifyAll', 'badgeIncluded'] as const
 const recountReasons: Record<RecountDeferralReason, true> = {
@@ -24,7 +24,7 @@ type Input = Fields & {
   status: Status
   entityKind?: 'chat' | 'room'
   entityId?: string
-  messageId?: string
+  messageKey?: string
   accountScope?: string
   source?: 'live' | 'archive'
   requestId?: string
@@ -41,7 +41,7 @@ function sanitize(value: unknown): Event | null {
     || typeof input.time !== 'number' || !Number.isFinite(input.time)) return null
   const event: Event = { time: input.time, phase: input.phase as Phase, status: input.status as Status }
   if (input.badgeTarget === 'desktop-native' || input.badgeTarget === 'widget-publisher' || input.badgeTarget === 'native-push' || input.badgeTarget === 'web') event.badgeTarget = input.badgeTarget
-  if (typeof input.recountReason === 'string' && Object.hasOwn(recountReasons, input.recountReason)) event.recountReason = input.recountReason as RecountDeferralReason
+  if (typeof input.recountReason === 'string' && Object.prototype.hasOwnProperty.call(recountReasons, input.recountReason)) event.recountReason = input.recountReason as RecountDeferralReason
   if (input.entityKind === 'chat' || input.entityKind === 'room') event.entityKind = input.entityKind
   if (input.source === 'live' || input.source === 'archive') event.source = input.source
   for (const key of ['entity', 'message', 'request'] as const) {
@@ -58,7 +58,7 @@ function sanitize(value: unknown): Event | null {
 /** Bounded, local-only diagnostic journal. Never accepts payloads or exception text. */
 export class BadgeDiagnosticJournal {
   private events: Event[] = []
-  private readonly session = crypto.randomUUID()
+  private readonly session = generateUUID()
   private sequence = 0
   private identities = new Map<string, string>()
   private persistence: 'available' | 'unavailable' = 'available'
@@ -91,7 +91,7 @@ export class BadgeDiagnosticJournal {
     const identity = [input.accountScope, input.entityKind, input.entityId]
     const event = sanitize({ ...input, time: this.now(),
       entity: input.entityId ? this.anonymous(['entity', ...identity]) : undefined,
-      message: input.messageId ? this.anonymous(['message', ...identity, input.messageId]) : undefined,
+      message: input.messageKey ? this.anonymous(['message', ...identity, input.messageKey]) : undefined,
       request: input.requestId ? this.anonymous(['request', input.requestId]) : undefined,
     })
     if (!event) return
@@ -146,8 +146,14 @@ function scheduleSweep(): void {
 }
 /** Start before React renders; no debug switch, server request or account access. */
 export function startBadgeDiagnostics(): () => void {
+  try { return installBadgeDiagnostics() } catch { return () => {} }
+}
+
+function installBadgeDiagnostics(): () => void {
   if (stop) return stop
   current().sweep()
+  let chatScope = getStorageScopeJid()
+  let chatEpoch = readStateGeneration('chat', '').store
   const subscriptions = [
     subscribeDiagnostics(event => {
       if (event.kind === 'badge-decision') recordBadgeDiagnostic(event)
@@ -156,6 +162,10 @@ export function startBadgeDiagnostics(): () => void {
           : { unreadBefore: event.verdict.previousCount, unreadAfter: event.verdict.count }) })
     }, { kinds: ['badge-decision', 'unread-recount'] }),
     chatStore.subscribe((state, previous) => {
+      const scope = getStorageScopeJid()
+      // The store epoch also catches a reload of the same account after reset.
+      const epoch = readStateGeneration('chat', '').store
+      if (scope !== chatScope || epoch !== chatEpoch) { chatScope = scope; chatEpoch = epoch; return }
       for (const [id, entity] of state.conversations) {
         const before = previous.conversations.get(id)
         if (before?.unreadCount === entity.unreadCount && before?.readPointer === entity.readPointer) continue
@@ -185,6 +195,14 @@ export function startBadgeDiagnostics(): () => void {
   stop = () => { subscriptions.forEach(off => off()); clearTimeout(expiryTimer); stop = undefined }
   scheduleSweep()
   return stop
+}
+
+/** Full local-data wipe: discard memory and its timer before removing durable history. */
+export function purgeBadgeDiagnostics(): void {
+  clearTimeout(expiryTimer)
+  expiryTimer = undefined
+  journal = undefined
+  try { localStorage.removeItem(BADGE_DIAGNOSTICS_KEY) } catch { /* Storage may already be unavailable. */ }
 }
 
 /** Test isolation without clearing unrelated app storage. */
