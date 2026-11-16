@@ -18,6 +18,12 @@
     font-size: 64px; line-height: 1.08; letter-spacing: -0.025em; }
   h1 span { background: linear-gradient(100deg, #38e0c4, #7c8cff 65%, #a78bfa);
     background-clip: text; -webkit-background-clip: text; color: transparent; }
+  .badges { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .badges .version { margin-bottom: 0; }
+  .beta { display: inline-flex; align-items: center; gap: 8px; padding: 5px 16px; border-radius: 999px;
+    color: #38e0c4; font-size: 20px; font-weight: 700; box-shadow: inset 0 0 0 2px #38e0c4aa; background: #38e0c41a; }
+  .beta::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #38e0c4;
+    box-shadow: 0 0 10px #38e0c4; }
   .summary { margin-top: 24px; color: #bdc6e8; font-size: 19px; line-height: 1.5; max-width: 400px; }
   .fixes { margin-top: 22px; display: flex; align-items: center; gap: 12px; }
   .fixes b { padding: 5px 14px; border-radius: 999px; font-size: 16px; font-weight: 700; color: #f2f4ff;
@@ -57,7 +63,7 @@
   <div class="glow teal"></div><div class="glow violet"></div>
   <div class="copy">
     <img class="logo" src="../../assets/readme/fluux-logo.svg" alt="Fluux">
-    <div class="version">0.18.3</div>
+    <div class="badges"><div class="version">0.18.3</div><div class="beta">Join the iOS beta</div></div>
     <h1>Unreads,<br><span>at a glance</span></h1>
     <p class="summary">New widgets on macOS and iOS.<br>Names and counts, never message text.</p>
     <div class="fixes"><b>15 fixes</b><span>Steadier scrolling, keychain<br>and notification reliability</span></div>
@@ -89,7 +95,7 @@
     <div class="unread">unread</div>
     <div class="names">Emma Wilson<br>Team Chat<span class="at">@</span></div>
   </div>
-  <div class="label" style="left: 966px; top: 536px; width: 170px;">iOS home screen</div>
+  <div class="label" style="left: 966px; top: 536px; width: 170px;">iOS beta home screen</div>
 </main>
 </body>
 </html>
