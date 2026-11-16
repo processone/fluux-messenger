@@ -3495,7 +3495,7 @@ export class MAM extends BaseModule {
     const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
     const me = roomSelf(this.deps.stores.room.getRoom(roomJid))
     for (const { forwarded, messageEl, archiveId } of entries) {
-      await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, this.extractForwardedTimestamp(forwarded), archiveId)
+      await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, 'room', this.extractForwardedTimestamp(forwarded), archiveId)
       session.assertCurrent()
       if (this.collectModification(messageEl, modifications, from => from, forwarded.getChild('delay', NS_DELAY), roomJid, archiveId)) continue
       const message = this.parseRoomArchiveMessage(forwarded, roomJid, me, archiveId)

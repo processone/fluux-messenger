@@ -108,6 +108,22 @@ describe('linked room message lookup', () => {
     expect(h.sendIQ.mock.calls.map(([iq]) => Number(iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max')))).toEqual([1, 1, 25, 25])
   })
 
+  // The archive-link caller owns this argument handoff; decryption itself is
+  // covered by MAM.e2ee.test.ts. A room kind must not displace the delay Date
+  // or the room-assigned archive id when the shared helper contract changes.
+  it('passes room kind, delay Date and archive id to context decryption', async () => {
+    const h = harness()
+    const decrypt = vi.spyOn(h.mam as unknown as {
+      decryptArchiveEntryIfNeeded: (message: Element, peer: string, kind: 'chat' | 'room', timestamp?: Date, archiveId?: string) => Promise<boolean>
+    }, 'decryptArchiveEntryIfNeeded')
+    const target = rows[40]
+    expect(await h.mam.locateRoomMessage(ROOM, target.stanzaId)).toMatchObject({ kind: 'found', source: 'archive' })
+    const context = decrypt.mock.calls.find(([message]) => message.attrs.id === target.id)
+    expect(context).toBeDefined()
+    expect(context?.slice(1)).toEqual([ROOM, 'room', target.timestamp, target.stanzaId])
+    expect(context?.[3]).toBeInstanceOf(Date)
+  })
+
   it('does not write old room context into an account switched during gap publication', async () => {
     await cache.saveRoomMessages([rows.at(-1)!])
     const h = harness()
