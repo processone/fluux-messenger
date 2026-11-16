@@ -2629,3 +2629,192 @@ test('Spam moderation removes rows without leaving an empty tail', async ({ page
     return (window as any).__roomStore.getState().messages.get(roomJid).length
   }, STRESS_ROOM_JID)).toBe(batch.count)
 })
+
+// Intent: a reaction is rendered immediately, and must not wait for pointer departure
+// to become fully visible. The reading case protects the existing interaction anchor.
+test.describe('Incoming reaction under a stationary pointer', () => {
+  test.use({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 })
+  for (const kind of ['room', 'chat'] as const) {
+    for (const mode of ['direct', 'reading', 'pointer-transfer', 'focus-transfer', 'tall', 'shrink'] as const) {
+      const reading = mode === 'reading'
+      test(`${kind}: reaction growth ${mode}`, async ({ page }, testInfo) => {
+        if (mode === 'tall') await page.setViewportSize({ width: 1280, height: 450 })
+        await loadDemo(page)
+        const jid = kind === 'room' ? 'team@conference.fluux.chat' : 'emma@fluux.chat'
+        await page.mouse.move(0, 0)
+        await page.evaluate(async ({ kind, jid }) => {
+          const scope = window as any
+          scope.__demoClient.stopAnimation()
+          scope.__fluuxScrollDebug?.(true)
+          const state = (kind === 'room' ? scope.__roomStore : scope.__chatStore).getState()
+          if (kind === 'room') await state.activateRoom(jid)
+          else await state.activateConversation(jid)
+          location.hash = `#/${kind === 'room' ? 'rooms' : 'messages'}/${encodeURIComponent(jid)}`
+        }, { kind, jid })
+        await page.waitForFunction(({ kind, jid }) => {
+          const scope = window as any
+          const state = (kind === 'room' ? scope.__roomStore : scope.__chatStore).getState()
+          return !state.activationPending && !!state.messages.get(jid)?.length
+        }, { kind, jid })
+        const lastId = await page.evaluate(({ kind, jid, reading, mode }) => {
+          const scope = window as any
+          const messages = (kind === 'room' ? scope.__roomStore : scope.__chatStore).getState().messages.get(jid)
+          // Reuse real conversation wording and sender data from the built demo.
+          const sources = messages.filter((m: any) => !m.isOutgoing && !m.isPrivate && !m.poll && !m.attachment && !m.replyTo && !m.isRetracted && m.body?.length > 20 && m.body.length < 160)
+          if (!sources.length) throw new Error('No plain incoming demo message')
+          const longBody = scope.__chatStore.getState().messages.get('james@fluux.chat')
+            ?.find((m: any) => m.body?.includes('async def stress_test'))?.body
+          if (mode === 'tall' && !longBody) throw new Error('No existing long code message fixture')
+          let id = ''
+          // Plain messages keep the reading control independent of the demo's tall media rows.
+          const now = Date.now()
+          for (let index = 0; index < (reading ? 16 : 1); index++) {
+            const source = sources[index % sources.length]
+            id = crypto.randomUUID()
+            const message = { id, from: source.from, body: mode === 'tall' ? longBody : source.body, timestamp: new Date(now + index), isOutgoing: false,
+              ...(kind === 'room' ? { type: 'groupchat', roomJid: jid, nick: source.nick, occupantId: source.occupantId } : { type: 'chat', conversationId: jid }) }
+            scope.__demoClient.emitSDK(kind === 'room' ? 'room:message' : 'chat:message', kind === 'room'
+              ? { roomJid: jid, message, isLiveArrival: true, incrementUnread: true }
+              : { message, isLiveArrival: true })
+          }
+          return id
+        }, { kind, jid, reading, mode })
+        await expect(page.locator(`.message-row[data-message-id="${lastId}"]`)).toBeInViewport()
+        // A raw scrollTop write cancels an incoming pin as user takeover. Navigate through the
+        // app instead, and wait for its measured settlement rather than the helper's fixed delay.
+        await page.locator('[data-message-list]').evaluate(el => el.closest<HTMLElement>('[tabindex="0"]')!.focus())
+        const navigationDone = page.waitForEvent('console', {
+          predicate: async message => {
+            if (!message.text().startsWith('[Scroll] PIN completed')) return false
+            const result = await message.args()[1]?.jsonValue()
+            return result?.trigger === 'fab' && ['settled', 'best-effort', 'user-takeover'].includes(result.outcome)
+          },
+          timeout: 30_000,
+        })
+        await page.keyboard.press('End')
+        const navigation = await (await navigationDone).args()[1].jsonValue()
+        expect(navigation.outcome, 'End must settle the bottom before interaction starts').toBe('settled')
+        // Replay the captured WebKit endpoint: a fractional row measurement left exactly one
+        // CSS pixel below the viewport, before pointer acquisition and without reader input.
+        const bottomReplay = mode === 'tall' ? await page.evaluate(async () => {
+          await document.fonts.ready
+          const list = document.querySelector<HTMLElement>('[data-message-list]')!
+          list.scrollTop = list.scrollHeight - list.clientHeight - 1
+          return { top: list.scrollTop, height: list.scrollHeight, client: list.clientHeight,
+            distance: list.scrollHeight - list.scrollTop - list.clientHeight }
+        }) : null
+        if (bottomReplay) expect(bottomReplay.distance).toBe(1)
+        if (reading) await wheelAwayFromBottom(page, 150, -400)
+        const targetId = reading ? await page.evaluate(() => {
+          const list = document.querySelector('[data-message-list]')!
+          const bounds = list.getBoundingClientRect()
+          const rows = [...list.querySelectorAll<HTMLElement>('.message-row[data-message-id]')]
+          const row = rows.find(row => {
+            const rect = row.getBoundingClientRect()
+            return rect.top > bounds.top + 50 && rect.bottom < bounds.bottom - 80 && !row.querySelector('[data-reaction-emoji]')
+          })
+          if (!row) throw new Error('No fully visible unreacted reading row')
+          return row.dataset.messageId!
+        }) : lastId
+        const row = page.locator(`.message-row[data-message-id="${targetId}"]`)
+        const list = page.locator('[data-message-list]')
+        if (mode === 'pointer-transfer' || mode === 'focus-transfer') {
+          const priorId = await page.evaluate(targetId => {
+            const list = document.querySelector('[data-message-list]')!
+            const bounds = list.getBoundingClientRect()
+            const row = [...list.querySelectorAll<HTMLElement>('.message-row[data-message-id]')].reverse().find(row => {
+              const rect = row.getBoundingClientRect()
+              return row.dataset.messageId !== targetId && rect.top >= bounds.top && rect.bottom < bounds.bottom
+            })
+            if (!row) throw new Error('No previous visible row for a hold transfer')
+            return row.dataset.messageId!
+          }, targetId)
+          // Resolve from the list so the same row is acquired by mouse or keyboard focus.
+          const priorRow = list.locator(`.message-row[data-message-id="${priorId}"]`)
+          if (mode === 'focus-transfer') {
+            await page.keyboard.press('Shift')
+            await priorRow.getByRole('button', { name: 'More reactions', exact: true }).focus()
+          } else await priorRow.locator('[data-message-body]').first().hover()
+          await expect(list).toHaveAttribute('data-message-interaction', await priorRow.getAttribute('data-message-row-id') as string)
+          expect(await list.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThanOrEqual(1)
+          if (mode === 'focus-transfer') await row.getByRole('button', { name: 'More reactions', exact: true }).focus()
+          else await row.locator('[data-message-body]').first().hover()
+        } else if (mode === 'tall') {
+          expect((await row.boundingBox())!.height).toBeGreaterThan((await list.boundingBox())!.height)
+          const box = (await row.boundingBox())!
+          const bounds = (await list.boundingBox())!
+          await page.mouse.move(box.x + 100, Math.min(box.y + box.height - 15, bounds.y + bounds.height - 20))
+        } else await row.locator('[data-message-body]').first().hover()
+        await expect(list).toHaveAttribute('data-message-interaction', await row.getAttribute('data-message-row-id') as string)
+        if (mode === 'shrink') {
+          await row.getByRole('button', { name: 'More reactions', exact: true }).click()
+          await expect(row.locator('[data-message-panel="reactions"]')).toBeVisible()
+          const baseline = await row.evaluate(el => ({ top: el.getBoundingClientRect().top, height: el.getBoundingClientRect().height }))
+          const initialClient = await list.evaluate(el => el.clientHeight)
+          await testInfo.attach('before-shrink', { body: await page.screenshot(), contentType: 'image/png' })
+          await page.setViewportSize({ width: 1280, height: 650 })
+          const frames = await list.evaluate((el, initialClient) => new Promise<{ top: number; height: number }[]>((resolve, reject) => {
+            const samples: { top: number; height: number }[] = []
+            let count = 0
+            const sample = () => {
+              const held = el.querySelector<HTMLElement>('.message-row[data-message-row-id="' + CSS.escape(el.getAttribute('data-message-interaction')!) + '"]')
+              if (!held) return reject(new Error('Shrink dropped the held row'))
+              if (el.clientHeight < initialClient) {
+                const rect = held.getBoundingClientRect()
+                samples.push({ top: rect.top, height: rect.height })
+              }
+              if (samples.length >= 20) resolve(samples)
+              else if (++count > 240) reject(new Error('Scrollport never shrank'))
+              else requestAnimationFrame(sample)
+            }
+            requestAnimationFrame(sample)
+          }), initialClient)
+          await testInfo.attach('after-shrink', { body: await page.screenshot(), contentType: 'image/png' })
+          await testInfo.attach('unchanged-row-shrink', { body: JSON.stringify({ baseline, frames }), contentType: 'application/json' })
+          expect(Math.max(...frames.map(frame => Math.abs(frame.height - baseline.height)))).toBeLessThanOrEqual(1)
+          expect(Math.max(...frames.map(frame => Math.abs(frame.top - baseline.top))), 'viewport shrink without row growth must preserve the hold').toBeLessThanOrEqual(1)
+          return
+        }
+        const beforeTop = (await row.boundingBox())!.y
+        const acquisitionGeometry = await list.evaluate(el => ({
+          top: el.scrollTop, height: el.scrollHeight, client: el.clientHeight,
+          distance: el.scrollHeight - el.scrollTop - el.clientHeight,
+        }))
+        if (!reading) expect(acquisitionGeometry.distance, 'the reaction fixture must start pinned at the bottom').toBeLessThanOrEqual(1)
+        await testInfo.attach('before-reaction', { body: await page.screenshot(), contentType: 'image/png' })
+        const trace: string[] = []
+        page.on('console', message => { if (message.text().includes('[Scroll]')) trace.push(message.text()) })
+        const samples = await page.evaluate(({ kind, jid, targetId }) => new Promise<{ clipped: number; top: number; distance: number; fab: boolean }[]>((resolve, reject) => {
+          const scope = window as any
+          const list = document.querySelector<HTMLElement>('[data-message-list]')!
+          const row = list.querySelector<HTMLElement>(`.message-row[data-message-id="${CSS.escape(targetId)}"]`)!
+          const samples: { clipped: number; top: number; distance: number; fab: boolean }[] = []
+          let frames = 0
+          const sample = () => {
+            const chip = row.querySelector('[data-reaction-emoji]')
+            if (chip) samples.push({ clipped: chip.getBoundingClientRect().bottom - list.getBoundingClientRect().bottom,
+              top: row.getBoundingClientRect().top, distance: list.scrollHeight - list.scrollTop - list.clientHeight,
+              fab: document.querySelector<HTMLElement>('[data-fab="scroll-to-bottom"]')?.tabIndex === 0 })
+            if (samples.length >= 20) resolve(samples)
+            else if (++frames > 240) reject(new Error('Incoming reaction never rendered'))
+            else requestAnimationFrame(sample)
+          }
+          requestAnimationFrame(sample)
+          scope.__demoClient.emitSDK(kind === 'room' ? 'room:reactions' : 'chat:reactions', kind === 'room'
+            ? { roomJid: jid, messageId: targetId, reactorNick: 'Emma', emojis: ['👍'], isLive: true }
+            : { conversationId: jid, messageId: targetId, reactorJid: 'emma@fluux.chat', emojis: ['👍'], isLive: true })
+        }), { kind, jid, targetId })
+        await testInfo.attach('after-reaction', { body: await page.screenshot(), contentType: 'image/png' })
+        await testInfo.attach('reaction-frames', { body: JSON.stringify({ navigation, bottomReplay, acquisitionGeometry, beforeTop, samples, trace }), contentType: 'application/json' })
+        expect(samples).toHaveLength(20)
+        if (reading) {
+          expect(Math.max(...samples.map(s => Math.abs(s.top - beforeTop))), 'reaction arrival must preserve the pre-arrival reading anchor').toBeLessThanOrEqual(1)
+          expect(Math.min(...samples.map(s => s.distance))).toBeGreaterThan(100)
+        } else {
+          expect(Math.max(...samples.map(s => s.clipped)), 'no painted reaction frame may be clipped while the pointer remains').toBeLessThanOrEqual(1)
+          expect(samples.some(s => s.fab), 'reaction growth must not expose the scroll-down button').toBe(false)
+        }
+      })
+    }
+  }
+})

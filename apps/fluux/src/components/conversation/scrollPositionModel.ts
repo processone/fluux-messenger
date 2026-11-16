@@ -64,6 +64,8 @@ export type TopOffsetAnchorPosition = {
      */
     kind: 'top-offset'
     offsetPx: PixelOffset
+    /** A bottom-visible tail hold compensates its own growth from this captured row height. */
+    rowHeightPx?: PixelOffset
   }
 }
 

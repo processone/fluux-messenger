@@ -113,9 +113,14 @@ export class AnchorPreservationBrowserAdapter {
       const scroller = this.options.getScroller()
       const row = scroller && findMessageRowElement(scroller, request.desired.messageId)
       const bubble = row?.querySelector<HTMLElement>('[data-message-body]') ?? row
-      if (!scroller || !bubble) return { kind: 'unavailable' }
-      const target = Math.max(0, scroller.scrollTop + bubble.getBoundingClientRect().top -
-        scroller.getBoundingClientRect().top - request.desired.placement.offsetPx)
+      if (!scroller || !row || !bubble) return { kind: 'unavailable' }
+      const viewportRect = scroller.getBoundingClientRect()
+      const { offsetPx, rowHeightPx } = request.desired.placement
+      const topTarget = scroller.scrollTop + bubble.getBoundingClientRect().top - viewportRect.top - offsetPx
+      // Compensate only growth of the held row, not a smaller viewport or newly arriving rows.
+      // Historical reading has no growth baseline and keeps its exact captured top offset.
+      const rowGrowth = rowHeightPx === undefined ? 0 : Math.max(0, row.getBoundingClientRect().height - rowHeightPx)
+      const target = Math.max(0, topTarget + rowGrowth)
       // A growing viewport can clamp away the held offset (for example when typing stops).
       // Reserve only the missing scroll range, under this same positioning lease.
       const padding = parseFloat(getComputedStyle(scroller).paddingBottom) || 0

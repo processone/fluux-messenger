@@ -1166,18 +1166,28 @@ export function useMessageListScroll({
     const row = scroller && findMessageRowElement(scroller, rowId)
     const bubble = row?.querySelector<HTMLElement>('[data-message-body]') ?? row
     const controller = positioningControllerRef.current
-    if (staticMode || !scroller || !bubble || !controller) return false
+    if (staticMode || !scroller || !row || !bubble || !controller) return false
     const current = controller.snapshot().active?.request.desired
     if (controller.hasInteractionHold() && current?.kind === 'anchor' && current.messageId === rowId) {
       return controller.reconcileInteractionHold({ conversationId, executor: createAnchorPreservationExecutor('interaction-anchor') })
     }
     observeViewportGeometry(conversationId, undefined, true)
     if (!interactionSpaceRef.current) interactionSpaceRef.current = { conversationId, scroller, padding: scroller.style.paddingBottom }
+    const viewportRect = scroller.getBoundingClientRect()
+    const rowRect = row.getBoundingClientRect()
+    // Acquisition clears the bottom ref, so transfers must read the unchanged live geometry.
+    // Include the same one-pixel endpoint as the interaction FAB: fractional WebKit layout can
+    // leave a pinned view there. A long row may extend above the scrollport while its bottom fits.
+    const keepTailVisible = windowAtLiveEdge !== false && getDistanceFromBottom(scroller) <= 1 &&
+      rowId === lastMessageId && rowRect.bottom > viewportRect.top && rowRect.bottom <= viewportRect.bottom
     const request = controller.beginInteractionHold({
       conversationId,
       desired: {
         kind: 'anchor', messageId: rowId,
-        placement: { kind: 'top-offset', offsetPx: pixelOffset(bubble.getBoundingClientRect().top - scroller.getBoundingClientRect().top) },
+        placement: {
+          kind: 'top-offset', offsetPx: pixelOffset(bubble.getBoundingClientRect().top - viewportRect.top),
+          ...(keepTailVisible ? { rowHeightPx: pixelOffset(rowRect.height) } : {}),
+        },
       },
       executor: createAnchorPreservationExecutor('interaction-anchor'),
     })
