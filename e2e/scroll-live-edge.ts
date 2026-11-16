@@ -2679,8 +2679,21 @@ test.describe('Incoming reaction under a stationary pointer', () => {
           }
           return id
         }, { kind, jid, reading, mode })
-        await scrollToBottom(page)
         await expect(page.locator(`.message-row[data-message-id="${lastId}"]`)).toBeInViewport()
+        // A raw scrollTop write cancels an incoming pin as user takeover. Navigate through the
+        // app instead, and wait for its measured settlement rather than the helper's fixed delay.
+        await page.locator('[data-message-list]').evaluate(el => el.closest<HTMLElement>('[tabindex="0"]')!.focus())
+        const navigationDone = page.waitForEvent('console', {
+          predicate: async message => {
+            if (!message.text().startsWith('[Scroll] PIN completed')) return false
+            const result = await message.args()[1]?.jsonValue()
+            return result?.trigger === 'fab' && ['settled', 'best-effort', 'user-takeover'].includes(result.outcome)
+          },
+          timeout: 30_000,
+        })
+        await page.keyboard.press('End')
+        const navigation = await (await navigationDone).args()[1].jsonValue()
+        expect(navigation.outcome, 'End must settle the bottom before interaction starts').toBe('settled')
         // Replay the captured WebKit endpoint: a fractional row measurement left exactly one
         // CSS pixel below the viewport, before pointer acquisition and without reader input.
         const bottomReplay = mode === 'tall' ? await page.evaluate(async () => {
@@ -2763,6 +2776,11 @@ test.describe('Incoming reaction under a stationary pointer', () => {
           return
         }
         const beforeTop = (await row.boundingBox())!.y
+        const acquisitionGeometry = await list.evaluate(el => ({
+          top: el.scrollTop, height: el.scrollHeight, client: el.clientHeight,
+          distance: el.scrollHeight - el.scrollTop - el.clientHeight,
+        }))
+        if (!reading) expect(acquisitionGeometry.distance, 'the reaction fixture must start pinned at the bottom').toBeLessThanOrEqual(1)
         await testInfo.attach('before-reaction', { body: await page.screenshot(), contentType: 'image/png' })
         const trace: string[] = []
         page.on('console', message => { if (message.text().includes('[Scroll]')) trace.push(message.text()) })
@@ -2787,7 +2805,7 @@ test.describe('Incoming reaction under a stationary pointer', () => {
             : { conversationId: jid, messageId: targetId, reactorJid: 'emma@fluux.chat', emojis: ['👍'], isLive: true })
         }), { kind, jid, targetId })
         await testInfo.attach('after-reaction', { body: await page.screenshot(), contentType: 'image/png' })
-        await testInfo.attach('reaction-frames', { body: JSON.stringify({ bottomReplay, beforeTop, samples, trace }), contentType: 'application/json' })
+        await testInfo.attach('reaction-frames', { body: JSON.stringify({ navigation, bottomReplay, acquisitionGeometry, beforeTop, samples, trace }), contentType: 'application/json' })
         expect(samples).toHaveLength(20)
         if (reading) {
           expect(Math.max(...samples.map(s => Math.abs(s.top - beforeTop))), 'reaction arrival must preserve the pre-arrival reading anchor').toBeLessThanOrEqual(1)
