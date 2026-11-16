@@ -1175,15 +1175,17 @@ export function useMessageListScroll({
     if (!interactionSpaceRef.current) interactionSpaceRef.current = { conversationId, scroller, padding: scroller.style.paddingBottom }
     const viewportRect = scroller.getBoundingClientRect()
     const rowRect = row.getBoundingClientRect()
-    const keepTailVisible = isAtBottomRef.current && windowAtLiveEdge !== false &&
-      rowId === lastMessageId && rowRect.top >= viewportRect.top && rowRect.bottom <= viewportRect.bottom
+    // Acquisition clears the bottom ref, so transfers must read the unchanged live geometry.
+    // The row's bottom can be visible even when a long message extends above the scrollport.
+    const keepTailVisible = windowAtLiveEdge !== false && getDistanceFromBottom(scroller) < 1 &&
+      rowId === lastMessageId && rowRect.bottom > viewportRect.top && rowRect.bottom <= viewportRect.bottom
     const request = controller.beginInteractionHold({
       conversationId,
       desired: {
         kind: 'anchor', messageId: rowId,
         placement: {
           kind: 'top-offset', offsetPx: pixelOffset(bubble.getBoundingClientRect().top - viewportRect.top),
-          ...(keepTailVisible ? { bottomClearancePx: pixelOffset(viewportRect.bottom - rowRect.bottom) } : {}),
+          ...(keepTailVisible ? { rowHeightPx: pixelOffset(rowRect.height) } : {}),
         },
       },
       executor: createAnchorPreservationExecutor('interaction-anchor'),

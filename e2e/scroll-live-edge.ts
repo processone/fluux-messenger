@@ -2635,8 +2635,10 @@ test('Spam moderation removes rows without leaving an empty tail', async ({ page
 test.describe('Incoming reaction under a stationary pointer', () => {
   test.use({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 })
   for (const kind of ['room', 'chat'] as const) {
-    for (const reading of [false, true]) {
-      test(`${kind}: reaction growth ${reading ? 'preserves the reading anchor' : 'keeps the hovered last message fully visible'}`, async ({ page }, testInfo) => {
+    for (const mode of ['direct', 'reading', 'pointer-transfer', 'focus-transfer', 'tall', 'shrink'] as const) {
+      const reading = mode === 'reading'
+      test(`${kind}: reaction growth ${mode}`, async ({ page }, testInfo) => {
+        if (mode === 'tall') await page.setViewportSize({ width: 1280, height: 450 })
         await loadDemo(page)
         const jid = kind === 'room' ? 'team@conference.fluux.chat' : 'emma@fluux.chat'
         await page.mouse.move(0, 0)
@@ -2654,26 +2656,29 @@ test.describe('Incoming reaction under a stationary pointer', () => {
           const state = (kind === 'room' ? scope.__roomStore : scope.__chatStore).getState()
           return !state.activationPending && !!state.messages.get(jid)?.length
         }, { kind, jid })
-        const lastId = await page.evaluate(({ kind, jid, reading }) => {
+        const lastId = await page.evaluate(({ kind, jid, reading, mode }) => {
           const scope = window as any
           const messages = (kind === 'room' ? scope.__roomStore : scope.__chatStore).getState().messages.get(jid)
           // Reuse real conversation wording and sender data from the built demo.
           const sources = messages.filter((m: any) => !m.isOutgoing && !m.isPrivate && !m.poll && !m.attachment && !m.replyTo && !m.isRetracted && m.body?.length > 20 && m.body.length < 160)
           if (!sources.length) throw new Error('No plain incoming demo message')
+          const longBody = scope.__chatStore.getState().messages.get('james@fluux.chat')
+            ?.find((m: any) => m.body?.includes('async def stress_test'))?.body
+          if (mode === 'tall' && !longBody) throw new Error('No existing long code message fixture')
           let id = ''
           // Plain messages keep the reading control independent of the demo's tall media rows.
           const now = Date.now()
           for (let index = 0; index < (reading ? 16 : 1); index++) {
             const source = sources[index % sources.length]
             id = crypto.randomUUID()
-            const message = { id, from: source.from, body: source.body, timestamp: new Date(now + index), isOutgoing: false,
+            const message = { id, from: source.from, body: mode === 'tall' ? longBody : source.body, timestamp: new Date(now + index), isOutgoing: false,
               ...(kind === 'room' ? { type: 'groupchat', roomJid: jid, nick: source.nick, occupantId: source.occupantId } : { type: 'chat', conversationId: jid }) }
             scope.__demoClient.emitSDK(kind === 'room' ? 'room:message' : 'chat:message', kind === 'room'
               ? { roomJid: jid, message, isLiveArrival: true, incrementUnread: true }
               : { message, isLiveArrival: true })
           }
           return id
-        }, { kind, jid, reading })
+        }, { kind, jid, reading, mode })
         await scrollToBottom(page)
         await expect(page.locator(`.message-row[data-message-id="${lastId}"]`)).toBeInViewport()
         if (reading) await wheelAwayFromBottom(page, 150, -400)
@@ -2689,8 +2694,64 @@ test.describe('Incoming reaction under a stationary pointer', () => {
           return row.dataset.messageId!
         }) : lastId
         const row = page.locator(`.message-row[data-message-id="${targetId}"]`)
-        await row.locator('[data-message-body]').first().hover()
-        await expect(page.locator('[data-message-list]')).toHaveAttribute('data-message-interaction')
+        const list = page.locator('[data-message-list]')
+        if (mode === 'pointer-transfer' || mode === 'focus-transfer') {
+          const priorId = await page.evaluate(targetId => {
+            const list = document.querySelector('[data-message-list]')!
+            const bounds = list.getBoundingClientRect()
+            const row = [...list.querySelectorAll<HTMLElement>('.message-row[data-message-id]')].reverse().find(row => {
+              const rect = row.getBoundingClientRect()
+              return row.dataset.messageId !== targetId && rect.top >= bounds.top && rect.bottom < bounds.bottom
+            })
+            if (!row) throw new Error('No previous visible row for a hold transfer')
+            return row.dataset.messageId!
+          }, targetId)
+          // Resolve from the list so the same row is acquired by mouse or keyboard focus.
+          const priorRow = list.locator(`.message-row[data-message-id="${priorId}"]`)
+          if (mode === 'focus-transfer') {
+            await page.keyboard.press('Shift')
+            await priorRow.getByRole('button', { name: 'More reactions', exact: true }).focus()
+          } else await priorRow.locator('[data-message-body]').first().hover()
+          await expect(list).toHaveAttribute('data-message-interaction', await priorRow.getAttribute('data-message-row-id') as string)
+          expect(await list.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThanOrEqual(1)
+          if (mode === 'focus-transfer') await row.getByRole('button', { name: 'More reactions', exact: true }).focus()
+          else await row.locator('[data-message-body]').first().hover()
+        } else if (mode === 'tall') {
+          expect((await row.boundingBox())!.height).toBeGreaterThan((await list.boundingBox())!.height)
+          const box = (await row.boundingBox())!
+          const bounds = (await list.boundingBox())!
+          await page.mouse.move(box.x + 100, Math.min(box.y + box.height - 15, bounds.y + bounds.height - 20))
+        } else await row.locator('[data-message-body]').first().hover()
+        await expect(list).toHaveAttribute('data-message-interaction', await row.getAttribute('data-message-row-id') as string)
+        if (mode === 'shrink') {
+          await row.getByRole('button', { name: 'More reactions', exact: true }).click()
+          await expect(row.locator('[data-message-panel="reactions"]')).toBeVisible()
+          const baseline = await row.evaluate(el => ({ top: el.getBoundingClientRect().top, height: el.getBoundingClientRect().height }))
+          const initialClient = await list.evaluate(el => el.clientHeight)
+          await testInfo.attach('before-shrink', { body: await page.screenshot(), contentType: 'image/png' })
+          await page.setViewportSize({ width: 1280, height: 650 })
+          const frames = await list.evaluate((el, initialClient) => new Promise<{ top: number; height: number }[]>((resolve, reject) => {
+            const samples: { top: number; height: number }[] = []
+            let count = 0
+            const sample = () => {
+              const held = el.querySelector<HTMLElement>('.message-row[data-message-row-id="' + CSS.escape(el.getAttribute('data-message-interaction')!) + '"]')
+              if (!held) return reject(new Error('Shrink dropped the held row'))
+              if (el.clientHeight < initialClient) {
+                const rect = held.getBoundingClientRect()
+                samples.push({ top: rect.top, height: rect.height })
+              }
+              if (samples.length >= 20) resolve(samples)
+              else if (++count > 240) reject(new Error('Scrollport never shrank'))
+              else requestAnimationFrame(sample)
+            }
+            requestAnimationFrame(sample)
+          }), initialClient)
+          await testInfo.attach('after-shrink', { body: await page.screenshot(), contentType: 'image/png' })
+          await testInfo.attach('unchanged-row-shrink', { body: JSON.stringify({ baseline, frames }), contentType: 'application/json' })
+          expect(Math.max(...frames.map(frame => Math.abs(frame.height - baseline.height)))).toBeLessThanOrEqual(1)
+          expect(Math.max(...frames.map(frame => Math.abs(frame.top - baseline.top))), 'viewport shrink without row growth must preserve the hold').toBeLessThanOrEqual(1)
+          return
+        }
         const beforeTop = (await row.boundingBox())!.y
         await testInfo.attach('before-reaction', { body: await page.screenshot(), contentType: 'image/png' })
         const trace: string[] = []

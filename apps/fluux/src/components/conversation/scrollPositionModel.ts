@@ -64,8 +64,8 @@ export type TopOffsetAnchorPosition = {
      */
     kind: 'top-offset'
     offsetPx: PixelOffset
-    /** A fully visible tail row held at the bottom may grow without clipping its own content. */
-    bottomClearancePx?: PixelOffset
+    /** A bottom-visible tail hold compensates its own growth from this captured row height. */
+    rowHeightPx?: PixelOffset
   }
 }
 
