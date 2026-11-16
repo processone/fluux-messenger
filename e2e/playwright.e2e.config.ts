@@ -57,7 +57,7 @@ const SUITES = [
   { name: 'message-hover', testMatch: 'message-hover.ts' },
   { name: 'reply-quote', testMatch: 'reply-quote.ts' },
   { name: 'message-code-wrap', testMatch: 'message-code-wrap.ts' },
-  { name: 'composer', testMatch: 'composer-geometry.ts' },
+  { name: 'composer', testMatch: ['composer-geometry.ts', 'composer-transition.ts'] },
   { name: 'composer-send', testMatch: 'composer-send.ts' },
   { name: 'popover', testMatch: 'popover-geometry.ts' },
   { name: 'history-loading', testMatch: 'history-loading.ts' },

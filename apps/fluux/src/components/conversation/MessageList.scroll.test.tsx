@@ -531,12 +531,10 @@ describe('MessageList scroll behavior', () => {
   })
 
   describe('container resize scroll', () => {
-    it('defers the scroll correction to rAF instead of writing scrollTop inside the ResizeObserver callback', () => {
-      // Regression guard: writing scrollTop synchronously inside a ResizeObserver
-      // callback is the literal trigger for WebKitGTK's "ResizeObserver loop
-      // completed with undelivered notifications". The correction must be
-      // coalesced into a requestAnimationFrame so it runs OUTSIDE the observer's
-      // delivery cycle (parity with the content observer hardened in #439).
+    it('corrects a shrinking viewport before returning from resize delivery', () => {
+      // A same-width composer shrink must not paint a clipped latest message.
+      // Keep the real controller/adapter path here; the hook test owns dispatch
+      // timing, and the browser regression owns actual text visibility.
       const messages = createTestMessages(5)
       const scrollSpy = vi.fn()
 
@@ -584,14 +582,11 @@ describe('MessageList scroll behavior', () => {
       flushRaf()
       scrollSpy.mockClear()
 
-      // Container shrinks while at bottom: the correction must NOT be applied
-      // synchronously inside the observer callback...
+      // The controller must apply the correction in the resize delivery itself,
+      // not leave it to a later animation frame after the shrunken viewport paints.
       act(() => { observer.triggerResize(400) })
-      expect(scrollSpy).not.toHaveBeenCalled()
-
-      // ...only after the rAF flushes.
-      flushRaf()
       expect(scrollSpy).toHaveBeenCalledWith(container.scrollHeight - container.clientHeight)
+      flushRaf()
     })
 
     it('should scroll to bottom when container height decreases and user is at bottom', async () => {
