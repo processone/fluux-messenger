@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { assertProfileCovers, decodeProfile, validateProfile, validateCommunicationConfig } from '../apps/fluux/scripts/macos-communication-profile.mjs'
 import { shareSettings } from '../apps/fluux/scripts/tauri-macos-share.mjs'
-import { designatedRequirement, extractArchive, verifyApp, launchEnvironment, launchForTenSeconds } from './verify-macos-release.mjs'
+import { designatedRequirement, embeddedComponents, extractArchive, verifyApp, launchEnvironment, launchForTenSeconds } from './verify-macos-release.mjs'
 
 const root = resolve('apps/fluux/src-tauri')
 const profilePath = join(root, 'macos/net.processone.fluux.provisionprofile')
@@ -73,21 +73,48 @@ async function verifierFixture(body) {
     const saveInfo = () => execFileSync('/usr/bin/plutil', ['-convert', 'xml1', '-o', infoPath, '--', '-'], { input: JSON.stringify(info) })
     saveInfo()
     const profile = supplied()
+    const group = '8L55BDM864.net.processone.fluux.share'
     const entitlements = Object.fromEntries(['com.apple.application-identifier', 'com.apple.developer.team-identifier', 'com.apple.developer.usernotifications.communication'].map(k => [k, profile.Entitlements[k]]))
+    entitlements['com.apple.security.application-groups'] = [group]
+    // Embedded components as the published 0.18.3 archive holds them; readings below mirror its codesign output.
+    const components = {}
+    for (const component of embeddedComponents) {
+      const path = join(app, 'Contents', component.path)
+      const record = { path, arch: 'arm64', team: '8L55BDM864', authority: 'Developer ID Application: ProcessOne (8L55BDM864)',
+        flags: 'flags=0x10000(runtime)', identifier: component.identifier,
+        entitlements: component.extension ? { 'com.apple.security.app-sandbox': true, 'com.apple.security.application-groups': [group] } : {} }
+      if (component.extension) {
+        mkdirSync(join(path, 'Contents/MacOS'), { recursive: true })
+        execFileSync('/usr/bin/plutil', ['-convert', 'xml1', '-o', join(path, 'Contents/Info.plist'), '--', '-'], { input: JSON.stringify({ CFBundleIdentifier: component.identifier, CFBundleExecutable: component.executable }) })
+        writeFileSync(join(path, 'Contents/MacOS', component.executable), 'executable fixture')
+      } else {
+        mkdirSync(join(app, 'Contents/Frameworks'), { recursive: true })
+        writeFileSync(path, 'library fixture')
+      }
+      components[component.path] = record
+    }
+    const owner = target => Object.values(components).find(record => target === record.path || target.startsWith(`${record.path}/`))
     let launches = 0
     const calls = []
     const invoke = (command, args) => {
       calls.push([command, ...args])
-      let stdout = ''
-      if (command.endsWith('/lipo')) stdout = 'arm64'
-      if (args.includes('--entitlements')) stdout = execFileSync('/usr/bin/plutil', ['-convert', 'xml1', '-o', '-', '--', '-'], { input: JSON.stringify(entitlements) })
+      const target = args[args.length - 1]
+      const component = owner(target)
+      let stdout = '', stderr = ''
+      if (command.endsWith('/lipo')) stdout = component ? component.arch : 'arm64'
+      if (args.includes('--entitlements')) stdout = execFileSync('/usr/bin/plutil', ['-convert', 'xml1', '-o', '-', '--', '-'], { input: JSON.stringify(component ? component.entitlements : entitlements) })
+      if (component && args.includes('--verbose=2') && args.includes('--display')) {
+        stderr = [`Identifier=${component.identifier}`, `CodeDirectory v=20500 size=1256 ${component.flags} hashes=28+7 location=embedded`,
+          ...(component.authority ? [`Authority=${component.authority}`, 'Authority=Developer ID Certification Authority', 'Timestamp=16 Nov 2026 at 18:03:19'] : ['Signature=adhoc']),
+          `TeamIdentifier=${component.team}`].join('\n')
+      }
       const certificateOption = args.find(arg => arg.startsWith('--extract-certificates='))
       if (certificateOption) writeFileSync(`${certificateOption.slice('--extract-certificates='.length)}0`, Buffer.from(profile.DeveloperCertificates[0], 'base64'))
       if (args.includes('--requirements')) stdout = `designated => ${designatedRequirement}`
-      return { stdout: Buffer.from(stdout), stderr: Buffer.alloc(0) }
+      return { stdout: Buffer.from(stdout), stderr: Buffer.from(stderr) }
     }
     const options = { arch: 'arm64', scratch, allowLaunch: true, invoke, decode: () => profile, launch: async () => { launches++ } }
-    await body({ app, info, saveInfo, profile, entitlements, options, calls, launches: () => launches })
+    await body({ app, info, saveInfo, profile, entitlements, components, options, calls, launches: () => launches })
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 }
 macTest('#1386 verifier checks signature, profile and stapling before launch', () => verifierFixture(async f => {
@@ -112,6 +139,34 @@ for (const failure of ['signature', 'entitlement', 'certificate', 'requirement',
     if (failure === 'architecture') f.options.arch = 'x86_64'
     if (failure === 'early-exit') f.options.launch = async () => { throw new Error('App stopped before ten seconds') }
     await assert.rejects(verifyApp(f.app, f.options))
+    assert.equal(f.launches(), 0)
+  }))
+}
+macTest('verifier checks every embedded widget and share component', () => verifierFixture(async f => {
+  await verifyApp(f.app, f.options)
+  for (const component of embeddedComponents) {
+    const path = join(f.app, 'Contents', component.path)
+    assert.ok(f.calls.some(call => call[0].endsWith('/codesign') && call.includes('--verify') && call.includes('--strict') && call.at(-1) === path), component.path)
+    assert.ok(f.calls.some(call => call[0].endsWith('/lipo') && call.at(-1).startsWith(path)), component.path)
+  }
+}))
+const componentFailures = [
+  ['missing widget extension', f => rmSync(f.components['PlugIns/FluuxWidgets.appex'].path, { recursive: true }), /FluuxWidgets\.appex/],
+  ['missing share extension', f => rmSync(f.components['PlugIns/FluuxShare.appex'].path, { recursive: true }), /FluuxShare\.appex/],
+  ['missing widget library', f => rmSync(f.components['Frameworks/libFluuxWidgets.dylib'].path), /libFluuxWidgets/],
+  ['widget built for the other architecture', f => { f.components['PlugIns/FluuxWidgets.appex'].arch = 'x86_64' }, /architecture/],
+  ['ad-hoc signed widget', f => { f.components['PlugIns/FluuxWidgets.appex'].authority = null }, /Developer ID/],
+  ['library signed by another team', f => { f.components['Frameworks/libFluuxWidgets.dylib'].team = 'ABCDE12345' }, /team/],
+  ['widget without hardened runtime', f => { f.components['PlugIns/FluuxWidgets.appex'].flags = 'flags=0x0(none)' }, /hardened runtime/],
+  ['widget with an unexpected identifier', f => { f.components['PlugIns/FluuxWidgets.appex'].identifier = 'net.processone.fluux.dev.widgets' }, /identifier/],
+  ['unsandboxed widget', f => { delete f.components['PlugIns/FluuxWidgets.appex'].entitlements['com.apple.security.app-sandbox'] }, /sandbox/],
+  ['widget in another App Group', f => { f.components['PlugIns/FluuxWidgets.appex'].entitlements['com.apple.security.application-groups'] = ['8L55BDM864.net.processone.fluux.dev.share'] }, /App Group/],
+  ['share extension without App Group', f => { delete f.components['PlugIns/FluuxShare.appex'].entitlements['com.apple.security.application-groups'] }, /App Group/],
+]
+for (const [name, mutate, error] of componentFailures) {
+  macTest(`verifier fails closed on ${name}`, () => verifierFixture(async f => {
+    mutate(f)
+    await assert.rejects(verifyApp(f.app, f.options), error)
     assert.equal(f.launches(), 0)
   }))
 }
@@ -260,5 +315,71 @@ test('public reference archive checksum rejects different bytes before extractio
     assert.notEqual(result.status, 0)
     assert.equal(require('node:fs').existsSync(marker), false)
     assert.match(result.stderr, /checksum.*(match|FAILED)|computed checksum/i)
+  } finally { rmSync(scratch, { recursive: true, force: true }) }
+})
+
+test('release notarizes, staples and re-uploads each macOS disk image with isolated credentials', () => {
+  const job = workflow.jobs['build-macos']
+  const index = name => job.steps.findIndex(step => step.name === name)
+  const [verification, download, notarization, upload] = ['Verify signed macOS update archive', 'Download macOS disk image',
+    'Notarize and staple macOS disk image', 'Upload notarized macOS disk image'].map(index)
+  assert.ok(verification >= 0 && download > verification && notarization > download && upload > notarization)
+  const [downloadStep, notarizeStep, uploadStep] = [download, notarization, upload].map(i => job.steps[i])
+  const apple = ['APPLE_ID', 'APPLE_PASSWORD', 'APPLE_TEAM_ID']
+  assert.equal(notarizeStep.env.GH_TOKEN, undefined)
+  for (const step of [downloadStep, uploadStep]) {
+    assert.ok(step.env.GH_TOKEN)
+    for (const key of apple) assert.equal(step.env[key], undefined)
+  }
+  for (const key of apple) assert.equal(notarizeStep.env[key], `\${{ secrets.${key} }}`)
+  for (const step of [downloadStep, notarizeStep, uploadStep]) assert.notEqual(step['continue-on-error'], true)
+  assert.ok(workflow.jobs['rename-assets'].needs.includes('build-macos'))
+
+  const scratch = mkdtempSync(join(tmpdir(), 'fluux-dmg-notarization-'))
+  try {
+    const log = join(scratch, 'calls.log')
+    // Stand-ins record each call; they model the tools' observable results, not Apple's service.
+    writeFileSync(join(scratch, 'gh'), `#!${process.execPath}\nconst fs=require('node:fs'),path=require('node:path');const a=process.argv.slice(2);fs.appendFileSync(process.env.LOG,JSON.stringify(['gh',...a])+'\\n');if(!process.env.GH_TOKEN||process.env.APPLE_PASSWORD)process.exit(8);if(a[1]==='download'){for(const n of JSON.parse(process.env.IMAGES))fs.writeFileSync(path.join(a[a.indexOf('--dir')+1],n),'dmg fixture')}`, { mode: 0o755 })
+    writeFileSync(join(scratch, 'xcrun'), `#!${process.execPath}\nconst fs=require('node:fs');const a=process.argv.slice(2);fs.appendFileSync(process.env.LOG,JSON.stringify(['xcrun',...a])+'\\n');if(process.env.GH_TOKEN)process.exit(8);if(a[0]==='notarytool'){if(a[a.indexOf('--apple-id')+1]!==process.env.APPLE_ID)process.exit(9);process.stdout.write(JSON.stringify({id:'fixture',status:process.env.NOTARY_STATUS}))}if(a[0]==='stapler'&&process.env.STAPLE_STATUS)process.exit(Number(process.env.STAPLE_STATUS))`, { mode: 0o755 })
+    writeFileSync(join(scratch, 'spctl'), `#!${process.execPath}\nrequire('node:fs').appendFileSync(process.env.LOG,JSON.stringify(['spctl',...process.argv.slice(2)])+'\\n');process.exit(Number(process.env.SPCTL_STATUS||0))`, { mode: 0o755 })
+    const { spawnSync } = require('node:child_process')
+    const matrix = { arch: 'aarch64' }
+    const image = 'Fluux.Messenger_0.18.4_aarch64.dmg'
+    for (const [label, images, notary, staple, spctl, expected] of [
+      ['accepted', [image], 'Accepted', '', '0', 'uploaded'],
+      ['rejected by notary service', [image], 'Invalid', '', '0', 'notarization'],
+      ['staple fails', [image], 'Accepted', '65', '0', 'notarization'],
+      ['Gatekeeper rejects', [image], 'Accepted', '', '3', 'notarization'],
+      ['no disk image', [], 'Accepted', '', '0', 'notarization'],
+      ['two disk images', [image, image.replace('0.18.4', '0.18.3')], 'Accepted', '', '0', 'notarization'],
+    ]) {
+      const dir = join(scratch, label.replaceAll(' ', '-'))
+      rmSync(log, { force: true })
+      const env = { PATH: `${scratch}:/usr/bin:/bin`, RELEASE_TAG: 'v0.18.4', LOG: log, IMAGES: JSON.stringify(images),
+        NOTARY_STATUS: notary, STAPLE_STATUS: staple, SPCTL_STATUS: spctl, DMG_DIR: dir }
+      const shell = (step, extra) => spawnSync('/bin/bash', ['-e', '-c', step.run], { env: { ...env, ...extra }, encoding: 'utf8' })
+      const fetched = shell(downloadStep, { GH_TOKEN: 'fixture-token', ASSET_ARCH: expression(downloadStep.env.ASSET_ARCH, matrix) })
+      assert.equal(fetched.status, 0, fetched.stderr)
+      const notarized = shell(notarizeStep, { APPLE_ID: 'fixture@example.com', APPLE_PASSWORD: 'fixture-password', APPLE_TEAM_ID: '8L55BDM864' })
+      const calls = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line))
+      assert.ok(calls.some(call => call[0] === 'gh' && call.includes('--pattern') && call.includes('*_aarch64.dmg')), label)
+      if (expected === 'notarization') {
+        assert.notEqual(notarized.status, 0, `${label} must fail the job`)
+        if (images.length !== 1) assert.ok(!calls.some(call => call[1] === 'notarytool'), `${label} must not reach notarization`)
+        if (notary !== 'Accepted') assert.ok(!calls.some(call => call[1] === 'stapler'), `${label} must not staple`)
+        console.log(`Actual disk image shells: ${label} => notarization step status ${notarized.status}`)
+        continue
+      }
+      assert.equal(notarized.status, 0, notarized.stderr)
+      const uploaded = shell(uploadStep, { GH_TOKEN: 'fixture-token' })
+      assert.equal(uploaded.status, 0, uploaded.stderr)
+      const all = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line))
+      const order = all.map(call => call[0] === 'xcrun' ? `${call[1]} ${call[2]}` : call[0] === 'gh' ? `gh ${call[2]}` : call[0])
+      assert.deepEqual(order, ['gh download', 'notarytool submit', 'stapler staple', 'stapler validate', 'spctl', 'gh upload'])
+      const upload = all.at(-1)
+      assert.ok(upload.includes('--clobber') && upload.includes(join(dir, image)))
+      assert.ok(all.find(call => call[0] === 'spctl').includes('context:primary-signature'))
+      console.log(`Actual disk image shells: ${label} => ${order.join(' -> ')}`)
+    }
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })

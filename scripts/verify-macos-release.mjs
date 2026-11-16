@@ -1,5 +1,5 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,6 +7,16 @@ import { assertProfileCovers, decodeProfile, readPlist } from '../apps/fluux/scr
 
 // The published 0.18.1 requirement: changing it can change legacy keychain authorization.
 export const designatedRequirement = 'identifier "net.processone.fluux" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "8L55BDM864"'
+const teamIdentifier = '8L55BDM864'
+const appGroupsKey = 'com.apple.security.application-groups'
+
+// Code the release embeds next to the main executable. A deep signature check only validates the code
+// that is present, so a bundling regression that drops one of these would otherwise still pass.
+export const embeddedComponents = [
+  { path: 'PlugIns/FluuxWidgets.appex', identifier: 'net.processone.fluux.widgets', executable: 'FluuxWidgets', extension: true },
+  { path: 'PlugIns/FluuxShare.appex', identifier: 'net.processone.fluux.share', executable: 'FluuxShare', extension: true },
+  { path: 'Frameworks/libFluuxWidgets.dylib', identifier: 'libFluuxWidgets', extension: false },
+]
 export const normalizeRequirement = value => value.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ').trim()
 
 function run(command, args) {
@@ -64,6 +74,41 @@ export function readSignature(app, scratch, invoke = run) {
   return { entitlements, certificate, requirement: normalizeRequirement(actual) }
 }
 
+// Extensions run in their own sandboxed process and reach the app's data only through the shared
+// App Group, so each must be sandboxed and carry exactly the host's group.
+function verifyEmbeddedComponents(contents, arch, hostEntitlements, invoke) {
+  const hostGroups = hostEntitlements[appGroupsKey] || []
+  if (hostGroups.length === 0) throw new Error('Host app has no App Group for its extensions')
+  for (const component of embeddedComponents) {
+    const path = join(contents, component.path)
+    if (!existsSync(path)) throw new Error(`Missing embedded component: ${component.path}`)
+    let binary = path
+    if (component.extension) {
+      const info = readPlist(readFileSync(join(path, 'Contents/Info.plist')))
+      if (info.CFBundleIdentifier !== component.identifier) throw new Error(`${component.path} has an unexpected bundle identifier`)
+      binary = join(path, 'Contents/MacOS', component.executable)
+    }
+    const architectures = invoke('/usr/bin/lipo', ['-archs', binary]).stdout.toString().trim().split(/\s+/)
+    if (!architectures.includes(arch)) throw new Error(`${component.path} has the wrong architecture`)
+    invoke('/usr/bin/codesign', ['--verify', '--strict', '--verbose=2', path])
+    const shown = invoke('/usr/bin/codesign', ['--display', '--verbose=2', path])
+    const details = `${shown.stdout}\n${shown.stderr}`
+    const field = name => details.split('\n').filter(line => line.startsWith(`${name}=`)).map(line => line.slice(name.length + 1))
+    if (field('Identifier')[0] !== component.identifier) throw new Error(`${component.path} is signed with an unexpected identifier`)
+    if (!field('Authority')[0]?.startsWith('Developer ID Application:')) throw new Error(`${component.path} is not signed with a Developer ID Application certificate`)
+    if (field('TeamIdentifier')[0] !== teamIdentifier) throw new Error(`${component.path} is signed by another team`)
+    if (!field('Timestamp')[0]) throw new Error(`${component.path} has no secure timestamp`)
+    if (!/flags=\S*\(\S*runtime/.test(details)) throw new Error(`${component.path} lacks the hardened runtime`)
+    if (!component.extension) continue
+    const entitlements = readPlist(invoke('/usr/bin/codesign', ['--display', '--entitlements', '-', '--xml', path]).stdout)
+    if (entitlements['com.apple.security.app-sandbox'] !== true) throw new Error(`${component.path} is not sandboxed`)
+    const groups = entitlements[appGroupsKey] || []
+    if (groups.length !== hostGroups.length || groups.some(group => !hostGroups.includes(group))) {
+      throw new Error(`${component.path} does not share the host's App Group`)
+    }
+  }
+}
+
 export async function verifyApp(app, { arch, scratch, invoke = run, launch = launchForTenSeconds, decode = decodeProfile, allowLaunch = false } = {}) {
   if (!['arm64', 'x86_64'].includes(arch)) throw new Error('Expected arm64 or x86_64 release architecture')
   const contents = join(app, 'Contents')
@@ -76,11 +121,12 @@ export async function verifyApp(app, { arch, scratch, invoke = run, launch = lau
   if (!architectures.includes(arch)) throw new Error('Update archive has the wrong architecture')
   invoke('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', app])
   const signed = readSignature(app, scratch, invoke)
+  verifyEmbeddedComponents(contents, arch, signed.entitlements, invoke)
   const profile = decode(join(contents, 'embedded.provisionprofile'))
   assertProfileCovers(profile, signed.entitlements, signed.certificate)
   if (signed.requirement !== designatedRequirement) throw new Error('Designated requirement differs from the published release')
   invoke('/usr/bin/xcrun', ['stapler', 'validate', app])
-  console.log(`Verified ${arch}: strict signature, authorized entitlements, embedded certificate, designated requirement, stapled notarization and activity type`)
+  console.log(`Verified ${arch}: strict signature, signed widget and share extensions, authorized entitlements, embedded certificate, designated requirement, stapled notarization and activity type`)
   if (!allowLaunch) {
     console.log('Launch not exercised: archive-only verification; runtime proof is still missing')
     return { launched: false }

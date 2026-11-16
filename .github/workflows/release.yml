@@ -174,6 +174,46 @@ jobs:
           test -f "${ARCHIVES[0]}"
           node scripts/verify-macos-release.mjs "${ARCHIVES[0]}" "$MACH_ARCH" --launch
 
+      # The Tauri bundler notarizes the app but only signs the disk image around it, so
+      # Gatekeeper reports a downloaded DMG as unnotarized. The image gets its own ticket here,
+      # before rename-assets publishes it under its final name.
+      - name: Download macOS disk image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_ARCH: ${{ matrix.arch == 'aarch64' && 'aarch64' || 'x64' }}
+          DMG_DIR: ${{ runner.temp }}/fluux-dmg-${{ matrix.arch }}
+        run: |
+          mkdir "$DMG_DIR"
+          gh release download "$RELEASE_TAG" --pattern "*_${ASSET_ARCH}.dmg" --dir "$DMG_DIR"
+
+      - name: Notarize and staple macOS disk image
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          DMG_DIR: ${{ runner.temp }}/fluux-dmg-${{ matrix.arch }}
+        run: |
+          IMAGES=("$DMG_DIR"/*.dmg)
+          test "${#IMAGES[@]}" -eq 1
+          test -f "${IMAGES[0]}"
+          # notarytool exits 0 for a rejected submission too: the recorded status decides.
+          xcrun notarytool submit "${IMAGES[0]}" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" --wait --timeout 30m --output-format json > "$DMG_DIR/notarization.json"
+          test "$(/usr/bin/plutil -extract status raw "$DMG_DIR/notarization.json")" = "Accepted"
+          xcrun stapler staple "${IMAGES[0]}"
+          xcrun stapler validate "${IMAGES[0]}"
+          spctl --assess --type open --context context:primary-signature -vv "${IMAGES[0]}"
+
+      - name: Upload notarized macOS disk image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DMG_DIR: ${{ runner.temp }}/fluux-dmg-${{ matrix.arch }}
+        run: |
+          trap 'rm -rf "$DMG_DIR"' EXIT
+          IMAGES=("$DMG_DIR"/*.dmg)
+          test "${#IMAGES[@]}" -eq 1
+          gh release upload "$RELEASE_TAG" "${IMAGES[0]}" --clobber
+
   build-windows:
     name: Build Windows
     needs: create-release
