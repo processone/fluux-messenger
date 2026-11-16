@@ -20,8 +20,8 @@ export interface ContextMenuState {
   handleContextMenu: (e: React.MouseEvent) => void
   /** Handler for touch start (long-press detection) */
   handleTouchStart: (e: React.TouchEvent) => void
-  /** Handler for touch end/move (cancel long-press) */
-  handleTouchEnd: () => void
+  /** Cancel a pending hold; consume the opening release after a long press. */
+  handleTouchEnd: (event?: React.TouchEvent) => void
 }
 
 interface UseContextMenuOptions {
@@ -134,7 +134,9 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
   }, [longPressDuration])
 
   // Cancel long-press on move or end
-  const handleTouchEnd = useCallback(() => {
+  const handleTouchEnd = useCallback((event?: React.TouchEvent) => {
+    // Consume release before its click can target an action portaled under the finger.
+    if (event?.type === 'touchend' && longPressTriggered.current) event.preventDefault()
     if (longPressTimeout.current) {
       clearTimeout(longPressTimeout.current)
       longPressTimeout.current = null

@@ -7,13 +7,13 @@
  * Uses React Router for navigation instead of callback handlers.
  */
 import { useEffect, useRef, useCallback } from 'react'
-import { useChat, useRoom, useRoster, chatStore, roomStore, connectionStore, rosterStore, type Conversation, parseXmppUri, isMucJid, getBareJid, getLocalPart } from '@fluux/sdk'
+import { useChat, useRoom, useRoster, chatStore, roomStore, connectionStore, rosterStore, type Conversation, parseXmppUri, parseRoomMessageLink, isMucJid, getBareJid, getLocalPart } from '@fluux/sdk'
 import { useConnectionStore, useRosterStore } from '@fluux/sdk/react'
 import { useNavigateToTarget } from './useNavigateToTarget'
 import { useTranslation } from 'react-i18next'
 import { useToastStore } from '@/stores/toastStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
-import { platform } from '@/platform'
+import { useRoomMessageLink } from './useRoomMessageLink'
 import { isShortcutURL, resolveShortcutURL } from '@/utils/shortcutConversation'
 import { deferDeepLink, ensureDeepLinkRouter, setNavigationHandler, takeQueuedDeepLinks } from '@/utils/deepLinkRouter'
 import { useNavigate } from 'react-router'
@@ -28,12 +28,12 @@ function rosterLoadedFor(liveJid: string | null, roster: { isLoaded: boolean; ac
 
 /**
  * Hook that listens for XMPP deep links and navigates accordingly.
- * Only active in Tauri desktop environment.
- *
+ * Shared by in-chat clicks on every platform and native system-link events.
  * Uses React Router for URL-based navigation.
  */
 export function useDeepLink() {
   const navigate = useNavigate()
+  const openRoomMessageLink = useRoomMessageLink()
   const { addConversation } = useChat()
   const { joinRoom, joinResult, getRoomInfo, isNonAnonymousRoomAcknowledged } = useRoom()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
@@ -80,6 +80,16 @@ export function useDeepLink() {
     }
 
     console.log('[DeepLink] Parsed:', parsed)
+
+    // A message link never falls through to the legacy room auto-join path,
+    // including malformed/empty targets. Membership and deliberate join are
+    // owned by the message-link resolver.
+    if (parsed.action === 'join' && Object.hasOwn(parsed.params, 'msg')) {
+      if (status !== 'online') { deferDeepLink(uri); return }
+      const target = parseRoomMessageLink(uri)
+      if (target) openRoomMessageLink(target)
+      return
+    }
 
     const bareJid = getBareJid(parsed.jid)
 
@@ -171,7 +181,6 @@ export function useDeepLink() {
   // While the chat view is up, the router hands every link to it. The router
   // owns the listener and the launch URL for the whole app (see deepLinkRouter).
   useEffect(() => {
-    if (!platform().hasDeepLinkEvents) return
     const dispose = setNavigationHandler(handleXmppUriSafely)
     void ensureDeepLinkRouter()
     return dispose
@@ -181,7 +190,7 @@ export function useDeepLink() {
   // or on the login form) are replayed once it is, and again once the
   // account's roster has loaded, for the shortcuts that wait for it.
   useEffect(() => {
-    if (!platform().hasDeepLinkEvents || status !== 'online') return
+    if (status !== 'online') return
     for (const uri of takeQueuedDeepLinks()) handleXmppUriSafely(uri)
   }, [status, rosterReady, handleXmppUriSafely])
 }

@@ -192,7 +192,7 @@ export interface UseMessageListScrollOptions {
    * Returns a promise that resolves once the slice has merged (or with an empty slice when the
    * anchor isn't in the cache).
    */
-  onLoadAround?: (anchorRow: MessageRowRef) => Promise<unknown> | void
+  onLoadAround?: (anchorRow: MessageRowRef, signal?: AbortSignal) => Promise<unknown> | void
   isLoadingOlder?: boolean
   /** Sliding window: load the next-newer cache slice when the reader scrolls back down to the
    *  bottom of a slid-up window (mirror of onScrollToTop for the newer direction). Fired only

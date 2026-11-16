@@ -260,10 +260,10 @@ export function useChatActive() {
   // restore / search navigation when the target/anchor isn't in the latest-N slice. Bound to the
   // currently-active conversation (the one being viewed when restore runs).
   const loadMessagesAround = useCallback(
-    (anchorRow: MessageRowRef) => {
+    (anchorRow: MessageRowRef, signal?: AbortSignal) => {
       const id = chatStore.getState().activeConversationId
       if (!id) return Promise.resolve([])
-      return chatStore.getState().loadMessagesAroundFromCache(id, anchorRow)
+      return chatStore.getState().loadMessagesAroundFromCache(id, anchorRow, undefined, signal)
     },
     []
   )

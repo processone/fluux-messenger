@@ -1504,8 +1504,10 @@ export class MAM extends BaseModule {
     targetTimestamp: string,
     oldestCachedTimestamp?: string
   ): Promise<void> {
+    const session = this.captureQuery()
     const targetTime = new Date(targetTimestamp).getTime()
     const maxPages = 30 // Safety cap
+    let roomBefore = ''
 
     logInfo(`MAM catch-up to ${targetTimestamp} for ${conversationId}`)
 
@@ -1521,13 +1523,15 @@ export class MAM extends BaseModule {
         const result = await this.queryRoomArchive({
           roomJid: conversationId,
           max: 100,
-          before: page === 0 ? '' : undefined,
+          before: roomBefore,
         })
+        session.assertCurrent()
         // Check if we've reached the target
         const oldestInPage = result.messages.length > 0
           ? result.messages[0].timestamp.getTime()
           : targetTime
-        if (result.complete || oldestInPage <= targetTime) break
+        if (result.complete || oldestInPage <= targetTime || !result.page.first || result.page.first === roomBefore) break
+        roomBefore = result.page.first
       } else {
         const result = await this.queryArchive({
           with: conversationId,
@@ -1544,6 +1548,7 @@ export class MAM extends BaseModule {
 
       // Small delay between pages
       await new Promise(resolve => setTimeout(resolve, 100))
+      session.assertCurrent()
     }
 
     logInfo(`MAM catch-up complete for ${conversationId}`)
@@ -3411,8 +3416,8 @@ export class MAM extends BaseModule {
   }
 
   /**
-   * One single-entry RSM page of an archive: the entry just before `before`,
-   * just after `after`, or the oldest one when neither is given. A cursor the
+   * One bounded RSM page of an archive (one entry by default): entries before
+   * `before`, after `after`, or from the oldest when neither is given. A cursor the
    * server rejects as item-not-found reads `absent`; any other failure, or an
    * answer without `<fin/>`, reads `unknown`.
    */
@@ -3420,12 +3425,13 @@ export class MAM extends BaseModule {
     entityId: string,
     isRoom: boolean,
     cursor: { before?: string; after?: string },
+    max = 1,
   ): Promise<{ kind: 'page'; entries: RawArchiveEntry[] } | { kind: 'absent' } | { kind: 'unknown' }> {
     const session = this.captureQuery()
     const queryId = `mam_${generateUUID()}`
     // No `with` filter: the account archive is ordered as a whole, so the
     // predecessor proof holds without narrowing it to one conversation.
-    const iq = this.buildMAMQuery(queryId, [], 1, cursor.before, isRoom ? entityId : undefined, cursor.after)
+    const iq = this.buildMAMQuery(queryId, [], max, cursor.before, isRoom ? entityId : undefined, cursor.after)
 
     const entries: RawArchiveEntry[] = []
     const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, id) => {
@@ -3452,6 +3458,59 @@ export class MAM extends BaseModule {
     }
     if (!session.isCurrent() || !response?.getChild('fin', NS_MAM)) return { kind: 'unknown' }
     return { kind: 'page', entries }
+  }
+
+  /**
+   * Locate a linked room archive entry without publishing it as a live arrival.
+   * Context pages are bounded, id-exact and persisted as a separate cache stretch.
+   * A transport failure is unknown, never evidence that the message was removed.
+   * The lookup source tells callers whether newly fetched context needs bridging.
+   */
+  async locateRoomMessage(roomJid: string, stanzaId: string): Promise<
+    { kind: 'found'; message: RoomMessage; source: 'resident' | 'cache' | 'archive' } | { kind: 'absent' | 'unknown' }
+  > {
+    const session = this.captureQuery()
+    if (!this.deps.stores?.room.getRoom(roomJid)?.joined) return { kind: 'unknown' }
+    const pending = this.deps.stores.room.waitForMessageArrivals?.(roomJid)
+    if (pending && !await pending) return { kind: 'unknown' }
+    session.assertCurrent()
+    if (!this.deps.stores.room.getRoom(roomJid)?.joined) return { kind: 'unknown' }
+    const resident = this.deps.stores.room.getMessage(roomJid, stanzaId)
+    if (resident?.stanzaId === stanzaId && !resident.isPrivate) return resident.isRetracted ? { kind: 'absent' } : { kind: 'found', message: resident, source: 'resident' }
+    const cached = await this.deps.stores.room.getMessageByArchiveId?.(roomJid, stanzaId)
+    session.assertCurrent()
+    if (cached && !cached.isPrivate) return cached.isRetracted ? { kind: 'absent' } : { kind: 'found', message: cached, source: 'cache' }
+
+    const found = await this.findArchivedEntry(roomJid, true, stanzaId)
+    session.assertCurrent()
+    if (found.kind !== 'found') return found
+    const before = await this.queryOneArchivedEntry(roomJid, true, { before: stanzaId }, 25)
+    session.assertCurrent()
+    if (before.kind !== 'page') return before
+    const after = await this.queryOneArchivedEntry(roomJid, true, { after: stanzaId }, 25)
+    session.assertCurrent()
+    if (after.kind !== 'page') return after
+    const entries = [...before.entries, found.entry, ...after.entries]
+    const messages: RoomMessage[] = []
+    const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+    const me = roomSelf(this.deps.stores.room.getRoom(roomJid))
+    for (const { forwarded, messageEl, archiveId } of entries) {
+      await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, 'room', this.extractForwardedTimestamp(forwarded), archiveId)
+      session.assertCurrent()
+      if (this.collectModification(messageEl, modifications, from => from, forwarded.getChild('delay', NS_DELAY), roomJid, archiveId)) continue
+      const message = this.parseRoomArchiveMessage(forwarded, roomJid, me, archiveId)
+      if (message) messages.push(message)
+    }
+    await this.applyModifications(messages, modifications, roomMessageAuthor, from => getResource(from) || from)
+    session.assertCurrent()
+    const reconciled = await this.deps.stores.room.reconcileHistoryMessages?.(messages) ?? messages
+    session.assertCurrent()
+    if (!this.deps.stores.room.getRoom(roomJid)?.joined) return { kind: 'unknown' }
+    const target = reconciled.find(message => message.stanzaId === stanzaId && !message.isPrivate)
+    if (!target || target.isRetracted) return { kind: 'absent' }
+    if (!await this.deps.stores.room.saveMessageLinkContext?.(roomJid, reconciled)) return { kind: 'unknown' }
+    session.assertCurrent()
+    return { kind: 'found', message: target, source: 'archive' }
   }
 
   /**

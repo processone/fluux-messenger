@@ -98,7 +98,7 @@ export interface ScrollExecutorPorts {
   }
   isLoadingOlder: () => boolean | undefined
   getLoadAround: () =>
-    | ((anchorRow: MessageRowRef) => Promise<unknown> | void)
+    | ((anchorRow: MessageRowRef, signal?: AbortSignal) => Promise<unknown> | void)
     | undefined
   getStoreTargetMessageId: () => string | null | undefined
   consumeStoreTarget: () => void
@@ -439,7 +439,7 @@ export function useScrollExecutors({
             )
             // The controller addresses rows by handle; the SDK anchor is a row ref,
             // so the occupant crosses with it and the slice lands on the saved row.
-            return portsRef.current.getLoadAround()?.(messageRowRefFromRowId(messageId))
+            return portsRef.current.getLoadAround()?.(messageRowRefFromRowId(messageId), signal)
           }
         : undefined,
       recenterVersion: [
@@ -548,7 +548,7 @@ export function useScrollExecutors({
       conversationId,
       messageReference,
       consumeStoreTarget,
-      loadAround: loadAround ? (messageId) => loadAround(messageRowRefFromRowId(messageId)) : undefined,
+      loadAround: loadAround ? (messageId, signal) => loadAround(messageRowRefFromRowId(messageId), signal) : undefined,
     })
   }, [
     beginControllerFrameLoop,

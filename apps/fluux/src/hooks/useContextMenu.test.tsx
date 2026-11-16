@@ -125,6 +125,19 @@ describe('useContextMenu', () => {
       expect(haptic).toHaveBeenCalledWith('contextMenu')
     })
 
+    // A portaled action can appear beneath the opening finger. The browser
+    // consumes defaultPrevented to decide whether release synthesizes a click.
+    it.each([false, true])('prevents release click only after the hold opens: %s', opened => {
+      const duration = 500
+      render(<TestComponent longPressDuration={duration} />)
+      const trigger = screen.getByTestId('trigger')
+      fireEvent.touchStart(trigger, { touches: [{ clientX: 100, clientY: 200 }] })
+      act(() => vi.advanceTimersByTime(opened ? duration : duration / 2))
+      const release = new Event('touchend', { bubbles: true, cancelable: true })
+      fireEvent(trigger, release)
+      expect(release.defaultPrevented).toBe(opened)
+    })
+
     it('should set position from touch coordinates', () => {
       render(<TestComponent />)
 

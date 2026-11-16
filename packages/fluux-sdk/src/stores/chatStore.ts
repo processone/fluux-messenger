@@ -694,8 +694,9 @@ interface ChatState {
    * Hydrate around an anchor for scroll restore or search/activity navigation. The resident
    * bound preserves the anchor using {@link timeline.aroundSlice}; the returned cache slice can
    * be larger than the resulting resident window. Returns an empty slice if the anchor is absent.
+   * A cancelled positioning request leaves the resident window unchanged.
    */
-  loadMessagesAroundFromCache: (conversationId: string, anchorRow: MessageRowRef, options?: { before?: number; after?: number }) => Promise<Message[]>
+  loadMessagesAroundFromCache: (conversationId: string, anchorRow: MessageRowRef, options?: { before?: number; after?: number }, signal?: AbortSignal) => Promise<Message[]>
   loadOlderMessagesFromCache: (conversationId: string, limit?: number) => Promise<Message[]>
   /**
    * Mirror of {@link loadOlderMessagesFromCache} for the opposite direction: loads the next-newer
@@ -2961,15 +2962,16 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
-      loadMessagesAroundFromCache: async (conversationId, anchorRow, options = {}) => {
+      loadMessagesAroundFromCache: async (conversationId, anchorRow, options = {}, signal) => {
         const isCurrent = captureChatCacheRead(conversationId)
+        const canPublish = () => !signal?.aborted && isCurrent()
         return withMessageCacheOperation('chat', conversationId, async () => {
-          if (!isCurrent()) return []
+          if (!canPublish()) return []
           try {
-            const slice = await messageCache.getMessagesAround(conversationId, anchorRow, options).then(messages => refreshCachedCorrections(messages, isCurrent))
-            if (!isCurrent()) return []
+            const slice = await messageCache.getMessagesAround(conversationId, anchorRow, options).then(messages => refreshCachedCorrections(messages, canPublish))
+            if (!canPublish()) return []
             if (slice.length > 0) {
-              set((state) => mergeCachedChatAround(state, conversationId, slice, anchorRow,
+              set((state) => !canPublish() ? state : mergeCachedChatAround(state, conversationId, slice, anchorRow,
                 options.before ?? messageCache.AROUND_CONTEXT_BEFORE) ?? state)
             }
             return slice

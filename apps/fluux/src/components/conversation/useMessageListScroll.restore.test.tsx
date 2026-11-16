@@ -40,7 +40,7 @@ interface HookHarnessProps {
   readPointerId?: string
   targetMessageId?: string | null
   clearFirstNewMessageId?: () => void
-  onLoadAround?: (anchorRow: MessageRowRef) => Promise<unknown> | void
+  onLoadAround?: (anchorRow: MessageRowRef, signal?: AbortSignal) => Promise<unknown> | void
   scrollHeight?: number
   clientHeight?: number
   initialScrollTop?: number
@@ -458,13 +458,27 @@ describe('useMessageListScroll saved-position restore', () => {
       />,
     )
 
-    expect(onLoadAround).toHaveBeenCalledWith({ id: 'old-anchor' })
+    expect(onLoadAround).toHaveBeenCalledWith({ id: 'old-anchor' }, expect.any(AbortSignal))
     await act(async () => {
       await Promise.resolve()
       await Promise.resolve()
     })
     expect(onLoadAround).toHaveBeenCalledTimes(1)
     expect(handle?.scrollTopSets).toContain(200)
+  })
+
+  it('aborts the saved cache-load signal when an explicit target supersedes restoration', async () => {
+    seedSavedAnchor('superseded-cache-restore', 'old-anchor')
+    let finish!: () => void
+    const onLoadAround = vi.fn((_row: MessageRowRef, _signal?: AbortSignal) => new Promise<void>(resolve => { finish = resolve }))
+    const props = { conversationId: 'superseded-cache-restore', ids: ['msg-0', 'msg-1'], onLoadAround, onReady: () => {} }
+    const { rerender } = render(<HookHarness {...props} />)
+    const signal = onLoadAround.mock.calls[0]?.[1]
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(signal?.aborted).toBe(false)
+    rerender(<HookHarness {...props} targetMessageId="msg-1" />)
+    expect(signal?.aborted).toBe(true)
+    await act(async () => finish())
   })
 
   it('preserves an opaque explicit target that resembles a row handle', async () => {
@@ -486,7 +500,7 @@ describe('useMessageListScroll saved-position restore', () => {
       await Promise.resolve()
     })
 
-    expect(onLoadAround).toHaveBeenCalledWith({ id: targetMessageId })
+    expect(onLoadAround).toHaveBeenCalledWith({ id: targetMessageId }, expect.any(AbortSignal))
   })
 
   it('degrades a malformed anchor to its finite saved offset', () => {

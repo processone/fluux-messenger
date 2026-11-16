@@ -11,6 +11,8 @@ const mockActivateRoom = vi.fn()
 const mockJoinRoom = vi.fn()
 const mockJoinResult = vi.fn()
 const mockHasConversation = vi.fn()
+const mockOpenRoomMessageLink = vi.fn()
+vi.mock('./useRoomMessageLink', () => ({ useRoomMessageLink: () => mockOpenRoomMessageLink }))
 const shortcutState = { jid: 'testuser@example.org/phone' as string | null, rosterAccount: 'testuser@example.org', loaded: true }
 // Status the chat view sees; 'online' lets queued links replay.
 const connectionState = { status: 'online' }
@@ -48,7 +50,8 @@ const { RoomJoinError } = vi.hoisted(() => {
   return { RoomJoinError }
 })
 
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async importOriginal => ({
+  ...await importOriginal<typeof import('@fluux/sdk')>(),
   connectionStore: { getState: () => ({ jid: shortcutState.jid }) },
   rosterStore: { getState: () => ({ accountJid: shortcutState.rosterAccount, isLoaded: shortcutState.loaded }) },
   roomStore: { getState: () => ({ rooms: new Map([['team@example.org', {}]]) }) },
@@ -74,42 +77,6 @@ vi.mock('@fluux/sdk', () => ({
       { jid: 'bob@example.org', name: 'Bob' },
     ],
   }),
-  // URI utilities moved from app to SDK
-  parseXmppUri: (uri: string) => {
-    if (!uri || !uri.startsWith('xmpp:')) return null
-    const withoutScheme = uri.slice(5)
-    const queryIndex = withoutScheme.indexOf('?')
-    const jid = queryIndex >= 0 ? withoutScheme.slice(0, queryIndex) : withoutScheme
-    const queryString = queryIndex >= 0 ? withoutScheme.slice(queryIndex + 1) : ''
-    // XMPP URIs use semicolons as separators: ?action;param=value;param2=value2
-    const params: Record<string, string> = {}
-    let action: string | undefined
-    if (queryString) {
-      const parts = queryString.split(';')
-      action = parts[0] || undefined
-      for (let i = 1; i < parts.length; i++) {
-        const [key, value] = parts[i].split('=')
-        if (key) params[key] = value || ''
-      }
-    }
-    return { jid: decodeURIComponent(jid), action, params }
-  },
-  isMucJid: (jid: string) => {
-    if (!jid) return false
-    const domain = jid.split('@')[1]?.toLowerCase() || ''
-    return domain.includes('conference') || domain.includes('muc') || domain.includes('room')
-  },
-  getBareJid: (fullJid: string) => {
-    if (!fullJid) return ''
-    const slashIndex = fullJid.indexOf('/')
-    return slashIndex >= 0 ? fullJid.substring(0, slashIndex) : fullJid
-  },
-  getLocalPart: (jid: string) => {
-    if (!jid) return ''
-    const bareJid = jid.indexOf('/') >= 0 ? jid.substring(0, jid.indexOf('/')) : jid
-    const atIndex = bareJid.indexOf('@')
-    return atIndex >= 0 ? bareJid.substring(0, atIndex) : bareJid
-  },
   RoomJoinError,
 }))
 
@@ -205,6 +172,23 @@ describe('useDeepLink', () => {
       useDeepLink = module.useDeepLink
     })
 
+    test('routes in-chat room message links on web without joining or a system handler', async () => {
+      const { routeDeepLink } = await import('@/utils/deepLinkRouter')
+      renderHook(() => useDeepLink(), { wrapper: createWrapper('/messages') })
+      await act(async () => routeDeepLink('xmpp:team@example.org?join;msg=1731490000123456'))
+      expect(mockOpenRoomMessageLink).toHaveBeenCalledWith({ roomJid: 'team@example.org', stanzaId: '1731490000123456' })
+      expect(mockJoinRoom).not.toHaveBeenCalled()
+      expect(mockOnOpenUrl).not.toHaveBeenCalled()
+    })
+
+    test('does not turn a malformed message target into an automatic join', async () => {
+      const { routeDeepLink } = await import('@/utils/deepLinkRouter')
+      renderHook(() => useDeepLink(), { wrapper: createWrapper('/messages') })
+      await act(async () => routeDeepLink('xmpp:team@example.org?join;msg='))
+      expect(mockOpenRoomMessageLink).not.toHaveBeenCalled()
+      expect(mockJoinRoom).not.toHaveBeenCalled()
+    })
+
     test('does not set up deep link listener', () => {
       renderHook(() => useDeepLink(), {
         wrapper: createWrapper('/messages'),
@@ -284,6 +268,19 @@ describe('useDeepLink', () => {
       rerender()
       await waitFor(() => expect(currentLocation.current.pathname).toBe('/messages/alice%40example.org'))
       expect(mockActivateConversation).toHaveBeenCalledWith('alice@example.org')
+    })
+
+    test('keeps a launch message id until the connected view handles it', async () => {
+      mockGetCurrent.mockResolvedValue(['xmpp:team@example.org?join;msg=1731490000123456'])
+      connectionState.status = 'connecting'
+      const { rerender } = renderHook(() => useDeepLink(), { wrapper: createWrapper('/messages') })
+      await waitFor(() => expect(mockGetCurrent).toHaveBeenCalled())
+      await act(async () => {})
+      expect(mockOpenRoomMessageLink).not.toHaveBeenCalled()
+      connectionState.status = 'online'
+      rerender()
+      await waitFor(() => expect(mockOpenRoomMessageLink).toHaveBeenCalledWith({ roomJid: 'team@example.org', stanzaId: '1731490000123456' }))
+      expect(mockJoinRoom).not.toHaveBeenCalled()
     })
 
     test('sets up deep link listener on mount', async () => {

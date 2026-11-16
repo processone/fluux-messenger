@@ -22,6 +22,7 @@ vi.mock('lucide-react', () => ({
   MoreHorizontal: () => <span data-testid="icon-more">More</span>,
   Reply: () => <span data-testid="icon-reply">Reply</span>,
   Trash2: () => <span data-testid="icon-trash">Trash</span>,
+  Link2: () => <span data-testid="icon-link">Link</span>,
 }))
 
 // Mock useClickOutside hook
@@ -255,6 +256,28 @@ describe('MessageToolbar', () => {
       fireEvent.click(screen.getByLabelText('chat.moreOptions'))
 
       expect(setShowMoreMenu).toHaveBeenCalledWith(true)
+    })
+
+    it('offers Copy message link without granting delete permission', () => {
+      const onCopyMessageLink = vi.fn()
+      render(<MessageToolbar {...defaultProps} canDelete={false} onCopyMessageLink={onCopyMessageLink} showMoreMenu />)
+      expect(screen.getByLabelText('chat.moreOptions')).not.toBeDisabled()
+      fireEvent.click(screen.getByText('chat.copyMessageLink'))
+      expect(onCopyMessageLink).toHaveBeenCalledOnce()
+      expect(defaultProps.setShowMoreMenu).toHaveBeenCalledWith(false)
+      expect(defaultProps.onDelete).not.toHaveBeenCalled()
+      expect(screen.queryByText('chat.deleteMessage')).not.toBeInTheDocument()
+    })
+
+    it('keeps open action slots fixed when a room id becomes available during the hold', () => {
+      const { rerender } = render(<MessageToolbar {...defaultProps} showMoreMenu />)
+      const deletion = screen.getByText('chat.deleteMessage')
+      const onCopyMessageLink = vi.fn()
+      rerender(<MessageToolbar {...defaultProps} showMoreMenu interactionHeld onCopyMessageLink={onCopyMessageLink} />)
+      expect(screen.queryByText('chat.copyMessageLink')).not.toBeInTheDocument()
+      expect(screen.getByText('chat.deleteMessage')).toBe(deletion)
+      rerender(<MessageToolbar {...defaultProps} showMoreMenu onCopyMessageLink={onCopyMessageLink} />)
+      expect(screen.getByText('chat.copyMessageLink')).toBeInTheDocument()
     })
 
     it('should disable more button when canDelete is false', () => {

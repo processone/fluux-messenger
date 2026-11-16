@@ -1,11 +1,16 @@
 /**
- * External link handler for native Tauri shells.
- * Intercepts clicks on external <a> tags and opens them in the system's
- * default browser. In web mode, links open normally.
+ * Handle in-app XMPP links on every platform and external web links in native
+ * shells. XMPP navigation never goes through an operating-system handler.
  */
 
 import { platform } from '@/platform'
 import { openInBrowser } from './openInBrowser'
+import { routeDeepLink } from './deepLinkRouter'
+
+function openLink(href: string): void {
+  if (href.startsWith('xmpp:')) routeDeepLink(href)
+  else void openInBrowser(href)
+}
 
 function isExternalUrl(href: string): boolean {
   try {
@@ -25,19 +30,19 @@ function externalLink(target: EventTarget | null): { anchor: Element; href: stri
   if (interactive && anchor.contains(interactive)) return null
 
   const href = anchor.getAttribute('href')
-  if (!href || (!href.startsWith('http://') && !href.startsWith('https://'))) return null
+  if (!href) return null
+  if (href.startsWith('xmpp:')) return { anchor, href }
+  if (!platform().interceptsInAppNavigation || (!href.startsWith('http://') && !href.startsWith('https://'))) return null
   if (!isExternalUrl(href)) return null
   return { anchor, href }
 }
 
 /**
- * Set up a global click handler that intercepts external link clicks
- * and opens them in the system's default browser.
- * Returns a cleanup function, or undefined in web mode.
+ * Install one shared click handler: XMPP links navigate in Fluux; native web
+ * links open in the system browser. Ordinary web-browser links keep their default.
+ * Returns the listener cleanup.
  */
 export function setupExternalLinkHandler(): (() => void) | undefined {
-  if (!platform().interceptsInAppNavigation) return undefined
-
   let touchStart: { anchor: Element; href: string; identifier: number; x: number; y: number; at: number } | null = null
   let suppressedClick: { anchor: Element; until: number } | null = null
 
@@ -52,7 +57,7 @@ export function setupExternalLinkHandler(): (() => void) | undefined {
       suppressedClick = null
       return
     }
-    void openInBrowser(link.href)
+    openLink(link.href)
   }
 
   const onTouchStart = (event: TouchEvent) => {
@@ -90,7 +95,7 @@ export function setupExternalLinkHandler(): (() => void) | undefined {
 
     // The iOS link path must not depend on WebKit producing a synthetic click.
     event.preventDefault()
-    void openInBrowser(started.href)
+    openLink(started.href)
   }
   const onTouchCancel = () => { touchStart = null }
 

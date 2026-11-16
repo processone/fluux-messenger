@@ -152,7 +152,7 @@ export interface MessageListProps<T extends BaseMessage> {
    * Used by scroll-position restore (and search/target navigation) when the saved anchor / target
    * is older than the latest-N slice loaded on activation, so the existing anchor restore can land.
    */
-  onLoadAround?: (anchorRow: MessageRowRef) => Promise<unknown> | void
+  onLoadAround?: (anchorRow: MessageRowRef, signal?: AbortSignal) => Promise<unknown> | void
   /** If true, show loading indicator at top while fetching older messages */
   isLoadingOlder?: boolean
   /** Sliding window: load the next-newer cache slice when the reader scrolls back down to the

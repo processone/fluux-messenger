@@ -5571,6 +5571,20 @@ describe('roomStore', () => {
       }
     }
 
+    it('does not publish a saved-anchor slice after its positioning request is cancelled', async () => {
+      const latest = roomMsgAt('newer-5', 5)
+      roomStore.setState({ messages: new Map([[roomJid, [latest]]]) })
+      let finish!: (rows: RoomMessage[]) => void
+      vi.mocked(messageCache.getRoomMessagesAround).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      const request = new AbortController()
+      const pending = roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' }, undefined, request.signal)
+      await vi.waitFor(() => expect(messageCache.getRoomMessagesAround).toHaveBeenCalledTimes(1))
+      request.abort()
+      finish([roomMsgAt('old-3', 3), roomMsgAt('anchor', 4), latest])
+      await pending
+      expect(roomWindow(roomJid)?.map(row => row.id)).toEqual([latest.id])
+    })
+
     it('hydrates the resident array with the cache slice that contains the anchor', async () => {
       const slice = [roomMsgAt('old-3', 3), roomMsgAt('anchor', 4), roomMsgAt('newer-5', 5)]
       vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue(slice)

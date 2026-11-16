@@ -1,9 +1,9 @@
-# URL Schemes and Login Prefill Links
+# URL Schemes, Room Message Links and Login Prefill Links
 
-This document describes the URL schemes Fluux understands for **preconfiguring the
-login screen** from a link, the `xmpp:` URI scheme on desktop and query-string
-parameters on web. The goal is VPN-profile-style provisioning: hand a user a link
-and Fluux opens with the login form prefilled (address and, when needed, an
+This document describes room message links and the URL schemes Fluux understands
+for **preconfiguring the login screen** from a link: the `xmpp:` URI scheme on
+desktop and query-string parameters on web. Login prefill provides
+VPN-profile-style provisioning: hand a user a link and Fluux opens with the login form prefilled (address and, when needed, an
 explicit server endpoint). The user still types their password and presses
 Connect.
 
@@ -12,7 +12,49 @@ bare domain, etc.) and the transport/proxy architecture, see
 [CONNECTION.md](CONNECTION.md). This document is about the **invocation links**
 that feed that field; CONNECTION.md is about what the field accepts once filled.
 
-## Principles
+## Room message links
+
+Fluux extends the XMPP room join URI with an opaque `msg` parameter:
+
+```
+xmpp:team@conference.example.org?join;msg=1731490000123456
+```
+
+The address is the bare room JID. The value of `msg` is the room-assigned
+XEP-0359 stanza-id, percent-encoded as one URI component. Sender client ids and
+origin ids are not interchangeable with this archive id. Use the SDK's
+`buildRoomMessageLink(roomJid, stanzaId)` and `parseRoomMessageLink(uri)` to build
+and read the format. The `msg` extension is a Fluux convention, not a registered
+XEP-0147 parameter; other clients can still interpret the `join` action.
+
+**Copy message link** appears in a room message's More menu and mobile long-press
+actions when the room supports archiving and the public, sent message has a
+room-assigned id. It is separate from **Copy link**, which copies a URL in the
+message body. Private room whispers and unconfirmed messages have no message link.
+
+Clicking an `xmpp:` link inside Fluux is handled in the app on web, desktop and
+phones, without asking the operating system to select a handler. Existing macOS
+and iOS system-link entry points use the same navigation after connection; this
+does not register a web browser handler or add Android system-link support.
+
+Opening a message link does not automatically join its room. A reader who is not
+currently joined sees the room's Join button; the existing real-address warning
+and password prompt still apply. After a successful join Fluux resumes the jump.
+Only then does Fluux look in resident history, the room-scoped local cache and
+finally the room archive. An archive lookup loads the entry and at most 25
+entries on either side using id-exact RSM cursors, never a time-window guess.
+Bounded context is stored separately from live history without claiming
+continuity, advancing read state or delivering an old message as a new arrival.
+The normal message target navigation scrolls to and highlights the resolved row.
+
+When lookup confirms the target is missing or deleted, Fluux shows
+**This message is no longer available**. A failed archive request produces
+**Could not load this message**, not a deletion
+claim. Links reveal the room address and archive id, not the message text, and do
+not grant access to a room. There is no web landing page, forwarded copy or
+message preview in this format's initial implementation.
+
+## Login prefill principles
 
 - **No credentials, ever.** A link carries an address and connection hints, never
   a password or token. There is no auto-connect from a link, it only seeds the

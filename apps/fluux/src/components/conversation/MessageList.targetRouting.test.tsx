@@ -246,6 +246,6 @@ it('carries the complete room reference into requested cache loading', async () 
   const { container } = render(<MessageList messages={messages} conversationId={target.roomJid}
     onLoadAround={loadAround} renderMessage={msg => <JumpRow id={msg.id} to={messageRowRef(target)} />} />)
   fireEvent.click(container.querySelector('[data-testid="jump-msg-0"]')!)
-  await waitFor(() => expect(loadAround).toHaveBeenCalledWith(messageRowRef(target)))
+  await waitFor(() => expect(loadAround).toHaveBeenCalledWith(messageRowRef(target), expect.any(AbortSignal)))
   localStorage.clear()
 })
