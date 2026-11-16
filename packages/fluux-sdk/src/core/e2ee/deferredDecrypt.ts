@@ -611,10 +611,14 @@ export class DeferredDecryptEngine {
 
       // A late result is dropped with the abandoned call: `stanza` is a local
       // parse, and nothing below runs for it. The stash stays for a later pass.
-      const result = await settleWithin(decryptStanzaInPlace(
+      const pending = decryptStanzaInPlace(
         stanza, manager, peer, 'archive',
-        isSelfOutgoing ? { isSelfOutgoing: true } : undefined,
-      ), this.deps.decryptTimeoutMs ?? DEFAULT_DECRYPT_TIMEOUT_MS)
+        { isSelfOutgoing, entityKind: messageContext },
+      )
+      // A subscribed publisher may have minted the key during the synchronous
+      // start of this call; carry it back to a previously unobserved source row.
+      if (diagnosticMessage) badgeMessageKey(diagnosticMessage, stanza)
+      const result = await settleWithin(pending, this.deps.decryptTimeoutMs ?? DEFAULT_DECRYPT_TIMEOUT_MS)
       if (result === TIMED_OUT) {
         logWarn(`E2EE deferred decrypt timed out for message from ${getDomain(senderJid)}; leaving it pending`)
         return { kind: 'pending' }

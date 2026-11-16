@@ -260,7 +260,8 @@ export class Chat extends BaseModule {
       stanzaHasEMEHint(stanza)
     ) {
       const { peer } = deriveConversationContext(stanza, getBareJid(this.deps.getCurrentJid() ?? ''))
-      recordUnclaimedEME(stanza, manager ?? false, { peer, source: 'live' })
+      recordUnclaimedEME(stanza, manager ?? false, { peer, source: 'live',
+        entityKind: this.badgeEntityKind(stanza) })
     }
 
     const from = stanza.attrs.from
@@ -282,10 +283,7 @@ export class Chat extends BaseModule {
     // joined room (room@service/nick) is a private message ("whisper"), not a
     // public room message. Detect it BEFORE the muc#user→groupchat
     // reclassification below, which would otherwise surface it publicly.
-    const isWhisper =
-      type === 'chat' &&
-      !!from && !!getResource(from) &&
-      this.deps.stores?.room?.getRoom(getBareJid(from))?.joined === true
+    const isWhisper = this.isRoomWhisper(stanza)
 
     if (type === 'chat' && hasMucUserElement && !isWhisper) {
       type = 'groupchat'
@@ -488,6 +486,18 @@ export class Chat extends BaseModule {
     return { handled: false }
   }
 
+  private isRoomWhisper(stanza: Element): boolean {
+    const from = stanza.attrs.from
+    return (stanza.attrs.type || 'chat') === 'chat' && !!from && !!getResource(from)
+      && this.deps.stores?.room?.getRoom(getBareJid(from))?.joined === true
+  }
+
+  private badgeEntityKind(stanza: Element): 'chat' | 'room' {
+    const type = stanza.attrs.type || 'chat'
+    return type === 'groupchat' || (type === 'chat' &&
+      (this.isRoomWhisper(stanza) || !!stanza.getChild('x', NS_MUC_USER))) ? 'room' : 'chat'
+  }
+
   /**
    * Look for an E2EE-plugin-claimed element in this stanza. If found, kick
    * off the async decrypt-and-reprocess flow and return true. Returns false
@@ -550,7 +560,7 @@ export class Chat extends BaseModule {
     const finish = this.correctionReceipts.begin(stanza)
     try {
       await decryptStanzaInPlace(stanza, manager, peer, 'live', {
-        isSelfOutgoing,
+        isSelfOutgoing, entityKind: this.badgeEntityKind(stanza),
       })
       if (!scope.isCurrent() || jid !== this.deps.getCurrentJid() || manager !== this.deps.getE2EEManager?.()) return
       this.handleMessageInternal(stanza, context)

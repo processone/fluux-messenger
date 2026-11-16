@@ -1,7 +1,8 @@
+import { DeferredDecryptEngine } from '../../../../packages/fluux-sdk/src/core/e2ee/deferredDecrypt'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, cleanup } from '@testing-library/react'
 import { xml } from '@xmpp/client'
-import { XMPPClient } from '../../../../packages/fluux-sdk/src/core/XMPPClient'
+import { XMPPClient } from '@fluux/sdk/core'
 import { Chat } from '../../../../packages/fluux-sdk/src/core/modules/Chat'
 import { MAM } from '../../../../packages/fluux-sdk/src/core/modules/MAM'
 import { createDefaultStoreBindings } from '../../../../packages/fluux-sdk/src/core/defaultStoreBindings'
@@ -224,6 +225,59 @@ describe('automatic badge diagnostics through message dispatch and stores', () =
     await receive()
     await act(async () => { chatStore.getState().applyRemoteDisplayed(PEER, 'fixture-archive') })
     expect(events()).toContainEqual(expect.objectContaining({ phase: 'read-state', entityKind: 'chat', pointerChanged: true }))
+  })
+
+  it.each(['claimed', 'unclaimed'] as const)('keeps an encrypted room whisper in one exported trace: %s', async mode => {
+    const room = 'whispers@conference.example.test'
+    roomStore.getState().addRoom({ jid: room, name: 'Whispers', nickname: 'reader', joined: true,
+      isBookmarked: false, occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set() })
+    if (mode === 'unclaimed') await manager.unregister('dummy-plaintext')
+    await act(async () => {
+      chat.handle(xml('message', { from: room + '/writer', to: SELF, type: 'chat', id: 'whisper-occurrence' },
+        xml('x', { xmlns: 'http://jabber.org/protocol/muc#user' }),
+        xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from('Private whisper').toString('base64')),
+        xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:fluux:e2ee-dummy:0' }),
+        xml('body', {}, 'Encrypted whisper fallback')))
+      await chat.whenLiveDecryptsSettled()
+      await roomStore.getState().waitForMessageArrivals(room)
+    })
+    const decrypt = events().find(event => event.phase === 'decrypt-complete')!
+    const arrival = events().find(event => event.phase === 'arrival' && event.status === 'accepted')!
+    expect(decrypt).toMatchObject({ entityKind: 'room', message: expect.any(String) })
+    expect(arrival).toMatchObject({ entityKind: 'room', message: decrypt.message })
+  })
+
+  it('keeps a legacy room retry without a wire type in the arrival trace', async () => {
+    const room = 'legacy@conference.example.test'
+    roomStore.getState().addRoom({ jid: room, name: 'Legacy', nickname: 'reader', joined: true,
+      isBookmarked: false, occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set() })
+    const pending = { type: 'groupchat' as const, roomJid: room, id: 'legacy-occurrence', from: room + '/writer', nick: 'writer',
+      body: 'Encrypted fallback', timestamp: new Date(), receivedAt: new Date(), isOutgoing: false,
+      encryptedPayload: xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from('Recovered room text').toString('base64')).toString() }
+    await act(async () => { await roomStore.getState().addMessage(room, pending) })
+    const arrival = events().find(event => event.phase === 'arrival' && event.status === 'accepted')!
+    const engine = new DeferredDecryptEngine({ getManager: () => manager, getStores: () => createDefaultStoreBindings(),
+      getOwnBareJid: () => SELF, cache: { getMessagesWithEncryptedPayload: async () => [], updateMessage: async () => {}, deleteMessage: async () => {} },
+      updateSearchIndex: async () => {},
+    })
+    await act(async () => { await engine.retryPending() })
+    expect(events()).toContainEqual(expect.objectContaining({ phase: 'decrypt-complete', entityKind: 'room', message: arrival.message, status: 'succeeded' }))
+  })
+
+  it('does not label an ordinary chat from an unjoined known room as a whisper', async () => {
+    const room = 'unjoined@conference.example.test'
+    roomStore.getState().addRoom({ jid: room, name: 'Unjoined', nickname: 'reader', joined: false,
+      isBookmarked: true, occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set() })
+    await act(async () => {
+      chat.handle(xml('message', { from: room + '/writer', to: SELF, type: 'chat', id: 'ordinary-chat' },
+        xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from('Ordinary chat').toString('base64')),
+        xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:fluux:e2ee-dummy:0' }),
+        xml('body', {}, 'Encrypted fallback')))
+      await chat.whenLiveDecryptsSettled()
+    })
+    const decrypt = events().find(event => event.phase === 'decrypt-complete')!
+    expect(decrypt).toMatchObject({ entityKind: 'chat', message: expect.any(String) })
+    expect(events()).toContainEqual(expect.objectContaining({ phase: 'arrival', status: 'accepted', entityKind: 'chat', message: decrypt.message }))
   })
 
 })

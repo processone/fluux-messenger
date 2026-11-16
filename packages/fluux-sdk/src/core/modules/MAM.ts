@@ -365,7 +365,7 @@ export class MAM extends BaseModule {
         for (const { forwarded, messageEl, archiveId } of boundedEntries) {
           if (!isCurrent()) throw new DOMException('Correction target removed', 'AbortError')
           const delay = forwarded.getChild('delay', NS_DELAY)
-          const journaled = await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(delay), archiveId)
+          const journaled = await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, room ? 'room' : 'chat', delayStamp(delay), archiveId)
           session.assertCurrent()
           this.collectModification(messageEl, modifications, from => room ? from : getBareJid(from), delay,
             room ? conversationId : getBareJid(this.deps.getCurrentJid() ?? ''), archiveId, journaled)
@@ -670,7 +670,7 @@ export class MAM extends BaseModule {
           const correctionStart = modifications.corrections.length
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
             const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
-            const journaled = await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(forwardedDelayEl), archiveId)
+            const journaled = await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, 'chat', delayStamp(forwardedDelayEl), archiveId)
             if (journaled) {
               processedArchiveSignal = true
             }
@@ -993,7 +993,7 @@ export class MAM extends BaseModule {
           const correctionStart = modifications.corrections.length
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
             const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
-            await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, delayStamp(forwardedDelayEl))
+            await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, 'room', delayStamp(forwardedDelayEl))
             session.assertCurrent()
             if (this.collectModification(messageEl, modifications, (from) => from, forwardedDelayEl, roomJid, archiveId)) {
               continue
@@ -1242,7 +1242,7 @@ export class MAM extends BaseModule {
         const from = getBareJid(messageEl.attrs.from || '')
         const to = getBareJid(messageEl.attrs.to || '')
         const conversationId = from === ownBareJid ? to : from
-        const journaled = await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, delayStamp(forwardedDelayEl), archiveId)
+        const journaled = await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, 'chat', delayStamp(forwardedDelayEl), archiveId)
         session.assertCurrent()
         if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedDelayEl, ownBareJid, archiveId, journaled)) {
           continue
@@ -1317,7 +1317,7 @@ export class MAM extends BaseModule {
 
       for (const { forwarded, messageEl, archiveId } of rawEntries) {
         const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
-        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, delayStamp(forwardedDelayEl))
+        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, 'room', delayStamp(forwardedDelayEl))
         session.assertCurrent()
         if (this.collectModification(messageEl, modifications, (from) => from, forwardedDelayEl, roomJid, archiveId)) {
           continue
@@ -2279,7 +2279,7 @@ export class MAM extends BaseModule {
         let latestMessage: Message | null = null
         for (const { forwarded, messageEl, archiveId } of rawEntries) {
           const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-          await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, forwardedTimestamp, archiveId)
+          await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, 'chat', forwardedTimestamp, archiveId)
           session.assertCurrent()
           const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
           if (msg) latestMessage = msg
@@ -2983,6 +2983,7 @@ export class MAM extends BaseModule {
   private async decryptArchiveEntryIfNeeded(
     messageEl: Element,
     peer: string,
+    entityKind: 'chat' | 'room',
     archiveTimestamp?: Date,
     archiveId?: string,
   ): Promise<boolean> {
@@ -3026,7 +3027,7 @@ export class MAM extends BaseModule {
       // live path's no-manager handling: stash an EME-tagged payload for
       // deferred retry so it self-heals (decrypts, or is tagged unsupported)
       // once a manager + plugin come online.
-      recordUnclaimedEME(messageEl, false, { peer, source: 'archive' })
+      recordUnclaimedEME(messageEl, false, { peer, source: 'archive', entityKind })
       return false
     }
     // Same helper the live path uses. The passed-in `peer` is kept as
@@ -3042,6 +3043,7 @@ export class MAM extends BaseModule {
     const finish = this.correctionReceipts.begin(messageEl)
     try {
       await decryptStanzaInPlace(messageEl, manager, peer, 'archive', {
+        entityKind,
         isSelfOutgoing,
         archiveTimestamp,
       })
@@ -3377,7 +3379,7 @@ export class MAM extends BaseModule {
 
     const timestamp = this.extractForwardedTimestamp(entry.forwarded)
     if (!timestamp) return { kind: 'unknown' }
-    await this.decryptArchiveEntryIfNeeded(entry.messageEl, entityId, timestamp, entry.archiveId)
+    await this.decryptArchiveEntryIfNeeded(entry.messageEl, entityId, isRoom ? 'room' : 'chat', timestamp, entry.archiveId)
     if (!session.isCurrent()) return { kind: 'unknown' }
     const row = isRoom
       ? this.parseRoomArchiveMessage(entry.forwarded, entityId, roomSelf(this.deps.stores?.room.getRoom(entityId)), archiveId)
@@ -3481,7 +3483,7 @@ export class MAM extends BaseModule {
     let result: RoomMessage | null
     try {
       for (const { forwarded, messageEl } of rawEntries) {
-        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, this.extractForwardedTimestamp(forwarded))
+        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, 'room', this.extractForwardedTimestamp(forwarded))
         if (!session.isCurrent()) return null
       }
       const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, me)

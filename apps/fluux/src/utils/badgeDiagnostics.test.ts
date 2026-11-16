@@ -99,10 +99,18 @@ describe('automatic private badge journal', () => {
   it('starts and records on supported WebKit without randomUUID or Object.hasOwn', () => {
     const randomValues = crypto.getRandomValues.bind(crypto)
     vi.stubGlobal('crypto', { getRandomValues: randomValues })
-    vi.spyOn(Object, 'hasOwn').mockImplementation(() => { throw new Error('Unavailable API must not be called') })
-    expect(() => startBadgeDiagnostics()).not.toThrow()
-    recordBadgeDiagnostic({ phase: 'recount', status: 'pending', recountReason: 'cache-unavailable' })
-    expect(JSON.parse(exportBadgeDiagnostics()).events).toContainEqual(expect.objectContaining({ phase: 'recount', recountReason: 'cache-unavailable' }))
+    const descriptor = Object.getOwnPropertyDescriptor(Object, 'hasOwn')!
+    let exported: string
+    try {
+      Object.defineProperty(Object, 'hasOwn', { value: undefined, configurable: true, writable: true })
+      startBadgeDiagnostics()
+      recordBadgeDiagnostic({ phase: 'recount', status: 'pending', recountReason: 'cache-unavailable' })
+      exported = exportBadgeDiagnostics()
+    } finally {
+      // The test runner itself requires this API; restore it before assertions.
+      Object.defineProperty(Object, 'hasOwn', descriptor)
+    }
+    expect(JSON.parse(exported).events).toContainEqual(expect.objectContaining({ phase: 'recount', recountReason: 'cache-unavailable' }))
   })
 
   it('does not prevent startup when diagnostic identity initialization itself fails', () => {

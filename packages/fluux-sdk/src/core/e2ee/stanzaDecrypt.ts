@@ -1,4 +1,4 @@
-import { badgeStanzaKey } from '../../diagnostics/badgeIdentity'
+import { createBadgeMessageKey } from '../../diagnostics/badgeIdentity'
 /**
  * Shared inbound-decrypt step for any message source.
  *
@@ -204,15 +204,16 @@ export async function decryptStanzaInPlace(
   manager: E2EEManager,
   senderPeer: string,
   source: InboundSource = 'live',
-  options?: { isSelfOutgoing?: boolean; archiveTimestamp?: Date },
+  options?: { isSelfOutgoing?: boolean; archiveTimestamp?: Date; entityKind?: 'chat' | 'room' },
 ): Promise<DecryptInPlaceResult> {
   // Observe the existing claim/decrypt path without calling plugins again or
   // adding another asynchronous layer around their result.
   const accountScope = getStorageScopeJid() ?? ''
+  const entityKind = options?.entityKind ?? (stanza.attrs.type === 'groupchat' ? 'room' : 'chat')
   const report = (phase: BadgeDecisionDiagnostic['phase'], status: BadgeDecisionDiagnostic['status']) => {
     publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', phase, status,
-      entityKind: stanza.attrs.type === 'groupchat' ? 'room' : 'chat', entityId: senderPeer,
-      messageKey: badgeStanzaKey(stanza), accountScope, source,
+      entityKind, entityId: senderPeer,
+      messageKey: createBadgeMessageKey(stanza), accountScope, source,
     }), undefined)
   }
   const marked = stanza as unknown as {
@@ -249,7 +250,7 @@ export async function decryptStanzaInPlace(
     // (no plugin registered — stash for deferred retry) from "protocol we have
     // no plugin for" (e.g. OMEMO when only OpenPGP is wired — surface the
     // sender's XEP-0380 fallback <body> with an unsupported-method tag).
-    const disposition = recordUnclaimedEME(stanza, manager, { peer: senderPeer, source })
+    const disposition = recordUnclaimedEME(stanza, manager, { peer: senderPeer, source, entityKind })
     if (disposition.kind === 'retry') {
       return { attempted: false, encryptedPayloadXml: disposition.encryptedPayloadXml }
     }
@@ -716,12 +717,12 @@ function isEmptyOmemoElement(namespace: string, child: Element | null): boolean 
 export function recordUnclaimedEME(
   stanza: Element,
   pluginState: UnclaimedEMEPluginState,
-  diagnostic?: { peer: string; source: InboundSource },
+  diagnostic?: { peer: string; source: InboundSource; entityKind: 'chat' | 'room' },
 ): UnclaimedEMEDisposition {
   const report = (status: BadgeDecisionDiagnostic['status']) => {
     if (diagnostic) publishDiagnostic('badge-decision', () => ({ kind: 'badge-decision', phase: 'decrypt-complete', status,
-      entityKind: stanza.attrs.type === 'groupchat' ? 'room' : 'chat', entityId: diagnostic.peer,
-      messageKey: badgeStanzaKey(stanza), accountScope: getStorageScopeJid() ?? '', source: diagnostic.source,
+      entityKind: diagnostic.entityKind, entityId: diagnostic.peer,
+      messageKey: createBadgeMessageKey(stanza), accountScope: getStorageScopeJid() ?? '', source: diagnostic.source,
     }), undefined)
   }
   const target = findEncryptionTarget(stanza)

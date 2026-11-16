@@ -1,4 +1,4 @@
-import { badgeMessageKey } from '../../diagnostics/badgeIdentity'
+import { badgeMessageKey, createBadgeMessageKey } from '../../diagnostics/badgeIdentity'
 import { publishDiagnostic } from '../../diagnostics/channel'
 import { emitLocalRead, hasLocalReadListeners } from '../localReadEvents'
 import { emitSettledRead } from '../settledReadEvents'
@@ -927,14 +927,17 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
       bumpUnreadInputVersion(entityId)
       const view = ports.storage.read(entityId)
       const diagnosticNote = { diagnosticMessageKey: options.diagnosticKey ?? badgeMessageKey(message), diagnosticUnreadBefore: view?.unreadCount }
-      publishDiagnostic('badge-decision', () => ({
-        kind: 'badge-decision', phase: 'arrival', status: 'pending', entityKind: kind,
-        entityId, messageKey: diagnosticNote.diagnosticMessageKey, accountScope: currentStorageScope() ?? '',
-        active: evidence.isActive, visible: evidence.windowVisible,
-        viewportAtEdge: currentViewportEvidence(scopeKey(entityId)) === 'at-edge',
-        outgoing: message.isOutgoing, delayed: !!message.isDelayed,
-        retryPayloadRetained: !!message.encryptedPayload, unreadBefore: view?.unreadCount,
-      }), undefined)
+      publishDiagnostic('badge-decision', () => {
+        diagnosticNote.diagnosticMessageKey ??= createBadgeMessageKey(message)
+        return {
+          kind: 'badge-decision', phase: 'arrival', status: 'pending', entityKind: kind,
+          entityId, messageKey: diagnosticNote.diagnosticMessageKey, accountScope: currentStorageScope() ?? '',
+          active: evidence.isActive, visible: evidence.windowVisible,
+          viewportAtEdge: currentViewportEvidence(scopeKey(entityId)) === 'at-edge',
+          outgoing: message.isOutgoing, delayed: !!message.isDelayed,
+          retryPayloadRetained: !!message.encryptedPayload, unreadBefore: view?.unreadCount,
+        }
+      }, undefined)
       // The same evidence `onMessageReceived` reads below, so "unseen" here means what "seen"
       // means there: an entity that is open and focused but scrolled up has NOT seen it.
       const unseen = isUnseenIncomingMessage(
