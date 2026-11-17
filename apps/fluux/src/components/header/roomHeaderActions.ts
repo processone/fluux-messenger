@@ -53,6 +53,11 @@ export function buildNotifyGroup({ room, t, setRoomNotifyLevel }: NotifyArgs): H
 
   const items = [
     {
+      key: 'off', label: t('rooms.notificationsOff'),
+      description: room.isQuickChat ? t('rooms.thisSessionOnly') : t('rooms.alwaysSavedToBookmark'),
+      icon: notifyIconOf('off'), active: mode === 'off', onSelect: () => select('off'),
+    },
+    {
       key: 'mentions', label: t('rooms.mentionsOnly'), description: t('rooms.defaultBehavior'),
       icon: notifyIconOf('mentions'), active: mode === 'mentions', onSelect: () => select('mentions'),
     },
@@ -67,11 +72,6 @@ export function buildNotifyGroup({ room, t, setRoomNotifyLevel }: NotifyArgs): H
       icon: notifyIconOf('all-always'), active: mode === 'all-always', onSelect: () => select('all-always'),
     })
   }
-  items.push({
-    key: 'off', label: t('rooms.notificationsOff'),
-    description: room.isQuickChat ? t('rooms.thisSessionOnly') : t('rooms.alwaysSavedToBookmark'),
-    icon: notifyIconOf('off'), active: mode === 'off', onSelect: () => select('off'),
-  })
   return { title: t('rooms.notificationSettings'), items }
 }
 
