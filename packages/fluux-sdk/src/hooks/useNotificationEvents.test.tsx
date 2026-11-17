@@ -312,6 +312,55 @@ describe('useNotificationEvents', () => {
     })
   })
 
+  // FLM-189: Off silences a room completely, mentions and @all included, and
+  // the session choice outranks the saved one.
+  describe('room notification level', () => {
+    const JID = 'room@conference.example.com'
+    const arrive = (room: Record<string, unknown>, body: string) => {
+      const onRoomMessage = vi.fn()
+      renderHook(() => useNotificationEvents({ onRoomMessage }))
+      act(() => {
+        mockRooms.set(JID, { jid: JID, name: 'Test Room', nickname: 'me', joined: true, mentionsCount: 0, ...room })
+        triggerRoomStoreUpdate(JID)
+      })
+      act(() => {
+        mockRooms.set(JID, {
+          ...mockRooms.get(JID),
+          messages: [{
+            id: 'msg1', roomJid: JID, from: `${JID}/user`, nick: 'user', body, isMention: /@(me|all)\b/.test(body),
+            timestamp: new Date(Date.now() - 60 * 1000), isOutgoing: false,
+          }],
+        })
+        triggerRoomStoreUpdate(JID)
+      })
+      return onRoomMessage
+    }
+
+    it('does not notify for a mention in a room saved as Off', () => {
+      expect(arrive({ notifyOffPersistent: true }, 'hello @me')).not.toHaveBeenCalled()
+    })
+
+    it('does not notify for @all in a room saved as Off', () => {
+      expect(arrive({ notifyOffPersistent: true }, '@all lunch')).not.toHaveBeenCalled()
+    })
+
+    it('does not notify for a mention in a room held Off for the session', () => {
+      expect(arrive({ notifyOff: true }, 'hello @me')).not.toHaveBeenCalled()
+    })
+
+    it('still notifies for a mention in a Mentions only room', () => {
+      expect(arrive({}, 'hello @me')).toHaveBeenCalledOnce()
+    })
+
+    it('notifies for everything when a session All messages choice overrides a saved Off', () => {
+      expect(arrive({ notifyOffPersistent: true, notifyAll: true }, 'plain message')).toHaveBeenCalledOnce()
+    })
+
+    it('goes quiet when a session Off overrides a saved All messages', () => {
+      expect(arrive({ notifyAllPersistent: true, notifyOff: true }, 'plain message')).not.toHaveBeenCalled()
+    })
+  })
+
   describe('conversation unseen-gate (no age gate)', () => {
     it('should notify for an old conversation message that is still unread (no age gate)', () => {
       const onConversationMessage = vi.fn()

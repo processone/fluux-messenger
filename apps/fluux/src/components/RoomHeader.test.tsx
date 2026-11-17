@@ -14,6 +14,7 @@ vi.mock('react-i18next', () => ({
         'rooms.allMessages': 'All messages',
         'rooms.thisSessionOnly': 'This session only',
         'rooms.alwaysSavedToBookmark': 'Always (saved to bookmark)',
+        'rooms.notificationsOff': 'Off',
         'rooms.manageRoom': 'Manage room',
         'rooms.roomSettings': 'Room settings',
         'rooms.configureRoom': 'Configure room',
@@ -101,7 +102,10 @@ vi.mock('@/utils/messageStyles', () => ({
 }))
 
 // Mock SDK
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  // The notification level resolvers are pure; keep the real ones.
+  resolveNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).resolveNotifyLevel,
+  savedNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).savedNotifyLevel,
   generateConsistentColorHexSync: () => '#4a90d9',
   getUniqueOccupantCount: (occupants: Iterable<{ jid?: string }>) => {
     const bareJids = new Set<string>()
@@ -147,7 +151,7 @@ const createOccupant = (overrides: Partial<RoomOccupant> = {}): RoomOccupant => 
 })
 
 // Mock functions
-const mockSetRoomNotifyAll = vi.fn().mockResolvedValue(undefined)
+const mockSetRoomNotifyLevel = vi.fn().mockResolvedValue(undefined)
 const mockSetRoomAvatar = vi.fn().mockResolvedValue(undefined)
 const mockClearRoomAvatar = vi.fn().mockResolvedValue(undefined)
 const mockSubmitRoomConfig = vi.fn().mockResolvedValue(undefined)
@@ -168,7 +172,7 @@ describe('RoomHeader', () => {
           room={createRoom({ name: 'My Room' })}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -186,7 +190,7 @@ describe('RoomHeader', () => {
           room={createRoom({ name: 'My Room' })}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -206,7 +210,7 @@ describe('RoomHeader', () => {
             room={createRoom({ name: 'My Room' })}
             showOccupants={false}
             onToggleOccupants={mockOnToggleOccupants}
-            setRoomNotifyAll={mockSetRoomNotifyAll}
+            setRoomNotifyLevel={mockSetRoomNotifyLevel}
             setRoomAvatar={mockSetRoomAvatar}
             clearRoomAvatar={mockClearRoomAvatar}
             submitRoomConfig={mockSubmitRoomConfig}
@@ -235,7 +239,7 @@ describe('RoomHeader', () => {
           room={createRoom({ name: 'My Room' })}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -255,7 +259,7 @@ describe('RoomHeader', () => {
           room={createRoom({ subject: 'Welcome to our room!' })}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -273,7 +277,7 @@ describe('RoomHeader', () => {
           room={createRoom({ jid: 'room@conference.example.com', subject: undefined })}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -291,7 +295,7 @@ describe('RoomHeader', () => {
           room={createRoom({ avatar: 'https://example.com/avatar.png' })}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -310,7 +314,7 @@ describe('RoomHeader', () => {
           room={createRoom({ avatar: undefined })}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -335,7 +339,7 @@ describe('RoomHeader', () => {
           onBack={mockOnBack}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -354,7 +358,7 @@ describe('RoomHeader', () => {
           onBack={mockOnBack}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -383,7 +387,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -401,7 +405,7 @@ describe('RoomHeader', () => {
           room={createRoom()}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -421,7 +425,7 @@ describe('RoomHeader', () => {
           room={createRoom()}
           showOccupants={true}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -441,7 +445,7 @@ describe('RoomHeader', () => {
           room={createRoom()}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -462,7 +466,7 @@ describe('RoomHeader', () => {
           room={createRoom()}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -478,13 +482,13 @@ describe('RoomHeader', () => {
       expect(screen.getAllByText('All messages').length).toBeGreaterThanOrEqual(1)
     })
 
-    it('calls setRoomNotifyAll when selecting all-session mode', async () => {
+    it('calls setRoomNotifyLevel when selecting all-session mode', async () => {
       render(
         <RoomHeader
           room={createRoom()}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -499,11 +503,65 @@ describe('RoomHeader', () => {
       const allMessagesButtons = screen.getAllByText('All messages')
       fireEvent.click(allMessagesButtons[0])
 
-      expect(mockSetRoomNotifyAll).toHaveBeenCalledWith(
+      expect(mockSetRoomNotifyLevel).toHaveBeenCalledWith(
         'room@conference.example.com',
-        true,
+        'all',
         false
       )
+    })
+
+    const renderNotifyMenu = (room: Room) => {
+      render(
+        <RoomHeader
+          room={room}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+          submitRoomConfig={mockSubmitRoomConfig}
+          setSubject={mockSetSubject}
+          destroyRoom={mockDestroyRoom}
+        />
+      )
+      fireEvent.click(screen.getByLabelText('Notification settings'))
+    }
+
+    it('saves Off to the bookmark when the Off row is chosen', () => {
+      renderNotifyMenu(createRoom({ isBookmarked: true, isQuickChat: false }))
+
+      fireEvent.click(screen.getByText('Off'))
+
+      expect(mockSetRoomNotifyLevel).toHaveBeenCalledWith('room@conference.example.com', 'none', true)
+    })
+
+    it('holds Off for the session in a quick chat', () => {
+      renderNotifyMenu(createRoom({ isQuickChat: true }))
+
+      fireEvent.click(screen.getByText('Off'))
+
+      expect(mockSetRoomNotifyLevel).toHaveBeenCalledWith('room@conference.example.com', 'none', false)
+    })
+
+    it('shows the crossed bell on the header button for an Off room and @ for Mentions only', () => {
+      const { unmount } = render(
+        <RoomHeader
+          room={createRoom({ notifyOffPersistent: true })}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+          submitRoomConfig={mockSubmitRoomConfig}
+          setSubject={mockSetSubject}
+          destroyRoom={mockDestroyRoom}
+        />
+      )
+      expect(screen.getByLabelText('Notification settings').querySelector('.lucide-bell-off')).not.toBeNull()
+      unmount()
+
+      renderNotifyMenu(createRoom())
+      expect(screen.getByLabelText('Notification settings').querySelector('.lucide-at-sign')).not.toBeNull()
     })
 
     it('shows "always" option only for bookmarked rooms', () => {
@@ -512,7 +570,7 @@ describe('RoomHeader', () => {
           room={createRoom({ isBookmarked: true, isQuickChat: false })}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -523,7 +581,8 @@ describe('RoomHeader', () => {
 
       fireEvent.click(screen.getByLabelText('Notification settings'))
 
-      expect(screen.getByText('Always (saved to bookmark)')).toBeInTheDocument()
+      // All messages · Always and Off · Always
+      expect(screen.getAllByText('Always (saved to bookmark)')).toHaveLength(2)
     })
 
     it('hides "always" option for quick chat rooms', () => {
@@ -532,7 +591,7 @@ describe('RoomHeader', () => {
           room={createRoom({ isQuickChat: true })}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -558,7 +617,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -580,7 +639,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -602,7 +661,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -624,7 +683,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -651,7 +710,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -675,7 +734,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -698,7 +757,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -721,7 +780,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -746,7 +805,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -770,7 +829,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -794,7 +853,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -822,7 +881,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -852,7 +911,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -875,7 +934,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -899,7 +958,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}
@@ -925,7 +984,7 @@ describe('RoomHeader', () => {
           room={room}
           showOccupants={false}
           onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
           setRoomAvatar={mockSetRoomAvatar}
           clearRoomAvatar={mockClearRoomAvatar}
           submitRoomConfig={mockSubmitRoomConfig}

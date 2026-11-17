@@ -156,6 +156,7 @@ export const roomBindingMethodKeys = [
   'removeBookmark',
   'isNonAnonymousRoomAcknowledged',
   'setNotifyAll',
+  'setNotifyLevel',
   'joinedRooms',
   'allRooms',
   'getRoomLastTimestamp',

@@ -9,6 +9,7 @@ import { isNoLocalStore } from '../core/types/message-internal'
 import { isSpamModerated } from '../utils/moderation'
 import { getBareJid } from '../core/jid'
 import { checkForMention } from '../core/mentionDetection'
+import { notifyLevelForArrival, resolveNotifyLevel } from '../core/notifyLevel'
 import { findNotificationMessage, isNotificationMessageReady, isNotificationMessageUnread, resolveNotificationMessage } from '../utils/notificationMessage'
 import { subscribeMessageCacheUpdates } from '../utils/messageCacheUpdates'
 import { getStorageScopeJid } from '../utils/storageScope'
@@ -96,7 +97,7 @@ interface PrevRoomState {
  *   and history fetches do not replay notifications. Arrivals already present at
  *   mount or observed without a handler are not replayed when a handler attaches.
  * - Skip delayed room messages and messages older than 5 minutes; notify for
- *   mentions or when notifyAll/notifyAllPersistent is enabled.
+ *   mentions, or for every message when the room's level is `all` (never when `none`).
  * - Skip room rows hidden by ignore rules (including replies to ignored users),
  *   spam moderation or absent previewable content. System notices remain
  *   eligible only if resident or eligible for local persistence; visible
@@ -199,7 +200,7 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
       const result = shouldNotifyRoom(recovered, {
         isActive: room.jid === state.activeRoomJid,
         windowVisible: connectionStore.getState().windowVisible,
-      }, room.notifyAll ?? room.notifyAllPersistent ?? false)
+      }, resolveNotifyLevel(room))
       if (result.shouldNotify) handlersRef.current.onRoomMessage?.(room, recovered, result.isMention)
     }
 
@@ -264,7 +265,7 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
         const result = shouldNotifyRoom(message, {
           isActive: room.jid === state.activeRoomJid,
           windowVisible: connectionStore.getState().windowVisible,
-        }, ready ? room.notifyAll ?? room.notifyAllPersistent ?? false : true)
+        }, notifyLevelForArrival(room, ready))
         if (!result.shouldNotify) continue
         if (ready) onRoomMessage(room, message, result.isMention)
         else pendingRooms.set(room.jid, [...(pendingRooms.get(room.jid) ?? []), message])

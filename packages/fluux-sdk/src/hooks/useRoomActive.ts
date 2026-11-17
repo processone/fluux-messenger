@@ -58,6 +58,7 @@ export function useRoomActive() {
   const { moderateMessage, setAffiliation, setRole } = useRoomModeration()
   const {
     setRoomNotifyAll,
+    setRoomNotifyLevel,
     submitRoomConfig,
     setSubject,
     destroyRoom,
@@ -429,6 +430,7 @@ export function useRoomActive() {
       sendChatState,
       sendWhisperChatState,
       setRoomNotifyAll,
+      setRoomNotifyLevel,
       sendEasterEgg,
       clearAnimation,
       clearTargetMessageId,
@@ -472,6 +474,7 @@ export function useRoomActive() {
       sendChatState,
       sendWhisperChatState,
       setRoomNotifyAll,
+      setRoomNotifyLevel,
       sendEasterEgg,
       clearAnimation,
       clearTargetMessageId,

@@ -120,7 +120,7 @@ vi.mock('@/platform/ios/haptics', () => ({ iosHaptic: (...args: unknown[]) => mo
 const mockSendCorrection = vi.fn()
 const mockRetractMessage = vi.fn()
 const mockSendChatState = vi.fn()
-const mockSetRoomNotifyAll = vi.fn()
+const mockSetRoomNotifyLevel = vi.fn()
 const mockJoinRoom = vi.fn()
 const mockJoinResult = vi.fn()
 const mockSetRoomAvatar = vi.fn()
@@ -182,6 +182,8 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   // The list resolves row handles through the SDK's own lookup; keep the real one.
   findMessageRowIndex: (await importOriginal<typeof import('@fluux/sdk')>()).findMessageRowIndex,
   findRoomMessageLink: (await importOriginal<typeof import('@fluux/sdk')>()).findRoomMessageLink,
+  resolveNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).resolveNotifyLevel,
+  savedNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).savedNotifyLevel,
   messageRowRef: (message: RoomMessage) => ({
     id: message.id,
     ...(message.occupantId ? { occupantId: message.occupantId } : {}),
@@ -208,7 +210,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
     sendCorrection: mockSendCorrection,
     retractMessage: mockRetractMessage,
     sendChatState: mockSendChatState,
-    setRoomNotifyAll: mockSetRoomNotifyAll,
+    setRoomNotifyLevel: mockSetRoomNotifyLevel,
     activeAnimation: null,
     sendEasterEgg: vi.fn(),
     clearAnimation: mockClearAnimation,
@@ -224,7 +226,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   usePolls: () => ({ sendPoll: vi.fn(), votePoll: vi.fn(), closePoll: vi.fn() }),
   useRoomModeration: () => ({ moderateMessage: vi.fn(), setAffiliation: vi.fn(), setRole: vi.fn() }),
   useRoomManagement: () => ({
-    setRoomNotifyAll: mockSetRoomNotifyAll,
+    setRoomNotifyLevel: mockSetRoomNotifyLevel,
     setRoomAvatar: mockSetRoomAvatar,
     clearRoomAvatar: mockClearRoomAvatar,
     submitRoomConfig: vi.fn(),
@@ -598,6 +600,7 @@ vi.mock('lucide-react', () => ({
   Bell: () => <span data-testid="icon-bell">Bell</span>,
   BellOff: () => <span data-testid="icon-bell-off">BellOff</span>,
   BellRing: () => <span data-testid="icon-bell-ring">BellRing</span>,
+  AtSign: () => <span data-testid="icon-at-sign">AtSign</span>,
   Check: () => <span data-testid="icon-check">Check</span>,
   ChevronDown: () => <span data-testid="icon-chevron-down">ChevronDown</span>,
   Upload: () => <span data-testid="icon-upload">Upload</span>,

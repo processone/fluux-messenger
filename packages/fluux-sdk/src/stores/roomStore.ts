@@ -75,6 +75,7 @@ import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoom
 import { ignoreStore, isMessageFromIgnoredUser, isReplyToIgnoredUser, type IgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
 import * as notifState from './shared/notificationState'
+import { hasBadgeActivity, notifiesForAllMessages, notifyLevelUpdates, type NotifyLevel } from '../core/notifyLevel'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, captureStorageScope, getStorageScopeJid } from '../utils/storageScope'
@@ -720,7 +721,7 @@ const ROOM_ENTITY_FIELDS = Object.keys({
 
 const ROOM_META_FIELDS = Object.keys({
   unreadCount: true, mentionsCount: true, typingUsers: true, notifyAll: true,
-  notifyAllPersistent: true, readPointer: true, historyFloor: true,
+  notifyAllPersistent: true, notifyOff: true, notifyOffPersistent: true, readPointer: true, historyFloor: true,
   pendingRemoteDisplayedStanzaId: true, lastMessage: true, lastInteractedAt: true,
 } satisfies Record<keyof RoomMetadata, true>) as readonly (keyof RoomMetadata)[]
 
@@ -1248,7 +1249,7 @@ export interface RoomState {
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
 
   // Bookmark actions
-  setBookmark: (roomJid: string, bookmark: { name: string; nick: string; autojoin?: boolean; password?: string; notifyAll?: boolean }) => void
+  setBookmark: (roomJid: string, bookmark: { name: string; nick: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel }) => void
   removeBookmark: (roomJid: string) => void
 
   // Non-anonymous room acknowledgement (issue #37)
@@ -1259,6 +1260,7 @@ export interface RoomState {
 
   // Notification settings
   setNotifyAll: (roomJid: string, notifyAll: boolean, persistent?: boolean) => void
+  setNotifyLevel: (roomJid: string, level: NotifyLevel, persistent?: boolean) => void
 
   // Easter egg animations
   triggerAnimation: (roomJid: string, animation: string, senderName?: string) => void
@@ -1465,6 +1467,8 @@ export const roomStore = createStore<RoomState>()(
         typingUsers: room.typingUsers,
         notifyAll: room.notifyAll,
         notifyAllPersistent: room.notifyAllPersistent,
+        notifyOff: room.notifyOff,
+        notifyOffPersistent: room.notifyOffPersistent,
         ...resolveRoomReadPosition(existingMeta, room, restoredReadState),
         // Written ONCE, when the room enters our world, and never again — that
         // is what makes it a lifecycle fact rather than a second read position.
@@ -1612,6 +1616,7 @@ export const roomStore = createStore<RoomState>()(
         unreadCount: joined ? existing.unreadCount : 0,
         mentionsCount: joined ? existing.mentionsCount : 0,
         notifyAll: joined ? existing.notifyAll : undefined,
+        notifyOff: joined ? existing.notifyOff : undefined,
       }
       newRooms.set(roomJid, updatedRoom)
 
@@ -1631,6 +1636,7 @@ export const roomStore = createStore<RoomState>()(
           unreadCount: joined ? existingMeta.unreadCount : 0,
           mentionsCount: joined ? existingMeta.mentionsCount : 0,
           notifyAll: joined ? existingMeta.notifyAll : undefined,
+          notifyOff: joined ? existingMeta.notifyOff : undefined,
         })
       }
 
@@ -3136,7 +3142,8 @@ export const roomStore = createStore<RoomState>()(
           isBookmarked: true,
           autojoin: bookmark.autojoin,
           password: bookmark.password,
-          notifyAllPersistent: bookmark.notifyAll,
+          notifyAllPersistent: bookmark.notifyLevel === 'all',
+          notifyOffPersistent: bookmark.notifyLevel === 'none',
         }
         newRooms.set(roomJid, updatedRoom)
 
@@ -3156,7 +3163,11 @@ export const roomStore = createStore<RoomState>()(
         // Update metadata (notifyAllPersistent)
         const existingMeta = newMeta.get(roomJid)
         if (existingMeta) {
-          newMeta.set(roomJid, { ...existingMeta, notifyAllPersistent: bookmark.notifyAll })
+          newMeta.set(roomJid, {
+            ...existingMeta,
+            notifyAllPersistent: bookmark.notifyLevel === 'all',
+            notifyOffPersistent: bookmark.notifyLevel === 'none',
+          })
         }
       } else {
         // Create a new room entry from bookmark. This is the SECOND place a
@@ -3174,7 +3185,8 @@ export const roomStore = createStore<RoomState>()(
           isBookmarked: true,
           autojoin: bookmark.autojoin,
           password: bookmark.password,
-          notifyAllPersistent: bookmark.notifyAll,
+          notifyAllPersistent: bookmark.notifyLevel === 'all',
+          notifyOffPersistent: bookmark.notifyLevel === 'none',
           occupants: new Map(),
           unreadCount: 0,
           mentionsCount: 0,
@@ -3200,7 +3212,8 @@ export const roomStore = createStore<RoomState>()(
           unreadCount: 0,
           mentionsCount: 0,
           typingUsers: new Set(),
-          notifyAllPersistent: bookmark.notifyAll,
+          notifyAllPersistent: bookmark.notifyLevel === 'all',
+          notifyOffPersistent: bookmark.notifyLevel === 'none',
           ...readPosition,
           historyFloor,
         })
@@ -3230,6 +3243,7 @@ export const roomStore = createStore<RoomState>()(
             autojoin: undefined,
             password: undefined,
             notifyAllPersistent: undefined,
+            notifyOffPersistent: undefined,
           })
 
           // Update entity
@@ -3246,7 +3260,7 @@ export const roomStore = createStore<RoomState>()(
           // Update metadata
           const existingMeta = newMeta.get(roomJid)
           if (existingMeta) {
-            newMeta.set(roomJid, { ...existingMeta, notifyAllPersistent: undefined })
+            newMeta.set(roomJid, { ...existingMeta, notifyAllPersistent: undefined, notifyOffPersistent: undefined })
           }
         } else {
           // Room not joined and no longer bookmarked, remove it
@@ -3274,31 +3288,26 @@ export const roomStore = createStore<RoomState>()(
   isNonAnonymousRoomAcknowledged: (roomJid) => get().acknowledgedNonAnonymousRooms?.has(roomJid) ?? false,
 
   // Notification settings
-  setNotifyAll: (roomJid, notifyAll, persistent = false) => {
+  setNotifyLevel: (roomJid, level, persistent = false) => {
     set((state) => {
       const newRooms = new Map(state.rooms)
       const existing = newRooms.get(roomJid)
       if (!existing) return state
 
-      newRooms.set(roomJid, {
-        ...existing,
-        notifyAll: persistent ? undefined : notifyAll, // Session-only if not persistent
-        notifyAllPersistent: persistent ? notifyAll : existing.notifyAllPersistent,
-      })
+      const updates = notifyLevelUpdates(level, persistent)
+      newRooms.set(roomJid, { ...existing, ...updates })
 
       // Update metadata
       const newMeta = new Map(state.roomMeta)
       const existingMeta = newMeta.get(roomJid)
-      if (existingMeta) {
-        newMeta.set(roomJid, {
-          ...existingMeta,
-          notifyAll: persistent ? undefined : notifyAll,
-          notifyAllPersistent: persistent ? notifyAll : existingMeta.notifyAllPersistent,
-        })
-      }
+      if (existingMeta) newMeta.set(roomJid, { ...existingMeta, ...updates })
 
       return { rooms: newRooms, roomMeta: newMeta }
     })
+  },
+
+  setNotifyAll: (roomJid, notifyAll, persistent = false) => {
+    get().setNotifyLevel(roomJid, notifyAll ? 'all' : 'mentions', persistent)
   },
 
   // Easter egg animations
@@ -4040,7 +4049,7 @@ export const roomStore = createStore<RoomState>()(
     for (const [jid, entity] of get().roomEntities) {
       if (entity.joined) {
         const meta = get().roomMeta.get(jid)
-        if (meta && (meta.notifyAll || meta.notifyAllPersistent)) {
+        if (meta && notifiesForAllMessages(meta)) {
           total += meta.unreadCount
         }
       }
@@ -4057,10 +4066,7 @@ export const roomStore = createStore<RoomState>()(
       if (entity.joined) {
         const meta = get().roomMeta.get(jid)
         if (meta) {
-          const hasActivity =
-            meta.mentionsCount > 0 ||
-            ((meta.notifyAll || meta.notifyAllPersistent) && meta.unreadCount > 0)
-          if (hasActivity) count++
+          if (hasBadgeActivity(meta)) count++
         }
       }
     }

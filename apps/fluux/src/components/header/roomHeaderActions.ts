@@ -1,36 +1,52 @@
 import type { TFunction } from 'i18next'
-import type { Room } from '@fluux/sdk'
-import { Bell, BellOff, BellRing, Settings, Type, Image, Trash2, UserMinus, Award, Shield } from 'lucide-react'
+import { resolveNotifyLevel, savedNotifyLevel, type NotifyLevel, type Room } from '@fluux/sdk'
+import { AtSign, Bell, BellOff, BellRing, Settings, Type, Image, Trash2, UserMinus, Award, Shield } from 'lucide-react'
 import type { HeaderActionGroup } from './headerOverflow'
 
-export type NotifyMode = 'mentions' | 'all-session' | 'all-always'
+export type NotifyMode = 'mentions' | 'all-session' | 'all-always' | 'off'
 
 export function notifyModeOf(room: Room): NotifyMode {
-  if (room.notifyAllPersistent) return 'all-always'
-  if (room.notifyAll) return 'all-session'
-  return 'mentions'
+  const level = resolveNotifyLevel(room)
+  if (level === 'none') return 'off'
+  if (level === 'mentions') return 'mentions'
+  return room.notifyAllPersistent && room.notifyAll !== false ? 'all-always' : 'all-session'
+}
+
+/** Header icon for a notification mode: crossed bell is Off, @ is Mentions only. */
+export function notifyIconOf(mode: NotifyMode) {
+  switch (mode) {
+    case 'off': return BellOff
+    case 'mentions': return AtSign
+    case 'all-always': return BellRing
+    case 'all-session': return Bell
+  }
 }
 
 interface NotifyArgs {
   room: Room
   t: TFunction
-  setRoomNotifyAll: (jid: string, all: boolean, persistent?: boolean) => Promise<void>
+  setRoomNotifyLevel: (jid: string, level: NotifyLevel, persistent?: boolean) => Promise<void>
 }
 
-export function buildNotifyGroup({ room, t, setRoomNotifyAll }: NotifyArgs): HeaderActionGroup {
+export function buildNotifyGroup({ room, t, setRoomNotifyLevel }: NotifyArgs): HeaderActionGroup {
   const mode = notifyModeOf(room)
+  // A level saved in the bookmark must be cleared when a session-only choice replaces it.
+  const hasSavedChoice = savedNotifyLevel(room) !== 'mentions'
   const select = (next: NotifyMode) => {
     switch (next) {
       case 'mentions':
-        void setRoomNotifyAll(room.jid, false, false)
-        if (room.notifyAllPersistent) void setRoomNotifyAll(room.jid, false, true)
+        void setRoomNotifyLevel(room.jid, 'mentions', hasSavedChoice)
         break
       case 'all-session':
-        void setRoomNotifyAll(room.jid, true, false)
-        if (room.notifyAllPersistent) void setRoomNotifyAll(room.jid, false, true)
+        if (hasSavedChoice) void setRoomNotifyLevel(room.jid, 'mentions', true)
+        void setRoomNotifyLevel(room.jid, 'all', false)
         break
       case 'all-always':
-        void setRoomNotifyAll(room.jid, true, true)
+        void setRoomNotifyLevel(room.jid, 'all', true)
+        break
+      case 'off':
+        // A quick chat has no bookmark: Off lasts for the session there.
+        void setRoomNotifyLevel(room.jid, 'none', !room.isQuickChat)
         break
     }
   }
@@ -38,19 +54,24 @@ export function buildNotifyGroup({ room, t, setRoomNotifyAll }: NotifyArgs): Hea
   const items = [
     {
       key: 'mentions', label: t('rooms.mentionsOnly'), description: t('rooms.defaultBehavior'),
-      icon: BellOff, active: mode === 'mentions', onSelect: () => select('mentions'),
+      icon: notifyIconOf('mentions'), active: mode === 'mentions', onSelect: () => select('mentions'),
     },
     {
       key: 'all-session', label: t('rooms.allMessages'), description: t('rooms.thisSessionOnly'),
-      icon: Bell, active: mode === 'all-session', onSelect: () => select('all-session'),
+      icon: notifyIconOf('all-session'), active: mode === 'all-session', onSelect: () => select('all-session'),
     },
   ]
   if (!room.isQuickChat) {
     items.push({
       key: 'all-always', label: t('rooms.allMessages'), description: t('rooms.alwaysSavedToBookmark'),
-      icon: BellRing, active: mode === 'all-always', onSelect: () => select('all-always'),
+      icon: notifyIconOf('all-always'), active: mode === 'all-always', onSelect: () => select('all-always'),
     })
   }
+  items.push({
+    key: 'off', label: t('rooms.notificationsOff'),
+    description: room.isQuickChat ? t('rooms.thisSessionOnly') : t('rooms.alwaysSavedToBookmark'),
+    icon: notifyIconOf('off'), active: mode === 'off', onSelect: () => select('off'),
+  })
   return { title: t('rooms.notificationSettings'), items }
 }
 

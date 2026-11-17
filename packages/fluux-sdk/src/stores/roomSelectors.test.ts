@@ -308,6 +308,48 @@ describe('roomSelectors', () => {
     })
   })
 
+  describe('Off rooms (FLM-189)', () => {
+    const entity = (n: number) => [`room${n}@conference.example.com`, { jid: `room${n}@conference.example.com`, name: `Room ${n}`, nickname: 'me', joined: true, isBookmarked: true } as RoomEntity] as const
+    const meta = (extra: Partial<RoomMetadata>) => ({ unreadCount: 4, mentionsCount: 0, typingUsers: new Set<string>(), ...extra } as RoomMetadata)
+
+    it('leaves an Off room out of the badge counts, mentions included', () => {
+      const state = createMockState({
+        roomEntities: new Map([entity(1), entity(2), entity(3)]),
+        roomMeta: new Map([
+          ['room1@conference.example.com', meta({ mentionsCount: 2, notifyOffPersistent: true })],
+          ['room2@conference.example.com', meta({ notifyOffPersistent: true, notifyAllPersistent: false })],
+          ['room3@conference.example.com', meta({ mentionsCount: 1 })],
+        ]),
+      })
+      expect(roomSelectors.roomsWithUnread(state)).toEqual(['room3@conference.example.com'])
+      expect(roomSelectors.roomsWithUnreadCount(state)).toBe(1)
+      expect(roomSelectors.totalNotifiableUnreadCount(state)).toBe(0)
+    })
+
+    it('follows a session choice over the saved one for the badge', () => {
+      const state = createMockState({
+        roomEntities: new Map([entity(1), entity(2)]),
+        roomMeta: new Map([
+          ['room1@conference.example.com', meta({ notifyAllPersistent: true, notifyOff: true })],
+          ['room2@conference.example.com', meta({ notifyOffPersistent: true, notifyAll: true })],
+        ]),
+      })
+      expect(roomSelectors.roomsWithUnread(state)).toEqual(['room2@conference.example.com'])
+    })
+
+    it('resolves the level for a room: session, then saved, then mentions', () => {
+      const rooms = new Map([
+        ['a@c', createMockRoom('a@c', { notifyOffPersistent: true })],
+        ['b@c', createMockRoom('b@c', { notifyOffPersistent: true, notifyAll: false })],
+        ['c@c', createMockRoom('c@c', { notifyAllPersistent: true })],
+        ['d@c', createMockRoom('d@c', {})],
+      ])
+      const state = createMockState({ rooms })
+      expect(['a@c', 'b@c', 'c@c', 'd@c'].map(j => roomSelectors.notifyLevelFor(j)(state))).toEqual(['none', 'mentions', 'all', 'mentions'])
+      expect(roomSelectors.notifyLevelFor('missing@c')(state)).toBe('mentions')
+    })
+  })
+
   describe('roomsWithUnreadCount', () => {
     it('should count rooms with mentions or notifyAll unread', () => {
       const roomEntities = new Map([
@@ -736,6 +778,15 @@ describe('roomActivityTone', () => {
 
   it("returns 'none' for a muted notifyAll room with unread", () => {
     expect(roomActivityTone({ ...base, unreadCount: 4, notifyAllPersistent: true, muted: true })).toBe('none')
+  })
+
+  it("returns 'neutral' (grey) for unread in an Off room, even with a mention", () => {
+    expect(roomActivityTone({ ...base, unreadCount: 3, notifyOffPersistent: true })).toBe('neutral')
+    expect(roomActivityTone({ ...base, unreadCount: 3, mentionsCount: 2, notifyOff: true })).toBe('neutral')
+  })
+
+  it("returns 'none' for an Off room with no unread", () => {
+    expect(roomActivityTone({ ...base, notifyOffPersistent: true })).toBe('none')
   })
 
   it("returns 'none' for a non-joined room", () => {

@@ -1,4 +1,4 @@
-import { roomSelectors } from '@fluux/sdk'
+import { roomSelectors, notifiesForAllMessages } from '@fluux/sdk'
 import type { Conversation } from '@fluux/sdk'
 
 type RoomState = Parameters<typeof roomSelectors.roomsWithUnread>[0]
@@ -38,7 +38,7 @@ export function pushBadgeState(
   const notifyAllRooms: string[] = []
   for (const [jid, entity] of rooms.roomEntities) {
     const meta = rooms.roomMeta.get(jid)
-    if (entity.joined && (meta?.notifyAll || meta?.notifyAllPersistent)) notifyAllRooms.push(jid)
+    if (entity.joined && notifiesForAllMessages(meta)) notifyAllRooms.push(jid)
   }
 
   return { unread, events, notifyAllRooms }

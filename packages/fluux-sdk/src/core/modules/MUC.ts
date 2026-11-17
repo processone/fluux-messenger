@@ -11,6 +11,7 @@ import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
 import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
 import { parseBookmarkItem } from '../bookmarkItem'
+import { notifyLevelUpdates, savedNotifyLevel, type NotifyLevel } from '../notifyLevel'
 import { createOriginIdElement } from './messagingUtils'
 import { PRESENCE_PRIORITY } from '../config'
 import {
@@ -433,6 +434,7 @@ export class MUC extends BaseModule {
             nick: nick,
             autojoin: false,
             password: acceptedPassword,
+            notifyLevel: savedNotifyLevel(room),
           }).catch(() => {
             // Ignore bookmark errors - room join was still successful
           })
@@ -442,7 +444,7 @@ export class MUC extends BaseModule {
             nick: nick,
             autojoin: room.autojoin,
             password: acceptedPassword,
-            notifyAll: room.notifyAllPersistent,
+            notifyLevel: savedNotifyLevel(room),
           }).catch(() => {
             // Ignore bookmark errors - room join was still successful
           })
@@ -1918,44 +1920,51 @@ export class MUC extends BaseModule {
   }
 
   /**
-   * Set whether to notify for all messages in a room.
+   * Set the notification level of a room.
    *
-   * When enabled, all messages in the room trigger notifications,
-   * not just @mentions.
+   * - `mentions` (default): notify for mentions, @all and replies
+   * - `all`: notify for every message
+   * - `none`: Off, no notification, sound or app-icon badge
    *
    * @param roomJid - The room JID
-   * @param notifyAll - True to notify on all messages, false for mentions only
-   * @param persistent - If true, saves the setting to the server bookmark
+   * @param level - The notification level
+   * @param persistent - If true and the room has a bookmark, saves the level to
+   *   it and replaces any session-only choice. Without a bookmark, or if false,
+   *   the choice lasts until the room is left.
    *
    * @example
    * ```typescript
-   * // Enable notifications for all messages (session only)
-   * await client.rooms.setRoomNotifyAll('room@conference.example.com', true)
-   *
-   * // Enable and save to bookmark
-   * await client.rooms.setRoomNotifyAll('room@conference.example.com', true, true)
+   * // Silence a room, saved to its bookmark
+   * await client.rooms.setRoomNotifyLevel('room@conference.example.com', 'none', true)
    * ```
    */
-  async setRoomNotifyAll(roomJid: string, notifyAll: boolean, persistent: boolean = false): Promise<void> {
+  async setRoomNotifyLevel(roomJid: string, level: NotifyLevel, persistent: boolean = false): Promise<void> {
+    // A level can only be saved in a bookmark. Without one the choice lasts for
+    // the session, so it must not be written to the saved fields: those outlive
+    // leaving the room and would be published by the next automatic bookmark.
+    const room = this.deps.stores?.room.getRoom(roomJid)
+    const saved = persistent && !!room?.isBookmarked
+
     // SDK event only - binding calls store.updateRoom
-    this.deps.emitSDK('room:updated', { roomJid, updates: { notifyAll, notifyAllPersistent: persistent } })
+    this.deps.emitSDK('room:updated', { roomJid, updates: notifyLevelUpdates(level, saved) })
 
-    // If persistent, update the bookmark on the server
-    if (persistent) {
-      const room = this.deps.stores?.room.getRoom(roomJid)
-      if (!room) return
+    if (!saved || !room) return
+    await this.setBookmark(roomJid, {
+      name: room.name,
+      nick: room.nickname,
+      autojoin: room.autojoin,
+      password: room.password,
+      notifyLevel: level,
+    })
+  }
 
-      // Only update bookmark if room is bookmarked
-      if (room.isBookmarked) {
-        await this.setBookmark(roomJid, {
-          name: room.name,
-          nick: room.nickname,
-          autojoin: room.autojoin,
-          password: room.password,
-          notifyAll,
-        })
-      }
-    }
+  /**
+   * Set whether to notify for all messages in a room.
+   *
+   * Wrapper over {@link setRoomNotifyLevel}: `true` is `all`, `false` is `mentions`.
+   */
+  async setRoomNotifyAll(roomJid: string, notifyAll: boolean, persistent: boolean = false): Promise<void> {
+    await this.setRoomNotifyLevel(roomJid, notifyAll ? 'all' : 'mentions', persistent)
   }
 
   /**
@@ -2008,7 +2017,7 @@ export class MUC extends BaseModule {
       for (const item of items.getChildren('item')) {
         const parsed = parseBookmarkItem(item)
         if (!parsed) continue
-        const { jid, name, autojoin, nick, password, notifyAll } = parsed
+        const { jid, name, autojoin, nick, password, notifyLevel } = parsed
 
         allRoomJids.push(jid)
         const resolvedNick = nick || defaultNick
@@ -2020,7 +2029,7 @@ export class MUC extends BaseModule {
           // that races with fetchBookmarks during fresh session reconnect.
           this.deps.emitSDK('room:bookmark', {
             roomJid: jid,
-            bookmark: { name, nick: resolvedNick, autojoin, password, notifyAll },
+            bookmark: { name, nick: resolvedNick, autojoin, password, notifyLevel },
           })
         } else {
           const room: Room = {
@@ -2031,8 +2040,8 @@ export class MUC extends BaseModule {
             isBookmarked: true,
             autojoin,
             password,
-            notifyAll,
-            notifyAllPersistent: notifyAll,
+            notifyAllPersistent: notifyLevel === 'all',
+            notifyOffPersistent: notifyLevel === 'none',
             occupants: new Map(),
             unreadCount: 0,
             mentionsCount: 0,
@@ -2072,7 +2081,10 @@ export class MUC extends BaseModule {
    * @param options.password - Room password. Omit to keep the password already
    *   known for the room (a publish replaces the whole bookmark, so omitting it
    *   would otherwise erase it); pass an empty string to clear it.
-   * @param options.notifyAll - If true, notify on all messages
+   * @param options.notifyLevel - Notification level to save. Omit to keep the
+   *   level already saved for the room (a publish replaces the whole bookmark,
+   *   so omitting it would otherwise reset it to Mentions only).
+   * @param options.notifyAll - Deprecated: `true` is `all`, `false` is `mentions`
    *
    * @example
    * ```typescript
@@ -2094,7 +2106,7 @@ export class MUC extends BaseModule {
    */
   async setBookmark(
     roomJid: string,
-    options: { name: string; nick: string; autojoin?: boolean; password?: string; notifyAll?: boolean }
+    options: { name: string; nick: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel; notifyAll?: boolean }
   ): Promise<void> {
     // A bookmark publish REPLACES the stored item, so an unrelated write (renaming
     // the bookmark, toggling autojoin) would drop the room password — ours or one
@@ -2102,17 +2114,21 @@ export class MUC extends BaseModule {
     // know"; pass an empty string to deliberately clear it (issue #1126).
     const password = options.password ?? this.deps.stores?.room.getRoom(roomJid)?.password
 
+    // Same rule for the notification level: omitted means "keep the saved one".
+    const notifyLevel: NotifyLevel = options.notifyLevel
+      ?? (options.notifyAll === undefined ? savedNotifyLevel(this.deps.stores?.room.getRoom(roomJid)) : options.notifyAll ? 'all' : 'mentions')
+
     // Build conference element children
     const confChildren: Element[] = [xml('nick', {}, options.nick)]
     if (password) {
       confChildren.push(xml('password', {}, password))
     }
 
-    // Add extensions element with notify setting if notifyAll is enabled
-    if (options.notifyAll) {
+    // Mentions only is the default and is stored as no element at all
+    if (notifyLevel !== 'mentions') {
       confChildren.push(
         xml('extensions', {},
-          xml('notify', { xmlns: NS_FLUUX }, 'all')
+          xml('notify', { xmlns: NS_FLUUX }, notifyLevel)
         )
       )
     }
@@ -2143,7 +2159,7 @@ export class MUC extends BaseModule {
         nick: options.nick,
         autojoin: options.autojoin,
         password: password || undefined,
-        notifyAll: options.notifyAll,
+        notifyLevel,
       },
     })
   }

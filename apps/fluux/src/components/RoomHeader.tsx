@@ -2,13 +2,13 @@
  * Header component for MUC room conversations.
  *
  * Displays room avatar, name, subject, and controls for:
- * - Notification settings (mentions only, all messages)
+ * - Notification settings (mentions only, all messages, off)
  * - Room management (owners/admins): settings, subject, avatar, members
  * - Occupant panel toggle
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { Room } from '@fluux/sdk'
+import type { NotifyLevel, Room } from '@fluux/sdk'
 import { getUniqueOccupantCount } from '@fluux/sdk'
 import { RoomAvatar } from './RoomAvatar'
 import { Tooltip } from './Tooltip'
@@ -24,7 +24,7 @@ import { RoomHatsModal } from './RoomHatsModal'
 import { RoomInfoModal } from './RoomInfoModal'
 import { HeaderSubmenuButton } from './header/HeaderSubmenuButton'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
-import { buildNotifyGroup, buildManagementGroup, notifyModeOf } from './header/roomHeaderActions'
+import { buildNotifyGroup, buildManagementGroup, notifyModeOf, notifyIconOf } from './header/roomHeaderActions'
 import { inlineClass, kebabClass, KEBAB_TRIGGER_CLASS } from './header/headerOverflow'
 import { useRoomUiStore } from '../stores/roomUiStore'
 import {
@@ -32,9 +32,6 @@ import {
   Users,
   X,
   ChevronRight,
-  Bell,
-  BellOff,
-  BellRing,
   Settings,
   UserPlus,
   Search,
@@ -47,7 +44,7 @@ export interface RoomHeaderProps {
   onBack?: () => void
   showOccupants: boolean
   onToggleOccupants: () => void
-  setRoomNotifyAll: (roomJid: string, notifyAll: boolean, persistent?: boolean) => Promise<void>
+  setRoomNotifyLevel: (roomJid: string, level: NotifyLevel, persistent?: boolean) => Promise<void>
   setRoomAvatar: (roomJid: string, imageData: Uint8Array, mimeType: string) => Promise<void>
   clearRoomAvatar: (roomJid: string) => Promise<void>
   submitRoomConfig: (roomJid: string, values: Record<string, string | string[]>) => Promise<void>
@@ -63,7 +60,7 @@ export function RoomHeader({
   onBack,
   showOccupants,
   onToggleOccupants,
-  setRoomNotifyAll,
+  setRoomNotifyLevel,
   setRoomAvatar,
   clearRoomAvatar,
   submitRoomConfig,
@@ -96,8 +93,8 @@ export function RoomHeader({
   const uniqueOccupantCount = getUniqueOccupantCount(room.occupants.values())
 
   const mode = notifyModeOf(room)
-  const NotifyIcon = mode === 'mentions' ? BellOff : mode === 'all-always' ? BellRing : Bell
-  const notifyGroup = buildNotifyGroup({ room, t, setRoomNotifyAll })
+  const NotifyIcon = notifyIconOf(mode)
+  const notifyGroup = buildNotifyGroup({ room, t, setRoomNotifyLevel })
   const managementGroup = buildManagementGroup({
     room, t, isOwner, canManageRoom,
     onConfig: openConfig,

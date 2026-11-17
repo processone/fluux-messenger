@@ -59,6 +59,8 @@ export const createMockRoom = (jid: string, overrides: Partial<Room> = {}): Room
   password: overrides.password,
   notifyAll: overrides.notifyAll,
   notifyAllPersistent: overrides.notifyAllPersistent,
+  notifyOff: overrides.notifyOff,
+  notifyOffPersistent: overrides.notifyOffPersistent,
 })
 
 /**
@@ -873,6 +875,7 @@ export interface MockXMPPClientForHooks {
     setBookmark: Mock
     removeBookmark: Mock
     setRoomNotifyAll: Mock
+    setRoomNotifyLevel: Mock
     createQuickChat: Mock
     sendMediatedInvitation: Mock
     sendMediatedInvitations: Mock
@@ -974,6 +977,7 @@ export const createMockXMPPClientForHooks = (): MockXMPPClientForHooks => ({
     setBookmark: vi.fn(),
     removeBookmark: vi.fn(),
     setRoomNotifyAll: vi.fn(),
+    setRoomNotifyLevel: vi.fn(),
     createQuickChat: vi.fn(),
     sendMediatedInvitation: vi.fn(),
     sendMediatedInvitations: vi.fn(),

@@ -1,4 +1,4 @@
-import { subscribeDiagnostics, chatStore, roomStore, connectionStore, getStorageScopeJid, generateUUID, readStateGeneration, type RecountDeferralReason } from '@fluux/sdk'
+import { subscribeDiagnostics, chatStore, roomStore, connectionStore, getStorageScopeJid, generateUUID, readStateGeneration, resolveNotifyLevel, hasBadgeActivity, type RecountDeferralReason } from '@fluux/sdk'
 
 export const BADGE_DIAGNOSTICS_KEY = 'fluux:badge-diagnostics:v1'
 export const BADGE_DIAGNOSTICS_LIMITS = { events: 1000, bytes: 1024 * 1024, ageMs: 7 * 24 * 60 * 60 * 1000 } as const
@@ -177,15 +177,16 @@ function installBadgeDiagnostics(): () => void {
       for (const [id, entity] of state.roomMeta) {
         const before = previous.roomMeta.get(id)
         const joined = state.roomEntities.get(id)?.joined === true
-        const notifyAll = !!(entity.notifyAll || entity.notifyAllPersistent)
+        const level = resolveNotifyLevel(entity)
+        const notifyAll = level === 'all'
         if (before?.unreadCount === entity.unreadCount && before?.readPointer === entity.readPointer
           && before?.mentionsCount === entity.mentionsCount
-          && !!(before?.notifyAll || before?.notifyAllPersistent) === notifyAll
+          && resolveNotifyLevel(before) === level
           && (previous.roomEntities.get(id)?.joined === true) === joined) continue
         recordBadgeDiagnostic({ phase: 'read-state', status: 'changed', entityKind: 'room', entityId: id,
           unreadBefore: before?.unreadCount, unreadAfter: entity.unreadCount, pointerChanged: before?.readPointer !== entity.readPointer,
           mentionsBefore: before?.mentionsCount, mentionsAfter: entity.mentionsCount, joined, notifyAll,
-          badgeIncluded: joined && (entity.mentionsCount > 0 || (notifyAll && entity.unreadCount > 0)) })
+          badgeIncluded: joined && hasBadgeActivity(entity) })
       }
     }),
     connectionStore.subscribe((state, before) => {

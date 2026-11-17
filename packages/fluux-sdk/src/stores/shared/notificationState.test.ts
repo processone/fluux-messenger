@@ -1283,45 +1283,56 @@ describe('shouldNotifyConversation', () => {
 // ---------------------------------------------------------------------------
 
 describe('shouldNotifyRoom', () => {
-  it('notifies for mention even when notifyAll is false', () => {
+  it('notifies for mention even when the level is mentions', () => {
     const msg = makeMsg({ isMention: true })
-    const result = shouldNotifyRoom(msg, INACTIVE_HIDDEN, false)
+    const result = shouldNotifyRoom(msg, INACTIVE_HIDDEN, 'mentions')
     expect(result.shouldNotify).toBe(true)
     expect(result.isMention).toBe(true)
   })
 
-  it('notifies for non-mention when notifyAll is true', () => {
+  it('notifies for non-mention when the level is all', () => {
     const msg = makeMsg()
-    const result = shouldNotifyRoom(msg, INACTIVE_HIDDEN, true)
+    const result = shouldNotifyRoom(msg, INACTIVE_HIDDEN, 'all')
     expect(result.shouldNotify).toBe(true)
     expect(result.isMention).toBe(false)
   })
 
-  it('does not notify for non-mention when notifyAll is false', () => {
+  it('does not notify for non-mention when the level is mentions', () => {
     const msg = makeMsg()
-    const result = shouldNotifyRoom(msg, INACTIVE_HIDDEN, false)
+    const result = shouldNotifyRoom(msg, INACTIVE_HIDDEN, 'mentions')
     expect(result.shouldNotify).toBe(false)
+  })
+
+  // FLM-189: Off silences everything, mentions and @all included.
+  it('does not notify for a mention when the level is none', () => {
+    const result = shouldNotifyRoom(makeMsg({ isMention: true }), INACTIVE_HIDDEN, 'none')
+    expect(result.shouldNotify).toBe(false)
+    expect(result.isMention).toBe(true)
+  })
+
+  it('does not notify for any message when the level is none', () => {
+    expect(shouldNotifyRoom(makeMsg(), INACTIVE_HIDDEN, 'none').shouldNotify).toBe(false)
   })
 
   it('does not notify when user sees it', () => {
     const msg = makeMsg({ isMention: true })
-    const result = shouldNotifyRoom(msg, ACTIVE_VISIBLE, true)
+    const result = shouldNotifyRoom(msg, ACTIVE_VISIBLE, 'all')
     expect(result.shouldNotify).toBe(false)
   })
 
   it('does not notify for outgoing', () => {
-    const result = shouldNotifyRoom(makeMsg({ isOutgoing: true }), INACTIVE_HIDDEN, true)
+    const result = shouldNotifyRoom(makeMsg({ isOutgoing: true }), INACTIVE_HIDDEN, 'all')
     expect(result.shouldNotify).toBe(false)
   })
 
   it('does not notify for delayed', () => {
-    const result = shouldNotifyRoom(makeMsg({ isDelayed: true }), INACTIVE_HIDDEN, true)
+    const result = shouldNotifyRoom(makeMsg({ isDelayed: true }), INACTIVE_HIDDEN, 'all')
     expect(result.shouldNotify).toBe(false)
   })
 
   it('does not notify for stale messages', () => {
     const staleTimestamp = new Date(Date.now() - 6 * 60 * 1000)
-    const result = shouldNotifyRoom(makeMsg({ timestamp: staleTimestamp, isMention: true }), INACTIVE_HIDDEN, true)
+    const result = shouldNotifyRoom(makeMsg({ timestamp: staleTimestamp, isMention: true }), INACTIVE_HIDDEN, 'all')
     expect(result.shouldNotify).toBe(false)
   })
 })
