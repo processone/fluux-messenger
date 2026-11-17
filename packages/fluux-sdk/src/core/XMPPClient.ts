@@ -742,6 +742,7 @@ export class XMPPClient {
       getE2EEManager: () => this.e2ee,
       recoverCorrection: (...args: Parameters<DeferredDecryptEngine['recoverCorrection']>) => this.deferredDecrypt?.recoverCorrection(...args),
       shouldAutoReconnect: this.shouldAutoReconnect,
+      adoptChangedPassword: (accountJid: string, password: string) => this.connection.adoptChangedPassword(accountJid, password),
     }
 
     this.connection = new Connection(moduleDeps)

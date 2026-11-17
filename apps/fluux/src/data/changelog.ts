@@ -48,6 +48,7 @@ export const changelog: ChangelogEntry[] = [
         'When the system keychain is locked or unavailable as you sign in with Remember me, Fluux now tells you your password was not saved instead of failing silently. On Linux, a keyring still locked at startup no longer makes Fluux forget your saved password, so the next start with the keyring unlocked signs you in',
         'Changing your password no longer reports a failure when the server accepted the new password but the system keychain could not save it. Fluux now tells you the new password was not saved, and the next start no longer tries the old saved password',
         'Changing your password no longer drops the server address you signed in with from your saved sign-in. The next start connects through that server again, and the login form still shows it',
+        'After you change your password, Fluux reconnects and reloads with the new password. Before, a dropped connection or a page reload tried the old one and sent you back to the sign-in screen',
       ],
     }],
   },

@@ -1327,6 +1327,10 @@ export class Profile extends BaseModule {
 
   /**
    * Change the user's password (XEP-0077 In-Band Registration).
+   *
+   * Once the server accepts it, the rest of the session authenticates with the
+   * new password: every reconnect uses it. A refused change keeps the current one.
+   * Copies the caller keeps elsewhere, such as a saved session, are the caller's to update.
    * @param newPassword - The new password to set
    */
   async changePassword(newPassword: string): Promise<void> {
@@ -1346,5 +1350,6 @@ export class Profile extends BaseModule {
     )
 
     await this.deps.sendIQ(iq)
+    this.deps.adoptChangedPassword?.(currentJid, newPassword)
   }
 }

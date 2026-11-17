@@ -84,6 +84,12 @@ export interface ModuleDependencies {
    * Defaults to always-allowed when omitted.
    */
   shouldAutoReconnect?: () => boolean
+  /**
+   * The server accepted a new password for this account: later authentications
+   * of the session (every reconnect) use it instead of the one given at connect.
+   * Wired by XMPPClient to the Connection module; used by Profile.changePassword.
+   */
+  adoptChangedPassword?: (accountJid: string, password: string) => void
 }
 
 /**

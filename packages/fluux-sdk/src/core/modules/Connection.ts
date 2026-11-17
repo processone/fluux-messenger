@@ -1195,6 +1195,23 @@ export class Connection extends BaseModule {
   }
 
   /**
+   * Use a password the server has just accepted for this account (XEP-0077
+   * password change) for every later authentication of the session.
+   *
+   * Each reconnect builds a new client from these credentials and authenticates
+   * again before any stream resumption, so keeping the old password would make
+   * the next reconnect fail, and xmpp.js also falls back to the password when a
+   * FAST token is refused. Does nothing once the session has ended or when it
+   * belongs to another account.
+   *
+   * @internal Called through the module dependencies after Profile.changePassword succeeds.
+   */
+  adoptChangedPassword(accountJid: string, password: string): void {
+    if (!this.credentials || getBareJid(this.credentials.jid) !== getBareJid(accountJid)) return
+    this.credentials = { ...this.credentials, password }
+  }
+
+  /**
    * Get Stream Management state for session resumption (XEP-0198).
    * Returns null if SM is not available or not enabled.
    *

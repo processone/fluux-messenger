@@ -5,7 +5,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { setPlatformForTesting } from '@/platform'
 import { hasSavedCredentials, resetKeychainLaunchStateForTesting } from '@/utils/keychain'
 import { standaloneStartupReconnect } from '@/utils/startupReconnect'
-import { saveSession } from '@/utils/sessionStorage'
+import { getSession, saveSession } from '@/utils/sessionStorage'
 
 const { mockChangePassword, mockInvoke } = vi.hoisted(() => ({
   mockChangePassword: vi.fn(),
@@ -54,8 +54,9 @@ describe('ChangePasswordModal', () => {
     restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'linux' })
     // Signed in earlier with Remember me: the keychain holds the current password.
     localStorage.setItem('xmpp-has-saved-credentials', 'true')
-    // Signed in through a custom server, as the login form and startup record it.
-    saveSession('fixture@example.invalid', 'old-local-secret', CUSTOM_SERVER)
+    // Signed in through a custom server, as the login form and startup record
+    // it. A reload of the tab signs in from this session.
+    saveSession('fixture@example.invalid', 'current-local-secret', CUSTOM_SERVER)
   })
 
   afterEach(() => {
@@ -75,6 +76,24 @@ describe('ChangePasswordModal', () => {
     expect(onClose).not.toHaveBeenCalled()
     expect(mockInvoke).not.toHaveBeenCalled()
     expect(hasSavedCredentials()).toBe(true)
+    expect(getSession('fixture@example.invalid')?.password).toBe('current-local-secret')
+  })
+
+  // Without this, a reload of the tab signs in with the old password and fails.
+  it('saves the new password in this tab\'s session once the server accepts it', async () => {
+    // Signed in without Remember me: nothing in the keychain to update.
+    localStorage.removeItem('xmpp-has-saved-credentials')
+    mockChangePassword.mockResolvedValueOnce(undefined)
+    const onClose = vi.fn()
+
+    submitNewPassword(onClose)
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(getSession('fixture@example.invalid')).toEqual({
+      jid: 'fixture@example.invalid',
+      password: 'new-local-secret',
+      server: CUSTOM_SERVER,
+    })
   })
 
   // The server took the new password, so the change succeeded; only the
