@@ -906,15 +906,6 @@ describe('MUC Module', () => {
       expect(notifyOf(1)).toBe('none')
     })
 
-    it('carries a level held for the session into the auto-bookmark on join', async () => {
-      mockStores.room.getRoom.mockReturnValue(storedRoom({ isBookmarked: false, notifyOffPersistent: true }))
-
-      await muc.joinRoom(ROOM, 'mynick')
-      muc.handle(selfPresence())
-
-      expect(notifyOf(1)).toBe('none')
-    })
-
     describe('setRoomNotifyLevel', () => {
       it('saves Off to the bookmark and replaces the session choice', async () => {
         mockStores.room.getRoom.mockReturnValue(storedRoom())
@@ -940,14 +931,15 @@ describe('MUC Module', () => {
         expect(mockSendIQ).not.toHaveBeenCalled()
       })
 
-      it('holds a saved choice in the store only when the room has no bookmark', async () => {
+      it('holds the level for the session, not as a saved one, when the room has no bookmark', async () => {
         mockStores.room.getRoom.mockReturnValue(storedRoom({ isBookmarked: false }))
 
         await muc.setRoomNotifyLevel(ROOM, 'none', true)
 
-        expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', expect.objectContaining({
-          updates: expect.objectContaining({ notifyOffPersistent: true }),
-        }))
+        expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+          roomJid: ROOM,
+          updates: { notifyAll: false, notifyOff: true },
+        })
         expect(mockSendIQ).not.toHaveBeenCalled()
       })
 

@@ -12,7 +12,10 @@ let onConversationRead: ((id: string) => void) | undefined
 let onRoomMessage: ((room: unknown, message: unknown) => void) | undefined
 const oscillators = vi.fn()
 
-vi.mock('@fluux/sdk', () => ({
+const rooms = new Map<string, { notifyOffPersistent?: boolean }>()
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  resolveNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).resolveNotifyLevel,
+  roomStore: { getState: () => ({ getRoom: (jid: string) => rooms.get(jid) }) },
   usePresence: () => ({ presenceStatus: 'online' }),
   useConnectionStatus: () => ({ status }),
 }))
@@ -31,6 +34,7 @@ describe('useSoundNotification', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     oscillators.mockClear()
+    rooms.clear()
     status = 'online'
     useSettingsStore.setState({ soundEnabled: true })
     ;(window as unknown as Record<string, unknown>).AudioContext = class {
@@ -98,5 +102,30 @@ describe('useSoundNotification', () => {
     onConversationRead?.('alice')
     act(() => { vi.advanceTimersByTime(3000) })
     expect(oscillators).not.toHaveBeenCalled()
+  })
+
+  // FLM-189: a room set to Off while its chime waits no longer chimes; another waiting conversation still does.
+  it('drops the pending chime of a room that became Off during the wait', () => {
+    status = 'reconnecting'
+    const { rerender } = renderHook(() => useSoundNotification())
+    status = 'online'
+    rerender()
+    rooms.set('quiet@muc.example.com', {})
+    onRoomMessage?.({ jid: 'quiet@muc.example.com' }, {})
+    rooms.set('quiet@muc.example.com', { notifyOffPersistent: true })
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(oscillators).not.toHaveBeenCalled()
+  })
+
+  it('still chimes once when another conversation waits beside an Off room', () => {
+    status = 'reconnecting'
+    const { rerender } = renderHook(() => useSoundNotification())
+    status = 'online'
+    rerender()
+    rooms.set('quiet@muc.example.com', { notifyOffPersistent: true })
+    onRoomMessage?.({ jid: 'quiet@muc.example.com' }, {})
+    onConversationMessage?.({ id: 'alice' }, {})
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(oscillators).toHaveBeenCalledTimes(2)
   })
 })

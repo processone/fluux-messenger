@@ -43,7 +43,7 @@ The level is a `<notify>` element in the `urn:xmpp:fluux:0` namespace, inside th
 | Text of `<notify>` | Level              | Meaning                                                                     |
 |--------------------|--------------------|-----------------------------------------------------------------------------|
 | `all`              | All messages       | Notify for every message in the room.                                       |
-| `none`             | Off                | Never notify for the room: no pop-up and no sound, mentions and replies included. The room does not add to the unread badge of the application icon. |
+| `none`             | Off                | A running client never notifies for the room: no pop-up and no sound, mentions and replies included. The room does not add to the unread badge of the application icon. See 3.4 for pushes received while the client is closed. |
 | *(element absent)* | Mentions only      | Notify for mentions and replies. This is the default.                       |
 
 Mentions only is stored as no `<notify>` element at all. A client that publishes that level MUST NOT write `<notify>mentions</notify>`, but MUST accept it as Mentions only.
@@ -61,6 +61,12 @@ A client that publishes a bookmark MUST carry the level the room already has unl
 ## 4. Session choice
 
 A client MAY let the user pick a level for the current session only. The session choice is never published, and it takes precedence over the saved level until the client leaves the room. The level that applies to a room is, in order: the session choice, the saved level, then Mentions only.
+
+---
+
+### 3.4 Closed-app push
+
+`none` is honored by a client that is running. Push notifications delivered while the client is closed (the iOS notification extension and the web push service worker in Fluux) are shown by the platform without reading the bookmark, so they are not silenced yet. Fluux cannot stop the server from sending them; making them arrive silently and uncounted is planned separately.
 
 ---
 

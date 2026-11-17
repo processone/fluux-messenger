@@ -1928,9 +1928,9 @@ export class MUC extends BaseModule {
    *
    * @param roomJid - The room JID
    * @param level - The notification level
-   * @param persistent - If true, saves the level (to the bookmark when the room
-   *   has one) and replaces any session-only choice. If false, the choice lasts
-   *   until the room is left.
+   * @param persistent - If true and the room has a bookmark, saves the level to
+   *   it and replaces any session-only choice. Without a bookmark, or if false,
+   *   the choice lasts until the room is left.
    *
    * @example
    * ```typescript
@@ -1939,13 +1939,16 @@ export class MUC extends BaseModule {
    * ```
    */
   async setRoomNotifyLevel(roomJid: string, level: NotifyLevel, persistent: boolean = false): Promise<void> {
-    // SDK event only - binding calls store.updateRoom
-    this.deps.emitSDK('room:updated', { roomJid, updates: notifyLevelUpdates(level, persistent) })
-
-    if (!persistent) return
+    // A level can only be saved in a bookmark. Without one the choice lasts for
+    // the session, so it must not be written to the saved fields: those outlive
+    // leaving the room and would be published by the next automatic bookmark.
     const room = this.deps.stores?.room.getRoom(roomJid)
-    // Only update the bookmark if the room is bookmarked
-    if (!room?.isBookmarked) return
+    const saved = persistent && !!room?.isBookmarked
+
+    // SDK event only - binding calls store.updateRoom
+    this.deps.emitSDK('room:updated', { roomJid, updates: notifyLevelUpdates(level, saved) })
+
+    if (!saved || !room) return
     await this.setBookmark(roomJid, {
       name: room.name,
       nick: room.nickname,

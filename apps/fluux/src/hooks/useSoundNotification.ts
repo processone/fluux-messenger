@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { usePresence, useConnectionStatus } from '@fluux/sdk'
+import { usePresence, useConnectionStatus, roomStore, resolveNotifyLevel } from '@fluux/sdk'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useNotificationEvents } from './useNotificationEvents'
 import { announcedByPush } from './useNativePush'
@@ -65,6 +65,15 @@ function createNotificationSound(): () => void {
 const CATCHUP_WINDOW_MS = 3000
 
 /**
+ * A room that was set to Off while its chime waited needs no chime: the level
+ * is read again when the wait ends, like the other deferred notification queues.
+ */
+function isSilencedRoomKey(key: string): boolean {
+  if (!key?.startsWith('room:')) return false
+  return resolveNotifyLevel(roomStore.getState().getRoom(key.slice('room:'.length))) === 'none'
+}
+
+/**
  * Hook to play a sound notification for new messages and room mentions.
  * Uses the shared useNotificationEvents hook for detection logic.
  */
@@ -115,7 +124,7 @@ export function useSoundNotification(): void {
         windowTimerRef.current = null
         const pending = burstPendingRef.current
         burstPendingRef.current = null
-        if (pending?.size) playNow()
+        if (pending && [...pending].some((key) => !isSilencedRoomKey(key))) playNow()
       }, CATCHUP_WINDOW_MS)
     } else if (status !== 'online' && prev === 'online') {
       if (windowTimerRef.current) clearTimeout(windowTimerRef.current)
