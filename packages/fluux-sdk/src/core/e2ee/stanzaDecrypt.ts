@@ -294,6 +294,9 @@ export async function decryptStanzaInPlace(
   // desynced and a plain retry cannot help. We trigger E2EEManager.repairSession
   // and, like a terminal failure, do NOT stash for deferred retry.
   let sessionNeedsRepair = false
+  // Set when the plugin consumed a control message (key transport, replay): it carries no
+  // content, so there is nothing to verify later and nothing to stash or archive.
+  let consumedControl = false
 
   try {
     const messageId = stanza.attrs.id
@@ -340,6 +343,7 @@ export async function decryptStanzaInPlace(
           // server-controlled and unauthenticated, so it must reach no feature handler under
           // the plugin's trusted context: consume the stanza here, before dispatch.
           stanza.children = []
+          consumedControl = true
         }
         securityContext = result.securityContext
         if (result.authoredAt) authoredAt = result.authoredAt
@@ -490,7 +494,7 @@ export async function decryptStanzaInPlace(
   // signature once the peer key arrives — same mechanism used for full
   // decrypt failures, but here the body is already correct.
   const needsDeferredVerification =
-    failureReason === null && securityContext?.trust === 'untrusted'
+    failureReason === null && !consumedControl && securityContext?.trust === 'untrusted'
   if (needsDeferredVerification) {
     stashPayload(stanza, originalStanzaXml)
   }

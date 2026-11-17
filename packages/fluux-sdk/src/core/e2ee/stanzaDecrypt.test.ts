@@ -1123,6 +1123,32 @@ describe('stanzaDecrypt — control-message status', () => {
   })
 })
 
+describe('stanzaDecrypt — untrusted control message', () => {
+  class UntrustedControlPlugin extends ControlMessagePlugin {
+    override async decrypt(): Promise<DecryptResult> {
+      return {
+        status: 'control-message',
+        senderDevice: { jid: 'peer@example.com', deviceId: 'dev' },
+        securityContext: { protocolId: TEST_PROTOCOL_ID, trust: 'untrusted' },
+      }
+    }
+  }
+
+  it('is neither stashed for deferred verification nor kept as an archive entry', async () => {
+    const manager = await makeManager(new UntrustedControlPlugin())
+    const stanza = bodilessStanza()
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.attempted).toBe(true)
+    expect(result.awaitsVerification).toBeUndefined()
+    expect(result.encryptedPayloadXml).toBeUndefined()
+    expect(result.contentAvailability).toEqual({ state: 'ready' })
+    expect(readStashedEncryptedPayload(stanza)).toBeUndefined()
+    expect(stanza.children).toEqual([])
+  })
+})
+
 describe('stanzaDecrypt — broken-session status', () => {
   it('shows a could-not-decrypt placeholder and triggers session repair', async () => {
     const plugin = new BrokenSessionPlugin()
