@@ -861,8 +861,8 @@ export function MessageComposer({
     const clipboardData = e.clipboardData
     if (!clipboardData) return
 
-    // First check clipboardData.files (populated by Safari "Copy Image" and some apps)
-    // This takes priority because it contains the actual file with proper metadata
+    // Prefer the original file (Finder copy, Safari "Copy Image") over image
+    // representations: the native clipboard may offer a document icon as well.
     const files = clipboardData.files
     if (attachmentDisabledReason && (files?.length || Array.from(clipboardData.items || []).some(item => item.kind === 'file'))) {
       e.preventDefault()
@@ -870,12 +870,9 @@ export function MessageComposer({
       return
     }
     if (files && files.length > 0) {
-      const file = files[0]
-      if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
-        e.preventDefault()
-        selectFile(file)
-        return
-      }
+      e.preventDefault()
+      selectFile(files[0])
+      return
     }
 
     // Fallback: check clipboardData.items for image data (screenshots, Chrome "Copy Image")
