@@ -16,6 +16,8 @@ import { readStashedEncryptedPayload, readStashedContentAvailability } from '../
 import {
   NS_DELAY,
   NS_REFERENCE,
+  NS_FALLBACK,
+  NS_FORWARD_QUOTE,
   NS_REPLY,
   NS_OOB,
   NS_THUMBS,
@@ -27,11 +29,12 @@ import {
   NS_RETRACT,
   NS_CORRECTION,
 } from '../namespaces'
-import type { Message, MessageReference, FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
-import { processFallback } from '../../utils/fallbackUtils'
+import type { Message, MessageReference, DataReference, FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
+import { processFallback, rebaseFallbackOffset } from '../../utils/fallbackUtils'
 import { CHAT_FALLBACK_TARGETS, ROOM_FALLBACK_TARGETS } from '../../utils/fallbackRegistry'
 import { isAesgcmUri, parse as parseAesgcmUri } from './AesgcmUri'
 import { fromCodePointOffset } from '../../utils/xep0426'
+import { parseRoomMessageLink } from '../../utils/roomMessageLink'
 import { logWarn } from '../logger'
 
 /**
@@ -361,7 +364,35 @@ export function parseMessageReferences(stanza: Element): MessageReference[] | un
     if (start >= stop || stop > Array.from(body).length) continue
     references.push({ type, uri, begin: fromCodePointOffset(body, start), end: fromCodePointOffset(body, stop) })
   }
+  attachForwardFallback(stanza, body, references)
   return references.length ? references : undefined
+}
+
+/**
+ * XEP-0428: a `<fallback for="urn:fluux:forward-quote:0">` range marks a forward's generated
+ * quote and link. It is kept on the data reference whose link it contains, never stripped
+ * here: only a reader that can show the source hides it.
+ */
+function attachForwardFallback(stanza: Element, body: string, references: MessageReference[]): void {
+  const codePoints = Array.from(body).length
+  for (const fallback of stanza.getChildren('fallback')) {
+    const el = fallback as Element
+    if (el.attrs?.xmlns !== NS_FALLBACK || el.attrs?.for !== NS_FORWARD_QUOTE) continue
+    const range = el.getChild('body', NS_FALLBACK)
+    if (!range || !/^\d+$/.test(range.attrs.start ?? '') || !/^\d+$/.test(range.attrs.end ?? '')) continue
+    const start = Number(range.attrs.start), stop = Number(range.attrs.end)
+    if (start >= stop || stop > codePoints) continue
+    const begin = fromCodePointOffset(body, start), end = fromCodePointOffset(body, stop)
+    // The generated block ends with the source link, so the marker binds to the last link
+    // inside the range: a room link quoted in the text above it is not the source.
+    let target: DataReference | undefined
+    for (const ref of references) {
+      if (ref.type !== 'data' || ref.begin === undefined || ref.end === undefined || ref.begin < begin || ref.end > end
+        || !parseRoomMessageLink(ref.uri)) continue
+      if (!target || ref.end > target.end!) target = ref
+    }
+    if (target) target.forwardFallback = { begin, end }
+  }
 }
 
 /** Result from parseMessageContent. */
@@ -460,7 +491,9 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
   const attachment = parseOobData(messageEl)
 
   // XEP-0428: Process fallback text removal
-  const { processedBody, fallbackBody } = processFallback(messageEl, body, { validTargets: fallbackTargets }, replyTo)
+  const fallback = processFallback(messageEl, body, { validTargets: fallbackTargets }, replyTo)
+
+  const { processedBody, fallbackBody } = fallback
 
   // Add fallbackBody to replyTo if extracted
   if (replyTo && fallbackBody) {
@@ -489,8 +522,33 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     replyTo,
     attachment,
     processedBody: finalBody,
-    references: parseMessageReferences(messageEl),
+    references: rebaseForwardReferences(parseMessageReferences(messageEl), body, finalBody, fallback),
   }
+}
+
+/**
+ * A forward's link and marker were parsed against the raw body; reply and OOB fallback
+ * removal moves them. Rebase both together, and drop the marker (keeping the quote
+ * visible) if the link no longer sits where the marker says.
+ */
+function rebaseForwardReferences(
+  references: MessageReference[] | undefined,
+  rawBody: string,
+  finalBody: string,
+  fallback: ReturnType<typeof processFallback>,
+): MessageReference[] | undefined {
+  if (finalBody === rawBody) return references
+  return references?.map(ref => {
+    if (ref.type !== 'data' || !ref.forwardFallback) return ref
+    const { forwardFallback } = ref
+    const begin = ref.begin === undefined ? undefined : rebaseFallbackOffset(ref.begin, fallback)
+    const end = ref.end === undefined ? undefined : rebaseFallbackOffset(ref.end, fallback)
+    const markerBegin = rebaseFallbackOffset(forwardFallback.begin, fallback)
+    const markerEnd = rebaseFallbackOffset(forwardFallback.end, fallback)
+    const valid = begin !== undefined && end !== undefined && finalBody.slice(begin, end) === ref.uri
+      && markerBegin <= begin && end <= markerEnd && markerEnd <= finalBody.length
+    return valid ? { ...ref, begin, end, forwardFallback: { begin: markerBegin, end: markerEnd } } : { type: 'data' as const, uri: ref.uri }
+  })
 }
 
 /**

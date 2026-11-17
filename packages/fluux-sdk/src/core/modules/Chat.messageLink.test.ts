@@ -113,4 +113,138 @@ describe('shared room message references', () => {
     expect(parsed.references).toEqual([{ type: 'data', uri: 'https://example.org' }])
     expect(findRoomMessageLink(link, parsed.references)).toEqual({ roomJid: room, stanzaId: '1731490000123456' })
   })
+
+  // Approved forward plan: the generated quote and link carry an XEP-0428 marker so
+  // a reader hides them only when it can show the source itself.
+  describe('forward quote fallback', () => {
+    const FB = 'urn:xmpp:fallback:0'
+    const FQ = 'urn:fluux:forward-quote:0'
+    const comment = 'Look 🔗\n'
+    const quote = '> Bob wrote:\n> Ship it\n'
+    const body = comment + quote + link
+    const forwardRef = { type: 'data' as const, uri: link, begin: (comment + quote).length, end: body.length,
+      forwardFallback: { begin: comment.length, end: body.length } }
+
+    function manager() {
+      return new E2EEManager({ account: { jid: 'alice@example.org' }, storage: new InMemoryStorageBackend(),
+        xmpp: { sendStanza: vi.fn(), queryDisco: async () => ({ features: [], identities: [] }),
+          publishPEP: vi.fn(), retractPEP: vi.fn(), deletePEP: vi.fn(), queryPEP: async () => [],
+          subscribePEP: () => ({ unsubscribe() {} }) } })
+    }
+
+    it('marks only the quote and link range, in code points, and a reader recovers it', async () => {
+      const h = harness()
+      await h.chat.sendMessage('bob@example.org', body, { references: [forwardRef] })
+      const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+      const fallback = stanza.getChildren('fallback', FB).find(el => el.attrs.for === FQ)!
+      expect(fallback.getChild('body', FB)!.attrs).toEqual({
+        start: String(Array.from(comment).length), end: String(Array.from(body).length) })
+      const parsed = parseMessageContent({ messageEl: stanza, body })
+      // The body is kept whole: only a reader that shows the source may hide the range.
+      expect(parsed.processedBody).toBe(body)
+      expect(parsed.references).toEqual([{ type: 'data', uri: link, begin: forwardRef.begin, end: body.length,
+        forwardFallback: { begin: comment.length, end: body.length } }])
+    })
+
+    it('sends the same marker in a room and when delivery is retried', async () => {
+      const h = harness()
+      await h.chat.resendMessage('bob@example.org', body, 'fwd-1', undefined, [forwardRef])
+      const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+      expect(stanza.getChildren('fallback', FB).filter(el => el.attrs.for === FQ)).toHaveLength(1)
+      h.stores.room.getRoom = vi.fn(() => ({ jid: room, nickname: 'Alice', joined: true })) as unknown as typeof h.stores.room.getRoom
+      await h.chat.sendMessage(room, body, { references: [forwardRef] })
+      const roomStanza = vi.mocked(h.deps.sendStanza).mock.calls[1][0]
+      expect(roomStanza.attrs.type).toBe('groupchat')
+      expect(roomStanza.getChildren('fallback', FB).filter(el => el.attrs.for === FQ)).toHaveLength(1)
+    })
+
+    it('rebases the link and marker when a reply quote is removed on receipt', async () => {
+      const h = harness()
+      await h.chat.sendMessage('bob@example.org', body, { references: [forwardRef],
+        replyTo: { id: 'earlier', fallback: { author: 'Carol', body: 'Question?' } } })
+      const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+      const wire = stanza.getChildText('body')!
+      const parsed = parseMessageContent({ messageEl: stanza, body: wire })
+      expect(parsed.processedBody).toBe(body)
+      const ref = parsed.references![0] as { begin: number; end: number; forwardFallback: { begin: number; end: number } }
+      expect(parsed.processedBody.slice(ref.begin, ref.end)).toBe(link)
+      expect(parsed.processedBody.slice(ref.forwardFallback.begin, ref.forwardFallback.end)).toBe(quote + link)
+    })
+
+    it('shifts the marker with the references when an encrypted reply quote is stripped from a plaintext send', async () => {
+      const h = harness()
+      await h.chat.sendMessage('bob@example.org', body, { references: [forwardRef],
+        replyTo: { id: 'earlier', fallback: { author: 'Carol', body: 'Private', fromEncrypted: true } } })
+      const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+      const parsed = parseMessageContent({ messageEl: stanza, body: stanza.getChildText('body')! })
+      const ref = parsed.references![0] as { forwardFallback: { begin: number; end: number } }
+      expect(parsed.processedBody).toBe(body)
+      expect(parsed.processedBody.slice(ref.forwardFallback.begin, ref.forwardFallback.end)).toBe(quote + link)
+    })
+
+    it('resolves the marked source, not an earlier link in the comment, after a retry', async () => {
+      const h = harness()
+      const text = `Also ${other}\n> Bob wrote:\n> Ship it\n${link}`
+      const begin = text.length - link.length
+      const stored = [{ type: 'data' as const, uri: link, begin, end: text.length,
+        forwardFallback: { begin: text.indexOf('> Bob'), end: text.length } }]
+      await h.chat.resendMessage('bob@example.org', text, 'fwd-2', undefined, stored)
+      const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+      const parsed = parseMessageContent({ messageEl: stanza, body: text })
+      // Body order puts the comment's link first; the marked one still wins.
+      expect(parsed.references!.map(ref => ref.uri)).toEqual([other, link])
+      expect(findRoomMessageLink(text, parsed.references)).toEqual({ roomJid: room, stanzaId: '1731490000123456' })
+    })
+
+    it('binds the marker to the terminal source link, not a link quoted above it, after a retry', async () => {
+      const h = harness()
+      const text = `Look\n> Bob wrote:\n> see ${other}\n${link}`
+      const stored = [{ type: 'data' as const, uri: link, begin: text.length - link.length, end: text.length,
+        forwardFallback: { begin: text.indexOf('> Bob'), end: text.length } }]
+      await h.chat.resendMessage('bob@example.org', text, 'fwd-3', undefined, stored)
+      const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+      // Body order puts the quoted link's reference first.
+      const parsed = parseMessageContent({ messageEl: stanza, body: text })
+      expect(parsed.references!.map(ref => ref.uri)).toEqual([other, link])
+      expect(parsed.references![0]).not.toHaveProperty('forwardFallback')
+      expect(findRoomMessageLink(text, parsed.references)).toEqual({ roomJid: room, stanzaId: '1731490000123456' })
+    })
+
+    it('ignores a marker that does not contain a room message link', () => {
+      const stanza = xml('message', {}, xml('body', {}, 'hello there'),
+        xml('fallback', { xmlns: FB, for: FQ }, xml('body', { start: '0', end: '5' })))
+      expect(parseMessageContent({ messageEl: stanza, body: 'hello there' }).references).toBeUndefined()
+    })
+
+    it('keeps the quote, link and marker inside the encrypted payload only', async () => {
+      const h = harness()
+      const m = manager()
+      await m.register(new DummyPlaintextPlugin())
+      h.deps.getE2EEManager = () => m
+      try {
+        await h.chat.sendMessage('bob@example.org', body, { references: [forwardRef] })
+        const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+        expect(stanza.getChildren('fallback', FB)).toEqual([])
+        expect(stanza.getChildText('body')).not.toContain('Ship it')
+        expect(stanza.getChildText('body')).not.toContain(link)
+        const decoded = Buffer.from(stanza.getChild('plain', 'urn:fluux:e2ee-dummy:0')!.text(), 'base64').toString('utf8')
+        const payload = parsePayloadEnvelope(decoded)!
+        const marker = payload.find(child => child.name === 'fallback' && child.attrs.for === FQ)
+        expect(marker).toBeDefined()
+        expect(payload.find(child => child.name === 'body')?.children?.join('')).toContain('Ship it')
+      } finally { await m.shutdown() }
+    })
+
+    it('never sends the quote in plaintext when encryption fails', async () => {
+      const h = harness()
+      const m = manager()
+      await m.register(new DummyPlaintextPlugin())
+      vi.spyOn(m, 'encryptOutbound').mockRejectedValue(new Error('key locked'))
+      h.deps.getE2EEManager = () => m
+      try {
+        await expect(h.chat.sendMessage('bob@example.org', body, { references: [forwardRef] })).rejects.toThrow('key locked')
+        expect(h.deps.sendStanza).not.toHaveBeenCalled()
+      } finally { await m.shutdown() }
+    })
+  })
 })

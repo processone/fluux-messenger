@@ -15,6 +15,7 @@ import {
   NS_CHATSTATES,
   NS_CARBONS,
   NS_FORWARD,
+  NS_FORWARD_QUOTE,
   NS_REACTIONS,
   NS_CORRECTION,
   NS_RETRACT,
@@ -175,6 +176,15 @@ interface MessageEnvelopeContext {
   isCarbonCopy?: boolean
   isSentCarbon?: boolean
   delayEl?: Element
+}
+
+/** XEP-0428: mark a forward's generated quote and link (offsets are UTF-16 in the sent text). */
+function forwardFallbackElement(fullBody: string, shift: number, range: { begin: number; end: number }): Element {
+  return xml('fallback', { xmlns: NS_FALLBACK, for: NS_FORWARD_QUOTE },
+    xml('body', {
+      start: String(toCodePointOffset(fullBody, shift + range.begin)),
+      end: String(toCodePointOffset(fullBody, shift + range.end)),
+    }))
 }
 
 export class Chat extends BaseModule {
@@ -668,7 +678,8 @@ export class Chat extends BaseModule {
           if (typeof c === 'string') continue
           const el = c as Element
           const key = `${el.name}|${el.attrs?.xmlns ?? ''}`
-          if (protectedChildKeys.has(key)) {
+          const keyForFallback = el.name === 'fallback' ? `${key}|${el.attrs?.for ?? ''}` : key
+          if (protectedChildKeys.has(key) || protectedChildKeys.has(keyForFallback)) {
             protectedChildren.push(el)
             protectedIndices.push(i)
           }
@@ -699,7 +710,8 @@ export class Chat extends BaseModule {
         // names the feature namespace, which is now confidential.
         if (protectedIndices.length > 0 && protectedChildKeys) {
           const protectedNamespaces = new Set(
-            [...protectedChildKeys].map(key => key.split('|')[1]).filter(ns => ns.length > 0),
+            [...protectedChildKeys].filter(key => key.split('|').length === 2)
+              .map(key => key.split('|')[1]).filter(ns => ns.length > 0),
           )
           for (let i = children.length - 1; i >= 0; i--) {
             const c = children[i]
@@ -810,6 +822,15 @@ export class Chat extends BaseModule {
         if (child.attrs[attribute] !== undefined) child.attrs[attribute] = String(Number(child.attrs[attribute]) - removedCodePoints)
       }
     }
+    // The forward marker is in the same frame as the references: move it with them.
+    for (const child of children) {
+      if (child.name !== 'fallback' || child.attrs.for !== NS_FORWARD_QUOTE) continue
+      const range = child.getChild('body', NS_FALLBACK)
+      if (!range) continue
+      for (const attribute of ['start', 'end']) {
+        if (range.attrs[attribute] !== undefined) range.attrs[attribute] = String(Number(range.attrs[attribute]) - removedCodePoints)
+      }
+    }
 
     const replyFallbackIdx = children.findIndex(
       (c) =>
@@ -858,7 +879,13 @@ export class Chat extends BaseModule {
    * plaintext by explicit product decision (see docs/ENCRYPTION.md).
    */
   private static readonly E2EE_PROTECTED_CHILD_KEYS: ReadonlySet<string> =
-    new Set([`x|${NS_OOB}`, `file|${NS_FILE_METADATA}`, `reference|${NS_REFERENCE}`])
+    new Set([
+      `x|${NS_OOB}`, `file|${NS_FILE_METADATA}`, `reference|${NS_REFERENCE}`,
+      // A forward's quote and link ride in the payload, so the marker that tells a
+      // reader to hide them must travel with them. Keyed by `for` so reply and OOB
+      // fallbacks keep their current handling.
+      `fallback|${NS_FALLBACK}|${NS_FORWARD_QUOTE}`,
+    ])
 
   /** XEP-0444 reactions ride inside the envelope; the reacted-to id rides with them. */
   private static readonly E2EE_REACTION_KEYS: ReadonlySet<string> = new Set([
@@ -982,6 +1009,7 @@ export class Chat extends BaseModule {
           uri: ref.uri,
         }))
         if (ref.type === 'mention' && !ref.uri.includes('/')) hasMentionAll = true
+        if (ref.type === 'data' && ref.forwardFallback) children.push(forwardFallbackElement(fullBody, fallbackEnd, ref.forwardFallback))
       }
       if (hasMentionAll) children.push(xml('mention-all', { xmlns: NS_MENTION_ALL }))
     }
@@ -1076,7 +1104,8 @@ export class Chat extends BaseModule {
     to: string,
     body: string,
     messageId: string,
-    attachment?: FileAttachment
+    attachment?: FileAttachment,
+    storedReferences?: MessageReference[],
   ): Promise<void> {
     const recipient = getBareJid(to)
 
@@ -1100,9 +1129,15 @@ export class Chat extends BaseModule {
       xml('active', { xmlns: NS_CHATSTATES })
     ]
 
-    for (const ref of roomMessageLinkReferences(body)) {
+    // The stored forward marker survives a retry, so a reader still hides the quote only when it can show the source.
+    const resendReferences = roomMessageLinkReferences(body).map(ref => {
+      const stored = storedReferences?.find(item => item.type === 'data' && item.uri === ref.uri && item.begin === ref.begin)
+      return stored?.type === 'data' && stored.forwardFallback ? { ...ref, forwardFallback: stored.forwardFallback } : ref
+    })
+    for (const ref of resendReferences) {
       children.push(xml('reference', { xmlns: NS_REFERENCE, type: ref.type, uri: ref.uri,
         begin: String(toCodePointOffset(fullBody, ref.begin!)), end: String(toCodePointOffset(fullBody, ref.end!)) }))
+      if (ref.forwardFallback) children.push(forwardFallbackElement(fullBody, 0, ref.forwardFallback))
     }
 
     if (attachment) {

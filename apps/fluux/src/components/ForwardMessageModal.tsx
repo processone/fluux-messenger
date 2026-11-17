@@ -3,17 +3,20 @@ import { useTranslation } from 'react-i18next'
 import { useChatActions, useRoomActions, useRoster, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { trackSend } from '@/utils/pendingSends'
+import { composeForward, type ForwardQuote } from '@/utils/forwardMessage'
 import { ContactSelector } from './ContactSelector'
 import { ModalShell } from './ModalShell'
 import { TextArea } from './ui/TextInput'
 
 interface ForwardMessageModalProps {
   link: string
+  /** The readable source text; left out when the source cannot be read. */
+  quote?: ForwardQuote
   onClose: () => void
 }
 
-/** Share a room location, never the source message's contents. */
-export function ForwardMessageModal({ link, onClose }: ForwardMessageModalProps) {
+/** Forward a room message as a comment, an attributed quote and the room link. */
+export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModalProps) {
   const { t } = useTranslation()
   const { contacts } = useRoster()
   const conversations = useChatStore(s => s.conversations)
@@ -61,17 +64,17 @@ export function ForwardMessageModal({ link, onClose }: ForwardMessageModalProps)
     setSending(true)
     setFailed(false)
     try {
-      // Existing send methods attach XEP-0372 data references to room links.
-      const body = comment.trim() ? `${comment.trim()}\n${link}` : link
+      // The quote and link are marked as fallback: Fluux hides them when it can show the source.
+      const { body, references } = composeForward(comment, link, quote)
       const jid = destination.slice(5)
       if (destination.startsWith('room:')) {
         const liveRoom = roomStore.getState().rooms.get(jid)
         if (!liveRoom?.joined || liveRoom.selfOccupant?.role === 'visitor') throw new Error('Room unavailable')
-        await trackSend(room.sendMessage(jid, body))
+        await trackSend(room.sendMessage(jid, body, { references }))
       } else {
         // The SDK routes known room addresses as groupchat even via chat actions.
         if (roomStore.getState().rooms.has(jid)) throw new Error('Destination changed')
-        await trackSend(chat.sendMessage(jid, body))
+        await trackSend(chat.sendMessage(jid, body, { references }))
       }
       onClose()
     } catch {

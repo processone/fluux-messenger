@@ -65,6 +65,12 @@ export interface DataReference {
   uri: string
   begin?: number
   end?: number
+  /**
+   * XEP-0428: the generated quote and link a forward adds for clients that cannot
+   * show it. UTF-16 offsets in the body; a reader hides them only when it can show
+   * the source itself.
+   */
+  forwardFallback?: { begin: number; end: number }
 }
 
 /** XEP-0372 references accepted by the messaging API. */

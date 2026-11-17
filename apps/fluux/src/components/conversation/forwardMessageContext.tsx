@@ -1,18 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { ForwardMessageModal } from '../ForwardMessageModal'
+import type { ForwardQuote } from '@/utils/forwardMessage'
 
-const ForwardMessageContext = createContext<((link: string) => void) | null>(null)
+export interface ForwardTarget { link: string; quote?: ForwardQuote }
+
+const ForwardMessageContext = createContext<((target: ForwardTarget) => void) | null>(null)
 
 /** Keep the picker alive when virtualized source rows leave the rendered range. */
 export function ForwardMessageProvider({ conversationId, children }: { conversationId: string; children: ReactNode }) {
-  const [target, setTarget] = useState<{ conversationId: string; link: string } | null>(null)
+  const [target, setTarget] = useState<(ForwardTarget & { conversationId: string }) | null>(null)
   useEffect(() => { setTarget(null) }, [conversationId])
-  const open = useCallback((link: string) => setTarget({ conversationId, link }), [conversationId])
+  const open = useCallback((next: ForwardTarget) => setTarget({ conversationId, ...next }), [conversationId])
   return (
     <ForwardMessageContext.Provider value={open}>
       {children}
       {target?.conversationId === conversationId && (
-        <ForwardMessageModal key={`${conversationId}:${target.link}`} link={target.link} onClose={() => setTarget(null)} />
+        <ForwardMessageModal key={`${conversationId}:${target.link}`} link={target.link} quote={target.quote} onClose={() => setTarget(null)} />
       )}
     </ForwardMessageContext.Provider>
   )

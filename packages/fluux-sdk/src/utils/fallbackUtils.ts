@@ -21,6 +21,23 @@ import { codePointLength, fromCodePointOffset } from './xep0426'
 export interface FallbackProcessingResult {
   processedBody: string
   fallbackBody?: string // For replies - extracted fallback text when original not found
+  /** UTF-16 ranges of the original body that were removed, in ascending order. */
+  removed?: Array<{ start: number; end: number }>
+  /** Characters trimmed from the start of the body after the ranges were removed. */
+  trimmedStart?: number
+}
+
+/**
+ * Where an offset in the original body lands in the processed one. An offset inside a
+ * removed range moves to where that range began.
+ */
+export function rebaseFallbackOffset(offset: number, result: Pick<FallbackProcessingResult, 'removed' | 'trimmedStart'>): number {
+  let shift = 0
+  for (const { start, end } of result.removed ?? []) {
+    if (offset >= end) shift += end - start
+    else { if (offset > start) shift += offset - start; break }
+  }
+  return Math.max(0, offset - shift - (result.trimmedStart ?? 0))
 }
 
 export interface FallbackProcessingOptions {
@@ -204,11 +221,17 @@ export function processFallback(
   }
 
   // Clean up whitespace based on trim mode
+  const untrimmed = processedBody
   if (trimMode === 'full') {
     processedBody = processedBody.trim()
   } else {
     processedBody = processedBody.replace(/^\n+/, '')
   }
 
-  return { processedBody, fallbackBody }
+  return {
+    processedBody,
+    fallbackBody,
+    removed: ranges.map(({ start, end }) => ({ start, end })).reverse(),
+    trimmedStart: untrimmed.length - (trimMode === 'full' ? untrimmed.trimStart() : untrimmed.replace(/^\n+/, '')).length,
+  }
 }

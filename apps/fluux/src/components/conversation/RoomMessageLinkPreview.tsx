@@ -12,20 +12,23 @@ type PreviewResult = { kind: 'found'; message: RoomMessage } | { kind: 'absent' 
 type QuoteUpdate = Parameters<typeof applyRoomMessagePreviewUpdate>[1] & { canonicalTarget?: RoomMessage }
 
 /** Never render a quote from sender-supplied text: the reader resolves its own copy. */
-export function RoomMessageLinkPreview({ message, formatTime, isDarkMode }: {
+export function RoomMessageLinkPreview({ message, formatTime, isDarkMode, onSourceShown }: {
   message: BaseMessage
   formatTime: (date: Date) => string
   isDarkMode?: boolean
+  /** Whether the source's own content is on screen, so a forward's quoted copy can be hidden. */
+  onSourceShown?: (shown: boolean) => void
 }) {
   if (message.isRetracted || message.encryptedPayload || message.unsupportedEncryption) return null
   const target = findRoomMessageLink(message.body, message.references)
-  return target ? <ReaderQuote key={JSON.stringify(target)} target={target} formatTime={formatTime} isDarkMode={isDarkMode} /> : null
+  return target ? <ReaderQuote key={JSON.stringify(target)} target={target} formatTime={formatTime} isDarkMode={isDarkMode} onSourceShown={onSourceShown} /> : null
 }
 
-function ReaderQuote({ target, formatTime, isDarkMode }: {
+function ReaderQuote({ target, formatTime, isDarkMode, onSourceShown }: {
   target: RoomMessageLink
   formatTime: (date: Date) => string
   isDarkMode?: boolean
+  onSourceShown?: (shown: boolean) => void
 }) {
   const { t } = useTranslation()
   const { client } = useXMPPContext()
@@ -155,6 +158,11 @@ function ReaderQuote({ target, formatTime, isDarkMode }: {
   const message = joined && account && result?.kind === 'found' ? result.message : undefined
   // An undecryptable entry's body can be a cleartext fallback, not room content.
   const readable = message && !message.encryptedPayload && !message.unsupportedEncryption
+  const sourceShown = !!(joined && account && readable)
+  useEffect(() => {
+    onSourceShown?.(sourceShown)
+    return () => onSourceShown?.(false)
+  }, [onSourceShown, sourceShown])
   const color = getConsistentTextColor(message?.nick ?? target.roomJid, isDarkMode)
   const label = !joined || !account ? t('chat.joinRoomToSeeMessage', 'Join the room to see it')
     : result?.kind === 'absent' ? t('chat.messageDeleted')

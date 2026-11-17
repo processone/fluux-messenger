@@ -17,6 +17,7 @@ import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
 import { useForwardMessage } from './forwardMessageContext'
 import { RoomMessageLinkPreview } from './RoomMessageLinkPreview'
+import { forwardFallbackRange, withoutForwardFallback } from '@/utils/forwardMessage'
 import { MessageBody } from './MessageBody'
 import { renderQuotePreview } from '@/utils/messageStyles'
 import { deriveCopyBody } from '@/utils/copyMessageBody'
@@ -419,6 +420,11 @@ export const MessageBubble = memo(function MessageBubble({
   // suppressed on touch via `touch:select-none` so the hold opens the sheet cleanly.
   const [showActionSheet, setShowActionSheet] = useState(false)
   const forwardMessage = useForwardMessage()
+  // A forward's quote and link stay until its source is on screen; then the preview replaces them.
+  const [sourceShown, setSourceShown] = useState(false)
+  const hasForwardFallback = !!forwardFallbackRange(message.references)
+  const hideForwardFallback = hasForwardFallback && sourceShown
+  const shown = hideForwardFallback ? withoutForwardFallback(message, mentions) : { body: message.body, mentions }
   const [reactorEmoji, setReactorEmoji] = useState<string | null>(null)
   const actionAnchor = useRef<HTMLElement | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -571,7 +577,12 @@ export const MessageBubble = memo(function MessageBubble({
   const { canReply, canEdit, canDelete } = actions
   const messageLink = roomMessageLinkFor(message, supportsMAM)
   const onCopyMessageLink = messageLink ? () => { void copyToClipboard(messageLink) } : undefined
-  const onForward = messageLink && forwardMessage ? () => forwardMessage(messageLink) : undefined
+  // A source that cannot be read, such as an undecryptable one, is forwarded as a link only.
+  const quotable = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
+  const onForward = messageLink && forwardMessage ? () => forwardMessage({
+    link: messageLink,
+    ...(quotable && { quote: { author: senderName, text: message.body } }),
+  }) : undefined
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   const saveableAttachment = !message.isRetracted && !message.encryptedPayload ? message.attachment : undefined
   const hasViewableReactions = !message.isRetracted && Object.keys(filteredReactions).length > 0
@@ -818,10 +829,14 @@ export const MessageBubble = memo(function MessageBubble({
             <EncryptedPlaceholder reason={message.securityContext?.failureReason} />
           ) : message.unsupportedEncryption ? (
             <UnsupportedEncryptionNotice method={message.unsupportedEncryption.name} />
-          ) : (
+          ) : (hideForwardFallback && !shown.body) ? null : (
+            <>
+            {hasForwardFallback && !hideForwardFallback && (
+              <div data-forward-quoted-copy className="text-xs text-fluux-muted mb-0.5">{t('chat.forwardQuotedCopy')}</div>
+            )}
             <MessageBody
               wrapIdentity={wrapIdentity}
-              body={message.body}
+              body={shown.body}
               isEdited={message.isEdited}
               originalBody={message.originalBody}
               isRetracted={message.isRetracted}
@@ -831,7 +846,7 @@ export const MessageBubble = memo(function MessageBubble({
               noStyling={message.noStyling}
               senderName={senderName}
               senderColor={senderColor}
-              mentions={mentions}
+              mentions={shown.mentions}
               nickname={nickname}
               knownNicks={knownNicks}
               resolveMentionColor={resolveMentionColor}
@@ -840,9 +855,10 @@ export const MessageBubble = memo(function MessageBubble({
               highlightTerms={highlightTerms}
               isCurrentMatch={isCurrentMatch}
             />
+            </>
           )}
 
-          <RoomMessageLinkPreview message={message} formatTime={formatTime} isDarkMode={isDarkMode} />
+          <RoomMessageLinkPreview message={message} formatTime={formatTime} isDarkMode={isDarkMode} onSourceShown={hasForwardFallback ? setSourceShown : undefined} />
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
           {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}

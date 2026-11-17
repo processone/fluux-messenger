@@ -1,4 +1,4 @@
-import type { ChatMessageTarget } from '../core/types/chat'
+import type { ChatMessageTarget, DataReference } from '../core/types/chat'
 import type { MessageRowRef } from '../utils/messageIdentity'
 import { useCallback, useMemo } from 'react'
 import { chatStore } from '../stores/chatStore'
@@ -30,8 +30,8 @@ export function useChatActions() {
     async (
       to: string,
       body: string,
-      // A 1:1 message carries no mentions: those address room occupants.
-      options?: Omit<SendMessageOptions, 'references'>
+      // A 1:1 message carries no mentions (those address room occupants), only data references.
+      options?: Omit<SendMessageOptions, 'references'> & { references?: DataReference[] }
     ): Promise<string> => {
       return await client.messages.sendMessage(to, body, options)
     },

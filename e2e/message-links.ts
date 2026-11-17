@@ -158,8 +158,8 @@ test.describe('mobile message links', () => {
   })
 })
 
-// The room-link forwarding specification requires one ordinary message, not a
-// forwarded copy. Exercise the actual demo SDK serializer and observe its local
+// Forward sends one ordinary message: comment, attributed quote and room link, with the
+// quote and link marked as XEP-0428 fallback and never an XEP-0297 copy. Exercise the actual demo SDK serializer and observe its local
 // transport boundary; no external account receives these messages.
 async function prepareForward(page: import('@playwright/test').Page) {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
@@ -179,11 +179,14 @@ async function prepareForward(page: import('@playwright/test').Page) {
       if (stanza.name === 'message' && stanza.getChildText('body')) scope.__forwardStanzas.push(stanza.toString())
       await original(stanza)
     }
-    return { id: row.id, body: row.body, stanzaId: row.stanzaId! }
+    return { id: row.id, body: row.body, nick: row.nick, stanzaId: row.stanzaId! }
   }, ROOM)
 }
 
-async function assertForwardStanza(page: import('@playwright/test').Page, to: string, type: string, body: string, link: string) {
+const FORWARD_QUOTE = 'urn:fluux:forward-quote:0'
+const quoteOf = (target: { nick: string; body: string }) => `> ${target.nick} wrote:\n${target.body.split('\n').map(line => `> ${line}`).join('\n')}\n`
+
+async function assertForwardStanza(page: import('@playwright/test').Page, to: string, type: string, body: string, link: string, fallbackText: string) {
   const stanzas = await page.evaluate(() => (window as unknown as { __forwardStanzas: string[] }).__forwardStanzas)
   expect(stanzas).toHaveLength(1)
   const parsed = await page.evaluate(xml => {
@@ -194,9 +197,16 @@ async function assertForwardStanza(page: import('@playwright/test').Page, to: st
       body: doc.getElementsByTagName('body')[0]?.textContent,
       reference: ref ? { type: ref.getAttribute('type'), uri: ref.getAttribute('uri') } : undefined,
       forwardedCopies: doc.getElementsByTagNameNS('urn:xmpp:forward:0', 'forwarded').length,
+      fallback: Array.from(doc.getElementsByTagNameNS('urn:xmpp:fallback:0', 'fallback')).map(el => ({
+        for: el.getAttribute('for'), range: el.getElementsByTagNameNS('urn:xmpp:fallback:0', 'body')[0]?.getAttributeNames().map(name => [name, el.getElementsByTagNameNS('urn:xmpp:fallback:0', 'body')[0].getAttribute(name)]),
+      })),
     }
   }, stanzas[0])
-  expect(parsed).toEqual({ to, type, body, reference: { type: 'data', uri: link }, forwardedCopies: 0 })
+  const marker = parsed.fallback.find(item => item.for === FORWARD_QUOTE)
+  const range = Object.fromEntries(marker?.range ?? []) as { start: string; end: string }
+  // The marker covers exactly the generated quote and link, in code points, never the comment.
+  expect(Array.from(body).slice(Number(range.start), Number(range.end)).join('')).toBe(fallbackText)
+  expect({ ...parsed, fallback: undefined }).toEqual({ to, type, body, reference: { type: 'data', uri: link }, forwardedCopies: 0, fallback: undefined })
   await test.info().attach('outgoing-stanza', { body: stanzas[0], contentType: 'application/xml' })
   if (process.env.FLUUX_FORWARD_EVIDENCE) {
     const { writeFile } = await import('node:fs/promises')
@@ -254,16 +264,57 @@ test('Forward sends a room link with an optional comment to a chosen contact', a
   await forwardPicture(page, 'after-picker')
   await picker.getByRole('button', { name: 'Send', exact: true }).click()
   await expect(picker).toBeHidden()
-  await assertForwardStanza(page, 'emma@fluux.chat', 'chat', `Please review\n${link}`, link)
+  await assertForwardStanza(page, 'emma@fluux.chat', 'chat', `Please review\n${quoteOf(target)}${link}`, link, `${quoteOf(target)}${link}`)
   await activateChat(page, 'emma@fluux.chat')
-  const sent = page.locator('[data-message-body]').filter({ has: page.getByRole('link', { name: link, exact: true }) }).last()
+  const sent = page.locator('[data-message-body]').filter({ hasText: 'Please review' }).last()
   await expect(sent).toBeVisible()
-  await expect(sent).toContainText('Please review')
+  // The source is readable, so the preview replaces the quote and link.
   await expect(sent.locator('[data-room-message-preview]')).toContainText(target.body)
+  await expect(sent).not.toContainText('wrote:')
+  await expect(sent.getByRole('link', { name: link, exact: true })).toHaveCount(0)
   await forwardPicture(page, 'after-recipient')
+  // Losing access to the source restores the labelled quote and link; regaining it hides them again.
+  const setJoined = (joined: boolean) => page.evaluate(({ jid, joined }) =>
+    (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState().updateRoom(jid, { joined }), { jid: ROOM, joined })
+  await setJoined(false)
+  await expect(sent).toContainText('wrote:')
+  await expect(sent).toContainText('Quoted copy from a forwarded message')
+  await expect(sent.getByRole('link', { name: link, exact: true }).first()).toBeVisible()
+  await expect(sent.locator('[data-room-message-preview]')).toContainText('Join the room to see it')
+  await sent.scrollIntoViewIfNeeded()
+  await forwardPicture(page, 'after-recipient-no-access')
+  await setJoined(true)
+  await expect(sent).not.toContainText('wrote:')
+  await expect(sent.locator('[data-room-message-preview]')).toContainText(target.body)
   await sent.locator('[data-room-message-preview]').getByRole('link').click()
   await expect(page.locator(`[data-message-id="${target.id}"].message-highlight`)).toBeInViewport()
   await forwardPicture(page, 'after-jump')
+})
+
+// The room route runs in both engines with the desktop picker; the touch journey below is Chromium-only.
+test('Forward sends the quote and link to a joined room and the real preview replaces them', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const target = await prepareForward(page)
+  const link = `xmpp:${ROOM}?join;msg=${encodeURIComponent(target.stanzaId)}`
+  const row = page.locator(`[data-message-id="${target.id}"][data-message-body]`)
+  await row.scrollIntoViewIfNeeded()
+  await page.mouse.move(1, 1)
+  await page.mouse.move(0, 0)
+  await row.hover()
+  await waitForActions(page, target.id)
+  await row.getByRole('button', { name: 'Forward message', exact: true }).click()
+  const picker = page.getByRole('dialog', { name: 'Forward message', exact: true })
+  await picker.getByLabel('Chat or room').fill('team')
+  await page.getByTestId('contact-suggestions').getByRole('button', { name: /Team Chat/ }).click()
+  await picker.getByLabel('Comment (optional)').fill('For the room')
+  await picker.getByRole('button', { name: 'Send', exact: true }).click()
+  await expect(picker).toBeHidden()
+  await assertForwardStanza(page, ROOM, 'groupchat', `For the room\n${quoteOf(target)}${link}`, link, `${quoteOf(target)}${link}`)
+  const sent = page.locator('[data-message-body]').filter({ hasText: 'For the room' }).last()
+  await expect(sent.locator('[data-room-message-preview]')).toContainText(target.body)
+  await expect(sent).not.toContainText('wrote:')
+  await sent.scrollIntoViewIfNeeded()
+  await forwardPicture(page, 'after-room-desktop')
 })
 
 test.describe('touch forwarding', () => {
@@ -307,9 +358,10 @@ test.describe('touch forwarding', () => {
     await forwardPicture(page, 'after-touch-picker')
     await picker.getByRole('button', { name: 'Send', exact: true }).tap()
     await expect(picker).toBeHidden()
-    await assertForwardStanza(page, ROOM, 'groupchat', link, link)
-    const sent = page.locator('[data-message-body]').filter({ has: page.getByRole('link', { name: link, exact: true }) }).last()
+    await assertForwardStanza(page, ROOM, 'groupchat', `${quoteOf(target)}${link}`, link, `${quoteOf(target)}${link}`)
+    const sent = page.locator('[data-message-body]').filter({ has: page.locator('[data-room-message-preview]') }).last()
     await expect(sent.locator('[data-room-message-preview]')).toContainText(target.body)
+    await expect(sent).not.toContainText('wrote:')
     await forwardPicture(page, 'after-room-recipient')
   })
 })

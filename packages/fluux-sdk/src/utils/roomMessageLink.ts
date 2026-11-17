@@ -40,7 +40,9 @@ export function roomMessageLinkReferences(body: string): DataReference[] {
 
 /** Prefer an explicit data reference; older clients can send just the body link. */
 export function findRoomMessageLink(body: string, references?: MessageReference[]): RoomMessageLink | null {
-  for (const reference of references ?? []) {
+  // A forward's marked link is its source, whatever other links its comment or quote holds.
+  const marked = (references ?? []).filter(reference => reference.type === 'data' && reference.forwardFallback)
+  for (const reference of [...marked, ...(references ?? [])]) {
     if (reference.type !== 'data') continue
     const target = parseRoomMessageLink(reference.uri)
     if (target) return target

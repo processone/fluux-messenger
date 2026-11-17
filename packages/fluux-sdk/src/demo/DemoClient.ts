@@ -25,7 +25,7 @@
 
 import { xml, type Element } from '@xmpp/client'
 import { XMPPClient } from '../core/XMPPClient'
-import { fromCodePointOffset } from '../utils/xep0426'
+import { parseMessageContent } from '../core/modules/messagingUtils'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
@@ -736,60 +736,11 @@ export class DemoClient extends XMPPClient {
     // `RoomMessage.id` is a string invariant the UI relies on (row keys, dedup).
     const id = (stanza.attrs.id as string | undefined) || generateUUID()
 
-    // Parse reply info from the stanza (XEP-0461)
-    const replyEl = stanza.getChild('reply')
-    const replyTo = replyEl
-      ? { id: replyEl.attrs.id as string, to: replyEl.attrs.to as string | undefined }
-      : undefined
-
-    // Parse attachment from OOB element (XEP-0066)
-    const oobEl = stanza.getChild('x')
-    const fileEl = stanza.getChild('file')
-    let attachment: RoomMessage['attachment'] | undefined
-    if (oobEl?.getChildText('url')) {
-      const thumbEl = oobEl.getChild('thumbnail')
-      attachment = {
-        url: oobEl.getChildText('url')!,
-        ...(fileEl?.getChildText('media-type') && { mediaType: fileEl.getChildText('media-type')! }),
-        ...(fileEl?.getChildText('name') && { name: fileEl.getChildText('name')! }),
-        ...(fileEl?.getChildText('size') && { size: Number(fileEl.getChildText('size')) }),
-        ...(fileEl?.getChildText('width') && { width: Number(fileEl.getChildText('width')) }),
-        ...(fileEl?.getChildText('height') && { height: Number(fileEl.getChildText('height')) }),
-        ...(thumbEl && {
-          thumbnail: {
-            uri: thumbEl.attrs.uri as string,
-            mediaType: thumbEl.attrs['media-type'] as string,
-            width: Number(thumbEl.attrs.width),
-            height: Number(thumbEl.attrs.height),
-          },
-        }),
-      }
-    }
-
-    // Strip reply fallback from body (everything before user's actual text)
-    const fallbackEl = stanza.getChildren('fallback')?.find(
-      (f: any) => f.attrs?.for?.includes('reply')
-    )
-    // Fallback ranges are code-point offsets (XEP-0426), matching what the real
-    // send path emits; body.slice() indexes UTF-16 units.
-    let processedBody = body
-    if (fallbackEl) {
-      const bodyRange = fallbackEl.getChild('body')
-      if (bodyRange?.attrs?.end) {
-        processedBody = body.slice(fromCodePointOffset(body, Number(bodyRange.attrs.end)))
-      }
-    }
-    // Also strip OOB fallback (URL appended at end)
-    const oobFallbackEl = stanza.getChildren('fallback')?.find(
-      (f: any) => f.attrs?.for?.includes('oob')
-    )
-    if (oobFallbackEl) {
-      const bodyRange = oobFallbackEl.getChild('body')
-      if (bodyRange?.attrs?.start) {
-        const start = fromCodePointOffset(processedBody, Number(bodyRange.attrs.start))
-        processedBody = processedBody.slice(0, start).trimEnd()
-      }
-    }
+    // The real receive parser, so reply and OOB fallback removal, attachments and
+    // reference offsets are transformed together exactly as for a reflected message.
+    const { processedBody, replyTo, attachment, references } = parseMessageContent({
+      messageEl: stanza, body, messageContext: 'room', preserveFullReplyToJid: true,
+    })
 
     // Parse poll elements so creating/closing polls works in demo
     const pollEl = stanza.getChild('poll')
@@ -812,6 +763,7 @@ export class DemoClient extends XMPPClient {
       receivedAt: new Date(),
       isOutgoing: true,
       ...(replyTo && { replyTo }),
+      ...(references && { references }),
       ...(attachment && { attachment }),
       ...(poll && { poll }),
       ...(pollClosed && { pollClosed }),

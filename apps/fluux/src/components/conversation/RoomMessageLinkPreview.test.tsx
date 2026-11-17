@@ -327,4 +327,51 @@ describe('room link reader previews', () => {
     expect(screen.queryByRole('link')).toBeNull()
     expect(read).not.toHaveBeenCalled()
   })
+
+  describe('reporting whether the source is on screen', () => {
+    const shown = vi.fn()
+    const render_ = (message = shared) => render(<RoomMessageLinkPreview message={message} formatTime={formatTime} onSourceShown={shown} />)
+    beforeEach(() => shown.mockReset())
+
+    it('reports true only while a readable source quote is shown, and false when it goes away', () => {
+      roomStore.getState().addRoom(room, [target])
+      const view = render_()
+      expect(shown).toHaveBeenLastCalledWith(true)
+      view.unmount()
+      expect(shown).toHaveBeenLastCalledWith(false)
+    })
+
+    it.each([
+      ['a readable marked source is shown even when the comment links an unreachable room', 'marked-readable'],
+      ['an unreachable marked source is not shown even when the comment links a readable room', 'marked-unreachable'],
+    ])('binds the report to the marked source: %s', (_name, mode) => {
+      const outside = buildRoomMessageLink('engineering@conference.example.org', '1731490000999999')
+      roomStore.getState().addRoom(room, [target])
+      const marked = mode === 'marked-readable' ? link : outside
+      const other = mode === 'marked-readable' ? outside : link
+      // Body order puts the comment's link first, as a retried send rebuilds it.
+      const body = `${other}\n> Bob wrote:\n> hi\n${marked}`
+      render_({ ...shared, body, references: [
+        { type: 'data', uri: other, begin: 0, end: other.length },
+        { type: 'data', uri: marked, begin: body.length - marked.length, end: body.length,
+          forwardFallback: { begin: other.length + 1, end: body.length } },
+      ] })
+      if (mode === 'marked-readable') expect(shown).toHaveBeenLastCalledWith(true)
+      else expect(shown).not.toHaveBeenCalledWith(true)
+    })
+
+    it('reports false for a non-member, so the forwarded quote stays visible', () => {
+      roomStore.getState().addRoom({ ...room, joined: false }, [target])
+      render_()
+      expect(shown).not.toHaveBeenCalledWith(true)
+    })
+
+    it('reports false for a deleted source', async () => {
+      roomStore.getState().addRoom(room)
+      read.mockResolvedValue({ kind: 'absent' })
+      render_()
+      await screen.findByText('Message deleted')
+      expect(shown).not.toHaveBeenCalledWith(true)
+    })
+  })
 })

@@ -170,6 +170,9 @@ export const NS_EASTER_EGG = 'urn:fluux:easter-egg:0'
 // Custom: Fluux Polls (reaction-based voting)
 export const NS_POLL = 'urn:fluux:poll:0'
 
+// Custom: Fluux forward quote. Names the XEP-0428 fallback for the quote and link a forward adds
+export const NS_FORWARD_QUOTE = 'urn:fluux:forward-quote:0'
+
 // XEP-0050: Ad-Hoc Commands
 export const NS_COMMANDS = 'http://jabber.org/protocol/commands'
 
