@@ -344,7 +344,7 @@ export async function decryptStanzaInPlace(
     failureReason = err instanceof Error ? err.message : String(err)
     failureCode = isE2EEPluginError(err) ? err.code : undefined
     prerequisiteWaiting = isE2EEPluginError(err) && err.kind === 'transient' &&
-      ['key-locked', 'keychain-locked', 'peer-key-missing', 'network', 'timeout', 'server-unreachable', 'server-error', 'key-storage-unavailable'].includes(err.code)
+      ['key-locked', 'timeout', 'server-unreachable', 'server-error', 'signature-not-yet-valid'].includes(err.code)
     if (isE2EEPluginError(err) && (err.code === 'signature-failed' || err.code === 'signature-missing')) {
       securityContext = {
         protocolId: claim.plugin.descriptor.id,

@@ -12,7 +12,10 @@ import { createDefaultStoreBindings } from '../defaultStoreBindings'
 import { chatStore } from '../../stores/chatStore'
 import * as cache from '../../utils/messageCache'
 import { setStorageScopeJid } from '../../utils/storageScope'
-import type { Message } from '../types'
+import type { Message, RoomMessage, StoreBindings } from '../types'
+import type { StoredMessage } from '../types/message-internal'
+import { createMockStores } from '../test-utils'
+import { serialize as serializePayloadEnvelope } from './payloadEnvelope'
 
 // Conversation preview status: exercise the existing dummy protocol through the
 // real claim/decrypt/recovery boundary, holding only its asynchronous completion.
@@ -139,6 +142,8 @@ describe('state-aware preview availability', () => {
 
   it.each([
     ['key-locked', 'transient', 'waiting', 'key-unavailable'],
+    ['signature-not-yet-valid', 'transient', 'waiting', 'unreadable'],
+    ['unknown', 'transient', 'failed', 'unreadable'],
     ['no-session-key', 'permanent', 'failed', 'key-unavailable'],
     ['malformed-data', 'permanent', 'failed', 'unreadable'],
     ['signature-failed', 'permanent', 'failed', 'signature-invalid'],
@@ -154,6 +159,117 @@ describe('state-aware preview availability', () => {
     if (state === 'failed') expect(preview().contentAvailability).toMatchObject({ reason })
     expect(isMessageDecrypting(PEER, preview())).toBe(false)
     if (code === 'malformed-data' || code === 'signature-failed') expect(preview().encryptedPayload).toBeUndefined()
+  })
+
+  // Review fixes: terminal corrections settle once, infrastructure errors are
+  // not decrypt failures, and unchanged availability never causes a write.
+  it.each(['malformed-data', 'broken-session'] as const)('retires a terminal %s correction after applying it once', async failure => {
+    chatStore.getState().refreshLastMessageContent(PEER, pending(), { encryptedPayload: undefined })
+    const message: StoredMessage = { ...pending(), id: 'terminal-correction', isEdited: true,
+      correctionRevision: { ids: ['id:terminal-correction'], supersedes: [] } }
+    if (failure === 'malformed-data') {
+      vi.spyOn(plugin, 'decrypt').mockRejectedValue(new E2EEPluginError('permanent', failure, 'Malformed dummy payload'))
+    } else {
+      vi.spyOn(plugin, 'decrypt').mockResolvedValue({ status: 'broken-session',
+        senderDevice: { jid: PEER, deviceId: 'dummy' }, securityContext: { protocolId: plugin.descriptor.id, trust: 'untrusted' } })
+    }
+    const repair = vi.spyOn(manager, 'repairSession').mockResolvedValue(true)
+    const apply = vi.fn()
+    const retry = vi.spyOn(engine, 'retryPending')
+    engine.recoverCorrection(message, () => true, apply)
+    await retry.mock.results[0].value
+    await engine.retryPending()
+    expect(apply).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ encryptedPayload: undefined,
+      contentAvailability: { state: 'failed', reason: 'unreadable' } }))
+    expect(plugin.decrypt).toHaveBeenCalledTimes(1)
+    expect(repair).toHaveBeenCalledTimes(failure === 'broken-session' ? 1 : 0)
+  })
+
+  it('keeps malformed stored XML pending instead of inventing a decrypt failure', async () => {
+    chatStore.getState().refreshLastMessageContent(PEER, pending(), { encryptedPayload: '<plain' })
+    const before = preview()
+    await engine.retryPending()
+    expect(plugin.decrypt).not.toHaveBeenCalled()
+    expect(preview()).toBe(before)
+  })
+
+  it('leaves a correction pending when durable signal storage fails after successful decryption', async () => {
+    const envelope = serializePayloadEnvelope([xml('body', {}, 'hello'), xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'original' })])
+    const message: StoredMessage = { ...pending(), isEdited: true,
+      correctionRevision: { ids: ['stanza:correction-archive'], supersedes: [] },
+      encryptedPayload: xml('message', { from: PEER, id: 'correction' },
+        xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(envelope).toString('base64'))).toString() }
+    chatStore.getState().reset()
+    chatStore.getState().addConversation({ id: PEER, name: 'Bob', type: 'chat', unreadCount: 2, lastMessage: message })
+    const stores = createDefaultStoreBindings()
+    const remember = vi.spyOn(stores.chat, 'rememberArchiveSignalForRecovery').mockRejectedValue(new Error('IndexedDB unavailable'))
+    engine = new DeferredDecryptEngine({ getManager: () => manager, getStores: () => stores,
+      getOwnBareJid: () => SELF, cache, updateSearchIndex: async () => {} })
+    const before = preview()
+    await engine.retryPending()
+    expect(plugin.decrypt).toHaveBeenCalledTimes(1)
+    expect(remember).toHaveBeenCalledTimes(1)
+    expect(preview()).toBe(before)
+    expect(isMessageDecrypting(PEER, preview())).toBe(false)
+  })
+
+  describe.each(['waiting', 'failed'] as const)('unchanged %s availability', state => {
+    it.each(['correction', 'resident', 'room', 'cached', 'preview-only'] as const)('does not write a retained %s message again', async location => {
+      const message: Message = { ...pending(), contentAvailability: state === 'waiting'
+        ? { state: 'waiting' } : { state: 'failed', reason: 'key-unavailable' } }
+      vi.spyOn(plugin, 'decrypt').mockRejectedValue(state === 'waiting'
+        ? new E2EEPluginError('transient', 'key-locked', 'Key locked')
+        : new E2EEPluginError('permanent', 'no-session-key', 'Not encrypted to this key'))
+      const stores = createMockStores()
+      const cached = { ...message, cacheKey: cache.chatCacheKey(message) }
+      const port = { getMessagesWithEncryptedPayload: vi.fn().mockResolvedValue(location === 'cached' ? [cached] : []),
+        updateMessage: vi.fn().mockResolvedValue(undefined), deleteMessage: vi.fn().mockResolvedValue(undefined) }
+      engine = new DeferredDecryptEngine({ getManager: () => manager, getStores: () => stores as unknown as StoreBindings,
+        getOwnBareJid: () => SELF, cache: port, updateSearchIndex: async () => {} })
+      if (location === 'resident') stores.chat.getAllStoredMessages.mockReturnValue([{ id: PEER, messages: [message] }])
+      if (location === 'room') {
+        const roomMessage: RoomMessage = { ...message, type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Bob', nick: 'Bob', occupantId: undefined }
+        stores.room.getAllRoomMessages.mockReturnValue([{ jid: roomMessage.roomJid, messages: [roomMessage] }])
+      }
+      if (location === 'preview-only') stores.chat.getEncryptedPreviews.mockReturnValue([{ conversationId: PEER, lastMessage: message }])
+      const apply = vi.fn()
+      if (location === 'correction') {
+        const retry = vi.spyOn(engine, 'retryPending')
+        engine.recoverCorrection({ ...message, isEdited: true }, () => true, apply)
+        await retry.mock.results[0].value
+      } else await engine.retryPending()
+      await engine.retryPending()
+      expect(plugin.decrypt).toHaveBeenCalledTimes(2)
+      expect(apply).not.toHaveBeenCalled()
+      expect(stores.chat.updateMessage).not.toHaveBeenCalled()
+      expect(stores.room.updateMessage).not.toHaveBeenCalled()
+      expect(port.updateMessage).not.toHaveBeenCalled()
+      expect(stores.chat.refreshLastMessageContent).not.toHaveBeenCalled()
+    })
+  })
+
+  it('updates changed failure reasons once and keeps a waiting correction snapshot current', async () => {
+    const stores = createMockStores()
+    const port = { getMessagesWithEncryptedPayload: async () => [], updateMessage: vi.fn(), deleteMessage: vi.fn() }
+    engine = new DeferredDecryptEngine({ getManager: () => manager, getStores: () => stores as unknown as StoreBindings,
+      getOwnBareJid: () => SELF, cache: port, updateSearchIndex: async () => {} })
+    const apply = vi.fn()
+    vi.spyOn(plugin, 'decrypt').mockRejectedValue(new E2EEPluginError('transient', 'key-locked', 'Key locked'))
+    const retry = vi.spyOn(engine, 'retryPending')
+    engine.recoverCorrection({ ...pending(), isEdited: true }, () => true, apply)
+    await retry.mock.results[0].value
+    await engine.retryPending()
+    expect(apply).toHaveBeenCalledTimes(1)
+    vi.spyOn(plugin, 'decrypt').mockRejectedValue(new E2EEPluginError('permanent', 'no-session-key', 'Not encrypted to this key'))
+    await engine.retryPending()
+    await engine.retryPending()
+    expect(apply).toHaveBeenCalledTimes(2)
+    expect(apply).toHaveBeenLastCalledWith(expect.objectContaining({ contentAvailability: { state: 'failed', reason: 'key-unavailable' } }))
+    vi.spyOn(plugin, 'decrypt').mockRejectedValue(new Error('Unreadable payload'))
+    await engine.retryPending()
+    await engine.retryPending()
+    expect(apply).toHaveBeenCalledTimes(3)
+    expect(apply).toHaveBeenLastCalledWith(expect.objectContaining({ contentAvailability: { state: 'failed', reason: 'unreadable' } }))
   })
 
   it('keeps decrypted-but-unverified content separate from decryption failure', async () => {

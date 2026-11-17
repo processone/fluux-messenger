@@ -342,7 +342,7 @@ export const ConversationItem = memo(function ConversationItem({
             <p dir="auto" className={`truncate text-xs opacity-75 ${conversation.lastMessage.isRetracted ? 'italic' : ''}`}>
               {activeDecrypt && <Loader2 className="inline size-3 me-1 align-text-bottom motion-safe:animate-spin" aria-hidden="true" />}
               {conversation.lastMessage.isOutgoing ? `${t('chat.me')}: ` : ''}
-              <span role={previewStatus ? 'status' : undefined}>{formatLocalizedPreview(conversation.lastMessage, t, encryption)}</span>
+              <span>{formatLocalizedPreview(conversation.lastMessage, t, encryption)}</span>
             </p>
           )}
         </div>

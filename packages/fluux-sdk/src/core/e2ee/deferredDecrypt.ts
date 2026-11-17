@@ -50,7 +50,7 @@ type RetryModification = ArchiveSignal['effect']
  *   retraction) is removed entirely so it never surfaces as a ghost bubble.
  * - `unavailable`: a completed attempt reports waiting or failed availability.
  *   Terminal failures clear the stash without changing the existing timeline placeholder.
- * - `pending`: still cannot decrypt (key locked / plugin not ready), an unverified signal
+ * - `pending`: plugin not ready, an interrupted attempt, an unverified signal
  *   waits for its signature check, or the message already shows this unverified text —
  *   leave `encryptedPayload`.
  */
@@ -62,7 +62,11 @@ type RetryOutcome =
   | { kind: 'pending' }
   | { kind: 'unavailable'; contentAvailability: NonNullable<Message['contentAvailability']>; clearPayload?: true; securityContext?: MessageSecurityContext }
 
-function unavailableUpdates(outcome: Extract<RetryOutcome, { kind: 'unavailable' }>): Partial<Pick<Message, 'contentAvailability' | 'encryptedPayload' | 'body' | 'securityContext'>> {
+function unavailableUpdates(message: Pick<Message, 'contentAvailability'>, outcome: Extract<RetryOutcome, { kind: 'unavailable' }>): Partial<Pick<Message, 'contentAvailability' | 'encryptedPayload' | 'body' | 'securityContext'>> | undefined {
+  const previous = message.contentAvailability
+  const next = outcome.contentAvailability
+  if (!outcome.clearPayload && previous?.state === next.state &&
+      (previous.state !== 'failed' || next.state !== 'failed' || previous.reason === next.reason)) return undefined
   return {
     contentAvailability: outcome.contentAvailability,
     ...(outcome.clearPayload && {
@@ -280,7 +284,12 @@ export class DeferredDecryptEngine {
         if (this.correctionRecoveries.get(key) !== request) continue
         if (!request.isCurrent()) { this.correctionRecoveries.delete(key); continue }
         if (outcome.kind === 'unavailable') {
-          request.apply(guardedUpdates(message, unavailableUpdates(outcome), accountScope))
+          if (outcome.clearPayload) this.correctionRecoveries.delete(key)
+          const updates = unavailableUpdates(message, outcome)
+          if (updates) {
+            request.apply(guardedUpdates(message, updates, accountScope))
+            request.message = { ...message, ...updates }
+          }
           continue
         }
         if (outcome.kind === 'pending') continue
@@ -316,7 +325,8 @@ export class DeferredDecryptEngine {
             chatBindings.updateMessage(conversationId, msg, recoveredUpdates(msg, outcome, accountScope))
             decryptedCount++
           } else if (outcome.kind === 'unavailable') {
-            chatBindings.updateMessage(conversationId, msg, guardedUpdates(msg, unavailableUpdates(outcome), accountScope))
+            const updates = unavailableUpdates(msg, outcome)
+            if (updates) chatBindings.updateMessage(conversationId, msg, guardedUpdates(msg, updates, accountScope))
           } else if (outcome.kind === 'modification') {
             if (!await this.dropChatPlaceholder(conversationId, msg, stores, accountScope, accountChanged, outcome)) continue
             if (accountChanged()) return decryptedCount
@@ -353,7 +363,8 @@ export class DeferredDecryptEngine {
             decryptedCount++
             roomsToRecount.add(roomJid)
           } else if (outcome.kind === 'unavailable') {
-            roomBindings.updateMessage(roomJid, msg.id, guardedUpdates(msg, unavailableUpdates(outcome), accountScope))
+            const updates = unavailableUpdates(msg, outcome)
+            if (updates) roomBindings.updateMessage(roomJid, msg.id, guardedUpdates(msg, updates, accountScope))
             if (outcome.clearPayload) roomsToRecount.add(roomJid)
           } else if (outcome.kind === 'rejected') {
             // MUC carries no encrypted bodiless signals, so a rejected room
@@ -421,7 +432,9 @@ export class DeferredDecryptEngine {
           stores.chat.refreshLastMessageContent?.(conversationId, msg, updates)
           decryptedCount++
         } else if (outcome.kind === 'unavailable') {
-          const updates = guardedUpdates(msg, unavailableUpdates(outcome), accountScope)
+          const unavailable = unavailableUpdates(msg, outcome)
+          if (!unavailable) continue
+          const updates = guardedUpdates(msg, unavailable, accountScope)
           await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from, accountScope, msg.cacheKey)
           if (accountChanged()) return decryptedCount
           if (outcome.clearPayload) {
@@ -487,7 +500,8 @@ export class DeferredDecryptEngine {
           chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, recoveredUpdates(lastMessage, outcome, accountScope))
           decryptedCount++
         } else if (outcome.kind === 'unavailable') {
-          chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, guardedUpdates(lastMessage, unavailableUpdates(outcome), accountScope))
+          const updates = unavailableUpdates(lastMessage, outcome)
+          if (updates) chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, guardedUpdates(lastMessage, updates, accountScope))
         } else if (outcome.kind === 'modification') {
           // Until decrypted, an outgoing signal can carry a fallback body and
           // become the preview even though it has no row in loaded history.
@@ -508,7 +522,7 @@ export class DeferredDecryptEngine {
             encryptedPayload: undefined,
           }, accountScope))
         }
-        // 'pending' means the key is still locked — leave the stash for a later pass.
+        // Pending and retained unavailable outcomes leave the stash for a later pass.
       }
 
       if (decryptedCount > 0) {
@@ -813,7 +827,7 @@ export class DeferredDecryptEngine {
       return outcome
     } catch (err) {
       logWarn(`E2EE deferred decrypt failed for message from ${getDomain(senderJid)}: ${err instanceof Error ? err.message : String(err)}`)
-      return { kind: 'unavailable', contentAvailability: { state: 'failed', reason: 'unreadable' } }
+      return { kind: 'pending' }
     } finally {
       endActivity()
     }
