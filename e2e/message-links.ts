@@ -157,3 +157,124 @@ test.describe('mobile message links', () => {
     }
   })
 })
+
+// The room-link forwarding specification requires one ordinary message, not a
+// forwarded copy. Exercise the actual demo SDK serializer and observe its local
+// transport boundary; no external account receives these messages.
+async function prepareForward(page: import('@playwright/test').Page) {
+  await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+  await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(ROOM)}`)
+  return page.evaluate(async roomJid => {
+    type Stanza = { name: string; getChildText: (name: string) => string; toString: () => string }
+    const scope = window as unknown as {
+      __demoClient: DemoClient; __roomStore: typeof roomStore; __forwardStanzas: string[]
+    }
+    scope.__demoClient.stopAnimation()
+    await scope.__roomStore.getState().activateRoom(roomJid)
+    const row = scope.__roomStore.getState().messages.get(roomJid)!.find(row => row.id === 'demo-room-whisper-pub')!
+    const transport = scope.__demoClient as unknown as { beginStanzaSend: (stanza: Stanza) => Promise<void> }
+    const original = transport.beginStanzaSend.bind(transport)
+    scope.__forwardStanzas = []
+    transport.beginStanzaSend = async stanza => {
+      if (stanza.name === 'message' && stanza.getChildText('body')) scope.__forwardStanzas.push(stanza.toString())
+      await original(stanza)
+    }
+    return { id: row.id, body: row.body, stanzaId: row.stanzaId! }
+  }, ROOM)
+}
+
+async function assertForwardStanza(page: import('@playwright/test').Page, to: string, type: string, body: string, link: string) {
+  const stanzas = await page.evaluate(() => (window as unknown as { __forwardStanzas: string[] }).__forwardStanzas)
+  expect(stanzas).toHaveLength(1)
+  const parsed = await page.evaluate(xml => {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml')
+    const ref = doc.getElementsByTagNameNS('urn:xmpp:reference:0', 'reference')[0]
+    return {
+      to: doc.documentElement.getAttribute('to'), type: doc.documentElement.getAttribute('type'),
+      body: doc.getElementsByTagName('body')[0]?.textContent,
+      reference: ref ? { type: ref.getAttribute('type'), uri: ref.getAttribute('uri') } : undefined,
+      forwardedCopies: doc.getElementsByTagNameNS('urn:xmpp:forward:0', 'forwarded').length,
+    }
+  }, stanzas[0])
+  expect(parsed).toEqual({ to, type, body, reference: { type: 'data', uri: link }, forwardedCopies: 0 })
+  await test.info().attach('outgoing-stanza', { body: stanzas[0], contentType: 'application/xml' })
+  if (process.env.FLUUX_FORWARD_EVIDENCE) {
+    const { writeFile } = await import('node:fs/promises')
+    await writeFile(`${process.env.FLUUX_FORWARD_EVIDENCE}/${type}-stanza.xml`, stanzas[0])
+  }
+}
+
+async function forwardPicture(page: import('@playwright/test').Page, name: string) {
+  if (process.env.FLUUX_FORWARD_EVIDENCE) await page.screenshot({ path: `${process.env.FLUUX_FORWARD_EVIDENCE}/${name}.png` })
+}
+
+test('Forward sends a room link with an optional comment to a chosen contact', async ({ page }) => {
+  const target = await prepareForward(page)
+  const link = `xmpp:${ROOM}?join;msg=${encodeURIComponent(target.stanzaId)}`
+  const row = page.locator(`[data-message-id="${target.id}"][data-message-body]`)
+  await row.scrollIntoViewIfNeeded()
+  await page.mouse.move(1, 1)
+  await page.mouse.move(0, 0)
+  await row.hover()
+  await waitForActions(page, target.id)
+  await forwardPicture(page, 'after-desktop')
+  await row.getByRole('button', { name: 'Forward message', exact: true }).click()
+  const picker = page.getByRole('dialog', { name: 'Forward message', exact: true })
+  await expect(picker.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
+  await picker.getByLabel('Chat or room').selectOption('chat:emma@fluux.chat')
+  await picker.getByLabel('Comment (optional)').fill('Please review')
+  await forwardPicture(page, 'after-picker')
+  await picker.getByRole('button', { name: 'Send', exact: true }).click()
+  await expect(picker).toBeHidden()
+  await assertForwardStanza(page, 'emma@fluux.chat', 'chat', `Please review\n${link}`, link)
+  await activateChat(page, 'emma@fluux.chat')
+  const sent = page.locator('[data-message-body]').filter({ hasText: `Please review\n${link}` }).last()
+  await expect(sent).toBeVisible()
+  await expect(sent.locator('[data-room-message-preview]')).toContainText(target.body)
+  await forwardPicture(page, 'after-recipient')
+  await sent.locator('[data-room-message-preview]').getByRole('link').click()
+  await expect(page.locator(`[data-message-id="${target.id}"].message-highlight`)).toBeInViewport()
+})
+
+test.describe('touch forwarding', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
+  test('Forward opens from the action sheet, cancels without sending and shares to a joined room', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'Held touch uses Chromium input dispatch; the shared picker runs in both engines above.')
+    const target = await prepareForward(page)
+    const link = `xmpp:${ROOM}?join;msg=${encodeURIComponent(target.stanzaId)}`
+    const row = page.locator(`[data-message-id="${target.id}"][data-message-body]`)
+    const open = async () => {
+      await row.scrollIntoViewIfNeeded()
+      const box = (await row.locator('[class~="touch:select-none"]').first().boundingBox())!
+      const touch = await page.context().newCDPSession(page)
+      try {
+        await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }] })
+        const sheet = page.getByRole('dialog', { name: 'More options', exact: true })
+        await expect(sheet).toBeVisible()
+        await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+        await expect(sheet.getByRole('button', { name: 'Forward message', exact: true })).toBeVisible()
+        await forwardPicture(page, 'after-touch')
+        await sheet.getByRole('button', { name: 'Forward message', exact: true }).tap()
+      } finally { await touch.detach() }
+    }
+    await open()
+    const picker = page.getByRole('dialog', { name: 'Forward message', exact: true })
+    await picker.getByRole('button', { name: 'Cancel', exact: true }).tap()
+    await expect(picker).toBeHidden()
+    expect(await page.evaluate(() => (window as unknown as { __forwardStanzas: string[] }).__forwardStanzas)).toHaveLength(0)
+    await open()
+    await picker.getByLabel('Chat or room').selectOption(`room:${ROOM}`)
+    await forwardPicture(page, 'after-touch-picker')
+    await picker.getByRole('button', { name: 'Send', exact: true }).tap()
+    await expect(picker).toBeHidden()
+    await assertForwardStanza(page, ROOM, 'groupchat', link, link)
+    const sent = page.locator('[data-message-body]').filter({ has: page.getByRole('link', { name: link, exact: true }) }).last()
+    await expect(sent.locator('[data-room-message-preview]')).toContainText(target.body)
+    await forwardPicture(page, 'after-room-recipient')
+    // Whispers remain outside the link-sharing action boundary.
+    const whisper = page.locator('[data-message-id="demo-room-whisper-out"][data-message-body]')
+    await whisper.scrollIntoViewIfNeeded()
+    await expect(whisper).toBeVisible()
+    await expect(whisper.getByRole('button', { name: 'Forward message', exact: true })).toHaveCount(0)
+  })
+})

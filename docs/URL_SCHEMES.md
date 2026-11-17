@@ -81,7 +81,17 @@ A reader who has not joined sees only the room name and **Join the room to see
 it**. No cache or archive content is disclosed to that reader. The preview opens
 the same in-app navigation as the text link; it does not join automatically.
 Leaving a room or changing accounts hides its quote and invalidates pending
-preview reads. The Forward chat picker is a separate feature.
+preview reads.
+
+**Forward message** on a linkable room message opens a picker of contacts, existing
+chats and currently joined rooms. On phones it is in the long-press action menu.
+Choose one destination, optionally add a comment, then press **Send**. Fluux sends
+one ordinary message containing the comment (if any), a newline and the room
+message link, with the same XEP-0372 data reference as a pasted link. Without a
+comment the body is only the link. It never sends an XEP-0297 forwarded copy or
+the original room text. Cancelling sends nothing; a send failure keeps the picker
+and comment available. Forward is unavailable for whispers, unconfirmed messages
+and messages without a room archive id, just like Copy message link.
 
 ## Login prefill principles
 
