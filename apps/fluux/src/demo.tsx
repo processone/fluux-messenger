@@ -37,6 +37,7 @@ import { installDemoLoadOlder, seedStressConversation } from './demo/demoLoadOld
 import App from './App'
 import i18n from './i18n'
 import './index.css'
+import { installNotificationSettingsFixture } from './demo/notificationSettingsFixture'
 import { installMobileViewport } from './utils/mobileViewport'
 
 installMobileViewport()
@@ -192,6 +193,7 @@ setSessionPassphrase('demo')
 ;(window as any).__themeStore = useThemeStore
 ;(window as any).__settingsStore = useSettingsStore
 ;(window as any).__i18n = i18n
+;(window as any).__installNotificationSettingsFixture = installNotificationSettingsFixture
 
 // Seed admin store so the Admin panel is accessible in demo
 adminStore.getState().setIsAdmin(true)

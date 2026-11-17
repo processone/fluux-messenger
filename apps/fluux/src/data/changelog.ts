@@ -19,6 +19,8 @@ export const changelog: ChangelogEntry[] = [
     sections: [{
       type: 'added',
       items: [
+        'macOS: Settings → Notifications now warns when system notifications, app icon badges or alerts are disabled, with a shortcut to system settings. Returning to Fluux refreshes the status; the panel never changes permissions automatically',
+        'Export badge diagnostics is now in Settings → Notifications instead of the XMPP console, on desktop, web and mobile',
         'Badge diagnostics now record anonymous local decisions automatically, including decryption, unread counts and native badge results. Export them separately from the XMPP console when investigating a missing badge; nothing uploads automatically',
         'macOS: a native desktop widget lists unread conversations with names, avatars, counts, mention markers and times, without message text. Clicking a row opens the conversation; an old saved list is marked when Fluux stops updating it',
         'iOS: a new widget shows your unread conversations on the home screen. The lock screen shows the unread total. Tap a row to open that conversation. Message text is never shown',

@@ -261,9 +261,15 @@ Local desktop builds run under a **separate dev identity** so they never collide
 
 The override lives in `apps/fluux/src-tauri/tauri.dev.conf.json` and is merged in by the local scripts via `--config`. CI/release builds use the base config and are **never** affected. Tauri only auto-merges `tauri.<platform>.conf.json` files, so `tauri.dev.conf.json` applies only when a script passes it explicitly. (To build locally with the *production* identity, e.g. to test the release artifact, use the raw `npm run tauri build`, which uses the base config.)
 
+Settings → Notifications reads `notification_settings_state` on macOS. It returns one snapshot of `authorizationStatus`, `badgeSetting`, `alertSetting` and `alertStyle` without prompting. Known-disabled badges or alerts warn; enabled alerts with a known `None` style also warn. Unknown SDK values and failed reads remain unknown, never disabled; unsupported states remain distinct. Fluux’s local sound/banner preferences remain separate. macOS notifications carry no native sound; the existing local sound switch controls Fluux’s own chime. An unbundled executable reports unsupported rather than denied or not requested. The existing `notification_permission_state` string contract remains unchanged for the runtime posting gate. The panel rereads on opening, focus and visibility changes; only an explicit click requests permission or opens System Settings.
+
+The `notification-settings` browser journey uses demo-owned IPC responses, not real system settings or an installed app's authorization. Native enum mapping tests likewise do not establish visible Dock rendering or permission continuity after an update.
+
+Run `bash scripts/native-tests/notification-settings/run.sh /absolute/path/outside/project` on macOS, choosing a new results directory. The launcher builds a throwaway unsigned `.app` for `notification_settings_isolated_native_probe --ignored`, reads only its dedicated identity's settings, retains stdout, stderr, environment details and a copy of `Info.plist`, and removes the bundle. It never requests permission or uses signing or keychain commands; a fresh identity normally proves the not-requested callback, not disabled badges.
+
 ### Why a separate identity
 
-macOS binds notification authorization (`UNUserNotificationCenter`) to the app's **code signature *and* bundle id**, not the bundle id alone. A locally-built app that shares the production identifier inherits (but cannot match) the grant given to the signed production build, so notifications silently read as *"permission not granted"* even though **System Settings → Notifications** still lists the app as allowed. (The dock badge keeps working, because it needs no authorization.) A distinct `.dev` identity gets its own authorization and never disturbs the production grant.
+macOS binds notification authorization (`UNUserNotificationCenter`) to the app's **code signature *and* bundle id**, not the bundle id alone. A locally-built app that shares the production identifier inherits (but cannot match) the grant given to the signed production build, so notifications silently read as *"permission not granted"* even though **System Settings → Notifications** still lists the app as allowed. (The Dock count is separate from general notification authorization; a successful badge call is not a visible readback.) A distinct `.dev` identity gets its own authorization and never disturbs the production grant.
 
 ### TLS providers in development and production
 
@@ -903,11 +909,11 @@ registration completed, not that every pending message has decrypted.
 ### Automatic badge diagnostics
 
 Fluux automatically keeps an independent local badge-decision journal during normal
-use, without enabling notification debugging. In **Settings → Advanced**, enable
-advanced mode to expose the console. Open **Show Console** from the user menu, then
-choose **Export badge diagnostics** (the bug icon beside **Export log**). This action
-works even when the XMPP log is empty and downloads `fluux-badge-diagnostics.json`.
-Desktop uses the normal save dialog; cancelling writes nothing. A save failure shows
+use, without enabling notification debugging. On any supported platform, open **Settings → Notifications**
+and choose **Export badge diagnostics** in the permission section. Advanced mode and
+the XMPP console are not required. The action remains available regardless of notification
+permission and works even when the XMPP log is empty. It saves `fluux-badge-diagnostics.json`.
+Desktop uses the normal save dialog; cancelling writes nothing. iOS uses its existing share sheet, and web and Android use the existing download path. A save failure shows
 an error rather than claiming success. This file is separate from the XMPP log, which
 can contain private protocol data.
 

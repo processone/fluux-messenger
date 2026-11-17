@@ -1617,6 +1617,8 @@ fn main() {
             #[cfg(target_os = "macos")]
             notifications::notification_permission_state,
             #[cfg(target_os = "macos")]
+            notifications::notification_settings_state,
+            #[cfg(target_os = "macos")]
             notifications::request_notification_permission,
             notifications::take_pending_notification_target,
             notifications::set_notification_listener_ready,
