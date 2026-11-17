@@ -122,7 +122,7 @@ export function isPeerVerified(jid: string, fingerprint: string): boolean {
   const stored = useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid[jid]
   // Normalized compare: a fingerprint verified on one OpenPGP backend
   // (e.g. Sequoia, UPPERCASE) and synced to another (openpgp.js, lowercase)
-  // must still count as verified. See e2ee/fingerprintCompare.ts.
+  // must still count as verified. See packages/openpgp-plugin/src/fingerprintCompare.ts.
   return stored !== undefined && fingerprintsEqual(stored, fingerprint)
 }
 
