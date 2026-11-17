@@ -4,6 +4,7 @@ import { useConnection } from '@fluux/sdk'
 import { useModalInput } from '@/hooks'
 import { ModalShell } from './ModalShell'
 import { forgetStaleSavedCredentials, hasSavedCredentials, saveCredentials } from '@/utils/keychain'
+import { getSession } from '@/utils/sessionStorage'
 import { useToastStore } from '@/stores/toastStore'
 
 interface ChangePasswordModalProps {
@@ -48,8 +49,11 @@ export function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
     // The server has the new password from here on, so the change succeeded
     // whatever the keychain does. Update it if "Remember me" was used at login.
     if (jid && hasSavedCredentials()) {
+      // Keep the server this session signed in with, as the login form saves
+      // it, so the next start and the login form still use a custom server.
+      const server = getSession(jid)?.server || null
       try {
-        await saveCredentials(jid, newPassword, null)
+        await saveCredentials(jid, newPassword, server)
       } catch (err) {
         console.error('Failed to save the new password to the keychain:', err)
         // The keychain still holds the old password, which no longer signs in:

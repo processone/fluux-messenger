@@ -5,6 +5,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { setPlatformForTesting } from '@/platform'
 import { hasSavedCredentials, resetKeychainLaunchStateForTesting } from '@/utils/keychain'
 import { standaloneStartupReconnect } from '@/utils/startupReconnect'
+import { saveSession } from '@/utils/sessionStorage'
 
 const { mockChangePassword, mockInvoke } = vi.hoisted(() => ({
   mockChangePassword: vi.fn(),
@@ -25,6 +26,10 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
 }))
 
+// A server address entered in the login form's server field, which the login
+// form saves with the password and the session keeps.
+const CUSTOM_SERVER = 'tcp://chat.example.invalid:5222'
+
 // What the Linux keyring command answers when the login keyring is locked and
 // its unlock prompt is dismissed during the save.
 const LOCKED_KEYRING_SAVE_ERROR = 'keychain-unavailable: Keychain locked or inaccessible during save: '
@@ -43,16 +48,20 @@ describe('ChangePasswordModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    sessionStorage.clear()
     resetKeychainLaunchStateForTesting()
     useToastStore.setState({ toasts: [] })
     restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'linux' })
     // Signed in earlier with Remember me: the keychain holds the current password.
     localStorage.setItem('xmpp-has-saved-credentials', 'true')
+    // Signed in through a custom server, as the login form and startup record it.
+    saveSession('fixture@example.invalid', 'old-local-secret', CUSTOM_SERVER)
   })
 
   afterEach(() => {
     restorePlatform?.()
     localStorage.clear()
+    sessionStorage.clear()
     useToastStore.setState({ toasts: [] })
   })
 
@@ -79,7 +88,7 @@ describe('ChangePasswordModal', () => {
     submitNewPassword(onClose)
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
-    expect(mockInvoke).toHaveBeenCalledWith('save_credentials', { jid: 'fixture@example.invalid', password: 'new-local-secret', server: null })
+    expect(mockInvoke).toHaveBeenCalledWith('save_credentials', expect.objectContaining({ password: 'new-local-secret' }))
     expect(screen.queryByText('profile.failedToChangePassword')).toBeNull()
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({ type: 'error', message: 'profile.newPasswordNotSaved' }),
@@ -90,7 +99,9 @@ describe('ChangePasswordModal', () => {
     errors.mockRestore()
   })
 
-  it('saves the new password and closes without a message when the keychain update works', async () => {
+  // The next start and the login form read the server from this entry, so
+  // dropping it would send a custom-server account to domain discovery.
+  it('saves the new password with the server the session signed in with and closes without a message when the keychain update works', async () => {
     mockChangePassword.mockResolvedValueOnce(undefined)
     mockInvoke.mockResolvedValueOnce(undefined)
     const onClose = vi.fn()
@@ -98,7 +109,7 @@ describe('ChangePasswordModal', () => {
     submitNewPassword(onClose)
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
-    expect(mockInvoke).toHaveBeenCalledWith('save_credentials', { jid: 'fixture@example.invalid', password: 'new-local-secret', server: null })
+    expect(mockInvoke).toHaveBeenCalledWith('save_credentials', { jid: 'fixture@example.invalid', password: 'new-local-secret', server: CUSTOM_SERVER })
     expect(useToastStore.getState().toasts).toEqual([])
     expect(standaloneStartupReconnect()).toEqual({ kind: 'keychain' })
   })
