@@ -65,6 +65,11 @@
       "enabled": false
     },
     {
+      "description": "shiki 4.6.0 gzips its bundled Oniguruma WebAssembly and, as soon as it is imported, decodes it with DecompressionStream and Response.bytes(). WebKit has DecompressionStream from Safari and iOS 16.4 and Response.bytes() only from 18, while Fluux still supports iOS 15 and older macOS WebKit: there the import fails and every code block loses its syntax colors. happy-dom, the app's default test DOM, has no Response.bytes() either, so the app tests that import shiki fail on 4.6.0. apps/fluux/package.json holds shiki at ~4.5.0, which keeps the weekly lockfile maintenance on 4.5; this rule stops Renovate from proposing a range bump to 4.6 or later. Remove both once the oldest supported WebKit and the test DOM provide Response.bytes() and DecompressionStream, or once a shiki release loads its bundled WebAssembly without them.",
+      "matchPackageNames": ["shiki"],
+      "allowedVersions": "<4.6.0"
+    },
+    {
       "groupName": "Rust crates",
       "groupSlug": "rust",
       "matchManagers": ["cargo"],
