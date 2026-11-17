@@ -200,6 +200,16 @@ their DOM snapshots, actions, console and network. For the same reason, avoid vi
 recording on long macOS WebKit runs: it captures the window the same way. A `--trace` flag
 on the command line is safe: it changes only the mode and keeps screenshots off.
 
+Every Playwright config under `e2e/`, and `npm run build:e2e`, first compares
+`node_modules` with `package-lock.json` (`scripts/check-install-lock.mjs`). When an
+installed version, a package the lockfile lists or no longer lists, or a workspace link
+differs, for example after pulling a lockfile update without reinstalling, or with
+`node_modules` cloned or linked from another checkout, the gate stops before it builds the
+demo or starts a browser. It lists the differing paths and asks for `npm ci`. Optional
+packages npm skips, such as other platforms' binaries, are not differences. Run
+`node scripts/check-install-lock.mjs` to check an install on its own;
+`npm run test:install-lock` tests the comparison.
+
 ### macOS native startup recovery
 
 On macOS a native cover sits above the webview until the page proves it is

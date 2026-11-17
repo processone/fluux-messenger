@@ -176,6 +176,11 @@ jobs:
       - name: Test inspector scope selection
         run: node --test scripts/inspector/ci-scope.test.mjs
 
+      # The comparison every browser gate runs before it builds: tested on fixtures,
+      # before `npm ci`, because it needs no dependencies.
+      - name: Test the install check
+        run: npm run test:install-lock
+
       - name: Install dependencies
         run: npm ci
 

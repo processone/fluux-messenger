@@ -1,4 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
+import { requireLockedInstall } from './harness/installGuard'
+
+// Before anything builds, serves or launches: see e2e/harness/installGuard.ts.
+requireLockedInstall()
 
 /**
  * The suites run against a BUILT demo served by `vite preview`, not the dev server.

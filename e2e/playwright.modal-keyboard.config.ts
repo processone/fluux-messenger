@@ -1,4 +1,8 @@
 import { defineConfig } from '@playwright/test'
+import { requireLockedInstall } from './harness/installGuard'
+
+// Before anything builds, serves or launches: see e2e/harness/installGuard.ts.
+requireLockedInstall()
 
 export default defineConfig({
   timeout: 120_000, testDir: '.', testMatch: 'modal-keyboard.ts', workers: 1,
