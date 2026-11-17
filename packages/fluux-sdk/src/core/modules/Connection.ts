@@ -804,6 +804,11 @@ export class Connection extends BaseModule {
       return resolveWebSocketUrl(server, domain, this.stores.console, fallbackWebSocketUrl, onFallback)
     }
 
+    // One credentials object serves every attempt of this request, so a password
+    // change the server accepts while an attempt is online (adoptChangedPassword)
+    // carries over to the next attempt: the proxy fallback taken when the direct
+    // WebSocket pre-check gives up during the post-connect setup.
+    const requestCredentials: ConnectOptions = { jid, password, server, resource, lang, disableSmKeepalive, rememberSession }
     let attemptAuthentication: AuthenticationTracker | undefined
     const attemptConnection = async (resolvedServer: string, connectionMethod: ConnectionMethod): Promise<void> => {
       throwIfCancelled()
@@ -815,8 +820,9 @@ export class Connection extends BaseModule {
         }
       }
       this.stores.connection.setConnectionMethod(connectionMethod)
-      this.credentials = { jid, password, server: resolvedServer, resource, lang, disableSmKeepalive, rememberSession }
-      this.installXmppClient({ jid, password, server: resolvedServer, resource, lang, rememberSession })
+      requestCredentials.server = resolvedServer
+      this.credentials = requestCredentials
+      this.installXmppClient({ jid, password: requestCredentials.password, server: resolvedServer, resource, lang, rememberSession })
       attemptAuthentication = this.xmpp ? this.authentications.get(this.xmpp) : undefined
       this.hydrateStreamManagement(restoredSmState ?? undefined)
       this.setupHandlers()
@@ -1204,11 +1210,14 @@ export class Connection extends BaseModule {
    * FAST token is refused. Does nothing once the session has ended or when it
    * belongs to another account.
    *
+   * The credentials are changed in place: an attempt still running from them,
+   * such as connect's proxy fallback or a reconnect's, uses the new password too.
+   *
    * @internal Called through the module dependencies after Profile.changePassword succeeds.
    */
   adoptChangedPassword(accountJid: string, password: string): void {
     if (!this.credentials || getBareJid(this.credentials.jid) !== getBareJid(accountJid)) return
-    this.credentials = { ...this.credentials, password }
+    this.credentials.password = password
   }
 
   /**

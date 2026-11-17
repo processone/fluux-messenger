@@ -15,6 +15,7 @@ import { buildStartupConnectionOptions } from '@/utils/startupConnectionOptions'
 import { prewarmOpenpgpUnlock } from '@/utils/openpgpPrewarm'
 import { ensureDeepLinkRouter, setStartupLoginHandler, clearQueuedDeepLinks } from '@/utils/deepLinkRouter'
 import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
+import { onSignInAccepted } from '@/utils/signInAccepted'
 import {
   clearSession,
   getSession,
@@ -118,12 +119,23 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
 
   // The one place a startup path connects. Nothing happens for an attempt that
   // was replaced by a login link, logged out or overtaken by a shutdown in the
-  // meantime, and the caller saves nothing for one that was while connecting.
+  // meantime. With `saveForReload`, the tab session that reloads sign in from
+  // is saved with this sign-in's credentials as soon as the server accepts it,
+  // so a password changed during the setup that follows replaces them; nothing
+  // is saved for an attempt that was replaced, logged out or overtaken by then.
   // Rejects when the connection fails or is cancelled (status then says so).
-  const startupConnect = useCallback(async (epoch: number, options: ConnectOptions): Promise<boolean> => {
-    if (startupObsolete(epoch)) return false
-    await connect(options)
-    return !startupObsolete(epoch)
+  const startupConnect = useCallback(async (epoch: number, options: ConnectOptions, saveForReload = false): Promise<void> => {
+    if (startupObsolete(epoch)) return
+    const stopSaving = saveForReload
+      ? onSignInAccepted(clientRef.current, options.jid, () => {
+        if (!startupObsolete(epoch)) saveSession(options.jid, options.password ?? '', options.server)
+      })
+      : undefined
+    try {
+      await connect(options)
+    } finally {
+      stopSaving?.()
+    }
   }, [connect, startupObsolete])
 
   // A login link replaces the saved account at any moment during startup: the
@@ -268,15 +280,14 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     // surface via the machine's AUTH_ERROR path and delete the token.
     try {
       await prepareNativePushAccount(savedJid)
-      const connected = await startupConnect(epoch, buildStartupConnectionOptions(
-        { jid: savedJid, password: fallbackPassword, ...serverOptions, resource, lang: i18n.language },
-        { kind: 'fast-token' },
-      ))
       // Save session for subsequent in-tab reconnects. Store the
       // fallback password so reloads (Path A) don't have to re-hit
       // the keychain; empty string preserves prior behavior when no
       // password is available.
-      if (connected) saveSession(savedJid, fallbackPassword ?? '', serverOptions.server)
+      await startupConnect(epoch, buildStartupConnectionOptions(
+        { jid: savedJid, password: fallbackPassword, ...serverOptions, resource, lang: i18n.language },
+        { kind: 'fast-token' },
+      ), true)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.log('[Auth] FAST token connect failed:', message)
@@ -318,12 +329,11 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     void prewarmOpenpgpUnlock(loginJid)
     try {
       await prepareNativePushAccount(loginJid)
-      const connected = await startupConnect(epoch, buildStartupConnectionOptions(
+      // Save session for auto-reconnect on page reload
+      await startupConnect(epoch, buildStartupConnectionOptions(
         { jid: loginJid, password: credentials.password, ...serverOptions, resource: getResource(), lang: i18n.language },
         { kind: 'keychain', hasNativeConnectionKeepalive: platform().hasNativeConnectionKeepalive },
-      ))
-      // Save session for auto-reconnect on page reload
-      if (connected) saveSession(loginJid, credentials.password, serverOptions.server)
+      ), true)
     } catch (err) {
       // Status says 'error': the login form shows it with the credentials prefilled.
       console.log('[Auth] Keychain auto-connect failed:', err instanceof Error ? err.message : String(err))
@@ -442,11 +452,10 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         console.log('[Auth] Auth failure on Tauri: retrying with keychain credentials')
         const resource = getResource()
         await prepareNativePushAccount(savedJid)
-        const connected = await startupConnect(epoch, buildStartupConnectionOptions(
+        await startupConnect(epoch, buildStartupConnectionOptions(
           { jid: savedJid, password: creds.password, ...serverOptions, resource, lang: i18n.language },
           { kind: 'keychain-retry' },
-        ))
-        if (connected) saveSession(savedJid, creds.password, serverOptions.server)
+        ), true)
       } catch (err) {
         console.log('[Auth] Keychain retry after auth failure failed:', err instanceof Error ? err.message : err)
         // A failed retry lands on 'error' again, where this effect finds the

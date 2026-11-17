@@ -6,9 +6,10 @@ import { useTranslation } from 'react-i18next'
 import { AppIconMark } from './brand/AppIconMark'
 import { HollowIconMark } from './brand/HollowIconMark'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useConnectionStatus, useConnectionActions, deleteFastToken, classifyConnectionError, validateBareJid } from '@fluux/sdk'
+import { useConnectionStatus, useConnectionActions, useXMPPContext, deleteFastToken, classifyConnectionError, validateBareJid } from '@fluux/sdk'
 import { Loader2, KeyRound, Eye, EyeOff, Wrench } from 'lucide-react'
 import { saveSession } from '@/utils/sessionStorage'
+import { onSignInAccepted } from '@/utils/signInAccepted'
 import { getResource } from '@/utils/xmppResource'
 import { hasSavedCredentials, getCredentials, saveCredentials, deleteCredentials } from '@/utils/keychain'
 import { platform } from '@/platform'
@@ -53,6 +54,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   const { t, i18n } = useTranslation()
   const { status, error, discoveryFailure } = useConnectionStatus()
   const { connect } = useConnectionActions()
+  const { client } = useXMPPContext()
   const { dragRegionProps } = useWindowDrag()
 
   // Workaround: On macOS, the WRY/WKWebView can lose native event delivery
@@ -310,9 +312,14 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         void prewarmOpenpgpUnlock(loginJid)
         const resource = getResource()
         await prepareNativePushAccount(loginJid)
-        await connect({ jid: loginJid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: true })
-        // Save session for auto-reconnect on page reload
-        saveSession(loginJid, password, actualServer)
+        // Save session for auto-reconnect on page reload, as soon as the server
+        // accepts the sign-in: a password changed later then replaces it.
+        const stopSaving = onSignInAccepted(client, loginJid, () => saveSession(loginJid, password, actualServer))
+        try {
+          await connect({ jid: loginJid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: true })
+        } finally {
+          stopSaving()
+        }
       } catch {
         // Error is handled in hook
         // Don't reset hasAutoConnected - user must click Connect to retry
@@ -320,7 +327,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     }
 
     void autoConnect()
-  }, [isLoadingCredentials, loadedFromKeychain, jid, password, server, status, connect, i18n.language, claimConnection])
+  }, [isLoadingCredentials, loadedFromKeychain, jid, password, server, status, connect, client, i18n.language, claimConnection])
 
   const isConnecting = status === 'connecting'
   const isLoading = isLoadingCredentials || isConnecting
@@ -375,12 +382,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       void prewarmOpenpgpUnlock(loginJid)
       const resource = linkResourceRef.current || getResource()
       await prepareNativePushAccount(loginJid)
-      const authenticated = await connect({ jid: loginJid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: rememberMe })
-      // Save session for auto-reconnect on page reload
-      saveSession(loginJid, password, actualServer)
-
-      // A successful FAST login does not validate the password entered in the form.
-      if (shouldSaveToKeychain && authenticated?.authentication?.method === 'password') {
+      const rememberPassword = async () => {
         try {
           await saveCredentials(loginJid, password, actualServer || null)
           setLoadedFromKeychain(true)
@@ -391,6 +393,19 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
           // once online, so the chat view's toasts show it until dismissed.
           useToastStore.getState().addToast('error', t('login.keychainSaveFailed'), 0)
         }
+      }
+      // Save the password as soon as the server accepts the sign-in, not once
+      // the setup after it is done: a password changed meanwhile replaces it.
+      const stopSaving = onSignInAccepted(client, loginJid, ({ authentication }) => {
+        // Save session for auto-reconnect on page reload
+        saveSession(loginJid, password, actualServer)
+        // A successful FAST login does not validate the password entered in the form.
+        if (shouldSaveToKeychain && authentication?.method === 'password') void rememberPassword()
+      })
+      try {
+        await connect({ jid: loginJid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: rememberMe })
+      } finally {
+        stopSaving()
       }
     } catch {
       // Error is handled in hook

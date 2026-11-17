@@ -22,16 +22,43 @@ const mockUseConnection = vi.fn<() => {
 
 const mockDeleteFastToken = vi.fn()
 
+// The SDK client's announcement that the server accepted a sign-in.
+const { signInListeners, announceSignIn } = vi.hoisted(() => {
+    const signInListeners = new Set<(event: { jid: string; authentication?: unknown }) => void>()
+    return {
+        signInListeners,
+        announceSignIn: (event: { jid: string; authentication?: unknown }) => {
+            for (const listener of [...signInListeners]) listener(event)
+        },
+    }
+})
+
 // LoginScreen now reads status/error via useConnectionStatus() and the connect
 // action via useConnectionActions(). Both are driven from the single
 // mockUseConnection fixture so existing test cases keep setting one object.
+// The value mockConnect resolves with is the request's authenticated event,
+// which the SDK announces before connect() resolves.
 vi.mock('@fluux/sdk', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@fluux/sdk')>()),
     useConnectionStatus: () => {
         const { status, error, discoveryFailure } = mockUseConnection()
         return { status, error, discoveryFailure }
     },
-    useConnectionActions: () => ({ connect: mockUseConnection().connect }),
+    useConnectionActions: () => ({
+        connect: async (options: { jid: string }) => {
+            const authenticated = await mockUseConnection().connect(options)
+            if (authenticated) announceSignIn({ jid: options.jid, ...authenticated })
+            return authenticated
+        },
+    }),
+    useXMPPContext: () => ({
+        client: {
+            subscribe: (_event: string, listener: (event: { jid: string; authentication?: unknown }) => void) => {
+                signInListeners.add(listener)
+                return () => { signInListeners.delete(listener) }
+            },
+        },
+    }),
     deleteFastToken: (...args: unknown[]) => mockDeleteFastToken(...args),
     classifyConnectionError: (error: string) => {
         if (!error) return 'unknown'
@@ -77,8 +104,9 @@ vi.mock('@/hooks', () => ({
 }))
 
 // Mock session storage
+const { mockSaveSession } = vi.hoisted(() => ({ mockSaveSession: vi.fn() }))
 vi.mock('@/utils/sessionStorage', () => ({
-    saveSession: vi.fn(),
+    saveSession: mockSaveSession,
 }))
 
 // Mock utils
@@ -120,6 +148,8 @@ function usePlatform(shell: 'desktop' | 'web' | 'mobile', os: 'macos' | 'windows
 afterEach(() => {
   restorePlatform?.()
   restorePlatform = undefined
+  // A sign-in a test left unfinished must not hear the next test's.
+  signInListeners.clear()
 })
 
 vi.mock('@/config/wellKnownServers', () => ({
@@ -742,6 +772,34 @@ describe('LoginScreen credential validation', () => {
         await new Promise(resolve => setTimeout(resolve, 0))
         if (method === 'password') expect(mockSaveCredentials).toHaveBeenCalledWith('fixture@example.invalid', 'local-secret', expect.anything())
         else expect(mockSaveCredentials).not.toHaveBeenCalled()
+    })
+    // A password changed in Settings while the sign-in finishes its setup must
+    // not be overwritten by the password typed here once connect() resolves.
+    it('saves the typed password when the server accepts the sign-in, not again after the setup', async () => {
+        let finishSetup!: () => void
+        mockConnect.mockImplementation(async ({ jid }: { jid: string }) => {
+            const authenticated = { jid, authentication: { method: 'password', mechanism: 'PLAIN' } }
+            // The SDK reports the session online before it announces the sign-in.
+            mockUseConnection.mockReturnValue({ status: 'online', error: null, connect: mockConnect })
+            announceSignIn(authenticated)
+            await new Promise<void>(resolve => { finishSetup = resolve })
+            return authenticated
+        })
+        const { container } = render(<LoginScreen />)
+        await screen.findByText('login.storedInKeychain')
+        fireEvent.change(container.querySelector('#jid')!, { target: { value: 'fixture@example.invalid' } })
+        fireEvent.change(container.querySelector('#password')!, { target: { value: 'local-secret' } })
+        fireEvent.click(container.querySelector('#remember')!)
+        fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
+
+        // Accepted and still setting up: Settings can change the password from here on.
+        await waitFor(() => expect(mockSaveCredentials).toHaveBeenCalledExactlyOnceWith('fixture@example.invalid', 'local-secret', expect.anything()))
+        expect(mockSaveSession).toHaveBeenCalledExactlyOnceWith('fixture@example.invalid', 'local-secret', expect.anything())
+
+        finishSetup()
+        await new Promise(resolve => setTimeout(resolve, 0))
+        expect(mockSaveSession).toHaveBeenCalledOnce()
+        expect(mockSaveCredentials).toHaveBeenCalledOnce()
     })
     // #1224: a Linux desktop without a running Secret Service signs in, but
     // the keyring refuses the password the user asked to be remembered.
