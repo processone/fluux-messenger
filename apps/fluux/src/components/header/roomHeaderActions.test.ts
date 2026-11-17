@@ -43,13 +43,13 @@ describe('buildNotifyGroup', () => {
 
   it('omits the persistent All messages option for quick chats but keeps Off as session only', () => {
     const { g } = group({ isQuickChat: true })
-    expect(g.items.map((i) => i.key)).toEqual(['mentions', 'all-session', 'off'])
+    expect(g.items.map((i) => i.key)).toEqual(['off', 'mentions', 'all-session'])
     expect(g.items.find((i) => i.key === 'off')!.description).toBe('rooms.thisSessionOnly')
   })
 
-  it('offers one Off row saved to the bookmark, last, with the crossed bell; Mentions only takes @', () => {
+  it('offers one Off row saved to the bookmark, first, with the crossed bell; Mentions only takes @', () => {
     const { g } = group()
-    expect(g.items.map((i) => i.key)).toEqual(['mentions', 'all-session', 'all-always', 'off'])
+    expect(g.items.map((i) => i.key)).toEqual(['off', 'mentions', 'all-session', 'all-always'])
     const off = g.items.find((i) => i.key === 'off')!
     expect(off.label).toBe('rooms.notificationsOff')
     expect(off.description).toBe('rooms.alwaysSavedToBookmark')
