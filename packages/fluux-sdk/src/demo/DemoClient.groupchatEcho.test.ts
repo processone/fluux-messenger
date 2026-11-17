@@ -49,6 +49,8 @@ describe('DemoClient groupchat echo', () => {
       references: [{ type: 'data', uri: link, begin: 5 + quote.length, end: body.length, forwardFallback: { begin: 5, end: body.length } }] })
     const [echoed] = roomStore.getState().messages.get(roomJid) ?? []
     expect(echoed.body).toBe(body)
+    // The reply keeps the occupant address, as the production room parsers do.
+    expect(echoed.replyTo).toMatchObject({ id: 'earlier', to: `${roomJid}/Carol` })
     const ref = echoed.references![0] as { begin: number; end: number; forwardFallback: { begin: number; end: number } }
     expect(echoed.body.slice(ref.begin, ref.end)).toBe(link)
     expect(echoed.body.slice(ref.forwardFallback.begin, ref.forwardFallback.end)).toBe(quote + link)

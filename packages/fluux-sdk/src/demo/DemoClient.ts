@@ -739,7 +739,7 @@ export class DemoClient extends XMPPClient {
     // The real receive parser, so reply and OOB fallback removal, attachments and
     // reference offsets are transformed together exactly as for a reflected message.
     const { processedBody, replyTo, attachment, references } = parseMessageContent({
-      messageEl: stanza, body, messageContext: 'room',
+      messageEl: stanza, body, messageContext: 'room', preserveFullReplyToJid: true,
     })
 
     // Parse poll elements so creating/closing polls works in demo
