@@ -9,7 +9,7 @@ export function installNotificationSettingsFixture(
   host: { shell: PlatformShell; os: PlatformOS } = { shell: 'desktop', os: 'macos' },
 ) {
   const fixture = {
-    authorization, badges, alerts: 'enabled', sounds: 'enabled', alertStyle: 'banner', calls: [] as string[], failOpen: false, failRead: false,
+    authorization, badges, alerts: 'enabled', alertStyle: 'banner', calls: [] as string[], failOpen: false, failRead: false,
     savePath: '/disposable/fluux-badge-diagnostics.json' as string | null,
     saveOptions: [] as unknown[], writes: [] as string[], failWrite: false,
     shares: [] as { path: string; name: string }[],
@@ -21,7 +21,7 @@ export function installNotificationSettingsFixture(
     fixture.calls.push(command)
     if (command === 'notification_settings_state') {
       if (fixture.failRead) throw new Error('Settings read failed')
-      return { authorization: fixture.authorization, badges: fixture.badges, alerts: fixture.alerts, sounds: fixture.sounds, alertStyle: fixture.alertStyle }
+      return { authorization: fixture.authorization, badges: fixture.badges, alerts: fixture.alerts, alertStyle: fixture.alertStyle }
     }
     if (command === 'notification_permission_state') return fixture.authorization
     if (command === 'plugin:notification|is_permission_granted') return fixture.authorization === 'granted'

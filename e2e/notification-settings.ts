@@ -116,27 +116,31 @@ test('retains explicit activation for not-requested permission and translates th
   await capture(page, 'after-badges-disabled-fr')
 })
 
-test('warns for macOS alerts, style None and sounds without treating unknown as off', async ({ page }) => {
+test('warns only for retained macOS badges and alerts without treating unknown as off', async ({ page }) => {
   await setup(page, 'granted', 'enabled')
   for (const scenario of [
-    { alerts: 'disabled', alertStyle: 'banner', sounds: 'enabled', alertText: 'Alerts disabled in macOS', soundText: 'Notification sounds enabled in macOS', picture: 'after-alerts-disabled' },
-    { alerts: 'enabled', alertStyle: 'none', sounds: 'enabled', alertText: 'Alerts disabled in macOS', soundText: 'Notification sounds enabled in macOS', picture: 'after-alert-style-none' },
-    { alerts: 'enabled', alertStyle: 'alert', sounds: 'disabled', alertText: 'Alerts enabled in macOS', soundText: 'Notification sounds disabled in macOS', picture: 'after-sounds-disabled' },
-    { alerts: 'enabled', alertStyle: 'none', sounds: 'disabled', alertText: 'Alerts disabled in macOS', soundText: 'Notification sounds disabled in macOS', picture: 'after-alerts-and-sounds-disabled' },
-    { alerts: 'unknown', alertStyle: 'none', sounds: 'unknown', alertText: 'macOS alert settings are unknown', soundText: 'macOS notification sound settings are unknown', picture: 'after-channels-unknown' },
-    { alerts: 'unsupported', alertStyle: 'none', sounds: 'unsupported', alertText: 'Alerts are not supported', soundText: 'Notification sounds are not supported', picture: 'after-channels-unsupported' },
-    { alerts: 'enabled', alertStyle: 'future-style', sounds: 'enabled', alertText: 'macOS alert settings are unknown', soundText: 'Notification sounds enabled in macOS', picture: 'after-alert-style-unknown' },
-    { alerts: 'enabled', alertStyle: 'banner', sounds: 'enabled', alertText: 'Alerts enabled in macOS', soundText: 'Notification sounds enabled in macOS', picture: 'after-channels-restored' },
+    { badges: 'enabled', alerts: 'disabled', alertStyle: 'banner', alertText: 'Alerts disabled in macOS', picture: 'after-alerts-disabled' },
+    { badges: 'enabled', alerts: 'enabled', alertStyle: 'none', alertText: 'Alerts disabled in macOS', picture: 'after-alert-style-none' },
+    { badges: 'enabled', alerts: 'enabled', alertStyle: 'alert', alertText: 'Alerts enabled in macOS', picture: 'after-alert-style-alert' },
+    { badges: 'disabled', alerts: 'enabled', alertStyle: 'none', alertText: 'Alerts disabled in macOS', picture: 'after-badges-and-alerts-disabled' },
+    { badges: 'enabled', alerts: 'unknown', alertStyle: 'none', alertText: 'macOS alert settings are unknown', picture: 'after-alerts-unknown' },
+    { badges: 'enabled', alerts: 'unsupported', alertStyle: 'none', alertText: 'Alerts are not supported', picture: 'after-alerts-unsupported' },
+    { badges: 'enabled', alerts: 'enabled', alertStyle: 'future-style', alertText: 'macOS alert settings are unknown', picture: 'after-alert-style-unknown' },
+    { badges: 'enabled', alerts: 'enabled', alertStyle: 'banner', alertText: 'Alerts enabled in macOS', picture: 'after-alerts-restored' },
   ]) {
     await page.evaluate(scenario => {
       const f = (window as any).__notificationSettingsFixture
-      Object.assign(f, { alerts: scenario.alerts, alertStyle: scenario.alertStyle, sounds: scenario.sounds })
+      Object.assign(f, { badges: scenario.badges, alerts: scenario.alerts, alertStyle: scenario.alertStyle })
       window.dispatchEvent(new Event('focus'))
     }, scenario)
     await expect(page.getByText(scenario.alertText, { exact: true })).toBeVisible()
-    await expect(page.getByText(scenario.soundText, { exact: true })).toBeVisible()
     await expect(page.getByText('Alerts disabled in macOS', { exact: true })).toHaveCount(scenario.alertText === 'Alerts disabled in macOS' ? 1 : 0)
-    await expect(page.getByText('Notification sounds disabled in macOS', { exact: true })).toHaveCount(scenario.soundText === 'Notification sounds disabled in macOS' ? 1 : 0)
+    await expect(page.getByText(badgeWarning, { exact: true })).toHaveCount(scenario.badges === 'disabled' ? 1 : 0)
+    const statuses = page.getByRole('heading', { name: 'Permission', exact: true }).locator('..').getByRole('status')
+    await expect(statuses).toHaveText([
+      scenario.badges === 'disabled' ? badgeWarning : enabled,
+      scenario.alertText,
+    ])
     await capture(page, scenario.picture)
   }
   const calls = await page.evaluate(() => (window as any).__notificationSettingsFixture.calls as string[])

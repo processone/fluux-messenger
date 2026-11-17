@@ -313,11 +313,11 @@ Background Web Push uses a saved copy of this preference after the tab closes. U
 
 #### Why is my Mac not showing an app icon badge?
 
-Open **Settings → Notifications**. Fluux reads macOS notification authorization and the separate badge, alert, alert-style and sound settings. A highlighted warning identifies blocked notifications or disabled badges, alerts or notification sounds. Use **Open system notification settings** to review them, then return to Fluux to refresh the status. If permission has never been requested, use **Enable** first. Unknown or unsupported states are shown separately; Fluux does not change permissions automatically from this panel.
+Open **Settings → Notifications**. Fluux reads macOS notification authorization and the separate badge, alert and alert-style settings. A highlighted warning identifies blocked notifications, disabled badges or disabled alerts. Use **Open system notification settings** to review them, then return to Fluux to refresh the status. If permission has never been requested, use **Enable** first. Unknown or unsupported states are shown separately; Fluux does not change permissions automatically from this panel.
 
 Use **Export badge diagnostics** in the same section to save the separate badge-decision log; advanced mode and the XMPP console are not required.
 
-The permission panel shows current system settings, not the history of an earlier missing badge. A successful badge update does not prove that macOS displayed it. macOS notification authorization and presentation settings are separate from Fluux's own sound and in-app banner preferences. Turning off Fluux's local sounds does not mean macOS sounds are disabled.
+The permission panel shows current system settings, not the history of an earlier missing badge. A successful badge update does not prove that macOS displayed it. macOS notification authorization and presentation settings are separate from Fluux's own sound and in-app banner preferences. On macOS, Fluux plays its own chime, controlled by **Play notification sounds**; its native notifications carry no sound.
 
 #### My antivirus flags the Windows installer as malicious, is the app safe?
 

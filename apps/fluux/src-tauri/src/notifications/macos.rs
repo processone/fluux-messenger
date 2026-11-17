@@ -442,7 +442,6 @@ fn settings_snapshot(
     status: UNAuthorizationStatus,
     badges: UNNotificationSetting,
     alerts: UNNotificationSetting,
-    sounds: UNNotificationSetting,
     alert_style: UNAlertStyle,
 ) -> NotificationSettingsState {
     let authorization = if status == UNAuthorizationStatus::NotDetermined {
@@ -458,7 +457,6 @@ fn settings_snapshot(
         authorization,
         badges: map_setting(badges),
         alerts: map_setting(alerts),
-        sounds: map_setting(sounds),
         alert_style: map_alert_style(alert_style),
     }
 }
@@ -472,7 +470,6 @@ pub fn notification_settings_state() -> Result<NotificationSettingsState, String
             authorization: SettingsAuthorization::Unsupported,
             badges: NotificationSettingState::Unsupported,
             alerts: NotificationSettingState::Unsupported,
-            sounds: NotificationSettingState::Unsupported,
             alert_style: SettingsAlertStyle::Unknown,
         });
     };
@@ -484,7 +481,6 @@ pub fn notification_settings_state() -> Result<NotificationSettingsState, String
             settings.authorizationStatus(),
             settings.badgeSetting(),
             settings.alertSetting(),
-            settings.soundSetting(),
             settings.alertStyle(),
         ));
     });
@@ -575,11 +571,10 @@ mod tests {
                     NotificationSettingState::Unsupported,
                 ),
             ] {
-                let snapshot = settings_snapshot(status, badge, badge, badge, UNAlertStyle::Banner);
+                let snapshot = settings_snapshot(status, badge, badge, UNAlertStyle::Banner);
                 assert_eq!(snapshot.authorization, expected);
                 assert_eq!(snapshot.badges, badge_expected);
                 assert_eq!(snapshot.alerts, badge_expected);
-                assert_eq!(snapshot.sounds, badge_expected);
                 // The settings reader never changes the legacy posting mapping.
                 assert_eq!(
                     map_status(status) == AuthState::Granted,
@@ -592,11 +587,10 @@ mod tests {
                 UNAuthorizationStatus::Authorized,
                 UNNotificationSetting::Disabled,
                 UNNotificationSetting::Enabled,
-                UNNotificationSetting::NotSupported,
                 UNAlertStyle::None,
             ))
             .unwrap(),
-            serde_json::json!({ "authorization": "granted", "badges": "disabled", "alerts": "enabled", "sounds": "unsupported", "alertStyle": "none" })
+            serde_json::json!({ "authorization": "granted", "badges": "disabled", "alerts": "enabled", "alertStyle": "none" })
         );
     }
 
@@ -606,13 +600,11 @@ mod tests {
             UNAuthorizationStatus(isize::MAX),
             UNNotificationSetting(isize::MAX),
             UNNotificationSetting(isize::MAX),
-            UNNotificationSetting(isize::MAX),
             UNAlertStyle(isize::MAX),
         );
         assert_eq!(snapshot.authorization, SettingsAuthorization::Unknown);
         assert_eq!(snapshot.badges, NotificationSettingState::Unknown);
         assert_eq!(snapshot.alerts, NotificationSettingState::Unknown);
-        assert_eq!(snapshot.sounds, NotificationSettingState::Unknown);
         assert_eq!(snapshot.alert_style, SettingsAlertStyle::Unknown);
     }
 
@@ -643,7 +635,6 @@ mod tests {
         assert_ne!(state.authorization, SettingsAuthorization::Unknown);
         assert_ne!(state.badges, NotificationSettingState::Unknown);
         assert_ne!(state.alerts, NotificationSettingState::Unknown);
-        assert_ne!(state.sounds, NotificationSettingState::Unknown);
         assert_ne!(state.alert_style, SettingsAlertStyle::Unknown);
         assert_eq!(
             authorization_state() == AuthState::Granted,

@@ -20,13 +20,12 @@ let mockIsMac = true
 let mockPermState = 'granted'
 let mockBadges = 'enabled'
 let mockAlerts = 'enabled'
-let mockSounds = 'enabled'
 let mockAlertStyle = 'banner'
-beforeEach(() => { mockAlerts = 'enabled'; mockSounds = 'enabled'; mockAlertStyle = 'banner' })
+beforeEach(() => { mockAlerts = 'enabled'; mockAlertStyle = 'banner' })
 const mockGetTrayStatus = vi.fn().mockResolvedValue({ enabled: true, available: true })
 const mockInvoke = vi.fn<(cmd: string) => Promise<any>>(async (cmd: string) =>
   cmd === 'notification_settings_state'
-    ? { authorization: mockPermState === 'default' ? 'notdetermined' : mockPermState, badges: mockBadges, alerts: mockAlerts, sounds: mockSounds, alertStyle: mockAlertStyle }
+    ? { authorization: mockPermState === 'default' ? 'notdetermined' : mockPermState, badges: mockBadges, alerts: mockAlerts, alertStyle: mockAlertStyle }
     : undefined,
 )
 
@@ -333,9 +332,9 @@ describe('NotificationsSettings — macOS badge warnings', () => {
   })
 })
 
-// Captain's added intent: macOS alert/sound restrictions are distinct from
-// authorization and Fluux's own local sound/banner preferences.
-describe('NotificationsSettings — macOS alert and sound warnings', () => {
+// Retained alert-warning intent after the explicit sound-warning removal.
+// Authorization and alert style remain distinct from local sound/banner preferences.
+describe('NotificationsSettings — macOS alert warnings', () => {
   beforeEach(() => {
     usePlatform('desktop')
     mockIsMac = true
@@ -347,74 +346,48 @@ describe('NotificationsSettings — macOS alert and sound warnings', () => {
   })
 
   it.each([
-    ['enabled', 'banner', 'enabled', 'alertsEnabledMac', 'soundsEnabledMac'],
-    ['enabled', 'alert', 'enabled', 'alertsEnabledMac', 'soundsEnabledMac'],
-    ['disabled', 'banner', 'enabled', 'alertsDisabledMac', 'soundsEnabledMac'],
-    ['disabled', 'unknown', 'enabled', 'alertsDisabledMac', 'soundsEnabledMac'],
-    ['enabled', 'none', 'enabled', 'alertsDisabledMac', 'soundsEnabledMac'],
-    ['enabled', 'banner', 'disabled', 'alertsEnabledMac', 'soundsDisabledMac'],
-    ['enabled', 'none', 'disabled', 'alertsDisabledMac', 'soundsDisabledMac'],
-    ['unknown', 'none', 'unknown', 'alertsUnknown', 'soundsUnknown'],
-    ['unsupported', 'none', 'unsupported', 'alertsUnsupported', 'soundsUnsupported'],
-    ['enabled', 'future-style', 'enabled', 'alertsUnknown', 'soundsEnabledMac'],
-    ['future-setting', 'none', 'future-setting', 'alertsUnknown', 'soundsUnknown'],
-  ])('maps alerts %s, style %s and sounds %s without changing preferences', async (alerts, style, sounds, alertText, soundText) => {
+    ['enabled', 'banner', 'alertsEnabledMac'],
+    ['enabled', 'alert', 'alertsEnabledMac'],
+    ['disabled', 'banner', 'alertsDisabledMac'],
+    ['disabled', 'unknown', 'alertsDisabledMac'],
+    ['enabled', 'none', 'alertsDisabledMac'],
+    ['unknown', 'none', 'alertsUnknown'],
+    ['unsupported', 'none', 'alertsUnsupported'],
+    ['enabled', 'future-style', 'alertsUnknown'],
+    ['future-setting', 'none', 'alertsUnknown'],
+  ])('maps alerts %s and style %s without changing preferences', async (alerts, style, alertText) => {
     mockAlerts = alerts
     mockAlertStyle = style
-    mockSounds = sounds
     render(<NotificationsSettings />)
     expect(await screen.findByText(`settings.${alertText}`)).toBeVisible()
-    expect(screen.getByText(`settings.${soundText}`)).toBeVisible()
     expect(screen.queryByText('settings.alertsDisabledMac') !== null).toBe(alertText === 'alertsDisabledMac')
-    expect(screen.queryByText('settings.soundsDisabledMac') !== null).toBe(soundText === 'soundsDisabledMac')
     expect(requestNotificationPermission).not.toHaveBeenCalled()
     expect(mockInvoke).not.toHaveBeenCalledWith('open_notification_settings')
     expect(useSettingsStore.getState().soundEnabled).toBe(true)
     expect(useSettingsStore.getState().inAppBannerEnabled).toBe(true)
   })
 
-  it('shows badge, alert and sound restrictions together rather than hiding later warnings', async () => {
+  it('shows only the retained badge and alert restrictions together', async () => {
     mockBadges = 'disabled'
     mockAlertStyle = 'none'
-    mockSounds = 'disabled'
     render(<NotificationsSettings />)
-    expect(await screen.findByText('settings.badgesDisabledMac')).toBeVisible()
-    expect(screen.getByText('settings.alertsDisabledMac')).toBeVisible()
-    expect(screen.getByText('settings.soundsDisabledMac')).toBeVisible()
+    const warnings = [
+      await screen.findByText('settings.badgesDisabledMac'),
+      screen.getByText('settings.alertsDisabledMac'),
+    ]
+    warnings.forEach(warning => expect(warning).toBeVisible())
+    const permission = screen.getByRole('heading', { name: 'settings.notificationPermission' }).closest('section')!
+    expect(within(permission).getAllByRole('status')).toEqual(warnings)
   })
 
-  it('clears alert and sound warnings when their actual statuses return enabled', async () => {
+  it('clears the alert warning when the actual status returns enabled', async () => {
     mockAlertStyle = 'none'
-    mockSounds = 'disabled'
     render(<NotificationsSettings />)
     await screen.findByText('settings.alertsDisabledMac')
-    expect(screen.getByText('settings.soundsDisabledMac')).toBeVisible()
     mockAlertStyle = 'banner'
-    mockSounds = 'enabled'
     fireEvent.focus(window)
     expect(await screen.findByText('settings.alertsEnabledMac')).toBeVisible()
-    expect(screen.getByText('settings.soundsEnabledMac')).toBeVisible()
     expect(screen.queryByText('settings.alertsDisabledMac')).toBeNull()
-    expect(screen.queryByText('settings.soundsDisabledMac')).toBeNull()
-  })
-
-  it('does not report OS sounds disabled just because Fluux local sounds are off', async () => {
-    useSettingsStore.setState({ soundEnabled: false })
-    render(<NotificationsSettings />)
-    expect(await screen.findByText('settings.soundsEnabledMac')).toBeVisible()
-    expect(screen.queryByText('settings.soundsDisabledMac')).toBeNull()
-    expect(screen.getByRole('switch', { name: 'settings.sound' })).toHaveAttribute('aria-checked', 'false')
-  })
-
-  it('does not clear the OS sound warning when local sounds are toggled on', async () => {
-    mockSounds = 'disabled'
-    useSettingsStore.setState({ soundEnabled: false })
-    render(<NotificationsSettings />)
-    await screen.findByText('settings.soundsDisabledMac')
-    fireEvent.click(screen.getByRole('switch', { name: 'settings.sound' }))
-    expect(useSettingsStore.getState().soundEnabled).toBe(true)
-    expect(screen.getByText('settings.soundsDisabledMac')).toBeVisible()
-    expect(mockInvoke).not.toHaveBeenCalledWith('open_notification_settings')
   })
 })
 

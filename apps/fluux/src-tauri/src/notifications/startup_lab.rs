@@ -12,7 +12,6 @@ pub fn notification_settings_state() -> Result<super::backend::NotificationSetti
         authorization: super::backend::SettingsAuthorization::Denied,
         badges: super::backend::NotificationSettingState::Disabled,
         alerts: super::backend::NotificationSettingState::Disabled,
-        sounds: super::backend::NotificationSettingState::Disabled,
         alert_style: super::backend::SettingsAlertStyle::None,
     })
 }

@@ -92,7 +92,6 @@ pub struct NotificationSettingsState {
     pub authorization: SettingsAuthorization,
     pub badges: NotificationSettingState,
     pub alerts: NotificationSettingState,
-    pub sounds: NotificationSettingState,
     pub alert_style: SettingsAlertStyle,
 }
 

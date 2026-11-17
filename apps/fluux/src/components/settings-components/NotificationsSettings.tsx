@@ -24,7 +24,6 @@ type PermissionSnapshot = {
   status: NotificationStatus
   badges?: NotificationSettingStatus
   alerts?: NotificationSettingStatus
-  sounds?: NotificationSettingStatus
 }
 
 function settingStatus(value: unknown): NotificationSettingStatus {
@@ -34,7 +33,6 @@ function settingStatus(value: unknown): NotificationSettingStatus {
 const channelStatusKeys = {
   badges: { enabled: 'settings.badgesEnabled', disabled: 'settings.badgesDisabledMac', unsupported: 'settings.badgesUnsupported', unknown: 'settings.badgesUnknown' },
   alerts: { enabled: 'settings.alertsEnabledMac', disabled: 'settings.alertsDisabledMac', unsupported: 'settings.alertsUnsupported', unknown: 'settings.alertsUnknown' },
-  sounds: { enabled: 'settings.soundsEnabledMac', disabled: 'settings.soundsDisabledMac', unsupported: 'settings.soundsUnsupported', unknown: 'settings.soundsUnknown' },
 } as const
 
 async function checkNotificationPermission(): Promise<PermissionSnapshot> {
@@ -42,7 +40,7 @@ async function checkNotificationPermission(): Promise<PermissionSnapshot> {
     if (platform().notificationsManagedByOS) {
       if (await isMacOSDesktop()) {
         const { invoke } = await import('@tauri-apps/api/core')
-        const state = await invoke<{ authorization: string; badges: unknown; alerts: unknown; sounds: unknown; alertStyle: unknown }>('notification_settings_state')
+        const state = await invoke<{ authorization: string; badges: unknown; alerts: unknown; alertStyle: unknown }>('notification_settings_state')
         const status = state.authorization === 'granted' || state.authorization === 'denied'
           ? state.authorization
           : state.authorization === 'notdetermined' ? 'default'
@@ -54,7 +52,7 @@ async function checkNotificationPermission(): Promise<PermissionSnapshot> {
           alerts = state.alertStyle === 'none' ? 'disabled'
             : state.alertStyle === 'banner' || state.alertStyle === 'alert' ? 'enabled' : 'unknown'
         }
-        return { status, badges: settingStatus(state.badges), alerts, sounds: settingStatus(state.sounds) }
+        return { status, badges: settingStatus(state.badges), alerts }
       }
       const { isPermissionGranted } = await import('@tauri-apps/plugin-notification')
       return { status: await isPermissionGranted() ? 'granted' : 'denied' }
@@ -282,7 +280,7 @@ export function NotificationsSettings() {
   }
 
   const blocked = isMac && (notificationStatus === 'denied' ||
-    (notificationStatus === 'granted' && [permission.badges, permission.alerts, permission.sounds].includes('disabled')))
+    (notificationStatus === 'granted' && [permission.badges, permission.alerts].includes('disabled')))
 
   return (
     <section className="w-full max-w-md space-y-8">
@@ -321,7 +319,7 @@ export function NotificationsSettings() {
                 </p>
                 {isMac && notificationStatus === 'granted' && (
                   <div className="mt-2 space-y-1">
-                    {(['badges', 'alerts', 'sounds'] as const).map(channel => {
+                    {(['badges', 'alerts'] as const).map(channel => {
                       const state = permission[channel] ?? 'unknown'
                       return (
                         <p key={channel} role="status" className={`text-xs ${state === 'disabled' ? 'font-medium text-fluux-text' : 'text-fluux-muted'}`}>
