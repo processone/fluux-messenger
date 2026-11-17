@@ -12,12 +12,6 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-vi.mock('@fluux/sdk', () => ({
-  chatStore: { getState: () => ({ activeConversationId: null }) },
-  roomStore: { getState: () => ({ activateRoom: vi.fn() }) },
-  isPreviewableMessage: () => true,
-}))
-
 vi.mock('@fluux/sdk/react', () => ({
   useConnectionStore: (selector: (state: { status: string }) => unknown) =>
     selector({ status: 'online' }),
@@ -63,7 +57,6 @@ vi.mock('../RoomAvatar', () => ({ RoomAvatar: () => null }))
 vi.mock('../Tooltip', () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => children,
 }))
-vi.mock('@/utils/messagePreviewText', () => ({ formatLocalizedPreview: () => 'Hello' }))
 vi.mock('@/stores/settingsStore', () => ({
   useSettingsStore: (selector: (state: { timeFormat: string; densityMode: string }) => unknown) =>
     selector({ timeFormat: '24h', densityMode: 'comfortable' }),
