@@ -26,13 +26,13 @@ import { TrustStateCompromisedBanner } from '@/components/TrustStateCompromisedB
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { KeyPickerDialog } from '@/components/KeyPickerDialog'
 import { KeychainRetryOffer } from '@/components/KeychainRetryPanel'
-import type { KeyBundle, BackupProbeResult, BackupContext, KeyInstallOptions } from '@/e2ee/OpenPGPPluginBase'
+import type { KeyBundle, BackupProbeResult, BackupContext, KeyInstallOptions } from '@fluux/openpgp-plugin'
 import {
   probeRemoteIdentityState,
   pepReaderFor,
   identityChoiceFromProbe,
   SecretKeyBackupProbeError,
-} from '@/e2ee/secretKeyProbe'
+} from '@fluux/openpgp-plugin'
 import { platform } from '@/platform'
 
 type PluginStatus =

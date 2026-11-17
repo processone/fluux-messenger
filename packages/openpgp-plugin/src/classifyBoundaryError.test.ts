@@ -5,7 +5,7 @@
  * the table also pins the cases where a message could match two branches.
  */
 import { describe, expect, it } from 'vitest'
-import { classifyBoundaryError } from './OpenPGPPluginBase'
+import { classifyBoundaryError } from './classifyBoundaryError'
 
 type Row = { name: string; input: unknown; kind: 'permanent' | 'transient'; code: string }
 

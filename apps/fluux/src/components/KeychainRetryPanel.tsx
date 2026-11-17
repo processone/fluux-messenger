@@ -6,7 +6,7 @@ import { SettingsDisclosure } from '@/components/ui/SettingsDisclosure'
 import { backupRecoveryError } from '@/components/backupRecoveryError'
 import { BackupRecoveryFailure } from '@/components/BackupRecoveryFailure'
 import { platform } from '@/platform'
-import type { KeychainRetryState } from '@/e2ee/OpenPGPPluginBase'
+import type { KeychainRetryState } from '@fluux/openpgp-plugin'
 
 type RetryFailure = ReturnType<typeof backupRecoveryError>
 

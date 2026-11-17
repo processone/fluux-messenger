@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErrors'
-import type { KeyBundle } from './OpenPGPPluginBase'
+import type { KeyBundle } from './types'
 
 const bundle: KeyBundle = {
   fingerprint: 'a'.repeat(40),

@@ -10,7 +10,7 @@ import { setPlatformForTesting } from '@/platform'
 import type { InvokeFn } from './SequoiaPgpPlugin'
 import { resetUncertainImportsForTesting, SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 import { deleteOwnKey, legacyNormalizeBackupPassphrase } from '@fluux/openpgp-plugin'
-import { OPENPGP_DESCRIPTOR } from './OpenPGPPluginBase'
+import { OPENPGP_DESCRIPTOR } from '@fluux/openpgp-plugin'
 import { getOwnKeyConflict } from '@/stores/ownKeyConflictStore'
 import {
   E2EEPluginError,

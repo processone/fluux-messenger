@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPluginStorage, InMemoryStorageBackend, type PluginContext } from '@fluux/sdk'
 import { decrypt, encrypt, readMessage, createMessage, readKey, unarmor } from 'openpgp'
 import { resetUncertainImportsForTesting, SequoiaPgpPlugin, type InvokeFn } from './SequoiaPgpPlugin'
-import { classifyBoundaryError, type KeyBundle } from './OpenPGPPluginBase'
+import { classifyBoundaryError, type KeyBundle } from '@fluux/openpgp-plugin'
 import { parseSecretKeysFromBackupPayload, legacyNormalizeBackupPassphrase } from '@fluux/openpgp-plugin'
 import { setPlatformForTesting } from '@/platform'
 

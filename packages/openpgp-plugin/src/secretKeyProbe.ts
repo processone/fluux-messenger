@@ -42,7 +42,7 @@ export type PepReader = (jid: string, node: string, maxItems?: number) => Promis
 export function pepReaderFor(client: XMPPClient): PepReader {
   return (jid, node, maxItems) => queryPepNode(client, jid, node, maxItems)
 }
-import type { BackupProbeResult } from './OpenPGPPluginBase'
+import type { BackupProbeResult } from './types'
 
 const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
 const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'

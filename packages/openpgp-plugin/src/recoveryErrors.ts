@@ -4,7 +4,7 @@
  * Kept in the app (not the SDK): they carry UI-routing payloads and are
  * only consumed by the dialog.
  */
-import type { KeyBundle, BackupContext } from './OpenPGPPluginBase'
+import type { KeyBundle, BackupContext } from './types'
 
 /** Server backup holds more than one key — the UI must let the user pick. */
 export class KeyPickerRequiredError extends Error {

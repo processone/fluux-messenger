@@ -24,13 +24,7 @@
 
 import type { PrivateKey } from 'openpgp'
 import { E2EEPluginError, isE2EEPluginError } from '@fluux/sdk'
-import {
-  OpenPGPPluginBase,
-  type CertValidation,
-  type DecryptOutput,
-  type KeyBundle,
-  type RestoreResult,
-} from './OpenPGPPluginBase'
+import { OpenPGPPluginBase } from './OpenPGPPluginBase'
 import {
   accountUserId,
   keyExportFilename,
@@ -41,8 +35,13 @@ import {
   prepareBackupPassphrase,
   detectArmorKind,
   parseSecretKeysFromBackupPayload,
+  KeyPickerRequiredError,
+  NoRecoveryAvailableError,
+  type CertValidation,
+  type DecryptOutput,
+  type KeyBundle,
+  type RestoreResult,
 } from '@fluux/openpgp-plugin'
-import { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErrors'
 
 const PRIVATE_KEY_STORAGE_KEY = 'private-key'
 

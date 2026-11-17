@@ -25,7 +25,7 @@ import {
 import { xml } from '@fluux/sdk/xmpp'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase, setSessionPassphrase } from '@fluux/openpgp-plugin'
-import type { KeyBundle } from './OpenPGPPluginBase'
+import type { KeyBundle } from '@fluux/openpgp-plugin'
 
 // Every test here generates real OpenPGP keys, so each one is CPU-bound and
 // contends with the rest of the suite for cores. Isolated, the slowest is
@@ -1619,7 +1619,7 @@ describe('WebOpenPGPPlugin', () => {
       // With no server backup, a wrong passphrase surfaces as
       // NoRecoveryAvailableError (local decrypt failed + no backup to fall
       // back to). The session passphrase must still be rolled back.
-      const { NoRecoveryAvailableError } = await import('./recoveryErrors')
+      const { NoRecoveryAvailableError } = await import('@fluux/openpgp-plugin')
       await expect(fresh.unlock('wrong-pp')).rejects.toBeInstanceOf(NoRecoveryAvailableError)
 
       // After failure, the session passphrase must have been rolled back
@@ -2740,7 +2740,7 @@ describe('WebOpenPGPPlugin', () => {
       const device = new WebOpenPGPPlugin()
       await device.init(makeCtx('alice@example.com', backend).ctx)
 
-      const { NoRecoveryAvailableError } = await import('./recoveryErrors')
+      const { NoRecoveryAvailableError } = await import('@fluux/openpgp-plugin')
       await expect(device.unlock('wrong-and-no-backup')).rejects.toBeInstanceOf(
         NoRecoveryAvailableError,
       )
@@ -2801,7 +2801,7 @@ describe('WebOpenPGPPlugin', () => {
       ;(device as unknown as { restoreSecretKey: (pp: string) => Promise<unknown> }).restoreSecretKey =
         async () => ({ needsPicker: true, candidates, backupContext: { message: 'MSG', passphrase: 'new-pp' } })
 
-      const { KeyPickerRequiredError } = await import('./recoveryErrors')
+      const { KeyPickerRequiredError } = await import('@fluux/openpgp-plugin')
       await expect(device.unlock('wrong-for-local-pp')).rejects.toBeInstanceOf(KeyPickerRequiredError)
       const { isKeyLocked } = await import('@fluux/openpgp-plugin')
       expect(isKeyLocked()).toBe(true) // rolled back
