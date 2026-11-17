@@ -3,7 +3,7 @@ import type { DemoClient } from '@fluux/sdk/demo'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { bootDemo } from './harness/demoBoot'
-import type { PlatformOS, PlatformShell } from '../apps/fluux/src/platform'
+import type { PlatformOS, PlatformShell } from '../apps/fluux/src/platform/capabilities'
 
 test.use({ viewport: { width: 1280, height: 900 } })
 
