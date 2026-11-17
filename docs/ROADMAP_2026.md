@@ -26,6 +26,11 @@ so that no GPL or AGPL code we don't own enters the client. OMEMO 2 (`urn:xmpp:o
 first, followed by the legacy `eu.siacs.conversations.axolotl` envelope, which most clients
 still use. OMEMO is not scheduled for a release.
 
+Known limit to fix before the app uses OMEMO: when two devices start a conversation at the same
+moment, a late first message of the losing handshake that arrives after a reply can replace the
+working session until the other device starts a new one. The fix is bounded prior-session
+recovery; it is required before any wiring work starts.
+
 ### MLS (future)
 
 MLS (RFC 9420) is the preferred long-term E2EE direction, especially for group encryption.
