@@ -503,6 +503,7 @@ export type {
   Logger as E2EELogger,
   PEPItem,
   PEPPublishOptions,
+  PeerIdentity,
   PeerSupport,
   PinnedStrategy,
   PluginConfiguration,

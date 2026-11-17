@@ -1105,15 +1105,47 @@ describe('stanzaDecrypt — control-message status', () => {
     expect(result.securityContext?.trust).toBe('tofu')
   })
 
-  it('does not overwrite an existing fallback body with a placeholder', async () => {
+  it('discards the outer cleartext body: a control message carries no user content', async () => {
     const manager = await makeManager(new ControlMessagePlugin())
-    const stanza = buildStanza() // carries a '[Encrypted message]' hint body
+    const stanza = buildStanza() // carries a cleartext hint body the sender or server controls
 
-    await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+    stanza.children.push(
+      xml('x', { xmlns: 'jabber:x:oob' }, xml('url', {}, 'https://evil.example/pic.png')),
+      xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: 'm0' }, xml('reaction', {}, 'x')),
+      xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'm0' }),
+    )
 
-    // Control message leaves the sender hint as-is — it is neither replaced
-    // with plaintext nor with a could-not-decrypt placeholder.
-    expect(stanza.getChild('body')?.text()).toBe('[Encrypted message]')
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    // None of it may reach a feature handler under the plugin's trusted context.
+    expect(stanza.children).toEqual([])
+    expect(result.encryptedPayloadXml).toBeUndefined()
+  })
+})
+
+describe('stanzaDecrypt — untrusted control message', () => {
+  class UntrustedControlPlugin extends ControlMessagePlugin {
+    override async decrypt(): Promise<DecryptResult> {
+      return {
+        status: 'control-message',
+        senderDevice: { jid: 'peer@example.com', deviceId: 'dev' },
+        securityContext: { protocolId: TEST_PROTOCOL_ID, trust: 'untrusted' },
+      }
+    }
+  }
+
+  it('is neither stashed for deferred verification nor kept as an archive entry', async () => {
+    const manager = await makeManager(new UntrustedControlPlugin())
+    const stanza = bodilessStanza()
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.attempted).toBe(true)
+    expect(result.awaitsVerification).toBeUndefined()
+    expect(result.encryptedPayloadXml).toBeUndefined()
+    expect(result.contentAvailability).toEqual({ state: 'ready' })
+    expect(readStashedEncryptedPayload(stanza)).toBeUndefined()
+    expect(stanza.children).toEqual([])
   })
 })
 

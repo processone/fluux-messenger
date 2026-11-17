@@ -294,6 +294,9 @@ export async function decryptStanzaInPlace(
   // desynced and a plain retry cannot help. We trigger E2EEManager.repairSession
   // and, like a terminal failure, do NOT stash for deferred retry.
   let sessionNeedsRepair = false
+  // Set when the plugin consumed a control message (key transport, replay): it carries no
+  // content, so there is nothing to verify later and nothing to stash or archive.
+  let consumedControl = false
 
   try {
     const messageId = stanza.attrs.id
@@ -334,6 +337,14 @@ export async function decryptStanzaInPlace(
         // control message is consumed silently. Trust comes from the plugin's
         // securityContext either way (`unverifiable` reports a reduced trust).
         if (result.plaintext) plaintext = new TextDecoder().decode(result.plaintext)
+        if (status === 'control-message') {
+          // A control message carries no user content. Everything outside the encrypted
+          // element (<body>, OOB attachments, reactions, retractions, replies) is sender- or
+          // server-controlled and unauthenticated, so it must reach no feature handler under
+          // the plugin's trusted context: consume the stanza here, before dispatch.
+          stanza.children = []
+          consumedControl = true
+        }
         securityContext = result.securityContext
         if (result.authoredAt) authoredAt = result.authoredAt
       }
@@ -483,7 +494,7 @@ export async function decryptStanzaInPlace(
   // signature once the peer key arrives — same mechanism used for full
   // decrypt failures, but here the body is already correct.
   const needsDeferredVerification =
-    failureReason === null && securityContext?.trust === 'untrusted'
+    failureReason === null && !consumedControl && securityContext?.trust === 'untrusted'
   if (needsDeferredVerification) {
     stashPayload(stanza, originalStanzaXml)
   }
@@ -595,6 +606,12 @@ const KNOWN_ENCRYPTION_NAMESPACES = new Set(Object.keys(EME_PROTOCOL_NAMES))
 
 const EME_NAMESPACE_PLUGIN_IDS: Record<string, string> = {
   'urn:xmpp:openpgp:0': 'openpgp',
+  'urn:xmpp:omemo:2': 'omemo:2',
+}
+
+/** Plugin id that handles an EME namespace, if any (for supported-vs-unsupported classification). */
+export function emePluginIdFor(namespace: string): string | undefined {
+  return EME_NAMESPACE_PLUGIN_IDS[namespace]
 }
 
 /**
@@ -644,7 +661,7 @@ type UnclaimedEMEPluginState = boolean | PluginRegistry
  */
 function isUnsupportedNamespace(state: UnclaimedEMEPluginState, namespace: string): boolean {
   if (typeof state === 'boolean') return state
-  const pluginId = EME_NAMESPACE_PLUGIN_IDS[namespace]
+  const pluginId = emePluginIdFor(namespace)
   if (state.hasDeclaredPlugins?.()) {
     return !pluginId || !state.expectsPlugin?.(pluginId)
   }

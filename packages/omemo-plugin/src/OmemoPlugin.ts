@@ -1,0 +1,680 @@
+// `OmemoPlugin` — the `E2EEPlugin` adapter over `@fluux/omemo`.
+//
+// It covers the identity/probe/trust half of the trait and the encrypt/claim/decrypt
+// half — the XEP-0420 SCE seam where host plaintext meets OMEMO ciphertext. The host hands `encrypt` a serialized
+// `<payload xmlns='jabber:client'>…</payload>` fragment; we SCE-wrap its children,
+// OMEMO-encrypt the envelope, and emit an `<encrypted xmlns='urn:xmpp:omemo:2'>`.
+// `decrypt` reverses that, returning a re-serialized `<payload>` (or a
+// control-message / broken-session status — never unauthenticated content).
+import { serializePayloadEnvelope, parsePayloadEnvelope, E2EEPluginError } from '@fluux/sdk'
+import type {
+  E2EEPlugin,
+  E2EEProtocolDescriptor,
+  PluginContext,
+  IdentityInfo,
+  PeerIdentity,
+  PeerSupport,
+  BareJID,
+  TrustState,
+  VerificationMethod,
+  VerificationFlow,
+  ConversationTarget,
+  ConversationHandle,
+  EncryptedPayload,
+  DecryptResult,
+  InboundDecryptContext,
+  ArchiveDecryptItem,
+  SecurityContext,
+  XMLElementData,
+} from '@fluux/sdk'
+import { OmemoAccount, OmemoError, fingerprint, bytesEqual } from '@fluux/omemo'
+import type { OmemoMessage } from '@fluux/omemo'
+import { PluginStorageOmemoStore } from './store'
+import { publishDeviceList, fetchDeviceList, fetchBundle, bundleSource, publishBundle, type BundleLookup } from './pep'
+import { resolveInboundTrust, toTrustState, type BtbvState } from './trust'
+import { isVerified, setVerified, clearVerified, hasAnyVerified } from './verifiedDevices'
+import { buildEnvelope, parseEnvelope } from './sce'
+import { buildEncrypted, parseEncrypted } from './encryptedElement'
+import { elementToData, dataToElement, parseXml } from './stanzaData'
+import { NS_OMEMO } from './namespaces'
+
+/** Upper bound on devices we encrypt to per recipient JID (defensive against a hostile device list). */
+const DEVICE_CAP = 50
+
+const hex = (u: Uint8Array): string => [...u].map((b) => b.toString(16).padStart(2, '0')).join('')
+
+/**
+ * Narrow a stored/derived {@link TrustState} to the `SecurityContext.trust`
+ * shape (which has no `unknown`). After a successful decrypt BTBV always yields
+ * `tofu`/`untrusted`; `unknown` should not occur, but if it ever did we surface
+ * the conservative `untrusted` rather than an over-trusting default.
+ */
+function toSecurityTrust(t: TrustState): SecurityContext['trust'] {
+  return t === 'unknown' ? 'untrusted' : t
+}
+
+export class OmemoPlugin implements E2EEPlugin {
+  readonly descriptor: E2EEProtocolDescriptor = {
+    id: 'omemo:2',
+    displayName: 'OMEMO',
+    securityLevel: 80,
+    features: {
+      forwardSecrecy: true,
+      postCompromiseSecurity: true,
+      multiDevice: true,
+      groupChat: false,
+      asynchronous: true,
+      deniability: true,
+    },
+  }
+
+  private ctx!: PluginContext
+  private account: OmemoAccount | null = null
+  /** In-flight first initialization, shared so concurrent callers never create competing identities. */
+  private accountInit: Promise<OmemoAccount> | null = null
+  /** Tail of the bundle publication queue: publications never overlap or finish out of order. */
+  private publishQueue: Promise<unknown> = Promise.resolve()
+  private readonly rng: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n))
+
+  async init(ctx: PluginContext): Promise<void> {
+    this.ctx = ctx
+  }
+
+  async shutdown(): Promise<void> {
+    this.account = null
+    this.accountInit = null
+  }
+
+  /** Lazily creates/loads the local `OmemoAccount`. Idempotent across restarts (`OmemoAccount.create` loads an existing identity when the store has one). */
+  private async ensureAccount(): Promise<OmemoAccount> {
+    if (this.account) return this.account
+    if (!this.accountInit) {
+      const store = new PluginStorageOmemoStore(this.ctx.storage)
+      this.accountInit = OmemoAccount.create(store, this.rng).then(
+        (acc) => (this.account = acc),
+        (err) => {
+          this.accountInit = null // a failed initialization may be retried
+          throw err
+        },
+      )
+    }
+    return this.accountInit
+  }
+
+  async ensureIdentity(): Promise<IdentityInfo> {
+    const acc = await this.ensureAccount()
+    const myDeviceId = acc.publishableDeviceId()
+    await acc.replenishPreKeys()
+    await this.publishBundleNow(acc, true)
+    const existing = await fetchDeviceList(this.ctx.xmpp, this.ctx.account.jid)
+    if (!existing.includes(myDeviceId)) {
+      await publishDeviceList(this.ctx.xmpp, [...existing, myDeviceId])
+    }
+    return {
+      fingerprint: hex(acc.identityFingerprint()),
+      devices: [{ jid: this.ctx.account.jid, deviceId: String(myDeviceId) }],
+    }
+  }
+
+  /**
+   * Read-only OMEMO identity fingerprint (hex), for the verify dialog's
+   * own-fingerprint display. Loads/creates the local account but NEVER
+   * publishes — unlike {@link ensureIdentity}, which has PEP side effects and
+   * must not run on the dialog hot path. Returns `null` only if the account
+   * cannot be loaded.
+   */
+  async getOwnFingerprint(): Promise<string | null> {
+    try {
+      const acc = await this.ensureAccount()
+      return hex(acc.identityFingerprint())
+    } catch {
+      return null
+    }
+  }
+
+  async probePeer(peer: BareJID): Promise<PeerSupport> {
+    const ids = await fetchDeviceList(this.ctx.xmpp, peer)
+    return { supported: ids.length > 0, ttl: 300, variant: NS_OMEMO }
+  }
+
+  getVerificationMethods(): VerificationMethod[] {
+    return [
+      {
+        id: 'fingerprint-compare',
+        displayName: 'Compare fingerprints',
+        description: 'Confirm the safety number out of band.',
+      },
+    ]
+  }
+
+  async startVerification(_peer: BareJID, _method: VerificationMethod): Promise<VerificationFlow> {
+    throw new Error('fingerprint-compare verification UI is a later sub-project')
+  }
+
+  /**
+   * Resolve one peer device to a {@link PeerIdentity}. Identity key comes from
+   * the persisted `TrustRecord.identityKey` (bound on first session) when
+   * present, else a best-effort bundle fetch. No key → `fingerprint:''`,
+   * `trust:'unknown'`. Trust precedence: a fingerprint-bound verified marker
+   * wins (`'verified'`), else the library BTBV state (`toTrustState`).
+   */
+  /**
+   * Trust of a device judged against one specific identity key (the one a session was built
+   * with): a record bound to another key, or an unverified device of a peer that has a verified
+   * one, is `untrusted`; a fingerprint-bound verified marker for this key is `verified`.
+   */
+  private async trustForKey(peer: string, deviceId: number, ik: Uint8Array): Promise<TrustState> {
+    if (await isVerified(this.ctx.storage, peer, deviceId, hex(fingerprint(ik)))) return 'verified'
+    const record = await new PluginStorageOmemoStore(this.ctx.storage).loadTrust(peer, deviceId)
+    if (record && record.identityKey.length > 0 && !bytesEqual(record.identityKey, ik)) return 'untrusted'
+    const state = (record?.state as BtbvState | undefined) ?? 'undecided'
+    if (state === 'undecided' && (await hasAnyVerified(this.ctx.storage, peer))) return 'untrusted'
+    return toTrustState(state)
+  }
+
+  /** The per-device send check handed to the account: peer devices must not be untrusted for the key that backs their session. */
+  private authorizeSend(): (jid: string, rid: number, ik: Uint8Array) => Promise<boolean> {
+    return async (jid, rid, ik) => {
+      if (jid === this.ctx.account.jid) return true // own devices: own-device trust is out of scope here
+      return (await this.trustForKey(jid, rid, ik)) !== 'untrusted'
+    }
+  }
+
+  private async resolvePeerIdentity(peer: string, deviceId: number, lookup?: BundleLookup): Promise<PeerIdentity> {
+    const store = new PluginStorageOmemoStore(this.ctx.storage)
+    const existing = await store.loadTrust(peer, deviceId)
+    let ik: Uint8Array | null =
+      existing?.identityKey && existing.identityKey.length > 0 ? existing.identityKey : null
+    if (!ik) {
+      try {
+        ik = (await (lookup ?? bundleSource(this.ctx.xmpp, peer))(deviceId))?.ik ?? null
+      } catch {
+        ik = null
+      }
+    }
+    const fpHex = ik ? hex(fingerprint(ik)) : ''
+    let trust: TrustState
+    if (fpHex && (await isVerified(this.ctx.storage, peer, deviceId, fpHex))) {
+      trust = 'verified'
+    } else {
+      const state = (existing?.state as BtbvState | undefined) ?? 'undecided'
+      // BTBV: once any of the peer's devices is verified, a device we have not
+      // decided on is untrusted rather than blind-trusted — outbound included.
+      if (state === 'undecided' && (await hasAnyVerified(this.ctx.storage, peer))) trust = 'untrusted'
+      else trust = fpHex ? toTrustState(state) : 'unknown'
+    }
+    return { id: String(deviceId), fingerprint: fpHex, trust }
+  }
+
+  async listPeerIdentities(peer: BareJID): Promise<PeerIdentity[]> {
+    const ids = await fetchDeviceList(this.ctx.xmpp, peer)
+    const out: PeerIdentity[] = []
+    const lookup = bundleSource(this.ctx.xmpp, peer)
+    for (const id of ids) out.push(await this.resolvePeerIdentity(peer, id, lookup))
+    return out
+  }
+
+  /**
+   * Write side of per-device trust: mark a device out-of-band `'verified'` or
+   * `'untrusted'`. `'verified'` pins the marker to the device's CURRENT
+   * identity key (fingerprint-bound, per `verifiedDevices.ts`) so a later key
+   * change silently reverts it; it also clears any prior library `untrusted`
+   * verdict so the two stores agree. `'untrusted'` persists the library
+   * verdict and drops any verified marker (never leaves the two stores
+   * disagreeing about the same device).
+   */
+  async setIdentityTrust(peer: BareJID, id: string, decision: 'verified' | 'untrusted'): Promise<void> {
+    const deviceId = Number(id)
+    const store = new PluginStorageOmemoStore(this.ctx.storage)
+    const existing = await store.loadTrust(peer, deviceId)
+    // Resolve the device's current identity key (persisted first, else bundle).
+    let ik: Uint8Array | null =
+      existing?.identityKey && existing.identityKey.length > 0 ? existing.identityKey : null
+    if (!ik) {
+      try {
+        ik = (await fetchBundle(this.ctx.xmpp, peer, deviceId))?.ik ?? null
+      } catch {
+        ik = null
+      }
+    }
+    if (decision === 'verified') {
+      // A verify has nothing to pin without a key; ignore the no-key case
+      // (the UI disables verify when fingerprint is '').
+      if (!ik) return
+      await setVerified(this.ctx.storage, peer, deviceId, hex(fingerprint(ik)))
+      // Clear any prior library `untrusted` verdict so the two stores agree.
+      if (existing && existing.state === 'untrusted') {
+        await store.saveTrust(peer, deviceId, { ...existing, state: 'undecided' })
+      }
+    } else {
+      // untrusted: persist the library verdict (bound to the key when we have
+      // it) and drop any verified marker.
+      await store.saveTrust(peer, deviceId, { state: 'untrusted', identityKey: ik ?? new Uint8Array(0) })
+      await clearVerified(this.ctx.storage, peer, deviceId)
+    }
+  }
+
+  async getPeerTrust(peer: BareJID): Promise<TrustState> {
+    const ids = await fetchDeviceList(this.ctx.xmpp, peer)
+    // Surface the STRONGEST concern with priority: a single untrusted device
+    // dominates (attention needed), then any explicitly verified device, then
+    // blind-trusted (tofu), else unknown. Never drop an untrusted/verified
+    // signal the way a naive "promote unknown->tofu only" pass would.
+    let sawUntrusted = false
+    let sawVerified = false
+    let sawTofu = false
+    const lookup = bundleSource(this.ctx.xmpp, peer)
+    for (const id of ids) {
+      const { trust } = await this.resolvePeerIdentity(peer, id, lookup)
+      if (trust === 'untrusted') sawUntrusted = true
+      else if (trust === 'verified') sawVerified = true
+      else if (trust === 'tofu') sawTofu = true
+    }
+    if (sawUntrusted) return 'untrusted'
+    if (sawVerified) return 'verified'
+    if (sawTofu) return 'tofu'
+    return 'unknown'
+  }
+
+  async getDeviceTrust(peer: BareJID, deviceId: string): Promise<TrustState> {
+    return (await this.resolvePeerIdentity(peer, Number(deviceId))).trust
+  }
+
+  // --- encrypt / claim / decrypt (the SCE seam). ---
+
+  async openConversation(target: ConversationTarget): Promise<ConversationHandle> {
+    if (target.kind !== 'direct') throw new Error('OMEMO M2a supports 1:1 conversations only')
+    return { protocolId: this.descriptor.id, state: { peer: target.peer } }
+  }
+
+  async closeConversation(_handle: ConversationHandle): Promise<void> {}
+
+  private peerOf(handle: ConversationHandle): string {
+    return (handle.state as { peer: string }).peer
+  }
+
+  /**
+   * Ensure a session exists for every device in `deviceIds`, fetching+processing
+   * bundles only for devices we have no session with. Crucially it NEVER
+   * re-processes a bundle for an existing session: `processBundle` overwrites the
+   * stored ratchet with a fresh X3DH, so re-processing an established session
+   * would desync the peer (their ratchet no longer matches ours). Devices whose
+   * bundle is missing or unusable are skipped, not fatal.
+   */
+  private async ensureSessions(acc: OmemoAccount, jid: string, deviceIds: number[], lookup: BundleLookup): Promise<void> {
+    const store = new PluginStorageOmemoStore(this.ctx.storage)
+    for (const rid of deviceIds) {
+      if (await store.loadSession(jid, rid)) continue // established — do not clobber the ratchet
+      try {
+        const bundle = await lookup(rid)
+        if (!bundle) continue
+        await acc.processBundle(jid, rid, bundle)
+      } catch {
+        /* missing, malformed or invalid bundle for this device — skip it, encrypt to the rest */
+      }
+    }
+  }
+
+  /**
+   * Filter `deviceIds` to only those for which a session was successfully loaded/
+   * established. `ensureSessions` deliberately skips devices with a missing/invalid
+   * bundle, so after it runs some candidate ids may still have NO session. Passing
+   * such an id into `OmemoAccount.encrypt` would throw `no session for …` and brick
+   * the ENTIRE outbound message. Filtering here realises `ensureSessions`'s stated
+   * intent — "encrypt to the rest" — so one unreachable device never sinks the send.
+   */
+  private async reachableDevices(jid: string, deviceIds: number[]): Promise<number[]> {
+    const store = new PluginStorageOmemoStore(this.ctx.storage)
+    const reachable: number[] = []
+    for (const rid of deviceIds) {
+      if (await store.loadSession(jid, rid)) reachable.push(rid)
+    }
+    return reachable
+  }
+
+  async encrypt(handle: ConversationHandle, plaintext: Uint8Array): Promise<EncryptedPayload> {
+    const acc = await this.ensureAccount()
+    const peer = this.peerOf(handle)
+
+    // Host boundary: `plaintext` is a serialized <payload xmlns='jabber:client'>
+    // fragment. Recover its children and SCE-wrap them (XEP-0420 envelope with a
+    // <to>/<from> affix, a sender-attested <time>, and mandatory <rpad>).
+    const children = parsePayloadEnvelope(new TextDecoder().decode(plaintext)) ?? []
+    const envelope = buildEnvelope(
+      children,
+      { to: peer, from: this.ctx.account.jid, timeIso: new Date().toISOString() },
+      this.rng,
+    )
+    const sceBytes = new TextEncoder().encode(envelope.toString())
+
+    // Recipients = the peer's devices + our OWN other devices (encrypt-to-self so
+    // sibling devices and MAM replay stay readable), never our own sending device.
+    const myDev = acc.publishableDeviceId()
+    const peerDevs = (await fetchDeviceList(this.ctx.xmpp, peer)).slice(0, DEVICE_CAP)
+    // The conversation PEER must have at least one OMEMO device. Otherwise the
+    // encrypt-to-self recipients below would keep `recipients` non-empty (self
+    // only) and we'd emit an <encrypted> addressed to NONE of the peer's devices —
+    // ciphertext the intended recipient can never read, reported to the host as a
+    // secure send. Fail LOUD (a peer with no published devices, or a transient PEP
+    // miss) so the host applies its plaintext policy rather than silently sending.
+    if (peerDevs.length === 0) {
+      throw new Error(`OMEMO: peer ${peer} has no usable OMEMO devices`)
+    }
+
+    // BTBV encrypt exclusion: drop peer devices whose resolved trust is
+    // `untrusted`. Own devices are unaffected (own-device trust is M2c-3).
+    // Before any verification exists all devices are tofu/unknown, so nothing
+    // is dropped (M2b blind-trust behavior preserved). If this empties the
+    // peer set (every device untrusted), the existing zero-usable-devices
+    // guard below fails LOUD rather than silently sending to self only.
+    const peerBundles = bundleSource(this.ctx.xmpp, peer)
+    const ownBundles = bundleSource(this.ctx.xmpp, this.ctx.account.jid)
+    const trustedPeerDevs: number[] = []
+    for (const rid of peerDevs) {
+      const { trust } = await this.resolvePeerIdentity(peer, rid, peerBundles)
+      if (trust !== 'untrusted') trustedPeerDevs.push(rid)
+    }
+    if (trustedPeerDevs.length === 0) {
+      throw new Error(`OMEMO: peer ${peer} has no usable OMEMO devices`)
+    }
+
+    const ownDevs = (await fetchDeviceList(this.ctx.xmpp, this.ctx.account.jid))
+      .filter((d) => d !== myDev)
+      .slice(0, DEVICE_CAP)
+
+    await this.ensureSessions(acc, peer, trustedPeerDevs, peerBundles)
+    await this.ensureSessions(acc, this.ctx.account.jid, ownDevs, ownBundles)
+
+    // `ensureSessions` skips devices whose bundle is missing/invalid, so a device id
+    // in the peer's (or our own) list may still have no session. Narrow each group to
+    // the devices that actually have a session — `acc.encrypt` throws on the first
+    // session-less device, which would brick the WHOLE send over one stale/unreachable
+    // device. We encrypt to "the rest", matching ensureSessions's stated intent.
+    // Trust was read BEFORE the sessions above existed. A session built from a bundle that
+    // carries a different identity key re-binds the device and drops it to untrusted, so
+    // authorize each device again against the identity that actually backs its session.
+    const reachablePeerDevs: number[] = []
+    for (const rid of await this.reachableDevices(peer, trustedPeerDevs)) {
+      if ((await this.resolvePeerIdentity(peer, rid, peerBundles)).trust !== 'untrusted') reachablePeerDevs.push(rid)
+    }
+    const reachableOwnDevs = await this.reachableDevices(this.ctx.account.jid, ownDevs)
+
+    // Apply the peer guard to the FILTERED set: a peer whose every device is
+    // unreachable (all bundles retracted/invalid) must still fail LOUD, never fall
+    // back to encrypt-to-self only (undeliverable ciphertext reported as a secure send).
+    if (reachablePeerDevs.length === 0) {
+      throw new Error(`OMEMO: peer ${peer} has no usable OMEMO devices`)
+    }
+
+    const recipients = [
+      { jid: peer, deviceIds: reachablePeerDevs },
+      { jid: this.ctx.account.jid, deviceIds: reachableOwnDevs },
+    ].filter((r) => r.deviceIds.length > 0)
+
+    const msg = await acc.encrypt(recipients, sceBytes, { authorize: this.authorizeSend() })
+    // Authorization runs against each session's own identity at wrapping time and may have
+    // refused every peer device since the checks above: never emit a message with no key for the peer.
+    if (!msg.keys.some((k) => k.jid === peer)) {
+      throw new Error(`OMEMO: peer ${peer} has no usable OMEMO devices`)
+    }
+    return {
+      protocolId: this.descriptor.id,
+      stanzaElement: elementToData(buildEncrypted(msg)),
+      fallbackBody: '[This message is OMEMO-encrypted.]',
+    }
+  }
+
+  tryClaimInbound(stanzaChild: XMLElementData): EncryptedPayload | null {
+    if (stanzaChild.name !== 'encrypted' || stanzaChild.attrs?.xmlns !== NS_OMEMO) return null
+    return { protocolId: this.descriptor.id, stanzaElement: stanzaChild }
+  }
+
+  async decrypt(
+    handle: ConversationHandle,
+    payload: EncryptedPayload,
+    context?: InboundDecryptContext,
+  ): Promise<DecryptResult> {
+    return this.decryptWith(handle, payload, context, false)
+  }
+
+  async decryptArchive(
+    handle: ConversationHandle,
+    payload: EncryptedPayload,
+    context?: InboundDecryptContext,
+  ): Promise<DecryptResult> {
+    return this.decryptWith(handle, payload, context, true)
+  }
+
+  async decryptArchiveBatch(
+    handle: ConversationHandle,
+    items: ArchiveDecryptItem[],
+  ): Promise<DecryptResult[]> {
+    const out: DecryptResult[] = []
+    for (const it of items) {
+      // Keep the result array index-aligned with `items`. A failure that is not a
+      // broken session occupies its slot as `unverifiable` (no plaintext) so it
+      // neither shifts later results nor asks the host to repair a working session.
+      try {
+        out.push(await this.decryptWith(handle, it.payload, it.context, true))
+      } catch (err) {
+        out.push({
+          status: 'unverifiable',
+          senderDevice: { jid: this.peerOf(handle), deviceId: '0' },
+          securityContext: {
+            protocolId: this.descriptor.id,
+            trust: 'untrusted',
+            notes: [err instanceof Error ? err.message : 'could not decrypt'],
+          },
+        })
+      }
+    }
+    return out
+  }
+
+  private brokenResult(jid: string, deviceId: number | string = '0'): DecryptResult {
+    return {
+      status: 'broken-session',
+      senderDevice: { jid, deviceId: String(deviceId) },
+      securityContext: {
+        protocolId: this.descriptor.id,
+        trust: 'untrusted',
+        notes: ['session could not be established'],
+      },
+    }
+  }
+
+  /**
+   * Resolve + persist BTBV trust for a just-decrypted (authenticated) device, and
+   * build the `SecurityContext` for the result. `identityKey` is the key that
+   * authenticated THIS message (from the session it decrypted under), so trust and the
+   * verified marker are judged against that key, never against whatever the stored
+   * record or a freshly fetched bundle says now. `OmemoAccount.decrypt` records a
+   * device's identity key on first contact as `undecided`; here we promote that to
+   * the blind-trust decision (or preserve an explicit prior decision — never a
+   * downgrade).
+   */
+  private async resolveInboundSecurity(senderJid: string, sid: number, identityKey: Uint8Array): Promise<SecurityContext> {
+    const store = new PluginStorageOmemoStore(this.ctx.storage)
+    // A fingerprint-bound verified marker outranks the BTBV state, for this key only.
+    if (await isVerified(this.ctx.storage, senderJid, sid, hex(fingerprint(identityKey)))) {
+      return { protocolId: this.descriptor.id, trust: 'verified' }
+    }
+    const existing = await store.loadTrust(senderJid, sid)
+    if (existing && existing.identityKey.length > 0 && !bytesEqual(existing.identityKey, identityKey)) {
+      // The device now has a different key (an archived message from an older identity): the
+      // record's decision belongs to the other key, so this message is untrusted.
+      return {
+        protocolId: this.descriptor.id,
+        trust: 'untrusted',
+        notes: ['sent with an identity key that is no longer the device\'s current one'],
+      }
+    }
+    const peerHasVerified = await this.peerHasVerifiedDevice(store, senderJid)
+    const resolved = resolveInboundTrust(peerHasVerified, (existing?.state as BtbvState | undefined) ?? null)
+    if (!existing || existing.state !== resolved.store || existing.identityKey.length === 0) {
+      // Promote in place (or record a first-seen device, which an archive decrypt does not
+      // bind), keeping the bound key. resolveInboundTrust preserves any explicit prior
+      // decision, so this never downgrades an existing verdict.
+      await store.saveTrust(senderJid, sid, { state: resolved.store, identityKey })
+    }
+    return { protocolId: this.descriptor.id, trust: toSecurityTrust(resolved.surfaced) }
+  }
+
+  /**
+   * BTBV gate: does the peer have any EXPLICITLY verified device (fingerprint-
+   * bound marker present)? When true, `resolveInboundTrust` forces newly-seen
+   * unverified devices to `untrusted` rather than blind-trusting them.
+   * Blind-trusted (`'trusted'`) devices deliberately do NOT count here —
+   * otherwise the second device a peer adds would be forced to `untrusted`,
+   * defeating blind-trust-before-verification.
+   */
+  private async peerHasVerifiedDevice(_store: PluginStorageOmemoStore, peer: string): Promise<boolean> {
+    return hasAnyVerified(this.ctx.storage, peer)
+  }
+
+  /**
+   * Failures that are NOT a broken session — an unreadable stanza, a message not addressed to
+   * this device, an invalid SCE envelope or mismatched affixes. They are terminal for that
+   * message but must never trigger session repair, which would overwrite a working session.
+   */
+  private malformed(why: string): E2EEPluginError {
+    return new E2EEPluginError('permanent', 'malformed-data', `OMEMO: ${why}`)
+  }
+
+  /**
+   * Publishes the current bundle, one publication at a time, so a slow older publish can never
+   * land after a newer one. The account is marked published only after the server accepted the
+   * revision that was read, so a failed publish leaves it dirty for the next attempt.
+   */
+  private publishBundleNow(acc: OmemoAccount, force: boolean): Promise<void> {
+    const run = this.publishQueue.then(async () => {
+      if (!force && !acc.isBundleDirty()) return
+      const revision = acc.bundleRevision()
+      const bundle = await acc.publishableBundleAsync()
+      await publishBundle(this.ctx.xmpp, acc.publishableDeviceId(), bundle)
+      acc.markBundlePublished(revision)
+    })
+    this.publishQueue = run.catch(() => undefined)
+    return run
+  }
+
+  /** Re-publishes our bundle when decrypting consumed a one-time prekey (best effort). */
+  private async republishBundleIfDirty(acc: OmemoAccount): Promise<void> {
+    if (!acc.isBundleDirty()) return
+    try {
+      await this.publishBundleNow(acc, false)
+    } catch (err) {
+      this.ctx.logger.warn('OMEMO: could not republish bundle after prekey use', err)
+    }
+  }
+
+  private async decryptWith(
+    handle: ConversationHandle,
+    payload: EncryptedPayload,
+    context: InboundDecryptContext | undefined,
+    archive: boolean,
+  ): Promise<DecryptResult> {
+    const acc = await this.ensureAccount()
+    // For a self-outgoing carbon/MAM replay the ciphertext came from OUR other
+    // device, so the session partner is our own JID, not the conversation peer.
+    const conversationPeer = this.peerOf(handle)
+    const senderJid = context?.isSelfOutgoing ? this.ctx.account.jid : conversationPeer
+
+    let msg: OmemoMessage
+    try {
+      msg = parseEncrypted(dataToElement(payload.stanzaElement))
+    } catch {
+      throw this.malformed('unreadable <encrypted> element')
+    }
+
+    let content: Uint8Array
+    let senderIdentityKey: Uint8Array
+    try {
+      ;({ content, senderIdentityKey } = await acc.decryptAuthenticated(senderJid, msg.sid, msg, {
+        archive,
+        ownJid: this.ctx.account.jid,
+      }))
+    } catch (err) {
+      if (!(err instanceof OmemoError)) throw err
+      if (err.code === 'session-broken') return this.brokenResult(senderJid, msg.sid)
+      if (err.code === 'duplicate') {
+        // Already consumed (redelivery, replay): nothing to show, and nothing to repair.
+        // The host discards the stanza's cleartext body for a control message.
+        return {
+          status: 'control-message',
+          senderDevice: { jid: senderJid, deviceId: String(msg.sid) },
+          securityContext: await this.resolveInboundSecurity(
+            senderJid,
+            msg.sid,
+            err.senderIdentityKey ?? new Uint8Array(0),
+          ),
+        }
+      }
+      throw this.malformed(err.message)
+    }
+    if (!archive) await this.republishBundleIfDirty(acc)
+
+    const securityContext = await this.resolveInboundSecurity(senderJid, msg.sid, senderIdentityKey)
+    const senderDevice = { jid: senderJid, deviceId: String(msg.sid) }
+
+    // 0-length recovered content = key-transport / empty ratchet advance.
+    if (content.length === 0) return { status: 'control-message', senderDevice, securityContext }
+
+    let env: ReturnType<typeof parseEnvelope>
+    try {
+      env = parseEnvelope(parseXml(new TextDecoder().decode(content)))
+    } catch {
+      // Authenticated bytes that are not a valid SCE envelope: never surface them
+      // as a decrypted body, but the session itself is fine.
+      throw this.malformed('invalid SCE envelope')
+    }
+
+    // Present affixes must match who sent this and which conversation it belongs to,
+    // so an authenticated message cannot be redirected into another conversation.
+    const bare = (jid: string): string => jid.split('/')[0].toLowerCase()
+    const expectedTo = context?.isSelfOutgoing ? conversationPeer : this.ctx.account.jid
+    if (env.from !== undefined && bare(env.from) !== bare(senderJid)) {
+      throw this.malformed('SCE <from> does not match the sender')
+    }
+    if (env.to !== undefined && bare(env.to) !== bare(expectedTo)) {
+      throw this.malformed('SCE <to> does not match the conversation')
+    }
+
+    const plaintext = new TextEncoder().encode(serializePayloadEnvelope(env.content))
+    const authoredAt = env.timeIso ? new Date(env.timeIso) : undefined
+    return { plaintext, status: 'ok', senderDevice, securityContext, ...(authoredAt ? { authoredAt } : {}) }
+  }
+
+  async repairSession(_handle: ConversationHandle, peer: BareJID): Promise<void> {
+    // Rebuild a desynced session: force a fresh X3DH for the peer's devices
+    // (overwriting the broken ratchet — unlike `ensureSessions`, which preserves
+    // existing sessions) and send an empty key-transport so the peer re-handshakes.
+    const acc = await this.ensureAccount()
+    const devs = (await fetchDeviceList(this.ctx.xmpp, peer)).slice(0, DEVICE_CAP)
+    const fresh: number[] = []
+    const lookup = bundleSource(this.ctx.xmpp, peer)
+    for (const rid of devs) {
+      try {
+        const bundle = await lookup(rid)
+        if (!bundle) continue
+        await acc.processBundle(peer, rid, bundle, { replace: true })
+        // A replacement bundle with a different identity key drops the device to untrusted:
+        // never wrap a key for it.
+        if ((await this.resolvePeerIdentity(peer, rid, lookup)).trust === 'untrusted') continue
+        fresh.push(rid)
+      } catch {
+        /* skip devices with missing, malformed or unusable bundles */
+      }
+    }
+    if (fresh.length === 0) return
+    const msg = await acc.encrypt([{ jid: peer, deviceIds: fresh }], new Uint8Array(0), {
+      authorize: this.authorizeSend(),
+    })
+    if (msg.keys.length === 0) return
+    await this.ctx.xmpp.sendStanza(this.wrapMessage(peer, elementToData(buildEncrypted(msg))))
+  }
+
+  private wrapMessage(to: string, encrypted: XMLElementData): XMLElementData {
+    return { name: 'message', attrs: { to, type: 'chat' }, children: [encrypted] }
+  }
+}

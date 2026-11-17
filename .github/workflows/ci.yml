@@ -199,6 +199,13 @@ jobs:
       - name: Run SDK tests
         run: npm run test:run --workspace=@fluux/sdk
 
+      - name: Run OMEMO library and plugin tests
+        run: |
+          # The plugin resolves the library through its built output.
+          npm run build --workspace=@fluux/omemo
+          npm run test:run --workspace=@fluux/omemo
+          npm run test:run --workspace=@fluux/omemo-plugin
+
       - name: Type check
         run: npm run typecheck
 
@@ -213,6 +220,11 @@ jobs:
 
       - name: Lint App
         run: npm run lint --workspace=@xmpp/fluux
+
+      - name: Lint OMEMO library and plugin
+        run: |
+          npm run lint --workspace=@fluux/omemo
+          npm run lint --workspace=@fluux/omemo-plugin
 
       # Two builds, two directions. The production direction protects users; the Dev
       # direction catches a silent regression to "eliminated everywhere, including

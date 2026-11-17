@@ -1,0 +1,274 @@
+import { describe, it, expect } from 'vitest'
+import { OmemoPlugin } from './OmemoPlugin'
+import { createMockPluginContext } from './testing/MockPluginContext'
+import { PluginStorageOmemoStore } from './store'
+import { fetchBundle, publishBundle, publishDeviceList } from './pep'
+import { fingerprint, OmemoAccount } from '@fluux/omemo'
+import { setVerified } from './verifiedDevices'
+import type { PluginStorage } from '@fluux/sdk'
+
+const hex = (u: Uint8Array) => [...u].map((b) => b.toString(16).padStart(2, '0')).join('')
+
+/** Stand up Alice + Bob on a shared net; Bob publishes identity so Alice can see his device. */
+async function twoParty() {
+  const alice = createMockPluginContext('alice@x')
+  const bob = createMockPluginContext('bob@x', alice.net)
+  const pa = new OmemoPlugin()
+  await pa.init(alice.ctx)
+  await pa.ensureIdentity()
+  const pb = new OmemoPlugin()
+  await pb.init(bob.ctx)
+  const bobId = await pb.ensureIdentity()
+  const bobDeviceId = Number(bobId.devices![0].deviceId)
+  return { alice, bob, pa, pb, bobDeviceId }
+}
+
+/** Fresh in-memory `PluginStorage`, isolated from any `createMockPluginContext` — used to mint an
+ *  independent second OMEMO identity (own device/session store) for a peer's second device. */
+function memStorage(): PluginStorage {
+  const store = new Map<string, Uint8Array>()
+  return {
+    async get(key) {
+      return store.get(key) ?? null
+    },
+    async put(key, value) {
+      store.set(key, value)
+    },
+    async delete(key) {
+      store.delete(key)
+    },
+    async list(prefix) {
+      return [...store.keys()].filter((k) => k.startsWith(prefix))
+    },
+  }
+}
+
+describe('OmemoPlugin.listPeerIdentities', () => {
+  it('lists one identity per device with its fingerprint (from the published bundle)', async () => {
+    const { alice, pa, bobDeviceId } = await twoParty()
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list).toHaveLength(1)
+    const bundle = await fetchBundle(alice.ctx.xmpp, 'bob@x', bobDeviceId)
+    expect(list[0]).toEqual({
+      id: String(bobDeviceId),
+      fingerprint: hex(fingerprint(bundle!.ik)),
+      trust: 'unknown', // no trust record yet, not verified
+    })
+  })
+
+  it('a device advertised with no fetchable bundle → fingerprint "" and trust "unknown"', async () => {
+    const alice = createMockPluginContext('alice@x')
+    const pa = new OmemoPlugin()
+    await pa.init(alice.ctx)
+    // Seed ONLY a device list for a peer with no bundle node.
+    const { deviceListToXml } = await import('./pep')
+    const { elementToData } = await import('./stanzaData')
+    const { devicesNode } = await import('./namespaces')
+    const { seedPeer } = await import('./testing/MockPluginContext')
+    seedPeer(alice.net, 'ghost@x', devicesNode(), elementToData(deviceListToXml([777])))
+    const list = await pa.listPeerIdentities('ghost@x')
+    expect(list).toEqual([{ id: '777', fingerprint: '', trust: 'unknown' }])
+  })
+
+  it('reflects a stored blind-trusted (tofu) device', async () => {
+    const { alice, pa, bobDeviceId } = await twoParty()
+    const bundle = await fetchBundle(alice.ctx.xmpp, 'bob@x', bobDeviceId)
+    const store = new PluginStorageOmemoStore(alice.ctx.storage)
+    await store.saveTrust('bob@x', bobDeviceId, { state: 'trusted', identityKey: bundle!.ik })
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list[0].trust).toBe('tofu')
+  })
+
+  it('a verified marker bound to a STALE fingerprint does not yield verified; the real fp does', async () => {
+    const { alice, pa, bobDeviceId } = await twoParty()
+    const bundle = await fetchBundle(alice.ctx.xmpp, 'bob@x', bobDeviceId)
+    const store = new PluginStorageOmemoStore(alice.ctx.storage)
+    await store.saveTrust('bob@x', bobDeviceId, { state: 'trusted', identityKey: bundle!.ik })
+    const realFp = hex(fingerprint(bundle!.ik))
+
+    // Marker bound to a fingerprint that does NOT match the device's real key.
+    await setVerified(alice.ctx.storage, 'bob@x', bobDeviceId, 'deadbeef')
+    let list = await pa.listPeerIdentities('bob@x')
+    expect(list[0]).toEqual({ id: String(bobDeviceId), fingerprint: realFp, trust: 'tofu' })
+
+    // Re-bind the marker to the REAL fingerprint — now it wins over library trust.
+    await setVerified(alice.ctx.storage, 'bob@x', bobDeviceId, realFp)
+    list = await pa.listPeerIdentities('bob@x')
+    expect(list[0]).toEqual({ id: String(bobDeviceId), fingerprint: realFp, trust: 'verified' })
+  })
+
+  it('resolves 2 devices independently: one verified (store), one tofu (library trust)', async () => {
+    const { alice, bob, pa, bobDeviceId: device1 } = await twoParty()
+
+    // Mint a second, independent OMEMO identity and publish it as Bob's second device.
+    const acc2 = await OmemoAccount.create(new PluginStorageOmemoStore(memStorage()), (n) =>
+      crypto.getRandomValues(new Uint8Array(n)),
+    )
+    const device2 = acc2.publishableDeviceId()
+    await publishBundle(bob.ctx.xmpp, device2, await acc2.publishableBundleAsync())
+    await publishDeviceList(bob.ctx.xmpp, [device1, device2])
+
+    const store = new PluginStorageOmemoStore(alice.ctx.storage)
+    const bundle1 = await fetchBundle(alice.ctx.xmpp, 'bob@x', device1)
+    const fp1 = hex(fingerprint(bundle1!.ik))
+    await store.saveTrust('bob@x', device1, { state: 'trusted', identityKey: bundle1!.ik })
+    await setVerified(alice.ctx.storage, 'bob@x', device1, fp1) // explicitly verified
+
+    const bundle2 = await fetchBundle(alice.ctx.xmpp, 'bob@x', device2)
+    const fp2 = hex(fingerprint(bundle2!.ik))
+    await store.saveTrust('bob@x', device2, { state: 'trusted', identityKey: bundle2!.ik }) // tofu only
+
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list).toHaveLength(2)
+    expect(list.find((e) => e.id === String(device1))).toEqual({
+      id: String(device1),
+      fingerprint: fp1,
+      trust: 'verified',
+    })
+    expect(list.find((e) => e.id === String(device2))).toEqual({
+      id: String(device2),
+      fingerprint: fp2,
+      trust: 'tofu',
+    })
+  })
+})
+
+describe('OmemoPlugin.setIdentityTrust', () => {
+  it("'verified' pins the current fingerprint and flips listed trust to verified", async () => {
+    const { pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list[0].trust).toBe('verified')
+    // getPeerTrust/getDeviceTrust are also verified-aware (the adapter wires
+    // isVerified into those read paths); see the "OmemoPlugin BTBV wiring"
+    // describe block below for the round-trip proof on those methods.
+  })
+
+  it("'verified' then a fingerprint change invalidates the marker (back to unverified)", async () => {
+    const { alice, pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    // Simulate a key change: overwrite the stored TrustRecord's identityKey.
+    const store = new PluginStorageOmemoStore(alice.ctx.storage)
+    const rec = await store.loadTrust('bob@x', bobDeviceId)
+    await store.saveTrust('bob@x', bobDeviceId, {
+      state: rec?.state ?? 'trusted',
+      identityKey: new Uint8Array(32).fill(0xaa), // different key → different fp
+    })
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list[0].trust).not.toBe('verified')
+  })
+
+  it("'untrusted' writes library untrusted state and removes any verified marker", async () => {
+    const { alice, pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'untrusted')
+    const store = new PluginStorageOmemoStore(alice.ctx.storage)
+    expect((await store.loadTrust('bob@x', bobDeviceId))!.state).toBe('untrusted')
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list[0].trust).toBe('untrusted')
+  })
+
+  it("'verified' clears a prior library 'untrusted' state (mutual clearing, other direction)", async () => {
+    const { alice, pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'untrusted')
+    const store = new PluginStorageOmemoStore(alice.ctx.storage)
+    expect((await store.loadTrust('bob@x', bobDeviceId))!.state).toBe('untrusted')
+
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list[0].trust).toBe('verified')
+
+    // Load-bearing: assert the library record itself was cleared, not merely
+    // shadowed by the verified marker's read-path precedence (listPeerIdentities
+    // alone would pass even if 'untrusted' were never cleared).
+    const rec = await store.loadTrust('bob@x', bobDeviceId)
+    expect(rec!.state).not.toBe('untrusted')
+    expect(rec!.state).toBe('undecided')
+  })
+
+  it('is idempotent for repeated verified calls', async () => {
+    const { pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list[0].trust).toBe('verified')
+  })
+})
+
+describe('OmemoPlugin BTBV wiring', () => {
+  it('getDeviceTrust surfaces verified after setIdentityTrust', async () => {
+    const { pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).toBe('verified')
+  })
+
+  it('once a peer has a verified device, a newly-seen device resolves to untrusted (BTBV)', async () => {
+    const { alice, pa, pb, bobDeviceId } = await twoParty()
+    // Verify bob's first device.
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    // Bob adds a SECOND device on the shared net.
+    const bob2 = createMockPluginContext('bob@x', alice.net)
+    const pb2 = new OmemoPlugin()
+    await pb2.init(bob2.ctx)
+    // Re-create identity for a distinct device id by seeding a fresh account:
+    const secondId = await pb2.ensureIdentity()
+    const secondDeviceId = Number(secondId.devices![0].deviceId)
+    // The second device, never verified, with a peer that HAS a verified device,
+    // must resolve untrusted via resolveInboundTrust (peerHasVerifiedDevice=true).
+    const store = new (await import('./store')).PluginStorageOmemoStore(alice.ctx.storage)
+    const { resolveInboundTrust } = await import('./trust')
+    const peerHasVerified = await (pa as unknown as {
+      peerHasVerifiedDevice(s: unknown, p: string): Promise<boolean>
+    }).peerHasVerifiedDevice(store, 'bob@x')
+    expect(peerHasVerified).toBe(true)
+    expect(resolveInboundTrust(peerHasVerified, null).store).toBe('untrusted')
+    expect(secondDeviceId).not.toBe(bobDeviceId)
+    // pb kept alive only for the shared-net stand-up in twoParty(); silence unused-var lint.
+    void pb
+  })
+
+  it('getPeerTrust returns verified for a peer with a verified and no untrusted device', async () => {
+    const { pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    expect(await pa.getPeerTrust('bob@x')).toBe('verified')
+  })
+
+  it('getPeerTrust: a single untrusted device dominates a verified one on the same peer', async () => {
+    const { bob, pa, bobDeviceId: device1 } = await twoParty()
+
+    // Mint a second, independent OMEMO identity and publish it as Bob's second device.
+    const acc2 = await OmemoAccount.create(new PluginStorageOmemoStore(memStorage()), (n) =>
+      crypto.getRandomValues(new Uint8Array(n)),
+    )
+    const device2 = acc2.publishableDeviceId()
+    await publishBundle(bob.ctx.xmpp, device2, await acc2.publishableBundleAsync())
+    await publishDeviceList(bob.ctx.xmpp, [device1, device2])
+
+    // Device A: verified. Device B: untrusted.
+    await pa.setIdentityTrust('bob@x', String(device1), 'verified')
+    await pa.setIdentityTrust('bob@x', String(device2), 'untrusted')
+    expect(await pa.getDeviceTrust('bob@x', String(device1))).toBe('verified')
+    expect(await pa.getDeviceTrust('bob@x', String(device2))).toBe('untrusted')
+
+    // A distrusted device must always win the aggregate — security-load-bearing.
+    expect(await pa.getPeerTrust('bob@x')).toBe('untrusted')
+  })
+
+  it('a fingerprint change on a verified device flips getDeviceTrust back off verified', async () => {
+    const { alice, pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).toBe('verified')
+
+    // Simulate a key change: overwrite the stored TrustRecord's identityKey so
+    // the verified marker (bound to the OLD fingerprint) no longer matches.
+    const store = new PluginStorageOmemoStore(alice.ctx.storage)
+    const rec = await store.loadTrust('bob@x', bobDeviceId)
+    await store.saveTrust('bob@x', bobDeviceId, {
+      state: rec?.state ?? 'trusted',
+      identityKey: new Uint8Array(32).fill(0xaa), // different key → different fp
+    })
+
+    expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).not.toBe('verified')
+  })
+})
