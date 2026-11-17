@@ -182,7 +182,7 @@ describe('OmemoAccount', () => {
     badMsg[badMsg.length - 1] ^= 0xff
     m1.keys[0].data = encodeKeyExchange({ ...kex, message: badMsg })
 
-    await expect(bob.decrypt('alice@x', m1.sid, m1)).rejects.toMatchObject({ code: 'session-broken' })
+    await expect(bob.decrypt('alice@x', m1.sid, m1)).rejects.toMatchObject({ code: 'malformed' })
 
     // No side effects: the one-time prekey survives and no trust record was written.
     expect((await bob.publishableBundleAsync()).preKeys.some((p) => p.id === usedPkId)).toBe(true)

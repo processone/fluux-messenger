@@ -64,7 +64,11 @@ are explicitly out of scope of this core harness. The adapter's own gated test
 (`packages/omemo-plugin/src/interop/plugin_interop.test.ts`, run with `VITEST_INTEROP=1`) covers the
 body level: the plugin encrypts the host's real payload shape and the reference parses the SCE
 envelope. That test seeds device bundles on the standard shared bundles node (one item per
-device id). A reference-to-plugin direction is not covered by either harness yet.
+device id). The same file also covers the reverse direction: the reference (`venv/interop_encrypt_to_plugin.py`)
+encrypts two XEP-0420 envelopes to the plugin's published bundle (a key exchange, then an
+ordinary ratchet message) and the plugin, registered in the SDK's `E2EEManager`, decrypts them
+through the manager's normal receive entry point. PEP itself is still the in-memory mock in both
+directions; a live XMPP server is not part of this harness.
 
 ## Dependency pin
 

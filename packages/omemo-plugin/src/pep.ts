@@ -96,8 +96,23 @@ export async function publishBundle(xmpp: XMPPPrimitives, deviceId: number, bund
   )
 }
 
-export async function fetchBundle(xmpp: XMPPPrimitives, jid: string, deviceId: number): Promise<Bundle | null> {
-  const items = await xmpp.queryPEP(jid, bundlesNode())
-  const item = items.find((i) => i.id === String(deviceId))
-  return item ? bundleFromXml(dataToElement(item.payload)) : null
+/** Looks up one device's bundle; see {@link bundleSource}. */
+export type BundleLookup = (deviceId: number) => Promise<Bundle | null>
+
+/**
+ * A bundle lookup for one JID that downloads the shared bundles node ONCE, however many
+ * devices are looked up. The node holds every device's bundle, so a per-device download
+ * would cost devices x node-size for a single send.
+ */
+export function bundleSource(xmpp: XMPPPrimitives, jid: string): BundleLookup {
+  let items: ReturnType<XMPPPrimitives['queryPEP']> | undefined
+  return async (deviceId) => {
+    items ??= xmpp.queryPEP(jid, bundlesNode())
+    const item = (await items).find((i) => i.id === String(deviceId))
+    return item ? bundleFromXml(dataToElement(item.payload)) : null
+  }
+}
+
+export function fetchBundle(xmpp: XMPPPrimitives, jid: string, deviceId: number): Promise<Bundle | null> {
+  return bundleSource(xmpp, jid)(deviceId)
 }

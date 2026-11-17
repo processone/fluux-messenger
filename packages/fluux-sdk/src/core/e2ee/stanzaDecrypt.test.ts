@@ -1105,15 +1105,15 @@ describe('stanzaDecrypt — control-message status', () => {
     expect(result.securityContext?.trust).toBe('tofu')
   })
 
-  it('does not overwrite an existing fallback body with a placeholder', async () => {
+  it('discards the outer cleartext body: a control message carries no user content', async () => {
     const manager = await makeManager(new ControlMessagePlugin())
-    const stanza = buildStanza() // carries a '[Encrypted message]' hint body
+    const stanza = buildStanza() // carries a cleartext hint body the sender or server controls
 
-    await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
 
-    // Control message leaves the sender hint as-is — it is neither replaced
-    // with plaintext nor with a could-not-decrypt placeholder.
-    expect(stanza.getChild('body')?.text()).toBe('[Encrypted message]')
+    // The body would otherwise show under the plugin's trusted context.
+    expect(stanza.getChild('body')).toBeUndefined()
+    expect(result.encryptedPayloadXml).toBeUndefined()
   })
 })
 

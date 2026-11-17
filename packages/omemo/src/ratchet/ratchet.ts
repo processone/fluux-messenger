@@ -81,7 +81,7 @@ function openMessage(
   // Verify-before-decrypt: recompute the MAC over ad || message and compare
   // constant-time. Throw BEFORE touching AES-decrypt on mismatch.
   if (!bytesEqual(hmacSha256(auth, concatBytes(ad, authMessage.message)).slice(0, 16), authMessage.mac)) {
-    throw new Error('ratchet message authentication failed')
+    throw new OmemoError('malformed', 'ratchet message authentication failed')
   }
   const parsed = decodeOmemoMessage(authMessage.message)
   return cbc(enc, iv).decrypt(parsed.ciphertext!)

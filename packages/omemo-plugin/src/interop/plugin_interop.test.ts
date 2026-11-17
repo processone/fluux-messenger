@@ -19,13 +19,13 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { xml } from '@xmpp/client'
-import { serializePayloadEnvelope } from '@fluux/sdk'
+import { serializePayloadEnvelope, parsePayloadEnvelope, E2EEManager, InMemoryStorageBackend } from '@fluux/sdk'
 import { b64encode, b64decode } from '@fluux/omemo'
 import type { Bundle } from '@fluux/omemo'
 import { OmemoPlugin } from '../OmemoPlugin'
 import { createMockPluginContext, seedPeer } from '../testing/MockPluginContext'
 import { deviceListToXml, bundleToXml, fetchBundle } from '../pep'
-import { elementToData, dataToElement } from '../stanzaData'
+import { elementToData, dataToElement, parseXml } from '../stanzaData'
 import { devicesNode, bundlesNode } from '../namespaces'
 import type { XMLElementData } from '@fluux/sdk'
 
@@ -109,5 +109,54 @@ describe.runIf(process.env.VITEST_INTEROP)('plugin body-level interop vs twomemo
 
     expect(out).toContain(`RECOVERED_BODY: ${EXPECTED_BODY}`)
     expect(out).toContain('BODY INTEROP SUCCESS')
+  }, 60_000)
+
+  it('the plugin, registered in the SDK manager, reads normal twomemo messages from the reference', async () => {
+    const bundlePath = `${RUN}/bob_bundle_reverse.json`
+    const aliceBundlePath = `${RUN}/alice_plugin_bundle.json`
+    const outPath = `${RUN}/reference_msgs.json`
+    execFileSync(PY, [`${VENV}interop_gen_bundle.py`, bundlePath], { encoding: 'utf8' })
+    const bob = JSON.parse(readFileSync(bundlePath, 'utf8')) as { deviceId: number }
+
+    // The plugin runs inside the real SDK manager, over the shared in-memory PEP network.
+    const { ctx } = createMockPluginContext('alice@localhost')
+    const manager = new E2EEManager({
+      storage: new InMemoryStorageBackend(),
+      xmpp: ctx.xmpp,
+      account: { jid: 'alice@localhost' },
+    })
+    const plugin = new OmemoPlugin()
+    await manager.register(plugin)
+    const identity = await plugin.ensureIdentity()
+    const aliceDev = Number(identity.devices![0].deviceId)
+    const aliceBundle = (await fetchBundle(ctx.xmpp, 'alice@localhost', aliceDev))!
+    writeFileSync(
+      aliceBundlePath,
+      JSON.stringify({
+        deviceId: aliceDev,
+        ik: b64encode(aliceBundle.ik),
+        spkId: aliceBundle.spkId,
+        spk: b64encode(aliceBundle.spk),
+        spkSig: b64encode(aliceBundle.spkSig),
+        preKeys: aliceBundle.preKeys.map((p) => ({ id: p.id, key: b64encode(p.key) })),
+      }),
+    )
+
+    const texts = ['first from reference', 'second from reference']
+    execFileSync(PY, [`${VENV}interop_encrypt_to_plugin.py`, aliceBundlePath, bundlePath, outPath, ...texts], {
+      encoding: 'utf8',
+    })
+    const { stanzas } = JSON.parse(readFileSync(outPath, 'utf8')) as { stanzas: string[] }
+    expect(stanzas).toHaveLength(2)
+    for (const [i, serialized] of stanzas.entries()) {
+      const element = elementToData(parseXml(serialized))
+      const result = await manager.decryptInbound(element, { kind: 'direct', peer: 'bob@localhost' })
+      expect(result, serialized.slice(0, 200)).not.toBeNull()
+      expect(result?.status).toBe('ok')
+      const [body] = parsePayloadEnvelope(new TextDecoder().decode(result!.plaintext))!
+      expect(body.name).toBe('body')
+      expect(body.text()).toBe(texts[i])
+      expect(result!.senderDevice.deviceId).toBe(String(bob.deviceId))
+    }
   }, 60_000)
 })

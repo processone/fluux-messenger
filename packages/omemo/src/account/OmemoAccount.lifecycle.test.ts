@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { MemoryStore } from '../store/MemoryStore'
 import { OmemoAccount } from './OmemoAccount'
-import { decodeKeyExchange } from '../omemo2/wire'
+import { decodeKeyExchange, encodeKeyExchange } from '../omemo2/wire'
 import { OmemoError } from '../errors'
 import type { OmemoStore } from '../store/types'
 
@@ -15,11 +15,11 @@ function counterRng(start: number) {
 const enc = (s: string) => new TextEncoder().encode(s)
 const dec = (u: Uint8Array) => new TextDecoder().decode(u)
 
-async function pair() {
+async function pair(bobSeed = 150) {
   const aliceStore = new MemoryStore()
   const bobStore = new MemoryStore()
   const alice = await OmemoAccount.create(aliceStore, counterRng(1))
-  const bob = await OmemoAccount.create(bobStore, counterRng(150))
+  const bob = await OmemoAccount.create(bobStore, counterRng(bobSeed))
   const bDev = bob.publishableDeviceId()
   await alice.processBundle('bob@x', bDev, await bob.publishableBundleAsync())
   return { alice, bob, aliceStore, bobStore, bDev, to: [{ jid: 'bob@x', deviceIds: [bDev] }] }
@@ -109,11 +109,15 @@ describe('prekey lifecycle', () => {
   it('replaces a consumed prekey and flags the bundle for republishing', async () => {
     const { alice, bob, to } = await pair()
     const before = await bob.publishableBundleAsync()
-    bob.takeBundleDirty()
+    bob.markBundlePublished(bob.bundleRevision())
+    expect(bob.isBundleDirty()).toBe(false)
     const m = await alice.encrypt(to, enc('hi'))
     await bob.decrypt('alice@x', m.sid, m)
-    expect(bob.takeBundleDirty()).toBe(true)
-    expect(bob.takeBundleDirty()).toBe(false)
+    expect(bob.isBundleDirty()).toBe(true)
+    // A publish of an older revision does not clear a newer change.
+    const rev = bob.bundleRevision()
+    bob.markBundlePublished(rev)
+    expect(bob.isBundleDirty()).toBe(false)
     const after = await bob.publishableBundleAsync()
     const usedId = decodeKeyExchange(m.keys[0].data).pkId
     expect(after.preKeys.some((p) => p.id === usedId)).toBe(false)
@@ -131,7 +135,7 @@ describe('prekey lifecycle', () => {
     for (const id of (await store.listPreKeyIds()).slice(0, 10)) await store.removePreKey(id)
     await bob.replenishPreKeys()
     expect((await store.listPreKeyIds()).length).toBe(100)
-    expect(bob.takeBundleDirty()).toBe(true)
+    expect(bob.isBundleDirty()).toBe(true)
   })
 })
 
@@ -155,14 +159,37 @@ describe('replacement key exchange', () => {
     expect(dec(await bob.decrypt('alice@x', m4.sid, m4))).toBe('still fine')
   })
 
-  it('lets a crossed initiation settle on the received key exchange', async () => {
-    const { alice, bob, bDev, to } = await pair()
-    await bob.processBundle('alice@x', alice.publishableDeviceId(), await alice.publishableBundleAsync())
-    const fromAlice = await alice.encrypt(to, enc('hello bob'))
-    const fromBob = await bob.encrypt([{ jid: 'alice@x', deviceIds: [alice.publishableDeviceId()] }], enc('hello alice'))
-    expect(dec(await bob.decrypt('alice@x', fromAlice.sid, fromAlice))).toBe('hello bob')
-    expect(dec(await alice.decrypt('bob@x', fromBob.sid, fromBob))).toBe('hello alice')
-    void bDev
+  it('converges a crossed initiation on one session that carries follow-ups both ways', async () => {
+    // Whichever side holds the higher identity key wins, so cover both orderings.
+    const seen = new Set<boolean>()
+    for (let seed = 150; seed < 190 && seen.size < 2; seed++) {
+      const { alice, bob, to } = await pair(seed)
+      const aDev = alice.publishableDeviceId()
+      const toAlice = [{ jid: 'alice@x', deviceIds: [aDev] }]
+      const aliceHigher = (await alice.publishableBundleAsync()).ik.join() > (await bob.publishableBundleAsync()).ik.join()
+      const ik = [(await alice.publishableBundleAsync()).ik, (await bob.publishableBundleAsync()).ik]
+      let cmp = 0
+      for (let i = 0; i < 32 && cmp === 0; i++) cmp = ik[0][i] - ik[1][i]
+      seen.add(cmp > 0)
+      void aliceHigher
+      await bob.processBundle('alice@x', aDev, await alice.publishableBundleAsync())
+      const fromAlice = await alice.encrypt(to, enc('hello bob'))
+      const fromAlice2 = await alice.encrypt(to, enc('hello again bob'))
+      const fromBob = await bob.encrypt(toAlice, enc('hello alice'))
+      const fromBob2 = await bob.encrypt(toAlice, enc('again alice'))
+      expect(dec(await bob.decrypt('alice@x', fromAlice.sid, fromAlice))).toBe('hello bob')
+      expect(dec(await alice.decrypt('bob@x', fromBob.sid, fromBob))).toBe('hello alice')
+      // The second message of each initiation is readable on both sides, winner or loser.
+      expect(dec(await alice.decrypt('bob@x', fromBob2.sid, fromBob2))).toBe('again alice')
+      expect(dec(await bob.decrypt('alice@x', fromAlice2.sid, fromAlice2))).toBe('hello again bob')
+      for (let i = 0; i < 3; i++) {
+        const a = await alice.encrypt(to, enc(`a${i}`))
+        expect(dec(await bob.decrypt('alice@x', a.sid, a))).toBe(`a${i}`)
+        const b = await bob.encrypt(toAlice, enc(`b${i}`))
+        expect(dec(await alice.decrypt('bob@x', b.sid, b))).toBe(`b${i}`)
+      }
+    }
+    expect(seen.size).toBe(2)
   })
 })
 
@@ -221,5 +248,101 @@ describe('interrupted initialization', () => {
     expect(bundle.preKeys).toHaveLength(100)
     const peer = await OmemoAccount.create(new MemoryStore(), counterRng(90))
     await peer.processBundle('me@x', account.publishableDeviceId(), bundle)
+  })
+})
+
+describe('decrypt side effects only after the content verifies', () => {
+  it('keeps the one-time prekey, trust record and session when the payload tag is bad', async () => {
+    const { alice, bob, bobStore, to } = await pair()
+    const m = await alice.encrypt(to, enc('payload'))
+    const tampered = { ...m, payload: Uint8Array.from(m.payload!, (b, i) => (i === 0 ? b ^ 1 : b)) }
+    const pkId = decodeKeyExchange(m.keys[0].data).pkId
+    await expect(bob.decrypt('alice@x', m.sid, tampered)).rejects.toMatchObject({ code: 'malformed' })
+    expect(await bobStore.loadPreKey(pkId)).toBeDefined()
+    expect(await bobStore.loadTrust('alice@x', m.sid)).toBeFalsy()
+    expect(await bobStore.loadSession('alice@x', m.sid)).toBeFalsy()
+    // The genuine message still opens afterwards.
+    expect(dec(await bob.decrypt('alice@x', m.sid, m))).toBe('payload')
+  })
+})
+
+describe('failures that must not trigger repair', () => {
+  const flip = (u: Uint8Array) => Uint8Array.from(u, (b, i) => (i === u.length - 1 ? b ^ 1 : b))
+
+  it('reports a forged MAC on an established session as malformed, not session-broken', async () => {
+    const { alice, bob, to } = await pair()
+    const first = await alice.encrypt(to, enc('one'))
+    await bob.decrypt('alice@x', first.sid, first)
+    const reply = await bob.encrypt([{ jid: 'alice@x', deviceIds: [alice.publishableDeviceId()] }], enc('r'))
+    await alice.decrypt('bob@x', reply.sid, reply)
+    const next = await alice.encrypt(to, enc('two'))
+    const forged = { ...next, keys: [{ ...next.keys[0], data: flip(next.keys[0].data) }] }
+    await expect(bob.decrypt('alice@x', next.sid, forged)).rejects.toMatchObject({ code: 'malformed' })
+    expect(dec(await bob.decrypt('alice@x', next.sid, next))).toBe('two')
+  })
+
+  it('reports a key exchange naming an unknown signed prekey as malformed', async () => {
+    const { alice, bob, to } = await pair()
+    const m = await alice.encrypt(to, enc('x'))
+    const kex = decodeKeyExchange(m.keys[0].data)
+    const bad = { ...m, keys: [{ ...m.keys[0], data: encodeKeyExchange({ ...kex, spkId: kex.spkId + 7 }) }] }
+    await expect(bob.decrypt('alice@x', m.sid, bad)).rejects.toMatchObject({ code: 'malformed' })
+  })
+
+  it('does not call a replay from a retired chain a broken session', async () => {
+    const { alice, bob, to } = await pair()
+    const toAlice = [{ jid: 'alice@x', deviceIds: [alice.publishableDeviceId()] }]
+    const old = await alice.encrypt(to, enc('old'))
+    await bob.decrypt('alice@x', old.sid, old)
+    // Alternate directions so the ratchet moves to new chains.
+    for (let i = 0; i < 2; i++) {
+      const r = await bob.encrypt(toAlice, enc('r'))
+      await alice.decrypt('bob@x', r.sid, r)
+      const a = await alice.encrypt(to, enc('a'))
+      await bob.decrypt('alice@x', a.sid, a)
+    }
+    await expect(bob.decrypt('alice@x', old.sid, old)).rejects.toSatisfy(
+      (e: unknown) => e instanceof OmemoError && e.code !== 'session-broken',
+    )
+  })
+
+  it('still reports a missing session as broken', async () => {
+    const { alice, bob, to } = await pair()
+    const first = await alice.encrypt(to, enc('one'))
+    await bob.decrypt('alice@x', first.sid, first)
+    const reply = await bob.encrypt([{ jid: 'alice@x', deviceIds: [alice.publishableDeviceId()] }], enc('r'))
+    await alice.decrypt('bob@x', reply.sid, reply)
+    const next = await alice.encrypt(to, enc('two'))
+    const stranger = await OmemoAccount.create(new MemoryStore(), counterRng(90))
+    await expect(stranger.decrypt('alice@x', next.sid, next)).rejects.toMatchObject({ code: 'not-addressed' })
+    await expect(bob.decrypt('nobody@x', next.sid, next)).rejects.toMatchObject({ code: 'session-broken' })
+  })
+})
+
+describe('authenticating identity of a decrypt', () => {
+  it('returns the identity key that vouched for the message, also for a continuing session', async () => {
+    const { alice, bob, to } = await pair()
+    const aliceKey = (await alice.publishableBundleAsync()).ik
+    const first = await alice.encrypt(to, enc('one'))
+    const r1 = await bob.decryptAuthenticated('alice@x', first.sid, first)
+    expect(r1.senderIdentityKey).toEqual(aliceKey)
+    const second = await alice.encrypt(to, enc('two'))
+    const r2 = await bob.decryptAuthenticated('alice@x', second.sid, second)
+    expect(r2.senderIdentityKey).toEqual(aliceKey)
+    const bobKey = (await bob.publishableBundleAsync()).ik
+    const reply = await bob.encrypt([{ jid: 'alice@x', deviceIds: [alice.publishableDeviceId()] }], enc('r'))
+    expect((await alice.decryptAuthenticated('bob@x', reply.sid, reply)).senderIdentityKey).toEqual(bobKey)
+  })
+
+  it('attaches the recorded sender identity to a duplicate', async () => {
+    const { alice, bob, to } = await pair()
+    const m = await alice.encrypt(to, enc('once'))
+    await bob.decrypt('alice@x', m.sid, m)
+    const second = await alice.encrypt(to, enc('twice'))
+    await bob.decrypt('alice@x', second.sid, second)
+    const err = await bob.decrypt('alice@x', second.sid, second).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(OmemoError)
+    expect((err as OmemoError).code).toBe('duplicate')
+    expect((err as OmemoError).senderIdentityKey).toEqual((await alice.publishableBundleAsync()).ik)
   })
 })

@@ -54,7 +54,9 @@ function unpackSession(blob: Uint8Array): { meta: SessionMeta; ratchet: Uint8Arr
 export class OmemoAccount {
   /** Tail of the operation queue: session read/modify/write sequences run one at a time. */
   private queue: Promise<unknown> = Promise.resolve()
-  private bundleDirty = false
+  /** Bumped whenever the published bundle goes out of date; compared with {@link publishedRev}. */
+  private bundleRev = 0
+  private publishedRev = 0
 
   private constructor(
     private store: OmemoStore,
@@ -97,7 +99,7 @@ export class OmemoAccount {
   private async completeKeyMaterial(): Promise<void> {
     if (!(await this.store.loadSignedPreKey(SPK_ID))) {
       await this.store.saveSignedPreKey(SPK_ID, generateSignedPreKey(this.rng, 0, this.id.edSeed, SPK_ID))
-      this.bundleDirty = true
+      this.bundleRev++
     }
     await this.topUpPreKeys()
   }
@@ -112,11 +114,19 @@ export class OmemoAccount {
     return fingerprint(this.id.edPub)
   }
 
-  /** True once if the published bundle is out of date (a prekey was consumed or replaced); reading clears it. */
-  takeBundleDirty(): boolean {
-    const dirty = this.bundleDirty
-    this.bundleDirty = false
-    return dirty
+  /** True while the published bundle is out of date (a prekey was consumed or replaced). */
+  isBundleDirty(): boolean {
+    return this.bundleRev !== this.publishedRev
+  }
+
+  /** The bundle revision to hand back to {@link markBundlePublished} once a publish of it succeeded. */
+  bundleRevision(): number {
+    return this.bundleRev
+  }
+
+  /** Records that the bundle as of `revision` reached the server; a later change keeps it dirty. */
+  markBundlePublished(revision: number): void {
+    this.publishedRev = Math.max(this.publishedRev, revision)
   }
 
   /** Generates prekeys with fresh random ids until the pool holds {@link PREKEY_COUNT}. */
@@ -130,11 +140,11 @@ export class OmemoAccount {
       const [pk] = generatePreKeys(this.rng, id, 1)
       await this.store.savePreKey(pk.id, pk)
       used.add(pk.id)
-      this.bundleDirty = true
+      this.bundleRev++
     }
   }
 
-  /** Replaces consumed prekeys; call {@link takeBundleDirty} afterwards to learn whether to republish. */
+  /** Replaces consumed prekeys; check {@link isBundleDirty} afterwards to learn whether to republish. */
   replenishPreKeys(): Promise<void> {
     return this.serialize(() => this.topUpPreKeys())
   }
@@ -278,7 +288,27 @@ export class OmemoAccount {
     msg: OmemoMessage,
     opts?: { archive?: boolean; ownJid?: string },
   ): Promise<Uint8Array> {
+    return this.decryptAuthenticated(senderJid, sid, msg, opts).then((r) => r.content)
+  }
+
+  /**
+   * Like {@link decrypt}, but also returns the identity key that authenticated THIS message
+   * (the one the session was built with), so callers derive trust from the key that actually
+   * vouched for the content instead of from a mutable record or a fresh bundle lookup.
+   */
+  decryptAuthenticated(
+    senderJid: string,
+    sid: number,
+    msg: OmemoMessage,
+    opts?: { archive?: boolean; ownJid?: string },
+  ): Promise<{ content: Uint8Array; senderIdentityKey: Uint8Array }> {
     return this.serialize(() => this.decryptNow(senderJid, sid, msg, opts))
+  }
+
+  /** The peer's Ed25519 identity key inside a session's `ad` (initiator || responder). */
+  private peerKeyFromAd(ad: Uint8Array): Uint8Array {
+    const first = ad.slice(0, 32)
+    return bytesEqual(first, this.id.edPub) ? ad.slice(32, 64) : first
   }
 
   private async decryptNow(
@@ -286,7 +316,7 @@ export class OmemoAccount {
     sid: number,
     msg: OmemoMessage,
     opts?: { archive?: boolean; ownJid?: string },
-  ): Promise<Uint8Array> {
+  ): Promise<{ content: Uint8Array; senderIdentityKey: Uint8Array }> {
     const ownJid = opts?.ownJid?.toLowerCase()
     const mine = msg.keys.find(
       (k) => k.rid === this.id.deviceId && (ownJid === undefined || k.jid.toLowerCase() === ownJid),
@@ -313,11 +343,24 @@ export class OmemoAccount {
       existing !== undefined &&
       (!kex || (existing.meta.peerEk !== undefined && bytesEqual(Uint8Array.from(existing.meta.peerEk), kex.ek)))
 
+    // Crossed initiation: both sides started a session and each sent a key exchange. Both
+    // must keep the SAME one, so the exchange whose initiator identity key sorts higher wins
+    // on both ends. When ours loses, the incoming message is still read, from a throwaway
+    // responder session that is never stored.
+    const crossedAndLost =
+      existing !== undefined &&
+      !continuesExisting &&
+      kex !== undefined &&
+      existing.meta.kexPending &&
+      compareBytes(kex.ik, this.id.edPub) < 0
+    const persist = !opts?.archive && !crossedAndLost
+
     let state: RatchetState
     let ad: Uint8Array
     let meta: SessionMeta
+    let senderIdentityKey: Uint8Array
     // Set when this message builds a session (first contact or replacement): drives the
-    // authenticated-first side effects (OTK consumption + trust) after ratchetDecrypt.
+    // authenticated-first side effects (OTK consumption + trust) once the content is verified.
     let newSession: { ik: Uint8Array; pkId: number; hadOtk: boolean } | undefined
 
     if (existing && continuesExisting) {
@@ -325,11 +368,14 @@ export class OmemoAccount {
       state = deserializeRatchet(existing.ratchet)
       state.rng = this.rng // receiving a new remote DH triggers a dhRatchet -> needs real rng
       ad = Uint8Array.from(meta.ad)
+      senderIdentityKey = this.peerKeyFromAd(ad)
     } else if (kex) {
       // Authenticate BEFORE any persistent mutation: all reads below are safe pre-auth;
-      // no write happens until ratchetDecrypt (the HMAC check) succeeds.
+      // no write happens until the HMAC and the payload have both verified.
       const spk = await this.store.loadSignedPreKey(kex.spkId)
-      if (!spk) throw new OmemoError('session-broken', 'signed prekey missing for kex')
+      // We never publish any signed prekey but the ones we hold, so an unknown id is
+      // unreadable input, not a desynchronised session.
+      if (!spk) throw new OmemoError('malformed', 'key exchange names an unknown signed prekey')
       const otk = await this.store.loadPreKey(kex.pkId)
       const resp = x3dhResponder({
         identitySeed: this.id.edSeed,
@@ -342,6 +388,7 @@ export class OmemoAccount {
       state.rng = this.rng // responder's FIRST ratchetDecrypt does a dhRatchet -> needs real rng
       ad = concatBytes(kex.ik, this.id.edPub) // initiator=them, responder=us
       meta = { ad: [...ad], kexPending: false, peerEk: [...kex.ek] }
+      senderIdentityKey = kex.ik
       newSession = { ik: kex.ik, pkId: kex.pkId, hadOtk: !!otk }
     } else {
       throw new OmemoError('session-broken', `no session for ${senderJid}/${sid}`)
@@ -352,7 +399,10 @@ export class OmemoAccount {
     try {
       result = ratchetDecrypt(state, authMessage, ad)
     } catch (e) {
-      if (e instanceof OmemoError) throw e
+      if (e instanceof OmemoError) {
+        if (e.code === 'duplicate') throw new OmemoError('duplicate', e.message, senderIdentityKey)
+        throw e
+      }
       throw new OmemoError('session-broken', e instanceof Error ? e.message : 'ratchet failure')
     }
     const keyAndHmac = result.plaintext
@@ -360,28 +410,43 @@ export class OmemoAccount {
       throw new OmemoError('malformed', 'unexpected key material length')
     }
 
-    // Receiving any message clears our kex-pending flag (peer now has our session).
-    meta.kexPending = false
-    if (!opts?.archive) {
+    // The payload must verify BEFORE anything is committed: a message with a valid ratchet
+    // MAC but a bad payload tag must not consume a one-time prekey, bind an identity or
+    // advance the stored ratchet.
+    let content: Uint8Array
+    if (!msg.payload) {
+      content = new Uint8Array(0) // key-transport message (32 zero key bytes)
+    } else {
+      try {
+        content = payloadDecrypt(keyAndHmac.slice(0, 32), msg.payload, keyAndHmac.slice(32, 48))
+      } catch (e) {
+        throw new OmemoError('malformed', e instanceof Error ? e.message : 'payload authentication failed')
+      }
+    }
+
+    if (persist) {
+      // Receiving any message clears our kex-pending flag (peer now has our session).
+      meta.kexPending = false
       if (newSession) {
         // Authenticated: consume the one-time prekey once and replace it in the published bundle.
         if (newSession.hadOtk) {
           await this.store.removePreKey(newSession.pkId)
           await this.topUpPreKeys()
-          this.bundleDirty = true
+          this.bundleRev++
         }
         await this.bindRemoteIdentity(senderJid, sid, newSession.ik)
       }
       await this.store.saveSession(senderJid, sid, packSession(meta, serializeRatchet(result.state)))
     }
-
-    if (!msg.payload) return new Uint8Array(0) // key-transport message (32 zero key bytes)
-    try {
-      return payloadDecrypt(keyAndHmac.slice(0, 32), msg.payload, keyAndHmac.slice(32, 48))
-    } catch (e) {
-      throw new OmemoError('malformed', e instanceof Error ? e.message : 'payload authentication failed')
-    }
+    return { content, senderIdentityKey }
   }
+}
+
+/** Lexicographic comparison of two byte strings: negative, zero or positive. */
+function compareBytes(a: Uint8Array, b: Uint8Array): number {
+  const n = Math.min(a.length, b.length)
+  for (let i = 0; i < n; i++) if (a[i] !== b[i]) return a[i] - b[i]
+  return a.length - b.length
 }
 
 export type { Bundle, OmemoMessage } from '../omemo2/codec'

@@ -8,11 +8,11 @@ import { describe, it, expect } from 'vitest'
 import { xml } from '@xmpp/client'
 import { serializePayloadEnvelope, parsePayloadEnvelope } from '@fluux/sdk'
 import type { ConversationHandle, EncryptedPayload } from '@fluux/sdk'
-import { OmemoAccount } from '@fluux/omemo'
+import { OmemoAccount, MemoryStore } from '@fluux/omemo'
 import { OmemoPlugin } from './OmemoPlugin'
 import { createMockPluginContext, type MockNetwork } from './testing/MockPluginContext'
 import { PluginStorageOmemoStore } from './store'
-import { fetchBundle, fetchDeviceList, publishDeviceList } from './pep'
+import { fetchBundle, fetchDeviceList, publishDeviceList, publishBundle } from './pep'
 import { buildEnvelope } from './sce'
 import { parseXml } from './stanzaData'
 import { setVerified } from './verifiedDevices'
@@ -172,13 +172,41 @@ describe('failure classification', () => {
     const alice = await ready('alice@x')
     const bob = await ready('bob@x', alice.c.net)
     const handle = await bob.p.openConversation({ kind: 'direct', peer: 'alice@x' })
+    const aliceHandle = await alice.p.openConversation({ kind: 'direct', peer: 'bob@x' })
     await bob.p.decrypt(handle, claim(bob.p, await send(alice, 'bob@x', 'establish')), {})
-    // Alice has not heard back, so her next message is still a key exchange, but the
-    // prekey it names was consumed. Bob also loses his session.
+    // Bob answers, so Alice's next message is an ordinary ratchet message, not a key exchange.
+    await alice.p.decrypt(aliceHandle, claim(alice.p, await send(bob, 'alice@x', 'reply')), {})
     const followUp = await send(alice, 'bob@x', 'after loss')
     await bob.c.ctx.storage.delete(`session/alice@x/${alice.deviceId}`)
     const res = await bob.p.decrypt(handle, claim(bob.p, followUp), {})
     expect(res.status).toBe('broken-session')
+  })
+
+  it('treats a forged message as unreadable input, never as a reason to repair the session', async () => {
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const handle = await bob.p.openConversation({ kind: 'direct', peer: 'alice@x' })
+    const aliceHandle = await alice.p.openConversation({ kind: 'direct', peer: 'bob@x' })
+    await bob.p.decrypt(handle, claim(bob.p, await send(alice, 'bob@x', 'establish')), {})
+    await alice.p.decrypt(aliceHandle, claim(alice.p, await send(bob, 'alice@x', 'reply')), {})
+    const real = await send(alice, 'bob@x', 'genuine')
+    // Flip the last character of the base64 key data: the MAC no longer verifies.
+    const keyEl = JSON.parse(JSON.stringify(real.stanzaElement)) as typeof real.stanzaElement
+    const walk = (n: unknown): void => {
+      const el = n as { name?: string; children?: unknown[] }
+      if (el.name === 'key' && typeof el.children?.[0] === 'string') {
+        const t = el.children[0] as string
+        el.children[0] = t.slice(0, 2) + (t[2] === 'A' ? 'B' : 'A') + t.slice(3)
+      }
+      el.children?.forEach(walk)
+    }
+    walk(keyEl)
+    await expect(bob.p.decrypt(handle, claim(bob.p, { ...real, stanzaElement: keyEl }), {})).rejects.toMatchObject({
+      kind: 'permanent',
+      code: 'malformed-data',
+    })
+    // The session is intact: the genuine message still opens.
+    expect(textOf((await bob.p.decrypt(handle, claim(bob.p, real), {})).plaintext)).toContain('genuine')
   })
 })
 
@@ -296,3 +324,105 @@ describe('session repair', () => {
   })
 })
 
+
+describe('trust follows the key that authenticated the message', () => {
+  it('does not report tofu for a message sent under a key the record no longer holds', async () => {
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const handle = await bob.p.openConversation({ kind: 'direct', peer: 'alice@x' })
+    const first = await send(alice, 'bob@x', 'one')
+    const second = await send(alice, 'bob@x', 'two')
+    expect((await bob.p.decrypt(handle, claim(bob.p, first), {})).securityContext.trust).toBe('tofu')
+    // The device is now recorded under a different identity key, trusted by blind trust.
+    const store = new PluginStorageOmemoStore(bob.c.ctx.storage)
+    await store.saveTrust('alice@x', alice.deviceId, { state: 'trusted', identityKey: new Uint8Array(32).fill(9) })
+    const archived = await bob.p.decryptArchive(handle, claim(bob.p, second), {})
+    expect(archived.status).toBe('ok')
+    expect(archived.securityContext.trust).toBe('untrusted')
+    // The record of the other key is left alone.
+    expect((await store.loadTrust('alice@x', alice.deviceId))!.identityKey).toEqual(new Uint8Array(32).fill(9))
+  })
+})
+
+describe('sending only to the identity that backs the session', () => {
+  it('drops a verified device whose replacement bundle carries another identity key', async () => {
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const { fingerprint } = await import('@fluux/omemo')
+    const hexOf = (u: Uint8Array) => [...fingerprint(u)].map((b) => b.toString(16).padStart(2, '0')).join('')
+    const original = (await fetchBundle(alice.c.ctx.xmpp, 'bob@x', bob.deviceId))!
+    // Alice has verified the device and holds its identity key, but has no session yet.
+    const aliceStore = new PluginStorageOmemoStore(alice.c.ctx.storage)
+    await aliceStore.saveTrust('bob@x', bob.deviceId, { state: 'undecided', identityKey: original.ik })
+    await setVerified(alice.c.ctx.storage, 'bob@x', bob.deviceId, hexOf(original.ik))
+    // The device's bundle is then replaced by one under a different identity.
+    const imposter = await OmemoAccount.create(new MemoryStore(), (n) => crypto.getRandomValues(new Uint8Array(n)))
+    await publishBundle(bob.c.ctx.xmpp, bob.deviceId, await imposter.publishableBundleAsync())
+
+    await expect(send(alice, 'bob@x', 'secret')).rejects.toThrow(/no usable OMEMO devices/)
+    expect((await aliceStore.loadTrust('bob@x', bob.deviceId))!.state).toBe('untrusted')
+  })
+})
+
+describe('bundle publication', () => {
+  it('keeps the bundle dirty when a republish fails and retries it on the next decrypt', async () => {
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const handle = await bob.p.openConversation({ kind: 'direct', peer: 'alice@x' })
+    const realPublish = bob.c.ctx.xmpp.publishPEP.bind(bob.c.ctx.xmpp)
+    let failNext = true
+    bob.c.ctx.xmpp.publishPEP = async (...args) => {
+      if (failNext) {
+        failNext = false
+        throw new Error('server unavailable')
+      }
+      return realPublish(...args)
+    }
+    const before = (await fetchBundle(alice.c.ctx.xmpp, 'bob@x', bob.deviceId))!
+    const first = await send(alice, 'bob@x', 'one')
+    await bob.p.decrypt(handle, claim(bob.p, first), {}) // consumes a prekey; the republish fails
+    expect((await fetchBundle(alice.c.ctx.xmpp, 'bob@x', bob.deviceId))!.preKeys).toEqual(before.preKeys)
+    await bob.p.decrypt(handle, claim(bob.p, await send(alice, 'bob@x', 'two')), {})
+    const after = (await fetchBundle(alice.c.ctx.xmpp, 'bob@x', bob.deviceId))!
+    expect(before.preKeys.filter((p) => !after.preKeys.some((q) => q.id === p.id))).toHaveLength(1)
+  })
+
+  it('never runs two bundle publications at once', async () => {
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const handle = await bob.p.openConversation({ kind: 'direct', peer: 'alice@x' })
+    const realPublish = bob.c.ctx.xmpp.publishPEP.bind(bob.c.ctx.xmpp)
+    let active = 0
+    let peak = 0
+    bob.c.ctx.xmpp.publishPEP = async (node, item, options) => {
+      active++
+      peak = Math.max(peak, active)
+      await new Promise((r) => setTimeout(r, 15))
+      try {
+        return await realPublish(node, item, options)
+      } finally {
+        active--
+      }
+    }
+    const msgs = await Promise.all(['a', 'b', 'c'].map((t) => send(alice, 'bob@x', t)))
+    await Promise.all([...msgs.map((m) => bob.p.decrypt(handle, claim(bob.p, m), {})), bob.p.ensureIdentity()])
+    expect(peak).toBe(1)
+  })
+})
+
+describe('bundle downloads', () => {
+  it('downloads the shared bundles node once per jid for a send to many devices', async () => {
+    const alice = await ready('alice@x')
+    await ready('bob@x', alice.c.net)
+    await ready('bob@x', alice.c.net)
+    await ready('bob@x', alice.c.net)
+    let bundleQueries = 0
+    const realQuery = alice.c.ctx.xmpp.queryPEP.bind(alice.c.ctx.xmpp)
+    alice.c.ctx.xmpp.queryPEP = async (peer, node, max) => {
+      if (node === bundlesNode()) bundleQueries++
+      return realQuery(peer, node, max)
+    }
+    await send(alice, 'bob@x', 'to three devices')
+    expect(bundleQueries).toBeLessThanOrEqual(2) // the peer's node and our own node, once each
+  })
+})
