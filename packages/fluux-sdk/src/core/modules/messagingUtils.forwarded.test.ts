@@ -23,7 +23,8 @@ describe('parseForwardedCopy', () => {
   it('bounds the text, strips control and bidirectional override characters, and drops an empty copy', () => {
     const long = parseForwardedCopy(copy(xml('body', {}, `a‮b\u0000${'x'.repeat(5000)}`)))!
     expect(Array.from(long.text).length).toBeLessThanOrEqual(4001)
-    expect(long.text).not.toMatch(/[‮\u0000]/)
+    expect(long.text).not.toContain('\u202e')
+    expect(long.text).not.toContain('\u0000')
     expect(parseForwardedCopy(copy(xml('body', {}, '  ')))).toBeUndefined()
     expect(parseForwardedCopy(copy())).toBeUndefined()
   })
