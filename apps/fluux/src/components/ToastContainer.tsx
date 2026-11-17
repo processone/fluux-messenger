@@ -18,19 +18,35 @@ const colorMap: Record<ToastType, { border: string; icon: string }> = {
 }
 
 const GAP_PX = 12
+/** Never squeeze the stack below roughly one notice, even in a very short window. */
+const MIN_STACK_PX = 72
+
+interface StackBox {
+  top: number | null
+  maxHeight: number | null
+}
 
 /**
- * Top of the notice stack: just under the main pane's header (and the
- * find-in-conversation bar when open), so notices never cover the composer.
- * Returns null while no pane header is on screen (settings, empty state).
+ * Where the notice stack goes: just under the main pane's header (and the
+ * find-in-conversation bar when open), and no taller than the space above the
+ * composer, so notices never cover what is being typed. The stack scrolls when
+ * its notices do not fit. Both are null when no pane header / composer is on
+ * screen (settings, empty state), which falls back to a fixed top offset.
  */
-function measureStackTop(): number | null {
+function measureStack(): StackBox {
   const header = document.querySelector('main header')
-  if (!header) return null
+  if (!header) return { top: null, maxHeight: null }
   let bottom = header.getBoundingClientRect().bottom
   const find = document.querySelector('[data-find-on-page-bar]')
   if (find) bottom = Math.max(bottom, find.getBoundingClientRect().bottom + 8)
-  return bottom + GAP_PX
+  // Follow the visible area when a mobile keyboard moves the visual viewport.
+  const vv = window.visualViewport
+  const top = Math.max(bottom + GAP_PX, (vv?.offsetTop ?? 0) + GAP_PX)
+  const composer = document.querySelector('main .composer-form')
+  const maxHeight = composer
+    ? Math.max(MIN_STACK_PX, composer.getBoundingClientRect().top - GAP_PX - top)
+    : null
+  return { top, maxHeight }
 }
 
 export function ToastContainer() {
@@ -38,16 +54,24 @@ export function ToastContainer() {
   const toasts = useToastStore((s) => s.toasts)
   const removeToast = useToastStore((s) => s.removeToast)
 
-  const [top, setTop] = useState<number | null>(null)
+  const [box, setBox] = useState<StackBox>({ top: null, maxHeight: null })
   const hasToasts = toasts.length > 0
 
+  // Notices live a few seconds, so re-measure every frame while one is shown:
+  // the pane, the Find bar, the composer height and the viewport all change
+  // without any event this component could subscribe to.
   useLayoutEffect(() => {
     if (!hasToasts) return
-    const update = () => setTop(measureStackTop())
-    update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [hasToasts, toasts.length])
+    let frame = 0
+    const tick = () => {
+      const next = measureStack()
+      setBox((prev) => (prev.top === next.top && prev.maxHeight === next.maxHeight ? prev : next))
+      frame = requestAnimationFrame(tick)
+    }
+    tick()
+    return () => cancelAnimationFrame(frame)
+  }, [hasToasts])
+  const { top, maxHeight } = box
 
   // Arrival banners are announced politely; focus never moves.
   const announced = [...toasts].reverse().find((toast) => toast.onClick)?.message ?? ''
@@ -56,8 +80,8 @@ export function ToastContainer() {
     <>
     <div aria-live="polite" className="sr-only">{announced}</div>
     {toasts.length > 0 && <div
-      className={`fixed end-4 z-[9999] flex flex-col gap-2 pointer-events-none ${top === null ? 'top-[calc(env(safe-area-inset-top)+4.5rem)]' : ''}`}
-      style={top === null ? undefined : { top }}
+      className={`fixed end-4 z-[9999] flex flex-col gap-2 overflow-y-auto overscroll-contain pointer-events-none ${top === null ? 'top-[calc(env(safe-area-inset-top)+4.5rem)]' : ''}`}
+      style={top === null ? undefined : { top, maxHeight: maxHeight ?? undefined }}
       data-toast-stack
     >
       {toasts.map((toast) => {
