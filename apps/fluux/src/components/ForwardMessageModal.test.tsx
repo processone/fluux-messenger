@@ -31,6 +31,10 @@ vi.mock('@fluux/sdk/react', () => ({
 // comment, no source copy; pending/failure/cancel must not produce extra sends.
 // Identities follow the existing demo contact and room fixtures.
 const link = 'xmpp:design@conference.fluux.chat?join;msg=1731490000123456'
+// The link is the whole generated block unless a quote precedes it; both are XEP-0428 fallback.
+const marked = (lead: string, quoteLength = 0) => ({ references: [{ type: 'data', uri: link,
+  begin: lead.length + quoteLength, end: lead.length + quoteLength + link.length,
+  forwardFallback: { begin: lead.length, end: lead.length + quoteLength + link.length } }] })
 const roomJid = 'design@conference.fluux.chat'
 const dan = { id: 'dan@example.org', name: 'Dan', type: 'chat', lastMessage: { timestamp: new Date() } }
 const picker = () => screen.getByLabelText('chat.forwardDestination')
@@ -44,7 +48,7 @@ const choose = (query: string) => {
 const send = () => fireEvent.click(screen.getByRole('button', { name: 'chat.forwardSend' }))
 function SourceRow() {
   const open = useForwardMessage()
-  return <button type="button" onClick={() => open?.(link)}>Forward source row</button>
+  return <button type="button" onClick={() => open?.({ link })}>Forward source row</button>
 }
 
 beforeEach(() => {
@@ -75,8 +79,21 @@ describe('ForwardMessageModal', () => {
     fireEvent.change(screen.getByLabelText('chat.forwardComment'), { target: { value: 'Please review' } })
     send()
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
-    expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('emma@fluux.chat', `Please review\n${link}`)
+    expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('emma@fluux.chat', `Please review\n${link}`, marked('Please review\n'))
     expect(fixture.roomSend).not.toHaveBeenCalled()
+  })
+
+  it('sends the comment, an attributed quote and the link, with the quote and link marked as fallback', async () => {
+    const onClose = vi.fn()
+    render(<ForwardMessageModal link={link} quote={{ author: 'Bob', text: 'Ship it\nTonight' }} onClose={onClose} />)
+    fireEvent.change(picker(), { target: { value: 'em' } })
+    fireEvent.keyDown(picker(), { key: 'Enter' })
+    fireEvent.change(screen.getByLabelText('chat.forwardComment'), { target: { value: 'Please review' } })
+    send()
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    const quote = '> Bob wrote:\n> Ship it\n> Tonight\n'
+    expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('emma@fluux.chat',
+      `Please review\n${quote}${link}`, marked('Please review\n', quote.length))
   })
 
   it('keeps the highlighted recipient when a message from them arrives before Enter', async () => {
@@ -95,7 +112,7 @@ describe('ForwardMessageModal', () => {
     fireEvent.keyDown(picker(), { key: 'Enter' })
     send()
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
-    expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('james@fluux.chat', link)
+    expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('james@fluux.chat', link, marked(''))
   })
 
   it('keeps the highlighted destination when a new chat joins the list before Enter', async () => {
@@ -112,7 +129,7 @@ describe('ForwardMessageModal', () => {
     fireEvent.keyDown(picker(), { key: 'Enter' })
     send()
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
-    expect(fixture.roomSend).toHaveBeenCalledExactlyOnceWith(roomJid, link)
+    expect(fixture.roomSend).toHaveBeenCalledExactlyOnceWith(roomJid, link, marked(''))
     expect(fixture.chatSend).not.toHaveBeenCalled()
   })
 
@@ -148,7 +165,7 @@ describe('ForwardMessageModal', () => {
     expect(dialog.getByText('Design')).toBeInTheDocument()
     send()
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
-    expect(fixture.roomSend).toHaveBeenCalledExactlyOnceWith(roomJid, link)
+    expect(fixture.roomSend).toHaveBeenCalledExactlyOnceWith(roomJid, link, marked(''))
     expect(fixture.chatSend).not.toHaveBeenCalled()
   })
 
@@ -178,7 +195,7 @@ describe('ForwardMessageModal', () => {
     expect(screen.getByLabelText('chat.forwardComment')).toHaveValue('Please review')
     send()
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
-    expect(fixture.chatSend).toHaveBeenLastCalledWith('emma@fluux.chat', `Please review\n${link}`)
+    expect(fixture.chatSend).toHaveBeenLastCalledWith('emma@fluux.chat', `Please review\n${link}`, marked('Please review\n'))
   })
 
   it('cancels without sending and offers no unjoined room, occupant chat or typed address', () => {

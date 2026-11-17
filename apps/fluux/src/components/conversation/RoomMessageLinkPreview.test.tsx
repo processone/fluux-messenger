@@ -327,4 +327,32 @@ describe('room link reader previews', () => {
     expect(screen.queryByRole('link')).toBeNull()
     expect(read).not.toHaveBeenCalled()
   })
+
+  describe('reporting whether the source is on screen', () => {
+    const shown = vi.fn()
+    const render_ = (message = shared) => render(<RoomMessageLinkPreview message={message} formatTime={formatTime} onSourceShown={shown} />)
+    beforeEach(() => shown.mockReset())
+
+    it('reports true only while a readable source quote is shown, and false when it goes away', () => {
+      roomStore.getState().addRoom(room, [target])
+      const view = render_()
+      expect(shown).toHaveBeenLastCalledWith(true)
+      view.unmount()
+      expect(shown).toHaveBeenLastCalledWith(false)
+    })
+
+    it('reports false for a non-member, so the forwarded quote stays visible', () => {
+      roomStore.getState().addRoom({ ...room, joined: false }, [target])
+      render_()
+      expect(shown).not.toHaveBeenCalledWith(true)
+    })
+
+    it('reports false for a deleted source', async () => {
+      roomStore.getState().addRoom(room)
+      read.mockResolvedValue({ kind: 'absent' })
+      render_()
+      await screen.findByText('Message deleted')
+      expect(shown).not.toHaveBeenCalledWith(true)
+    })
+  })
 })

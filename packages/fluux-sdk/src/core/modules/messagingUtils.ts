@@ -16,6 +16,8 @@ import { readStashedEncryptedPayload, readStashedContentAvailability } from '../
 import {
   NS_DELAY,
   NS_REFERENCE,
+  NS_FALLBACK,
+  NS_FORWARD_QUOTE,
   NS_REPLY,
   NS_OOB,
   NS_THUMBS,
@@ -32,6 +34,7 @@ import { processFallback } from '../../utils/fallbackUtils'
 import { CHAT_FALLBACK_TARGETS, ROOM_FALLBACK_TARGETS } from '../../utils/fallbackRegistry'
 import { isAesgcmUri, parse as parseAesgcmUri } from './AesgcmUri'
 import { fromCodePointOffset } from '../../utils/xep0426'
+import { parseRoomMessageLink } from '../../utils/roomMessageLink'
 import { logWarn } from '../logger'
 
 /**
@@ -361,7 +364,29 @@ export function parseMessageReferences(stanza: Element): MessageReference[] | un
     if (start >= stop || stop > Array.from(body).length) continue
     references.push({ type, uri, begin: fromCodePointOffset(body, start), end: fromCodePointOffset(body, stop) })
   }
+  attachForwardFallback(stanza, body, references)
   return references.length ? references : undefined
+}
+
+/**
+ * XEP-0428: a `<fallback for="urn:fluux:forward:0">` range marks a forward's generated
+ * quote and link. It is kept on the data reference whose link it contains, never stripped
+ * here: only a reader that can show the source hides it.
+ */
+function attachForwardFallback(stanza: Element, body: string, references: MessageReference[]): void {
+  const codePoints = Array.from(body).length
+  for (const fallback of stanza.getChildren('fallback')) {
+    const el = fallback as Element
+    if (el.attrs?.xmlns !== NS_FALLBACK || el.attrs?.for !== NS_FORWARD_QUOTE) continue
+    const range = el.getChild('body', NS_FALLBACK)
+    if (!range || !/^\d+$/.test(range.attrs.start ?? '') || !/^\d+$/.test(range.attrs.end ?? '')) continue
+    const start = Number(range.attrs.start), stop = Number(range.attrs.end)
+    if (start >= stop || stop > codePoints) continue
+    const begin = fromCodePointOffset(body, start), end = fromCodePointOffset(body, stop)
+    const target = references.find(ref => ref.type === 'data' && ref.begin !== undefined && ref.end !== undefined
+      && ref.begin >= begin && ref.end <= end && !!parseRoomMessageLink(ref.uri))
+    if (target?.type === 'data') target.forwardFallback = { begin, end }
+  }
 }
 
 /** Result from parseMessageContent. */

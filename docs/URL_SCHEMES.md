@@ -51,7 +51,7 @@ When lookup confirms the target is missing or deleted, Fluux shows
 **This message is no longer available**. A failed archive request produces
 **Could not load this message**, not a deletion
 claim. Links reveal the room address and archive id, not the message text, and do
-not grant access to a room. There is no web landing page or forwarded copy.
+not grant access to a room. There is no web landing page. Forward adds a quoted copy, described below.
 
 ### Sharing inside chats
 
@@ -89,12 +89,30 @@ the long-press action menu.
 Typing narrows the list by name or by the part of the address before @, and Enter
 picks the highlighted entry; only listed destinations can be picked.
 Choose one destination, optionally add a comment, then press **Send**. Fluux sends
-one ordinary message containing the comment (if any), a newline and the room
-message link, with the same XEP-0372 data reference as a pasted link. Without a
-comment the body is only the link. It never sends an XEP-0297 forwarded copy or
-the original room text. Cancelling sends nothing; a send failure keeps the picker
-and comment available. Forward is unavailable for whispers, unconfirmed messages
-and messages without a room archive id, just like Copy message link.
+one ordinary message: the comment (if any), a plain-text quote attributed to the
+author (`> Nick wrote:` followed by the quoted lines, clipped at 500 characters),
+then the room message link, with the same XEP-0372 data reference as a pasted link.
+A source that is retracted or cannot be read is forwarded as the link only.
+It never sends an XEP-0297 forwarded copy.
+
+The generated quote and link are marked with XEP-0428 Fallback Indication:
+`<fallback xmlns="urn:xmpp:fallback:0" for="urn:fluux:forward-quote:0">` with one
+`<body start end/>` range covering the quote and link (code points, XEP-0426). The
+comment stays outside the range. A reader keeps the marker with the link's data
+reference and hides the range only while its preview shows the source's own
+content, which requires the reader to be in the room and the source to be readable.
+Otherwise (not joined, deleted, still loading or undecryptable) the quote and link
+stay visible under the label **Quoted copy from a forwarded message**. Other clients
+do not know this feature name and show the quote and link as plain text. A marker
+whose range holds no room message link is ignored.
+
+In an encrypted chat the quote, link, reference and fallback marker all travel
+inside the encrypted payload; the outer body keeps only the generic encryption
+notice, and a failed encryption never falls back to plaintext. A failed send that
+is retried keeps the marker. Cancelling sends nothing; a send failure keeps the
+picker and comment available. Forward is unavailable for whispers, unconfirmed
+messages and messages without a room archive id, just like Copy message link.
+Forwarding one-to-one messages and standalone XEP-0297 copies are separate changes.
 
 ## Login prefill principles
 

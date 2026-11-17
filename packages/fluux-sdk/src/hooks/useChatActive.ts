@@ -227,7 +227,7 @@ export function useChatActive() {
       // Clear the error before resending
       chatStore.getState().updateMessage(conversationId, messageId, { deliveryError: undefined })
 
-      await client.messages.resendMessage(conversationId, message.body, messageId, message.attachment)
+      await client.messages.resendMessage(conversationId, message.body, messageId, message.attachment, message.references)
     },
     [client]
   )
