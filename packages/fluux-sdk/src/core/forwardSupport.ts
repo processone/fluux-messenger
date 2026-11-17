@@ -17,6 +17,8 @@ const DISCOVERY_TIMEOUT_MS = 4000
 export class ForwardSupport {
   /** XEP-0115 node#ver last announced by each full JID. */
   private readonly announced = new Map<string, { node: string; ver: string }>()
+  /** Moves whenever a device's announcement changes, so an answer given before the move is not trusted. */
+  private generation = 0
   /** Answers per full JID and ver, so a device is asked once per announced version. */
   private readonly answers = new Map<string, Promise<boolean>>()
 
@@ -34,25 +36,36 @@ export class ForwardSupport {
     if (previous?.node === node && previous.ver === ver) return
     this.forget(fullJid)
     this.announced.set(fullJid, { node, ver })
+    this.generation++
   }
 
   /** A device went offline: its announcement and answers are stale. */
   forget(fullJid: string): void {
+    this.generation++
     this.announced.delete(fullJid)
     for (const key of this.answers.keys()) if (key.startsWith(`${fullJid}\0`)) this.answers.delete(key)
   }
 
   clear(): void {
+    this.generation++
     this.announced.clear()
     this.answers.clear()
   }
 
-  /** True only when there is at least one device and every one of them advertises the feature. */
-  async everyDeviceSupports(bareJid: string, resources: readonly string[]): Promise<boolean> {
+  /**
+   * True only when there is at least one device and every one of them advertises the feature.
+   * The device list is read again once discovery returns: a device that joined, left or changed its
+   * announcement meanwhile makes the answer stale, so it is refused.
+   */
+  async everyDeviceSupports(bareJid: string, currentResources: () => readonly string[]): Promise<boolean> {
+    const resources = [...currentResources()]
     if (resources.length === 0 || resources.some(resource => !resource)) return false
+    const generation = this.generation
     try {
       const results = await Promise.all(resources.map(resource => this.deviceSupports(`${bareJid}/${resource}`)))
-      return results.every(Boolean)
+      if (!results.every(Boolean) || generation !== this.generation) return false
+      const now = new Set(currentResources())
+      return now.size === resources.length && resources.every(resource => now.has(resource))
     } catch {
       return false
     }

@@ -2368,6 +2368,8 @@ export const chatStore = createStore<ChatState>()(
           const replay = resolvePendingRetractions(state, conversationId, [updatedMessage], { persist: false })
           updatedMessage = replay.messages[0]
           if (updatedMessage.isRetracted) updates = { ...updates, isRetracted: true, retractedAt: updatedMessage.retractedAt }
+          // A forwarded copy holds the forwarded text: a deletion removes it from the resident row too.
+          if (updatedMessage.isRetracted && updatedMessage.forwarded) updatedMessage = { ...updatedMessage, forwarded: undefined }
           const pendingPatch = replay.pendingRetractions ? { pendingRetractions: replay.pendingRetractions } : {}
           if (messageIndex !== -1) updatedConvMessages[messageIndex] = updatedMessage
           const window = messageIndex !== -1

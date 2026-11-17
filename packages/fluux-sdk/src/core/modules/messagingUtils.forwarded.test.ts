@@ -11,7 +11,7 @@ const copy = (...inner: unknown[]) => xml('message', { type: 'chat' }, xml('body
 describe('parseForwardedCopy', () => {
   it('reads the plain body, the occupant nickname and the original time', () => {
     expect(parseForwardedCopy(copy(xml('body', {}, 'Ship it')))).toEqual({
-      author: 'Bob', text: 'Ship it', timestamp: Date.UTC(2026, 10, 17, 9, 30) })
+      author: 'Bob', from: 'room@conference.example.org/Bob', text: 'Ship it', timestamp: Date.UTC(2026, 10, 17, 9, 30) })
   })
 
   it('ignores a nested forward, receipts and other extensions of the inner message', () => {

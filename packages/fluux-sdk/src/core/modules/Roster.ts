@@ -366,8 +366,8 @@ export class Roster extends BaseModule {
    * and offline all answer false, which means the quoted fallback.
    */
   async supportsForwardedCopy(bareJid: string): Promise<boolean> {
-    const resources = Array.from(this.deps.stores?.roster.getContact(bareJid)?.resources?.keys() ?? [])
-    return this.forwardSupport.everyDeviceSupports(bareJid, resources)
+    return this.forwardSupport.everyDeviceSupports(bareJid, () =>
+      Array.from(this.deps.stores?.roster.getContact(bareJid)?.resources?.keys() ?? []))
   }
 
   // --- Outgoing Presence Methods ---

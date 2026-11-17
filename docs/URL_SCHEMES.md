@@ -132,8 +132,11 @@ bidirectional-override characters removed; nested forwards and every other
 extension are ignored, and the inner message is never handled as a new arrival,
 correction, receipt or room event. Fluux shows it labelled with the claimed
 author and time, and without a second preview of the link. In an encrypted
-chat the copy travels inside the encrypted payload only, a retry keeps it, and
-a retraction of the message removes the stored copy with the body.
+chat the copy travels inside the encrypted payload only; a copy added outside the
+payload by anyone else is dropped. A retry keeps the copy and its original sender
+address, a copy received before the key was available is recovered with the body,
+and a copy may stand without an outer body. A retraction removes the copy from the
+open conversation and from storage along with the body.
 
 ## Login prefill principles
 

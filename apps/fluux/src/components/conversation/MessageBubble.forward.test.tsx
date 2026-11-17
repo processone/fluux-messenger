@@ -85,4 +85,11 @@ describe('standalone forwarded copy', () => {
     expect(container.querySelector('[data-forwarded-copy] img')).toBeNull()
     expect(container.querySelector('[data-forwarded-copy]')!.textContent).toContain('<img src=x')
   })
+
+  // Review: a deletion removes the copied text from view even while the resident row still holds it.
+  it('hides the copy once the message is retracted', () => {
+    const { container } = render(<MessageBubble {...bubble({ forwarded, references: undefined, isRetracted: true })} />)
+    expect(container.querySelector('[data-forwarded-copy]')).toBeNull()
+    expect(screen.queryByText(/Ship it/)).toBeNull()
+  })
 })

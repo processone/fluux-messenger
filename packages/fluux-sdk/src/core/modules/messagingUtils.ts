@@ -398,6 +398,7 @@ function attachForwardFallback(stanza: Element, body: string, references: Messag
 
 const MAX_FORWARDED_CODE_POINTS = 4000
 const MAX_FORWARDED_AUTHOR_CODE_POINTS = 120
+const MAX_FORWARDED_ADDRESS_CODE_POINTS = 1023
 
 /** Drop control characters other than newline and tab, then bound the length in code points. */
 function boundedPlainText(value: string, limit: number): string {
@@ -426,7 +427,8 @@ export function parseForwardedCopy(messageEl: Element): ForwardedCopy | undefine
   const author = boundedPlainText(slash >= 0 && slash < from.length - 1 ? from.slice(slash + 1) : from, MAX_FORWARDED_AUTHOR_CODE_POINTS).trim()
   const stamp = forwarded?.getChild('delay', NS_DELAY)?.attrs.stamp
   const time = typeof stamp === 'string' ? new Date(stamp).getTime() : NaN
-  return { author, text, ...(Number.isFinite(time) && { timestamp: time }) }
+  const address = boundedPlainText(from, MAX_FORWARDED_ADDRESS_CODE_POINTS)
+  return { author, ...(address && address === from && { from: address }), text, ...(Number.isFinite(time) && { timestamp: time }) }
 }
 
 /** Result from parseMessageContent. */

@@ -24,6 +24,7 @@ export function reconcileCorrectionHandoff<T extends Row>(held: T | undefined, i
   const updates = resolveCorrectionUpdates(held, {
     body: incoming.body,
     references: incoming.references,
+    forwarded: incoming.forwarded,
     isEdited: incoming.isEdited,
     originalBody: incoming.originalBody,
     attachment: incoming.attachment,
@@ -50,7 +51,7 @@ export function reconcileCorrectionHandoff<T extends Row>(held: T | undefined, i
     }),
   }
   return result.isRetracted ? {
-    ...result, body: '', references: undefined, originalBody: undefined, attachment: undefined,
+    ...result, body: '', references: undefined, forwarded: undefined, originalBody: undefined, attachment: undefined,
     linkPreview: undefined, poll: undefined, pollClosed: undefined,
     encryptedPayload: undefined, contentAvailability: undefined, unsupportedEncryption: undefined, correctionAlternatives: undefined,
   } : result

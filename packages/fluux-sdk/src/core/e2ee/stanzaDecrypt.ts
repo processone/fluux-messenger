@@ -113,6 +113,16 @@ const ALLOWED_PAYLOAD_CHILDREN = new Set([
   ...['active', 'composing', 'paused', 'inactive', 'gone'].map((state) => `${state}\0${NS_CHATSTATES}`),
 ])
 
+/**
+ * A forwarded copy holds text the forwarder chose, so on an encrypted message only the copy
+ * inside the authenticated payload counts. Anything an intermediary appended outside it is dropped.
+ */
+function dropOuterForwardedCopy(stanza: Element): void {
+  stanza.children = stanza.children.filter(
+    (child) => typeof child === 'string' || !((child as Element).name === 'forwarded' && (child as Element).attrs?.xmlns === NS_FORWARD),
+  )
+}
+
 function isAllowedPayloadChild(child: Element): boolean {
   if (child.name === 'body') return true
   const xmlns = child.attrs?.xmlns as string | undefined
@@ -261,6 +271,7 @@ export async function decryptStanzaInPlace(
     // no plugin for" (e.g. OMEMO when only OpenPGP is wired — surface the
     // sender's XEP-0380 fallback <body> with an unsupported-method tag).
     const disposition = recordUnclaimedEME(stanza, manager, { peer: senderPeer, source, entityKind })
+    if (disposition.kind === 'retry' || disposition.kind === 'unsupported') dropOuterForwardedCopy(stanza)
     if (disposition.kind === 'retry') {
       return { attempted: false, encryptedPayloadXml: disposition.encryptedPayloadXml }
     }
@@ -279,6 +290,8 @@ export async function decryptStanzaInPlace(
   // cleartext context (XEP-0461 <reply>, XEP-0428 <fallback> ranges) that
   // the retry needs to re-run fallback stripping on the decrypted body.
   const originalStanzaXml = stanza.toString()
+  // Whatever the outcome, an outer copy is unauthenticated; the payload's own copy is added back on success.
+  dropOuterForwardedCopy(stanza)
 
   let plaintext: string | null = null
   let securityContext: SecurityContext | null = null

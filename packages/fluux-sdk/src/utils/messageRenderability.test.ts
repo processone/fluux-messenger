@@ -63,4 +63,9 @@ describe('isRenderableStoredMessage', () => {
     expect(isRenderableStoredMessage(chat({ body: '', encryptedPayload: '<encrypted/>' }))).toBe(true)
     expect(isRenderableStoredMessage(chat({ body: '', unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl' } as unknown as Message['unsupportedEncryption'] }))).toBe(true)
   })
+
+  // A standalone forwarded copy can stand without an outer body.
+  it('keeps a bodiless forwarded copy', () => {
+    expect(isRenderableStoredMessage(chat({ body: '', forwarded: { author: 'Bob', text: 'Ship it' } }))).toBe(true)
+  })
 })

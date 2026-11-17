@@ -112,6 +112,22 @@ describe('DeferredDecryptEngine', () => {
       expect.objectContaining({ body: 'See the room update', references: [{ type: 'data', uri }] }))
   })
 
+  // Review: a copy received before the key was available is recovered with the body, even without an outer body.
+  it.each([['with a body', true], ['without an outer body', false]])('recovers a forwarded copy %s from a pending encrypted envelope', async (_name, withBody) => {
+    const copy = xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { from: 'team@conference.example.org/Bob' }, xml('body', {}, 'Ship it')))
+    const envelope = serializePayloadEnvelope([...(withBody ? [xml('body', {}, 'Look')] : []), copy])
+    const pending: Message = {
+      type: 'chat', id: 'fwd-pending', stanzaId: undefined, originId: undefined,
+      conversationId: 'bob@example.com', from: 'bob@example.com',
+      body: '[dummy-plaintext payload]', timestamp: new Date(), isOutgoing: false,
+      encryptedPayload: xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(envelope).toString('base64')).toString(),
+    }
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [pending] }])
+    await engine.retryPending()
+    expect(stores.chat.updateMessage).toHaveBeenCalledWith('bob@example.com', pending,
+      expect.objectContaining({ body: withBody ? 'Look' : '', forwarded: expect.objectContaining({ author: 'Bob', text: 'Ship it' }) }))
+  })
+
   it('decrypts a pending chat payload and writes back through the injected bindings', async () => {
     // Verified so the outcome is committed (untrusted defers verification).
     vi.spyOn(manager, 'decryptArchive').mockResolvedValue({

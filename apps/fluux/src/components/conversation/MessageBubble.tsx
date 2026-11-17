@@ -863,7 +863,7 @@ export const MessageBubble = memo(function MessageBubble({
             </>
           )}
 
-          {message.forwarded && !message.encryptedPayload && !message.unsupportedEncryption && (
+          {message.forwarded && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption && (
             <div data-forwarded-copy className="mt-1 pl-2 border-l-2 border-fluux-hover">
               <div className="text-xs text-fluux-muted">
                 {t('chat.forwardedCopyLabel', { author: message.forwarded.author || t('chat.forwardedCopyUnknownAuthor') })}
@@ -874,7 +874,7 @@ export const MessageBubble = memo(function MessageBubble({
           )}
 
           {/* A structured copy already shows the source, so no second preview of the same link. */}
-          {!message.forwarded && <RoomMessageLinkPreview message={message} formatTime={formatTime} isDarkMode={isDarkMode} onSourceShown={hasForwardFallback ? setSourceShown : undefined} />}
+          {!(message.forwarded && !message.isRetracted) && <RoomMessageLinkPreview message={message} formatTime={formatTime} isDarkMode={isDarkMode} onSourceShown={hasForwardFallback ? setSourceShown : undefined} />}
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
           {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}

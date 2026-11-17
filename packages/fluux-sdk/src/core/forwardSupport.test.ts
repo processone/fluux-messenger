@@ -22,7 +22,7 @@ describe('ForwardSupport', () => {
     const { support, sendIQ } = setup({ 'bob@example.org/a': [NS_FORWARD_COPY], 'bob@example.org/b': ['x', NS_FORWARD_COPY] })
     support.note('bob@example.org/a', caps('v1'))
     support.note('bob@example.org/b', caps('v2'))
-    expect(await support.everyDeviceSupports('bob@example.org', ['a', 'b'])).toBe(true)
+    expect(await support.everyDeviceSupports('bob@example.org', () => ['a', 'b'])).toBe(true)
     const nodes = sendIQ.mock.calls.map(([iq]) => iq.getChild('query', NS_DISCO_INFO)!.attrs.node)
     expect(nodes).toEqual(['https://fluux.io/web#v1', 'https://fluux.io/web#v2'])
   })
@@ -34,27 +34,27 @@ describe('ForwardSupport', () => {
     const { support } = setup(features)
     support.note('bob@example.org/a', caps('v1'))
     support.note('bob@example.org/b', caps('v2'))
-    expect(await support.everyDeviceSupports('bob@example.org', ['a', 'b'])).toBe(false)
+    expect(await support.everyDeviceSupports('bob@example.org', () => ['a', 'b'])).toBe(false)
   })
 
   it('does not accept a device that announced no capabilities, or a contact with no device', async () => {
     const { support, sendIQ } = setup({ 'bob@example.org/a': [NS_FORWARD_COPY] })
-    expect(await support.everyDeviceSupports('bob@example.org', ['a'])).toBe(false)
-    expect(await support.everyDeviceSupports('bob@example.org', [])).toBe(false)
+    expect(await support.everyDeviceSupports('bob@example.org', () => ['a'])).toBe(false)
+    expect(await support.everyDeviceSupports('bob@example.org', () => [])).toBe(false)
     expect(sendIQ).not.toHaveBeenCalled()
   })
 
   it('asks a device once per announced version, again after a new version, never after it goes offline', async () => {
     const { support, sendIQ } = setup({ 'bob@example.org/a': [NS_FORWARD_COPY] })
     support.note('bob@example.org/a', caps('v1'))
-    await support.everyDeviceSupports('bob@example.org', ['a'])
-    await support.everyDeviceSupports('bob@example.org', ['a'])
+    await support.everyDeviceSupports('bob@example.org', () => ['a'])
+    await support.everyDeviceSupports('bob@example.org', () => ['a'])
     expect(sendIQ).toHaveBeenCalledTimes(1)
     support.note('bob@example.org/a', caps('v2'))
-    await support.everyDeviceSupports('bob@example.org', ['a'])
+    await support.everyDeviceSupports('bob@example.org', () => ['a'])
     expect(sendIQ).toHaveBeenCalledTimes(2)
     support.forget('bob@example.org/a')
-    expect(await support.everyDeviceSupports('bob@example.org', ['a'])).toBe(false)
+    expect(await support.everyDeviceSupports('bob@example.org', () => ['a'])).toBe(false)
   })
 
   it('asks again after a failed discovery', async () => {
@@ -62,7 +62,31 @@ describe('ForwardSupport', () => {
     const sendIQ = vi.fn(async () => { const next = replies.shift()!; if (next instanceof Error) throw next; return next })
     const support = new ForwardSupport(sendIQ)
     support.note('bob@example.org/a', caps('v1'))
-    expect(await support.everyDeviceSupports('bob@example.org', ['a'])).toBe(false)
-    expect(await support.everyDeviceSupports('bob@example.org', ['a'])).toBe(true)
+    expect(await support.everyDeviceSupports('bob@example.org', () => ['a'])).toBe(false)
+    expect(await support.everyDeviceSupports('bob@example.org', () => ['a'])).toBe(true)
+  })
+
+  // Review: a late positive answer must not outlive a changed device list or announcement.
+  it('refuses a positive answer when a device joins while discovery is pending', async () => {
+    let release!: (value: Element) => void
+    const sendIQ = vi.fn(() => new Promise<Element>(resolve => { release = resolve }))
+    const support = new ForwardSupport(sendIQ)
+    support.note('bob@example.org/a', caps('v1'))
+    const devices = ['a']
+    const answerPromise = support.everyDeviceSupports('bob@example.org', () => devices)
+    devices.push('b')
+    support.note('bob@example.org/b', caps('v2'))
+    release(answer(NS_FORWARD_COPY))
+    expect(await answerPromise).toBe(false)
+  })
+
+  it('refuses a positive answer when a device changes its announcement while discovery is pending', async () => {
+    let release!: (value: Element) => void
+    const support = new ForwardSupport(vi.fn(() => new Promise<Element>(resolve => { release = resolve })))
+    support.note('bob@example.org/a', caps('v1'))
+    const answerPromise = support.everyDeviceSupports('bob@example.org', () => ['a'])
+    support.note('bob@example.org/a', undefined)
+    release(answer(NS_FORWARD_COPY))
+    expect(await answerPromise).toBe(false)
   })
 })

@@ -261,6 +261,8 @@ export interface MessageSecurityContext {
 export interface ForwardedCopy {
   /** Display name of the claimed original author (a room nickname or bare address). */
   author: string
+  /** Address the copy named as its sender, kept so a retry sends the same claim. */
+  from?: string
   /** Plain text of the original body, bounded and stripped of control characters. */
   text: string
   /** Original timestamp (ms since epoch) when the copy named one. */

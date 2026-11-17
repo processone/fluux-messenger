@@ -157,7 +157,7 @@ export function applyPendingRetractions<T extends RetractableMessage & IdentityP
       if (target.isRetracted && target.retractedAt?.getTime() === retractedAt.getTime() && !metadataChanged) continue
 
       const next: T[] = [...(patched ?? messages)]
-      next[index] = { ...target, isRetracted: true, retractedAt, ...moderation }
+      next[index] = { ...target, isRetracted: true, retractedAt, ...('forwarded' in target && { forwarded: undefined }), ...moderation }
       patched = next
       const knownApplied = applied.get(index)
       if (!knownApplied || retractedAt < knownApplied) applied.set(index, retractedAt)

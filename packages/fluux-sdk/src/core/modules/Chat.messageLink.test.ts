@@ -271,7 +271,7 @@ describe('shared room message references', () => {
       expect(forwarded.getChild('delay', 'urn:xmpp:delay')!.attrs.stamp).toBe('2026-11-17T09:30:00.000Z')
       expect(forwarded.getChild('message')!.attrs.from).toBe(`${room}/Bob`)
       expect(forwarded.getChild('message')!.getChildText('body')).toBe('Ship it 🚀')
-      expect(parseMessageContent({ messageEl: stanza, body }).forwarded).toEqual({ author: 'Bob', text: 'Ship it 🚀', timestamp: copy.timestamp })
+      expect(parseMessageContent({ messageEl: stanza, body }).forwarded).toEqual({ author: 'Bob', from: `${room}/Bob`, text: 'Ship it 🚀', timestamp: copy.timestamp })
       const event = vi.mocked(h.deps.emitSDK).mock.calls.find(([name]) => name === 'chat:message')
       expect(event?.[1]).toMatchObject({ message: { forwarded: { author: 'Bob', text: 'Ship it 🚀' } } })
     })
@@ -318,10 +318,69 @@ describe('shared room message references', () => {
       } finally { await m.shutdown() }
     })
 
-    it('keeps the copy on a retry, inside the payload when encrypted', async () => {
+    // Review: only the copy inside the authenticated payload counts on an encrypted message.
+    it('drops a copy an intermediary added outside the encrypted payload, on success and on failure', async () => {
       const h = harness()
-      await h.chat.resendMessage('bob@example.org', body, 'm1', undefined, refs, { author: 'Bob', text: 'Ship it', timestamp: copy.timestamp })
-      expect(vi.mocked(h.deps.sendStanza).mock.calls[0][0].getChild('forwarded', NSF)!.getChild('message')!.getChildText('body')).toBe('Ship it')
+      const m = manager()
+      await m.register(new DummyPlaintextPlugin())
+      h.deps.getE2EEManager = () => m
+      const forged = () => xml('forwarded', { xmlns: NSF }, xml('message', { from: `${room}/Mallory` }, xml('body', {}, 'forged text')))
+      try {
+        await h.chat.sendMessage('bob@example.org', link)
+        const sent = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+        const received = () => xml('message', { type: 'chat', from: 'alice@example.org/web', to: 'bob@example.org' }, ...(sent.children as Element[]), forged())
+        const ok = received()
+        await decryptStanzaInPlace(ok, m, 'alice@example.org')
+        expect(parseMessageContent({ messageEl: ok, body: ok.getChildText('body') ?? '' }).forwarded).toBeUndefined()
+
+        vi.spyOn(m, 'decryptInbound').mockRejectedValue(new Error('key locked'))
+        const failed = received()
+        await decryptStanzaInPlace(failed, m, 'alice@example.org')
+        expect(parseMessageContent({ messageEl: failed, body: failed.getChildText('body') ?? '' }).forwarded).toBeUndefined()
+      } finally { await m.shutdown() }
+    })
+
+    it('keeps the copy and its original sender address on a retry, inside the payload when encrypted', async () => {
+      const h = harness()
+      // A nickname that holds a slash must not lose its leading part on the next parse.
+      const stored = parseMessageContent({ messageEl: xml('message', {}, xml('forwarded', { xmlns: NSF },
+        xml('message', { from: `${room}/Bob/Builder` }, xml('body', {}, 'Ship it')))), body: '' }).forwarded!
+      expect(stored.from).toBe(`${room}/Bob/Builder`)
+      await h.chat.resendMessage('bob@example.org', body, 'm1', undefined, refs, stored)
+      const plain = vi.mocked(h.deps.sendStanza).mock.calls[0][0].getChild('forwarded', NSF)!
+      expect(plain.getChild('message')!.attrs.from).toBe(`${room}/Bob/Builder`)
+      expect(plain.getChild('message')!.getChildText('body')).toBe('Ship it')
+
+      const m = manager()
+      await m.register(new DummyPlaintextPlugin())
+      h.deps.getE2EEManager = () => m
+      try {
+        vi.mocked(h.deps.sendStanza).mockClear()
+        await h.chat.resendMessage('bob@example.org', body, 'm1', undefined, refs, stored)
+        const sent = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+        expect(sent.getChild('forwarded', NSF)).toBeUndefined()
+        expect(sent.toString()).not.toContain('Ship it')
+        const decoded = Buffer.from(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')!.text(), 'base64').toString('utf8')
+        expect(parsePayloadEnvelope(decoded)!.find(child => child.name === 'forwarded')).toBeDefined()
+      } finally { await m.shutdown() }
+    })
+
+    it('replays a copy that has no outer body from the archive', () => {
+      const h = harness()
+      const mam = new MAM(h.deps) as unknown as { parseArchiveMessage(f: Element, conversation: string, archiveId?: string): { body: string; forwarded?: unknown } | null }
+      const forwarded = xml('forwarded', { xmlns: NSF }, xml('delay', { xmlns: 'urn:xmpp:delay', stamp: '2026-11-17T09:30:00Z' }),
+        xml('message', { type: 'chat', from: 'bob@example.org/web', to: 'alice@example.org', id: 'nobody-archived' },
+          xml('forwarded', { xmlns: NSF }, xml('message', { from: `${room}/Bob` }, xml('body', {}, 'Ship it')))))
+      expect(mam.parseArchiveMessage(forwarded, 'bob@example.org', 'arch1')).toMatchObject({ body: '', forwarded: { author: 'Bob', text: 'Ship it' } })
+    })
+
+    // Review: a copy may arrive without an outer body and must still be delivered.
+    it('delivers a copy that has no outer body', () => {
+      const h = harness()
+      h.chat.handle(xml('message', { type: 'chat', id: 'nobody', from: 'bob@example.org/web', to: 'alice@example.org' },
+        xml('forwarded', { xmlns: NSF }, xml('message', { from: `${room}/Bob` }, xml('body', {}, 'Ship it')))))
+      const event = vi.mocked(h.deps.emitSDK).mock.calls.find(([name]) => name === 'chat:message')
+      expect(event?.[1]).toMatchObject({ message: { body: '', forwarded: { author: 'Bob', text: 'Ship it' } } })
     })
   })
 })

@@ -23,10 +23,10 @@ import { xml, Element } from '@xmpp/client'
 import * as ltx from 'ltx'
 import type { E2EEManager } from '.'
 import { decryptStanzaInPlace, COULD_NOT_DECRYPT_BODY, MESSAGE_REJECTED_BODY } from './stanzaDecrypt'
-import { parseMessageContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, applyCorrection, parseOgpFastening, isMessageSignal } from '../modules/messagingUtils'
+import { parseMessageContent, parseForwardedCopy, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, applyCorrection, parseOgpFastening, isMessageSignal } from '../modules/messagingUtils'
 import { getBareJid, getDomain } from '../jid'
 import { logDebug, logInfo, logWarn } from '../logger'
-import type { StoreBindings, MessageSecurityContext, FileAttachment, Message, RoomMessage, MessageReference } from '../types'
+import type { StoreBindings, MessageSecurityContext, FileAttachment, Message, RoomMessage, MessageReference, ForwardedCopy } from '../types'
 import { captureContentSource, resolveCorrectionUpdates, compareCorrectionRevisions, sameCorrection, type MessageImplState, type CorrectionUpdates, type StoredMessage, type StoredRoomMessage } from '../types/message-internal'
 import { captureStorageScope } from '../../utils/storageScope'
 import type { ArchiveSignal } from '../../utils/archiveSignal'
@@ -55,7 +55,7 @@ type RetryModification = ArchiveSignal['effect']
  *   leave `encryptedPayload`.
  */
 type RetryOutcome =
-  | { kind: 'decrypted'; authoredAt?: Date; body: string; references?: MessageReference[]; securityContext?: MessageSecurityContext; attachment?: FileAttachment; unverified?: true }
+  | { kind: 'decrypted'; authoredAt?: Date; body: string; references?: MessageReference[]; forwarded?: ForwardedCopy; securityContext?: MessageSecurityContext; attachment?: FileAttachment; unverified?: true }
   | { kind: 'modification'; modification: RetryModification; stanza: string; securityContext?: MessageSecurityContext; authoredAt?: Date }
   | { kind: 'unsupported'; info: { namespace: string; name: string } }
   | { kind: 'rejected'; securityContext?: MessageSecurityContext }
@@ -158,6 +158,7 @@ function recoveredUpdates(
     contentAvailability: { state: outcome.unverified ? 'verification' as const : 'ready' as const },
     body: outcome.body,
     references: outcome.references,
+    forwarded: outcome.forwarded,
     ...(outcome.securityContext && { securityContext: outcome.securityContext }),
     ...(outcome.attachment && { attachment: outcome.attachment }),
     ...(message.isEdited && {
@@ -754,8 +755,9 @@ export class DeferredDecryptEngine {
       }
 
       // Extract the decrypted body
-      const body = stanza.getChildText('body')
-      if (!body) return { kind: 'pending' }
+      const body = stanza.getChildText('body') ?? ''
+      // A forwarded copy can stand without an outer body.
+      if (!body && !(messageContext !== 'room' && parseForwardedCopy(stanza))) return { kind: 'pending' }
 
       // Re-run the shared content parse on the decrypted stanza: strips
       // XEP-0428 fallback ranges (e.g. the XEP-0461 reply quote that the
@@ -790,6 +792,7 @@ export class DeferredDecryptEngine {
         ...(parsed.timestampSource === 'authored' && { authoredAt: parsed.timestamp }),
         body: processedBody,
         references: parsed.references,
+        ...(parsed.forwarded && { forwarded: parsed.forwarded }),
         ...(securityContext && { securityContext }),
         ...(attachment && { attachment }),
         ...(unverified && { unverified: true as const }),

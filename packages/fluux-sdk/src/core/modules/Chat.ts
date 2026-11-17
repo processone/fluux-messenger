@@ -495,7 +495,8 @@ export class Chat extends BaseModule {
 
     // Process actual message
     // Poll messages have their body stripped by fallback processing, so also check for poll elements
-    if (body || stanza.getChild('x', NS_OOB) || stanza.getChild('poll', NS_POLL) || stanza.getChild('poll-closed', NS_POLL)) {
+    // A forwarded copy can stand without an outer body.
+    if (body || stanza.getChild('x', NS_OOB) || stanza.getChild('poll', NS_POLL) || stanza.getChild('poll-closed', NS_POLL) || (type !== 'groupchat' && parseForwardedCopy(stanza))) {
       let message: Message | RoomMessage | null
       if (type === 'groupchat') {
         message = this.processRoomMessage(stanza, from, bareFrom, body || '', isCarbonCopy, isSentCarbon)
@@ -1168,7 +1169,7 @@ export class Chat extends BaseModule {
 
     // A retry keeps the structured copy inside the same protection as the first send.
     if (storedForwarded) {
-      children.push(forwardedCopyElement({ from: storedForwarded.author, text: storedForwarded.text, timestamp: storedForwarded.timestamp }))
+      children.push(forwardedCopyElement({ from: storedForwarded.from ?? storedForwarded.author, text: storedForwarded.text, timestamp: storedForwarded.timestamp }))
     }
 
     if (attachment) {
