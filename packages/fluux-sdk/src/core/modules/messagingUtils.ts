@@ -29,7 +29,7 @@ import {
   NS_RETRACT,
   NS_CORRECTION,
 } from '../namespaces'
-import type { Message, MessageReference, FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
+import type { Message, MessageReference, DataReference, FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
 import { processFallback, rebaseFallbackOffset } from '../../utils/fallbackUtils'
 import { CHAT_FALLBACK_TARGETS, ROOM_FALLBACK_TARGETS } from '../../utils/fallbackRegistry'
 import { isAesgcmUri, parse as parseAesgcmUri } from './AesgcmUri'
@@ -383,9 +383,15 @@ function attachForwardFallback(stanza: Element, body: string, references: Messag
     const start = Number(range.attrs.start), stop = Number(range.attrs.end)
     if (start >= stop || stop > codePoints) continue
     const begin = fromCodePointOffset(body, start), end = fromCodePointOffset(body, stop)
-    const target = references.find(ref => ref.type === 'data' && ref.begin !== undefined && ref.end !== undefined
-      && ref.begin >= begin && ref.end <= end && !!parseRoomMessageLink(ref.uri))
-    if (target?.type === 'data') target.forwardFallback = { begin, end }
+    // The generated block ends with the source link, so the marker binds to the last link
+    // inside the range: a room link quoted in the text above it is not the source.
+    let target: DataReference | undefined
+    for (const ref of references) {
+      if (ref.type !== 'data' || ref.begin === undefined || ref.end === undefined || ref.begin < begin || ref.end > end
+        || !parseRoomMessageLink(ref.uri)) continue
+      if (!target || ref.end > target.end!) target = ref
+    }
+    if (target) target.forwardFallback = { begin, end }
   }
 }
 

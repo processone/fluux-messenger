@@ -196,6 +196,20 @@ describe('shared room message references', () => {
       expect(findRoomMessageLink(text, parsed.references)).toEqual({ roomJid: room, stanzaId: '1731490000123456' })
     })
 
+    it('binds the marker to the terminal source link, not a link quoted above it, after a retry', async () => {
+      const h = harness()
+      const text = `Look\n> Bob wrote:\n> see ${other}\n${link}`
+      const stored = [{ type: 'data' as const, uri: link, begin: text.length - link.length, end: text.length,
+        forwardFallback: { begin: text.indexOf('> Bob'), end: text.length } }]
+      await h.chat.resendMessage('bob@example.org', text, 'fwd-3', undefined, stored)
+      const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+      // Body order puts the quoted link's reference first.
+      const parsed = parseMessageContent({ messageEl: stanza, body: text })
+      expect(parsed.references!.map(ref => ref.uri)).toEqual([other, link])
+      expect(parsed.references![0]).not.toHaveProperty('forwardFallback')
+      expect(findRoomMessageLink(text, parsed.references)).toEqual({ roomJid: room, stanzaId: '1731490000123456' })
+    })
+
     it('ignores a marker that does not contain a room message link', () => {
       const stanza = xml('message', {}, xml('body', {}, 'hello there'),
         xml('fallback', { xmlns: FB, for: FQ }, xml('body', { start: '0', end: '5' })))
