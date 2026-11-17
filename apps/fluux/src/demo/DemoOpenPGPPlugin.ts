@@ -9,7 +9,7 @@ import type {
   EncryptedPayload,
   DecryptResult,
 } from '@fluux/sdk'
-import type { KeyBundle, BackupProbeResult } from '../e2ee/OpenPGPPluginBase'
+import type { KeyBundle, BackupProbeResult } from '@fluux/openpgp-plugin'
 
 const OPENPGP_DESCRIPTOR: E2EEProtocolDescriptor = {
   id: 'openpgp',

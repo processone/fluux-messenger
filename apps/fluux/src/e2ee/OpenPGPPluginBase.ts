@@ -46,7 +46,6 @@ import type {
   ConversationTarget,
   DecryptResult,
   E2EEPlugin,
-  E2EEProtocolDescriptor,
   E2EEReconnectInfo,
   EncryptedPayload,
   IdentityInfo,
@@ -66,7 +65,6 @@ import {
   SigncryptEnvelopeError,
   unwrapSigncrypt,
   wrapForSigncrypt,
-  type E2EEErrorKind,
 } from '@fluux/sdk'
 import { discoSupportsPep, getBareJid } from '@fluux/sdk'
 import {
@@ -98,12 +96,21 @@ import {
   prepareBackupPassphrase,
   withPassphraseFormatHeader,
   isSecretKeyUnavailableError,
-} from '@fluux/openpgp-plugin'
-import {
+  classifyBoundaryError,
+  OPENPGP_DESCRIPTOR,
   probeRemoteIdentityState,
   probeRemotePublishedFingerprints,
   SecretKeyBackupProbeError,
-} from './secretKeyProbe'
+  type BackupProbeResult,
+  type BackupRecoveryMode,
+  type CertValidation,
+  type DecryptOutput,
+  type KeyBundle,
+  type KeychainRetryAvailability,
+  type KeychainRetryState,
+  type KeyInstallOptions,
+  type RestoreResult,
+} from '@fluux/openpgp-plugin'
 import {
   clearPeerVerified,
   isPeerVerified,
@@ -149,7 +156,6 @@ const PUBSUB_PUBLISH_OPTIONS_FEATURE = 'http://jabber.org/protocol/pubsub#publis
 const PUBLIC_KEYS_METADATA_NODE = 'urn:xmpp:openpgp:0:public-keys'
 const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
 const CURRENT_ITEM_ID = 'current'
-const OX_IM_FEATURE = 'urn:xmpp:openpgp:im:0'
 
 const PUBLIC_KEY_NODE_OPTIONS: PEPPublishOptions = {
   accessModel: 'open',
@@ -214,117 +220,6 @@ function clearPeerKeyCache(accountJid: string): void {
   try { localStorage.removeItem(peerKeyCacheKey(accountJid)) } catch { /* */ }
 }
 
-// ---------------------------------------------------------------------------
-// Shared types
-// ---------------------------------------------------------------------------
-
-/**
- * Public key material for an identity (own or peer). Does NOT carry secret
- * key material — crypto backends keep that internally.
- */
-export interface KeyBundle {
-  fingerprint: string
-  publicArmored: string
-  /** True when the private key is protected by the OS keychain (Tauri only). */
-  keychainBacked: boolean
-  /** ISO 8601 primary-key creation time. */
-  createdAt?: string
-}
-
-/** Explicit consent to recover only this account; never inferred from an error. */
-export interface BackupRecoveryMode {
-  accountJid: string
-}
-
-/** Selected-key installs carry the typed code independently of its working form.
- * Supplying accountJid explicitly opts into account-bound recovery. */
-export interface KeyInstallOptions {
-  accountJid?: string
-  typedPassphrase?: string
-}
-
-export interface BackupContext {
-  message: string
-  /** Code form that decrypted this source, possibly the legacy encoding. */
-  passphrase: string
-  typedPassphrase?: string
-}
-
-/**
- * Discriminated union returned by {@link restoreSecretKey} /
- * {@link importKeyFromFile}. When the backup contains a single key
- * (or auto-selection succeeds), the caller receives an `IdentityInfo`.
- * When multiple keys exist and no heuristic can confidently pick one,
- * the caller receives the candidates so a picker UI can be shown.
- */
-export type RestoreResult =
-  | IdentityInfo
-  | {
-      needsPicker: true
-      recommendedFingerprint?: string
-      candidates: KeyBundle[]
-      backupContext: BackupContext
-    }
-
-/** Decryption result returned by the crypto backend. */
-export interface DecryptOutput {
-  plaintext: string
-  signatureVerified: boolean
-  signerFingerprint: string | null
-  signaturePresent: boolean
-  /**
-   * Machine-readable outcome of signature verification, mirroring the Rust
-   * `DecryptOutput::signature_status` (serde → `signatureStatus`):
-   *
-   * - `'none'`     — the message carried no signature at all.
-   * - `'verified'` — a signature verified against one of the supplied sender
-   *   keys; {@link signerFingerprint} names its primary certificate.
-   * - `'bad'`      — a supplied sender key matched the signature's issuer but
-   *   the signature itself did not verify (tamper / genuine failure).
-   * - `'missing-key'` — the message was signed, but none of the supplied
-   *   sender keys is the issuer, so verification could not be attempted. The
-   *   caller may refetch the sender's announced keyset and retry.
-   *
-   * `signatureVerified === (signatureStatus === 'verified')` and
-   * `signaturePresent === (signatureStatus !== 'none')`; the discrete field
-   * lets callers distinguish a genuinely bad signature from a merely
-   * unavailable signing key without re-deriving it from the booleans.
-   */
-  signatureStatus: 'none' | 'verified' | 'bad' | 'missing-key'
-  /**
-   * Set when signature verification failed specifically because the
-   * signature's creation time is ahead of the verifier's clock (beyond the
-   * skew tolerance) — i.e. a *transient* clock-skew failure that may verify
-   * once clocks converge, NOT a genuine bad signature. Lets the decrypt path
-   * mark the message retryable rather than permanently rejected.
-   */
-  signatureNotYetValid?: boolean
-}
-
-export interface CertValidation {
-  fingerprint: string
-  createdAt: string
-  encryptionSubkeyCount: number
-  /**
-   * `true` iff {@link encryptionSubkeyCount} > 0. Mirrors the Rust
-   * `CertValidation::has_encryption_subkey` (serde → `hasEncryptionSubkey`).
-   * A parsed cert with `false` is a *definitively invalid* recipient (no usable
-   * encryption subkey), which the peer-cache classifier treats as excluded —
-   * distinct from a transient fetch failure.
-   */
-  hasEncryptionSubkey: boolean
-  userIds: string[]
-  /**
-   * Upper-case hex fingerprints of every subkey in the certificate,
-   * independent of usage flags or expiry. These identify the key material
-   * itself: stripping an expiration or re-signing a self-signature leaves
-   * them unchanged, while a genuine key rotation adds a new one. Used to
-   * tell "same key, different bytes" apart from "a different key was
-   * published" without a brittle raw-byte comparison.
-   */
-  subkeyFingerprints: string[]
-}
-
 interface PendingVerification {
   messageId: string
   ciphertext: string
@@ -365,146 +260,6 @@ const UNVERIFIED_INACTIVE_CAP = 5
 // cert's retirement (`inactiveAt`) — so a retired key can still verify eligible
 // archived traffic but never a fresh live message (see spec §Retained certs).
 const INACTIVE_ARCHIVE_TOLERANCE_MS = 5 * 60 * 1000
-
-// ---------------------------------------------------------------------------
-// Shared error helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Classify a raw error into transient/permanent + machine-readable code.
- * Handles XMPP-level IQ errors (same on all platforms) and common
- * Rust/openpgp.js failure messages.
- */
-export function classifyBoundaryError(err: unknown): { kind: E2EEErrorKind; code: string } {
-  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
-
-  if (msg.includes('openpgp-storage-unavailable:')) {
-    return { kind: 'permanent', code: 'key-storage-unavailable' }
-  }
-  // FLM-304: answers of the explicit keychain retry. A new refusal keeps
-  // the earlier recovery state; "unavailable" means there is nothing to retry.
-  if (msg.includes('openpgp-keychain-refused:')) {
-    return { kind: 'permanent', code: 'keychain-refused' }
-  }
-  if (msg.includes('openpgp-keychain-retry-unavailable:')) {
-    return { kind: 'permanent', code: 'keychain-retry-unavailable' }
-  }
-
-  if (msg.includes('no skesk matched') || msg.includes('session key decryption failed') || msg.includes('incorrect key passphrase')) {
-    return { kind: 'permanent', code: 'wrong-passphrase' }
-  }
-  if (msg.includes('passphrase is empty')) return { kind: 'permanent', code: 'empty-passphrase' }
-  if (msg.includes('passphrase for account') && msg.includes('not in the keychain')) {
-    return { kind: 'permanent', code: 'key-unrecoverable' }
-  }
-  // The stored passphrase no longer decrypts the on-disk TSK (keychain/key
-  // desync, or a corrupted secret-key packet). Sequoia surfaces this as
-  // "decrypt persisted TSK ..." / "decrypt primary secret key" and, for a
-  // wrong passphrase against a v4/CFB secret, "unexpected EOF". It is a
-  // permanent condition the user can only resolve by restoring or replacing
-  // the key — never a retryable transient — so the host can route to recovery
-  // instead of showing an opaque `(unknown)`.
-  if (
-    msg.includes('decrypt persisted tsk') ||
-    msg.includes('decrypt primary secret key') ||
-    msg.includes('decrypt secret subkey') ||
-    msg.includes('unexpected eof')
-  ) {
-    return { kind: 'permanent', code: 'key-unrecoverable' }
-  }
-  if (msg.includes('no key for account') || msg.includes('no identity')) {
-    return { kind: 'permanent', code: 'key-missing' }
-  }
-  if (msg.includes('not a recognizable openpgp') || msg.includes('unknown pem type') || msg.includes('could not convert stream')) {
-    return { kind: 'permanent', code: 'malformed-key' }
-  }
-  if (msg.includes('backup input is a public key')) {
-    return { kind: 'permanent', code: 'malformed-backup' }
-  }
-  if (
-    msg.includes('parse ') ||
-    msg.includes('not valid') ||
-    // openpgp.js readMessage/readKey on bytes that are not valid OpenPGP:
-    // "Error during parsing. This message / key probably does not conform to
-    // a valid OpenPGP format." Structurally malformed → never decrypts.
-    msg.includes('during parsing') ||
-    msg.includes('conform to a valid openpgp') ||
-    // Sequoia stream decryptor fed bytes that are not parseable OpenPGP at
-    // all: "Malformed packet: Malformed CTB: MSB of ptag … not set (ptag is
-    // a dash, perhaps this is an ASCII-armor encoded message)". Like the
-    // openpgp.js cases above, no key change can ever open structurally
-    // invalid bytes, so this is terminal — without it the failure falls
-    // through to `transient/unknown` and stanzaDecrypt re-stashes the
-    // message, making retryPendingDecrypts re-attempt (and re-log) it on
-    // every launch forever.
-    msg.includes('malformed packet')
-  ) {
-    return { kind: 'permanent', code: 'malformed-data' }
-  }
-  if (msg.includes('item-not-found')) return { kind: 'permanent', code: 'not-found' }
-  if (msg.includes('feature-not-implemented') || msg.includes('does not advertise pep')) {
-    return { kind: 'permanent', code: 'pep-unsupported' }
-  }
-  if (msg.includes('key-locked')) return { kind: 'transient', code: 'key-locked' }
-
-  if (msg.includes('panicked')) return { kind: 'transient', code: 'ipc-panic' }
-  if (msg.includes('timeout') || msg.includes('timed out')) {
-    return { kind: 'transient', code: 'timeout' }
-  }
-  if (msg.includes('remote-server-timeout')) return { kind: 'transient', code: 'timeout' }
-  if (msg.includes('remote-server-not-found') || msg.includes('service-unavailable')) {
-    return { kind: 'transient', code: 'server-unreachable' }
-  }
-  if (msg.includes('internal-server-error') || msg.includes('resource-constraint')) {
-    return { kind: 'transient', code: 'server-error' }
-  }
-
-  return { kind: 'transient', code: 'unknown' }
-}
-
-// ---------------------------------------------------------------------------
-// Shared XEP-0373 protocol descriptor
-// ---------------------------------------------------------------------------
-
-export const OPENPGP_DESCRIPTOR: E2EEProtocolDescriptor = {
-  id: 'openpgp',
-  displayName: 'OpenPGP (XEP-0373)',
-  securityLevel: 30,
-  discoFeatures: [OX_IM_FEATURE],
-  features: {
-    forwardSecrecy: false,
-    postCompromiseSecurity: false,
-    multiDevice: true,
-    groupChat: false,
-    asynchronous: true,
-    deniability: false,
-  },
-}
-
-/**
- * Three-state result of probing the server for a secret-key backup.
- * `unknown` means the probe could not reach a definitive answer — see
- * {@link OpenPGPPluginBase.probeSecretKeyBackup}.
- */
-export type BackupProbeResult = 'present' | 'absent' | 'unknown'
-
-/**
- * What the native store's cached answers say about the keychain items that
- * unlock our key: `held` while it keeps the user's refusal of them, `pending`
- * while a keychain read is under way, such as an earlier retry still waiting
- * on the user's answer, and `unlocked` once the native store has the key
- * unlocked, for example by such a retry the user allowed after it timed out.
- */
-export type KeychainRetryAvailability = 'held' | 'not-held' | 'pending' | 'unlocked'
-
-/**
- * What the keychain retry panel offers (FLM-304). `offered`: asking the
- * keychain again. `ready`: using the key the native store already unlocked,
- * which reads nothing (FLM-408 R5). `unconfirmed` while no answer holds yet:
- * a keychain read is under way, such as a retry whose prompt outlived its
- * time limit, or a probe failed. Only `none` confirms that nothing is left.
- */
-export type KeychainRetryState = 'offered' | 'ready' | 'unconfirmed' | 'none'
 
 /** What a check of our published key found, or `outdated` when our key changed meanwhile. */
 type OwnKeyCheckVerdict = 'consistent' | 'conflict' | 'outdated'

@@ -25,7 +25,7 @@
 
 import type { XMPPClient } from '@fluux/sdk/core'
 // Raw PEP: XEP-0373's nodes are not modelled by the SDK. This is the only
-// place in the app that reaches for the escape hatch, and `pepReaderFor` is
+// place in the OpenPGP code that reaches for the escape hatch, and `pepReaderFor` is
 // what keeps it to one line.
 import { queryPepNode, type PEPItem } from '@fluux/sdk/xmpp'
 
@@ -42,7 +42,7 @@ export type PepReader = (jid: string, node: string, maxItems?: number) => Promis
 export function pepReaderFor(client: XMPPClient): PepReader {
   return (jid, node, maxItems) => queryPepNode(client, jid, node, maxItems)
 }
-import type { BackupProbeResult } from './OpenPGPPluginBase'
+import type { BackupProbeResult } from './types'
 
 const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
 const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'

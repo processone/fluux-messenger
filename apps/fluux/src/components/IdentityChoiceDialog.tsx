@@ -4,7 +4,7 @@ import { AlertTriangle, Loader2, Server, FileUp, RotateCcw } from 'lucide-react'
 import { backupRecoveryError } from './backupRecoveryError'
 import { BackupRecoveryFailure } from './BackupRecoveryFailure'
 import { ModalOverlay } from './ModalOverlay'
-import type { BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
+import type { BackupProbeResult } from '@fluux/openpgp-plugin'
 
 type Phase = 'choose' | 'restoring' | 'importing' | 'confirm-replace' | 'replacing'
 

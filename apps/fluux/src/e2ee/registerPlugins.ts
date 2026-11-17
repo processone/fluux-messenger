@@ -15,7 +15,7 @@ import type { XMPPClient } from '@fluux/sdk/core'
 import { platform } from '@/platform'
 import { isOpenpgpEnabled, useEncryptionSettingsStore } from '../stores/encryptionSettingsStore'
 import { useConversationPlaintextOverrideStore } from '../stores/conversationPlaintextOverrideStore'
-import { classifyBoundaryError, OPENPGP_DESCRIPTOR } from './OpenPGPPluginBase'
+import { classifyBoundaryError, OPENPGP_DESCRIPTOR } from '@fluux/openpgp-plugin'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 
 /**

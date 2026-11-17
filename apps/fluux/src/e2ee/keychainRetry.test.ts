@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPluginStorage, InMemoryStorageBackend, type PluginContext } from '@fluux/sdk'
 import { decrypt, readMessage, readKey, unarmor } from 'openpgp'
 import { resetUncertainImportsForTesting, SequoiaPgpPlugin, type InvokeFn } from './SequoiaPgpPlugin'
-import type { KeyBundle } from './OpenPGPPluginBase'
+import type { KeyBundle } from '@fluux/openpgp-plugin'
 import { parseSecretKeysFromBackupPayload } from '@fluux/openpgp-plugin'
 import { setPlatformForTesting } from '@/platform'
 

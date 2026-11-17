@@ -16,16 +16,17 @@
 
 import { E2EEPluginError } from '@fluux/sdk'
 import { platform } from '@/platform'
+import { OpenPGPPluginBase } from './OpenPGPPluginBase'
 import {
-  OpenPGPPluginBase,
+  accountUserId,
+  keyExportFilename,
+  classifyBoundaryError,
   type BackupRecoveryMode,
   type CertValidation,
   type DecryptOutput,
   type KeyBundle,
   type KeychainRetryAvailability,
-  classifyBoundaryError,
-} from './OpenPGPPluginBase'
-import { accountUserId, keyExportFilename } from '@fluux/openpgp-plugin'
+} from '@fluux/openpgp-plugin'
 
 /**
  * Typed wrapper over Tauri's `invoke`. Abstracted so tests can inject a
