@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { E2EEPluginError } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
-import { registerE2EEPlugins } from './registerPlugins'
+import { registerE2EEPlugins, unregisterE2EEPlugins } from './registerPlugins'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 
 // Force the desktop path: no dynamic IndexedDB/openpgp.js imports, and the
@@ -22,6 +22,20 @@ vi.mock('./SequoiaPgpPlugin', () => ({
     return {}
   }),
 }))
+
+const webBackend = vi.hoisted(() => ({ open: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('./IndexedDBStorageBackend', () => ({
+  IndexedDBStorageBackend: vi.fn(function IndexedDBStorageBackendMock() {
+    return webBackend
+  }),
+}))
+import { IndexedDBStorageBackend } from './IndexedDBStorageBackend'
+vi.mock('./WebOpenPGPPlugin', () => ({
+  WebOpenPGPPlugin: vi.fn(function WebOpenPGPPluginMock() {
+    return { web: true }
+  }),
+}))
+import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 
 type Logger = ReturnType<NonNullable<XMPPClient['e2ee']>['getDiagnosticLogger']>
 
@@ -173,5 +187,68 @@ describe('OpenPGP registration diagnostics', () => {
     expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/^OpenPGP registration: state=failed phase=initialize-native elapsedMs=\d+ kind=transient code=timeout$/))
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain(privateDetail)
     expect(useEncryptionSettingsStore.getState().registrationError).toEqual({ kind: 'transient', code: 'timeout' })
+  })
+})
+
+describe('registerE2EEPlugins web branch', () => {
+  afterEach(() => {
+    setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+  })
+
+  it('opens the IndexedDB backend for the account, hands it to the client, then registers the web plugin', async () => {
+    setPlatformForTesting({ shell: 'web', os: 'linux' })
+    useEncryptionSettingsStore.setState({ openpgpEnabled: true, pluginRegisteredAt: 0, registrationError: null })
+    vi.mocked(SequoiaPgpPlugin).mockClear()
+    vi.mocked(WebOpenPGPPlugin).mockClear()
+    vi.mocked(IndexedDBStorageBackend).mockClear()
+    webBackend.open.mockClear()
+    const register = vi.fn().mockResolvedValue(undefined)
+    const client = makeClient(register)
+    const setBackend = vi.fn()
+    ;(client as unknown as { setE2EEStorageBackend: typeof setBackend }).setE2EEStorageBackend = setBackend
+
+    await registerE2EEPlugins(client)
+
+    expect(SequoiaPgpPlugin).not.toHaveBeenCalled()
+    expect(IndexedDBStorageBackend).toHaveBeenCalledWith('me@example.com')
+    expect(webBackend.open).toHaveBeenCalledTimes(1)
+    expect(setBackend).toHaveBeenCalledWith(webBackend)
+    expect(WebOpenPGPPlugin).toHaveBeenCalledTimes(1)
+    expect(register).toHaveBeenCalledWith(expect.objectContaining({ web: true }))
+    expect(useEncryptionSettingsStore.getState().pluginRegisteredAt).toBe(1)
+  })
+})
+
+describe('unregisterE2EEPlugins', () => {
+  function clientWith(plugin: unknown, unregister: () => Promise<void>): XMPPClient {
+    return { e2ee: { getPlugin: () => plugin, unregister } } as unknown as XMPPClient
+  }
+
+  it('does nothing without a manager', async () => {
+    await expect(unregisterE2EEPlugins({ e2ee: null } as unknown as XMPPClient)).resolves.toBeUndefined()
+  })
+
+  it('does nothing when OpenPGP is not registered', async () => {
+    const unregister = vi.fn()
+    await unregisterE2EEPlugins(clientWith(null, unregister))
+    expect(unregister).not.toHaveBeenCalled()
+  })
+
+  it('unregisters the openpgp plugin once', async () => {
+    const unregister = vi.fn().mockResolvedValue(undefined)
+    await unregisterE2EEPlugins(clientWith({}, unregister))
+    expect(unregister).toHaveBeenCalledExactlyOnceWith('openpgp')
+  })
+
+  it('logs and swallows an unregistration failure', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await expect(
+        unregisterE2EEPlugins(clientWith({}, () => Promise.reject(new Error('boom')))),
+      ).resolves.toBeUndefined()
+      expect(error).toHaveBeenCalledWith('[Fluux] E2EE plugin unregistration failed:', expect.any(Error))
+    } finally {
+      error.mockRestore()
+    }
   })
 })
