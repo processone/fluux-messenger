@@ -28,6 +28,7 @@ export type {
   Logger,
   PEPItem,
   PEPPublishOptions,
+  PeerIdentity,
   PeerSupport,
   PluginConfiguration,
   PluginContext,
