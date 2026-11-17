@@ -546,6 +546,8 @@
         "previewUnavailable": "תצוגה מקדימה לא זמינה",
         "truncated": "קוצר",
         "messageDeleted": "ההודעה נמחקה",
+        "joinRoomToSeeMessage": "יש להצטרף לחדר כדי לראות את ההודעה",
+        "linkedMessagePreview": "פתיחת ההודעה בחדר",
         "messageModerated": "ההודעה הוסרה על ידי {{moderator}}",
         "deleteMessage": "מחיקת הודעה",
         "deleteMessageConfirm": "פעולה זו תמחק את ההודעה. לא ניתן לבטל פעולה זו.",

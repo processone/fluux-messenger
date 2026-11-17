@@ -15,6 +15,7 @@ import { Avatar } from '../Avatar'
 import { NickText, NickSentence } from '../NickText'
 import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
+import { RoomMessageLinkPreview } from './RoomMessageLinkPreview'
 import { MessageBody } from './MessageBody'
 import { renderQuotePreview } from '@/utils/messageStyles'
 import { deriveCopyBody } from '@/utils/copyMessageBody'
@@ -203,6 +204,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   if (prev.message.id !== next.message.id) return false
   if (messageRowId(prev.message) !== messageRowId(next.message)) return false
   if (prev.message.body !== next.message.body) return false
+  if (JSON.stringify(prev.message.references) !== JSON.stringify(next.message.references)) return false
   if (prev.whisperWith !== next.whisperWith) return false
   if (prev.whisperThread !== next.whisperThread) return false
   if (prev.counterpartPresent !== next.counterpartPresent) return false
@@ -835,6 +837,8 @@ export const MessageBubble = memo(function MessageBubble({
               isCurrentMatch={isCurrentMatch}
             />
           )}
+
+          <RoomMessageLinkPreview message={message} formatTime={formatTime} isDarkMode={isDarkMode} />
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
           {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}

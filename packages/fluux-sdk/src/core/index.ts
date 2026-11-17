@@ -24,6 +24,8 @@ export type {
   ReplyTarget,
   AnyMessage,
   MentionReference,
+  DataReference,
+  MessageReference,
   ReplyInfo,
   ConversationEntity,
   ConversationMetadata,

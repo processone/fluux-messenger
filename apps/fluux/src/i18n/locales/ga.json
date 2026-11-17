@@ -550,6 +550,8 @@
         "previewUnavailable": "Réamhamharc gan fáil",
         "truncated": "giorraithe",
         "messageDeleted": "Teachtaireacht scriosta",
+        "joinRoomToSeeMessage": "Glac páirt sa seomra chun an teachtaireacht a fheiceáil",
+        "linkedMessagePreview": "Oscail an teachtaireacht sa seomra",
         "messageModerated": "Teachtaireacht bainte ag {{moderator}}",
         "deleteMessage": "Scrios teachtaireacht",
         "deleteMessageConfirm": "Scriosfaidh sé seo an teachtaireacht seo. Ní féidir an gníomh seo a chealú.",

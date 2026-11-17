@@ -544,6 +544,8 @@
         "previewUnavailable": "Voorbeeld niet beschikbaar",
         "truncated": "ingekort",
         "messageDeleted": "Bericht verwijderd",
+        "joinRoomToSeeMessage": "Neem deel aan de ruimte om het bericht te zien",
+        "linkedMessagePreview": "Bericht in de ruimte openen",
         "messageModerated": "Bericht verwijderd door {{moderator}}",
         "deleteMessage": "Bericht verwijderen",
         "deleteMessageConfirm": "Dit bericht wordt verwijderd. Deze actie kan niet ongedaan worden gemaakt.",

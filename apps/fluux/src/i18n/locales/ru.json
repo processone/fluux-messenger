@@ -548,6 +548,8 @@
         "previewUnavailable": "Превью недоступно",
         "truncated": "сокращено",
         "messageDeleted": "Сообщение удалено",
+        "joinRoomToSeeMessage": "Присоединитесь к комнате, чтобы увидеть сообщение",
+        "linkedMessagePreview": "Открыть сообщение в комнате",
         "messageModerated": "Сообщение удалено модератором {{moderator}}",
         "deleteMessage": "Удалить сообщение",
         "deleteMessageConfirm": "Это удалит это сообщение. Это действие нельзя отменить.",

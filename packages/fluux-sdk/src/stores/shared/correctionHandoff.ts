@@ -1,3 +1,5 @@
+import type { RoomMessage } from '../../core/types/room'
+import type { SDKEvents } from '../../core/types/sdk-events'
 import { roomStanzaIdsMergeable } from '../../utils/roomStanzaId'
 import { resolveCorrectionUpdates, type StoredMessage, type StoredRoomMessage } from '../../core/types/message-internal'
 import { archiveIdentityConflict, chatArchiveConflict, CHAT_SCOPE, chatMessageAuthor, identityKeys, roomMessageAuthor, roomScope, sameLogicalMessage } from '../../utils/messageIdentity'
@@ -21,6 +23,7 @@ export function reconcileCorrectionHandoff<T extends Row>(held: T | undefined, i
   if (!held || !matchesCorrectionTarget(held, incoming)) return undefined
   const updates = resolveCorrectionUpdates(held, {
     body: incoming.body,
+    references: incoming.references,
     isEdited: incoming.isEdited,
     originalBody: incoming.originalBody,
     attachment: incoming.attachment,
@@ -34,6 +37,7 @@ export function reconcileCorrectionHandoff<T extends Row>(held: T | undefined, i
     correctionStanzaIds: incoming.correctionStanzaIds,
     correctionHandoff: incoming.correctionHandoff,
     contentRecovery: incoming.contentRecovery,
+    liveCorrection: incoming.liveCorrection,
   }, scope)
   const result = {
     ...held,
@@ -45,7 +49,7 @@ export function reconcileCorrectionHandoff<T extends Row>(held: T | undefined, i
     }),
   }
   return result.isRetracted ? {
-    ...result, body: '', originalBody: undefined, attachment: undefined,
+    ...result, body: '', references: undefined, originalBody: undefined, attachment: undefined,
     linkPreview: undefined, poll: undefined, pollClosed: undefined,
     encryptedPayload: undefined, unsupportedEncryption: undefined, correctionAlternatives: undefined,
   } : result
@@ -98,4 +102,20 @@ export async function refreshCachedCorrections<T extends Row>(cached: T[], isCur
     ? await reconcileChatHistoryMessages(cached as StoredMessage[], () => [], scope)
     : await reconcileRoomHistoryMessages(cached as StoredRoomMessage[], () => [], scope)
   return isCurrent() ? reconcileCachedCorrections(cached, refreshed as T[], scope) : []
+}
+
+/** Project onto a detached quote only after the reader resolves the canonical target. */
+export function applyRoomMessagePreviewUpdate(
+  message: RoomMessage,
+  event: SDKEvents['room:message-updated'] | SDKEvents['room:retraction-pending'],
+  account: string,
+  canonicalTarget: RoomMessage,
+): RoomMessage {
+  if (message.isRetracted || event.roomJid !== message.roomJid) return message
+  if (!matchesCorrectionTarget(message, canonicalTarget)) return message
+  const actor = 'updates' in event ? event.correctionActor
+    : { actorJid: event.actorJid, actorOccupantId: event.actorOccupantId }
+  if (actor && !roomMessageAuthor(message, actor)) return message
+  const updates = 'updates' in event ? event.updates : { isRetracted: true }
+  return reconcileCorrectionHandoff(message, { ...message, ...updates }, account) ?? message
 }

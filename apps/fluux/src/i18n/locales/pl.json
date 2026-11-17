@@ -550,6 +550,8 @@
         "previewUnavailable": "Podgląd niedostępny",
         "truncated": "skrócone",
         "messageDeleted": "Wiadomość usunięta",
+        "joinRoomToSeeMessage": "Dołącz do pokoju, aby zobaczyć wiadomość",
+        "linkedMessagePreview": "Otwórz wiadomość w pokoju",
         "messageModerated": "Wiadomość usunięta przez {{moderator}}",
         "deleteMessage": "Usuń wiadomość",
         "deleteMessageConfirm": "To usunie tę wiadomość. Tej czynności nie można cofnąć.",

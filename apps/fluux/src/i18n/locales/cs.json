@@ -550,6 +550,8 @@
         "previewUnavailable": "Náhled není k dispozici",
         "truncated": "zkráceno",
         "messageDeleted": "Zpráva smazána",
+        "joinRoomToSeeMessage": "Připojte se k místnosti a zobrazte zprávu",
+        "linkedMessagePreview": "Otevřít zprávu v místnosti",
         "messageModerated": "Zpráva odstraněna uživatelem {{moderator}}",
         "deleteMessage": "Smazat zprávu",
         "deleteMessageConfirm": "Tato zpráva bude smazána. Tuto akci nelze vrátit zpět.",

@@ -546,6 +546,8 @@
         "previewUnavailable": "Eelvaade pole saadaval",
         "truncated": "kärbitud",
         "messageDeleted": "Sõnum kustutatud",
+        "joinRoomToSeeMessage": "Sõnumi nägemiseks liitu toaga",
+        "linkedMessagePreview": "Ava sõnum toas",
         "messageModerated": "Sõnumi eemaldas {{moderator}}",
         "deleteMessage": "Kustuta sõnum",
         "deleteMessageConfirm": "See kustutab selle sõnumi. Seda toimingut ei saa tagasi võtta.",

@@ -544,6 +544,8 @@
         "previewUnavailable": "Forskoðun ekki tiltæk",
         "truncated": "stytt",
         "messageDeleted": "Skilaboðum eytt",
+        "joinRoomToSeeMessage": "Vertu með í herberginu til að sjá skilaboðin",
+        "linkedMessagePreview": "Opna skilaboðin í herberginu",
         "messageModerated": "Skilaboð fjarlægð af {{moderator}}",
         "deleteMessage": "Eyða skilaboðum",
         "deleteMessageConfirm": "Þetta mun eyða þessum skilaboðum. Ekki er hægt að afturkalla þessa aðgerð.",

@@ -1,3 +1,4 @@
+import type { DataReference, MessageReference } from '../core/types/chat'
 import { parseXmppUri } from './xmppUri'
 
 /** A room message link names the room's archive id, never a sender's client id. */
@@ -25,4 +26,28 @@ export function parseRoomMessageLink(uri: string): RoomMessageLink | null {
   const parsed = parseXmppUri(uri)
   if (!parsed || parsed.action !== 'join' || !isRoomAddress(parsed.jid) || !parsed.params.msg) return null
   return { roomJid: parsed.jid, stanzaId: parsed.params.msg }
+}
+
+/** Find pasted room links with offsets in the original body (UTF-16 in memory). */
+export function roomMessageLinkReferences(body: string): DataReference[] {
+  const references: DataReference[] = []
+  for (const match of body.matchAll(/(?<![\w:])xmpp:[^\s<>]+/g)) {
+    const uri = match[0].replace(/[.,;:!?)"'\]]+$/, '')
+    if (parseRoomMessageLink(uri)) references.push({ type: 'data', uri, begin: match.index, end: match.index + uri.length })
+  }
+  return references
+}
+
+/** Prefer an explicit data reference; older clients can send just the body link. */
+export function findRoomMessageLink(body: string, references?: MessageReference[]): RoomMessageLink | null {
+  for (const reference of references ?? []) {
+    if (reference.type !== 'data') continue
+    const target = parseRoomMessageLink(reference.uri)
+    if (target) return target
+  }
+  for (const reference of roomMessageLinkReferences(body)) {
+    const target = parseRoomMessageLink(reference.uri)
+    if (target) return target
+  }
+  return null
 }

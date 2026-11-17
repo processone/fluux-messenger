@@ -181,6 +181,7 @@ function _filterIgnoredReactions(
 vi.mock('@fluux/sdk', async (importOriginal) => ({
   // The list resolves row handles through the SDK's own lookup; keep the real one.
   findMessageRowIndex: (await importOriginal<typeof import('@fluux/sdk')>()).findMessageRowIndex,
+  findRoomMessageLink: (await importOriginal<typeof import('@fluux/sdk')>()).findRoomMessageLink,
   messageRowRef: (message: RoomMessage) => ({
     id: message.id,
     ...(message.occupantId ? { occupantId: message.occupantId } : {}),

@@ -544,6 +544,8 @@
         "previewUnavailable": "Preview unavailable",
         "truncated": "truncated",
         "messageDeleted": "Message deleted",
+        "joinRoomToSeeMessage": "Join the room to see it",
+        "linkedMessagePreview": "Open message in room",
         "messageModerated": "Message removed by {{moderator}}",
         "deleteMessage": "Delete message",
         "deleteMessageConfirm": "This will delete this message. This action cannot be undone.",

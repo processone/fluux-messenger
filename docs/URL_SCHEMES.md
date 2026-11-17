@@ -51,8 +51,37 @@ When lookup confirms the target is missing or deleted, Fluux shows
 **This message is no longer available**. A failed archive request produces
 **Could not load this message**, not a deletion
 claim. Links reveal the room address and archive id, not the message text, and do
-not grant access to a room. There is no web landing page, forwarded copy or
-message preview in this format's initial implementation.
+not grant access to a room. There is no web landing page or forwarded copy.
+
+### Sharing inside chats
+
+Sending a body containing a room message link adds an XEP-0372 reference with
+`type="data"` and `uri` set to the link. The body remains readable in other XMPP
+clients; no original room text is embedded. References travel inside the encrypted
+payload when the chat uses end-to-end encryption. Receivers retain references in
+live messages and archived history, prefer a valid data reference, and fall back
+to finding the link in the body. The SDK's `findRoomMessageLink` implements this
+selection; `roomMessageLinkReferences` finds pasted links and their body ranges.
+
+Below a shared link, a joined reader sees a quote with the room name, sender,
+time and a two-line excerpt resolved from their own resident history, local
+cache or archive. `readRoomMessagePreview` performs this lookup without adding
+arrivals, moving a room's history window or claiming archive coverage. When the
+original comes from the archive, the lookup reads subsequent pages to apply
+separately archived edits and deletions before displaying its text. Live updates
+also reconcile quotes whose targets are no longer in the resident window. Update
+references resolve against canonical room/cache/archive targets, so a sender id
+cannot shadow another message's room-assigned id. Closing or unmounting a quote
+cancels further lookup pages and entry decryption; an already pending request may
+finish. A deleted
+target shows **Message deleted**; a failed lookup keeps an **Open message in
+room** link rather than claiming deletion. Undecryptable content is never quoted.
+
+A reader who has not joined sees only the room name and **Join the room to see
+it**. No cache or archive content is disclosed to that reader. The preview opens
+the same in-app navigation as the text link; it does not join automatically.
+Leaving a room or changing accounts hides its quote and invalidates pending
+preview reads. The Forward chat picker is a separate feature.
 
 ## Login prefill principles
 

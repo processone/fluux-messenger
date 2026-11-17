@@ -548,6 +548,8 @@
         "previewUnavailable": "Previsualització no disponible",
         "truncated": "truncat",
         "messageDeleted": "Missatge eliminat",
+        "joinRoomToSeeMessage": "Uneix-te a la sala per veure el missatge",
+        "linkedMessagePreview": "Obre el missatge a la sala",
         "messageModerated": "Missatge eliminat per {{moderator}}",
         "deleteMessage": "Elimina el missatge",
         "deleteMessageConfirm": "Això eliminarà aquest missatge. Aquesta acció no es pot desfer.",

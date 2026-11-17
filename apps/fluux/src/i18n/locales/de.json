@@ -546,6 +546,8 @@
         "previewUnavailable": "Vorschau nicht verfügbar",
         "truncated": "gekürzt",
         "messageDeleted": "Nachricht gelöscht",
+        "joinRoomToSeeMessage": "Tritt dem Raum bei, um die Nachricht zu sehen",
+        "linkedMessagePreview": "Nachricht im Raum öffnen",
         "messageModerated": "Nachricht entfernt von {{moderator}}",
         "deleteMessage": "Nachricht löschen",
         "deleteMessageConfirm": "Diese Nachricht wird gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",

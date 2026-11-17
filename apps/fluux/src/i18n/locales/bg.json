@@ -544,6 +544,8 @@
         "previewUnavailable": "Визуализацията не е налична",
         "truncated": "съкратено",
         "messageDeleted": "Съобщението е изтрито",
+        "joinRoomToSeeMessage": "Присъединете се към стаята, за да видите съобщението",
+        "linkedMessagePreview": "Отваряне на съобщението в стаята",
         "messageModerated": "Съобщението е премахнато от {{moderator}}",
         "deleteMessage": "Изтрий съобщение",
         "deleteMessageConfirm": "Това ще изтрие това съобщение. Това действие не може да бъде отменено.",

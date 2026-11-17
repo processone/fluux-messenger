@@ -25,7 +25,7 @@ import { decryptStanzaInPlace, COULD_NOT_DECRYPT_BODY, MESSAGE_REJECTED_BODY } f
 import { parseMessageContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, applyCorrection, parseOgpFastening, isMessageSignal } from '../modules/messagingUtils'
 import { getBareJid, getDomain } from '../jid'
 import { logDebug, logInfo, logWarn } from '../logger'
-import type { StoreBindings, MessageSecurityContext, FileAttachment, Message, RoomMessage } from '../types'
+import type { StoreBindings, MessageSecurityContext, FileAttachment, Message, RoomMessage, MessageReference } from '../types'
 import { captureContentSource, resolveCorrectionUpdates, compareCorrectionRevisions, sameCorrection, type MessageImplState, type CorrectionUpdates, type StoredMessage, type StoredRoomMessage } from '../types/message-internal'
 import { captureStorageScope } from '../../utils/storageScope'
 import type { ArchiveSignal } from '../../utils/archiveSignal'
@@ -52,7 +52,7 @@ type RetryModification = ArchiveSignal['effect']
  *   leave `encryptedPayload`.
  */
 type RetryOutcome =
-  | { kind: 'decrypted'; authoredAt?: Date; body: string; securityContext?: MessageSecurityContext; attachment?: FileAttachment; unverified?: true }
+  | { kind: 'decrypted'; authoredAt?: Date; body: string; references?: MessageReference[]; securityContext?: MessageSecurityContext; attachment?: FileAttachment; unverified?: true }
   | { kind: 'modification'; modification: RetryModification; stanza: string; securityContext?: MessageSecurityContext; authoredAt?: Date }
   | { kind: 'unsupported'; info: { namespace: string; name: string } }
   | { kind: 'rejected'; securityContext?: MessageSecurityContext }
@@ -138,6 +138,7 @@ function recoveredUpdates(
 ) {
   return guardedUpdates(message, {
     body: outcome.body,
+    references: outcome.references,
     ...(outcome.securityContext && { securityContext: outcome.securityContext }),
     ...(outcome.attachment && { attachment: outcome.attachment }),
     ...(message.isEdited && {
@@ -723,6 +724,7 @@ export class DeferredDecryptEngine {
         kind: 'decrypted',
         ...(parsed.timestampSource === 'authored' && { authoredAt: parsed.timestamp }),
         body: processedBody,
+        references: parsed.references,
         ...(securityContext && { securityContext }),
         ...(attachment && { attachment }),
         ...(unverified && { unverified: true as const }),

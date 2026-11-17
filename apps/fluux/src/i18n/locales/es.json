@@ -548,6 +548,8 @@
         "previewUnavailable": "Vista previa no disponible",
         "truncated": "truncado",
         "messageDeleted": "Mensaje eliminado",
+        "joinRoomToSeeMessage": "Únete a la sala para ver el mensaje",
+        "linkedMessagePreview": "Abrir el mensaje en la sala",
         "messageModerated": "Mensaje eliminado por {{moderator}}",
         "deleteMessage": "Eliminar mensaje",
         "deleteMessageConfirm": "Esto eliminará este mensaje. Esta acción no se puede deshacer.",

@@ -547,6 +547,8 @@
         "previewUnavailable": "Aperçu indisponible",
         "truncated": "tronqué",
         "messageDeleted": "Message supprimé",
+        "joinRoomToSeeMessage": "Rejoignez le salon pour voir le message",
+        "linkedMessagePreview": "Ouvrir le message dans le salon",
         "messageModerated": "Message supprimé par {{moderator}}",
         "deleteMessage": "Supprimer le message",
         "deleteMessageConfirm": "Ce message sera supprimé. Cette action est irréversible.",

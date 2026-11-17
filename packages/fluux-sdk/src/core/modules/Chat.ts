@@ -9,7 +9,8 @@ import { captureStorageScope } from '../../utils/storageScope'
 import { getBareJid, getLocalPart, getResource, isQuickChatJid } from '../jid'
 import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID, generateStableMessageId } from '../../utils/uuid'
-import { toCodePointOffset, fromCodePointOffset } from '../../utils/xep0426'
+import { toCodePointOffset } from '../../utils/xep0426'
+import { roomMessageLinkReferences } from '../../utils/roomMessageLink'
 import {
   NS_CHATSTATES,
   NS_CARBONS,
@@ -56,6 +57,7 @@ import type {
   Message,
   ChatMessageTarget,
   MentionReference,
+  MessageReference,
   FileAttachment,
   SendMessageOptions,
   ChatStateNotification,
@@ -71,7 +73,7 @@ import type {
   PollClosedData,
 } from '../types'
 import { getCorrectionStanzaIds, withCorrectionStanzaId, type StoredMessage, type StoredRoomMessage } from '../types/message-internal'
-import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, correctionMarks } from './messagingUtils'
+import { parseMessageContent, parseMessageReferences, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, correctionMarks } from './messagingUtils'
 import { checkForMention } from '../mentionDetection'
 import { parsePollElement, parsePollClosedElement } from '../poll'
 import { logWarn } from '../logger'
@@ -800,6 +802,13 @@ export class Chat extends BaseModule {
       (c): c is Element => typeof c !== 'string' && (c as Element).name === 'body',
     )
     if (bodyIdx >= 0) children[bodyIdx] = xml('body', {}, strippedBody)
+    const removedCodePoints = toCodePointOffset(fullBody, fallbackEnd)
+    for (const child of children) {
+      if (child.name !== 'reference' || child.attrs.xmlns !== NS_REFERENCE) continue
+      for (const attribute of ['begin', 'end']) {
+        if (child.attrs[attribute] !== undefined) child.attrs[attribute] = String(Number(child.attrs[attribute]) - removedCodePoints)
+      }
+    }
 
     const replyFallbackIdx = children.findIndex(
       (c) =>
@@ -848,7 +857,7 @@ export class Chat extends BaseModule {
    * plaintext by explicit product decision (see docs/ENCRYPTION.md).
    */
   private static readonly E2EE_PROTECTED_CHILD_KEYS: ReadonlySet<string> =
-    new Set([`x|${NS_OOB}`, `file|${NS_FILE_METADATA}`])
+    new Set([`x|${NS_OOB}`, `file|${NS_FILE_METADATA}`, `reference|${NS_REFERENCE}`])
 
   /** XEP-0444 reactions ride inside the envelope; the reacted-to id rides with them. */
   private static readonly E2EE_REACTION_KEYS: ReadonlySet<string> = new Set([
@@ -898,7 +907,11 @@ export class Chat extends BaseModule {
    * ```
    */
   async sendMessage(to: string, body: string, options?: SendMessageOptions): Promise<string> {
-    const { replyTo, references, attachment } = options ?? {}
+    const { replyTo, attachment } = options ?? {}
+    const references = [...(options?.references ?? [])]
+    for (const ref of roomMessageLinkReferences(body)) {
+      if (!references.some(existing => existing.type === 'data' && existing.uri === ref.uri)) references.push(ref)
+    }
     const type = this.conversationKind(to)
     const id = generateUUID()
     const recipient = type === 'chat' ? getBareJid(to) : to
@@ -960,12 +973,14 @@ export class Chat extends BaseModule {
         // Shift into that frame before converting to code points.
         children.push(xml('reference', {
           xmlns: NS_REFERENCE,
-          begin: String(toCodePointOffset(fullBody, fallbackEnd + ref.begin)),
-          end: String(toCodePointOffset(fullBody, fallbackEnd + ref.end)),
+          ...(ref.begin !== undefined && ref.end !== undefined ? {
+            begin: String(toCodePointOffset(fullBody, fallbackEnd + ref.begin)),
+            end: String(toCodePointOffset(fullBody, fallbackEnd + ref.end)),
+          } : {}),
           type: ref.type,
           uri: ref.uri,
         }))
-        if (!ref.uri.includes('/')) hasMentionAll = true
+        if (ref.type === 'mention' && !ref.uri.includes('/')) hasMentionAll = true
       }
       if (hasMentionAll) children.push(xml('mention-all', { xmlns: NS_MENTION_ALL }))
     }
@@ -1031,6 +1046,7 @@ export class Chat extends BaseModule {
         body: body === attachment?.url ? '' : body,
         timestamp: new Date(),
         isOutgoing: true,
+        ...(references.length && { references }),
         ...(replyTo && { replyTo: { id: replyTo.id, to: replyTo.to } }),
         ...(attachment && { attachment }),
         ...(outgoingSecurityContext && { securityContext: outgoingSecurityContext }),
@@ -1082,6 +1098,11 @@ export class Chat extends BaseModule {
       xml('body', {}, fullBody),
       xml('active', { xmlns: NS_CHATSTATES })
     ]
+
+    for (const ref of roomMessageLinkReferences(body)) {
+      children.push(xml('reference', { xmlns: NS_REFERENCE, type: ref.type, uri: ref.uri,
+        begin: String(toCodePointOffset(fullBody, ref.begin!)), end: String(toCodePointOffset(fullBody, ref.end!)) }))
+    }
 
     if (attachment) {
       const oobUrl = this.attachmentWireUrl(attachment.url, attachment.encryption)
@@ -1388,6 +1409,11 @@ export class Chat extends BaseModule {
       }
     }
 
+    for (const ref of roomMessageLinkReferences(newBody)) {
+      children.push(xml('reference', { xmlns: NS_REFERENCE, type: ref.type, uri: ref.uri,
+        begin: String(toCodePointOffset(bodyText, ref.begin!)), end: String(toCodePointOffset(bodyText, ref.end!)) }))
+    }
+
     const correctionStanzaId = generateUUID()
     children.push(createOriginIdElement(correctionStanzaId))
 
@@ -1421,6 +1447,7 @@ export class Chat extends BaseModule {
     if (original || type === 'chat' && typeof target !== 'string') {
       const updates = {
         body: newBody, isEdited: true, originalBody: original?.originalBody ?? original?.body, attachment,
+        references: roomMessageLinkReferences(newBody),
         encryptedPayload: undefined,
         ...(correctionSecurityContext && { securityContext: correctionSecurityContext }),
         correctionTimestamp: undefined, correctionTimestampSource: undefined, liveCorrection: true,
@@ -1724,6 +1751,16 @@ export class Chat extends BaseModule {
    */
   async queryRoomMAM(options: RoomHistoryQueryOptions): Promise<RoomHistoryResult> {
     return this.mamModule.queryRoomArchive(options)
+  }
+
+  /** Resolve a reader-built quote without changing the room timeline. */
+  async readRoomMessagePreview(roomJid: string, stanzaId: string, signal?: AbortSignal) {
+    return this.mamModule.readRoomMessagePreview(roomJid, stanzaId, signal)
+  }
+
+  /** Resolve a detached quote update against canonical room/cache/archive identity. */
+  async resolveRoomMessagePreviewTarget(message: RoomMessage, reference: string, signal?: AbortSignal) {
+    return this.mamModule.resolveRoomMessagePreviewTarget(message, reference, signal)
   }
 
   /** Resolve a joined room's message link from resident history, cache, then bounded archive context. */
@@ -2235,6 +2272,7 @@ export class Chat extends BaseModule {
       conversationId,
       from: bareFrom,
       body: parsed.processedBody,
+      ...(parsed.references && { references: parsed.references }),
       timestamp: parsed.timestamp,
       isOutgoing,
       ...(parsed.isDelayed && { isDelayed: true }),
@@ -2324,6 +2362,7 @@ export class Chat extends BaseModule {
       from,
       nick,
       body: parsed.processedBody,
+      ...(parsed.references && { references: parsed.references }),
       timestamp: parsed.timestamp,
       receivedAt: new Date(),
       isOutgoing,
@@ -2382,7 +2421,7 @@ export class Chat extends BaseModule {
         message.isMention = true
         message.isMentionAll = isMentionAll
       }
-      if (mentions.length > 0) message.mentions = mentions
+      if (mentions.length > 0) message.mentions = mentions.filter((ref): ref is MentionReference => ref.type === 'mention')
     }
 
     // SDK event only - binding calls store.addMessage
@@ -2461,6 +2500,7 @@ export class Chat extends BaseModule {
       from,
       nick,
       body: parsed.processedBody,
+      ...(parsed.references && { references: parsed.references }),
       timestamp: parsed.timestamp,
       receivedAt: new Date(),
       isOutgoing,
@@ -2561,24 +2601,8 @@ export class Chat extends BaseModule {
     })
   }
 
-  private parseMentions(stanza: Element): MentionReference[] {
-    const refs = stanza.getChildren('reference', NS_REFERENCE)
-    // XEP-0372 offsets index the body in code points (XEP-0426). Convert against
-    // the raw <body/>, not the fallback-stripped one: the sender counted the body
-    // as it appears on the wire, and consumers highlight against that same text.
-    const wireBody = stanza.getChildText('body') ?? ''
-    return refs.flatMap(ref => {
-      if (ref.attrs.type !== 'mention') return []
-      const begin = parseInt(ref.attrs.begin, 10)
-      const end = parseInt(ref.attrs.end, 10)
-      if (isNaN(begin) || isNaN(end)) return []
-      return [{
-        begin: fromCodePointOffset(wireBody, begin),
-        end: fromCodePointOffset(wireBody, end),
-        type: 'mention' as const,
-        uri: ref.attrs.uri,
-      }]
-    })
+  private parseMentions(stanza: Element): MessageReference[] {
+    return parseMessageReferences(stanza) ?? []
   }
 
   private checkForMentionAll(body: string, hasMentionAllElement: boolean): boolean {

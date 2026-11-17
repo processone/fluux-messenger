@@ -544,6 +544,8 @@
         "previewUnavailable": "Az előnézet nem érhető el",
         "truncated": "levágva",
         "messageDeleted": "Üzenet törölve",
+        "joinRoomToSeeMessage": "Csatlakozz a szobához az üzenet megtekintéséhez",
+        "linkedMessagePreview": "Üzenet megnyitása a szobában",
         "messageModerated": "Üzenetet eltávolította: {{moderator}}",
         "deleteMessage": "Üzenet törlése",
         "deleteMessageConfirm": "Ez törli ezt az üzenetet. Ez a művelet nem vonható vissza.",

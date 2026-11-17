@@ -552,6 +552,8 @@
         "previewUnavailable": "Preview mhux disponibbli",
         "truncated": "imqassar",
         "messageDeleted": "Messaġġ imħassar",
+        "joinRoomToSeeMessage": "Ingħaqad mal-kamra biex tara l-messaġġ",
+        "linkedMessagePreview": "Iftaħ il-messaġġ fil-kamra",
         "messageModerated": "Messaġġ imneħħi minn {{moderator}}",
         "deleteMessage": "Ħassar messaġġ",
         "deleteMessageConfirm": "Dan se jħassar dan il-messaġġ. Din l-azzjoni ma tistax tiġi annullata.",

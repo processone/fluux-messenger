@@ -549,6 +549,8 @@
         "previewUnavailable": "Náhľad nie je dostupný",
         "truncated": "skrátené",
         "messageDeleted": "Správa vymazaná",
+        "joinRoomToSeeMessage": "Pripojte sa k miestnosti a zobrazte správu",
+        "linkedMessagePreview": "Otvoriť správu v miestnosti",
         "messageModerated": "Správa odstránená používateľom {{moderator}}",
         "deleteMessage": "Vymazať správu",
         "deleteMessageConfirm": "Táto správa bude vymazaná. Túto akciu nemožno vrátiť späť.",

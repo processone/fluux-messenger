@@ -59,6 +59,17 @@ export interface MentionReference {
   uri: string
 }
 
+/** A non-embedded resource reference (XEP-0372). Offsets are optional. */
+export interface DataReference {
+  type: 'data'
+  uri: string
+  begin?: number
+  end?: number
+}
+
+/** XEP-0372 references accepted by the messaging API. */
+export type MessageReference = MentionReference | DataReference
+
 /**
  * The message an outgoing one replies to (XEP-0461).
  *
@@ -90,8 +101,8 @@ export interface ReplyTarget {
 export interface SendMessageOptions {
   /** Reply to an earlier message (XEP-0461). */
   replyTo?: ReplyTarget
-  /** Mentions to mark in the body (XEP-0372). */
-  references?: MentionReference[]
+  /** Mention or resource references (XEP-0372); pasted room links are added automatically. */
+  references?: MessageReference[]
   /** File to attach (XEP-0066, XEP-0363). */
   attachment?: FileAttachment
 }

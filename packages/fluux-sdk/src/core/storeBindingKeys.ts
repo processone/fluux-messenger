@@ -126,6 +126,7 @@ export const eventsBindingMethodKeys = [
 
 export const roomBindingMethodKeys = [
   'getMessageByArchiveId',
+  'getMessageByReference',
   'saveMessageLinkContext',
   'addRoom',
   'updateRoom',

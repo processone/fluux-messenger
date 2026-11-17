@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
+import { activateChat } from './harness/scrollHarness'
 import { waitForActions } from './harness/messageInteraction'
 import { ROOM_JID as ROOM } from '../apps/fluux/src/demo/constants'
 
@@ -53,6 +54,60 @@ test('copy a room message link and jump to it from another chat', async ({ page 
   await expect(highlighted).toBeInViewport()
   await expect(highlighted).toHaveCount(1)
   expect(page.context().pages()).toHaveLength(1)
+})
+
+// Approved preview piece: the reader builds the quote from its own room copy;
+// an unjoined room discloses only its address and the deliberate Join action.
+test('shared links show member quotes, deleted targets and non-member Join chips', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+  await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(ROOM)}`)
+  const target = await page.evaluate(async roomJid => {
+    const scope = window as unknown as { __demoClient: DemoClient; __roomStore: typeof roomStore }
+    scope.__demoClient.stopAnimation()
+    await scope.__roomStore.getState().activateRoom(roomJid)
+    const row = scope.__roomStore.getState().messages.get(roomJid)!.find(row => row.id === 'demo-room-whisper-pub')!
+    return { id: row.id, stanzaId: row.stanzaId!, body: row.body, nick: row.nick }
+  }, ROOM)
+  await activateChat(page, 'emma@fluux.chat')
+  const link = `xmpp:${ROOM}?join;msg=${encodeURIComponent(target.stanzaId)}`
+  const outside = 'xmpp:engineering@conference.fluux.chat?join;msg=1731490000123456'
+  await page.evaluate(({ link, outside }) => {
+    const scope = window as unknown as { __demoClient: DemoClient }
+    const peer = 'emma@fluux.chat'
+    for (const [id, body, references] of [
+      ['member-link', link, undefined],
+      ['reference-link', 'See the room update', [{ type: 'data', uri: link }]],
+      ['nonmember-link', outside, undefined],
+    ] as const) scope.__demoClient.emitSDK('chat:message', { message: {
+      type: 'chat', id, body, references: references ? [...references] : undefined,
+      conversationId: peer, from: peer, stanzaId: undefined, originId: undefined,
+      timestamp: new Date(), isOutgoing: false,
+    }, isLiveArrival: true })
+  }, { link, outside })
+  const member = page.locator('[data-message-id="member-link"][data-message-body] [data-room-message-preview]')
+  const reference = page.locator('[data-message-id="reference-link"][data-message-body] [data-room-message-preview]')
+  const nonmember = page.locator('[data-message-id="nonmember-link"][data-message-body] [data-room-message-preview]')
+  await expect(member).toContainText(target.body)
+  await expect(member).toContainText(target.nick)
+  await expect(reference).toContainText(target.body)
+  await expect(nonmember).toContainText('Join the room to see it')
+  await expect(nonmember).not.toContainText(target.body)
+  await nonmember.getByRole('link').click()
+  await expect(page.getByRole('button', { name: /Join room/ })).toBeVisible()
+  expect(await page.evaluate(jid => (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState().rooms.get(jid)?.joined,
+    'engineering@conference.fluux.chat')).toBe(false)
+  await activateChat(page, 'emma@fluux.chat')
+  await member.getByRole('link').click()
+  await expect(page.locator(`[data-message-id="${target.id}"].message-highlight`)).toBeInViewport()
+  expect(page.context().pages()).toHaveLength(1)
+  await activateChat(page, 'emma@fluux.chat')
+  await page.evaluate(({ roomJid, target }) => {
+    const scope = window as unknown as { __demoClient: DemoClient }
+    scope.__demoClient.emitSDK('room:message-updated', { roomJid, messageId: target.id,
+      updates: { isRetracted: true, body: '' } })
+  }, { roomJid: ROOM, target })
+  await expect(member).toContainText('Message deleted')
+  await expect(reference).not.toContainText(target.body)
 })
 
 test.describe('mobile message links', () => {
