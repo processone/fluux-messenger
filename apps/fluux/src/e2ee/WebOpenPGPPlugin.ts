@@ -40,6 +40,7 @@ import {
   type CertValidation,
   type DecryptOutput,
   type KeyBundle,
+  type OpenPGPHostStores,
   type RestoreResult,
 } from '@fluux/openpgp-plugin'
 
@@ -122,6 +123,10 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
 
   /** Transient cache of parsed keys from backupImportAll, keyed by fingerprint. */
   private pendingImportKeys: Map<string, PrivateKey> = new Map()
+
+  constructor(stores: OpenPGPHostStores) {
+    super(stores)
+  }
 
   protected pluginName(): string {
     return 'WebOpenPGPPlugin'

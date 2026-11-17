@@ -26,6 +26,7 @@ import {
   type DecryptOutput,
   type KeyBundle,
   type KeychainRetryAvailability,
+  type OpenPGPHostStores,
 } from '@fluux/openpgp-plugin'
 
 /**
@@ -35,6 +36,8 @@ import {
 export type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>
 
 export interface SequoiaPgpPluginOptions {
+  /** The host's trust and status state. */
+  stores: OpenPGPHostStores
   /** Tauri command dispatcher. Tests pass a mock; app code passes the real one. */
   invoke: InvokeFn
   /** Bounds on native calls, in milliseconds. Defaults to {@link NATIVE_CALL_TIMEOUTS_MS}. */
@@ -120,7 +123,7 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   private readonly invoke: InvokeFn
 
   constructor(options: SequoiaPgpPluginOptions) {
-    super()
+    super(options.stores)
     this.invoke = boundedInvoke(options.invoke, { ...NATIVE_CALL_TIMEOUTS_MS, ...options.timeouts })
   }
 

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { TrustStateStatus } from '@fluux/openpgp-plugin'
 
 /**
  * Trust-state integrity status, re-evaluated on every session.
@@ -12,13 +13,6 @@ import { create } from 'zustand'
  * Not persisted: the check runs on every plugin init after the key
  * becomes available, producing a fresh verdict each session.
  */
-export type TrustStateStatus =
-  | 'uninitialized'
-  | 'sealed'
-  | 'pending-seal'
-  | 'awaiting-key'
-  | 'compromised'
-
 interface TrustStateStatusState {
   status: TrustStateStatus
   mismatchDetails?: string[]

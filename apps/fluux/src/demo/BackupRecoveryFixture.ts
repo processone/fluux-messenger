@@ -8,6 +8,7 @@ import { xml, type Element } from '@fluux/sdk/xmpp'
 import type { XMPPPrimitives, PEPItem } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
 import { chatStore } from '@fluux/sdk/stores'
+import { createAppHostStores } from '@/e2ee/appHostStores'
 import { SequoiaPgpPlugin, type InvokeFn } from '@/e2ee/SequoiaPgpPlugin'
 import type { KeyBundle } from '@fluux/openpgp-plugin'
 import { parseSecretKeysFromBackupPayload, withPassphraseFormatHeader } from '@fluux/openpgp-plugin'
@@ -223,5 +224,5 @@ export function createBackupRecoveryFixture() {
       },
     }
   }
-  return { attachPepReader, attachTransitions, seedPending, plugin: new FixturePlugin({ invoke }) as SequoiaPgpPlugin, xmpp, meta, audit }
+  return { attachPepReader, attachTransitions, seedPending, plugin: new FixturePlugin({ invoke, stores: createAppHostStores() }) as SequoiaPgpPlugin, xmpp, meta, audit }
 }

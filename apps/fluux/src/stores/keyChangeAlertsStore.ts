@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { buildScopedStorageKey } from '@fluux/sdk'
+import type { KeyChangeAlert } from '@fluux/openpgp-plugin'
 
 /**
  * Key-change alerts: per-peer entries that say "this peer was once
@@ -23,16 +24,6 @@ import { buildScopedStorageKey } from '@fluux/sdk'
  * hasn't acknowledged yet, which is the worst possible outcome for a
  * security-relevant signal.
  */
-interface KeyChangeAlert {
-  /** Fingerprint the user had previously verified. */
-  previousFingerprint: string
-  /** Fingerprint now cached for the peer (their current key). */
-  currentFingerprint: string
-  /** ISO timestamp when the rotation was first observed. Useful for
-   *  ordering and for surfacing "key changed N days ago" copy later. */
-  observedAt: string
-}
-
 interface KeyChangeAlertsState {
   alertsByJid: Record<string, KeyChangeAlert>
   setAlert: (jid: string, alert: KeyChangeAlert) => void
@@ -165,4 +156,3 @@ export function rehydrateKeyChangeAlerts(): void {
   useKeyChangeAlertsStore.getState().rehydrate()
 }
 
-export type { KeyChangeAlert }

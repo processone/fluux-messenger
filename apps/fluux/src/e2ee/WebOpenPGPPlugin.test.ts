@@ -9,6 +9,7 @@
  * realm-sensitive `instanceof Uint8Array` checks that fail under
  * jsdom (which uses a different realm than Node's globals).
  */
+import { createAppHostStores } from './appHostStores'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -341,7 +342,7 @@ afterEach(() => {
 describe('WebOpenPGPPlugin', () => {
   describe('ensureKeyMaterial', () => {
     it('throws key-locked when no session passphrase is set', async () => {
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       await plugin.init(ctx)
 
@@ -351,7 +352,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('generates a new key when none is stored and a passphrase is set', async () => {
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('hunter2-strong-passphrase')
       await plugin.init(ctx)
@@ -366,7 +367,7 @@ describe('WebOpenPGPPlugin', () => {
     it('publishes the own public-key node id and v4/v6-fingerprint in upper-case (XEP-0373 §4.1, issue #528)', async () => {
       const shared: SharedPep = new Map()
       setSessionPassphrase('hunter2-strong-passphrase')
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       // init() → ensureIdentity() generates the key and publishes both PEP nodes.
       await plugin.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
       const bundle = await plugin.callEnsureKeyMaterial('alice@example.com')
@@ -404,7 +405,7 @@ describe('WebOpenPGPPlugin', () => {
       // ensureIdentity must run BEFORE ensureKeyMaterial, so a server
       // that can never host the published key doesn't end up with an
       // orphan private key parked in IndexedDB.
-      const plugin = new WebOpenPGPPlugin()
+      const plugin = new WebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('hunter2-strong-passphrase')
       ctx.xmpp.queryDisco = async () => ({ features: [], identities: [] })
@@ -420,7 +421,7 @@ describe('WebOpenPGPPlugin', () => {
       const passphrase = 'hunter2-strong-passphrase'
 
       // First instance: generate.
-      const first = new TestableWebOpenPGPPlugin()
+      const first = new TestableWebOpenPGPPlugin(createAppHostStores())
       const ctx1 = makeCtx('alice@example.com', backend).ctx
       setSessionPassphrase(passphrase)
       await first.init(ctx1)
@@ -428,7 +429,7 @@ describe('WebOpenPGPPlugin', () => {
 
       // Simulate a page reload: new plugin, same backend, same passphrase.
       clearSessionPassphrase()
-      const second = new TestableWebOpenPGPPlugin()
+      const second = new TestableWebOpenPGPPlugin(createAppHostStores())
       const ctx2 = makeCtx('alice@example.com', backend).ctx
       setSessionPassphrase(passphrase)
       await second.init(ctx2)
@@ -440,7 +441,7 @@ describe('WebOpenPGPPlugin', () => {
 
     it('rejects a wrong passphrase with wrong-passphrase code', async () => {
       const backend = new InMemoryStorageBackend()
-      const first = new TestableWebOpenPGPPlugin()
+      const first = new TestableWebOpenPGPPlugin(createAppHostStores())
       const ctx1 = makeCtx('alice@example.com', backend).ctx
       setSessionPassphrase('correct-passphrase-123')
       await first.init(ctx1)
@@ -449,7 +450,7 @@ describe('WebOpenPGPPlugin', () => {
       // Same backend, different passphrase → init() reaches ensureIdentity
       // which propagates wrong-passphrase (only key-locked is swallowed).
       clearSessionPassphrase()
-      const second = new TestableWebOpenPGPPlugin()
+      const second = new TestableWebOpenPGPPlugin(createAppHostStores())
       const ctx2 = makeCtx('alice@example.com', backend).ctx
       setSessionPassphrase('totally-different-pp')
 
@@ -471,7 +472,7 @@ describe('WebOpenPGPPlugin', () => {
       // itself swallows the error so the plugin stays registered for the
       // user-driven resolution path (see dedicated test below).
       const { ctx } = makeCtxWithPublishedFingerprint('alice@example.com', 'a1'.repeat(20))
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       // Do NOT call init() — we want to reach ensureKeyMaterial directly
       // to assert the guard's behaviour without depending on the init
       // wrapper's error-swallowing policy.
@@ -495,7 +496,7 @@ describe('WebOpenPGPPlugin', () => {
       // `retireAndGenerateIdentity`) through the registered plugin. If
       // init propagated, every subsequent call would have to re-register.
       const { ctx } = makeCtxWithPublishedFingerprint('alice@example.com', 'b2'.repeat(20))
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       setSessionPassphrase('strong-test-passphrase-123')
       // No throw expected — the guard fires inside ensureIdentity, init
       // recognises the error code and swallows it (same shape as the
@@ -542,7 +543,7 @@ describe('WebOpenPGPPlugin', () => {
         account: { jid: 'alice@example.com' },
         reportSecurityContextUpdate: () => {},
       }
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       setSessionPassphrase('strong-test-passphrase-123')
       await plugin.init(ctx)
       await expect(
@@ -555,7 +556,7 @@ describe('WebOpenPGPPlugin', () => {
     it('still generates silently when neither a backup nor a public key exists', async () => {
       // Truly fresh account — first-ever setup. The user has nothing to
       // lose by generating; the existing flow is the right path.
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('strong-test-passphrase-123')
       await plugin.init(ctx)
@@ -566,7 +567,7 @@ describe('WebOpenPGPPlugin', () => {
 
   describe('crypto round-trip', () => {
     it('encryptToRecipient → decryptWithOwnKey returns the original plaintext', async () => {
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('hunter2-strong-passphrase')
       await plugin.init(ctx)
@@ -600,7 +601,7 @@ describe('WebOpenPGPPlugin', () => {
       // parsing … does not conform to a valid OpenPGP format". That is
       // terminal, so the plugin must surface a permanent 'malformed-data'
       // E2EEPluginError — the SDK uses that to stop re-stashing it for retry.
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('hunter2-strong-passphrase')
       await plugin.init(ctx)
@@ -621,7 +622,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('decrypts without a sender public key (no verification possible)', async () => {
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('hunter2-strong-passphrase')
       await plugin.init(ctx)
@@ -653,7 +654,7 @@ describe('WebOpenPGPPlugin', () => {
       // zero tolerance. When the sender's machine clock is a little ahead,
       // a freshly-signed message fails to verify. The verifier must allow a
       // small clock-skew window.
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('hunter2-strong-passphrase')
       await plugin.init(ctx)
@@ -693,7 +694,7 @@ describe('WebOpenPGPPlugin', () => {
       // grossly in the future (well past the tolerance window) is still not
       // trusted. This distinguishes "allow modest skew" from "disable the
       // creation-time check entirely".
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('hunter2-strong-passphrase')
       await plugin.init(ctx)
@@ -729,7 +730,7 @@ describe('WebOpenPGPPlugin', () => {
       // A signature dated past the skew window fails to verify, but the cause
       // is a clock difference, not a bad key — so it must be marked transient
       // so the upper layer can retry it rather than reject it permanently.
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('hunter2-strong-passphrase')
       await plugin.init(ctx)
@@ -764,7 +765,7 @@ describe('WebOpenPGPPlugin', () => {
     it('does NOT flag a genuine key mismatch as not-yet-valid (permanent)', async () => {
       // Signature made by one key, verified against a different key → a real
       // failure that must stay permanent (not retried, not self-healing).
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('hunter2-strong-passphrase')
       await plugin.init(ctx)
@@ -803,7 +804,7 @@ describe('WebOpenPGPPlugin', () => {
 
   describe('validateCert', () => {
     it('returns the fingerprint and a positive subkey count for a generated key', async () => {
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('hunter2-strong-passphrase')
       await plugin.init(ctx)
@@ -827,7 +828,7 @@ describe('WebOpenPGPPlugin', () => {
       const backupPassphrase = 'correct horse battery staple eight words ok'
 
       // Source plugin: generate + back up.
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       const sourceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('source-session-pp')
       await source.init(sourceCtx)
@@ -842,7 +843,7 @@ describe('WebOpenPGPPlugin', () => {
       // Destination plugin: empty backend + no session passphrase initially.
       // backupImport must accept the backup passphrase as the new session pp.
       clearSessionPassphrase()
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const destCtx = makeCtx('alice@example.com').ctx
       await dest.init(destCtx) // locked — that's fine for import
       const restored = await dest.callBackupImport(
@@ -872,7 +873,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('rejects backup decryption with the wrong passphrase', async () => {
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       const sourceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('session-pp')
       await source.init(sourceCtx)
@@ -882,7 +883,7 @@ describe('WebOpenPGPPlugin', () => {
         'right-backup-passphrase',
       )
 
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const destCtx = makeCtx('alice@example.com').ctx
       await dest.init(destCtx)
 
@@ -894,7 +895,7 @@ describe('WebOpenPGPPlugin', () => {
 
   describe('file export header', () => {
     it('exported armor carries Passphrase-Format: xep0373 and round-trips', async () => {
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       const sourceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('source-session-pp')
       await source.init(sourceCtx)
@@ -906,7 +907,7 @@ describe('WebOpenPGPPlugin', () => {
 
       // The header must not break import: a fresh plugin recovers the key.
       clearSessionPassphrase()
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const destCtx = makeCtx('alice@example.com').ctx
       await dest.init(destCtx)
       const restored = await dest.callBackupImport(
@@ -918,7 +919,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('backupEncrypt output (PEP/server backup) carries NO Passphrase-Format header', async () => {
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       const sourceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('source-session-pp')
       await source.init(sourceCtx)
@@ -951,7 +952,7 @@ describe('WebOpenPGPPlugin', () => {
         passwords: ['pw'],
       })) as string
 
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('v6@example.com')
       await dest.init(ctx)
 
@@ -974,7 +975,7 @@ describe('WebOpenPGPPlugin', () => {
         passwords: ['pw'],
       })) as string
 
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('v4@example.com')
       await dest.init(ctx)
 
@@ -1004,7 +1005,7 @@ describe('WebOpenPGPPlugin', () => {
         passwords: ['pw'],
       })) as string
 
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('imported@example.com')
       await dest.init(ctx)
 
@@ -1038,7 +1039,7 @@ describe('WebOpenPGPPlugin', () => {
         passwords: ['pw'],
       })) as string
 
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('already@example.com')
       await dest.init(ctx)
 
@@ -1058,7 +1059,7 @@ describe('WebOpenPGPPlugin', () => {
 
   describe('key lifecycle helpers', () => {
     it('hasNoLocalKey returns true before generation, false after', async () => {
-      const plugin = new WebOpenPGPPlugin()
+      const plugin = new WebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('session-pp')
       await plugin.init(ctx)
@@ -1068,7 +1069,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('hasNoLocalKey returns true on a freshly-installed locked plugin', async () => {
-      const plugin = new WebOpenPGPPlugin()
+      const plugin = new WebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       // No passphrase → init catches key-locked, no key generated.
       await plugin.init(ctx)
@@ -1077,7 +1078,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('forgetAccount removes the stored key', async () => {
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('session-pp')
       await plugin.init(ctx)
@@ -1113,12 +1114,12 @@ describe('WebOpenPGPPlugin', () => {
 
       // Alice device-A — generates the account key.
       setSessionPassphrase(passphrase)
-      const aliceDeviceA = new WebOpenPGPPlugin()
+      const aliceDeviceA = new WebOpenPGPPlugin(createAppHostStores())
       const aliceACtx = makeCtxWithSharedPep('alice@example.com', shared, aliceBackend).ctx
       await aliceDeviceA.init(aliceACtx)
       // Force key generation via probePeer's underlying ensureKey.
       // Easier path: use the Testable wrapper directly.
-      const aliceFromInit = new TestableWebOpenPGPPlugin()
+      const aliceFromInit = new TestableWebOpenPGPPlugin(createAppHostStores())
       const aliceInitCtx = makeCtxWithSharedPep('alice@example.com', shared, aliceBackend).ctx
       await aliceFromInit.init(aliceInitCtx)
       const aliceBundle = await aliceFromInit.callEnsureKeyMaterial('alice@example.com')
@@ -1127,7 +1128,7 @@ describe('WebOpenPGPPlugin', () => {
       // loads the same private key.
       clearSessionPassphrase()
       setSessionPassphrase(passphrase)
-      const aliceDeviceB = new WebOpenPGPPlugin()
+      const aliceDeviceB = new WebOpenPGPPlugin(createAppHostStores())
       const aliceBCtx = makeCtxWithSharedPep('alice@example.com', shared, aliceBackend).ctx
       await aliceDeviceB.init(aliceBCtx)
       // Force device-B to load (rather than regenerate) the existing key.
@@ -1139,7 +1140,7 @@ describe('WebOpenPGPPlugin', () => {
       // Bob — different identity, his own backend.
       clearSessionPassphrase()
       setSessionPassphrase('bob-passphrase-strong')
-      const bob = new TestableWebOpenPGPPlugin()
+      const bob = new TestableWebOpenPGPPlugin(createAppHostStores())
       const bobCtx = makeCtxWithSharedPep('bob@example.com', shared).ctx
       await bob.init(bobCtx)
       const bobBundle = await bob.callEnsureKeyMaterial('bob@example.com')
@@ -1285,14 +1286,14 @@ describe('WebOpenPGPPlugin', () => {
   describe('encrypt-to-self', () => {
     it('sender can decrypt their own outgoing ciphertext', async () => {
       // Alice and Bob each get their own plugin/key.
-      const alice = new TestableWebOpenPGPPlugin()
+      const alice = new TestableWebOpenPGPPlugin(createAppHostStores())
       const aliceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('alice-pp')
       await alice.init(aliceCtx)
       const aliceBundle = await alice.callEnsureKeyMaterial('alice@example.com')
 
       clearSessionPassphrase()
-      const bob = new TestableWebOpenPGPPlugin()
+      const bob = new TestableWebOpenPGPPlugin(createAppHostStores())
       const bobCtx = makeCtx('bob@example.com').ctx
       setSessionPassphrase('bob-pp')
       await bob.init(bobCtx)
@@ -1327,7 +1328,7 @@ describe('WebOpenPGPPlugin', () => {
 
   describe('encrypt — missing peer key', () => {
     it('throws E2EEPluginError with code peer-key-missing when peerKeys has no entry for the peer', async () => {
-      const alice = new TestableWebOpenPGPPlugin()
+      const alice = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('alice-pp')
       await alice.init(ctx)
@@ -1351,14 +1352,14 @@ describe('WebOpenPGPPlugin', () => {
 
   describe('signer fingerprint format', () => {
     it('returns the full primary cert fingerprint, not a short key ID', async () => {
-      const alice = new TestableWebOpenPGPPlugin()
+      const alice = new TestableWebOpenPGPPlugin(createAppHostStores())
       const aliceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('alice-pp')
       await alice.init(aliceCtx)
       const aliceBundle = await alice.callEnsureKeyMaterial('alice@example.com')
 
       clearSessionPassphrase()
-      const bob = new TestableWebOpenPGPPlugin()
+      const bob = new TestableWebOpenPGPPlugin(createAppHostStores())
       const bobCtx = makeCtx('bob@example.com').ctx
       setSessionPassphrase('bob-pp')
       await bob.init(bobCtx)
@@ -1394,7 +1395,7 @@ describe('WebOpenPGPPlugin', () => {
       // OX may advertise several public keys for one JID. encryptToRecipients
       // must encrypt to EVERY supplied recipient key so each holder can read
       // the message — not just the first.
-      const alice = new TestableWebOpenPGPPlugin()
+      const alice = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('alice-strong-pp')
       await alice.init(ctx)
@@ -1430,7 +1431,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('verifies a signature from any of several sender keys and returns the PRIMARY fingerprint', async () => {
-      const alice = new TestableWebOpenPGPPlugin()
+      const alice = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('alice-strong-pp')
       await alice.init(ctx)
@@ -1474,7 +1475,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('reports missing-key with null fingerprint when the signing key is absent', async () => {
-      const alice = new TestableWebOpenPGPPlugin()
+      const alice = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('alice-strong-pp')
       await alice.init(ctx)
@@ -1517,7 +1518,7 @@ describe('WebOpenPGPPlugin', () => {
 
   describe('backup passphrase is used verbatim (#1021)', () => {
     it('imports with the exact code, rejects a case-folded one', async () => {
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       const sourceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('session-pp')
       await source.init(sourceCtx)
@@ -1527,7 +1528,7 @@ describe('WebOpenPGPPlugin', () => {
       const backupMessage = await source.callBackupEncrypt('alice@example.com', code)
 
       clearSessionPassphrase()
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       await dest.init(makeCtx('alice@example.com').ctx)
       // Case-folding is NOT forgiven — the passphrase is opaque key
       // material used byte-for-byte, like every other XEP-0373 client.
@@ -1540,7 +1541,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('forgives surrounding whitespace only (paste artifacts)', async () => {
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       const sourceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('session-pp')
       await source.init(sourceCtx)
@@ -1552,7 +1553,7 @@ describe('WebOpenPGPPlugin', () => {
       )
 
       clearSessionPassphrase()
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       await dest.init(makeCtx('alice@example.com').ctx)
       const restored = await dest.callBackupImport(
         'alice@example.com',
@@ -1565,7 +1566,7 @@ describe('WebOpenPGPPlugin', () => {
 
   describe('validateCert filtering', () => {
     it('counts only encryption-capable subkeys', async () => {
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('session-pp')
       await plugin.init(ctx)
@@ -1584,7 +1585,7 @@ describe('WebOpenPGPPlugin', () => {
       const passphrase = 'shared-passphrase'
 
       // Generate a key first (this populates the storage backend).
-      const setup = new WebOpenPGPPlugin()
+      const setup = new WebOpenPGPPlugin(createAppHostStores())
       const setupCtx = makeCtx('alice@example.com', backend).ctx
       setSessionPassphrase(passphrase)
       await setup.init(setupCtx)
@@ -1593,7 +1594,7 @@ describe('WebOpenPGPPlugin', () => {
 
       // Simulate a fresh session: clear passphrase + new plugin instance.
       clearSessionPassphrase()
-      const fresh = new WebOpenPGPPlugin()
+      const fresh = new WebOpenPGPPlugin(createAppHostStores())
       const freshCtx = makeCtx('alice@example.com', backend).ctx
       await fresh.init(freshCtx)
       // Locked: no fingerprint yet.
@@ -1606,13 +1607,13 @@ describe('WebOpenPGPPlugin', () => {
     it('clears the session passphrase on a wrong-passphrase unlock (no backup available)', async () => {
       const backend = new InMemoryStorageBackend()
 
-      const setup = new WebOpenPGPPlugin()
+      const setup = new WebOpenPGPPlugin(createAppHostStores())
       const setupCtx = makeCtx('alice@example.com', backend).ctx
       setSessionPassphrase('the-real-passphrase')
       await setup.init(setupCtx)
 
       clearSessionPassphrase()
-      const fresh = new WebOpenPGPPlugin()
+      const fresh = new WebOpenPGPPlugin(createAppHostStores())
       const freshCtx = makeCtx('alice@example.com', backend).ctx
       await fresh.init(freshCtx)
 
@@ -1631,7 +1632,7 @@ describe('WebOpenPGPPlugin', () => {
 
   describe('multi-TSK backup (backupImportAll / backupImportSelected)', () => {
     it('backupImportAll returns a single-element array for a single-key backup', async () => {
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       const sourceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('session-pp')
       await source.init(sourceCtx)
@@ -1640,7 +1641,7 @@ describe('WebOpenPGPPlugin', () => {
       const backupMessage = await source.callBackupEncrypt('alice@example.com', 'backup-pp')
 
       clearSessionPassphrase()
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const destCtx = makeCtx('alice@example.com').ctx
       await dest.init(destCtx)
 
@@ -1653,7 +1654,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('backupImportSelected installs the chosen key and enables decryption', async () => {
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       const sourceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('session-pp')
       await source.init(sourceCtx)
@@ -1669,7 +1670,7 @@ describe('WebOpenPGPPlugin', () => {
       )
 
       clearSessionPassphrase()
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const destCtx = makeCtx('alice@example.com').ctx
       await dest.init(destCtx)
 
@@ -1692,7 +1693,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('backupImportAll rejects a wrong passphrase', async () => {
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       const sourceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('session-pp')
       await source.init(sourceCtx)
@@ -1700,7 +1701,7 @@ describe('WebOpenPGPPlugin', () => {
 
       const backupMessage = await source.callBackupEncrypt('alice@example.com', 'right-pp')
 
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const destCtx = makeCtx('alice@example.com').ctx
       await dest.init(destCtx)
 
@@ -1710,7 +1711,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('backupImportSelected rejects an unknown fingerprint', async () => {
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       const sourceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('session-pp')
       await source.init(sourceCtx)
@@ -1719,7 +1720,7 @@ describe('WebOpenPGPPlugin', () => {
       const backupMessage = await source.callBackupEncrypt('alice@example.com', 'backup-pp')
 
       clearSessionPassphrase()
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const destCtx = makeCtx('alice@example.com').ctx
       await dest.init(destCtx)
 
@@ -1763,7 +1764,7 @@ describe('WebOpenPGPPlugin', () => {
       const message = await createMessage({ binary: combined })
       const backupMessage = await encrypt({ message, passwords: ['multi-pp'] }) as string
 
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const destCtx = makeCtx('alice@example.com').ctx
       await dest.init(destCtx)
 
@@ -1808,7 +1809,7 @@ describe('WebOpenPGPPlugin', () => {
       })
       const armoredPrivateKey = privateKey.armor()
 
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('bob@example.com')
       await dest.init(ctx)
 
@@ -1818,7 +1819,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('rejects a public-key block (neither MESSAGE nor PRIVATE KEY BLOCK)', async () => {
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('carol@example.com')
       await dest.init(ctx)
       const garbage = `-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nmQGN...\n-----END PGP PUBLIC KEY BLOCK-----\n`
@@ -1829,7 +1830,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('rejects an unparseable private-key block', async () => {
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('dave@example.com')
       await dest.init(ctx)
       const broken = `-----BEGIN PGP PRIVATE KEY BLOCK-----\n\nnot-real-base64-data\n-----END PGP PRIVATE KEY BLOCK-----\n`
@@ -1853,7 +1854,7 @@ describe('WebOpenPGPPlugin', () => {
       privateKey.subkeys = []
       const armoredPrivateKey = privateKey.armor()
 
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('eve@example.com')
       await dest.init(ctx)
 
@@ -1878,7 +1879,7 @@ describe('WebOpenPGPPlugin', () => {
       )
       expect(armoredPrivateKey.startsWith('-----BEGIN PGP PRIVATE KEY BLOCK-----')).toBe(true)
 
-      const dest = new TestableWebOpenPGPPlugin()
+      const dest = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('fixture@fluux.test')
       await dest.init(ctx)
 
@@ -1898,7 +1899,7 @@ describe('WebOpenPGPPlugin', () => {
 
   describe('selectKeyFromBackup heuristic', () => {
     it('returns null for an empty bundle array', async () => {
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('session-pp')
       await plugin.init(ctx)
@@ -1908,7 +1909,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('auto-selects (needsPicker=false) when there is exactly one key', async () => {
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('session-pp')
       await plugin.init(ctx)
@@ -1928,7 +1929,7 @@ describe('WebOpenPGPPlugin', () => {
 
     it('auto-selects via metadata match when published FP matches a candidate', async () => {
       const metadataFp = 'AABBCCDD11223344'
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       ctx.xmpp.queryPEP = async (_jid: string, node: string): Promise<PEPItem[]> => {
         if (node === 'urn:xmpp:openpgp:0:public-keys') {
@@ -1962,7 +1963,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('falls back to newest key with needsPicker=true when no metadata matches', async () => {
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       setSessionPassphrase('session-pp')
       await plugin.init(ctx)
@@ -1979,7 +1980,7 @@ describe('WebOpenPGPPlugin', () => {
     })
 
     it('falls back to newest key when metadata query fails', async () => {
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const { ctx } = makeCtx('alice@example.com')
       ctx.xmpp.queryPEP = async () => { throw new Error('item-not-found') }
       setSessionPassphrase('session-pp')
@@ -2060,7 +2061,7 @@ describe('WebOpenPGPPlugin', () => {
         account: { jid: 'alice@example.com' },
         reportSecurityContextUpdate: () => {},
       }
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       setSessionPassphrase('strong-test-passphrase-123')
       await plugin.init(ctx) // init swallows needs-identity-decision
 
@@ -2091,7 +2092,7 @@ describe('WebOpenPGPPlugin', () => {
       // would conflict if we had one). After retire, server == local and
       // the conflict banner must come down on its own.
       const { ctx } = makeCtxWithPublishedFingerprint('alice@example.com', 'cc'.repeat(20))
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       setSessionPassphrase('strong-test-passphrase-123')
       await plugin.init(ctx)
 
@@ -2159,7 +2160,7 @@ describe('WebOpenPGPPlugin', () => {
         account: { jid: 'alice@example.com' },
         reportSecurityContextUpdate: () => {},
       }
-      const plugin = new TestableWebOpenPGPPlugin()
+      const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       setSessionPassphrase('strong-test-passphrase-123')
       await plugin.init(ctx)
 
@@ -2195,7 +2196,7 @@ describe('WebOpenPGPPlugin', () => {
       const shared: SharedPep = new Map()
 
       setSessionPassphrase('alice-strong-pp')
-      const alicePlugin = new TestableWebOpenPGPPlugin()
+      const alicePlugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const aliceSecUpdates: ActorCtx['securityUpdates'] = []
       const aliceRaw = makeCtxWithSharedPep('alice@example.com', shared)
       const aliceCtx: PluginContext = {
@@ -2208,7 +2209,7 @@ describe('WebOpenPGPPlugin', () => {
 
       clearSessionPassphrase()
       setSessionPassphrase('bob-strong-pp')
-      const bobPlugin = new TestableWebOpenPGPPlugin()
+      const bobPlugin = new TestableWebOpenPGPPlugin(createAppHostStores())
       const bobSecUpdates: ActorCtx['securityUpdates'] = []
       const bobRaw = makeCtxWithSharedPep('bob@example.com', shared)
       const bobCtx: PluginContext = {
@@ -2391,7 +2392,7 @@ describe('WebOpenPGPPlugin', () => {
       // accepts it — a real attacker can trivially forge the UID.
       clearSessionPassphrase()
       setSessionPassphrase('eve-strong-pp')
-      const eve = new TestableWebOpenPGPPlugin()
+      const eve = new TestableWebOpenPGPPlugin(createAppHostStores())
       const eveCtx = makeCtx('alice@example.com').ctx
       await eve.init(eveCtx)
       const eveBundle = await eve.callEnsureKeyMaterial('alice@example.com')
@@ -2558,7 +2559,7 @@ describe('WebOpenPGPPlugin', () => {
         // the already-received message (receivedAt < its inactiveAt).
         clearSessionPassphrase()
         setSessionPassphrase('eve-strong-pp')
-        const eve = new TestableWebOpenPGPPlugin()
+        const eve = new TestableWebOpenPGPPlugin(createAppHostStores())
         await eve.init(makeCtx('alice@example.com').ctx)
         const eveBundle = await eve.callEnsureKeyMaterial('alice@example.com')
         publishKeyToSharedPep(shared, 'alice@example.com', eveBundle)
@@ -2658,13 +2659,13 @@ describe('WebOpenPGPPlugin', () => {
 
     it('returns recovered:false on a normal local unlock', async () => {
       const backend = new InMemoryStorageBackend()
-      const setup = new WebOpenPGPPlugin()
+      const setup = new WebOpenPGPPlugin(createAppHostStores())
       setSessionPassphrase(PP)
       await setup.init(makeCtx('alice@example.com', backend).ctx)
       const fp = setup.getOwnFingerprint()
 
       clearSessionPassphrase()
-      const fresh = new WebOpenPGPPlugin()
+      const fresh = new WebOpenPGPPlugin(createAppHostStores())
       await fresh.init(makeCtx('alice@example.com', backend).ctx)
       const result = await fresh.unlock(PP)
 
@@ -2676,12 +2677,12 @@ describe('WebOpenPGPPlugin', () => {
       // Web parity with the Sequoia restore path: a successful unlock must tell
       // the host so deferred decrypts re-run. init()'s locked load must NOT.
       const backend = new InMemoryStorageBackend()
-      const setup = new WebOpenPGPPlugin()
+      const setup = new WebOpenPGPPlugin(createAppHostStores())
       setSessionPassphrase(PP)
       await setup.init(makeCtx('alice@example.com', backend).ctx)
 
       clearSessionPassphrase()
-      const fresh = new WebOpenPGPPlugin()
+      const fresh = new WebOpenPGPPlugin(createAppHostStores())
       const ctx = makeCtx('alice@example.com', backend).ctx
       const notifyKeyUnlocked = vi.fn()
       ctx.notifyKeyUnlocked = notifyKeyUnlocked
@@ -2696,13 +2697,13 @@ describe('WebOpenPGPPlugin', () => {
       const shared: SharedPep = new Map()
       const sourceBackend = new InMemoryStorageBackend()
       setSessionPassphrase('old-local-passphrase')
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       await source.init(makeCtxWithWritablePep('alice@example.com', shared, sourceBackend).ctx)
       const original = await source.callEnsureKeyMaterial('alice@example.com')
       await source.backupSecretKey(PP) // publishes the backup under the NEW passphrase
 
       clearSessionPassphrase()
-      const device = new WebOpenPGPPlugin()
+      const device = new WebOpenPGPPlugin(createAppHostStores())
       await device.init(makeCtxWithWritablePep('alice@example.com', shared, sourceBackend).ctx)
       expect(device.getOwnFingerprint()).toBeNull() // locked
 
@@ -2715,13 +2716,13 @@ describe('WebOpenPGPPlugin', () => {
     it('recovers when there is no local key but a server backup exists', async () => {
       const shared: SharedPep = new Map()
       setSessionPassphrase('source-session-pp')
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       await source.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
       const original = await source.callEnsureKeyMaterial('alice@example.com')
       await source.backupSecretKey(PP)
 
       clearSessionPassphrase()
-      const device = new WebOpenPGPPlugin() // empty backend
+      const device = new WebOpenPGPPlugin(createAppHostStores()) // empty backend
       await device.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
 
       const result = await device.unlock(PP)
@@ -2732,12 +2733,12 @@ describe('WebOpenPGPPlugin', () => {
 
     it('throws NoRecoveryAvailableError when local is stale and there is no backup', async () => {
       const backend = new InMemoryStorageBackend()
-      const setup = new WebOpenPGPPlugin()
+      const setup = new WebOpenPGPPlugin(createAppHostStores())
       setSessionPassphrase('real-passphrase')
       await setup.init(makeCtx('alice@example.com', backend).ctx)
 
       clearSessionPassphrase()
-      const device = new WebOpenPGPPlugin()
+      const device = new WebOpenPGPPlugin(createAppHostStores())
       await device.init(makeCtx('alice@example.com', backend).ctx)
 
       const { NoRecoveryAvailableError } = await import('@fluux/openpgp-plugin')
@@ -2752,13 +2753,13 @@ describe('WebOpenPGPPlugin', () => {
       const shared: SharedPep = new Map()
       const backend = new InMemoryStorageBackend()
       setSessionPassphrase('local-pp')
-      const source = new TestableWebOpenPGPPlugin()
+      const source = new TestableWebOpenPGPPlugin(createAppHostStores())
       await source.init(makeCtxWithWritablePep('alice@example.com', shared, backend).ctx)
       await source.callEnsureKeyMaterial('alice@example.com')
       await source.backupSecretKey('backup-pp')
 
       clearSessionPassphrase()
-      const device = new WebOpenPGPPlugin()
+      const device = new WebOpenPGPPlugin(createAppHostStores())
       await device.init(makeCtxWithWritablePep('alice@example.com', shared, backend).ctx)
 
       await expect(device.unlock('neither-of-them')).rejects.toMatchObject({
@@ -2771,7 +2772,7 @@ describe('WebOpenPGPPlugin', () => {
       // backup → recovery has nothing to restore, so the original
       // needs-identity-decision is preserved for the IdentityChoiceDialog.
       const { ctx } = makeCtxWithPublishedFingerprint('alice@example.com', 'c3'.repeat(20))
-      const device = new WebOpenPGPPlugin()
+      const device = new WebOpenPGPPlugin(createAppHostStores())
       await device.init(ctx) // locked (no passphrase yet) → init swallows key-locked
 
       await expect(device.unlock('some-passphrase-123')).rejects.toMatchObject({
@@ -2788,11 +2789,11 @@ describe('WebOpenPGPPlugin', () => {
       // multi-key backup so the test stays focused on the orchestration.
       const backend = new InMemoryStorageBackend()
       setSessionPassphrase('old-local-pp')
-      const setup = new WebOpenPGPPlugin()
+      const setup = new WebOpenPGPPlugin(createAppHostStores())
       await setup.init(makeCtx('alice@example.com', backend).ctx) // stores a key under old-local-pp
 
       clearSessionPassphrase()
-      const device = new WebOpenPGPPlugin()
+      const device = new WebOpenPGPPlugin(createAppHostStores())
       await device.init(makeCtx('alice@example.com', backend).ctx)
       const candidates: KeyBundle[] = [
         { fingerprint: 'a'.repeat(40), publicArmored: 'PUB-A', keychainBacked: false },
@@ -2826,7 +2827,7 @@ describe('legacy backup passphrase migration (#1021)', () => {
   async function publishLegacyBackup(shared: SharedPep) {
     const { legacyNormalizeBackupPassphrase } = await import('@fluux/openpgp-plugin')
     setSessionPassphrase('source-session-pp')
-    const source = new TestableWebOpenPGPPlugin()
+    const source = new TestableWebOpenPGPPlugin(createAppHostStores())
     await source.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
     const original = await source.callEnsureKeyMaterial('alice@example.com')
     await source.backupSecretKey(legacyNormalizeBackupPassphrase(CODE))
@@ -2838,7 +2839,7 @@ describe('legacy backup passphrase migration (#1021)', () => {
     const shared: SharedPep = new Map()
     const original = await publishLegacyBackup(shared)
 
-    const device = new WebOpenPGPPlugin() // fresh backend — new device
+    const device = new WebOpenPGPPlugin(createAppHostStores()) // fresh backend — new device
     await device.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
 
     const result = await device.restoreSecretKey(CODE)
@@ -2851,7 +2852,7 @@ describe('legacy backup passphrase migration (#1021)', () => {
     const shared: SharedPep = new Map()
     await publishLegacyBackup(shared)
 
-    const device = new WebOpenPGPPlugin()
+    const device = new WebOpenPGPPlugin(createAppHostStores())
     await device.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
     await device.restoreSecretKey(CODE)
 
@@ -2880,13 +2881,13 @@ describe('legacy backup passphrase migration (#1021)', () => {
   it('does NOT re-publish when the backup already uses the verbatim passphrase', async () => {
     const shared: SharedPep = new Map()
     setSessionPassphrase('source-session-pp')
-    const source = new TestableWebOpenPGPPlugin()
+    const source = new TestableWebOpenPGPPlugin(createAppHostStores())
     await source.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
     await source.callEnsureKeyMaterial('alice@example.com')
     await source.backupSecretKey(CODE) // canonical (post-fix) backup
     clearSessionPassphrase()
 
-    const device = new WebOpenPGPPlugin()
+    const device = new WebOpenPGPPlugin(createAppHostStores())
     const { ctx } = makeCtxWithWritablePep('alice@example.com', shared)
     const secretKeyPublishes: string[] = []
     const origPublish = ctx.xmpp.publishPEP
@@ -2905,7 +2906,7 @@ describe('legacy backup passphrase migration (#1021)', () => {
     const shared: SharedPep = new Map()
     await publishLegacyBackup(shared)
 
-    const device = new WebOpenPGPPlugin()
+    const device = new WebOpenPGPPlugin(createAppHostStores())
     await device.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
 
     // Mixed-case wrong guess: exercises the legacy retry too (the forms
@@ -2923,7 +2924,7 @@ describe('legacy backup passphrase migration (#1021)', () => {
     const shared: SharedPep = new Map()
     const original = await publishLegacyBackup(shared)
 
-    const device = new WebOpenPGPPlugin()
+    const device = new WebOpenPGPPlugin(createAppHostStores())
     await device.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
 
     const result = await device.unlock(CODE)
@@ -2945,7 +2946,7 @@ describe('legacy backup passphrase migration (#1021)', () => {
     const shared: SharedPep = new Map()
     const original = await publishLegacyBackup(shared)
 
-    const device = new WebOpenPGPPlugin()
+    const device = new WebOpenPGPPlugin(createAppHostStores())
     const { ctx } = makeCtxWithWritablePep('alice@example.com', shared)
     const origPublish = ctx.xmpp.publishPEP
     ctx.xmpp.publishPEP = async (node, item, opts) => {
@@ -2977,7 +2978,7 @@ describe('legacy backup passphrase migration (#1021)', () => {
       passwords: [legacyNormalizeBackupPassphrase(CODE)],
     })) as string
 
-    const device = new WebOpenPGPPlugin()
+    const device = new WebOpenPGPPlugin(createAppHostStores())
     const shared: SharedPep = new Map()
     const { ctx } = makeCtxWithWritablePep('alice@example.com', shared)
     const secretKeyPublishes: string[] = []
@@ -3023,7 +3024,7 @@ describe('legacy backup passphrase migration (#1021)', () => {
     })) as string
 
     const shared: SharedPep = new Map()
-    const device = new WebOpenPGPPlugin()
+    const device = new WebOpenPGPPlugin(createAppHostStores())
     const { ctx } = makeCtxWithWritablePep('alice@example.com', shared)
     await device.init(ctx)
     // Serve the multi-key blob as the server backup.
@@ -3093,7 +3094,7 @@ describe('key expiration (XEP-0373 §5 cross-client restore)', () => {
   afterEach(() => clearSessionPassphrase())
 
   it('generates keys that never expire', async () => {
-    const plugin = new TestableWebOpenPGPPlugin()
+    const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
     const { ctx } = makeCtx('alice@example.com')
     setSessionPassphrase(PASSPHRASE)
     await plugin.init(ctx)
@@ -3110,7 +3111,7 @@ describe('key expiration (XEP-0373 §5 cross-client restore)', () => {
     const stored = await ctx.storage.get('private-key')
     expect(await primaryExpiration(new TextDecoder().decode(stored!))).not.toBe(Infinity)
 
-    const plugin = new TestableWebOpenPGPPlugin()
+    const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
     setSessionPassphrase(PASSPHRASE)
     await plugin.init(ctx)
     const bundle = await plugin.callEnsureKeyMaterial('alice@example.com')
@@ -3126,7 +3127,7 @@ describe('key expiration (XEP-0373 §5 cross-client restore)', () => {
     const { ctx } = makeCtx('alice@example.com')
     await seedExpiringKey(ctx, 'alice@example.com')
 
-    const plugin = new TestableWebOpenPGPPlugin()
+    const plugin = new TestableWebOpenPGPPlugin(createAppHostStores())
     setSessionPassphrase(PASSPHRASE)
     await plugin.init(ctx)
     const bundle = await plugin.callEnsureKeyMaterial('alice@example.com')
@@ -3143,7 +3144,7 @@ describe('key expiration (XEP-0373 §5 cross-client restore)', () => {
     const { ctx } = makeCtx('alice@example.com', backend)
     await seedExpiringKey(ctx, 'alice@example.com')
 
-    const first = new TestableWebOpenPGPPlugin()
+    const first = new TestableWebOpenPGPPlugin(createAppHostStores())
     setSessionPassphrase(PASSPHRASE)
     await first.init(ctx)
     await first.callEnsureKeyMaterial('alice@example.com')
@@ -3151,7 +3152,7 @@ describe('key expiration (XEP-0373 §5 cross-client restore)', () => {
     // A fresh plugin over the same backend must see the healed key on disk,
     // not heal it again from a still-expiring blob.
     clearSessionPassphrase()
-    const second = new TestableWebOpenPGPPlugin()
+    const second = new TestableWebOpenPGPPlugin(createAppHostStores())
     const { ctx: ctx2 } = makeCtx('alice@example.com', backend)
     const persisted = await ctx2.storage.get('private-key')
     expect(await primaryExpiration(new TextDecoder().decode(persisted!))).toBe(Infinity)
@@ -3166,7 +3167,7 @@ describe('key expiration (XEP-0373 §5 cross-client restore)', () => {
     // Re-signing must not damage the key.
     const { ctx } = makeCtx('alice@example.com')
     await seedExpiringKey(ctx, 'alice@example.com')
-    const alice = new TestableWebOpenPGPPlugin()
+    const alice = new TestableWebOpenPGPPlugin(createAppHostStores())
     setSessionPassphrase(PASSPHRASE)
     await alice.init(ctx)
     const aliceBundle = await alice.callEnsureKeyMaterial('alice@example.com')
