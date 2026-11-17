@@ -1,6 +1,9 @@
 //! macOS native notifications via `UNUserNotificationCenter`.
 
-use crate::notifications::backend::{AuthState, NativeNotification, NavTarget};
+use crate::notifications::backend::{
+    AuthState, BadgeSetting, NativeNotification, NavTarget, NotificationSettingsState,
+    SettingsAuthorization,
+};
 use core::ptr::NonNull;
 use objc2::rc::Retained;
 use objc2::runtime::{Bool, NSObject, NSObjectProtocol, ProtocolObject};
@@ -9,7 +12,7 @@ use objc2_foundation::{NSBundle, NSError, NSString};
 use objc2_user_notifications::{
     UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent, UNNotification,
     UNNotificationPresentationOptions, UNNotificationRequest, UNNotificationResponse,
-    UNNotificationSettings, UNNotificationTrigger, UNUserNotificationCenter,
+    UNNotificationSetting, UNNotificationSettings, UNNotificationTrigger, UNUserNotificationCenter,
     UNUserNotificationCenterDelegate,
 };
 use std::collections::HashMap;
@@ -410,6 +413,59 @@ pub fn authorization_state() -> AuthState {
         .unwrap_or(AuthState::NotDetermined)
 }
 
+// Keep unknown future SDK values distinct from "not requested" in Settings.
+fn settings_snapshot(
+    status: UNAuthorizationStatus,
+    badges: UNNotificationSetting,
+) -> NotificationSettingsState {
+    let authorization = if status == UNAuthorizationStatus::NotDetermined {
+        SettingsAuthorization::NotDetermined
+    } else {
+        match map_status(status) {
+            AuthState::Granted => SettingsAuthorization::Granted,
+            AuthState::Denied => SettingsAuthorization::Denied,
+            AuthState::NotDetermined => SettingsAuthorization::Unknown,
+        }
+    };
+    let badges = if badges == UNNotificationSetting::Enabled {
+        BadgeSetting::Enabled
+    } else if badges == UNNotificationSetting::Disabled {
+        BadgeSetting::Disabled
+    } else if badges == UNNotificationSetting::NotSupported {
+        BadgeSetting::Unsupported
+    } else {
+        BadgeSetting::Unknown
+    };
+    NotificationSettingsState {
+        authorization,
+        badges,
+    }
+}
+
+/// Read both properties from one OS callback, without requesting authorization.
+/// Like authorization_state, this must run off the main thread.
+pub fn notification_settings_state() -> Result<NotificationSettingsState, String> {
+    use block2::RcBlock;
+    let Some(center) = current_center() else {
+        return Ok(NotificationSettingsState {
+            authorization: SettingsAuthorization::Unsupported,
+            badges: BadgeSetting::Unsupported,
+        });
+    };
+    let (tx, rx) = mpsc::channel();
+    let handler = RcBlock::new(move |settings: NonNull<UNNotificationSettings>| {
+        // SAFETY: the OS keeps the non-null settings object alive during this callback.
+        let settings = unsafe { settings.as_ref() };
+        let _ = tx.send(settings_snapshot(
+            settings.authorizationStatus(),
+            settings.badgeSetting(),
+        ));
+    });
+    center.getNotificationSettingsWithCompletionHandler(&handler);
+    rx.recv_timeout(Duration::from_secs(2))
+        .map_err(|_| "Could not read notification settings".to_string())
+}
+
 /// Fire an authorization request without waiting. Used at startup to surface the
 /// OS prompt early; the result is read later via `authorization_state()`.
 fn prime_authorization() {
@@ -454,6 +510,92 @@ pub fn request_authorization() -> AuthState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Accepted settings-warning intent: read the SDK's distinct authorization and
+    // badge values without letting an unknown value masquerade as permission.
+    #[test]
+    fn notification_settings_preserve_authorization_and_badges() {
+        for (status, expected) in [
+            (
+                UNAuthorizationStatus::Authorized,
+                SettingsAuthorization::Granted,
+            ),
+            (
+                UNAuthorizationStatus::Provisional,
+                SettingsAuthorization::Granted,
+            ),
+            (
+                UNAuthorizationStatus::Ephemeral,
+                SettingsAuthorization::Granted,
+            ),
+            (UNAuthorizationStatus::Denied, SettingsAuthorization::Denied),
+            (
+                UNAuthorizationStatus::NotDetermined,
+                SettingsAuthorization::NotDetermined,
+            ),
+        ] {
+            for (badge, badge_expected) in [
+                (UNNotificationSetting::Enabled, BadgeSetting::Enabled),
+                (UNNotificationSetting::Disabled, BadgeSetting::Disabled),
+                (
+                    UNNotificationSetting::NotSupported,
+                    BadgeSetting::Unsupported,
+                ),
+            ] {
+                let snapshot = settings_snapshot(status, badge);
+                assert_eq!(snapshot.authorization, expected);
+                assert_eq!(snapshot.badges, badge_expected);
+                // The settings reader never changes the legacy posting mapping.
+                assert_eq!(
+                    map_status(status) == AuthState::Granted,
+                    expected == SettingsAuthorization::Granted
+                );
+            }
+        }
+        assert_eq!(
+            serde_json::to_value(settings_snapshot(
+                UNAuthorizationStatus::Authorized,
+                UNNotificationSetting::Disabled
+            ))
+            .unwrap(),
+            serde_json::json!({ "authorization": "granted", "badges": "disabled" })
+        );
+    }
+
+    #[test]
+    fn notification_settings_unknown_sdk_values_are_not_granted() {
+        let snapshot = settings_snapshot(
+            UNAuthorizationStatus(isize::MAX),
+            UNNotificationSetting(isize::MAX),
+        );
+        assert_eq!(snapshot.authorization, SettingsAuthorization::Unknown);
+        assert_eq!(snapshot.badges, BadgeSetting::Unknown);
+    }
+
+    /// Run only from the disposable permission lab bundle, never an installed app.
+    #[test]
+    #[ignore = "requires an isolated .app bundle; never requests permission"]
+    fn notification_settings_isolated_native_probe() {
+        assert_eq!(
+            NSBundle::mainBundle()
+                .bundleIdentifier()
+                .unwrap()
+                .to_string(),
+            "net.processone.fluux.permission-lab"
+        );
+        let state = notification_settings_state().expect("native settings callback");
+        assert_ne!(state.authorization, SettingsAuthorization::Unsupported);
+        assert_ne!(state.authorization, SettingsAuthorization::Unknown);
+        assert_ne!(state.badges, BadgeSetting::Unknown);
+        assert_eq!(
+            authorization_state() == AuthState::Granted,
+            state.authorization == SettingsAuthorization::Granted
+        );
+        println!(
+            "notification-settings: {}",
+            serde_json::to_string(&state).unwrap()
+        );
+    }
 
     struct AvatarFixture(std::path::PathBuf);
 

@@ -18,9 +18,12 @@ let mockWebPushSupported = false
 let mockConnection = { webPushStatus: 'unavailable', webPushEnabled: false, isConnected: false }
 let mockIsMac = true
 let mockPermState = 'granted'
+let mockBadges = 'enabled'
 const mockGetTrayStatus = vi.fn().mockResolvedValue({ enabled: true, available: true })
-const mockInvoke = vi.fn(async (cmd: string) =>
-  cmd === 'notification_permission_state' ? mockPermState : undefined,
+const mockInvoke = vi.fn<(cmd: string) => Promise<any>>(async (cmd: string) =>
+  cmd === 'notification_settings_state'
+    ? { authorization: mockPermState === 'default' ? 'notdetermined' : mockPermState, badges: mockBadges }
+    : undefined,
 )
 
 vi.mock('react-i18next', () => ({
@@ -70,6 +73,8 @@ vi.mock('@tauri-apps/plugin-notification', () => ({
 }))
 
 import { NotificationsSettings } from './NotificationsSettings'
+import { refreshNotificationPermission, requestNotificationPermission } from '@/hooks/useNotificationPermission'
+import { act } from '@testing-library/react'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 const LINK = 'settings.openSystemNotificationSettings'
@@ -79,6 +84,7 @@ describe('NotificationsSettings — system notification settings link', () => {
     usePlatform('desktop')
     mockIsMac = true
     mockPermState = 'granted'
+    mockBadges = 'enabled'
     mockGetTrayStatus.mockReset().mockResolvedValue({ enabled: true, available: true })
     useSettingsStore.setState({ keepInSystemTray: true })
     mockInvoke.mockClear()
@@ -218,11 +224,114 @@ describe('NotificationsSettings — system notification settings link', () => {
   })
 })
 
+// Intent: the approved macOS badge-warning proposal. SDK-shaped settings
+// fixtures exercise the panel boundary; they do not assert visible Dock output.
+describe('NotificationsSettings — macOS badge warnings', () => {
+  beforeEach(() => {
+    usePlatform('desktop')
+    mockIsMac = true
+    mockPermState = 'granted'
+    mockBadges = 'enabled'
+    mockInvoke.mockClear()
+    vi.mocked(requestNotificationPermission).mockClear()
+    vi.mocked(refreshNotificationPermission).mockClear()
+    useSettingsStore.setState({ soundEnabled: true, inAppBannerEnabled: true })
+  })
+
+  it.each([
+    ['denied', 'enabled', 'settings.notificationDeniedMac'],
+    ['granted', 'disabled', 'settings.badgesDisabledMac'],
+    ['granted', 'enabled', 'settings.badgesEnabled'],
+    ['default', 'disabled', 'settings.notificationDefault'],
+    ['unknown', 'disabled', 'settings.notificationUnknownMac'],
+    ['unsupported', 'unsupported', 'settings.notificationUnsupportedMac'],
+    ['granted', 'unknown', 'settings.badgesUnknown'],
+    ['granted', 'unsupported', 'settings.badgesUnsupported'],
+    ['future-value', 'enabled', 'settings.notificationUnknownMac'],
+    ['granted', 'future-value', 'settings.badgesUnknown'],
+  ])('distinguishes %s authorization and %s badges', async (authorization, badges, text) => {
+    mockPermState = authorization
+    mockBadges = badges
+    render(<NotificationsSettings />)
+    expect(await screen.findByText(text)).toBeVisible()
+    expect(screen.queryByText('settings.badgesDisabledMac') !== null).toBe(authorization === 'granted' && badges === 'disabled')
+    expect(screen.queryByText('settings.requestPermission') !== null).toBe(authorization === 'default')
+    expect(screen.queryByText('settings.notificationEnabled') !== null).toBe(authorization === 'granted')
+    expect(requestNotificationPermission).not.toHaveBeenCalled()
+    expect(mockInvoke).not.toHaveBeenCalledWith('open_notification_settings')
+    expect(useSettingsStore.getState().soundEnabled).toBe(true)
+    expect(useSettingsStore.getState().inAppBannerEnabled).toBe(true)
+  })
+
+  it('shows an unreadable state on a rejected native read, never Enable or enabled', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('settings read unavailable'))
+    render(<NotificationsSettings />)
+    expect(await screen.findByText('settings.notificationUnknownMac')).toBeVisible()
+    expect(screen.queryByText('settings.notificationEnabled')).toBeNull()
+    expect(screen.queryByText('settings.requestPermission')).toBeNull()
+    expect(requestNotificationPermission).not.toHaveBeenCalled()
+  })
+
+  it('refreshes on focus and visible return, clearing the warning after restoration', async () => {
+    mockBadges = 'disabled'
+    render(<NotificationsSettings />)
+    await screen.findByText('settings.badgesDisabledMac')
+    mockBadges = 'enabled'
+    fireEvent.focus(window)
+    expect(await screen.findByText('settings.badgesEnabled')).toBeVisible()
+    expect(screen.queryByText('settings.badgesDisabledMac')).toBeNull()
+    mockPermState = 'denied'
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+    fireEvent(document, new Event('visibilitychange'))
+    expect(await screen.findByText('settings.notificationDeniedMac')).toBeVisible()
+    expect(refreshNotificationPermission).toHaveBeenCalled()
+    expect(requestNotificationPermission).not.toHaveBeenCalled()
+    expect(mockInvoke).not.toHaveBeenCalledWith('open_notification_settings')
+  })
+
+  it('does not let an older native response replace the restored state', async () => {
+    let finish!: (state: any) => void
+    mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    render(<NotificationsSettings />)
+    await waitFor(() => expect(finish).toBeTypeOf('function'))
+    fireEvent.focus(window)
+    await screen.findByText('settings.badgesEnabled')
+    await act(async () => finish({ authorization: 'denied', badges: 'disabled' }))
+    expect(screen.queryByText('settings.notificationDeniedMac')).toBeNull()
+    expect(screen.getByText('settings.badgesEnabled')).toBeVisible()
+  })
+
+  it('keeps explicit activation and rereads badges after the request', async () => {
+    mockPermState = 'default'
+    render(<NotificationsSettings />)
+    const button = await screen.findByRole('button', { name: 'settings.requestPermission' })
+    expect(requestNotificationPermission).not.toHaveBeenCalled()
+    mockPermState = 'granted'
+    mockBadges = 'disabled'
+    fireEvent.click(button)
+    expect(await screen.findByText('settings.badgesDisabledMac')).toBeVisible()
+    expect(requestNotificationPermission).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the existing link and visible opening failure for blocked badges', async () => {
+    mockBadges = 'disabled'
+    render(<NotificationsSettings />)
+    await screen.findByText('settings.badgesDisabledMac')
+    expect(mockInvoke).not.toHaveBeenCalledWith('open_notification_settings')
+    mockInvoke.mockRejectedValueOnce(new Error('opening failed'))
+    fireEvent.click(screen.getByRole('button', { name: LINK }))
+    expect(await screen.findByText('settings.openSystemNotificationSettingsFailed')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: LINK }))
+    await waitFor(() => expect(screen.queryByText('settings.openSystemNotificationSettingsFailed')).toBeNull())
+  })
+})
+
 describe('NotificationsSettings — notification sound', () => {
   beforeEach(() => {
     usePlatform('desktop')
     mockIsMac = true
     mockPermState = 'granted'
+    mockBadges = 'enabled'
     useSettingsStore.setState({ soundEnabled: true })
   })
 

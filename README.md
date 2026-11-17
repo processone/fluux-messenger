@@ -311,6 +311,12 @@ Open **Settings → Notifications** and turn off **Play notification sounds**. T
 
 Background Web Push uses a saved copy of this preference after the tab closes. Updating that copy is best-effort: simultaneous writes from multiple tabs or storage failures can leave it out of date. If the saved copy is missing or cannot be read, background notifications request silence. The browser and operating system ultimately control notification delivery and sound.
 
+#### Why is my Mac not showing an app icon badge?
+
+Open **Settings → Notifications**. Fluux reads macOS notification authorization and the separate app icon badge setting. A highlighted warning identifies blocked notifications or disabled badges. Use **Open system notification settings** to review them, then return to Fluux to refresh the status. If permission has never been requested, use **Enable** first. Unknown or unsupported states are shown separately; Fluux does not change permissions automatically from this panel.
+
+This shows the current system settings, not the history of an earlier missing badge. A successful badge update does not prove that macOS displayed it. Notification authorization, badge settings, and Fluux's sound and in-app banner preferences are separate.
+
 #### My antivirus flags the Windows installer as malicious, is the app safe?
 
 Yes. Two things can trigger warnings right now:

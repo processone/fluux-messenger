@@ -119,6 +119,14 @@ pub async fn notification_permission_state() -> AuthState {
 
 #[cfg(target_os = "macos")]
 #[tauri::command]
+pub async fn notification_settings_state() -> Result<backend::NotificationSettingsState, String> {
+    tauri::async_runtime::spawn_blocking(macos::notification_settings_state)
+        .await
+        .map_err(|_| "Could not read notification settings".to_string())?
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
 pub async fn request_notification_permission() -> AuthState {
     tauri::async_runtime::spawn_blocking(macos::request_authorization)
         .await

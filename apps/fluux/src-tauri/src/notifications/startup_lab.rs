@@ -6,3 +6,10 @@ pub fn post(_: NativeNotification) -> Result<(), String> { Ok(()) }
 pub fn dismiss(_: &str, _: &str, _: Option<&str>) -> Result<(), String> { Ok(()) }
 pub fn authorization_state() -> AuthState { AuthState::Denied }
 pub fn request_authorization() -> AuthState { AuthState::Denied }
+
+pub fn notification_settings_state() -> Result<super::backend::NotificationSettingsState, String> {
+    Ok(super::backend::NotificationSettingsState {
+        authorization: super::backend::SettingsAuthorization::Denied,
+        badges: super::backend::BadgeSetting::Disabled,
+    })
+}

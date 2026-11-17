@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bell, BellOff, ExternalLink, Send } from 'lucide-react'
 import { useConnection, useXMPPContext, connectionStore, getDomain } from '@fluux/sdk'
@@ -17,29 +17,31 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { getTrayStatus, type TrayStatus } from '@/utils/windowBehavior'
 import { platform } from '@/platform'
 
-type NotificationStatus = 'checking' | 'granted' | 'denied' | 'default' | 'unavailable'
+type NotificationStatus = 'checking' | 'granted' | 'denied' | 'default' | 'unavailable' | 'unsupported'
+type BadgeStatus = 'enabled' | 'disabled' | 'unknown' | 'unsupported'
+type PermissionSnapshot = { status: NotificationStatus; badges?: BadgeStatus }
 
-async function checkNotificationPermission(): Promise<NotificationStatus> {
+async function checkNotificationPermission(): Promise<PermissionSnapshot> {
   try {
     if (platform().notificationsManagedByOS) {
-      // macOS uses the native UNUserNotificationCenter command — the same
-      // source of truth as the posting gate — so Settings can't disagree with
-      // whether notifications actually fire. It also distinguishes "not yet
-      // asked" (notdetermined) from "denied", which the plugin can't.
       if (await isMacOSDesktop()) {
         const { invoke } = await import('@tauri-apps/api/core')
-        const state = await invoke<string>('notification_permission_state')
-        return state === 'granted' ? 'granted' : state === 'denied' ? 'denied' : 'default'
+        const state = await invoke<{ authorization: string; badges: string }>('notification_settings_state')
+        const status = state.authorization === 'granted' || state.authorization === 'denied'
+          ? state.authorization
+          : state.authorization === 'notdetermined' ? 'default'
+            : state.authorization === 'unsupported' ? 'unsupported' : 'unavailable'
+        const badges = state.badges === 'enabled' || state.badges === 'disabled' || state.badges === 'unsupported'
+          ? state.badges : 'unknown'
+        return { status, badges }
       }
       const { isPermissionGranted } = await import('@tauri-apps/plugin-notification')
-      const granted = await isPermissionGranted()
-      return granted ? 'granted' : 'denied'
-    } else {
-      if (typeof Notification === 'undefined') return 'unavailable'
-      return Notification.permission as NotificationStatus
+      return { status: await isPermissionGranted() ? 'granted' : 'denied' }
     }
+    if (typeof Notification === 'undefined') return { status: 'unavailable' }
+    return { status: Notification.permission }
   } catch {
-    return 'unavailable'
+    return { status: 'unavailable' }
   }
 }
 
@@ -109,7 +111,14 @@ export function NotificationsSettings() {
   const desktopBuild = platform().shell === 'desktop'
   const { client } = useXMPPContext()
   const { webPushStatus, webPushEnabled, pushStatus, isConnected, jid } = useConnection()
-  const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>('checking')
+  const [permission, setPermission] = useState<PermissionSnapshot>({ status: 'checking' })
+  const notificationStatus = permission.status
+  const permissionRead = useRef(0)
+  const refreshPermission = useCallback(async () => {
+    const read = ++permissionRead.current
+    const next = await checkNotificationPermission()
+    if (read === permissionRead.current) setPermission(next)
+  }, [])
   const [isMac, setIsMac] = useState(false)
   const [disabling, setDisabling] = useState(false)
   const [openSettingsFailed, setOpenSettingsFailed] = useState(false)
@@ -129,12 +138,6 @@ export function NotificationsSettings() {
   }, [])
 
   useEffect(() => {
-    void checkNotificationPermission()
-      .then(setNotificationStatus)
-      .catch(() => setNotificationStatus('unavailable'))
-  }, [])
-
-  useEffect(() => {
     if (!showTraySetting) return
     const refreshTrayStatus = () => {
       void getTrayStatus()
@@ -146,31 +149,27 @@ export function NotificationsSettings() {
     return () => window.removeEventListener('focus', refreshTrayStatus)
   }, [showTraySetting, keepInSystemTray])
 
-  // Re-check when the window regains focus so the status (and the runtime gate)
-  // updates after the user flips the permission in System Settings and returns.
+  // Read on opening and on return, without prompting. Ignore late reads after
+  // a newer refresh or unmount, including StrictMode's effect cleanup.
   useEffect(() => {
+    void refreshPermission()
     const refresh = () => {
-      void checkNotificationPermission()
-        .then(setNotificationStatus)
-        .catch(() => setNotificationStatus('unavailable'))
-      void refreshNotificationPermission()
+      void refreshPermission()
+      void refreshNotificationPermission().catch(() => {})
     }
     window.addEventListener('focus', refresh)
     document.addEventListener('visibilitychange', refresh)
     return () => {
+      ++permissionRead.current
       window.removeEventListener('focus', refresh)
       document.removeEventListener('visibilitychange', refresh)
     }
-  }, [])
+  }, [refreshPermission])
 
-  // Request OS notification permission (the web prompt or the native dialog —
-  // requestNotificationPermission branches per platform) and refresh the
-  // displayed status. Crucially this goes through the SHARED module so the
-  // runtime posting gate (getNotificationPermissionGranted) updates immediately;
-  // a web-only local prompt left it stale until the next window focus.
+  // Keep the shared posting gate in sync after explicit activation.
   const handleRequestPermission = async () => {
     await requestNotificationPermission()
-    setNotificationStatus(await checkNotificationPermission())
+    await refreshPermission()
   }
 
   const handleOpenNotificationSettings = async () => {
@@ -210,7 +209,7 @@ export function NotificationsSettings() {
       <section className="w-full max-w-md space-y-8">
         <SettingsSection>
           <IosNotificationsCard
-            permission={notificationStatus}
+            permission={notificationStatus === 'unsupported' ? 'unavailable' : notificationStatus}
             onRequestPermission={() => void handleRequestPermission()}
             push={client.push}
             pushStatus={pushStatus}
@@ -247,17 +246,24 @@ export function NotificationsSettings() {
     )
   }
 
+  const blocked = isMac && (notificationStatus === 'denied' ||
+    (notificationStatus === 'granted' && permission.badges === 'disabled'))
+
   return (
     <section className="w-full max-w-md space-y-8">
       <SettingsSection title={t('settings.notificationPermission')}>
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+          <div className={`flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg border-2 ${
+            blocked ? 'border-fluux-yellow bg-fluux-yellow/10' : 'border-fluux-border bg-fluux-bg'
+          }`}>
             <div className="flex flex-1 basis-48 min-w-0 items-start gap-3">
-              {notificationStatus === 'granted' ? (
+              {blocked ? (
+                <BellOff className="size-5 shrink-0 text-fluux-yellow" />
+              ) : notificationStatus === 'granted' ? (
                 <Bell className="size-5 shrink-0 text-fluux-green" />
               ) : notificationStatus === 'denied' ? (
                 <BellOff className="size-5 shrink-0 text-fluux-red" />
-              ) : notificationStatus === 'unavailable' ? (
+              ) : notificationStatus === 'unavailable' || notificationStatus === 'unsupported' ? (
                 <BellOff className="size-5 shrink-0 text-fluux-muted" />
               ) : (
                 <Bell className="size-5 shrink-0 text-fluux-muted animate-pulse" />
@@ -269,14 +275,22 @@ export function NotificationsSettings() {
                 <p className="text-xs text-fluux-muted">
                   {notificationStatus === 'granted' && t('settings.notificationEnabled')}
                   {notificationStatus === 'denied' && t(
-                    platform().notificationsManagedByOS
+                    isMac ? 'settings.notificationDeniedMac' : platform().notificationsManagedByOS
                       ? 'settings.notificationDenied'
                       : 'settings.notificationDeniedWeb',
                   )}
                   {notificationStatus === 'default' && t('settings.notificationDefault')}
-                  {notificationStatus === 'unavailable' && t('settings.notificationUnavailable')}
+                  {notificationStatus === 'unavailable' && t(isMac ? 'settings.notificationUnknownMac' : 'settings.notificationUnavailable')}
+                  {notificationStatus === 'unsupported' && t('settings.notificationUnsupportedMac')}
                   {notificationStatus === 'checking' && t('settings.notificationChecking')}
                 </p>
+                {isMac && notificationStatus === 'granted' && (
+                  <p role="status" className={`text-xs mt-2 ${permission.badges === 'disabled' ? 'font-medium text-fluux-text' : 'text-fluux-muted'}`}>
+                    {t(permission.badges === 'enabled' ? 'settings.badgesEnabled'
+                      : permission.badges === 'disabled' ? 'settings.badgesDisabledMac'
+                        : permission.badges === 'unsupported' ? 'settings.badgesUnsupported' : 'settings.badgesUnknown')}
+                  </p>
+                )}
               </div>
             </div>
 

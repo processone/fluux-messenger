@@ -261,9 +261,13 @@ Local desktop builds run under a **separate dev identity** so they never collide
 
 The override lives in `apps/fluux/src-tauri/tauri.dev.conf.json` and is merged in by the local scripts via `--config`. CI/release builds use the base config and are **never** affected. Tauri only auto-merges `tauri.<platform>.conf.json` files, so `tauri.dev.conf.json` applies only when a script passes it explicitly. (To build locally with the *production* identity, e.g. to test the release artifact, use the raw `npm run tauri build`, which uses the base config.)
 
+Settings → Notifications reads `notification_settings_state` on macOS. It returns one snapshot of `authorizationStatus` and `badgeSetting` without prompting. Unknown SDK values and failed reads remain unknown; an unbundled executable reports unsupported rather than denied or not requested. The existing `notification_permission_state` string contract remains unchanged for the runtime posting gate. The panel rereads on opening, focus and visibility changes; only an explicit click requests permission or opens System Settings.
+
+The `notification-settings` browser journey uses demo-owned IPC responses, not real system settings or an installed app's authorization. Native enum mapping tests likewise do not establish visible Dock rendering or permission continuity after an update.
+
 ### Why a separate identity
 
-macOS binds notification authorization (`UNUserNotificationCenter`) to the app's **code signature *and* bundle id**, not the bundle id alone. A locally-built app that shares the production identifier inherits (but cannot match) the grant given to the signed production build, so notifications silently read as *"permission not granted"* even though **System Settings → Notifications** still lists the app as allowed. (The dock badge keeps working, because it needs no authorization.) A distinct `.dev` identity gets its own authorization and never disturbs the production grant.
+macOS binds notification authorization (`UNUserNotificationCenter`) to the app's **code signature *and* bundle id**, not the bundle id alone. A locally-built app that shares the production identifier inherits (but cannot match) the grant given to the signed production build, so notifications silently read as *"permission not granted"* even though **System Settings → Notifications** still lists the app as allowed. (The Dock count is separate from general notification authorization; a successful badge call is not a visible readback.) A distinct `.dev` identity gets its own authorization and never disturbs the production grant.
 
 ### TLS providers in development and production
 

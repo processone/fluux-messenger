@@ -53,6 +53,35 @@ pub enum AuthState {
     NotDetermined,
 }
 
+/// Settings-only snapshot. The posting gate keeps its existing AuthState contract.
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SettingsAuthorization {
+    Granted,
+    Denied,
+    NotDetermined,
+    Unknown,
+    Unsupported,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum BadgeSetting {
+    Enabled,
+    Disabled,
+    Unsupported,
+    Unknown,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+pub struct NotificationSettingsState {
+    pub authorization: SettingsAuthorization,
+    pub badges: BadgeSetting,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
