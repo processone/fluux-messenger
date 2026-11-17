@@ -23,6 +23,11 @@ describe('measureSystemBodySize', () => {
   })
 
   it('returns null where the webview does not know the system font', () => {
+    // Model browsers that discard the keyword, independently of jsdom's CSS support.
+    const probe = document.createElement('span')
+    Object.defineProperty(probe.style, 'font', { get: () => '', set: () => {} })
+    vi.spyOn(document, 'createElement').mockReturnValue(probe)
+
     expect(measureSystemBodySize()).toBeNull()
     expect(document.body.children).toHaveLength(0)
   })
@@ -32,7 +37,7 @@ describe('measureSystemBodySize', () => {
     let font = ''
     vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
       const element = createElement(tag)
-      // jsdom drops system font keywords; WebKit keeps them.
+      // Model WebKit's retained system font independently of jsdom's CSS support.
       Object.defineProperty(element.style, 'font', { get: () => font, set: (v: string) => { font = v } })
       return element
     })
