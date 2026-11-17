@@ -196,6 +196,8 @@ jobs:
 
       - name: Run OMEMO library and plugin tests
         run: |
+          # The plugin resolves the library through its built output.
+          npm run build --workspace=@fluux/omemo
           npm run test:run --workspace=@fluux/omemo
           npm run test:run --workspace=@fluux/omemo-plugin
 
