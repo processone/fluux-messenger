@@ -281,6 +281,7 @@ test('Forward sends a room link with an optional comment to a chosen contact', a
   await expect(sent).toContainText('Quoted copy from a forwarded message')
   await expect(sent.getByRole('link', { name: link, exact: true }).first()).toBeVisible()
   await expect(sent.locator('[data-room-message-preview]')).toContainText('Join the room to see it')
+  await sent.scrollIntoViewIfNeeded()
   await forwardPicture(page, 'after-recipient-no-access')
   await setJoined(true)
   await expect(sent).not.toContainText('wrote:')
@@ -288,6 +289,32 @@ test('Forward sends a room link with an optional comment to a chosen contact', a
   await sent.locator('[data-room-message-preview]').getByRole('link').click()
   await expect(page.locator(`[data-message-id="${target.id}"].message-highlight`)).toBeInViewport()
   await forwardPicture(page, 'after-jump')
+})
+
+// The room route runs in both engines with the desktop picker; the touch journey below is Chromium-only.
+test('Forward sends the quote and link to a joined room and the real preview replaces them', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const target = await prepareForward(page)
+  const link = `xmpp:${ROOM}?join;msg=${encodeURIComponent(target.stanzaId)}`
+  const row = page.locator(`[data-message-id="${target.id}"][data-message-body]`)
+  await row.scrollIntoViewIfNeeded()
+  await page.mouse.move(1, 1)
+  await page.mouse.move(0, 0)
+  await row.hover()
+  await waitForActions(page, target.id)
+  await row.getByRole('button', { name: 'Forward message', exact: true }).click()
+  const picker = page.getByRole('dialog', { name: 'Forward message', exact: true })
+  await picker.getByLabel('Chat or room').fill('team')
+  await page.getByTestId('contact-suggestions').getByRole('button', { name: /Team Chat/ }).click()
+  await picker.getByLabel('Comment (optional)').fill('For the room')
+  await picker.getByRole('button', { name: 'Send', exact: true }).click()
+  await expect(picker).toBeHidden()
+  await assertForwardStanza(page, ROOM, 'groupchat', `For the room\n${quoteOf(target)}${link}`, link, `${quoteOf(target)}${link}`)
+  const sent = page.locator('[data-message-body]').filter({ hasText: 'For the room' }).last()
+  await expect(sent.locator('[data-room-message-preview]')).toContainText(target.body)
+  await expect(sent).not.toContainText('wrote:')
+  await sent.scrollIntoViewIfNeeded()
+  await forwardPicture(page, 'after-room-desktop')
 })
 
 test.describe('touch forwarding', () => {
