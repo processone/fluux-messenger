@@ -65,7 +65,7 @@ describe('ToastContainer', () => {
   // FLM-228: with little room above the composer the stack shrinks, never overlapping it.
   describe('room above the composer', () => {
     const at = (bottomOrTop: number, key: 'bottom' | 'top') =>
-      ({ getBoundingClientRect: () => ({ [key]: bottomOrTop }) as DOMRect })
+      ({ getBoundingClientRect: () => ({ [key]: bottomOrTop }) as unknown as DOMRect })
 
     function mountPane(headerBottom: number, composerTop: number) {
       const main = document.createElement('main')
