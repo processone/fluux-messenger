@@ -822,6 +822,15 @@ export class Chat extends BaseModule {
         if (child.attrs[attribute] !== undefined) child.attrs[attribute] = String(Number(child.attrs[attribute]) - removedCodePoints)
       }
     }
+    // The forward marker is in the same frame as the references: move it with them.
+    for (const child of children) {
+      if (child.name !== 'fallback' || child.attrs.for !== NS_FORWARD_QUOTE) continue
+      const range = child.getChild('body', NS_FALLBACK)
+      if (!range) continue
+      for (const attribute of ['start', 'end']) {
+        if (range.attrs[attribute] !== undefined) range.attrs[attribute] = String(Number(range.attrs[attribute]) - removedCodePoints)
+      }
+    }
 
     const replyFallbackIdx = children.findIndex(
       (c) =>

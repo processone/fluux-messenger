@@ -30,7 +30,7 @@ import {
   NS_CORRECTION,
 } from '../namespaces'
 import type { Message, MessageReference, FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
-import { processFallback } from '../../utils/fallbackUtils'
+import { processFallback, rebaseFallbackOffset } from '../../utils/fallbackUtils'
 import { CHAT_FALLBACK_TARGETS, ROOM_FALLBACK_TARGETS } from '../../utils/fallbackRegistry'
 import { isAesgcmUri, parse as parseAesgcmUri } from './AesgcmUri'
 import { fromCodePointOffset } from '../../utils/xep0426'
@@ -369,7 +369,7 @@ export function parseMessageReferences(stanza: Element): MessageReference[] | un
 }
 
 /**
- * XEP-0428: a `<fallback for="urn:fluux:forward:0">` range marks a forward's generated
+ * XEP-0428: a `<fallback for="urn:fluux:forward-quote:0">` range marks a forward's generated
  * quote and link. It is kept on the data reference whose link it contains, never stripped
  * here: only a reader that can show the source hides it.
  */
@@ -485,7 +485,9 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
   const attachment = parseOobData(messageEl)
 
   // XEP-0428: Process fallback text removal
-  const { processedBody, fallbackBody } = processFallback(messageEl, body, { validTargets: fallbackTargets }, replyTo)
+  const fallback = processFallback(messageEl, body, { validTargets: fallbackTargets }, replyTo)
+
+  const { processedBody, fallbackBody } = fallback
 
   // Add fallbackBody to replyTo if extracted
   if (replyTo && fallbackBody) {
@@ -514,8 +516,33 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     replyTo,
     attachment,
     processedBody: finalBody,
-    references: parseMessageReferences(messageEl),
+    references: rebaseForwardReferences(parseMessageReferences(messageEl), body, finalBody, fallback),
   }
+}
+
+/**
+ * A forward's link and marker were parsed against the raw body; reply and OOB fallback
+ * removal moves them. Rebase both together, and drop the marker (keeping the quote
+ * visible) if the link no longer sits where the marker says.
+ */
+function rebaseForwardReferences(
+  references: MessageReference[] | undefined,
+  rawBody: string,
+  finalBody: string,
+  fallback: ReturnType<typeof processFallback>,
+): MessageReference[] | undefined {
+  if (finalBody === rawBody) return references
+  return references?.map(ref => {
+    if (ref.type !== 'data' || !ref.forwardFallback) return ref
+    const { forwardFallback } = ref
+    const begin = ref.begin === undefined ? undefined : rebaseFallbackOffset(ref.begin, fallback)
+    const end = ref.end === undefined ? undefined : rebaseFallbackOffset(ref.end, fallback)
+    const markerBegin = rebaseFallbackOffset(forwardFallback.begin, fallback)
+    const markerEnd = rebaseFallbackOffset(forwardFallback.end, fallback)
+    const valid = begin !== undefined && end !== undefined && finalBody.slice(begin, end) === ref.uri
+      && markerBegin <= begin && end <= markerEnd && markerEnd <= finalBody.length
+    return valid ? { ...ref, begin, end, forwardFallback: { begin: markerBegin, end: markerEnd } } : { type: 'data' as const, uri: ref.uri }
+  })
 }
 
 /**

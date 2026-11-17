@@ -158,6 +158,44 @@ describe('shared room message references', () => {
       expect(roomStanza.getChildren('fallback', FB).filter(el => el.attrs.for === FQ)).toHaveLength(1)
     })
 
+    it('rebases the link and marker when a reply quote is removed on receipt', async () => {
+      const h = harness()
+      await h.chat.sendMessage('bob@example.org', body, { references: [forwardRef],
+        replyTo: { id: 'earlier', fallback: { author: 'Carol', body: 'Question?' } } })
+      const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+      const wire = stanza.getChildText('body')!
+      const parsed = parseMessageContent({ messageEl: stanza, body: wire })
+      expect(parsed.processedBody).toBe(body)
+      const ref = parsed.references![0] as { begin: number; end: number; forwardFallback: { begin: number; end: number } }
+      expect(parsed.processedBody.slice(ref.begin, ref.end)).toBe(link)
+      expect(parsed.processedBody.slice(ref.forwardFallback.begin, ref.forwardFallback.end)).toBe(quote + link)
+    })
+
+    it('shifts the marker with the references when an encrypted reply quote is stripped from a plaintext send', async () => {
+      const h = harness()
+      await h.chat.sendMessage('bob@example.org', body, { references: [forwardRef],
+        replyTo: { id: 'earlier', fallback: { author: 'Carol', body: 'Private', fromEncrypted: true } } })
+      const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+      const parsed = parseMessageContent({ messageEl: stanza, body: stanza.getChildText('body')! })
+      const ref = parsed.references![0] as { forwardFallback: { begin: number; end: number } }
+      expect(parsed.processedBody).toBe(body)
+      expect(parsed.processedBody.slice(ref.forwardFallback.begin, ref.forwardFallback.end)).toBe(quote + link)
+    })
+
+    it('resolves the marked source, not an earlier link in the comment, after a retry', async () => {
+      const h = harness()
+      const text = `Also ${other}\n> Bob wrote:\n> Ship it\n${link}`
+      const begin = text.length - link.length
+      const stored = [{ type: 'data' as const, uri: link, begin, end: text.length,
+        forwardFallback: { begin: text.indexOf('> Bob'), end: text.length } }]
+      await h.chat.resendMessage('bob@example.org', text, 'fwd-2', undefined, stored)
+      const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+      const parsed = parseMessageContent({ messageEl: stanza, body: text })
+      // Body order puts the comment's link first; the marked one still wins.
+      expect(parsed.references!.map(ref => ref.uri)).toEqual([other, link])
+      expect(findRoomMessageLink(text, parsed.references)).toEqual({ roomJid: room, stanzaId: '1731490000123456' })
+    })
+
     it('ignores a marker that does not contain a room message link', () => {
       const stanza = xml('message', {}, xml('body', {}, 'hello there'),
         xml('fallback', { xmlns: FB, for: FQ }, xml('body', { start: '0', end: '5' })))

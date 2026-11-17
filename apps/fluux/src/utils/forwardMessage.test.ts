@@ -35,6 +35,15 @@ describe('forward composition', () => {
     expect(shown.mentions).toEqual([mention(3, 7)])
   })
 
+  it('removes only the marked interval, keeping text and mentions after it', () => {
+    const { body, references } = composeForward('Hi', link, { author: 'Bob', text: 'Ship it' })
+    const tail = `${body}\nthanks @Ann`
+    const mention = { type: 'mention' as const, uri: 'xmpp:r@c/Ann', begin: tail.length - 4, end: tail.length }
+    const shown = withoutForwardFallback({ body: tail, references }, [mention])
+    expect(shown.body).toBe('Hi\nthanks @Ann')
+    expect(shown.mentions).toEqual([{ ...mention, begin: shown.body.length - 4, end: shown.body.length }])
+  })
+
   it('leaves a message without a marker alone', () => {
     const message = { body: `see ${link}`, references: [{ type: 'data' as const, uri: link, begin: 4, end: 4 + link.length }] }
     expect(withoutForwardFallback(message).body).toBe(message.body)

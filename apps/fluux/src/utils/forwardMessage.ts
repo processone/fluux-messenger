@@ -39,15 +39,25 @@ export function forwardFallbackRange(references?: MessageReference[]): { begin: 
   return undefined
 }
 
-/** Remove the marked range, and any mention that sat inside or after it. */
+/**
+ * Remove only the marked [begin, end) interval, keeping text on both sides. A mention
+ * after it moves up with the text; one inside it is dropped.
+ */
 export function withoutForwardFallback(message: Pick<BaseMessage, 'body' | 'references'>, mentions?: MentionReference[]): {
   body: string
   mentions?: MentionReference[]
 } {
   const range = forwardFallbackRange(message.references)
   if (!range) return { body: message.body, mentions }
+  const before = message.body.slice(0, range.begin).trimEnd()
+  const rest = message.body.slice(range.end)
+  const after = rest.trimStart()
+  const afterStart = range.end + rest.length - after.length
+  const joiner = before && after ? '\n' : ''
+  const moved = before.length + joiner.length - afterStart
   return {
-    body: message.body.slice(0, range.begin).trimEnd(),
-    mentions: mentions?.filter(mention => mention.end !== undefined && mention.end <= range.begin),
+    body: before + joiner + after,
+    mentions: mentions?.flatMap(mention => mention.end <= before.length ? [mention]
+      : mention.begin >= afterStart ? [{ ...mention, begin: mention.begin + moved, end: mention.end + moved }] : []),
   }
 }

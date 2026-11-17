@@ -26,6 +26,7 @@
 import { xml, type Element } from '@xmpp/client'
 import { XMPPClient } from '../core/XMPPClient'
 import { fromCodePointOffset } from '../utils/xep0426'
+import { parseMessageReferences } from '../core/modules/messagingUtils'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
@@ -798,6 +799,9 @@ export class DemoClient extends XMPPClient {
     const pollClosedEl = stanza.getChild('poll-closed')
     const pollClosed: PollClosedData | null = pollClosedEl ? parsePollClosedElement(pollClosedEl) : null
 
+    // A real MUC reflects the references too, forward markers included.
+    const references = parseMessageReferences(stanza)
+
     const message: RoomMessage = {
       type: 'groupchat',
       id,
@@ -812,6 +816,7 @@ export class DemoClient extends XMPPClient {
       receivedAt: new Date(),
       isOutgoing: true,
       ...(replyTo && { replyTo }),
+      ...(references && { references }),
       ...(attachment && { attachment }),
       ...(poll && { poll }),
       ...(pollClosed && { pollClosed }),
