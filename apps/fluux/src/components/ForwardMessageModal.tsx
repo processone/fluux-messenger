@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useChatActions, useRoomActions, useRoster, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { trackSend } from '@/utils/pendingSends'
+import { ContactSelector } from './ContactSelector'
 import { ModalShell } from './ModalShell'
 import { TextArea } from './ui/TextInput'
 
@@ -24,6 +25,8 @@ export function ForwardMessageModal({ link, onClose }: ForwardMessageModalProps)
   const [sending, setSending] = useState(false)
   const [failed, setFailed] = useState(false)
   const inFlight = useRef(false)
+  const commentRef = useRef<HTMLTextAreaElement>(null)
+  const pickerId = useId()
 
   const chats = new Map(contacts.filter(contact => !rooms.has(contact.jid)).map(contact => [contact.jid, contact.name || contact.jid]))
   for (const conversation of conversations.values()) {
@@ -35,6 +38,22 @@ export function ForwardMessageModal({ link, onClose }: ForwardMessageModalProps)
   const validDestination = destination.startsWith('room:')
     ? joinedRooms.some(item => item.jid === destination.slice(5))
     : destination.startsWith('chat:') && chats.has(destination.slice(5))
+  // The picker lists roster contacts itself; offer the other chats and the joined rooms beside them,
+  // and hide roster entries that are rooms you cannot speak in.
+  const suggestions = [
+    ...Array.from(chats, ([jid, name]) => ({ jid, name })),
+    ...joinedRooms.map(item => ({ jid: item.jid, name: item.name || item.jid })),
+  ]
+  const hiddenRooms = contacts.filter(contact => rooms.has(contact.jid) && !joinedRooms.some(item => item.jid === contact.jid))
+    .map(contact => contact.jid)
+
+  // Keep the kind chosen at pick time, so a room that is left later is never sent to as a chat.
+  const pick = (jid: string) => {
+    const kind = joinedRooms.some(item => item.jid === jid) ? 'room' : chats.has(jid) ? 'chat' : null
+    if (!kind) return
+    setDestination(`${kind}:${jid}`)
+    commentRef.current?.focus()
+  }
 
   const send = async () => {
     if (inFlight.current || !validDestination) return
@@ -68,25 +87,17 @@ export function ForwardMessageModal({ link, onClose }: ForwardMessageModalProps)
       dismissable={!sending} onClose={onClose} width="max-w-md" panelClassName="max-h-[90vh] flex flex-col">
       <div className="p-4 space-y-4 overflow-y-auto">
         <p className="text-sm text-fluux-muted">{t('chat.forwardLinkOnly')}</p>
-        <label className="block text-sm text-fluux-text">
-          {t('chat.forwardDestination')}
-          <select value={destination} onChange={event => setDestination(event.target.value)} disabled={sending}
-            className="mt-1 w-full p-2 rounded bg-fluux-bg text-fluux-text border border-fluux-hover">
-            <option value="">{t('chat.forwardChoose')}</option>
-            {destination && !validDestination && (
-              <option value={destination} disabled>{t('chat.forwardUnavailable')} ({destination.slice(5)})</option>
-            )}
-            <optgroup label={t('sidebar.messages')}>
-              {Array.from(chats, ([jid, name]) => <option key={jid} value={`chat:${jid}`}>{name} ({jid})</option>)}
-            </optgroup>
-            <optgroup label={t('sidebar.rooms')}>
-              {joinedRooms.map(item => <option key={item.jid} value={`room:${item.jid}`}>{item.name || item.jid}</option>)}
-            </optgroup>
-          </select>
-        </label>
+        <div className="text-sm text-fluux-text">
+          <label htmlFor={pickerId} className="block mb-1">{t('chat.forwardDestination')}</label>
+          <ContactSelector inputId={pickerId} selectedContacts={destination ? [destination.slice(5)] : []}
+            onSelectionChange={jids => { if (jids.length === 0) setDestination('') }} onPick={pick}
+            extraSuggestions={suggestions} excludeJids={hiddenRooms} allowTypedJid={false} disabled={sending}
+            placeholder={t('chat.forwardChoose')} addMorePlaceholder="" />
+          {destination && !validDestination && <p className="mt-1 text-xs text-fluux-error">{t('chat.forwardUnavailable')}</p>}
+        </div>
         <label className="block text-sm text-fluux-text">
           {t('chat.forwardComment')}
-          <TextArea value={comment} onChange={event => setComment(event.target.value)} disabled={sending} rows={3}
+          <TextArea ref={commentRef} value={comment} onChange={event => setComment(event.target.value)} disabled={sending} rows={3}
             className="mt-1 w-full p-2 rounded bg-fluux-bg text-fluux-text border border-fluux-hover resize-none" />
         </label>
         <p className="text-xs text-fluux-muted break-all">{link}</p>

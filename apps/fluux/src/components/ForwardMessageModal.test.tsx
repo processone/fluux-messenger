@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { ForwardMessageModal } from './ForwardMessageModal'
 import { sendsSettled } from '@/utils/pendingSends'
 import { ForwardMessageProvider, useForwardMessage } from './conversation/forwardMessageContext'
@@ -9,25 +9,38 @@ const fixture = vi.hoisted(() => ({
   rooms: new Map(), conversations: new Map(),
 }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
-vi.mock('@fluux/sdk', () => ({
-  useRoster: () => ({ contacts: [{ jid: 'emma@fluux.chat', name: 'Emma' }] }),
+vi.mock('@fluux/sdk', async () => ({
+  // The shared picker filters with the SDK's own name/address matcher.
+  matchNameOrJid: (await vi.importActual<typeof import('@fluux/sdk')>('@fluux/sdk')).matchNameOrJid,
+  useRoster: () => ({ contacts: [{ jid: 'emma@fluux.chat', name: 'Emma' }, { jid: 'james@fluux.chat', name: 'James' }] }),
   useChatActions: () => ({ sendMessage: fixture.chatSend }),
   useRoomActions: () => ({ sendMessage: fixture.roomSend }),
   roomStore: { getState: () => ({ rooms: fixture.rooms }) },
+  chatStore: { getState: () => ({ conversations: fixture.conversations }) },
 }))
 vi.mock('@fluux/sdk/react', () => ({
   useChatStore: (selector: (state: unknown) => unknown) => selector({ conversations: fixture.conversations }),
   useRoomStore: (selector: (state: unknown) => unknown) => selector({ rooms: fixture.rooms }),
+  useConnectionStore: (selector: (state: unknown) => unknown) => selector({ status: 'online' }),
 }))
-// Keep the real ModalShell/ModalOverlay: pending-dismissal regressions occur
-// before the caller's onClose, in the exit transition and focus handling.
+// Keep the real ModalShell/ModalOverlay and the real ContactSelector: pending-dismissal
+// regressions occur in the exit transition and focus handling, and the picker is the
+// destination control under test.
 
 // The room-link forwarding specification owns these transitions: one destination, optional
 // comment, no source copy; pending/failure/cancel must not produce extra sends.
 // Identities follow the existing demo contact and room fixtures.
 const link = 'xmpp:design@conference.fluux.chat?join;msg=1731490000123456'
 const roomJid = 'design@conference.fluux.chat'
-const choose = (value: string) => fireEvent.change(screen.getByLabelText('chat.forwardDestination'), { target: { value } })
+const dan = { id: 'dan@example.org', name: 'Dan', type: 'chat', lastMessage: { timestamp: new Date() } }
+const picker = () => screen.getByLabelText('chat.forwardDestination')
+const suggestions = () => screen.queryByTestId('contact-suggestions')?.querySelectorAll('[role="button"]') ?? []
+/** Type into the destination picker and pick the highlighted entry with Enter. */
+const choose = (query: string) => {
+  fireEvent.focus(picker())
+  fireEvent.change(picker(), { target: { value: query } })
+  fireEvent.keyDown(picker(), { key: 'Enter' })
+}
 const send = () => fireEvent.click(screen.getByRole('button', { name: 'chat.forwardSend' }))
 function SourceRow() {
   const open = useForwardMessage()
@@ -43,11 +56,22 @@ beforeEach(() => {
 })
 
 describe('ForwardMessageModal', () => {
-  it('requires a selection and sends one link with the optional comment to a contact', async () => {
+  it('narrows the picker as you type, picks with Enter and sends one link with the comment', async () => {
     const onClose = vi.fn()
     render(<ForwardMessageModal link={link} onClose={onClose} />)
     expect(screen.getByRole('button', { name: 'chat.forwardSend' })).toBeDisabled()
-    choose('chat:emma@fluux.chat')
+    expect(picker()).toHaveFocus()
+    expect(Array.from(suggestions(), row => row.textContent)).toEqual([
+      expect.stringContaining('Emma'), expect.stringContaining('James'), expect.stringContaining('Design'),
+    ])
+    fireEvent.change(picker(), { target: { value: 'em' } })
+    expect(Array.from(suggestions(), row => row.textContent)).toEqual([expect.stringContaining('Emma')])
+    fireEvent.keyDown(picker(), { key: 'Enter' })
+    expect(screen.getByLabelText('chat.forwardComment')).toHaveFocus()
+    expect(picker()).toHaveValue('')
+    expect(screen.getByText('Emma')).toBeInTheDocument()
+    // The field under the chosen chip must not still ask for a choice.
+    expect(picker()).toHaveAttribute('placeholder', '')
     fireEvent.change(screen.getByLabelText('chat.forwardComment'), { target: { value: 'Please review' } })
     send()
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
@@ -55,10 +79,73 @@ describe('ForwardMessageModal', () => {
     expect(fixture.roomSend).not.toHaveBeenCalled()
   })
 
-  it('sends a link without a comment to a joined room', async () => {
+  it('keeps the highlighted recipient when a message from them arrives before Enter', async () => {
+    const onClose = vi.fn()
+    const { rerender } = render(<ForwardMessageModal link={link} onClose={onClose} />)
+    fireEvent.change(picker(), { target: { value: 'm' } })
+    expect(Array.from(suggestions(), row => row.textContent)).toEqual([
+      expect.stringContaining('Emma'), expect.stringContaining('James'),
+    ])
+    fireEvent.keyDown(picker(), { key: 'ArrowDown' })
+    // James writes while the list is open; Forward re-renders from its conversations subscription.
+    fixture.conversations = new Map([['james@fluux.chat', {
+      id: 'james@fluux.chat', name: 'James', type: 'chat', lastMessage: { timestamp: new Date() },
+    }]])
+    rerender(<ForwardMessageModal link={link} onClose={onClose} />)
+    fireEvent.keyDown(picker(), { key: 'Enter' })
+    send()
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('james@fluux.chat', link)
+  })
+
+  it('keeps the highlighted destination when a new chat joins the list before Enter', async () => {
+    const onClose = vi.fn()
+    const { rerender } = render(<ForwardMessageModal link={link} onClose={onClose} />)
+    fireEvent.change(picker(), { target: { value: 'd' } })
+    expect(Array.from(suggestions(), row => row.textContent)).toEqual([expect.stringContaining('Design')])
+    // A first message from someone outside the roster creates a chat sorted ahead of Design.
+    fixture.conversations = new Map([[dan.id, dan]])
+    rerender(<ForwardMessageModal link={link} onClose={onClose} />)
+    expect(Array.from(suggestions(), row => row.textContent)).toEqual([
+      expect.stringContaining('Dan'), expect.stringContaining('Design'),
+    ])
+    fireEvent.keyDown(picker(), { key: 'Enter' })
+    send()
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(fixture.roomSend).toHaveBeenCalledExactlyOnceWith(roomJid, link)
+    expect(fixture.chatSend).not.toHaveBeenCalled()
+  })
+
+  it('asks for a fresh choice when the highlighted destination leaves the list', () => {
+    const diego = { id: 'diego@example.org', name: 'Diego', type: 'chat' }
+    fixture.conversations = new Map([[diego.id, diego]])
+    const props = { link, onClose: vi.fn() }
+    const { rerender } = render(<ForwardMessageModal {...props} />)
+    fireEvent.change(picker(), { target: { value: 'd' } })
+    expect(Array.from(suggestions(), row => row.textContent)).toEqual([
+      expect.stringContaining('Design'), expect.stringContaining('Diego'),
+    ])
+    // The highlighted room is left; Diego moves up to where Design was.
+    fixture.rooms = new Map([[roomJid, { jid: roomJid, name: 'Design', joined: false }]])
+    rerender(<ForwardMessageModal {...props} />)
+    expect(Array.from(suggestions(), row => row.textContent)).toEqual([expect.stringContaining('Diego')])
+    fireEvent.keyDown(picker(), { key: 'Enter' })
+    expect(within(screen.getByRole('dialog')).queryByText('Diego')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'chat.forwardSend' })).toBeDisabled()
+    fireEvent.keyDown(picker(), { key: 'ArrowDown' })
+    fireEvent.keyDown(picker(), { key: 'Enter' })
+    expect(within(screen.getByRole('dialog')).getByText('Diego')).toBeInTheDocument()
+  })
+
+  it('replaces an earlier pick and sends a link without a comment to a joined room', async () => {
     const onClose = vi.fn()
     render(<ForwardMessageModal link={link} onClose={onClose} />)
-    choose(`room:${roomJid}`)
+    choose('emma')
+    choose('des')
+    // The chosen destination shows inside the dialog; the suggestion list is portalled outside it.
+    const dialog = within(screen.getByRole('dialog'))
+    expect(dialog.queryByText('Emma')).not.toBeInTheDocument()
+    expect(dialog.getByText('Design')).toBeInTheDocument()
     send()
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
     expect(fixture.roomSend).toHaveBeenCalledExactlyOnceWith(roomJid, link)
@@ -70,7 +157,7 @@ describe('ForwardMessageModal', () => {
     fixture.chatSend.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail }))
     const onClose = vi.fn()
     render(<ForwardMessageModal link={link} onClose={onClose} />)
-    choose('chat:emma@fluux.chat')
+    choose('emma')
     fireEvent.change(screen.getByLabelText('chat.forwardComment'), { target: { value: 'Please review' } })
     send()
     const pending = screen.getByRole('button', { name: 'chat.forwardSending' })
@@ -87,17 +174,26 @@ describe('ForwardMessageModal', () => {
     expect(acknowledged).toHaveBeenCalledOnce()
     await screen.findByRole('alert')
     expect(onClose).not.toHaveBeenCalled()
-    expect(screen.getByLabelText('chat.forwardDestination')).toHaveValue('chat:emma@fluux.chat')
+    expect(screen.getByText('Emma')).toBeInTheDocument()
     expect(screen.getByLabelText('chat.forwardComment')).toHaveValue('Please review')
+    send()
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(fixture.chatSend).toHaveBeenLastCalledWith('emma@fluux.chat', `Please review\n${link}`)
   })
 
-  it('cancels without sending and excludes unjoined rooms and private occupant conversations', () => {
-    fixture.rooms.set('engineering@conference.fluux.chat', { jid: 'engineering@conference.fluux.chat', joined: false })
+  it('cancels without sending and offers no unjoined room, occupant chat or typed address', () => {
+    fixture.rooms.set('engineering@conference.fluux.chat', { jid: 'engineering@conference.fluux.chat', name: 'Engineering', joined: false })
     fixture.conversations.set(`${roomJid}/Alice`, { id: `${roomJid}/Alice`, name: 'Alice', type: 'chat' })
     const onClose = vi.fn()
     render(<ForwardMessageModal link={link} onClose={onClose} />)
-    expect(screen.queryByRole('option', { name: 'Alice' })).not.toBeInTheDocument()
-    expect(screen.getAllByRole('option')).toHaveLength(3)
+    fireEvent.focus(picker())
+    expect(suggestions()).toHaveLength(3)
+    for (const query of ['Engineering', 'Alice', 'stranger@example.org']) {
+      choose(query)
+      expect(suggestions()).toHaveLength(0)
+      expect(screen.getByText('contacts.noContactsFound')).toBeInTheDocument()
+    }
+    expect(screen.getByRole('button', { name: 'chat.forwardSend' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }))
     expect(onClose).toHaveBeenCalledOnce()
     expect(fixture.chatSend).not.toHaveBeenCalled()
@@ -107,10 +203,11 @@ describe('ForwardMessageModal', () => {
   it('does not reinterpret a departed room as a direct-chat destination', () => {
     const props = { link, onClose: vi.fn() }
     const { rerender } = render(<ForwardMessageModal {...props} />)
-    choose(`room:${roomJid}`)
+    choose('design')
     fixture.rooms = new Map([[roomJid, { jid: roomJid, joined: false }]])
     rerender(<ForwardMessageModal {...props} />)
     expect(screen.getByRole('button', { name: 'chat.forwardSend' })).toBeDisabled()
+    expect(screen.getByText('chat.forwardUnavailable')).toBeInTheDocument()
     send()
     expect(fixture.roomSend).not.toHaveBeenCalled()
     expect(fixture.chatSend).not.toHaveBeenCalled()
@@ -124,7 +221,7 @@ describe('ForwardMessageModal', () => {
     const onClose = vi.fn()
     try {
       const { container } = render(<ForwardMessageModal link={link} onClose={onClose} />)
-      choose('chat:emma@fluux.chat')
+      choose('emma')
       send()
       fireEvent.keyDown(document.body, { key: 'Escape' })
       fireEvent.click(screen.getByRole('button', { name: 'common.close' }))
@@ -152,15 +249,18 @@ describe('ForwardMessageModal', () => {
       id: 'engineering@conference.fluux.chat', name: 'Engineering', type: 'chat',
     })
     render(<ForwardMessageModal link={link} onClose={vi.fn()} />)
-    expect(screen.queryByRole('option', { name: /Engineering/ })).not.toBeInTheDocument()
-    choose(`room:${roomJid}`)
+    choose('engineering')
+    expect(suggestions()).toHaveLength(0)
+    choose('design')
     // Store changed, before the subscribed render catches up with the demotion.
     fixture.rooms = new Map([[roomJid, { jid: roomJid, joined: true, selfOccupant: { role: 'visitor' } }]])
     send()
     await screen.findByRole('alert')
     expect(fixture.roomSend).not.toHaveBeenCalled()
     expect(fixture.chatSend).not.toHaveBeenCalled()
-    expect(screen.getByLabelText('chat.forwardDestination')).toHaveValue(`room:${roomJid}`)
+    // The pick is kept, named by its address now that the room is no longer offered.
+    expect(screen.getByText(roomJid)).toBeInTheDocument()
+    expect(screen.getByText('chat.forwardUnavailable')).toBeInTheDocument()
   })
 
   it('retains selection and comment when the source row unmounts', () => {
@@ -169,10 +269,10 @@ describe('ForwardMessageModal', () => {
     )
     const { rerender } = render(view(true))
     fireEvent.click(screen.getByRole('button', { name: 'Forward source row' }))
-    choose('chat:emma@fluux.chat')
+    choose('emma')
     fireEvent.change(screen.getByLabelText('chat.forwardComment'), { target: { value: 'Please review' } })
     rerender(view(false))
-    expect(screen.getByLabelText('chat.forwardDestination')).toHaveValue('chat:emma@fluux.chat')
+    expect(screen.getByText('Emma')).toBeInTheDocument()
     expect(screen.getByLabelText('chat.forwardComment')).toHaveValue('Please review')
     rerender(view(false, 'team@conference.fluux.chat'))
     expect(screen.queryByLabelText('chat.forwardDestination')).not.toBeInTheDocument()
