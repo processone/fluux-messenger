@@ -38,6 +38,18 @@ import { xml } from '@fluux/sdk/xmpp'
 vi.setConfig({ testTimeout: 30_000 })
 
 beforeEach(resetUncertainImportsForTesting)
+
+const tauriFiles = vi.hoisted(() => ({
+  save: vi.fn(),
+  open: vi.fn(),
+  writeTextFile: vi.fn(),
+  readTextFile: vi.fn(),
+}))
+vi.mock('@tauri-apps/plugin-dialog', () => ({ save: tauriFiles.save, open: tauriFiles.open }))
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  writeTextFile: tauriFiles.writeTextFile,
+  readTextFile: tauriFiles.readTextFile,
+}))
 afterEach(resetUncertainImportsForTesting)
 
 /**
@@ -6649,5 +6661,52 @@ describe('SequoiaPgpPlugin', () => {
         })
       })
     }
+  })
+
+  describe('key file export and import', () => {
+    beforeEach(() => {
+      for (const fn of Object.values(tauriFiles)) fn.mockReset()
+    })
+
+    it('exports the armored backup to the path the user chose, named after the account', async () => {
+      await plugin.init(makeContext('me@example.com').ctx)
+      tauriFiles.save.mockResolvedValue('/chosen/backup.asc')
+      expect(await plugin.exportKeyToFile('correct horse battery')).toBe(true)
+      expect(tauriFiles.save).toHaveBeenCalledWith(expect.objectContaining({
+        defaultPath: 'openpgp-backup-me@example.com.asc',
+      }))
+      expect(tauriFiles.writeTextFile).toHaveBeenCalledTimes(1)
+      const [path, armored] = tauriFiles.writeTextFile.mock.calls[0]
+      expect(path).toBe('/chosen/backup.asc')
+      expect(armored).toContain('-----BEGIN PGP MESSAGE-----')
+      expect(armored).toMatch(/^Passphrase-Format:/m)
+    })
+
+    it('writes nothing when the user cancels the save dialog', async () => {
+      await plugin.init(makeContext('me@example.com').ctx)
+      tauriFiles.save.mockResolvedValue(null)
+      expect(await plugin.exportKeyToFile('correct horse battery')).toBe(false)
+      expect(tauriFiles.writeTextFile).not.toHaveBeenCalled()
+    })
+
+    it('reads the file the user picked', async () => {
+      tauriFiles.open.mockResolvedValue('/picked/backup.asc')
+      tauriFiles.readTextFile.mockResolvedValue('ARMORED TEXT')
+      expect(await plugin.pickKeyFile()).toBe('ARMORED TEXT')
+      expect(tauriFiles.readTextFile).toHaveBeenCalledWith('/picked/backup.asc')
+    })
+
+    it('reads the first path when the picker answers with an array', async () => {
+      tauriFiles.open.mockResolvedValue(['/first.asc', '/second.asc'])
+      tauriFiles.readTextFile.mockResolvedValue('FIRST')
+      expect(await plugin.pickKeyFile()).toBe('FIRST')
+      expect(tauriFiles.readTextFile).toHaveBeenCalledWith('/first.asc')
+    })
+
+    it('returns null and reads nothing when the user cancels the picker', async () => {
+      tauriFiles.open.mockResolvedValue(null)
+      expect(await plugin.pickKeyFile()).toBeNull()
+      expect(tauriFiles.readTextFile).not.toHaveBeenCalled()
+    })
   })
 })
