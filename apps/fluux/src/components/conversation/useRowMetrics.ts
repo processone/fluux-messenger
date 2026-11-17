@@ -41,9 +41,9 @@ export const ROW_METRICS_FALLBACK: RowEstimatorContext = {
  * so sampling whichever row happens to be first poisons the width (and therefore the height
  * cache's width-bucket validity tag) with an essentially random value. Whisper cards have their
  * own inset and padding, so neither their width nor chrome calibrates ordinary rows. Prefer the first text
- * element OUTSIDE `[data-msg-own]`; if only own rows are mounted, the widest own text box is
- * the best available lower bound for the estimator. The height cache's width tag must not
- * follow that lower bound: it reads {@link realContentWidthPx} instead.
+ * element OUTSIDE `[data-msg-own]`; if only own rows are mounted, return the widest own text box.
+ * Its width is only a lower bound: the estimator and the height cache's width tag read
+ * {@link realContentWidthPx} for it instead, and fall back to the lower bound outside a marked column.
  */
 export function pickWidthSampleEl(root: HTMLElement): HTMLElement | null {
   const all = root.querySelectorAll<HTMLElement>('[data-msg-text]')
@@ -151,7 +151,8 @@ export interface RowMetrics {
 
 /**
  * Samples the live row metrics needed to estimate unmounted rows: the body FontSpec, the text
- * content width, the rendered line box (WebKit floors line boxes; we read the real box), and the
+ * content width (an incoming text box's width; the content column's with only own rows mounted),
+ * the rendered line box (WebKit floors line boxes; we read the real box), and the
  * per-shape chrome deltas (chrome = a mounted row's outer height minus its predicted text height).
  * Chrome sampling requires the full text to fit both CAPPED_PREDICTION_PREFIX_CHARS and
  * MAX_COLLAPSED_HEIGHT, so an uncapped prediction stays bounded and collapse or extrapolation
@@ -191,7 +192,13 @@ export function useRowMetrics(
       onRealWidthChangeRef.current?.(realWidthPx)
     }
     const fontSpec = fontSpecFrom(textEl)
-    const contentWidthPx = textEl.clientWidth
+    // An own text box hugs its text, so with only own rows mounted the estimator reads the real
+    // content width instead: the unmounted rows wrap at the column, which an incoming text box
+    // fills, not at the widest own reply. Own rows wrap slightly narrower (by the own tint's
+    // inline padding), but every row keeps the width an incoming sample reads, so moving between
+    // own-only and mixed windows does not recalibrate the estimates.
+    const ownSample = textEl.closest('[data-msg-own]') !== null
+    const contentWidthPx = ownSample ? (realWidthPx ?? textEl.clientWidth) : textEl.clientWidth
 
     // Line box height: primary = floor(lineHeightPx) — the engine-correct rendered box (WebKit
     // floors line boxes to integer px; floor(lineHeight) matches the real box for font-size

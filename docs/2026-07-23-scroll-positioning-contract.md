@@ -150,29 +150,31 @@ the library's own commit-time update asks for none. Navigation writes and report
 still publish at rest.
 
 Native upward panning also retains visible progress when the metrics behind unmeasured estimates
-are resampled. Two legitimate samples change estimates during a pan: when only own hug-width
-bubbles are mounted the sampled width is their widest text, a lower bound that gives way to the
-full content width once an incoming row mounts; and up to three chrome corrections per geometry
-follow when a plain row of a shape first mounts. An estimate refresh keeps the held anchor, or
-else the row at the reader's live offset, at the same placement: the offset shift the new
-estimates cause above it goes through the library's own scroll correction, in either direction and
-during backward scrolling, because no row the reader has seen changed size. A refresh that moved
+are resampled. Up to three chrome corrections per geometry change estimates during a pan, when a
+plain row of a shape first mounts. The sampled width stays put during a pan: own hug-width
+bubbles are only as wide as their text, so with only own bubbles mounted the sampler reads the
+content column they sit in, the width an incoming row's text fills, and moving between own-only
+and mixed windows keeps one width. An estimate refresh keeps the held anchor, or else the row at
+the reader's live offset, at the same placement: the offset shift the new estimates cause above
+it goes through the library's own scroll correction, in either direction and during backward
+scrolling, because no row the reader has seen changed size. A refresh that moved
 the offset commits its re-render in the same task, so no paint shows the new offset with the old
 row positions. A shift larger than the scroll room the old spacer leaves would be clamped, and the
 window rendered at the clamped offset would mount older rows whose first measurements replace the
 library's recovery of the rest, skipping the reader far back. Such a refresh first commits the
 taller layout windowed at the shifted offset, then writes the whole shift, all before paint.
 Disabled automatic adjustment and a smooth or written scroll still landing keep their pixels; an
-iOS gesture defers the correction as it does a resize. Correcting the estimates also stops the
-own-only feedback loop, in which an uncompensated refresh re-windowed the list away from the
-incoming row and the width sample fell back to the own lower bound, so the list never settled.
+iOS gesture defers the correction as it does a resize. Sampling the column for own bubbles also
+removes the own-only feedback loop, in which a refresh re-windowed the list away from the incoming
+row and the width sample fell back to the widest own text, so the list never settled.
 `e2e/scroll-native-pan-estimates.ts` seeds a direct chat and a room for three journeys, each
 panning upward with actual Chromium middle-click autoscroll: a latest window of own messages only,
-whose first incoming row widens the sample; a run of own messages below incoming ones, which
-narrows the sample and widens it again; and continuation rows whose first plain one corrects the
-chrome. The virtualizer's own observer measures every row; a forwarding probe records each
-estimate refresh with its resampled metrics. The journeys require the expected metric changes
-during backward motion. Across every refresh and every frame a reading cannot return to a newer
+into the incoming rows above it; a run of own messages below incoming ones, into the older
+incoming rows; and continuation rows whose first plain one corrects the chrome. The virtualizer's
+own observer measures every row; a forwarding probe records each estimate refresh with its
+resampled metrics. The own-message journeys require the content column's width from the latest
+window on and no width change during the pan; the chrome journey requires its correction during
+backward motion. Across every refresh and every frame a reading cannot return to a newer
 message, move the same message against the pan, or skip more older messages than native
 autoscroll reveals in the time between them (three rows per 100ms, and at least three). Readings
 more than 250ms apart follow a stalled frame and are exempt from the skip check, and a refresh with

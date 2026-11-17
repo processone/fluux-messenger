@@ -1,7 +1,8 @@
 // Intent: FLM-311. Native autoscroll must not reverse visible reading progress when the row
-// metrics behind unmeasured estimates are resampled: the width sampled from own hug-width bubbles
-// alone giving way to the full content width, or replacing it across a run of own messages, and a
-// chrome correction once a plain continuation row first mounts.
+// metrics behind unmeasured estimates are resampled, as a chrome correction does once a plain
+// continuation row first mounts. Panning across own hug-width bubbles resamples no width at all:
+// unmounted rows are estimated at the content column whether or not an incoming row is mounted,
+// not at the widest own reply.
 import { expect, test, type Page } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { chatStore, roomStore } from '@fluux/sdk/stores'
@@ -27,19 +28,22 @@ type Observation = {
   start: PanSample; initial: Metrics; samples: PanSample[]; refreshes: Refresh[]
   inputs: { at: number; trusted: boolean }[]
   scrolls: Scroll[]
+  /** The content column's width when the pan begins, and whether an older incoming row has mounted. */
+  column: number | null; reachedOlder: boolean
+  final?: Metrics
 }
-type Capture = { read: () => { refreshes: Refresh[]; top: number }; begin: () => Observation; stop: () => Observation }
+type Capture = { read: () => { refreshes: Refresh[]; top: number; reachedOlder: boolean }; begin: () => Observation; stop: () => Observation }
 type CaptureWindow = Window & { estimatePanCapture: Capture }
 
 const LONG = 'Older context that wraps across several lines at the full reading width, so its estimated height depends on the sampled content width. '
 
-// History whose metric the pan, not the latest window, recalibrates:
-// - own-latest: the latest window holds only own hug-width bubbles, so the sampled width is their
-//   lower bound until an older incoming row mounts;
-// - own-run: the latest window samples the full width, a longer run of own bubbles narrows it,
-//   and the older incoming rows restore it;
+// History the pan crosses:
+// - own-latest: the latest window holds only own hug-width bubbles, and older incoming rows mount
+//   during the pan;
+// - own-run: the latest window holds incoming rows, then a longer run of own bubbles leaves only
+//   own rows mounted before the older incoming rows mount;
 // - chrome: the latest window holds only rows with a sender header, so the continuation chrome
-//   keeps its fallback until a plain continuation row mounts.
+//   keeps its fallback until a plain continuation row mounts and the pan recalibrates it.
 function history(trigger: Trigger) {
   const rows: { body: string; own: boolean; minutes: number }[] = []
   if (trigger !== 'chrome') {
@@ -133,12 +137,14 @@ function installCapture(trigger: Trigger) {
     }).filter(row => row.top >= -1 && row.bottom <= view.height + 1).sort((a, b) => a.top - b.top)
     return { at: performance.now(), top: list.scrollTop, height: list.scrollHeight, client: list.clientHeight, anchor: anchors[0] ?? null }
   }
-  // The latest window leaves the trigger's recalibration to the pan.
+  // The latest window leaves the trigger's rows to the pan.
   const incoming = [...list.querySelectorAll<HTMLElement>('[data-msg-chrome]')].filter(row => !row.hasAttribute('data-msg-own'))
   const ready = trigger === 'own-latest' ? incoming.length === 0
     : trigger === 'own-run' ? incoming.length > 0
     : !incoming.some(row => row.dataset.msgChrome === 'cont')
-  if (!ready) throw new Error(`The latest window does not leave the ${trigger} recalibration to the pan`)
+  if (!ready) throw new Error(`The latest window does not leave the ${trigger} rows to the pan`)
+  const olderMounted = () => [...list.querySelectorAll<HTMLElement>('[data-msg-chrome]:not([data-msg-own]) [data-msg-text]')]
+    .some(text => text.textContent?.includes('Older context'))
   let data: Observation | undefined
   let active = false, frame = 0, lastTop = list.scrollTop
   const setOptions = lib.setOptions
@@ -157,40 +163,34 @@ function installCapture(trigger: Trigger) {
   // Capture before the virtualizer's ordinary scroll listener performs its synchronous render.
   list.addEventListener('scroll', onScroll, true)
   document.addEventListener('mousemove', onInput, true)
-  const tick = () => { if (active && data) { data.samples.push(sample()); frame = requestAnimationFrame(tick) } }
+  const tick = () => {
+    if (active && data) { data.samples.push(sample()); data.reachedOlder ||= olderMounted(); frame = requestAnimationFrame(tick) }
+  }
   ;(window as unknown as CaptureWindow).estimatePanCapture = {
-    read: () => ({ refreshes: data?.refreshes ?? [], top: list.scrollTop }),
+    read: () => ({ refreshes: data?.refreshes ?? [], top: list.scrollTop, reachedOlder: data?.reachedOlder ?? false }),
     begin: () => {
-      data = { start: sample(), initial: readMetrics(), samples: [], refreshes: [], inputs: [], scrolls: [] }
+      data = { start: sample(), initial: readMetrics(), samples: [], refreshes: [], inputs: [], scrolls: [],
+        column: list.querySelector<HTMLElement>('[data-msg-column]')?.clientWidth ?? null, reachedOlder: olderMounted() }
       lastTop = list.scrollTop; active = true; tick(); return data
     },
     stop: () => {
       active = false; cancelAnimationFrame(frame); lib.setOptions = setOptions
       list.removeEventListener('scroll', onScroll, true); document.removeEventListener('mousemove', onInput, true)
+      data!.final = readMetrics()
       return data!
     },
   }
 }
 
-// The refreshes carrying the trigger's metric change, and whether the pan has seen all of them.
-function recalibrations(trigger: Trigger, initial: Metrics, refreshes: Refresh[]) {
-  const width = (refresh: Refresh) => refresh.metrics.contentWidthPx
-  if (trigger === 'chrome') {
-    const changes = refreshes.filter(refresh => width(refresh) === initial.contentWidthPx && refresh.metrics.continuation !== initial.continuation)
-    return { changes, complete: changes.length > 0 }
-  }
-  if (trigger === 'own-latest') {
-    const changes = refreshes.filter(refresh => width(refresh) > initial.contentWidthPx)
-    return { changes, complete: changes.length > 0 }
-  }
-  const narrowed = refreshes.filter(refresh => width(refresh) < initial.contentWidthPx)
-  const restored = refreshes.filter(refresh => narrowed.length > 0 && refresh.at > narrowed[0].at && width(refresh) === initial.contentWidthPx)
-  return { changes: [...narrowed, ...restored], complete: narrowed.length > 0 && restored.length > 0 }
+// The refreshes carrying the continuation chrome correction, and whether the pan has seen one.
+function chromeRecalibrations(initial: Metrics, refreshes: Refresh[]) {
+  const changes = refreshes.filter(refresh => refresh.metrics.contentWidthPx === initial.contentWidthPx && refresh.metrics.continuation !== initial.continuation)
+  return { changes, complete: changes.length > 0 }
 }
 
 const LABELS: Record<Trigger, string> = {
-  'own-latest': 'the full width replacing a width sampled from own messages alone',
-  'own-run': 'the width sample narrowing and widening across a run of own messages',
+  'own-latest': 'a latest window of own messages alone at one sampled width',
+  'own-run': 'a run of own messages at one sampled width',
   chrome: 'the first continuation chrome correction',
 }
 
@@ -216,33 +216,44 @@ for (const kind of ['chat', 'room'] as const) {
       await page.mouse.move(x, y - 60, { steps: 5 })
       await expect.poll(async () => {
         const progress = await page.evaluate(() => (window as unknown as CaptureWindow).estimatePanCapture.read())
-        return recalibrations(trigger, initial, progress.refreshes).complete || progress.top <= 0
+        const done = trigger === 'chrome' ? chromeRecalibrations(initial, progress.refreshes).complete : progress.reachedOlder
+        return done || progress.top <= 0
       }, { timeout: 60_000, intervals: [50] }).toBe(true)
       await frames(page, 60)
       const result = await page.evaluate(() => (window as unknown as CaptureWindow).estimatePanCapture.stop())
       await page.mouse.up({ button: 'middle' })
       await test.info().attach('native-pan-estimates', { body: JSON.stringify(result, null, 2), contentType: 'application/json' })
 
-      const { changes, complete } = recalibrations(trigger, initial, result.refreshes)
-      expect(complete, `the ${trigger} recalibration must refresh estimates during the pan`).toBe(true)
-      for (const refresh of changes) {
-        // The library's own direction flag reads null between its offset poll's idle frames, so
-        // the native scroll events on both sides of the refresh carry the backward motion. One
-        // event can also fold in a measurement correction, so a few events are searched for a
-        // native autoscroll step: a few dozen pixels per event even on a slow runner, where an
-        // estimate correction moves the offset by hundreds of pixels or more.
-        const step = (scroll: Scroll) => scroll.trusted && scroll.top < scroll.from && scroll.from - scroll.top <= NATIVE_STEP_PX
-        const previous = result.scrolls.filter(scroll => scroll.at < refresh.at).slice(-4)
-        const following = result.scrolls.filter(scroll => scroll.at > refresh.at).slice(0, 4)
-        // Offsets are not comparable across a refresh that moved them, so progress is read in messages.
-        expect(refresh.before.anchor!.order, 'the native pan has moved before the refresh').toBeLessThan(start.anchor!.order)
-        expect(previous.some(step), 'a native upward step precedes the refresh').toBe(true)
-        expect(following.some(step), 'the native pan continues upward after it').toBe(true)
-        const next = result.samples.find(sample => sample.at > refresh.at)
-        expect(next, 'a frame follows the refresh').toBeDefined()
-        expectProgress(refresh.before, next!, `${trigger} refresh`)
-        expect(next!.at - refresh.before.at, 'a stalled frame around the refresh leaves its continuity unproven').toBeLessThanOrEqual(FRAME_GAP_MS)
-        expectContinuity(refresh.before, next!, `${trigger} refresh`)
+      if (trigger === 'chrome') {
+        const { changes, complete } = chromeRecalibrations(initial, result.refreshes)
+        expect(complete, 'the chrome recalibration must refresh estimates during the pan').toBe(true)
+        for (const refresh of changes) {
+          // The library's own direction flag reads null between its offset poll's idle frames, so
+          // the native scroll events on both sides of the refresh carry the backward motion. One
+          // event can also fold in a measurement correction, so a few events are searched for a
+          // native autoscroll step: a few dozen pixels per event even on a slow runner, where an
+          // estimate correction moves the offset by hundreds of pixels or more.
+          const step = (scroll: Scroll) => scroll.trusted && scroll.top < scroll.from && scroll.from - scroll.top <= NATIVE_STEP_PX
+          const previous = result.scrolls.filter(scroll => scroll.at < refresh.at).slice(-4)
+          const following = result.scrolls.filter(scroll => scroll.at > refresh.at).slice(0, 4)
+          // Offsets are not comparable across a refresh that moved them, so progress is read in messages.
+          expect(refresh.before.anchor!.order, 'the native pan has moved before the refresh').toBeLessThan(start.anchor!.order)
+          expect(previous.some(step), 'a native upward step precedes the refresh').toBe(true)
+          expect(following.some(step), 'the native pan continues upward after it').toBe(true)
+          const next = result.samples.find(sample => sample.at > refresh.at)
+          expect(next, 'a frame follows the refresh').toBeDefined()
+          expectProgress(refresh.before, next!, 'chrome refresh')
+          expect(next!.at - refresh.before.at, 'a stalled frame around the refresh leaves its continuity unproven').toBeLessThanOrEqual(FRAME_GAP_MS)
+          expectContinuity(refresh.before, next!, 'chrome refresh')
+        }
+      } else {
+        // The own rows hug their text, but the estimates use the column they sit in: the width is
+        // the column's from the latest window on, and no refresh during the pan changes it.
+        expect(result.reachedOlder, 'the pan reaches the older incoming rows').toBe(true)
+        expect(initial.contentWidthPx, 'the latest window samples the content column').toBe(result.column)
+        expect(result.refreshes.map(refresh => refresh.metrics.contentWidthPx).filter(width => width !== initial.contentWidthPx),
+          'no refresh during the pan changes the sampled width').toEqual([])
+        expect(result.final!.contentWidthPx, 'the sampled width after the pan').toBe(initial.contentWidthPx)
       }
       expect(result.inputs.length).toBeGreaterThan(0)
       expect(result.inputs.every(input => input.trusted)).toBe(true)

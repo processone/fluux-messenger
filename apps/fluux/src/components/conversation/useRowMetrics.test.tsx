@@ -268,6 +268,49 @@ describe('useRowMetrics', () => {
     unmount()
   })
 
+  // Own bubbles hug their text, so a window of short own replies used to sample its widest reply
+  // and estimate every unmounted row above as if it wrapped there, several times too tall.
+  // Widths are the demo app's in Chromium at 1280px, then 1000px, wide.
+  it('estimates at the content column when only own rows are mounted, and follows the column', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const root = document.body.appendChild(document.createElement('div'))
+    let columnPx = 888
+    // Mirrors MessageBubble: the content column holds the chrome box, its body and the text.
+    const append = (own: boolean, body: string, ownTextPx = 0) => {
+      const column = root.appendChild(document.createElement('div'))
+      column.dataset.msgColumn = ''
+      Object.defineProperty(column, 'clientWidth', { get: () => columnPx })
+      const row = column.appendChild(document.createElement('div'))
+      row.dataset.msgChrome = 'cont'
+      if (own) row.dataset.msgOwn = ''
+      const text = row.appendChild(document.createElement('div')).appendChild(document.createElement('div'))
+      text.dataset.msgText = ''
+      text.textContent = body
+      Object.defineProperty(text, 'clientWidth', { get: () => own ? ownTextPx : columnPx })
+      return column
+    }
+    const incoming = append(false, 'A comfortable reading column keeps a long conversation easy to follow.')
+    append(true, 'short own reply 98', 142)
+    append(true, 'short own reply 99', 140)
+    const onCalibrated = vi.fn()
+    const { result, unmount } = renderHook(() => useRowMetrics({ current: root }, onCalibrated))
+    result.current.sample()
+    expect(result.current.metricsRef.current.contentWidthPx).toBe(888)
+
+    // The reader scrolls down past the last incoming row: only own replies stay mounted.
+    incoming.remove()
+    result.current.sample()
+    expect(result.current.metricsRef.current.contentWidthPx).toBe(888)
+
+    // The window narrows: the own replies keep their width, the column does not.
+    const calibrations = onCalibrated.mock.calls.length
+    columnPx = 608
+    result.current.sample()
+    expect(result.current.metricsRef.current.contentWidthPx).toBe(608)
+    expect(onCalibrated).toHaveBeenCalledTimes(calibrations + 1)
+    unmount()
+  })
+
   it('tells the listener which notification is the first calibration of the mount', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
     const root = document.createElement('div')
