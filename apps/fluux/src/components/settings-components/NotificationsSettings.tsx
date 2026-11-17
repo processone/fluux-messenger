@@ -19,22 +19,42 @@ import { platform } from '@/platform'
 import { saveBadgeDiagnostics } from '@/utils/badgeDiagnosticsExport'
 
 type NotificationStatus = 'checking' | 'granted' | 'denied' | 'default' | 'unavailable' | 'unsupported'
-type BadgeStatus = 'enabled' | 'disabled' | 'unknown' | 'unsupported'
-type PermissionSnapshot = { status: NotificationStatus; badges?: BadgeStatus }
+type NotificationSettingStatus = 'enabled' | 'disabled' | 'unknown' | 'unsupported'
+type PermissionSnapshot = {
+  status: NotificationStatus
+  badges?: NotificationSettingStatus
+  alerts?: NotificationSettingStatus
+  sounds?: NotificationSettingStatus
+}
+
+function settingStatus(value: unknown): NotificationSettingStatus {
+  return value === 'enabled' || value === 'disabled' || value === 'unsupported' ? value : 'unknown'
+}
+
+const channelStatusKeys = {
+  badges: { enabled: 'settings.badgesEnabled', disabled: 'settings.badgesDisabledMac', unsupported: 'settings.badgesUnsupported', unknown: 'settings.badgesUnknown' },
+  alerts: { enabled: 'settings.alertsEnabledMac', disabled: 'settings.alertsDisabledMac', unsupported: 'settings.alertsUnsupported', unknown: 'settings.alertsUnknown' },
+  sounds: { enabled: 'settings.soundsEnabledMac', disabled: 'settings.soundsDisabledMac', unsupported: 'settings.soundsUnsupported', unknown: 'settings.soundsUnknown' },
+} as const
 
 async function checkNotificationPermission(): Promise<PermissionSnapshot> {
   try {
     if (platform().notificationsManagedByOS) {
       if (await isMacOSDesktop()) {
         const { invoke } = await import('@tauri-apps/api/core')
-        const state = await invoke<{ authorization: string; badges: string }>('notification_settings_state')
+        const state = await invoke<{ authorization: string; badges: unknown; alerts: unknown; sounds: unknown; alertStyle: unknown }>('notification_settings_state')
         const status = state.authorization === 'granted' || state.authorization === 'denied'
           ? state.authorization
           : state.authorization === 'notdetermined' ? 'default'
             : state.authorization === 'unsupported' ? 'unsupported' : 'unavailable'
-        const badges = state.badges === 'enabled' || state.badges === 'disabled' || state.badges === 'unsupported'
-          ? state.badges : 'unknown'
-        return { status, badges }
+        let alerts = settingStatus(state.alerts)
+        if (alerts === 'enabled') {
+          // A known None style suppresses banners/alerts. An unreadable style
+          // is not the same as None, even when alert permission is enabled.
+          alerts = state.alertStyle === 'none' ? 'disabled'
+            : state.alertStyle === 'banner' || state.alertStyle === 'alert' ? 'enabled' : 'unknown'
+        }
+        return { status, badges: settingStatus(state.badges), alerts, sounds: settingStatus(state.sounds) }
       }
       const { isPermissionGranted } = await import('@tauri-apps/plugin-notification')
       return { status: await isPermissionGranted() ? 'granted' : 'denied' }
@@ -205,19 +225,33 @@ export function NotificationsSettings() {
     </SettingsSection>
   )
 
+  const badgeDiagnosticsExport = (
+    <button
+      type="button"
+      onClick={() => { void saveBadgeDiagnostics(t('console.exportBadgeDiagnosticsFailed')) }}
+      className="flex items-center gap-1.5 text-sm text-fluux-brand hover:text-fluux-text transition-colors"
+    >
+      <Download className="size-4" />
+      {t('console.exportBadgeDiagnostics')}
+    </button>
+  )
+
   if (platform().usesNativePush) {
     return (
       <section className="w-full max-w-md space-y-8">
         <SettingsSection>
-          <IosNotificationsCard
-            permission={notificationStatus === 'unsupported' ? 'unavailable' : notificationStatus}
-            onRequestPermission={() => void handleRequestPermission()}
-            push={client.push}
-            pushStatus={pushStatus}
-            pushEnabled={webPushEnabled}
-            isConnected={isConnected}
-            server={jid ? getDomain(jid) : ''}
-          />
+          <div className="space-y-3">
+            <IosNotificationsCard
+              permission={notificationStatus === 'unsupported' ? 'unavailable' : notificationStatus}
+              onRequestPermission={() => void handleRequestPermission()}
+              push={client.push}
+              pushStatus={pushStatus}
+              pushEnabled={webPushEnabled}
+              isConnected={isConnected}
+              server={jid ? getDomain(jid) : ''}
+            />
+            {badgeDiagnosticsExport}
+          </div>
         </SettingsSection>
 
         <SettingsSection title={t('settings.messagePreviews')}>
@@ -248,7 +282,7 @@ export function NotificationsSettings() {
   }
 
   const blocked = isMac && (notificationStatus === 'denied' ||
-    (notificationStatus === 'granted' && permission.badges === 'disabled'))
+    (notificationStatus === 'granted' && [permission.badges, permission.alerts, permission.sounds].includes('disabled')))
 
   return (
     <section className="w-full max-w-md space-y-8">
@@ -286,11 +320,16 @@ export function NotificationsSettings() {
                   {notificationStatus === 'checking' && t('settings.notificationChecking')}
                 </p>
                 {isMac && notificationStatus === 'granted' && (
-                  <p role="status" className={`text-xs mt-2 ${permission.badges === 'disabled' ? 'font-medium text-fluux-text' : 'text-fluux-muted'}`}>
-                    {t(permission.badges === 'enabled' ? 'settings.badgesEnabled'
-                      : permission.badges === 'disabled' ? 'settings.badgesDisabledMac'
-                        : permission.badges === 'unsupported' ? 'settings.badgesUnsupported' : 'settings.badgesUnknown')}
-                  </p>
+                  <div className="mt-2 space-y-1">
+                    {(['badges', 'alerts', 'sounds'] as const).map(channel => {
+                      const state = permission[channel] ?? 'unknown'
+                      return (
+                        <p key={channel} role="status" className={`text-xs ${state === 'disabled' ? 'font-medium text-fluux-text' : 'text-fluux-muted'}`}>
+                          {t(channelStatusKeys[channel][state])}
+                        </p>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
             </div>
@@ -333,16 +372,7 @@ export function NotificationsSettings() {
                 )}
               </div>
             )}
-          {isMac && (
-            <button
-              type="button"
-              onClick={() => { void saveBadgeDiagnostics(t('console.exportBadgeDiagnosticsFailed')) }}
-              className="flex items-center gap-1.5 text-sm text-fluux-brand hover:text-fluux-text transition-colors"
-            >
-              <Download className="size-4" />
-              {t('console.exportBadgeDiagnostics')}
-            </button>
-          )}
+          {badgeDiagnosticsExport}
         </div>
       </SettingsSection>
 

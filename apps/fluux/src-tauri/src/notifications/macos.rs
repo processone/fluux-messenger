@@ -1,8 +1,8 @@
 //! macOS native notifications via `UNUserNotificationCenter`.
 
 use crate::notifications::backend::{
-    AuthState, BadgeSetting, NativeNotification, NavTarget, NotificationSettingsState,
-    SettingsAuthorization,
+    AuthState, NativeNotification, NavTarget, NotificationSettingState, NotificationSettingsState,
+    SettingsAlertStyle, SettingsAuthorization,
 };
 use core::ptr::NonNull;
 use objc2::rc::Retained;
@@ -10,10 +10,10 @@ use objc2::runtime::{Bool, NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{define_class, msg_send, AnyThread};
 use objc2_foundation::{NSBundle, NSError, NSString};
 use objc2_user_notifications::{
-    UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent, UNNotification,
-    UNNotificationPresentationOptions, UNNotificationRequest, UNNotificationResponse,
-    UNNotificationSetting, UNNotificationSettings, UNNotificationTrigger, UNUserNotificationCenter,
-    UNUserNotificationCenterDelegate,
+    UNAlertStyle, UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent,
+    UNNotification, UNNotificationPresentationOptions, UNNotificationRequest,
+    UNNotificationResponse, UNNotificationSetting, UNNotificationSettings, UNNotificationTrigger,
+    UNUserNotificationCenter, UNUserNotificationCenterDelegate,
 };
 use std::collections::HashMap;
 use std::sync::mpsc;
@@ -413,10 +413,37 @@ pub fn authorization_state() -> AuthState {
         .unwrap_or(AuthState::NotDetermined)
 }
 
+fn map_setting(setting: UNNotificationSetting) -> NotificationSettingState {
+    if setting == UNNotificationSetting::Enabled {
+        NotificationSettingState::Enabled
+    } else if setting == UNNotificationSetting::Disabled {
+        NotificationSettingState::Disabled
+    } else if setting == UNNotificationSetting::NotSupported {
+        NotificationSettingState::Unsupported
+    } else {
+        NotificationSettingState::Unknown
+    }
+}
+
+fn map_alert_style(style: UNAlertStyle) -> SettingsAlertStyle {
+    if style == UNAlertStyle::None {
+        SettingsAlertStyle::None
+    } else if style == UNAlertStyle::Banner {
+        SettingsAlertStyle::Banner
+    } else if style == UNAlertStyle::Alert {
+        SettingsAlertStyle::Alert
+    } else {
+        SettingsAlertStyle::Unknown
+    }
+}
+
 // Keep unknown future SDK values distinct from "not requested" in Settings.
 fn settings_snapshot(
     status: UNAuthorizationStatus,
     badges: UNNotificationSetting,
+    alerts: UNNotificationSetting,
+    sounds: UNNotificationSetting,
+    alert_style: UNAlertStyle,
 ) -> NotificationSettingsState {
     let authorization = if status == UNAuthorizationStatus::NotDetermined {
         SettingsAuthorization::NotDetermined
@@ -427,29 +454,26 @@ fn settings_snapshot(
             AuthState::NotDetermined => SettingsAuthorization::Unknown,
         }
     };
-    let badges = if badges == UNNotificationSetting::Enabled {
-        BadgeSetting::Enabled
-    } else if badges == UNNotificationSetting::Disabled {
-        BadgeSetting::Disabled
-    } else if badges == UNNotificationSetting::NotSupported {
-        BadgeSetting::Unsupported
-    } else {
-        BadgeSetting::Unknown
-    };
     NotificationSettingsState {
         authorization,
-        badges,
+        badges: map_setting(badges),
+        alerts: map_setting(alerts),
+        sounds: map_setting(sounds),
+        alert_style: map_alert_style(alert_style),
     }
 }
 
-/// Read both properties from one OS callback, without requesting authorization.
+/// Read authorization and presentation settings from one callback, without prompting.
 /// Like authorization_state, this must run off the main thread.
 pub fn notification_settings_state() -> Result<NotificationSettingsState, String> {
     use block2::RcBlock;
     let Some(center) = current_center() else {
         return Ok(NotificationSettingsState {
             authorization: SettingsAuthorization::Unsupported,
-            badges: BadgeSetting::Unsupported,
+            badges: NotificationSettingState::Unsupported,
+            alerts: NotificationSettingState::Unsupported,
+            sounds: NotificationSettingState::Unsupported,
+            alert_style: SettingsAlertStyle::Unknown,
         });
     };
     let (tx, rx) = mpsc::channel();
@@ -459,6 +483,9 @@ pub fn notification_settings_state() -> Result<NotificationSettingsState, String
         let _ = tx.send(settings_snapshot(
             settings.authorizationStatus(),
             settings.badgeSetting(),
+            settings.alertSetting(),
+            settings.soundSetting(),
+            settings.alertStyle(),
         ));
     });
     center.getNotificationSettingsWithCompletionHandler(&handler);
@@ -535,16 +562,24 @@ mod tests {
             ),
         ] {
             for (badge, badge_expected) in [
-                (UNNotificationSetting::Enabled, BadgeSetting::Enabled),
-                (UNNotificationSetting::Disabled, BadgeSetting::Disabled),
+                (
+                    UNNotificationSetting::Enabled,
+                    NotificationSettingState::Enabled,
+                ),
+                (
+                    UNNotificationSetting::Disabled,
+                    NotificationSettingState::Disabled,
+                ),
                 (
                     UNNotificationSetting::NotSupported,
-                    BadgeSetting::Unsupported,
+                    NotificationSettingState::Unsupported,
                 ),
             ] {
-                let snapshot = settings_snapshot(status, badge);
+                let snapshot = settings_snapshot(status, badge, badge, badge, UNAlertStyle::Banner);
                 assert_eq!(snapshot.authorization, expected);
                 assert_eq!(snapshot.badges, badge_expected);
+                assert_eq!(snapshot.alerts, badge_expected);
+                assert_eq!(snapshot.sounds, badge_expected);
                 // The settings reader never changes the legacy posting mapping.
                 assert_eq!(
                     map_status(status) == AuthState::Granted,
@@ -555,10 +590,13 @@ mod tests {
         assert_eq!(
             serde_json::to_value(settings_snapshot(
                 UNAuthorizationStatus::Authorized,
-                UNNotificationSetting::Disabled
+                UNNotificationSetting::Disabled,
+                UNNotificationSetting::Enabled,
+                UNNotificationSetting::NotSupported,
+                UNAlertStyle::None,
             ))
             .unwrap(),
-            serde_json::json!({ "authorization": "granted", "badges": "disabled" })
+            serde_json::json!({ "authorization": "granted", "badges": "disabled", "alerts": "enabled", "sounds": "unsupported", "alertStyle": "none" })
         );
     }
 
@@ -567,9 +605,26 @@ mod tests {
         let snapshot = settings_snapshot(
             UNAuthorizationStatus(isize::MAX),
             UNNotificationSetting(isize::MAX),
+            UNNotificationSetting(isize::MAX),
+            UNNotificationSetting(isize::MAX),
+            UNAlertStyle(isize::MAX),
         );
         assert_eq!(snapshot.authorization, SettingsAuthorization::Unknown);
-        assert_eq!(snapshot.badges, BadgeSetting::Unknown);
+        assert_eq!(snapshot.badges, NotificationSettingState::Unknown);
+        assert_eq!(snapshot.alerts, NotificationSettingState::Unknown);
+        assert_eq!(snapshot.sounds, NotificationSettingState::Unknown);
+        assert_eq!(snapshot.alert_style, SettingsAlertStyle::Unknown);
+    }
+
+    #[test]
+    fn notification_settings_distinguish_alert_styles() {
+        for (style, expected) in [
+            (UNAlertStyle::None, SettingsAlertStyle::None),
+            (UNAlertStyle::Banner, SettingsAlertStyle::Banner),
+            (UNAlertStyle::Alert, SettingsAlertStyle::Alert),
+        ] {
+            assert_eq!(map_alert_style(style), expected);
+        }
     }
 
     /// Run only from the disposable permission lab bundle, never an installed app.
@@ -586,7 +641,10 @@ mod tests {
         let state = notification_settings_state().expect("native settings callback");
         assert_ne!(state.authorization, SettingsAuthorization::Unsupported);
         assert_ne!(state.authorization, SettingsAuthorization::Unknown);
-        assert_ne!(state.badges, BadgeSetting::Unknown);
+        assert_ne!(state.badges, NotificationSettingState::Unknown);
+        assert_ne!(state.alerts, NotificationSettingState::Unknown);
+        assert_ne!(state.sounds, NotificationSettingState::Unknown);
+        assert_ne!(state.alert_style, SettingsAlertStyle::Unknown);
         assert_eq!(
             authorization_state() == AuthState::Granted,
             state.authorization == SettingsAuthorization::Granted

@@ -261,11 +261,11 @@ Local desktop builds run under a **separate dev identity** so they never collide
 
 The override lives in `apps/fluux/src-tauri/tauri.dev.conf.json` and is merged in by the local scripts via `--config`. CI/release builds use the base config and are **never** affected. Tauri only auto-merges `tauri.<platform>.conf.json` files, so `tauri.dev.conf.json` applies only when a script passes it explicitly. (To build locally with the *production* identity, e.g. to test the release artifact, use the raw `npm run tauri build`, which uses the base config.)
 
-Settings → Notifications reads `notification_settings_state` on macOS. It returns one snapshot of `authorizationStatus` and `badgeSetting` without prompting. Unknown SDK values and failed reads remain unknown; an unbundled executable reports unsupported rather than denied or not requested. The existing `notification_permission_state` string contract remains unchanged for the runtime posting gate. The panel rereads on opening, focus and visibility changes; only an explicit click requests permission or opens System Settings.
+Settings → Notifications reads `notification_settings_state` on macOS. It returns one snapshot of `authorizationStatus`, `badgeSetting`, `alertSetting`, `alertStyle` and `soundSetting` without prompting. Known-disabled badges, alerts or sounds warn; enabled alerts with a known `None` style also warn. Unknown SDK values and failed reads remain unknown, never disabled; unsupported states remain distinct. Fluux’s local sound/banner preferences remain separate. An unbundled executable reports unsupported rather than denied or not requested. The existing `notification_permission_state` string contract remains unchanged for the runtime posting gate. The panel rereads on opening, focus and visibility changes; only an explicit click requests permission or opens System Settings.
 
 The `notification-settings` browser journey uses demo-owned IPC responses, not real system settings or an installed app's authorization. Native enum mapping tests likewise do not establish visible Dock rendering or permission continuity after an update.
 
-Run `bash scripts/native-tests/notification-settings/run.sh /absolute/path/outside/project` on macOS, choosing a new results directory. The launcher builds a throwaway unsigned `.app` for `notification_settings_isolated_native_probe --ignored`, reads only its dedicated identity's settings, retains logs, and removes the bundle. It never requests permission or uses signing or keychain commands; a fresh identity normally proves the not-requested callback, not disabled badges.
+Run `bash scripts/native-tests/notification-settings/run.sh /absolute/path/outside/project` on macOS, choosing a new results directory. The launcher builds a throwaway unsigned `.app` for `notification_settings_isolated_native_probe --ignored`, reads only its dedicated identity's settings, retains stdout, stderr, environment details and a copy of `Info.plist`, and removes the bundle. It never requests permission or uses signing or keychain commands; a fresh identity normally proves the not-requested callback, not disabled badges.
 
 ### Why a separate identity
 
@@ -909,11 +909,11 @@ registration completed, not that every pending message has decrypted.
 ### Automatic badge diagnostics
 
 Fluux automatically keeps an independent local badge-decision journal during normal
-use, without enabling notification debugging. On macOS, open **Settings → Notifications**
+use, without enabling notification debugging. On any supported platform, open **Settings → Notifications**
 and choose **Export badge diagnostics** in the permission section. Advanced mode and
 the XMPP console are not required. The action remains available regardless of notification
 permission and works even when the XMPP log is empty. It saves `fluux-badge-diagnostics.json`.
-Desktop uses the normal save dialog; cancelling writes nothing. A save failure shows
+Desktop uses the normal save dialog; cancelling writes nothing. iOS uses its existing share sheet, and web and Android use the existing download path. A save failure shows
 an error rather than claiming success. This file is separate from the XMPP log, which
 can contain private protocol data.
 

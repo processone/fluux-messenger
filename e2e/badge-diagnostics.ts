@@ -1,26 +1,29 @@
 import { expect, test, type Page } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { bootDemo } from './harness/demoBoot'
+import type { PlatformOS, PlatformShell } from '../apps/fluux/src/platform'
+
+test.use({ viewport: { width: 1280, height: 900 } })
 
 async function capture(page: Page, name: string) {
   if (process.env.FLUUX_NOTIFICATION_PROOF) {
     await page.screenshot({ path: join(process.env.FLUUX_NOTIFICATION_PROOF, name + '.png') })
   }
 }
-async function macSettings(page: Page) {
-  await page.evaluate(async () => {
+async function settingsWithFixture(page: Page, shell: PlatformShell = 'desktop', os: PlatformOS = 'macos') {
+  await page.evaluate(async ({ shell, os }) => {
     const w = window as any
     w.__demoClient.stopAnimation()
     await w.__i18n.changeLanguage('en')
-    w.__notificationSettingsFixture = w.__installNotificationSettingsFixture()
+    w.__notificationSettingsFixture = w.__installNotificationSettingsFixture('granted', 'disabled', { shell, os })
     location.hash = '/settings/notifications'
-  })
-  await expect(page.getByText('Desktop Notifications', { exact: true })).toBeVisible()
+  }, { shell, os })
+  await expect(page.getByRole('button', { name: 'Export badge diagnostics', exact: true })).toBeVisible()
 }
 
-// Intent: the captain moved this sanitized export to macOS Notifications settings.
+// Intent: the requested relocation puts this sanitized export in Notifications settings.
 // It must remain independent of ordinary XMPP entries and keep private data out.
 test('exports badge decisions from Notifications, not the empty XMPP console', async ({ page }) => {
   await page.addInitScript(() => {
@@ -45,7 +48,7 @@ test('exports badge decisions from Notifications, not the empty XMPP console', a
   await expect(page.getByRole('button', { name: 'Export badge diagnostics', exact: true })).toHaveCount(0)
   await capture(page, 'after-export-console')
   await page.getByRole('button', { name: 'Close console', exact: true }).click()
-  await macSettings(page)
+  await settingsWithFixture(page)
   const action = page.getByRole('button', { name: 'Export badge diagnostics', exact: true })
   await expect(action).toBeEnabled()
   await capture(page, 'after-export-settings')
@@ -78,7 +81,7 @@ test('exports badge decisions from Notifications, not the empty XMPP console', a
 test('exports without advanced mode or permission, preserving native cancel and error behavior', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('fluux-advanced-mode', 'false'))
   await bootDemo(page, '/demo.html?tutorial=false')
-  await macSettings(page)
+  await settingsWithFixture(page)
   await page.evaluate(() => {
     ;(window as any).__notificationSettingsFixture.failRead = true
     window.dispatchEvent(new Event('focus'))
@@ -100,3 +103,48 @@ test('exports without advanced mode or permission, preserving native cancel and 
   expect(await page.evaluate(() => (window as any).__notificationSettingsFixture.writes)).toEqual([])
   await capture(page, 'after-export-error')
 })
+
+// The relocation keeps each existing save route reachable, including the iOS
+// settings branch. These are controlled hosts, not native device qualification.
+for (const [shell, os] of [
+  ['desktop', 'windows'], ['desktop', 'linux'], ['web', 'other'],
+  ['mobile', 'android'], ['mobile', 'ios'],
+] as const) {
+  test(`exports from ${shell}/${os} Notifications using the existing saver`, async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('fluux-advanced-mode', 'false'))
+    await bootDemo(page, '/demo.html?tutorial=false')
+    const downloads: unknown[] = []
+    page.on('download', download => downloads.push(download))
+    await settingsWithFixture(page, shell, os)
+    const action = page.getByRole('button', { name: 'Export badge diagnostics', exact: true })
+    await expect(action).toHaveCount(1)
+    await expect(action).toBeEnabled()
+    expect(downloads).toHaveLength(0)
+    expect(await page.evaluate(() => (window as any).__notificationSettingsFixture.writes)).toEqual([])
+    expect(await page.evaluate(() => (window as any).__notificationSettingsFixture.shares)).toEqual([])
+    await capture(page, `after-export-${shell}-${os}`)
+    let content: string
+    if (shell === 'web' || os === 'android') {
+      const downloaded = page.waitForEvent('download')
+      await action.click()
+      const file = await downloaded
+      expect(file.suggestedFilename()).toBe('fluux-badge-diagnostics.json')
+      content = await readFile((await file.path())!, 'utf8')
+    } else {
+      await action.click()
+      await expect.poll(() => page.evaluate(() => (window as any).__notificationSettingsFixture.writes.length)).toBe(1)
+      content = await page.evaluate(() => (window as any).__notificationSettingsFixture.writes[0] as string)
+      if (os === 'ios') {
+        await expect.poll(() => page.evaluate(() => (window as any).__notificationSettingsFixture.shares.length)).toBe(1)
+        expect(await page.evaluate(() => (window as any).__notificationSettingsFixture.shares[0].name)).toBe('fluux-badge-diagnostics.json')
+        await expect.poll(() => page.evaluate(() => (window as any).__notificationSettingsFixture.calls)).toContain('plugin:fs|remove')
+        expect(await page.evaluate(() => (window as any).__notificationSettingsFixture.saveOptions)).toEqual([])
+      } else {
+        expect(await page.evaluate(() => (window as any).__notificationSettingsFixture.saveOptions)).toEqual([
+          { options: { defaultPath: 'fluux-badge-diagnostics.json' } },
+        ])
+      }
+    }
+    expect(JSON.parse(content)).toMatchObject({ format: 'fluux-badge-diagnostics', events: expect.any(Array) })
+  })
+}

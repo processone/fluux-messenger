@@ -5,6 +5,8 @@ import { test, expect, type Page } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
 import { join } from 'node:path'
 
+test.use({ viewport: { width: 1280, height: 900 } })
+
 async function setup(page: Page, authorization = 'granted', badges = 'disabled') {
   await bootDemo(page, '/demo.html?tutorial=false')
   await page.evaluate(async ({ authorization, badges }) => {
@@ -112,4 +114,32 @@ test('retains explicit activation for not-requested permission and translates th
   await page.evaluate(async () => { await (window as any).__i18n.changeLanguage('fr') })
   await expect(page.getByText('Badges de l’icône désactivés dans macOS. Activez-les dans les réglages système.')).toBeVisible()
   await capture(page, 'after-badges-disabled-fr')
+})
+
+test('warns for macOS alerts, style None and sounds without treating unknown as off', async ({ page }) => {
+  await setup(page, 'granted', 'enabled')
+  for (const scenario of [
+    { alerts: 'disabled', alertStyle: 'banner', sounds: 'enabled', alertText: 'Alerts disabled in macOS', soundText: 'Notification sounds enabled in macOS', picture: 'after-alerts-disabled' },
+    { alerts: 'enabled', alertStyle: 'none', sounds: 'enabled', alertText: 'Alerts disabled in macOS', soundText: 'Notification sounds enabled in macOS', picture: 'after-alert-style-none' },
+    { alerts: 'enabled', alertStyle: 'alert', sounds: 'disabled', alertText: 'Alerts enabled in macOS', soundText: 'Notification sounds disabled in macOS', picture: 'after-sounds-disabled' },
+    { alerts: 'enabled', alertStyle: 'none', sounds: 'disabled', alertText: 'Alerts disabled in macOS', soundText: 'Notification sounds disabled in macOS', picture: 'after-alerts-and-sounds-disabled' },
+    { alerts: 'unknown', alertStyle: 'none', sounds: 'unknown', alertText: 'macOS alert settings are unknown', soundText: 'macOS notification sound settings are unknown', picture: 'after-channels-unknown' },
+    { alerts: 'unsupported', alertStyle: 'none', sounds: 'unsupported', alertText: 'Alerts are not supported', soundText: 'Notification sounds are not supported', picture: 'after-channels-unsupported' },
+    { alerts: 'enabled', alertStyle: 'future-style', sounds: 'enabled', alertText: 'macOS alert settings are unknown', soundText: 'Notification sounds enabled in macOS', picture: 'after-alert-style-unknown' },
+    { alerts: 'enabled', alertStyle: 'banner', sounds: 'enabled', alertText: 'Alerts enabled in macOS', soundText: 'Notification sounds enabled in macOS', picture: 'after-channels-restored' },
+  ]) {
+    await page.evaluate(scenario => {
+      const f = (window as any).__notificationSettingsFixture
+      Object.assign(f, { alerts: scenario.alerts, alertStyle: scenario.alertStyle, sounds: scenario.sounds })
+      window.dispatchEvent(new Event('focus'))
+    }, scenario)
+    await expect(page.getByText(scenario.alertText, { exact: true })).toBeVisible()
+    await expect(page.getByText(scenario.soundText, { exact: true })).toBeVisible()
+    await expect(page.getByText('Alerts disabled in macOS', { exact: true })).toHaveCount(scenario.alertText === 'Alerts disabled in macOS' ? 1 : 0)
+    await expect(page.getByText('Notification sounds disabled in macOS', { exact: true })).toHaveCount(scenario.soundText === 'Notification sounds disabled in macOS' ? 1 : 0)
+    await capture(page, scenario.picture)
+  }
+  const calls = await page.evaluate(() => (window as any).__notificationSettingsFixture.calls as string[])
+  expect(calls).not.toContain('request_notification_permission')
+  expect(calls).not.toContain('open_notification_settings')
 })

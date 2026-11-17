@@ -10,6 +10,9 @@ pub fn request_authorization() -> AuthState { AuthState::Denied }
 pub fn notification_settings_state() -> Result<super::backend::NotificationSettingsState, String> {
     Ok(super::backend::NotificationSettingsState {
         authorization: super::backend::SettingsAuthorization::Denied,
-        badges: super::backend::BadgeSetting::Disabled,
+        badges: super::backend::NotificationSettingState::Disabled,
+        alerts: super::backend::NotificationSettingState::Disabled,
+        sounds: super::backend::NotificationSettingState::Disabled,
+        alert_style: super::backend::SettingsAlertStyle::None,
     })
 }

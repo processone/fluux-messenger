@@ -68,7 +68,7 @@ pub enum SettingsAuthorization {
 #[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum BadgeSetting {
+pub enum NotificationSettingState {
     Enabled,
     Disabled,
     Unsupported,
@@ -77,9 +77,23 @@ pub enum BadgeSetting {
 
 #[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SettingsAlertStyle {
+    None,
+    Banner,
+    Alert,
+    Unknown,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct NotificationSettingsState {
     pub authorization: SettingsAuthorization,
-    pub badges: BadgeSetting,
+    pub badges: NotificationSettingState,
+    pub alerts: NotificationSettingState,
+    pub sounds: NotificationSettingState,
+    pub alert_style: SettingsAlertStyle,
 }
 
 #[cfg(test)]

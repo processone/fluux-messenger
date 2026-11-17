@@ -54,6 +54,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundlePackageType</key><string>APPL</string>
 </dict></plist>
 PLIST
+cp "$APP/Contents/Info.plist" "$RESULTS/Info.plist"
 # A scratch HOME alone does not isolate keychains. Block both command names too.
 printf '#!/bin/sh\necho "Forbidden signing or keychain command" >&2\nexit 97\n' > "$LAB/bin/security"
 cp "$LAB/bin/security" "$LAB/bin/codesign"
@@ -64,7 +65,7 @@ chmod +x "$LAB/bin/security" "$LAB/bin/codesign"
   rustc --version
 } > "$RESULTS/environment.txt"
 HOME="$LAB/home" CFFIXED_USER_HOME="$LAB/home" FM3000_LOCAL_CODESIGN_DIR="$LAB/home/signing" PATH="$LAB/bin:$PATH" \
-  python3 - "$APP/Contents/MacOS/FluuxPermissionProbe" <<'PY' | tee "$RESULTS/native-probe.log"
+  python3 - "$APP/Contents/MacOS/FluuxPermissionProbe" 2>&1 <<'PY' | tee "$RESULTS/native-probe.log"
 import subprocess, sys
 subprocess.run([sys.argv[1], 'notifications::macos::tests::notification_settings_isolated_native_probe',
                 '--exact', '--ignored', '--nocapture'], check=True, timeout=15)
