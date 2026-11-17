@@ -83,7 +83,7 @@ verified fingerprint, in localStorage.
 
 ## Cross-device sync (optional)
 
-`apps/fluux/src/e2ee/verificationSync.ts` publishes the verification map to a
+`packages/openpgp-plugin/src/verificationSync.ts` publishes the verification map to a
 private PEP node `urn:xmpp:fluux:verifications:0` (whitelist), sign+encrypted to
 the account's own key. A fetched snapshot is applied only if it is signed by the
 own key (authorship) and carries a strictly higher `version` (replay defence). A
@@ -143,9 +143,9 @@ control, and verified state is per fingerprint.
 | Trust state type               | `packages/fluux-sdk/src/core/e2ee/types.ts` (`TrustState`)   |
 | Verify dialog (SAS + fallback) | `apps/fluux/src/components/VerifyPeerDialog.tsx`             |
 | Verified-key storage           | `apps/fluux/src/stores/verifiedPeerKeysStore.ts`            |
-| Fingerprint normalisation      | `apps/fluux/src/e2ee/fingerprintCompare.ts`                  |
+| Fingerprint normalisation      | `packages/openpgp-plugin/src/fingerprintCompare.ts`                  |
 | Trust lifting to `verified`    | `apps/fluux/src/e2ee/OpenPGPPluginBase.ts` (`isPeerVerified`) |
-| Cross-device sync (PEP)        | `apps/fluux/src/e2ee/verificationSync.ts`                    |
+| Cross-device sync (PEP)        | `packages/openpgp-plugin/src/verificationSync.ts`                    |
 
 ## Appendix A: planned commitment-based upgrade
 

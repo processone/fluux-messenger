@@ -20,6 +20,7 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
       '@fluux/sdk': resolve(__dirname, '../../packages/fluux-sdk/src'),
+      '@fluux/openpgp-plugin': resolve(__dirname, '../../packages/openpgp-plugin/src'),
     },
   },
   test: {

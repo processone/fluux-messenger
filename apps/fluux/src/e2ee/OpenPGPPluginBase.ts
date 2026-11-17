@@ -73,7 +73,32 @@ import {
   clearBackedUpFingerprint,
   readBackedUpFingerprint,
   writeBackedUpFingerprint,
-} from './backupMarker'
+  VERIFICATIONS_NODE,
+  fetchVerificationsFromServer,
+  loadAppliedVerificationsVersion,
+  planVerificationUpdate,
+  publishVerificationsToServer,
+  saveAppliedVerificationsVersion,
+  fingerprintsEqual,
+  normalizeFingerprint,
+  toXep0373Fingerprint,
+  deserializePeerCache,
+  serializePeerCache,
+  activePublics,
+  activeFingerprints,
+  eligibleVerifierPublics,
+  upsertActive,
+  markDepartedInactive,
+  capUnverifiedInactive,
+  type CachedPeerCert,
+  accountUserId,
+  mergePublicKeysList,
+  OX_NAMESPACE as OX_WIRE_NAMESPACE,
+  legacyNormalizeBackupPassphrase,
+  prepareBackupPassphrase,
+  withPassphraseFormatHeader,
+  isSecretKeyUnavailableError,
+} from '@fluux/openpgp-plugin'
 import {
   probeRemoteIdentityState,
   probeRemotePublishedFingerprints,
@@ -85,33 +110,6 @@ import {
   setPeerVerified,
   useVerifiedPeerKeysStore,
 } from '@/stores/verifiedPeerKeysStore'
-import {
-  VERIFICATIONS_NODE,
-  fetchVerificationsFromServer,
-  loadAppliedVerificationsVersion,
-  planVerificationUpdate,
-  publishVerificationsToServer,
-  saveAppliedVerificationsVersion,
-} from './verificationSync'
-import {
-  fingerprintsEqual,
-  normalizeFingerprint,
-  toXep0373Fingerprint,
-} from './fingerprintCompare'
-import {
-  deserializePeerCache,
-  serializePeerCache,
-  activePublics,
-  activeFingerprints,
-  eligibleVerifierPublics,
-  upsertActive,
-  markDepartedInactive,
-  capUnverifiedInactive,
-  type CachedPeerCert,
-} from './peerCertCache'
-import { accountUserId } from './openpgpUserId'
-import { mergePublicKeysList, OX_NAMESPACE as OX_WIRE_NAMESPACE } from './oxPublicKeysList'
-import { legacyNormalizeBackupPassphrase, prepareBackupPassphrase } from './backupPassphrase'
 import {
   clearKeyChangeAlert,
   getKeyChangeAlert,
@@ -140,8 +138,6 @@ import {
 import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { setTrustStateStatus, getTrustStateStatus } from '@/stores/trustStateStatusStore'
-import { withPassphraseFormatHeader } from './passphraseFormatHeader'
-import { isSecretKeyUnavailableError } from './keyUnavailable'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants

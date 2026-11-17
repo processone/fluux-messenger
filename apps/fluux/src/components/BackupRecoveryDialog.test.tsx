@@ -7,11 +7,11 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { E2EEPluginError, type E2EEManager } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
 import { BackupRecoveryDialog } from './BackupRecoveryDialog'
-import { legacyNormalizeBackupPassphrase } from '@/e2ee/backupPassphrase'
+import { legacyNormalizeBackupPassphrase } from '@fluux/openpgp-plugin'
 
-const meta = JSON.parse(readFileSync(resolve(__dirname, '../e2ee/fixtures/sequoia_meta.json'), 'utf8'))
-const backup = readFileSync(resolve(__dirname, '../e2ee/fixtures/sequoia_alice_backup.asc'), 'utf8')
-const publicArmored = readFileSync(resolve(__dirname, '../e2ee/fixtures/sequoia_alice_public.asc'), 'utf8')
+const meta = JSON.parse(readFileSync(resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures/sequoia_meta.json'), 'utf8'))
+const backup = readFileSync(resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures/sequoia_alice_backup.asc'), 'utf8')
+const publicArmored = readFileSync(resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures/sequoia_alice_public.asc'), 'utf8')
 let jid = 'alice@example.com/laptop'
 vi.mock('@fluux/sdk', async importOriginal => ({ ...await importOriginal<typeof import('@fluux/sdk')>(), useConnection: () => ({ jid }) }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }) }))
@@ -53,13 +53,13 @@ describe('BackupRecoveryDialog', () => {
   })
   it('R2 carries the typed code alongside a legacy file working code at confirmation', async () => {
     const f = setup()
-    const legacyFile = readFileSync(resolve(__dirname, '../e2ee/fixtures/web_alice_backup.asc'), 'utf8')
-    const web = JSON.parse(readFileSync(resolve(__dirname, '../e2ee/fixtures/web_meta.json'), 'utf8'))
+    const legacyFile = readFileSync(resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures/web_alice_backup.asc'), 'utf8')
+    const web = JSON.parse(readFileSync(resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures/web_meta.json'), 'utf8'))
     const fingerprint = web.aliceFingerprint.toUpperCase()
     const workingCode = legacyNormalizeBackupPassphrase(web.backupPassphrase)
     f.plugin.pickKeyFile.mockResolvedValue(legacyFile)
     f.plugin.importKeyFromFile.mockResolvedValue({ needsPicker: true, candidates: [{ fingerprint,
-      publicArmored: readFileSync(resolve(__dirname, '../e2ee/fixtures/web_alice_public.asc'), 'utf8'), keychainBacked: true }],
+      publicArmored: readFileSync(resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures/web_alice_public.asc'), 'utf8'), keychainBacked: true }],
       backupContext: { message: legacyFile, passphrase: workingCode, typedPassphrase: web.backupPassphrase } })
     f.plugin.installSelectedKey.mockResolvedValue({ fingerprint })
     render(<BackupRecoveryDialog {...f.props} />)
@@ -76,9 +76,9 @@ describe('BackupRecoveryDialog', () => {
 
   it('keeps the advertised fingerprint recommendation when confirming a multi-key preview', async () => {
     const f = setup()
-    const bob = JSON.parse(readFileSync(resolve(__dirname, '../e2ee/fixtures/web_meta.json'), 'utf8')).bobFingerprint.toUpperCase()
+    const bob = JSON.parse(readFileSync(resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures/web_meta.json'), 'utf8')).bobFingerprint.toUpperCase()
     f.plugin.restoreSecretKey.mockResolvedValue({ ...f.preview, recommendedFingerprint: bob, candidates: [...f.preview.candidates, {
-      fingerprint: bob, publicArmored: readFileSync(resolve(__dirname, '../e2ee/fixtures/web_bob_public.asc'), 'utf8'), keychainBacked: true,
+      fingerprint: bob, publicArmored: readFileSync(resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures/web_bob_public.asc'), 'utf8'), keychainBacked: true,
     }] })
     render(<BackupRecoveryDialog {...f.props} />)
     fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.identityChoice.restoreFromServerTitle' }))

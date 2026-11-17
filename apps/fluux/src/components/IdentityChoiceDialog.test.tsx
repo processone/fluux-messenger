@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
-import recoveryMeta from '../e2ee/fixtures/sequoia_meta.json'
+import recoveryMeta from '../../../../packages/openpgp-plugin/src/fixtures/sequoia_meta.json'
 import { IdentityChoiceDialog } from './IdentityChoiceDialog'
 import { EscapeModal } from '@/test-utils/escapeModal'
 

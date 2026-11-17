@@ -10,11 +10,10 @@ import { createPluginStorage, InMemoryStorageBackend, type PluginContext } from 
 import { decrypt, encrypt, readMessage, createMessage, readKey, unarmor } from 'openpgp'
 import { resetUncertainImportsForTesting, SequoiaPgpPlugin, type InvokeFn } from './SequoiaPgpPlugin'
 import { classifyBoundaryError, type KeyBundle } from './OpenPGPPluginBase'
-import { parseSecretKeysFromBackupPayload } from './backupKeyMaterial'
-import { legacyNormalizeBackupPassphrase } from './backupPassphrase'
+import { parseSecretKeysFromBackupPayload, legacyNormalizeBackupPassphrase } from '@fluux/openpgp-plugin'
 import { setPlatformForTesting } from '@/platform'
 
-const fixture = (name: string) => readFileSync(resolve(__dirname, 'fixtures', name), 'utf8')
+const fixture = (name: string) => readFileSync(resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures', name), 'utf8')
 const meta = JSON.parse(fixture('sequoia_meta.json'))
 const accountJid = 'alice@example.com'
 const sourceBackup = fixture('sequoia_alice_backup.asc')

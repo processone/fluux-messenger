@@ -54,7 +54,7 @@ mod host {
         names
     }
     fn metadata() -> serde_json::Value {
-        serde_json::from_str(include_str!("../../src/e2ee/fixtures/sequoia_meta.json")).unwrap()
+        serde_json::from_str(include_str!("../../../../packages/openpgp-plugin/src/fixtures/sequoia_meta.json")).unwrap()
     }
 
     #[derive(Clone)]
@@ -521,7 +521,7 @@ mod host {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(initial.import_backup(
                 JID.into(),
-                include_str!("../../src/e2ee/fixtures/sequoia_alice_backup.asc").into(),
+                include_str!("../../../../packages/openpgp-plugin/src/fixtures/sequoia_alice_backup.asc").into(),
                 metadata()["backupPassphrase"].as_str().unwrap().into(),
                 false,
             ))

@@ -76,6 +76,13 @@ while IFS= read -r path || [ -n "$path" ]; do
             rust=true
             ;;
 
+        # The OpenPGP golden key files are compiled into Rust tests (include_str!),
+        # so a change to them must run both families.
+        packages/openpgp-plugin/src/fixtures/*)
+            js=true
+            rust=true
+            ;;
+
         # --- Rule 4: TypeScript / JavaScript ----------------------------------
         # e2e/ holds every Playwright config, suite and harness; scripts/build-e2e.mjs
         # produces the bundle those suites load.

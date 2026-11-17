@@ -206,6 +206,9 @@ jobs:
           npm run test:run --workspace=@fluux/omemo
           npm run test:run --workspace=@fluux/omemo-plugin
 
+      - name: Run OpenPGP plugin package tests
+        run: npm run test:run --workspace=@fluux/openpgp-plugin
+
       - name: Type check
         run: npm run typecheck
 
@@ -225,6 +228,9 @@ jobs:
         run: |
           npm run lint --workspace=@fluux/omemo
           npm run lint --workspace=@fluux/omemo-plugin
+
+      - name: Lint OpenPGP plugin package
+        run: npm run lint --workspace=@fluux/openpgp-plugin
 
       # Two builds, two directions. The production direction protects users; the Dev
       # direction catches a silent regression to "eliminated everywhere, including

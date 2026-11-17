@@ -31,14 +31,18 @@ import {
   type KeyBundle,
   type RestoreResult,
 } from './OpenPGPPluginBase'
-import { accountUserId } from './openpgpUserId'
-import { keyExportFilename } from './keyExportNaming'
+import {
+  accountUserId,
+  keyExportFilename,
+  clearSessionPassphrase,
+  getSessionPassphrase,
+  setSessionPassphrase,
+  USE_V6_KEYS,
+  prepareBackupPassphrase,
+  detectArmorKind,
+  parseSecretKeysFromBackupPayload,
+} from '@fluux/openpgp-plugin'
 import { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErrors'
-import { clearSessionPassphrase, getSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
-import { USE_V6_KEYS } from './passphraseGenerator'
-import { prepareBackupPassphrase } from './backupPassphrase'
-import { detectArmorKind } from './armorDetect'
-import { parseSecretKeysFromBackupPayload } from './backupKeyMaterial'
 
 const PRIVATE_KEY_STORAGE_KEY = 'private-key'
 

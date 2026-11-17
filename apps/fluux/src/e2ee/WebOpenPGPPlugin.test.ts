@@ -24,7 +24,7 @@ import {
 } from '@fluux/sdk'
 import { xml } from '@fluux/sdk/xmpp'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
-import { clearSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
+import { clearSessionPassphrase, setSessionPassphrase } from '@fluux/openpgp-plugin'
 import type { KeyBundle } from './OpenPGPPluginBase'
 
 // Every test here generates real OpenPGP keys, so each one is CPU-bound and
@@ -45,7 +45,7 @@ vi.setConfig({ testTimeout: 30_000 })
 // failing assertion inside `waitFor` rather than an opaque test timeout.
 const DRAIN_POLL_TIMEOUT_MS = 20_000
 
-const FIXTURES_DIR = resolve(__dirname, 'fixtures')
+const FIXTURES_DIR = resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures')
 
 // Expose the crypto-layer protected methods so we can round-trip
 // without going through the full XEP-0373 envelope handling.
@@ -1624,7 +1624,7 @@ describe('WebOpenPGPPlugin', () => {
 
       // After failure, the session passphrase must have been rolled back
       // so the locked state is preserved (no half-unlocked plugin).
-      const { isKeyLocked } = await import('./webPassphraseStore')
+      const { isKeyLocked } = await import('@fluux/openpgp-plugin')
       expect(isKeyLocked()).toBe(true)
     })
   })
@@ -2744,7 +2744,7 @@ describe('WebOpenPGPPlugin', () => {
       await expect(device.unlock('wrong-and-no-backup')).rejects.toBeInstanceOf(
         NoRecoveryAvailableError,
       )
-      const { isKeyLocked } = await import('./webPassphraseStore')
+      const { isKeyLocked } = await import('@fluux/openpgp-plugin')
       expect(isKeyLocked()).toBe(true) // rolled back
     })
 
@@ -2777,7 +2777,7 @@ describe('WebOpenPGPPlugin', () => {
       await expect(device.unlock('some-passphrase-123')).rejects.toMatchObject({
         code: 'needs-identity-decision',
       })
-      const { isKeyLocked } = await import('./webPassphraseStore')
+      const { isKeyLocked } = await import('@fluux/openpgp-plugin')
       expect(isKeyLocked()).toBe(true) // rolled back
     })
 
@@ -2803,7 +2803,7 @@ describe('WebOpenPGPPlugin', () => {
 
       const { KeyPickerRequiredError } = await import('./recoveryErrors')
       await expect(device.unlock('wrong-for-local-pp')).rejects.toBeInstanceOf(KeyPickerRequiredError)
-      const { isKeyLocked } = await import('./webPassphraseStore')
+      const { isKeyLocked } = await import('@fluux/openpgp-plugin')
       expect(isKeyLocked()).toBe(true) // rolled back
     })
   })
@@ -2824,7 +2824,7 @@ describe('legacy backup passphrase migration (#1021)', () => {
    * bytes.)
    */
   async function publishLegacyBackup(shared: SharedPep) {
-    const { legacyNormalizeBackupPassphrase } = await import('./backupPassphrase')
+    const { legacyNormalizeBackupPassphrase } = await import('@fluux/openpgp-plugin')
     setSessionPassphrase('source-session-pp')
     const source = new TestableWebOpenPGPPlugin()
     await source.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
@@ -2866,7 +2866,7 @@ describe('legacy backup passphrase migration (#1021)', () => {
       openpgp.decrypt({ message: exact, passwords: [CODE], format: 'binary' }),
     ).resolves.toBeDefined()
 
-    const { legacyNormalizeBackupPassphrase } = await import('./backupPassphrase')
+    const { legacyNormalizeBackupPassphrase } = await import('@fluux/openpgp-plugin')
     const folded = await openpgp.readMessage({ armoredMessage: healed! })
     await expect(
       openpgp.decrypt({
@@ -2965,7 +2965,7 @@ describe('legacy backup passphrase migration (#1021)', () => {
     // too. The same fallback opens them — but there is no server copy to
     // heal, so no secret-key publish may happen.
     const openpgp = await import('openpgp')
-    const { legacyNormalizeBackupPassphrase } = await import('./backupPassphrase')
+    const { legacyNormalizeBackupPassphrase } = await import('@fluux/openpgp-plugin')
     const { privateKey: tsk } = await openpgp.generateKey({
       type: 'ecc',
       curve: 'curve25519Legacy',
@@ -3003,7 +3003,7 @@ describe('legacy backup passphrase migration (#1021)', () => {
     // picker with a backupContext whose passphrase actually decrypts the
     // blob, so installSelectedKey completes without re-prompting.
     const openpgp = await import('openpgp')
-    const { legacyNormalizeBackupPassphrase } = await import('./backupPassphrase')
+    const { legacyNormalizeBackupPassphrase } = await import('@fluux/openpgp-plugin')
     const genKey = () =>
       openpgp.generateKey({
         type: 'ecc',

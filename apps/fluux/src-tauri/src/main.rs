@@ -1787,7 +1787,7 @@ fn main() {
                     Err(_) => return,
                 };
                 // Mirrors the canonical XEP-0373 §8.5 trust-anchor UID defined
-                // in TS at `src/e2ee/openpgpUserId.ts` (`accountUserId`). Keep in
+                // in TS at `packages/openpgp-plugin/src/openpgpUserId.ts` (`accountUserId`). Keep in
                 // sync — generation and verification key off this exact form.
                 let user_id = format!("xmpp:{jid}");
                 prewarm_state.prewarm_if_persisted(jid, user_id);

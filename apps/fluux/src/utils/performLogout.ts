@@ -5,7 +5,7 @@ import { clearLocalData, clearAutoReconnectCredentials } from '@/utils/clearLoca
 import { endPushSession, type PushRegistrar } from '@/hooks/useNativePush'
 import { markLoggedOut } from '@/utils/reconnectIntent'
 import { clearQueuedDeepLinks } from '@/utils/deepLinkRouter'
-import { clearCachedPassphrase } from '@/e2ee/webPassphraseCache'
+import { clearCachedPassphrase } from '@fluux/openpgp-plugin'
 import { platform } from '@/platform'
 
 const LOGOUT_DISCONNECT_TIMEOUT_MS = 2500

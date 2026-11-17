@@ -60,6 +60,8 @@ expect "linux packaging check"       false true  scripts/check-linux-packaging.s
 
 # --- Rule 4: TypeScript -------------------------------------------------------
 expect "sdk source"                  true  false packages/fluux-sdk/src/core/XMPPClient.ts
+expect "openpgp package source"        true  false packages/openpgp-plugin/src/backupPassphrase.ts
+expect "openpgp fixtures feed rust"    true  true  packages/openpgp-plugin/src/fixtures/sequoia_meta.json
 expect "app source"                  true  false apps/fluux/src/App.tsx
 expect "workspace tsconfig"          true  false apps/fluux/tsconfig.json
 expect "playwright e2e config"       true  false e2e/playwright.e2e.config.ts

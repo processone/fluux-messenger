@@ -17,7 +17,7 @@ import { clearAllAvatarData } from '@fluux/sdk/cache'
 import { clearSession, getSession } from '@/utils/sessionStorage'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearMediaCache } from '@/utils/mediaCache'
-import { clearCachedPassphrase, clearAllCachedPassphrases } from '@/e2ee/webPassphraseCache'
+import { clearCachedPassphrase, clearAllCachedPassphrases } from '@fluux/openpgp-plugin'
 import { endPushSession, type PushRegistrar } from '@/hooks/useNativePush'
 import { clearNotifiedEventMemory } from '@/utils/notifiedEventMemory'
 

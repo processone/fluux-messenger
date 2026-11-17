@@ -7,13 +7,17 @@ import { SettingsDisclosure } from '@/components/ui/SettingsDisclosure'
 import { useConnection, useXMPPContext, getBareJid, isE2EEPluginError } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
-import { deleteOwnKey, type OwnKeyDeletionPlugin } from '@/e2ee/deleteOwnKey'
+import {
+  deleteOwnKey,
+  type OwnKeyDeletionPlugin,
+  parseArmorPassphraseFormat,
+  isKeyLocked,
+} from '@fluux/openpgp-plugin'
 import { useToastStore } from '@/stores/toastStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
-import { parseArmorPassphraseFormat } from '@/e2ee/passphraseFormatHeader'
 import { BackupRecoveryDialog } from '@/components/BackupRecoveryDialog'
 import type { E2EEManager } from '@fluux/sdk'
 import { IdentityChoiceDialog } from '@/components/IdentityChoiceDialog'
@@ -29,7 +33,6 @@ import {
   identityChoiceFromProbe,
   SecretKeyBackupProbeError,
 } from '@/e2ee/secretKeyProbe'
-import { isKeyLocked } from '@/e2ee/webPassphraseStore'
 import { platform } from '@/platform'
 
 type PluginStatus =

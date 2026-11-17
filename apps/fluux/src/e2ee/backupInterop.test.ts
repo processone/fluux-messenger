@@ -24,7 +24,7 @@ import {
   type XMPPPrimitives,
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
-import { clearSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
+import { clearSessionPassphrase, setSessionPassphrase } from '@fluux/openpgp-plugin'
 
 // These round-trips generate and re-wrap real OpenPGP keys, so the tests are
 // CPU-bound and inflate several-fold under the contention of a full

@@ -10,12 +10,11 @@ import type { XMPPClient } from '@fluux/sdk/core'
 import { chatStore } from '@fluux/sdk/stores'
 import { SequoiaPgpPlugin, type InvokeFn } from '@/e2ee/SequoiaPgpPlugin'
 import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
-import { parseSecretKeysFromBackupPayload } from '@/e2ee/backupKeyMaterial'
-import { withPassphraseFormatHeader } from '@/e2ee/passphraseFormatHeader'
+import { parseSecretKeysFromBackupPayload, withPassphraseFormatHeader } from '@fluux/openpgp-plugin'
 import { platform, setPlatformForTesting } from '@/platform'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
-import backup from '@/e2ee/fixtures/sequoia_alice_backup.asc?raw'
-import meta from '@/e2ee/fixtures/sequoia_meta.json'
+import backup from '../../../../packages/openpgp-plugin/src/fixtures/sequoia_alice_backup.asc?raw'
+import meta from '../../../../packages/openpgp-plugin/src/fixtures/sequoia_meta.json'
 
 export function createBackupRecoveryFixture() {
   const params = new URLSearchParams(location.search)

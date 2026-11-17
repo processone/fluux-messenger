@@ -24,7 +24,7 @@ import {
   type XMPPPrimitives,
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
-import { clearSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
+import { clearSessionPassphrase, setSessionPassphrase } from '@fluux/openpgp-plugin'
 
 // Decrypting and verifying the Sequoia fixtures is real openpgp.js work, so
 // the tests are CPU-bound and inflate several-fold under the contention of a
@@ -32,7 +32,7 @@ import { clearSessionPassphrase, setSessionPassphrase } from './webPassphraseSto
 // little headroom on a loaded runner. See WebOpenPGPPlugin.test.ts.
 vi.setConfig({ testTimeout: 30_000 })
 
-const FIXTURES_DIR = resolve(__dirname, 'fixtures')
+const FIXTURES_DIR = resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures')
 const META_PATH = resolve(FIXTURES_DIR, 'sequoia_meta.json')
 
 class TestablePlugin extends WebOpenPGPPlugin {

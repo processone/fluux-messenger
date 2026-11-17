@@ -25,9 +25,9 @@ import {
   type XMPPPrimitives,
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
-import { clearSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
+import { clearSessionPassphrase, setSessionPassphrase } from '@fluux/openpgp-plugin'
 
-const FIXTURES_DIR = resolve(__dirname, 'fixtures')
+const FIXTURES_DIR = resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures')
 const BACKUP_PASSPHRASE = 'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW'
 
 class TestablePlugin extends WebOpenPGPPlugin {

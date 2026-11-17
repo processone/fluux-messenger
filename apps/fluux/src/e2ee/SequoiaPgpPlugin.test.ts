@@ -9,9 +9,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setPlatformForTesting } from '@/platform'
 import type { InvokeFn } from './SequoiaPgpPlugin'
 import { resetUncertainImportsForTesting, SequoiaPgpPlugin } from './SequoiaPgpPlugin'
-import { deleteOwnKey } from './deleteOwnKey'
+import { deleteOwnKey, legacyNormalizeBackupPassphrase } from '@fluux/openpgp-plugin'
 import { OPENPGP_DESCRIPTOR } from './OpenPGPPluginBase'
-import { legacyNormalizeBackupPassphrase } from './backupPassphrase'
 import { getOwnKeyConflict } from '@/stores/ownKeyConflictStore'
 import {
   E2EEPluginError,
@@ -6011,7 +6010,7 @@ describe('SequoiaPgpPlugin', () => {
 
       const store = await import('@/stores/verifiedPeerKeysStore')
       expect(store.useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid).toEqual({})
-      const { loadAppliedVerificationsVersion } = await import('./verificationSync')
+      const { loadAppliedVerificationsVersion } = await import('@fluux/openpgp-plugin')
       expect(loadAppliedVerificationsVersion()).toBe(-1)
     })
   })
