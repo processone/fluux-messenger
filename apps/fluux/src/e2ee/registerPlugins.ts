@@ -16,6 +16,7 @@ import { platform } from '@/platform'
 import { isOpenpgpEnabled, useEncryptionSettingsStore } from '../stores/encryptionSettingsStore'
 import { useConversationPlaintextOverrideStore } from '../stores/conversationPlaintextOverrideStore'
 import { classifyBoundaryError, OPENPGP_DESCRIPTOR } from '@fluux/openpgp-plugin'
+import { createAppDesktopHost } from './appDesktopHost'
 import { createAppHostStores } from './appHostStores'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 
@@ -69,7 +70,7 @@ async function registerPluginsOnManager(
       // keychain; no user passphrase needed for day-to-day use.
       const { invoke } = await import('@tauri-apps/api/core')
       if (!isCurrent()) return
-      const plugin = new SequoiaPgpPlugin({ invoke, stores: createAppHostStores() })
+      const plugin = new SequoiaPgpPlugin({ invoke, stores: createAppHostStores(), ...createAppDesktopHost() })
       phase = 'initialize-native'
       progress('started')
       await manager.register(plugin)

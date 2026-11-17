@@ -5,6 +5,7 @@
  * on the trust stores, which the host-store seam must not change.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { createAppDesktopHost } from './appDesktopHost'
 import { createAppHostStores } from './appHostStores'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
@@ -20,7 +21,7 @@ type Internals = {
 }
 
 function makePlugin(refetch: () => Promise<{ supported: boolean }>, peerFingerprints: string[]) {
-  const plugin = new SequoiaPgpPlugin({ invoke: vi.fn(), stores: createAppHostStores() })
+  const plugin = new SequoiaPgpPlugin({ invoke: vi.fn(), stores: createAppHostStores(), ...createAppDesktopHost() })
   vi.spyOn(plugin as unknown as Internals, 'refetchAndCachePeerKey').mockImplementation(refetch)
   vi.spyOn(plugin, 'getPeerFingerprints').mockReturnValue(peerFingerprints)
   return plugin

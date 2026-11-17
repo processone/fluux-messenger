@@ -5,6 +5,7 @@
  * decrypt, claim — without any Tauri runtime.
  */
 
+import { createAppDesktopHost } from './appDesktopHost'
 import { createAppHostStores } from './appHostStores'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setPlatformForTesting } from '@/platform'
@@ -39,17 +40,6 @@ vi.setConfig({ testTimeout: 30_000 })
 
 beforeEach(resetUncertainImportsForTesting)
 
-const tauriFiles = vi.hoisted(() => ({
-  save: vi.fn(),
-  open: vi.fn(),
-  writeTextFile: vi.fn(),
-  readTextFile: vi.fn(),
-}))
-vi.mock('@tauri-apps/plugin-dialog', () => ({ save: tauriFiles.save, open: tauriFiles.open }))
-vi.mock('@tauri-apps/plugin-fs', () => ({
-  writeTextFile: tauriFiles.writeTextFile,
-  readTextFile: tauriFiles.readTextFile,
-}))
 afterEach(resetUncertainImportsForTesting)
 
 /**
@@ -713,8 +703,8 @@ async function buildCrossPublishedPair(fake: ReturnType<typeof makeFakeRust>): P
   alice: { plugin: SequoiaPgpPlugin; ctx: PluginContext }
   bob: { plugin: SequoiaPgpPlugin; ctx: PluginContext }
 }> {
-  const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
-  const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+  const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
+  const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
   const aliceBuilt = makeContext('alice@example.com')
   const bobBuilt = makeContext('bob@example.com')
   await alicePlugin.init(aliceBuilt.ctx)
@@ -927,7 +917,7 @@ describe('SequoiaPgpPlugin', () => {
     trustStatusStore.useTrustStateStatusStore.getState().clear()
 
     fake = makeFakeRust()
-    plugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+    plugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
   })
 
   describe('init / ensureIdentity', () => {
@@ -1012,7 +1002,7 @@ describe('SequoiaPgpPlugin', () => {
           if (cmd !== 'openpgp_ensure_key') return result
           return { ...(result as KeyBundle), createdAt: undefined } as T
         }
-        const pluginUnderTest = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: invokeWithoutCreationTime })
+        const pluginUnderTest = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: invokeWithoutCreationTime })
         const built = makeContext('me@example.com')
         await pluginUnderTest.init(built.ctx)
 
@@ -1146,7 +1136,7 @@ describe('SequoiaPgpPlugin', () => {
       // run BEFORE ensureKeyMaterial. Generating first would leave an
       // orphan key in the OS keychain that can never be published.
       const commands: string[] = []
-      const tracked = new SequoiaPgpPlugin({ stores: createAppHostStores(),
+      const tracked = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(),
         invoke: async <T,>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
           commands.push(cmd)
           return fake.invoke<T>(cmd, args)
@@ -1918,7 +1908,7 @@ describe('SequoiaPgpPlugin', () => {
         }
         return fake.invoke<T>(cmd, args)
       }
-      const pluginUnderTest = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: wrappedInvoke })
+      const pluginUnderTest = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: wrappedInvoke })
       await pluginUnderTest.init(built.ctx)
 
       built.peerPublish('bob@example.com', METADATA_NODE, {
@@ -2070,7 +2060,7 @@ describe('SequoiaPgpPlugin', () => {
         }
         return fake.invoke<T>(cmd, args)
       }
-      const pluginUnderTest = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: wrappedInvoke })
+      const pluginUnderTest = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: wrappedInvoke })
       await pluginUnderTest.init(built.ctx)
 
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
@@ -2983,7 +2973,7 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.backupSecretKey('shared-pp')
       const backup = (await plugin.fetchSecretKeyBackup())!
       fake.accounts.clear()
-      const device = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const device = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const built = makeContext(ME)
       await device.init(built.ctx)
       await built.ctx.xmpp.publishPEP(SECRET_KEY_NODE, {
@@ -3040,7 +3030,7 @@ describe('SequoiaPgpPlugin', () => {
       await fake.invoke<KeyBundle>('openpgp_ensure_key', { accountJid: OTHER, userId: `xmpp:${OTHER}` })
       const next = makeContext(OTHER)
       next.peerPublish(OTHER, METADATA_NODE, tamperedKeyList('2024-01-01T00:00:00Z'))
-      await new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke }).init(next.ctx)
+      await new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke }).init(next.ctx)
       const conflict = getOwnKeyConflict()
       expect(conflict).toMatchObject({ kind: 'primary-mismatch', publishedFingerprint: 'TAMPEREDFP000000' })
 
@@ -3364,8 +3354,8 @@ describe('SequoiaPgpPlugin', () => {
     it('drains the buffer on onPeerKeysChanged and reports an upgrade for verified entries', async () => {
       // Build the pair manually so we hold references to the captured
       // securityUpdates on bob's context.
-      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
@@ -3412,8 +3402,8 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     it('does not stash when the signature verified on first decrypt', async () => {
-      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
@@ -3458,8 +3448,8 @@ describe('SequoiaPgpPlugin', () => {
       // later drain (the genuine signing key may still arrive), never rejected.
       // A genuine forgery from a cached signer (signatureStatus 'bad') is what
       // gets permanently rejected — see the drain state-machine test.
-      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
@@ -3507,8 +3497,8 @@ describe('SequoiaPgpPlugin', () => {
       // Stuff SIGNATURE_BUFFER_SIZE + 1 entries in, then verify the oldest
       // is gone by triggering a drain with the legitimate key and counting
       // upgrades. We expect exactly SIGNATURE_BUFFER_SIZE upgrades.
-      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
@@ -3550,8 +3540,8 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     it('evicts entries older than the TTL on subsequent inserts', async () => {
-      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
@@ -3604,8 +3594,8 @@ describe('SequoiaPgpPlugin', () => {
       // The SDK only passes messageId when the stanza carries one. A
       // message without an id has no stable key to buffer on — we skip
       // the stash entirely rather than inventing an opaque token.
-      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
@@ -3644,9 +3634,9 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     it('only upgrades messages from the peer whose keys changed', async () => {
-      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
-      const carolPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
+      const carolPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       const carolBuilt = makeContext('carol@example.com')
@@ -3710,7 +3700,7 @@ describe('SequoiaPgpPlugin', () => {
     it('rejects a hung decrypt as a transient timeout, ignores its late result, and decrypts on retry', async () => {
       const { alice } = await buildCrossPublishedPair(fake)
       const gate = makeHangingInvoke()
-      const bob = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: gate.invoke, timeouts: SHORT })
+      const bob = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: gate.invoke, timeouts: SHORT })
       await bob.init(makeContext('bob@example.com').ctx)
       await alice.plugin.probePeer('bob@example.com')
       const aliceHandle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
@@ -3734,9 +3724,9 @@ describe('SequoiaPgpPlugin', () => {
     // FLM-79 S2: forget has the same authorization window as other key-material operations.
     it('does not abandon forget at the routine-command deadline', async () => {
       const gate = makeHangingInvoke()
-      const plugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: gate.invoke, timeouts: SHORT })
-      await plugin.init(makeContext('me@example.com').ctx)
       const restore = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+      const plugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: gate.invoke, timeouts: SHORT })
+      await plugin.init(makeContext('me@example.com').ctx)
       vi.useFakeTimers()
       try {
         gate.hung.add('openpgp_forget_account')
@@ -3755,9 +3745,9 @@ describe('SequoiaPgpPlugin', () => {
       ['desktop', 'windows'], ['desktop', 'linux'], ['mobile', 'ios'],
     ] as const)('keeps the routine forget bound on %s/%s', async (shell, os) => {
       const gate = makeHangingInvoke()
-      const plugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: gate.invoke, timeouts: SHORT })
-      await plugin.init(makeContext('me@example.com').ctx)
       const restore = setPlatformForTesting({ shell, os })
+      const plugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: gate.invoke, timeouts: SHORT })
+      await plugin.init(makeContext('me@example.com').ctx)
       vi.useFakeTimers()
       try {
         gate.hung.add('openpgp_forget_account')
@@ -3773,7 +3763,7 @@ describe('SequoiaPgpPlugin', () => {
     it('fails init with a transient timeout when key loading never settles', async () => {
       const gate = makeHangingInvoke()
       gate.hung.add('openpgp_ensure_key')
-      const hungPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: gate.invoke, timeouts: SHORT })
+      const hungPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: gate.invoke, timeouts: SHORT })
 
       await expect(hungPlugin.init(makeContext('me@example.com').ctx))
         .rejects.toMatchObject({ kind: 'transient', code: 'timeout' })
@@ -3796,7 +3786,7 @@ describe('SequoiaPgpPlugin', () => {
       })
       const gate = makeHangingInvoke()
       gate.hung.add('openpgp_has_persisted_key')
-      const hungPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: gate.invoke, timeouts: SHORT })
+      const hungPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: gate.invoke, timeouts: SHORT })
 
       // Reading the timeout as "no local key" would route a device that holds
       // its key to the identity-choice flow.
@@ -4109,7 +4099,7 @@ describe('SequoiaPgpPlugin', () => {
       // regression that drops all-but-the-first would surface. We drive the
       // array-shaped crypto wrappers directly (the message path still passes a
       // single peer key; multi-key peer bundles are a separate task).
-      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       await alicePlugin.init(makeContext('alice@example.com').ctx)
 
       // Two recipients (bob + carol) and the signer (alice's own key).
@@ -4145,9 +4135,9 @@ describe('SequoiaPgpPlugin', () => {
       expect(stubText).toContain(carolBundle.fingerprint)
 
       // Each recipient can open the message addressed to it.
-      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       await bobPlugin.init(makeContext('bob@example.com').ctx)
-      const carolPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const carolPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       await carolPlugin.init(makeContext('carol@example.com').ctx)
 
       type DecryptShape = {
@@ -4186,7 +4176,7 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     it('reports signatureStatus missing-key when the signer fp is not among supplied senders', async () => {
-      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       await alicePlugin.init(makeContext('alice@example.com').ctx)
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
@@ -4210,7 +4200,7 @@ describe('SequoiaPgpPlugin', () => {
         'secret for bob',
       )
 
-      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       await bobPlugin.init(makeContext('bob@example.com').ctx)
       const bobCrypto = bobPlugin as unknown as {
         decryptWithOwnKey(
@@ -4283,7 +4273,7 @@ describe('SequoiaPgpPlugin', () => {
       const fp = plugin.getOwnFingerprint()
       await plugin.shutdown()
 
-      const plugin2 = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const plugin2 = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const { ctx: ctx2 } = makeContext('me@example.com')
       await plugin2.init(ctx2)
       expect(plugin2.getOwnFingerprint()).toBe(fp)
@@ -4462,7 +4452,7 @@ describe('SequoiaPgpPlugin', () => {
       // present on PEP. The test harness uses a module-level `fake`
       // Rust, so simulate a cold state by clearing it.
       fake.accounts.clear()
-      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const { ctx: ctxB, published: publishedB } = makeContext('me@example.com')
       await pluginB.init(ctxB)
       // The `init` generated a DIFFERENT key locally on device B; the
@@ -4512,7 +4502,7 @@ describe('SequoiaPgpPlugin', () => {
       const backup = await plugin.fetchSecretKeyBackup()
 
       fake.accounts.clear()
-      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const { ctx: ctxB, published: publishedB } = makeContext('me@example.com')
       await pluginB.init(ctxB)
       const ephemeralFp = pluginB.getOwnFingerprint()!
@@ -4562,7 +4552,7 @@ describe('SequoiaPgpPlugin', () => {
       expect(backup).toBeTruthy()
 
       fake.accounts.clear()
-      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const { ctx: ctxB, published: publishedB } = makeContext('me@example.com')
       await pluginB.init(ctxB)
       ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
@@ -4598,7 +4588,7 @@ describe('SequoiaPgpPlugin', () => {
       const backup = await plugin.fetchSecretKeyBackup()
 
       fake.accounts.clear()
-      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const { ctx: ctxB, published: publishedB } = makeContext('me@example.com')
       await pluginB.init(ctxB)
       ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
@@ -4664,7 +4654,7 @@ describe('SequoiaPgpPlugin', () => {
       const backup = await plugin.fetchSecretKeyBackup()
 
       fake.accounts.clear()
-      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const { ctx: ctxB, keyUnlocks } = makeContext('me@example.com')
       await pluginB.init(ctxB)
       // init's passive load is covered by the plugin-registered retry.
@@ -4718,7 +4708,7 @@ describe('SequoiaPgpPlugin', () => {
       const backup = await plugin.fetchSecretKeyBackup()
 
       fake.accounts.clear()
-      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const { ctx: ctxB, deletedNodes: deletedB } = makeContext('me@example.com')
       await pluginB.init(ctxB)
       const fpBbefore = pluginB.getOwnFingerprint()
@@ -4803,7 +4793,7 @@ describe('SequoiaPgpPlugin', () => {
       // the seal check so only that decrypt is affected (init's own
       // `verifyTrustStateOnInit` is fire-and-forget, so we re-drive it
       // deterministically here).
-      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const { ctx: ctxB } = makeContext('me@example.com')
       ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
         id: 'current',
@@ -5036,7 +5026,7 @@ describe('SequoiaPgpPlugin', () => {
 
       fake.accounts.clear()
       localStorage.clear()
-      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const { ctx: ctxB } = makeContext('me@example.com')
       await pluginB.init(ctxB)
       // Seed the backup onto device B's PEP tree.
@@ -5100,7 +5090,7 @@ describe('SequoiaPgpPlugin', () => {
     it('is null when the plugin has no context (pre-init edge case)', () => {
       // The UI may peek at the getter before init completes. A null
       // answer is correct — there's no account to scope the marker to.
-      const fresh = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const fresh = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       expect(fresh.getBackedUpFingerprint()).toBeNull()
     })
   })
@@ -5362,7 +5352,7 @@ describe('SequoiaPgpPlugin', () => {
         }
         throw new Error('unexpected cmd: ' + cmd)
       }
-      const unrecoverablePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fakeInvoke })
+      const unrecoverablePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fakeInvoke })
       await unrecoverablePlugin.init(ctx) // must resolve, not reject
 
       expect(unrecoverablePlugin.isKeyRecoveryNeeded()).toBe(true)
@@ -5426,7 +5416,7 @@ describe('SequoiaPgpPlugin', () => {
         }
         throw new Error('unexpected cmd: ' + cmd)
       }
-      const recoveringPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fakeInvoke })
+      const recoveringPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fakeInvoke })
       await recoveringPlugin.init(ctx) // must resolve, not reject
       expect(recoveringPlugin.isKeyRecoveryNeeded()).toBe(true)
     })
@@ -5436,7 +5426,7 @@ describe('SequoiaPgpPlugin', () => {
       const fakeInvoke: InvokeFn = async () => {
         throw new Error('openpgp unlock task panicked: kaboom')
       }
-      const flakyPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fakeInvoke })
+      const flakyPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fakeInvoke })
       let caught: unknown
       try {
         await flakyPlugin.init(ctx)
@@ -5468,7 +5458,7 @@ describe('SequoiaPgpPlugin', () => {
         }
         return realInvoke(cmd, args)
       }
-      const restorer = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: spyingInvoke })
+      const restorer = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: spyingInvoke })
       // Init will succeed against the real backup (ensure_key reuses the
       // cached bundle). Re-init on a fresh context so the restore path is
       // isolated from init.
@@ -5677,7 +5667,7 @@ describe('SequoiaPgpPlugin', () => {
           VERIFICATIONS_NODE,
           buildVerificationsPepItem(fp, { 'alice@example.com': 'ALICE_FP' }, 5),
         )
-        const device = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+        const device = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
         try {
           await device.init(ctx)
           expect(device.getOwnFingerprint()).toBeNull()
@@ -6145,7 +6135,7 @@ describe('SequoiaPgpPlugin', () => {
     }
 
     async function makeBob() {
-      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
       const built = makeContext(OWN)
       await bobPlugin.init(built.ctx)
       const ownFp = bobPlugin.getOwnFingerprint()!
@@ -6574,7 +6564,7 @@ describe('SequoiaPgpPlugin', () => {
          */
         async function setup() {
           const fake = makeFakeRust()
-          const plugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke: fake.invoke })
+          const plugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke: fake.invoke })
           const { ctx } = makeContext(SELF)
           await plugin.init(ctx)
           const ownFp = plugin.getOwnFingerprint()!
@@ -6664,49 +6654,45 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('key file export and import', () => {
+    const fileIO = { saveFile: vi.fn(), pickFile: vi.fn() }
+    let filePlugin: SequoiaPgpPlugin
+
     beforeEach(() => {
-      for (const fn of Object.values(tauriFiles)) fn.mockReset()
+      fileIO.saveFile.mockReset()
+      fileIO.pickFile.mockReset()
+      filePlugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), macosDesktop: false, fileIO, invoke: fake.invoke })
     })
 
-    it('exports the armored backup to the path the user chose, named after the account', async () => {
-      await plugin.init(makeContext('me@example.com').ctx)
-      tauriFiles.save.mockResolvedValue('/chosen/backup.asc')
-      expect(await plugin.exportKeyToFile('correct horse battery')).toBe(true)
-      expect(tauriFiles.save).toHaveBeenCalledWith(expect.objectContaining({
-        defaultPath: 'openpgp-backup-me@example.com.asc',
-      }))
-      expect(tauriFiles.writeTextFile).toHaveBeenCalledTimes(1)
-      const [path, armored] = tauriFiles.writeTextFile.mock.calls[0]
-      expect(path).toBe('/chosen/backup.asc')
+    it('hands the armored backup and an account-named default to the host and reports the write', async () => {
+      await filePlugin.init(makeContext('me@example.com').ctx)
+      fileIO.saveFile.mockResolvedValue(true)
+      expect(await filePlugin.exportKeyToFile('correct horse battery')).toBe(true)
+      expect(fileIO.saveFile).toHaveBeenCalledTimes(1)
+      const [defaultName, armored] = fileIO.saveFile.mock.calls[0]
+      expect(defaultName).toBe('openpgp-backup-me@example.com.asc')
       expect(armored).toContain('-----BEGIN PGP MESSAGE-----')
       expect(armored).toMatch(/^Passphrase-Format:/m)
     })
 
-    it('writes nothing when the user cancels the save dialog', async () => {
-      await plugin.init(makeContext('me@example.com').ctx)
-      tauriFiles.save.mockResolvedValue(null)
-      expect(await plugin.exportKeyToFile('correct horse battery')).toBe(false)
-      expect(tauriFiles.writeTextFile).not.toHaveBeenCalled()
+    it('reports no write when the user cancels the save', async () => {
+      await filePlugin.init(makeContext('me@example.com').ctx)
+      fileIO.saveFile.mockResolvedValue(false)
+      expect(await filePlugin.exportKeyToFile('correct horse battery')).toBe(false)
     })
 
-    it('reads the file the user picked', async () => {
-      tauriFiles.open.mockResolvedValue('/picked/backup.asc')
-      tauriFiles.readTextFile.mockResolvedValue('ARMORED TEXT')
-      expect(await plugin.pickKeyFile()).toBe('ARMORED TEXT')
-      expect(tauriFiles.readTextFile).toHaveBeenCalledWith('/picked/backup.asc')
+    it('refuses to export before an identity exists, without asking the host', async () => {
+      await expect(filePlugin.exportKeyToFile('x')).rejects.toThrow()
+      expect(fileIO.saveFile).not.toHaveBeenCalled()
     })
 
-    it('reads the first path when the picker answers with an array', async () => {
-      tauriFiles.open.mockResolvedValue(['/first.asc', '/second.asc'])
-      tauriFiles.readTextFile.mockResolvedValue('FIRST')
-      expect(await plugin.pickKeyFile()).toBe('FIRST')
-      expect(tauriFiles.readTextFile).toHaveBeenCalledWith('/first.asc')
+    it('returns the text the host picked', async () => {
+      fileIO.pickFile.mockResolvedValue('ARMORED TEXT')
+      expect(await filePlugin.pickKeyFile()).toBe('ARMORED TEXT')
     })
 
-    it('returns null and reads nothing when the user cancels the picker', async () => {
-      tauriFiles.open.mockResolvedValue(null)
-      expect(await plugin.pickKeyFile()).toBeNull()
-      expect(tauriFiles.readTextFile).not.toHaveBeenCalled()
+    it('returns null when the user cancels the picker', async () => {
+      fileIO.pickFile.mockResolvedValue(null)
+      expect(await filePlugin.pickKeyFile()).toBeNull()
     })
   })
 })
