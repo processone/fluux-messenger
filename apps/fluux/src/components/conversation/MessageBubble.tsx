@@ -15,6 +15,7 @@ import { Avatar } from '../Avatar'
 import { NickText, NickSentence } from '../NickText'
 import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
+import { useForwardMessage } from './forwardMessageContext'
 import { RoomMessageLinkPreview } from './RoomMessageLinkPreview'
 import { MessageBody } from './MessageBody'
 import { renderQuotePreview } from '@/utils/messageStyles'
@@ -417,6 +418,7 @@ export const MessageBubble = memo(function MessageBubble({
   // unconditionally (a mouse never fires touch events); native text selection is
   // suppressed on touch via `touch:select-none` so the hold opens the sheet cleanly.
   const [showActionSheet, setShowActionSheet] = useState(false)
+  const forwardMessage = useForwardMessage()
   const [reactorEmoji, setReactorEmoji] = useState<string | null>(null)
   const actionAnchor = useRef<HTMLElement | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -569,6 +571,7 @@ export const MessageBubble = memo(function MessageBubble({
   const { canReply, canEdit, canDelete } = actions
   const messageLink = roomMessageLinkFor(message, supportsMAM)
   const onCopyMessageLink = messageLink ? () => { void copyToClipboard(messageLink) } : undefined
+  const onForward = messageLink && forwardMessage ? () => forwardMessage(messageLink) : undefined
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   const saveableAttachment = !message.isRetracted && !message.encryptedPayload ? message.attachment : undefined
   const hasViewableReactions = !message.isRetracted && Object.keys(filteredReactions).length > 0
@@ -667,6 +670,7 @@ export const MessageBubble = memo(function MessageBubble({
           onEdit={onEdit}
           onDelete={onDelete}
           onCopyMessageLink={onCopyMessageLink}
+          onForward={onForward}
           myReactions={reactionsEnabled ? myReactions : []}
           canReply={canReply}
           canEdit={canEdit}
@@ -960,6 +964,7 @@ export const MessageBubble = memo(function MessageBubble({
           onEdit={onEdit}
           onDelete={onDelete}
           onCopyMessageLink={onCopyMessageLink}
+          onForward={onForward}
           onSaveAttachment={saveableAttachment
             ? () => downloadAttachment(saveableAttachment, { errorMessage: t('common.downloadFailed') })
             : undefined}

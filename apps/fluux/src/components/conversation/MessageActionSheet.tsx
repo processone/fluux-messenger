@@ -1,7 +1,7 @@
 /** Touch actions and quick reactions anchored to the selected message. */
 import { useState, useRef, Suspense, lazy } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Reply, Pencil, Trash2, Copy, SmilePlus, Link2 } from 'lucide-react'
+import { Reply, Pencil, Trash2, Copy, SmilePlus, Link2, Forward } from 'lucide-react'
 import { TouchMenu } from '../ui/TouchMenu'
 import { SelectedMessagePreview } from './SelectedMessagePreview'
 import { MenuButton } from '../sidebar-components/SidebarListMenu'
@@ -30,6 +30,7 @@ export interface MessageActionSheetProps {
   onDelete: () => void | Promise<void>
   /** Copies the message's room location, not a URL in its body. */
   onCopyMessageLink?: () => void | Promise<void>
+  onForward?: () => void
   /** Saves or shares the message's attachment; undefined hides the action. */
   onSaveAttachment?: () => void | Promise<void>
   canReply: boolean
@@ -49,6 +50,7 @@ export function MessageActionSheet({
   onEdit,
   onDelete,
   onCopyMessageLink,
+  onForward,
   onSaveAttachment,
   canReply,
   canEdit,
@@ -182,6 +184,14 @@ export function MessageActionSheet({
                 onClick={copyBody}
                 icon={<Copy className="size-5" />}
                 label={t('chat.copyMessage')}
+                className="py-3"
+              />
+            )}
+            {onForward && (
+              <MenuButton
+                onClick={() => runAction(onForward)}
+                icon={<Forward className="rtl-mirror size-5" />}
+                label={t('chat.forwardMessageLink')}
                 className="py-3"
               />
             )}

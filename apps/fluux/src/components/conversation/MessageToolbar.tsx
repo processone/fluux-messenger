@@ -28,6 +28,8 @@ export interface MessageToolbarProps {
   onDelete: () => void
   /** Available only for a confirmed public message in an archived room. */
   onCopyMessageLink?: () => void
+  /** Shares only the room message link with a chosen chat. */
+  onForward?: () => void
   /** Emojis the current user has already reacted with */
   myReactions: string[]
   /** Whether the reply button should be shown */
@@ -69,6 +71,7 @@ export const MessageToolbar = memo(function MessageToolbar({
   onEdit,
   onDelete,
   onCopyMessageLink,
+  onForward,
   myReactions,
   canReply,
   canEdit,
@@ -322,13 +325,14 @@ export const MessageToolbar = memo(function MessageToolbar({
         </Tooltip>
       )}
 
-      {/* Forward button (placeholder) */}
-      <Tooltip content={t('chat.forwardMessage')} position="top" disabled={showReactionPicker || showMoreMenu}>
+      {/* Forward shares a link, never a copy of the room message. */}
+      <Tooltip content={t(onForward ? 'chat.forwardMessageLink' : 'chat.forwardMessage')} position="top" disabled={showReactionPicker || showMoreMenu}>
         <button
           type="button"
-          className={`p-1.5 transition-colors opacity-50 cursor-not-allowed ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
-          aria-label={t('chat.forwardMessage')}
-          disabled
+          className={`p-1.5 transition-colors ${!onForward ? 'opacity-50 cursor-not-allowed' : ''} ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
+          aria-label={t(onForward ? 'chat.forwardMessageLink' : 'chat.forwardMessage')}
+          disabled={!onForward}
+          onClick={onForward}
         >
           <Forward className="rtl-mirror size-4 text-fluux-muted" />
         </button>
