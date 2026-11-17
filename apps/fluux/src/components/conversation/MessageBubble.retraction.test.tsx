@@ -22,6 +22,8 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }))
 vi.mock('date-fns', () => ({ format: vi.fn(() => '14:30') }))
+// Without a copy the room link shows its own preview, which needs a live connection this test does not have.
+vi.mock('./RoomMessageLinkPreview', () => ({ RoomMessageLinkPreview: () => null }))
 vi.mock('../Avatar', () => ({ Avatar: () => <div data-testid="avatar" /> }))
 vi.mock('@/stores/settingsStore', () => ({
   useSettingsStore: (selector: (s: { densityMode: string }) => unknown) => selector({ densityMode: 'comfortable' }),
@@ -112,5 +114,43 @@ describe('retracting a message that shows a forwarded copy', () => {
     expect(resident(id).forwarded).toBeUndefined()
     view.rerender(<MessageBubble {...props(resident(id))} />)
     expect(view.container.querySelector('[data-forwarded-copy]')).toBeNull()
+  })
+})
+
+// Rework: the quote a forward carries is hidden only while its copy is shown.
+describe('the quote that stands in for a forwarded copy', () => {
+  const quote = '> Bob wrote:\n> Ship it\n'
+  const forwardBody = `Look\n${quote}xmpp:${room}?join;msg=1`
+  const forward = (id: string, withCopy: boolean) => xml('message', { type: 'chat', id, from: `${peer}/web`, to: 'alice@example.org' },
+    xml('body', {}, forwardBody),
+    ...(withCopy ? [xml('forwarded', { xmlns: NSF }, xml('message', { from: `${room}/Bob` }, xml('body', {}, 'Ship it')))] : []),
+    xml('fallback', { xmlns: 'urn:xmpp:fallback:0', for: NSF }, xml('body', { start: '5', end: String(Array.from(forwardBody).length) })))
+  const bubble = (id: string) => render(<MessageBubble {...props(resident(id))} />).container
+
+  it('shows the comment and the copy, and not the quote, while the copy is shown', () => {
+    const chat = wire()
+    chat.handle(forward('with-copy', true))
+    const view = bubble('with-copy')
+    expect(view.querySelector('[data-forwarded-copy]')?.textContent).toContain('Ship it')
+    expect(view.textContent).toContain('Look')
+    expect(view.textContent).not.toContain('> Bob wrote:')
+  })
+
+  it('shows the whole body when the copy is missing, as after an archive that strips extensions', () => {
+    const chat = wire()
+    chat.handle(forward('no-copy', false))
+    const view = bubble('no-copy')
+    expect(view.querySelector('[data-forwarded-copy]')).toBeNull()
+    expect(view.textContent).toContain('Bob wrote:')
+    expect(view.textContent).toContain('Ship it')
+  })
+
+  it('shows no copy and no hidden text once the message is retracted', () => {
+    const chat = wire()
+    chat.handle(forward('retracted', true))
+    chat.handle(retraction('retracted'))
+    const view = bubble('retracted')
+    expect(view.querySelector('[data-forwarded-copy]')).toBeNull()
+    expect(view.textContent).not.toContain('Ship it')
   })
 })

@@ -365,6 +365,95 @@ describe('shared room message references', () => {
       } finally { await m.shutdown() }
     })
 
+    // Rework: one stanza for every reader. The quote is marked as the copy's fallback, so a reader that shows
+    // the copy can hide it and every other reader keeps it; nothing asks a device.
+    describe('fallback for the copy', () => {
+      const NSB = 'urn:xmpp:fallback:0'
+      const quoted = '> Bob wrote:\n> Ship it 🚀\n'
+      const quotedBody = `Look\n${quoted}${link}`
+      const quotedRefs = [{ type: 'data' as const, uri: link, begin: quotedBody.length - link.length, end: quotedBody.length }]
+      const mark = { begin: 'Look\n'.length, end: quotedBody.length }
+      const copyFallbacks = (stanza: Element) => stanza.getChildren('fallback').filter(el => (el as Element).attrs.for === NSF) as Element[]
+
+      it('marks the quote and link as the copy fallback in code points, and a reader reads the same range back', async () => {
+        const h = harness()
+        await h.chat.sendMessage('bob@example.org', quotedBody, { references: quotedRefs, forwarded: { ...copy, fallback: mark } })
+        const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+        expect(stanza.getChildText('body')).toBe(quotedBody)
+        const [marker] = copyFallbacks(stanza)
+        expect(copyFallbacks(stanza)).toHaveLength(1)
+        const wire = marker.getChild('body', NSB)!
+        const points = Array.from(quotedBody)
+        expect(points.slice(Number(wire.attrs.start), Number(wire.attrs.end)).join('')).toBe(`${quoted}${link}`)
+        const parsed = parseMessageContent({ messageEl: stanza, body: quotedBody })
+        expect(parsed.forwarded?.fallback).toEqual(mark)
+        expect(parsed.processedBody.slice(mark.begin, mark.end)).toBe(`${quoted}${link}`)
+        const event = vi.mocked(h.deps.emitSDK).mock.calls.find(([name]) => name === 'chat:message')
+        expect(event?.[1]).toMatchObject({ message: { forwarded: { fallback: mark } } })
+      })
+
+      it('moves the range with the text when a reply quote is put in front of the body', async () => {
+        const h = harness()
+        await h.chat.sendMessage('bob@example.org', quotedBody, {
+          references: quotedRefs, forwarded: { ...copy, fallback: mark },
+          replyTo: { id: 'r1', to: 'bob@example.org', fallback: { author: 'Bob', body: 'earlier' } },
+        })
+        const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+        const wireBody = stanza.getChildText('body')!
+        const parsed = parseMessageContent({ messageEl: stanza, body: wireBody })
+        expect(parsed.processedBody).toBe(quotedBody)
+        expect(parsed.processedBody.slice(parsed.forwarded!.fallback!.begin, parsed.forwarded!.fallback!.end)).toBe(`${quoted}${link}`)
+      })
+
+      it('never marks a range outside the body, and the message is then sent as a plain copy', async () => {
+        const h = harness()
+        await h.chat.sendMessage('bob@example.org', quotedBody, { references: quotedRefs, forwarded: { ...copy, fallback: { begin: 2, end: 9999 } } })
+        const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+        expect(copyFallbacks(stanza)).toHaveLength(0)
+        expect(stanza.getChild('forwarded', NSF)).toBeDefined()
+      })
+
+      it('ignores a marker that is malformed, out of range or has no copy, so the quote stays readable', () => {
+        const withMarker = (start: string, end: string, withCopy = true) => xml('message', { type: 'chat' },
+          xml('body', {}, quotedBody),
+          ...(withCopy ? [xml('forwarded', { xmlns: NSF }, xml('message', { from: `${room}/Bob` }, xml('body', {}, 'Ship it')))] : []),
+          xml('fallback', { xmlns: NSB, for: NSF }, xml('body', { start, end })))
+        const read = (el: Element) => parseMessageContent({ messageEl: el, body: quotedBody })
+        // Code point 30 lies after the one emoji, which takes two UTF-16 units.
+        expect(read(withMarker('5', '30')).forwarded?.fallback).toEqual({ begin: 5, end: 31 })
+        for (const [start, end] of [['x', '4'], ['9', '9'], ['9', '3'], ['0', '9999'], ['-1', '4']]) {
+          expect(read(withMarker(start, end)).forwarded?.fallback).toBeUndefined()
+        }
+        expect(read(withMarker('5', '30', false)).forwarded).toBeUndefined()
+        expect(read(withMarker('5', '30', false)).processedBody).toBe(quotedBody)
+      })
+
+      it('keeps the marker inside the encrypted payload only', async () => {
+        const h = harness()
+        const m = manager()
+        await m.register(new DummyPlaintextPlugin())
+        h.deps.getE2EEManager = () => m
+        try {
+          await h.chat.sendMessage('bob@example.org', quotedBody, { references: quotedRefs, forwarded: { ...copy, fallback: mark } })
+          const sent = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+          expect(copyFallbacks(sent)).toHaveLength(0)
+          const decoded = Buffer.from(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')!.text(), 'base64').toString('utf8')
+          expect(parsePayloadEnvelope(decoded)!.some(child => child.name === 'fallback' && child.attrs.for === NSF)).toBe(true)
+          const received = xml('message', { type: 'chat', from: 'alice@example.org/web', to: 'bob@example.org' }, ...sent.children as Element[])
+          await decryptStanzaInPlace(received, m, 'alice@example.org')
+          expect(parseMessageContent({ messageEl: received, body: received.getChildText('body') ?? '' }).forwarded?.fallback).toEqual(mark)
+        } finally { await m.shutdown() }
+      })
+
+      it('keeps the marker on a retry', async () => {
+        const h = harness()
+        const stored = { author: 'Bob', from: `${room}/Bob`, text: 'Ship it 🚀', fallback: mark }
+        await h.chat.resendMessage('bob@example.org', quotedBody, 'm1', undefined, quotedRefs, stored)
+        const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+        expect(parseMessageContent({ messageEl: stanza, body: stanza.getChildText('body')! }).forwarded?.fallback).toEqual(mark)
+      })
+    })
+
     it('replays a copy that has no outer body from the archive', () => {
       const h = harness()
       const mam = new MAM(h.deps) as unknown as { parseArchiveMessage(f: Element, conversation: string, archiveId?: string): { body: string; forwarded?: unknown } | null }

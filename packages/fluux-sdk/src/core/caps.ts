@@ -13,7 +13,7 @@ import {
   NS_CARBONS,
   NS_FLUUX_VERIFICATIONS_NOTIFY,
   NS_CONVERSATIONS_NOTIFY,
-  NS_FORWARD_COPY,
+  NS_FORWARD,
   NS_IDLE,
   NS_MDS_NOTIFY,
   NS_OPENPGP_PUBLIC_KEYS_NOTIFY,
@@ -73,7 +73,7 @@ export const CLIENT_FEATURES = [
   NS_CONVERSATIONS_NOTIFY,   // Fluux private PEP notify (conversation archive/unarchive sync)
   NS_MDS_NOTIFY,             // XEP-0490 PEP notify (read-position sync)
   NS_OPENPGP_PUBLIC_KEYS_NOTIFY, // XEP-0373 PEP notify (OpenPGP public keys)
-  NS_FORWARD_COPY,          // Fluux: shows a standalone XEP-0297 forwarded copy
+  NS_FORWARD,               // XEP-0297 Stanza Forwarding (shows a forwarded copy)
   NS_PING,                  // XEP-0199 XMPP Ping
   NS_TIME,                  // XEP-0202 Entity Time
   NS_REACTIONS,             // XEP-0444 Message Reactions

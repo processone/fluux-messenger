@@ -431,6 +431,25 @@ export function parseForwardedCopy(messageEl: Element): ForwardedCopy | undefine
   return { author, ...(address && address === from && { from: address }), text, ...(Number.isFinite(time) && { timestamp: time }) }
 }
 
+/**
+ * XEP-0428: the part of the body that only stands in for the forwarded copy, as a
+ * `<fallback for="urn:xmpp:forward:0">` range (code points in the raw body). Returned as
+ * UTF-16 offsets, or undefined when it is missing or does not lie inside the body.
+ */
+function parseForwardedCopyFallback(messageEl: Element, body: string): { begin: number; end: number } | undefined {
+  const codePoints = Array.from(body).length
+  for (const fallback of messageEl.getChildren('fallback')) {
+    const el = fallback as Element
+    if (el.attrs?.xmlns !== NS_FALLBACK || el.attrs?.for !== NS_FORWARD) continue
+    const range = el.getChild('body', NS_FALLBACK)
+    if (!range || !/^\d+$/.test(range.attrs.start ?? '') || !/^\d+$/.test(range.attrs.end ?? '')) continue
+    const start = Number(range.attrs.start), stop = Number(range.attrs.end)
+    if (start >= stop || stop > codePoints) continue
+    return { begin: fromCodePointOffset(body, start), end: fromCodePointOffset(body, stop) }
+  }
+  return undefined
+}
+
 /** Result from parseMessageContent. */
 export interface ParsedMessageContent {
   timestamp: Date
@@ -526,7 +545,7 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
 
   // XEP-0066: Out of Band Data
   const attachment = parseOobData(messageEl)
-  const forwardedCopy = parseForwardedCopy(messageEl)
+  const parsedCopy = parseForwardedCopy(messageEl)
 
   // XEP-0428: Process fallback text removal
   const fallback = processFallback(messageEl, body, { validTargets: fallbackTargets }, replyTo)
@@ -543,6 +562,21 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
   let finalBody = processedBody
   if (attachment?.url && processedBody.includes(attachment.url)) {
     finalBody = processedBody.replace(attachment.url, '').trim()
+  }
+
+  // The marked quote is kept with the copy, never stripped here: only a reader that shows the
+  // copy hides it. Reply and attachment fallback removal moves it; if it no longer fits, the
+  // quote simply stays visible.
+  let forwardedCopy = parsedCopy
+  if (parsedCopy) {
+    const marked = parseForwardedCopyFallback(messageEl, body)
+    if (marked) {
+      const rebased = finalBody === body ? marked
+        : processedBody.length === finalBody.length
+          ? { begin: rebaseFallbackOffset(marked.begin, fallback), end: rebaseFallbackOffset(marked.end, fallback) }
+          : undefined
+      if (rebased && rebased.begin < rebased.end && rebased.end <= finalBody.length) forwardedCopy = { ...parsedCopy, fallback: rebased }
+    }
   }
 
   return {

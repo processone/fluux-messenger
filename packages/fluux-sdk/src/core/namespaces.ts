@@ -173,10 +173,6 @@ export const NS_POLL = 'urn:fluux:poll:0'
 // Custom: Fluux forward quote. Names the XEP-0428 fallback for the quote and link a forward adds
 export const NS_FORWARD_QUOTE = 'urn:fluux:forward-quote:0'
 
-// Custom: Fluux standalone forwarded copy. Advertised once a client shows a XEP-0297 copy of a
-// message it received on its own; support for forwarding as an archive or carbons wrapper says nothing about it
-export const NS_FORWARD_COPY = 'urn:fluux:forward-copy:0'
-
 // XEP-0050: Ad-Hoc Commands
 export const NS_COMMANDS = 'http://jabber.org/protocol/commands'
 

@@ -104,6 +104,17 @@ describe('messagePreview', () => {
       expect(formatMessagePreview({ ...baseMessage, body: 'Look', forwarded })).toBe('Look')
     })
 
+    // Rework: the quote that stands in for a shown copy is left out; with a comment only the comment previews.
+    it('leaves the marked quote out of the preview, and previews the copied text when nothing else is left', () => {
+      const quote = '> Bob wrote:\n> Ship it\n'
+      const marked = (lead: string) => ({ ...baseMessage, body: `${lead}${quote}xmpp:r@c?join;msg=1`,
+        forwarded: { author: 'Bob', text: 'Ship it', fallback: { begin: lead.length, end: lead.length + quote.length + 'xmpp:r@c?join;msg=1'.length } } })
+      expect(formatMessagePreview(marked('Look\n'))).toBe('Look')
+      expect(formatMessagePreview(marked(''))).toBe('Ship it')
+      expect(formatMessagePreview({ ...marked('Look\n'), forwarded: { author: 'Bob', text: 'Ship it', fallback: { begin: 2, end: 9999 } } }))
+        .toContain('Bob wrote')
+    })
+
     it('should return empty string when no body and no attachment', () => {
       const message = { ...baseMessage, body: '' }
       expect(formatMessagePreview(message)).toBe('')

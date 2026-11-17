@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useChatActions, useRoomActions, useRoster, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { trackSend } from '@/utils/pendingSends'
-import { buildForwardedCopy, composeForward, composeNativeForward, type ForwardQuote } from '@/utils/forwardMessage'
+import { composeForward, composeForwardWithCopy, type ForwardQuote } from '@/utils/forwardMessage'
 import { ContactSelector } from './ContactSelector'
 import { ModalShell } from './ModalShell'
 import { TextArea } from './ui/TextInput'
@@ -74,13 +74,12 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
       } else {
         // The SDK routes known room addresses as groupchat even via chat actions.
         if (roomStore.getState().rooms.has(jid)) throw new Error('Destination changed')
-        // A structured copy only when every device the contact is online with shows one; an unknown,
-        // mixed, failed or offline answer keeps the quoted copy.
-        const copy = buildForwardedCopy(quote)
-        const native = copy && await chat.supportsForwardedCopy(jid).catch(() => false)
-        if (copy && native) {
-          const { body, references } = composeNativeForward(comment, link)
-          await trackSend(chat.sendMessage(jid, body, { references, forwarded: copy }))
+        // One stanza for every reader: the comment, quote and link, plus a structured copy. The quote
+        // is marked as the copy's fallback, so a reader that shows the copy hides it; no device is asked.
+        const withCopy = composeForwardWithCopy(comment, link, quote)
+        if (withCopy) {
+          const { body, references, forwarded } = withCopy
+          await trackSend(chat.sendMessage(jid, body, { references, forwarded }))
         } else {
           const { body, references } = composeForward(comment, link, quote)
           await trackSend(chat.sendMessage(jid, body, { references }))

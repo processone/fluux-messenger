@@ -179,9 +179,13 @@ interface MessageEnvelopeContext {
   delayEl?: Element
 }
 
-/** XEP-0428: mark a forward's generated quote and link (offsets are UTF-16 in the sent text). */
-function forwardFallbackElement(fullBody: string, shift: number, range: { begin: number; end: number }): Element {
-  return xml('fallback', { xmlns: NS_FALLBACK, for: NS_FORWARD_QUOTE },
+/**
+ * XEP-0428: mark a forward's generated quote and link (offsets are UTF-16 in the sent text).
+ * With a structured copy the target is the copy's own namespace, so any client that reads the
+ * copy knows what the marked text stands for; without one it is Fluux's private quote marker.
+ */
+function forwardFallbackElement(fullBody: string, shift: number, range: { begin: number; end: number }, target: string = NS_FORWARD_QUOTE): Element {
+  return xml('fallback', { xmlns: NS_FALLBACK, for: target },
     xml('body', {
       start: String(toCodePointOffset(fullBody, shift + range.begin)),
       end: String(toCodePointOffset(fullBody, shift + range.end)),
@@ -840,7 +844,7 @@ export class Chat extends BaseModule {
     }
     // The forward marker is in the same frame as the references: move it with them.
     for (const child of children) {
-      if (child.name !== 'fallback' || child.attrs.for !== NS_FORWARD_QUOTE) continue
+      if (child.name !== 'fallback' || (child.attrs.for !== NS_FORWARD_QUOTE && child.attrs.for !== NS_FORWARD)) continue
       const range = child.getChild('body', NS_FALLBACK)
       if (!range) continue
       for (const attribute of ['start', 'end']) {
@@ -901,6 +905,8 @@ export class Chat extends BaseModule {
       // reader to hide them must travel with them. Keyed by `for` so reply and OOB
       // fallbacks keep their current handling.
       `fallback|${NS_FALLBACK}|${NS_FORWARD_QUOTE}`,
+      // The same for the marker of a structured copy: it names the text the copy replaces.
+      `fallback|${NS_FALLBACK}|${NS_FORWARD}`,
       // A standalone forwarded copy holds the forwarded text, so it rides in the payload too.
       `forwarded|${NS_FORWARD}`,
     ])
@@ -960,6 +966,11 @@ export class Chat extends BaseModule {
       throw new Error('A forwarded copy can only be sent to a one-to-one chat')
     }
     const forwarded = options?.forwarded ? forwardedCopyFor(options.forwarded) : undefined
+    // The marked quote must lie inside the body the caller passed; otherwise nothing is marked.
+    const copyFallback = options?.forwarded?.fallback
+    const validCopyFallback = copyFallback && copyFallback.begin >= 0 && copyFallback.begin < copyFallback.end && copyFallback.end <= body.length
+      ? copyFallback : undefined
+    if (forwarded && validCopyFallback) forwarded.fallback = validCopyFallback
     for (const ref of roomMessageLinkReferences(body)) {
       if (!references.some(existing => existing.type === 'data' && existing.uri === ref.uri)) references.push(ref)
     }
@@ -1042,7 +1053,10 @@ export class Chat extends BaseModule {
         (url, encryption) => this.attachmentWireUrl(url, encryption)))
     }
 
-    if (forwarded && options?.forwarded) children.push(forwardedCopyElement(options.forwarded))
+    if (forwarded && options?.forwarded) {
+      children.push(forwardedCopyElement(options.forwarded))
+      if (validCopyFallback) children.push(forwardFallbackElement(fullBody, fallbackEnd, validCopyFallback, NS_FORWARD))
+    }
 
     // XEP-0359: Include origin-id for echo deduplication
     children.push(createOriginIdElement(id))
@@ -1170,6 +1184,9 @@ export class Chat extends BaseModule {
     // A retry keeps the structured copy inside the same protection as the first send.
     if (storedForwarded) {
       children.push(forwardedCopyElement({ from: storedForwarded.from ?? storedForwarded.author, text: storedForwarded.text, timestamp: storedForwarded.timestamp }))
+      if (storedForwarded.fallback && storedForwarded.fallback.end <= body.length) {
+        children.push(forwardFallbackElement(fullBody, 0, storedForwarded.fallback, NS_FORWARD))
+      }
     }
 
     if (attachment) {

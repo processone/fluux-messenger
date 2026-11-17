@@ -114,16 +114,17 @@ picker and comment available. Forward is unavailable for whispers, unconfirmed
 messages and messages without a room archive id, just like Copy message link.
 Forwarding one-to-one messages is a separate change.
 
-**Structured copy (XEP-0297).** A forward to a one-to-one chat sends a standalone
-`<forwarded xmlns="urn:xmpp:forward:0">` copy instead of the quote only when every
-device the contact is online with positively advertises `urn:fluux:forward-copy:0`.
-Fluux asks each device itself through XEP-0030, using the node and version from its
-XEP-0115 presence, and caches the answer per device and announced version. Support
-for archive or carbons wrappers, the server, the account and the client name say
-nothing about it. A device that is unknown, announced no capabilities, answered
-slowly or with an error, a mix of supporting and other devices, a contact with no
-device online, and every room, get the quoted form above. The structured copy
-carries the comment and the room link in the body (no duplicated quote), and the
+**Structured copy (XEP-0297).** A forward to a one-to-one chat is one stanza for every
+reader: the same comment, quote and link as the quoted form above, plus a standalone
+`<forwarded xmlns="urn:xmpp:forward:0">` copy, and a XEP-0428
+`<fallback xmlns="urn:xmpp:fallback:0" for="urn:xmpp:forward:0">` whose `<body start end/>`
+marks the quote and link (code points, as in the body). Fluux asks no device what it
+supports: a reader that shows the copy may hide the marked text, and any other reader
+shows the whole body. Fluux hides the marked text only while it shows the copy; a message
+whose copy is missing (an archive may drop extensions), malformed, retracted or still
+encrypted keeps it visible, and a marker outside the body is ignored. A reader that shows
+copies but ignores XEP-0428 would show the quote and the copy together. Every room gets
+the quoted form alone. The
 copy holds a `<delay/>` with the original time and a `<message from=...>` whose
 only child is the plain body; `from` is the room occupant address. The text is
 the sender's claim, not verified history. A receiver reads only that plain body,

@@ -279,7 +279,12 @@ export function formatMessagePreview(message: Pick<BaseMessage, 'body' | 'attach
   // For replies, strip any quote prefix that may still be in the body
   // (in case XEP-0428 fallback indication wasn't used)
   // A forwarded copy without a comment previews as the copied text.
-  let previewBody = body || message.forwarded?.text || ''
+  // The quote that only stands in for a copy the reader shows is left out of the preview.
+  const marked = message.forwarded?.fallback
+  const visibleBody = marked && marked.begin < marked.end && marked.end <= body.length
+    ? `${body.slice(0, marked.begin).trimEnd()}\n${body.slice(marked.end).trimStart()}`.trim()
+    : body
+  let previewBody = visibleBody || message.forwarded?.text || ''
   if (replyTo && previewBody.startsWith('> ')) {
     previewBody = stripReplyQuote(previewBody)
   }

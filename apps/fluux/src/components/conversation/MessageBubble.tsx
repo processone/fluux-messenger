@@ -17,7 +17,7 @@ import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
 import { useForwardMessage } from './forwardMessageContext'
 import { RoomMessageLinkPreview } from './RoomMessageLinkPreview'
-import { forwardFallbackRange, withoutForwardFallback } from '@/utils/forwardMessage'
+import { forwardFallbackRange, forwardedCopyFallbackRange, withoutForwardFallback } from '@/utils/forwardMessage'
 import { MessageBody } from './MessageBody'
 import { renderQuotePreview } from '@/utils/messageStyles'
 import { deriveCopyBody } from '@/utils/copyMessageBody'
@@ -424,7 +424,11 @@ export const MessageBubble = memo(function MessageBubble({
   const [sourceShown, setSourceShown] = useState(false)
   const hasForwardFallback = !!forwardFallbackRange(message.references)
   const hideForwardFallback = hasForwardFallback && sourceShown
-  const shown = hideForwardFallback ? withoutForwardFallback(message, mentions) : { body: message.body, mentions }
+  // A copy that is shown replaces the quote it came with; a copy that is missing, retracted or
+  // still encrypted leaves the quote visible.
+  const copyShown = !!message.forwarded && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
+  const hideCopyQuote = copyShown && !!forwardedCopyFallbackRange(message)
+  const shown = hideForwardFallback || hideCopyQuote ? withoutForwardFallback(message, mentions, hideCopyQuote) : { body: message.body, mentions }
   const [reactorEmoji, setReactorEmoji] = useState<string | null>(null)
   const actionAnchor = useRef<HTMLElement | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)

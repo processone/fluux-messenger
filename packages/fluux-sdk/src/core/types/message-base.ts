@@ -267,4 +267,10 @@ export interface ForwardedCopy {
   text: string
   /** Original timestamp (ms since epoch) when the copy named one. */
   timestamp?: number
+  /**
+   * The text of the message body that only stands in for the copy (a quote of it), as a
+   * XEP-0428 fallback for the copy. A reader that shows the copy hides it; any other reader
+   * or a message without a readable copy shows it. UTF-16 offsets in `body`.
+   */
+  fallback?: { begin: number; end: number }
 }
