@@ -61,4 +61,37 @@ describe('ToastContainer', () => {
     expect(stack.className).not.toContain('bottom-')
     expect(stack.className).toContain('top-')
   })
+
+  // FLM-228: with little room above the composer the stack shrinks, never overlapping it.
+  describe('room above the composer', () => {
+    const at = (bottomOrTop: number, key: 'bottom' | 'top') =>
+      ({ getBoundingClientRect: () => ({ [key]: bottomOrTop }) as DOMRect })
+
+    function mountPane(headerBottom: number, composerTop: number) {
+      const main = document.createElement('main')
+      main.innerHTML = '<header></header><form class="composer-form"></form>'
+      document.body.appendChild(main)
+      Object.assign(main.querySelector('header')!, at(headerBottom, 'bottom'))
+      Object.assign(main.querySelector('.composer-form')!, at(composerTop, 'top'))
+      return main
+    }
+    const stackStyle = () => (document.querySelector('[data-toast-stack]') as HTMLElement).style
+
+    it('caps the stack at the space left, even when under one notice tall', () => {
+      const main = mountPane(100, 150) // top 112, composer 150 -> 26px left
+      useToastStore.getState().addToast('info', 'Tight', 0)
+      render(<ToastContainer />)
+      expect(stackStyle().top).toBe('112px')
+      expect(stackStyle().maxHeight).toBe('26px')
+      main.remove()
+    })
+
+    it('shows no notice when the composer leaves no room', () => {
+      const main = mountPane(100, 90)
+      useToastStore.getState().addToast('info', 'None', 0)
+      render(<ToastContainer />)
+      expect(stackStyle().maxHeight).toBe('0')
+      main.remove()
+    })
+  })
 })

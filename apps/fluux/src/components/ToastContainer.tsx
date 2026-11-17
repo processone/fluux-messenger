@@ -18,8 +18,6 @@ const colorMap: Record<ToastType, { border: string; icon: string }> = {
 }
 
 const GAP_PX = 12
-/** Never squeeze the stack below roughly one notice, even in a very short window. */
-const MIN_STACK_PX = 72
 
 interface StackBox {
   top: number | null
@@ -44,7 +42,7 @@ function measureStack(): StackBox {
   const top = Math.max(bottom + GAP_PX, (vv?.offsetTop ?? 0) + GAP_PX)
   const composer = document.querySelector('main .composer-form')
   const maxHeight = composer
-    ? Math.max(MIN_STACK_PX, composer.getBoundingClientRect().top - GAP_PX - top)
+    ? Math.max(0, composer.getBoundingClientRect().top - GAP_PX - top)
     : null
   return { top, maxHeight }
 }
