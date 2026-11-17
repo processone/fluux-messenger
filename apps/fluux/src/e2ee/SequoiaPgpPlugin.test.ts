@@ -5,7 +5,7 @@
  * decrypt, claim — without any Tauri runtime.
  */
 
-import { createAppDesktopHost } from './appDesktopHost'
+import { createAppDesktopHost, createAppFileIO } from './appDesktopHost'
 import { createAppHostStores } from './appHostStores'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setPlatformForTesting } from '@/platform'
@@ -39,6 +39,18 @@ import { xml } from '@fluux/sdk/xmpp'
 vi.setConfig({ testTimeout: 30_000 })
 
 beforeEach(resetUncertainImportsForTesting)
+
+// In-memory stand-in for the Tauri dialog and filesystem plugins, so a key file
+// travels through the real app adapter (createAppFileIO) between two plugins.
+const tauriDisk = vi.hoisted(() => ({ files: new Map<string, string>(), picked: null as string | null }))
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  save: async () => '/disk/backup.asc',
+  open: async () => tauriDisk.picked,
+}))
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  writeTextFile: async (path: string, text: string) => { tauriDisk.files.set(path, text) },
+  readTextFile: async (path: string) => tauriDisk.files.get(path) ?? '',
+}))
 
 afterEach(resetUncertainImportsForTesting)
 
@@ -6683,6 +6695,30 @@ describe('SequoiaPgpPlugin', () => {
     it('refuses to export before an identity exists, without asking the host', async () => {
       await expect(filePlugin.exportKeyToFile('x')).rejects.toThrow()
       expect(fileIO.saveFile).not.toHaveBeenCalled()
+    })
+
+    it('imports a key exported through the app adapter and keeps its fingerprint', async () => {
+      tauriDisk.files.clear()
+      const source = new SequoiaPgpPlugin({ stores: createAppHostStores(), macosDesktop: false, fileIO: createAppFileIO(), invoke: fake.invoke })
+      await source.init(makeContext('me@example.com').ctx)
+      const originalFingerprint = source.getOwnFingerprint()
+      expect(originalFingerprint).not.toBeNull()
+      expect(await source.exportKeyToFile('correct horse battery')).toBe(true)
+      expect(tauriDisk.files.get('/disk/backup.asc')).toContain('-----BEGIN PGP MESSAGE-----')
+
+      // A second device with no key reads the file back and installs it.
+      const otherFake = makeFakeRust()
+      const device = new SequoiaPgpPlugin({ stores: createAppHostStores(), macosDesktop: false, fileIO: createAppFileIO(), invoke: otherFake.invoke })
+      const deviceCtx = makeContext('me@example.com')
+      deviceCtx.ctx.xmpp.queryPEP = async () => []
+      ;(device as unknown as { ctx: PluginContext }).ctx = deviceCtx.ctx
+      tauriDisk.picked = '/disk/backup.asc'
+      const armored = await device.pickKeyFile()
+      expect(armored).not.toBeNull()
+      const result = await device.importKeyFromFile(armored!, 'correct horse battery')
+      expect('needsPicker' in result).toBe(false)
+      expect((result as { fingerprint: string }).fingerprint).toBe(originalFingerprint)
+      expect(device.getOwnFingerprint()).toBe(originalFingerprint)
     })
 
     it('returns the text the host picked', async () => {
