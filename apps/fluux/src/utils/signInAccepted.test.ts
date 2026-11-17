@@ -52,6 +52,26 @@ describe('onSignInAccepted', () => {
     expect(persist).toHaveBeenCalledTimes(1)
   })
 
+  // The login form stays usable while a first sign-in retries, and connect()
+  // ignores a request made meanwhile: only the retrying request's password
+  // has been tried when the server accepts the sign-in.
+  it.each(['connecting', 'reconnecting'] as const)(
+    'saves the password of the request being retried, not of one made while %s',
+    (inProgress) => {
+      const { client, accept } = sdkClient()
+      const saved: string[] = []
+      onSignInAccepted(client, 'user@example.com/fluux-1', () => saved.push('password-A'))
+      connectionStore.getState().setStatus('connecting')
+      connectionStore.getState().setStatus(inProgress)
+
+      onSignInAccepted(client, 'user@example.com/fluux-1', () => saved.push('password-B'))
+      connectionStore.getState().setStatus('online')
+      accept('user@example.com/fluux-1')
+
+      expect(saved).toEqual(['password-A'])
+    },
+  )
+
   it.each([
     { end: 'error', why: 'a final failure' },
     { end: 'disconnected', why: 'a cancellation or logout' },
