@@ -1304,6 +1304,47 @@ describe('XMPPClient Connection', () => {
       proxyClient.cancelReconnect()
     })
 
+    // A password changed while the first sign-in is still in its post-connect
+    // setup must survive the pre-check giving up on that setup and signing in
+    // again through the proxy.
+    it('signs in through the proxy with a password changed during the direct WebSocket pre-check', async () => {
+      mockDiscoverWebSocket.mockResolvedValue('wss://discovered.example.com/ws')
+
+      // The server answers the password change but nothing else, so the first
+      // session's setup outlasts the pre-check.
+      const directClient = createMockXmppClient()
+      directClient.iqCaller.request.mockImplementation((iq: { children?: Array<{ attrs?: { xmlns?: string } }> }) =>
+        iq.children?.[0]?.attrs?.xmlns === 'jabber:iq:register'
+          ? Promise.resolve(createMockElement('iq', { type: 'result' }))
+          : new Promise(() => {}))
+      const fallbackClient = createMockXmppClient()
+      mockClientFactory.mockImplementationOnce(() => directClient).mockImplementationOnce(() => fallbackClient)
+
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      bindStoresForTesting(proxyClient, mockStores)
+
+      void proxyClient.connect({ jid: 'user@example.com', password: 'secret', server: 'example.com' }).catch(() => {})
+      await vi.advanceTimersByTimeAsync(0)
+      directClient._emit('online', { jid: { toString: () => 'user@example.com/resource' } })
+      await vi.advanceTimersByTimeAsync(0)
+      await proxyClient.profile.changePassword('newpassword123')
+
+      await vi.advanceTimersByTimeAsync(DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS)
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+      expect(mockClientFactory).toHaveBeenCalledTimes(2)
+
+      const [options] = mockClientFactory.mock.calls[1] as unknown as [ClientOptions]
+      const authenticate = vi.fn().mockResolvedValue(undefined)
+      await options.credentials!(authenticate, ['SCRAM-SHA-1', 'PLAIN'], null, { isSecure: () => true })
+      expect(authenticate.mock.calls[0][0]).toMatchObject({ password: 'newpassword123' })
+
+      proxyClient.cancelReconnect()
+    })
+
     it('should show firewall hint when proxy mode connection fails with code 1006', async () => {
       // Create a client with proxy adapter (simulating Tauri desktop mode)
       const mockProxyAdapter = {

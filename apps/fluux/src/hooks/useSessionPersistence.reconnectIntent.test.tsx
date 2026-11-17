@@ -31,7 +31,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   return {
     ...actual,
     useConnectionActions: () => ({ connect: mockConnect }),
-    useXMPPContext: () => ({ client: { connect: mockConnect } }),
+    useXMPPContext: () => ({ client: { connect: mockConnect, subscribe: () => () => {} } }),
     connectionStore: {
       getState: () => ({ setStatus: vi.fn(), setError: vi.fn() }),
       subscribe: vi.fn(() => vi.fn()),

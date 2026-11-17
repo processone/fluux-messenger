@@ -3,7 +3,7 @@ import { StrictMode } from 'react'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import type { ConnectionStatus } from '@fluux/sdk'
 import { useSessionPersistence, startupReconnectExpected } from './useSessionPersistence'
-import { getSession, saveSession } from '@/utils/sessionStorage'
+import { getSession, saveSession, updateSessionPassword } from '@/utils/sessionStorage'
 import { markLoggedOut, markConnectActive } from '@/utils/reconnectIntent'
 import { setPlatformForTesting } from '@/platform'
 import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
@@ -27,6 +27,11 @@ const mockPrewarm = vi.fn()
 const mockGetCurrentUrls = vi.fn()
 const mockOnOpenUrl = vi.fn()
 const statusHolder = { value: 'disconnected' as ConnectionStatus }
+// The SDK client's announcement that the server accepted a sign-in.
+const signInListeners = new Set<(event: { jid: string }) => void>()
+function announceSignIn(event: { jid: string }): void {
+  for (const listener of [...signInListeners]) listener(event)
+}
 const pushGate: { wait: Promise<void> | null } = { wait: null }
 
 vi.mock('react-i18next', () => ({
@@ -50,8 +55,26 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@fluux/sdk')>()
   return {
     ...actual,
-    useConnectionActions: () => ({ connect: mockConnect }),
-    useXMPPContext: () => ({ client: { disconnect: mockDisconnect, profile: { restoreOwnAvatarFromCache: vi.fn() } } }),
+    // A connect() that succeeds has had its sign-in accepted by then, unless
+    // it handed a failed attempt to the automatic reconnection (status
+    // 'reconnecting'): that one is accepted later, if at all.
+    useConnectionActions: () => ({
+      connect: async (options: { jid: string }) => {
+        const result = await mockConnect(options)
+        if (statusHolder.value !== 'reconnecting') announceSignIn({ jid: options.jid })
+        return result
+      },
+    }),
+    useXMPPContext: () => ({
+      client: {
+        disconnect: mockDisconnect,
+        profile: { restoreOwnAvatarFromCache: vi.fn() },
+        subscribe: (_event: string, listener: (event: { jid: string }) => void) => {
+          signInListeners.add(listener)
+          return () => { signInListeners.delete(listener) }
+        },
+      },
+    }),
     connectionStore: {
       getState: () => ({ status: statusHolder.value, jid: null, setStatus: vi.fn(), setError: vi.fn() }),
       subscribe: vi.fn(() => vi.fn()),
@@ -310,6 +333,23 @@ describe('useSessionPersistence — startup owner', () => {
       expect(getSession()).toMatchObject({ jid: JID, password: 'pw' })
     })
 
+    // connect() returns once the automatic reconnection owns a failed attempt;
+    // the sign-in that reconnection makes is the one a reload and a later
+    // password change rely on.
+    it('saves the tab session when the automatic reconnection signs in after connect() returned', async () => {
+      seedFastToken()
+      seedKeychain()
+      mockConnect.mockImplementation(() => { statusHolder.value = 'reconnecting'; return Promise.resolve(null) })
+      renderHook(() => useSessionPersistence())
+      await waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1))
+      await flush()
+      expect(getSession()).toBeNull()
+
+      statusHolder.value = 'online'
+      act(() => announceSignIn({ jid: JID }))
+      expect(getSession()).toEqual({ jid: JID, password: 'pw', server: 'example.com' })
+    })
+
     it('ends the startup when a pending attempt is torn down (cancelled reconnect, logout, takeover)', async () => {
       seedFastToken()
       pendingConnect()
@@ -366,6 +406,24 @@ describe('useSessionPersistence — startup owner', () => {
       rerender()
       await waitFor(() => expect(result.current.startupPending).toBe(false))
       expect(getSession()).toMatchObject({ jid: JID, password: 'pw' })
+    })
+
+    // Settings can change the password once the server accepts the sign-in,
+    // while connect() still waits for the setup that follows: a reload of the
+    // tab must then sign in with the new password, not the keychain's.
+    it('keeps a password changed while the sign-in finishes its setup', async () => {
+      seedKeychain()
+      const attempt = pendingConnect()
+      renderHook(() => useSessionPersistence())
+      await waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1))
+
+      act(() => announceSignIn({ jid: JID }))
+      updateSessionPassword(JID, 'changed-pw')
+
+      statusHolder.value = 'online'
+      await act(async () => { attempt.resolve() })
+      await flush()
+      expect(getSession()).toMatchObject({ jid: JID, password: 'changed-pw' })
     })
 
     it('ends the startup with no attempt when the keychain holds nothing usable', async () => {

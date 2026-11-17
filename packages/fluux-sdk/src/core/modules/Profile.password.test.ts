@@ -185,5 +185,44 @@ describe('XMPPClient Password', () => {
       await expect(xmppClient.profile.changePassword('newpassword'))
         .resolves.toBeUndefined()
     })
+
+    /**
+     * Drops the connection, lets the reconnect run, and returns the password the
+     * reconnect's client offers when the server asks it to authenticate.
+     */
+    async function passwordOfferedOnReconnect(): Promise<unknown> {
+      const droppedClient = mockXmppClientInstance
+      mockXmppClientInstance = createMockXmppClient()
+      mockClientFactory._setInstance(mockXmppClientInstance)
+      mockClientFactory.mockClear()
+
+      droppedClient._emit('disconnect', { clean: false })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+
+      const { credentials } = (mockClientFactory.mock.calls[0] as unknown[])[0] as { credentials: Function }
+      const authenticate = vi.fn().mockResolvedValue(undefined)
+      // A server without FAST: authentication has only the password to go on.
+      await credentials(authenticate, ['SCRAM-SHA-1', 'PLAIN'], null, { isSecure: () => true })
+      return (authenticate.mock.calls[0][0] as { password?: string }).password
+    }
+
+    it('should authenticate the next reconnect with the new password once the server accepts it', async () => {
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(
+        createMockElement('iq', { type: 'result' })
+      )
+
+      await xmppClient.profile.changePassword('newpassword123')
+
+      expect(await passwordOfferedOnReconnect()).toBe('newpassword123')
+    })
+
+    it('should keep authenticating with the current password when the server refuses the change', async () => {
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('not-acceptable'))
+
+      await expect(xmppClient.profile.changePassword('newpassword123')).rejects.toThrow('not-acceptable')
+
+      expect(await passwordOfferedOnReconnect()).toBe('secret')
+    })
   })
 })

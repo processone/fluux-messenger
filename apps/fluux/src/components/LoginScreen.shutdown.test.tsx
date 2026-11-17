@@ -17,6 +17,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@fluux/sdk')>()),
   useConnectionStatus: () => ({ status: 'offline', error: null }),
   useConnectionActions: () => ({ connect: mockConnect }),
+  useXMPPContext: () => ({ client: { subscribe: () => () => {} } }),
   deleteFastToken: vi.fn(),
 }))
 vi.mock('react-i18next', () => ({

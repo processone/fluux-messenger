@@ -42,7 +42,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   return {
     ...actual,
     useConnectionActions: () => ({ connect: mockConnect }),
-    useXMPPContext: () => ({ client: { profile: { restoreOwnAvatarFromCache: vi.fn() } } }),
+    useXMPPContext: () => ({ client: { profile: { restoreOwnAvatarFromCache: vi.fn() }, subscribe: () => () => {} } }),
     connectionStore: {
       getState: () => ({ jid: null, setStatus: vi.fn(), setError: vi.fn() }),
       subscribe: vi.fn(() => vi.fn()),

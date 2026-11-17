@@ -129,6 +129,23 @@ export function saveSession(jid: string, password: string, server: string): void
   setScopedSessionItem(SESSION_KEY, JSON.stringify(data), scopeJid)
 }
 
+/**
+ * Puts a password the server has just accepted into this tab's saved session,
+ * so a reload signs in with it instead of the old one. Does nothing when the
+ * tab holds no session for that account.
+ */
+export function updateSessionPassword(jid: string, password: string): void {
+  const stored = getScopedSessionItem(SESSION_KEY, jid)
+  if (!stored) return
+  try {
+    const session = JSON.parse(stored) as SessionData
+    if (normalizeSessionJid(session.jid) !== normalizeSessionJid(jid)) return
+    setScopedSessionItem(SESSION_KEY, JSON.stringify({ ...session, password }), jid)
+  } catch {
+    // An unreadable session is left as it is: the reload falls back to the sign-in form.
+  }
+}
+
 // Note: SM state persistence is now handled by SDK's storage adapter.
 // The SDK automatically persists SM state on enable/resume and loads it on connect.
 

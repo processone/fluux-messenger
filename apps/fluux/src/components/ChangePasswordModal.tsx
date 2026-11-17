@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useConnection } from '@fluux/sdk'
 import { useModalInput } from '@/hooks'
 import { ModalShell } from './ModalShell'
-import { forgetStaleSavedCredentials, hasSavedCredentials, saveCredentials } from '@/utils/keychain'
-import { getSession } from '@/utils/sessionStorage'
+import { credentialSaveSettled, forgetStaleSavedCredentials, hasSavedCredentials, saveCredentials } from '@/utils/keychain'
+import { getSession, updateSessionPassword } from '@/utils/sessionStorage'
 import { useToastStore } from '@/stores/toastStore'
 
 interface ChangePasswordModalProps {
@@ -47,7 +47,13 @@ export function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
     }
 
     // The server has the new password from here on, so the change succeeded
-    // whatever the keychain does. Update it if "Remember me" was used at login.
+    // whatever the keychain does. The SDK already reconnects with it; a reload
+    // of this tab signs in from the tab's saved session, so update that too.
+    if (jid) updateSessionPassword(jid, newPassword)
+
+    // Update the keychain if "Remember me" was used at login. That first save
+    // may still be running: wait for it, so the new password lands last.
+    await credentialSaveSettled()
     if (jid && hasSavedCredentials()) {
       // Keep the server this session signed in with, as the login form saves
       // it, so the next start and the login form still use a custom server.
