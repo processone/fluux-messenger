@@ -1,4 +1,4 @@
-import { getBareJid } from '@fluux/sdk'
+import { connectionStore, getBareJid } from '@fluux/sdk'
 import type { SDKEvents } from '@fluux/sdk'
 
 type SignInAccepted = SDKEvents['connection:authenticated']
@@ -10,12 +10,17 @@ interface SignInEvents {
 
 /**
  * Calls `persist` once, as soon as the server accepts the sign-in to `jid`, and
- * returns what stops waiting for it: call that once the sign-in is over.
+ * returns what stops waiting for it: call that when `connect()` rejects.
  *
  * `connect()` resolves only after the setup that follows the sign-in (roster,
  * bookmarks), and the app is usable from the moment the server accepts it.
  * Saving the sign-in's password once `connect()` resolves would overwrite a
  * password changed during that setup; saving it here lets the change replace it.
+ *
+ * `connect()` also resolves, before any sign-in, when it hands a failed attempt
+ * to the automatic reconnection: the wait goes on until that is accepted. It
+ * ends by itself when the connection ends without it, on a final failure
+ * (status `error`) or a cancellation or logout (`disconnected`).
  */
 export function onSignInAccepted(
   client: SignInEvents,
@@ -23,10 +28,17 @@ export function onSignInAccepted(
   persist: (event: SignInAccepted) => void,
 ): () => void {
   const account = getBareJid(jid)
-  const stop = client.subscribe('connection:authenticated', (event) => {
+  const stopAccepted = client.subscribe('connection:authenticated', (event) => {
     if (getBareJid(event.jid) !== account) return
     stop()
     persist(event)
   })
+  const stopEnded = connectionStore.subscribe((state) => state.status, (status) => {
+    if (status === 'error' || status === 'disconnected') stop()
+  })
+  function stop(): void {
+    stopAccepted()
+    stopEnded()
+  }
   return stop
 }

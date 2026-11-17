@@ -123,6 +123,8 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
   // is saved with this sign-in's credentials as soon as the server accepts it,
   // so a password changed during the setup that follows replaces them; nothing
   // is saved for an attempt that was replaced, logged out or overtaken by then.
+  // A sign-in handed to the automatic reconnection is saved when that accepts
+  // it, after connect() has returned.
   // Rejects when the connection fails or is cancelled (status then says so).
   const startupConnect = useCallback(async (epoch: number, options: ConnectOptions, saveForReload = false): Promise<void> => {
     if (startupObsolete(epoch)) return
@@ -133,8 +135,9 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
       : undefined
     try {
       await connect(options)
-    } finally {
+    } catch (error) {
       stopSaving?.()
+      throw error
     }
   }, [connect, startupObsolete])
 

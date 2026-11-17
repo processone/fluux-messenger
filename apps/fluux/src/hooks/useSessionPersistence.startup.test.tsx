@@ -55,11 +55,13 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@fluux/sdk')>()
   return {
     ...actual,
-    // A connect() that succeeds has had its sign-in accepted by then.
+    // A connect() that succeeds has had its sign-in accepted by then, unless
+    // it handed a failed attempt to the automatic reconnection (status
+    // 'reconnecting'): that one is accepted later, if at all.
     useConnectionActions: () => ({
       connect: async (options: { jid: string }) => {
         const result = await mockConnect(options)
-        announceSignIn({ jid: options.jid })
+        if (statusHolder.value !== 'reconnecting') announceSignIn({ jid: options.jid })
         return result
       },
     }),
@@ -329,6 +331,23 @@ describe('useSessionPersistence — startup owner', () => {
       rerender()
       await waitFor(() => expect(result.current.startupPending).toBe(false))
       expect(getSession()).toMatchObject({ jid: JID, password: 'pw' })
+    })
+
+    // connect() returns once the automatic reconnection owns a failed attempt;
+    // the sign-in that reconnection makes is the one a reload and a later
+    // password change rely on.
+    it('saves the tab session when the automatic reconnection signs in after connect() returned', async () => {
+      seedFastToken()
+      seedKeychain()
+      mockConnect.mockImplementation(() => { statusHolder.value = 'reconnecting'; return Promise.resolve(null) })
+      renderHook(() => useSessionPersistence())
+      await waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1))
+      await flush()
+      expect(getSession()).toBeNull()
+
+      statusHolder.value = 'online'
+      act(() => announceSignIn({ jid: JID }))
+      expect(getSession()).toEqual({ jid: JID, password: 'pw', server: 'example.com' })
     })
 
     it('ends the startup when a pending attempt is torn down (cancelled reconnect, logout, takeover)', async () => {

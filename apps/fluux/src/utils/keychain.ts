@@ -61,10 +61,36 @@ export function hasSavedCredentials(): boolean {
   return localStorage.getItem(STORAGE_KEY_HAS_CREDENTIALS) === 'true'
 }
 
+// The latest keychain save, settled either way (see credentialSaveSettled).
+let latestSave: Promise<unknown> = Promise.resolve()
+
+/**
+ * Resolves once the latest keychain save has finished, whether it worked or
+ * not; `hasSavedCredentials()` then says whether a password is saved.
+ *
+ * The login form saves the password ("Remember me") when the server accepts
+ * the sign-in, and that save can still be running when a password change is
+ * accepted: waiting for it lets the new password replace the old one, instead
+ * of the old one landing last.
+ */
+export async function credentialSaveSettled(): Promise<void> {
+  await latestSave
+}
+
 /**
  * Save credentials to the OS keychain (native apps only)
  */
-export async function saveCredentials(
+export function saveCredentials(
+  jid: string,
+  password: string,
+  server: string | null
+): Promise<void> {
+  const save = writeCredentials(jid, password, server)
+  latestSave = save.catch(() => {})
+  return save
+}
+
+async function writeCredentials(
   jid: string,
   password: string,
   server: string | null

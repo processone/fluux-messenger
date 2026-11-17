@@ -317,8 +317,9 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         const stopSaving = onSignInAccepted(client, loginJid, () => saveSession(loginJid, password, actualServer))
         try {
           await connect({ jid: loginJid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: true })
-        } finally {
+        } catch (error) {
           stopSaving()
+          throw error
         }
       } catch {
         // Error is handled in hook
@@ -404,8 +405,9 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       })
       try {
         await connect({ jid: loginJid, password, ...serverOptions, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: rememberMe })
-      } finally {
+      } catch (error) {
         stopSaving()
+        throw error
       }
     } catch {
       // Error is handled in hook
