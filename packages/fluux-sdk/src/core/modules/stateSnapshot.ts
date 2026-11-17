@@ -76,6 +76,8 @@ interface SerializedRoom {
   password?: string
   notifyAll?: boolean
   notifyAllPersistent?: boolean
+  notifyOff?: boolean
+  notifyOffPersistent?: boolean
   isQuickChat?: boolean
   muted?: boolean
   supportsMAM?: boolean
@@ -183,6 +185,8 @@ function serializeRoom(r: Room, window: RoomMessage[]): SerializedRoom {
     password: r.password,
     notifyAll: r.notifyAll,
     notifyAllPersistent: r.notifyAllPersistent,
+    notifyOff: r.notifyOff,
+    notifyOffPersistent: r.notifyOffPersistent,
     isQuickChat: r.isQuickChat,
     muted: r.muted,
     supportsMAM: r.supportsMAM,

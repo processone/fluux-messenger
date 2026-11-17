@@ -12,6 +12,7 @@ import type { MessageActor } from '../../utils/messageIdentity'
  */
 
 import type { Element } from '@xmpp/client'
+import type { NotifyLevel } from '../notifyLevel'
 import type { Message, Conversation } from './chat'
 import type { StoredMessage, StoredRoomMessage } from './message-internal'
 import type { Contact, PresenceShow, ProfileDetails } from './roster'
@@ -474,7 +475,7 @@ export interface RoomEvents {
       nick: string
       autojoin?: boolean
       password?: string
-      notifyAll?: boolean
+      notifyLevel?: NotifyLevel
     }
   }
 

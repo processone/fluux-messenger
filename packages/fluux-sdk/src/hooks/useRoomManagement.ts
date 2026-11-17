@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useXMPPContext } from '../provider'
+import type { NotifyLevel } from '../core/notifyLevel'
 import type { PageRequest, AdminRoom, PageInfo } from '../core/types'
 
 /**
@@ -65,7 +66,7 @@ export function useRoomManagement() {
   const setBookmark = useCallback(
     async (
       roomJid: string,
-      options: { name: string; nick: string; autojoin?: boolean; password?: string }
+      options: { name: string; nick: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel }
     ) => {
       await client.rooms.setBookmark(roomJid, options)
     },
@@ -82,6 +83,13 @@ export function useRoomManagement() {
   const setRoomNotifyAll = useCallback(
     async (roomJid: string, notifyAll: boolean, persistent: boolean = false) => {
       await client.rooms.setRoomNotifyAll(roomJid, notifyAll, persistent)
+    },
+    [client]
+  )
+
+  const setRoomNotifyLevel = useCallback(
+    async (roomJid: string, level: NotifyLevel, persistent: boolean = false) => {
+      await client.rooms.setRoomNotifyLevel(roomJid, level, persistent)
     },
     [client]
   )
@@ -140,6 +148,7 @@ export function useRoomManagement() {
       setBookmark,
       removeBookmark,
       setRoomNotifyAll,
+      setRoomNotifyLevel,
       inviteToRoom,
       inviteMultipleToRoom,
       browsePublicRooms,
@@ -156,6 +165,7 @@ export function useRoomManagement() {
       setBookmark,
       removeBookmark,
       setRoomNotifyAll,
+      setRoomNotifyLevel,
       inviteToRoom,
       inviteMultipleToRoom,
       browsePublicRooms,

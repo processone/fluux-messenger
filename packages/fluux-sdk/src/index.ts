@@ -231,6 +231,8 @@ export type { SyncedConversation } from './core/modules/ConversationSync'
 export { isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions } from './stores/ignoreStore'
 
 // Notification state utilities (pure functions for badge computation, etc.)
+export type { NotifyLevel } from './core/notifyLevel'
+export { resolveNotifyLevel, savedNotifyLevel, parseNotifyLevel, notifiesForAllMessages, hasBadgeActivity } from './core/notifyLevel'
 export { computeBadgeCount, shouldNotifyConversation, shouldNotifyRoom } from './stores/shared/notificationState'
 export type { EntityNotificationState, NotificationMessage, EntityContext, BadgeInput } from './stores/shared/notificationState'
 export { unreadConversations } from './stores/unreadConversations'

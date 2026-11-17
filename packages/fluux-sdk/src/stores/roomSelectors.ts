@@ -21,6 +21,7 @@
  */
 
 import type { RoomState } from './roomStore'
+import { hasBadgeActivity, notifiesForAllMessages, resolveNotifyLevel, type NotifyLevel } from '../core/notifyLevel'
 import type { MessageRowRef } from '../utils/messageIdentity'
 import type { Room, RoomEntity, RoomMetadata, RoomRuntime, RoomOccupant, RoomMessage, HistoryQueryState } from '../core/types'
 
@@ -63,10 +64,12 @@ export function roomActivityTone(room: {
   mentionsCount: number
   notifyAll?: boolean
   notifyAllPersistent?: boolean
+  notifyOff?: boolean
+  notifyOffPersistent?: boolean
 }): RoomActivityTone {
   if (!room.joined || room.muted) return 'none'
-  const notifyAll = room.notifyAll || room.notifyAllPersistent
-  if (room.mentionsCount > 0 || (notifyAll && room.unreadCount > 0)) return 'accent'
+  // An Off room never turns accent: its unread count stays grey.
+  if (hasBadgeActivity(room)) return 'accent'
   if (room.unreadCount > 0) return 'neutral'
   return 'none'
 }
@@ -254,7 +257,7 @@ export const roomSelectors = {
     for (const [jid, entity] of state.roomEntities) {
       if (entity.joined) {
         const meta = state.roomMeta.get(jid)
-        if (meta && (meta.notifyAll || meta.notifyAllPersistent)) {
+        if (meta && notifiesForAllMessages(meta)) {
           total += meta.unreadCount
         }
       }
@@ -279,10 +282,7 @@ export const roomSelectors = {
       if (entity.joined) {
         const meta = state.roomMeta.get(jid)
         if (meta) {
-          const hasActivity =
-            meta.mentionsCount > 0 ||
-            ((meta.notifyAll || meta.notifyAllPersistent) && meta.unreadCount > 0)
-          if (hasActivity) jids.push(jid)
+          if (hasBadgeActivity(meta)) jids.push(jid)
         }
       }
     }
@@ -392,7 +392,14 @@ export const roomSelectors = {
    */
   notifyAllFor: (roomJid: string) => (state: RoomState): boolean => {
     const room = state.rooms.get(roomJid)
-    return !!(room?.notifyAll || room?.notifyAllPersistent)
+    return notifiesForAllMessages(room)
+  },
+
+  /**
+   * Notification level in effect for a room (session choice, saved choice, Mentions only).
+   */
+  notifyLevelFor: (roomJid: string) => (state: RoomState): NotifyLevel => {
+    return resolveNotifyLevel(state.rooms.get(roomJid))
   },
 
   // ============================================================
@@ -508,7 +515,7 @@ export const roomSelectors = {
         avatarHash: entity.avatarHash,
         unreadCount: meta?.unreadCount ?? 0,
         mentionsCount: meta?.mentionsCount ?? 0,
-        notifyAll: !!(meta?.notifyAll || meta?.notifyAllPersistent),
+        notifyAll: notifiesForAllMessages(meta),
         draft: state.drafts.get(jid),
         occupantCount: runtime?.occupants.size ?? 0,
         lastMessage: meta?.lastMessage,
@@ -577,7 +584,7 @@ export const roomSelectors = {
         avatarHash: entity.avatarHash,
         unreadCount: meta?.unreadCount ?? 0,
         mentionsCount: meta?.mentionsCount ?? 0,
-        notifyAll: !!(meta?.notifyAll || meta?.notifyAllPersistent),
+        notifyAll: notifiesForAllMessages(meta),
         draft: state.drafts.get(jid),
         occupantCount: runtime?.occupants.size ?? 0,
         lastMessage: meta?.lastMessage,

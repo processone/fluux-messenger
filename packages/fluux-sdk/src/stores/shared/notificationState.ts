@@ -54,6 +54,7 @@ import {
   type RenderabilityCheckFields,
 } from './readState'
 import { isSpamModerated } from '../../utils/moderation'
+import type { NotifyLevel } from '../../core/notifyLevel'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -792,20 +793,22 @@ const ROOM_FRESHNESS_THRESHOLD_MS = 5 * 60 * 1000
  * Should a room message trigger a notification?
  *
  * Returns { shouldNotify, isMention } for the notification handler.
- * Notifies for mentions (always) or all messages (when notifyAll enabled),
- * but only when the user can't see the room.
+ * Notifies for mentions (level `mentions`), every message (`all`) or nothing
+ * (`none`, Off — mentions and @all included), but only when the user can't
+ * see the room.
  */
 export function shouldNotifyRoom(
   msg: NotificationMessage,
   ctx: EntityContext,
-  notifyAll: boolean
+  level: NotifyLevel
 ): { shouldNotify: boolean; isMention: boolean } {
   const isMention = msg.isMention ?? false
+  if (level === 'none') return { shouldNotify: false, isMention }
   if (msg.isOutgoing || msg.isDelayed) return { shouldNotify: false, isMention }
   if (Date.now() - msg.timestamp.getTime() > ROOM_FRESHNESS_THRESHOLD_MS) return { shouldNotify: false, isMention }
   if (ctx.isActive && ctx.windowVisible) return { shouldNotify: false, isMention }
 
-  return { shouldNotify: isMention || notifyAll, isMention }
+  return { shouldNotify: isMention || level === 'all', isMention }
 }
 
 // ---------------------------------------------------------------------------

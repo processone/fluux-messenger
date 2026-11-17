@@ -1,6 +1,7 @@
 import { Element } from '@xmpp/client'
 import { getLocalPart } from './jid'
 import { NS_BOOKMARKS, NS_FLUUX } from './namespaces'
+import { parseNotifyLevel, type NotifyLevel } from './notifyLevel'
 
 /**
  * A parsed XEP-0402 `<conference>` bookmark item.
@@ -16,7 +17,7 @@ export interface ParsedBookmark {
   nick?: string
   autojoin: boolean
   password?: string
-  notifyAll: boolean
+  notifyLevel: NotifyLevel
 }
 
 /**
@@ -38,7 +39,7 @@ export function parseBookmarkItem(item: Element): ParsedBookmark | null {
   const autojoin = conference.attrs.autojoin === '1' || conference.attrs.autojoin === 'true'
   const nick = conference.getChildText('nick') || undefined
   const password = conference.getChildText('password') || undefined
-  const notifyAll = conference.getChild('extensions')?.getChild('notify', NS_FLUUX)?.getText() === 'all'
+  const notifyLevel = parseNotifyLevel(conference.getChild('extensions')?.getChild('notify', NS_FLUUX)?.getText())
 
-  return { jid, name, nick, autojoin, password, notifyAll }
+  return { jid, name, nick, autojoin, password, notifyLevel }
 }

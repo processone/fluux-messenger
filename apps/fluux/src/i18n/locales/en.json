@@ -282,6 +282,7 @@
         "allMessages": "All messages",
         "thisSessionOnly": "This session only",
         "alwaysSavedToBookmark": "Always (saved to bookmark)",
+        "notificationsOff": "Off",
         "showMembers": "Show members",
         "hideMembers": "Hide members",
         "members": "Members",

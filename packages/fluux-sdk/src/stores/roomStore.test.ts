@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { roomStore, _resetRoomArchiveSavesForTesting, _resetRoomReadStateForTesting } from './roomStore'
 import { connectionStore } from './connectionStore'
 import type { Room, RoomMessage, RoomMetadata } from '../core/types'
+import { resolveNotifyLevel } from '../core/notifyLevel'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { createRoom, createMessage, roomWindow } from './roomStore.testHelpers'
 import { makeReadPointer, type ReadPointer } from './shared/readPointer'
@@ -572,12 +573,12 @@ describe('roomStore', () => {
     })
   })
 
-  describe('setBookmark with notifyAll', () => {
-    it('should set notifyAllPersistent when bookmark has notifyAll', () => {
+  describe('setBookmark with a notify level', () => {
+    it('should set notifyAllPersistent when bookmark has notify level all', () => {
       roomStore.getState().setBookmark('test@conference.example.com', {
         name: 'Test Room',
         nick: 'user',
-        notifyAll: true,
+        notifyLevel: 'all',
       })
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
@@ -590,11 +591,58 @@ describe('roomStore', () => {
       roomStore.getState().setBookmark('test@conference.example.com', {
         name: 'Test Room',
         nick: 'user',
-        notifyAll: true,
+        notifyLevel: 'all',
       })
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
       expect(room?.notifyAllPersistent).toBe(true)
+    })
+
+    it('should save Off from a bookmark pushed by another session, in room and metadata', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', { joined: true }))
+
+      roomStore.getState().setBookmark('test@conference.example.com', { name: 'Test Room', nick: 'user', notifyLevel: 'none' })
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.notifyOffPersistent).toBe(true)
+      expect(room?.notifyAllPersistent).toBe(false)
+      expect(roomStore.getState().roomMeta.get('test@conference.example.com')?.notifyOffPersistent).toBe(true)
+    })
+
+    it('should clear Off when the bookmark is removed from a joined room', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', { joined: true }))
+      roomStore.getState().setBookmark('test@conference.example.com', { name: 'Test Room', nick: 'user', notifyLevel: 'none' })
+
+      roomStore.getState().removeBookmark('test@conference.example.com')
+
+      expect(roomStore.getState().rooms.get('test@conference.example.com')?.notifyOffPersistent).toBeUndefined()
+    })
+  })
+
+  describe('setNotifyLevel', () => {
+    const JID = 'test@conference.example.com'
+    beforeEach(() => {
+      roomStore.getState().addRoom(createRoom(JID, { joined: true }))
+    })
+
+    it('a saved choice replaces the session choice', () => {
+      roomStore.getState().setNotifyLevel(JID, 'all', false)
+      roomStore.getState().setNotifyLevel(JID, 'none', true)
+
+      const room = roomStore.getState().rooms.get(JID)
+      expect(room?.notifyAll).toBeUndefined()
+      expect(room?.notifyOff).toBeUndefined()
+      expect(room?.notifyOffPersistent).toBe(true)
+      expect(resolveNotifyLevel(room)).toBe('none')
+    })
+
+    it('a session choice overrides the saved one until the room is left', () => {
+      roomStore.getState().setNotifyLevel(JID, 'none', true)
+      roomStore.getState().setNotifyLevel(JID, 'all', false)
+      expect(resolveNotifyLevel(roomStore.getState().rooms.get(JID))).toBe('all')
+
+      roomStore.getState().setRoomJoined(JID, false)
+      expect(resolveNotifyLevel(roomStore.getState().rooms.get(JID))).toBe('none')
     })
   })
 

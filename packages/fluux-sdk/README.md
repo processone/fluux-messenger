@@ -378,9 +378,10 @@ const {
   sendCorrection,           // (roomJid, messageId, newBody, attachment?) => Promise<void>
   retractMessage,           // (roomJid, messageId) => Promise<void>
   sendChatState,            // (roomJid, state: 'composing' | 'paused') => Promise<void>
-  setBookmark,              // (roomJid, { name, nick, autojoin?, password? }) => Promise<void>
+  setBookmark,              // (roomJid, { name, nick, autojoin?, password?, notifyLevel? }) => Promise<void>
   removeBookmark,           // (roomJid: string) => Promise<void>
-  setRoomNotifyAll,         // (roomJid, notifyAll, persistent?) => Promise<void>
+  setRoomNotifyLevel,       // (roomJid, level: 'none' | 'mentions' | 'all', persistent?) => Promise<void>
+  setRoomNotifyAll,         // (roomJid, notifyAll, persistent?) => Promise<void>, wrapper over setRoomNotifyLevel
   inviteToRoom,             // (roomJid, inviteeJid, reason?) => Promise<void>
   inviteMultipleToRoom,     // (roomJid, inviteeJids[], reason?) => Promise<void>
   browsePublicRooms,        // (mucServiceJid?, rsm?) => Promise<{ rooms, pagination }>

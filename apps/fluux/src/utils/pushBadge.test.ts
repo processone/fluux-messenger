@@ -7,13 +7,14 @@ import { pushBadgeState, resetSharedPushBadge, sharePushBadge } from './pushBadg
 
 type Rooms = Parameters<typeof pushBadgeState>[1]
 
-function rooms(list: Array<{ jid: string; joined?: boolean; unreadCount?: number; mentionsCount?: number; notifyAll?: boolean }>): Rooms {
+function rooms(list: Array<{ jid: string; joined?: boolean; unreadCount?: number; mentionsCount?: number; notifyAll?: boolean; notifyOffPersistent?: boolean }>): Rooms {
   return {
     roomEntities: new Map(list.map((r) => [r.jid, { jid: r.jid, joined: r.joined ?? true }])),
     roomMeta: new Map(list.map((r) => [r.jid, {
       unreadCount: r.unreadCount ?? 0,
       mentionsCount: r.mentionsCount ?? 0,
       notifyAll: r.notifyAll,
+      notifyOffPersistent: r.notifyOffPersistent,
     }])),
   } as unknown as Rooms
 }
@@ -37,6 +38,21 @@ describe('pushBadgeState', () => {
       events: 1,
       notifyAllRooms: ['all@muc.example.com', 'idle@muc.example.com'],
     })
+  })
+})
+
+describe('pushBadgeState with Off rooms', () => {
+  // An Off room never adds to the app icon badge, mentions included, and is
+  // not a notify-all room for the iOS push badge either.
+  it('leaves an Off room out of the badge and the notify-all list', () => {
+    const state = pushBadgeState([], rooms([
+      { jid: 'off-mention@muc.example.com', unreadCount: 3, mentionsCount: 2, notifyOffPersistent: true },
+      { jid: 'off-all@muc.example.com', unreadCount: 3, notifyAll: false, notifyOffPersistent: true },
+      { jid: 'mention@muc.example.com', unreadCount: 1, mentionsCount: 1 },
+    ]), 0)
+
+    expect(state.unread).toEqual(['mention@muc.example.com'])
+    expect(state.notifyAllRooms).toEqual([])
   })
 })
 

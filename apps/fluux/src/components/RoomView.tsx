@@ -134,7 +134,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   })
   const { sendPoll, votePoll, closePoll } = usePolls()
   const { moderateMessage, setAffiliation, setRole } = useRoomModeration()
-  const { setRoomNotifyAll, setRoomAvatar, clearRoomAvatar, submitRoomConfig, setSubject, destroyRoom } = useRoomManagement()
+  const { setRoomNotifyLevel, setRoomAvatar, clearRoomAvatar, submitRoomConfig, setSubject, destroyRoom } = useRoomManagement()
   const mediaPolicy = useSettingsStore((s) => s.mediaAutoDownload)
 
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
@@ -583,7 +583,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onBack={onBack}
             showOccupants={showOccupants}
             onToggleOccupants={() => setShowOccupants(!showOccupants)}
-            setRoomNotifyAll={setRoomNotifyAll}
+            setRoomNotifyLevel={setRoomNotifyLevel}
             setRoomAvatar={setRoomAvatar}
             clearRoomAvatar={clearRoomAvatar}
             submitRoomConfig={submitRoomConfig}

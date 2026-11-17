@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Room } from '@fluux/sdk'
+import { AtSign, BellOff } from 'lucide-react'
 import { buildNotifyGroup, buildManagementGroup, notifyModeOf } from './roomHeaderActions'
 
 const t = ((k: string) => k) as any
@@ -9,7 +10,6 @@ function room(partial: Partial<Room> = {}): Room {
     jid: 'room@conf.example.com',
     name: 'Room',
     occupants: new Map(),
-    notifyAll: false,
     notifyAllPersistent: false,
     isQuickChat: false,
     avatar: undefined,
@@ -23,21 +23,77 @@ describe('notifyModeOf', () => {
     expect(notifyModeOf(room())).toBe('mentions')
     expect(notifyModeOf(room({ notifyAll: true }))).toBe('all-session')
     expect(notifyModeOf(room({ notifyAll: true, notifyAllPersistent: true }))).toBe('all-always')
+    expect(notifyModeOf(room({ notifyAllPersistent: true }))).toBe('all-always')
+  })
+
+  it('shows Off for a saved or session Off, and lets a session choice override a saved one', () => {
+    expect(notifyModeOf(room({ notifyOffPersistent: true }))).toBe('off')
+    expect(notifyModeOf(room({ notifyOff: true }))).toBe('off')
+    expect(notifyModeOf(room({ notifyOffPersistent: true, notifyAll: true }))).toBe('all-session')
+    expect(notifyModeOf(room({ notifyAllPersistent: true, notifyOff: true }))).toBe('off')
   })
 })
 
 describe('buildNotifyGroup', () => {
-  it('omits the persistent option for quick chats', () => {
-    const g = buildNotifyGroup({ room: room({ isQuickChat: true }), t, setRoomNotifyAll: vi.fn() })
-    expect(g.items.map((i) => i.key)).toEqual(['mentions', 'all-session'])
+  const group = (partial: Partial<Room> = {}) => {
+    const setRoomNotifyLevel = vi.fn().mockResolvedValue(undefined)
+    return { setRoomNotifyLevel, g: buildNotifyGroup({ room: room(partial), t, setRoomNotifyLevel }) }
+  }
+  const choose = (g: ReturnType<typeof group>['g'], key: string) => g.items.find((i) => i.key === key)!.onSelect()
+
+  it('omits the persistent All messages option for quick chats but keeps Off as session only', () => {
+    const { g } = group({ isQuickChat: true })
+    expect(g.items.map((i) => i.key)).toEqual(['mentions', 'all-session', 'off'])
+    expect(g.items.find((i) => i.key === 'off')!.description).toBe('rooms.thisSessionOnly')
+  })
+
+  it('offers one Off row saved to the bookmark, last, with the crossed bell; Mentions only takes @', () => {
+    const { g } = group()
+    expect(g.items.map((i) => i.key)).toEqual(['mentions', 'all-session', 'all-always', 'off'])
+    const off = g.items.find((i) => i.key === 'off')!
+    expect(off.label).toBe('rooms.notificationsOff')
+    expect(off.description).toBe('rooms.alwaysSavedToBookmark')
+    expect(off.icon).toBe(BellOff)
+    expect(g.items.find((i) => i.key === 'mentions')!.icon).toBe(AtSign)
   })
 
   it('marks the active mode and wires onSelect', () => {
-    const setRoomNotifyAll = vi.fn().mockResolvedValue(undefined)
-    const g = buildNotifyGroup({ room: room({ notifyAll: true }), t, setRoomNotifyAll })
+    const { g, setRoomNotifyLevel } = group({ notifyAll: true })
     expect(g.items.find((i) => i.key === 'all-session')!.active).toBe(true)
-    g.items.find((i) => i.key === 'mentions')!.onSelect()
-    expect(setRoomNotifyAll).toHaveBeenCalledWith('room@conf.example.com', false, false)
+    choose(g, 'mentions')
+    expect(setRoomNotifyLevel).toHaveBeenCalledWith('room@conf.example.com', 'mentions', false)
+  })
+
+  it('saves Off, which replaces any session choice, and marks it active', () => {
+    const { g, setRoomNotifyLevel } = group({ notifyAll: true })
+    choose(g, 'off')
+    expect(setRoomNotifyLevel).toHaveBeenCalledWith('room@conf.example.com', 'none', true)
+    expect(group({ notifyOffPersistent: true }).g.items.find((i) => i.key === 'off')!.active).toBe(true)
+  })
+
+  it('holds Off for the session in a quick chat', () => {
+    const { g, setRoomNotifyLevel } = group({ isQuickChat: true })
+    choose(g, 'off')
+    expect(setRoomNotifyLevel).toHaveBeenCalledWith('room@conf.example.com', 'none', false)
+  })
+
+  it('clears a saved level when Mentions only or a session All messages replaces it', () => {
+    const saved = group({ notifyOffPersistent: true })
+    choose(saved.g, 'mentions')
+    expect(saved.setRoomNotifyLevel).toHaveBeenCalledWith('room@conf.example.com', 'mentions', true)
+
+    const all = group({ notifyAllPersistent: true })
+    choose(all.g, 'all-session')
+    expect(all.setRoomNotifyLevel.mock.calls).toEqual([
+      ['room@conf.example.com', 'mentions', true],
+      ['room@conf.example.com', 'all', false],
+    ])
+  })
+
+  it('saves All messages always', () => {
+    const { g, setRoomNotifyLevel } = group()
+    choose(g, 'all-always')
+    expect(setRoomNotifyLevel).toHaveBeenCalledWith('room@conf.example.com', 'all', true)
   })
 })
 

@@ -278,6 +278,10 @@ export interface RoomMetadata {
   notifyAll?: boolean
   /** Notify for all messages (persisted in bookmark) */
   notifyAllPersistent?: boolean
+  /** Off for this session only (see {@link resolveNotifyLevel}) */
+  notifyOff?: boolean
+  /** Off, saved in the bookmark */
+  notifyOffPersistent?: boolean
   /**
    * Where the user has read to — the read position, and the only
    * representation of it.

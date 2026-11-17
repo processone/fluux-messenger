@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { chatStore, isMessageFromIgnoredUser, isReplyToIgnoredUser, connectionStore, roomStore, rosterStore, checkForMention, isNotificationMessageUnread, shouldNotifyConversation, shouldNotifyRoom, resolveNotificationMessage, usePresence, useConnectionStatus, getBareJid, subscribeSettledReads, messageRowRef } from '@fluux/sdk'
+import { chatStore, isMessageFromIgnoredUser, isReplyToIgnoredUser, connectionStore, roomStore, rosterStore, checkForMention, isNotificationMessageUnread, shouldNotifyConversation, shouldNotifyRoom, resolveNotifyLevel, resolveNotificationMessage, usePresence, useConnectionStatus, getBareJid, subscribeSettledReads, messageRowRef } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import { ignoreStore } from '@fluux/sdk/stores'
 import { addPluginListener, invoke } from '@tauri-apps/api/core'
@@ -251,7 +251,7 @@ export function useDesktopNotifications(): void {
         isReplyToIgnoredUser(ignored, message.replyTo, entity.nickToJidCache)) return undefined
       const isMention = message.isMentionAll || checkForMention(message.body, entity.nickname) || /@all\b/i.test(message.body)
       const current = { ...message, isMention }
-      if (!shouldNotifyRoom(current, { isActive: entity.jid === state.activeRoomJid, windowVisible }, entity.notifyAll ?? entity.notifyAllPersistent ?? false).shouldNotify) return undefined
+      if (!shouldNotifyRoom(current, { isActive: entity.jid === state.activeRoomJid, windowVisible }, resolveNotifyLevel(entity)).shouldNotify) return undefined
       return { kind: 'room', entity, message: current }
     }
     return undefined

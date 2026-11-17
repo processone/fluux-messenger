@@ -320,8 +320,35 @@ describe('MUC Module', () => {
         expect(mockEmitSDK).toHaveBeenCalledWith('room:added', {
           room: expect.objectContaining({
             jid: 'notify@conference.example.org',
-            notifyAll: true,
             notifyAllPersistent: true,
+            notifyOffPersistent: false,
+          })
+        })
+      })
+
+      it('parses a none notify extension as Off', async () => {
+        const response = createMockElement('iq', { type: 'result' }, [{
+          name: 'pubsub', attrs: { xmlns: 'http://jabber.org/protocol/pubsub' },
+          children: [{ name: 'items', attrs: { node: 'urn:xmpp:bookmarks:1' }, children: [{
+            name: 'item', attrs: { id: 'quiet@conference.example.org' },
+            children: [{
+              name: 'conference', attrs: { xmlns: 'urn:xmpp:bookmarks:1', name: 'Quiet Room', autojoin: 'false' },
+              children: [
+                { name: 'nick', text: 'mynick' },
+                { name: 'extensions', children: [{ name: 'notify', attrs: { xmlns: 'urn:xmpp:fluux:0' }, text: 'none' }] },
+              ],
+            }],
+          }] }],
+        }])
+        mockSendIQ.mockResolvedValue(response)
+
+        await muc.fetchBookmarks()
+
+        expect(mockEmitSDK).toHaveBeenCalledWith('room:added', {
+          room: expect.objectContaining({
+            jid: 'quiet@conference.example.org',
+            notifyAllPersistent: false,
+            notifyOffPersistent: true,
           })
         })
       })
@@ -700,7 +727,6 @@ describe('MUC Module', () => {
             name: 'P1-French',
             nickname: 'mickael',
             autojoin: true,
-            notifyAll: true,
             notifyAllPersistent: true,
           })
         })
@@ -749,27 +775,47 @@ describe('MUC Module', () => {
       expect(conference.attrs.autojoin).toBe('true')
     })
 
-    it('includes notifyAll extension when enabled', async () => {
+    const publishedNotify = () => {
+      const sentIq = mockSendIQ.mock.calls[mockSendIQ.mock.calls.length - 1][0]
+      const conference = sentIq.children[0].children[0].children[0].children[0]
+      const extensions = conference.children.find((c: any) => c.name === 'extensions')
+      return extensions?.children.find((c: any) => c.name === 'notify')
+    }
+
+    it('includes the notify extension when the level is all', async () => {
       mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
 
       await muc.setBookmark('room@conference.example.org', {
         name: 'Test Room',
         nick: 'mynick',
         autojoin: false,
-        notifyAll: true,
+        notifyLevel: 'all',
       })
 
-      const sentIq = mockSendIQ.mock.calls[0][0]
-      const conference = sentIq.children[0].children[0].children[0].children[0]
-
-      // Find extensions element
-      const extensions = conference.children.find((c: any) => c.name === 'extensions')
-      expect(extensions).toBeDefined()
-
-      // Find notify element
-      const notify = extensions.children.find((c: any) => c.name === 'notify')
+      const notify = publishedNotify()
       expect(notify).toBeDefined()
       expect(notify.attrs.xmlns).toBe('urn:xmpp:fluux:0')
+      expect(notify.children[0]).toBe('all')
+    })
+
+    it('publishes none when the level is Off', async () => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.setBookmark('room@conference.example.org', { name: 'Test Room', nick: 'mynick', notifyLevel: 'none' })
+
+      expect(publishedNotify().children[0]).toBe('none')
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:bookmark', {
+        roomJid: 'room@conference.example.org',
+        bookmark: expect.objectContaining({ notifyLevel: 'none' }),
+      })
+    })
+
+    it('publishes no notify element for Mentions only', async () => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.setBookmark('room@conference.example.org', { name: 'Test Room', nick: 'mynick', notifyLevel: 'mentions' })
+
+      expect(publishedNotify()).toBeUndefined()
     })
 
     it('updates local store after successful bookmark', async () => {
@@ -788,6 +834,133 @@ describe('MUC Module', () => {
           nick: 'mynick',
           autojoin: true,
         })
+      })
+    })
+  })
+
+  // FLM-189: a per-room Off level, saved in the bookmark next to Mentions only
+  // (no element) and All messages. Every bookmark write must carry the level
+  // the room already has; before, the sidebar autojoin toggle and the edit
+  // modal reset a saved "All messages" to Mentions only.
+  describe('notification level', () => {
+    const ROOM = 'quiet@conference.example.org'
+    const storedRoom = (overrides: Partial<Room> = {}) =>
+      createMockRoom(ROOM, { name: 'Quiet', nickname: 'mynick', isBookmarked: true, autojoin: false, ...overrides })
+    const notifyOf = (call = 0) => {
+      const conference = mockSendIQ.mock.calls[call][0].children[0].children[0].children[0].children[0]
+      return conference.children.find((c: { name: string }) => c.name === 'extensions')
+        ?.children.find((c: { name: string }) => c.name === 'notify')?.children[0]
+    }
+    const selfPresence = () =>
+      createMockElement('presence', { from: `${ROOM}/mynick` }, [{
+        name: 'x',
+        attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+        children: [
+          { name: 'item', attrs: { affiliation: 'member', role: 'participant' } },
+          { name: 'status', attrs: { code: '110' } },
+        ],
+      }])
+
+    beforeEach(() => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+    })
+
+    it.each([
+      ['all', { notifyAllPersistent: true }],
+      ['none', { notifyOffPersistent: true }],
+    ])('keeps a saved %s level when the caller names none (autojoin toggle, edit modal)', async (level, saved) => {
+      mockStores.room.getRoom.mockReturnValue(storedRoom(saved))
+
+      await muc.setBookmark(ROOM, { name: 'Quiet', nick: 'mynick', autojoin: true })
+
+      expect(notifyOf()).toBe(level)
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:bookmark', {
+        roomJid: ROOM,
+        bookmark: expect.objectContaining({ notifyLevel: level }),
+      })
+    })
+
+    it('writes no notify element for a room saved as Mentions only', async () => {
+      mockStores.room.getRoom.mockReturnValue(storedRoom())
+
+      await muc.setBookmark(ROOM, { name: 'Quiet', nick: 'mynick', autojoin: true })
+
+      expect(notifyOf()).toBeUndefined()
+    })
+
+    it('lets the caller set a level over the saved one', async () => {
+      mockStores.room.getRoom.mockReturnValue(storedRoom({ notifyOffPersistent: true }))
+
+      await muc.setBookmark(ROOM, { name: 'Quiet', nick: 'mynick', notifyLevel: 'mentions' })
+
+      expect(notifyOf()).toBeUndefined()
+    })
+
+    it('keeps the saved level when the password learned on join is written', async () => {
+      mockStores.room.getRoom.mockReturnValue(storedRoom({ notifyOffPersistent: true }))
+
+      await muc.joinRoom(ROOM, 'mynick', { password: 'correct-horse' })
+      muc.handle(selfPresence())
+
+      // joinRoom's disco#info is call 0; the bookmark publish follows it.
+      expect(notifyOf(1)).toBe('none')
+    })
+
+    it('carries a level held for the session into the auto-bookmark on join', async () => {
+      mockStores.room.getRoom.mockReturnValue(storedRoom({ isBookmarked: false, notifyOffPersistent: true }))
+
+      await muc.joinRoom(ROOM, 'mynick')
+      muc.handle(selfPresence())
+
+      expect(notifyOf(1)).toBe('none')
+    })
+
+    describe('setRoomNotifyLevel', () => {
+      it('saves Off to the bookmark and replaces the session choice', async () => {
+        mockStores.room.getRoom.mockReturnValue(storedRoom())
+
+        await muc.setRoomNotifyLevel(ROOM, 'none', true)
+
+        expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+          roomJid: ROOM,
+          updates: { notifyAll: undefined, notifyOff: undefined, notifyAllPersistent: false, notifyOffPersistent: true },
+        })
+        expect(notifyOf()).toBe('none')
+      })
+
+      it('holds Off for the session without publishing when not persistent', async () => {
+        mockStores.room.getRoom.mockReturnValue(storedRoom())
+
+        await muc.setRoomNotifyLevel(ROOM, 'none', false)
+
+        expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+          roomJid: ROOM,
+          updates: { notifyAll: false, notifyOff: true },
+        })
+        expect(mockSendIQ).not.toHaveBeenCalled()
+      })
+
+      it('holds a saved choice in the store only when the room has no bookmark', async () => {
+        mockStores.room.getRoom.mockReturnValue(storedRoom({ isBookmarked: false }))
+
+        await muc.setRoomNotifyLevel(ROOM, 'none', true)
+
+        expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', expect.objectContaining({
+          updates: expect.objectContaining({ notifyOffPersistent: true }),
+        }))
+        expect(mockSendIQ).not.toHaveBeenCalled()
+      })
+
+      it('keeps setRoomNotifyAll as a wrapper: true is all, false is mentions', async () => {
+        mockStores.room.getRoom.mockReturnValue(storedRoom())
+
+        await muc.setRoomNotifyAll(ROOM, true, true)
+        expect(notifyOf()).toBe('all')
+
+        mockSendIQ.mockClear()
+        mockStores.room.getRoom.mockReturnValue(storedRoom({ notifyAllPersistent: true }))
+        await muc.setRoomNotifyAll(ROOM, false, true)
+        expect(notifyOf()).toBeUndefined()
       })
     })
   })

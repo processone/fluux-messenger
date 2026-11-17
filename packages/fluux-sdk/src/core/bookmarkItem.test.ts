@@ -17,7 +17,7 @@ describe('parseBookmarkItem', () => {
     ], { name: 'My Room', autojoin: 'true' })
 
     expect(parseBookmarkItem(el)).toEqual({
-      jid: 'room@conf.example.com', name: 'My Room', nick: 'me', autojoin: true, password: 's3cret', notifyAll: true,
+      jid: 'room@conf.example.com', name: 'My Room', nick: 'me', autojoin: true, password: 's3cret', notifyLevel: 'all',
     })
   })
 
@@ -25,10 +25,28 @@ describe('parseBookmarkItem', () => {
     expect(parseBookmarkItem(item('r@c', [], { autojoin: '1' }))?.autojoin).toBe(true)
   })
 
-  it('defaults autojoin to false and notifyAll to false when absent', () => {
+  it('defaults autojoin to false and the notify level to mentions when absent', () => {
     const parsed = parseBookmarkItem(item('r@c', []))
     expect(parsed?.autojoin).toBe(false)
-    expect(parsed?.notifyAll).toBe(false)
+    expect(parsed?.notifyLevel).toBe('mentions')
+  })
+
+  // docs/XEP-ROOM_NOTIFICATIONS.md: absent = mentions, all = all, none = off,
+  // any other value = mentions.
+  it.each([
+    ['all', 'all'],
+    ['none', 'none'],
+    ['mentions', 'mentions'],
+    ['mute', 'mentions'],
+    ['', 'mentions'],
+  ])('reads <notify>%s</notify> as %s', (text, expected) => {
+    const el = item('r@c', [{ name: 'extensions', children: [{ name: 'notify', attrs: { xmlns: NS_FLUUX }, text }] }])
+    expect(parseBookmarkItem(el)?.notifyLevel).toBe(expected)
+  })
+
+  it('ignores a <notify> element in another namespace', () => {
+    const el = item('r@c', [{ name: 'extensions', children: [{ name: 'notify', attrs: { xmlns: 'urn:example:other' }, text: 'none' }] }])
+    expect(parseBookmarkItem(el)?.notifyLevel).toBe('mentions')
   })
 
   it('falls back to the JID local part when the conference has no name', () => {

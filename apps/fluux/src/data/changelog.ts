@@ -21,6 +21,7 @@ export const changelog: ChangelogEntry[] = [
       items: [
         'macOS: Settings → Notifications now warns when system notifications, app icon badges or alerts are disabled, with a shortcut to system settings. Returning to Fluux refreshes the status; the panel never changes permissions automatically',
         'Export badge diagnostics is now in Settings → Notifications instead of the XMPP console, on desktop, web and mobile',
+        'Rooms: a new Off setting in the room\'s notification menu silences a room completely: no notification, sound or app icon badge, mentions included. It is saved in the room\'s bookmark, so your other Fluux sessions follow. The room\'s unread count stays visible in grey. Mentions only now uses an @ icon and Off uses the crossed bell',
         'Badge diagnostics now record anonymous local decisions automatically, including decryption, unread counts and native badge results. Export them separately from the XMPP console when investigating a missing badge; nothing uploads automatically',
         'macOS: a native desktop widget lists unread conversations with names, avatars, counts, mention markers and times, without message text. Clicking a row opens the conversation; an old saved list is marked when Fluux stops updating it',
         'iOS: a new widget shows your unread conversations on the home screen. The lock screen shows the unread total. Tap a row to open that conversation. Message text is never shown',
@@ -36,6 +37,7 @@ export const changelog: ChangelogEntry[] = [
         'macOS: Fluux cleans up old keychain copies without asking for access again. Copies that differ are kept, so you never lose a secret',
         'macOS: a keychain prompt waiting for your answer no longer blocks saving other secrets, such as your credentials, MCP token or encrypted OpenPGP key',
         'iOS: room notifications show the room picture. The room name stays first, with the sender above the message',
+        'Changing a room\'s autojoin or editing its bookmark no longer resets its saved "All messages" notification setting to Mentions only',
         'Scrolling up in conversations and rooms no longer jumps or skips messages when Fluux corrects its size estimate for older messages, for example after a long run of your own short replies',
         'Scrolling back through a very long conversation or room no longer gets stuck or returns to the newest messages once you go past the latest 5,000 messages, so you can read back to the start',
         'In long conversations and rooms, the messages you are reading no longer jump away when older messages finish loading while your pointer rests on a message or you keep scrolling',

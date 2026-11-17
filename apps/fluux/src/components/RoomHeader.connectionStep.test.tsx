@@ -25,7 +25,10 @@ vi.mock('@fluux/sdk/react', () => ({
   useConnectionStore: (selector: (s: unknown) => unknown) =>
     selector({ status: mockStatus, isVerifying: false, reconnectTargetTime: null }),
 }))
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  // The notification level resolvers are pure; keep the real ones.
+  resolveNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).resolveNotifyLevel,
+  savedNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).savedNotifyLevel,
   generateConsistentColorHexSync: () => '#4a90d9',
   getUniqueOccupantCount: () => 0,
 }))
@@ -55,7 +58,7 @@ const ui = () => (
     room={room}
     showOccupants={false}
     onToggleOccupants={vi.fn()}
-    setRoomNotifyAll={vi.fn()}
+    setRoomNotifyLevel={vi.fn()}
     setRoomAvatar={vi.fn()}
     clearRoomAvatar={vi.fn()}
     submitRoomConfig={vi.fn()}

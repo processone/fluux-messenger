@@ -1,3 +1,4 @@
+import type { NotifyLevel } from '../notifyLevel'
 import type { ArchiveSignal } from '../../utils/archiveSignal'
 import type { ChatMessageTarget } from './chat'
 import type { GapInterval } from './pagination'
@@ -441,7 +442,7 @@ export interface RoomBindings {
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
 
   // Bookmark actions
-  setBookmark: (roomJid: string, bookmark: { name: string; nick: string; autojoin?: boolean; password?: string; notifyAll?: boolean }) => void
+  setBookmark: (roomJid: string, bookmark: { name: string; nick: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel }) => void
   removeBookmark: (roomJid: string) => void
 
   /** Whether the user has already acknowledged this room's real-JID exposure. */
@@ -449,6 +450,7 @@ export interface RoomBindings {
 
   // Notification settings
   setNotifyAll: (roomJid: string, notifyAll: boolean, persistent?: boolean) => void
+  setNotifyLevel: (roomJid: string, level: NotifyLevel, persistent?: boolean) => void
 
   // Computed
   joinedRooms: () => Room[]

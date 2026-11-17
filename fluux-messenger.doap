@@ -449,7 +449,7 @@
       <xmpp:SupportedXep>
         <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0402.html"/>
         <xmpp:status>complete</xmpp:status>
-        <xmpp:note>Room bookmarks with autojoin and notification preferences</xmpp:note>
+        <xmpp:note>Room bookmarks with autojoin and a per-room notification level (mentions only, all messages or off)</xmpp:note>
       </xmpp:SupportedXep>
     </implements>
 

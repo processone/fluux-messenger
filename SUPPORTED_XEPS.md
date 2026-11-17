@@ -98,7 +98,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [XEP-0249](https://xmpp.org/extensions/xep-0249.html) | Direct MUC Invitations      | ✅ Implemented | Receive room invitations with Accept/Decline in Events view                                                 |
 | [XEP-0372](https://xmpp.org/extensions/xep-0372.html) | References                  | ✅ Implemented | @mention notifications with position-based highlighting                                                     |
 | [XEP-0398](https://xmpp.org/extensions/xep-0398.html) | User Avatar to vCard-Based Avatars Conversion | ✅ Implemented | MUC occupant avatars via vCard conversion                                                     |
-| [XEP-0402](https://xmpp.org/extensions/xep-0402.html) | PEP Native Bookmarks        | ✅ Implemented | Room bookmarks with autojoin, custom extensions for notification preferences                                |
+| [XEP-0402](https://xmpp.org/extensions/xep-0402.html) | PEP Native Bookmarks        | ✅ Implemented | Room bookmarks with autojoin, custom extension for the room notification level: Mentions only, All messages or Off ([spec](docs/XEP-ROOM_NOTIFICATIONS.md))                               |
 | [XEP-0421](https://xmpp.org/extensions/xep-0421.html) | Anonymous Unique Occupant Identifiers | ✅ Implemented | Stable occupant identifiers for anonymous MUC rooms                                             |
 
 ## End-to-End Encryption
@@ -140,7 +140,7 @@ Fluux uses custom extensions across several namespaces:
 
 ### Bookmark Extensions (`urn:xmpp:fluux:0`)
 
-- **Room notification preferences**: Stored in XEP-0402 bookmark extensions to enable per-room notification settings (mentions only vs. all messages)
+- **Room notification preferences**: Stored in XEP-0402 bookmark extensions to enable per-room notification settings (mentions only, all messages or off), see [XEP-ROOM_NOTIFICATIONS](docs/XEP-ROOM_NOTIFICATIONS.md)
 - **@all mentions**: Room-wide mention indicator (`urn:fluux:mentions:0`) for notifying all participants
 - **Quick chat marker**: `<quickchat xmlns="urn:xmpp:fluux:0"/>` element included in MUC invitations to indicate the room is a temporary quick chat (non-persistent, auto-destroys when empty)
 
