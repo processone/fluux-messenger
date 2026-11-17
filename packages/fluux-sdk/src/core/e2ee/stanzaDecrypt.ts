@@ -33,6 +33,7 @@ import { logInfo } from '../logger'
 import {
   NS_EME,
   NS_REFERENCE,
+  NS_FORWARD,
   NS_OOB,
   NS_FILE_METADATA,
   NS_REACTIONS,
@@ -92,6 +93,8 @@ export function decryptFailureReasonFor(code: string | undefined): DecryptFailur
 // sender from the stanza envelope rather than from the payload.
 const ALLOWED_PAYLOAD_CHILDREN = new Set([
   `reference\0${NS_REFERENCE}`,
+  // A forwarded copy of one message; the parser reads only its plain body, sender and time.
+  `forwarded\0${NS_FORWARD}`,
   `x\0${NS_OOB}`,
   `file\0${NS_FILE_METADATA}`,
   `reactions\0${NS_REACTIONS}`,

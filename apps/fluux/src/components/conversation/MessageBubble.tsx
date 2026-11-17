@@ -581,7 +581,12 @@ export const MessageBubble = memo(function MessageBubble({
   const quotable = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   const onForward = messageLink && forwardMessage ? () => forwardMessage({
     link: messageLink,
-    ...(quotable && { quote: { author: senderName, text: message.body } }),
+    ...(quotable && { quote: {
+      author: senderName,
+      text: message.body,
+      ...(message.type === 'groupchat' && { from: message.from }),
+      timestamp: message.timestamp.getTime(),
+    } }),
   }) : undefined
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   const saveableAttachment = !message.isRetracted && !message.encryptedPayload ? message.attachment : undefined
@@ -858,7 +863,18 @@ export const MessageBubble = memo(function MessageBubble({
             </>
           )}
 
-          <RoomMessageLinkPreview message={message} formatTime={formatTime} isDarkMode={isDarkMode} onSourceShown={hasForwardFallback ? setSourceShown : undefined} />
+          {message.forwarded && !message.encryptedPayload && !message.unsupportedEncryption && (
+            <div data-forwarded-copy className="mt-1 pl-2 border-l-2 border-fluux-hover">
+              <div className="text-xs text-fluux-muted">
+                {t('chat.forwardedCopyLabel', { author: message.forwarded.author || t('chat.forwardedCopyUnknownAuthor') })}
+                {message.forwarded.timestamp !== undefined && ` · ${formatTime(new Date(message.forwarded.timestamp))}`}
+              </div>
+              <div className="text-sm text-fluux-text whitespace-pre-wrap break-words">{message.forwarded.text}</div>
+            </div>
+          )}
+
+          {/* A structured copy already shows the source, so no second preview of the same link. */}
+          {!message.forwarded && <RoomMessageLinkPreview message={message} formatTime={formatTime} isDarkMode={isDarkMode} onSourceShown={hasForwardFallback ? setSourceShown : undefined} />}
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
           {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}

@@ -4,6 +4,32 @@ import type { BaseMessage, DataReference, MentionReference, MessageReference } f
 export interface ForwardQuote {
   author: string
   text: string
+  /** Address of the claimed author, for a room message the occupant address; needed for a structured copy. */
+  from?: string
+  /** When the source was sent (ms since epoch). */
+  timestamp?: number
+}
+
+const MAX_COPY_CHARACTERS = 4000
+
+/** The structured copy of the source for a recipient whose devices all support it; null when it cannot be built. */
+export function buildForwardedCopy(quote?: ForwardQuote): { from: string; text: string; timestamp?: number } | null {
+  const text = quote?.text.trim()
+  if (!quote?.from || !text) return null
+  return {
+    from: quote.from,
+    text: Array.from(text).slice(0, MAX_COPY_CHARACTERS).join(''),
+    ...(quote.timestamp !== undefined && { timestamp: quote.timestamp }),
+  }
+}
+
+/**
+ * Compose a forward whose source travels as a structured copy: the comment and the room
+ * link only, with no duplicated quote in the body. The link is a plain data reference.
+ */
+export function composeNativeForward(comment: string, link: string): { body: string; references: DataReference[] } {
+  const lead = comment.trim() ? `${comment.trim()}\n` : ''
+  return { body: lead + link, references: [{ type: 'data', uri: link, begin: lead.length, end: lead.length + link.length }] }
 }
 
 const MAX_QUOTE_CHARACTERS = 500

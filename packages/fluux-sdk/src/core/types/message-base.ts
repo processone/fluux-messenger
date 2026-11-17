@@ -95,6 +95,8 @@ export interface PollClosedData {
  * @category Chat
  */
 export interface BaseMessage {
+  /** XEP-0297: a structured copy of another message, shown beside the forwarder's own comment. */
+  forwarded?: ForwardedCopy
   /** XEP-0372 references, retained for live delivery and archived history. */
   references?: MessageReference[]
   /** Validated local alias retained after room identity confirmation; never a wire reference. */
@@ -248,4 +250,19 @@ export interface MessageSecurityContext {
    * rotated or server-substituted key must not inherit a stale verification.
    */
   fingerprint?: string
+}
+
+/**
+ * A message forwarded on its own (XEP-0297). The author and text are the forwarder's
+ * claim, never verified history: the stored copy is not the original signed stanza.
+ *
+ * @category Chat
+ */
+export interface ForwardedCopy {
+  /** Display name of the claimed original author (a room nickname or bare address). */
+  author: string
+  /** Plain text of the original body, bounded and stripped of control characters. */
+  text: string
+  /** Original timestamp (ms since epoch) when the copy named one. */
+  timestamp?: number
 }

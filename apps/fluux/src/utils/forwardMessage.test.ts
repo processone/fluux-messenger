@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeForward, forwardFallbackRange, withoutForwardFallback } from './forwardMessage'
+import { buildForwardedCopy, composeNativeForward, composeForward, forwardFallbackRange, withoutForwardFallback } from './forwardMessage'
 
 const link = 'xmpp:design@conference.fluux.chat?join;msg=1731490000123456'
 
@@ -49,3 +49,20 @@ describe('forward composition', () => {
     expect(withoutForwardFallback(message).body).toBe(message.body)
   })
 })
+
+// Piece 2 of the forward plan: a structured copy needs the claimed author and keeps no duplicated quote in the body.
+describe('native forward composition', () => {
+  it('sends only the comment and the link, with the link as a plain data reference', () => {
+    const { body, references } = composeNativeForward(' Look ', link)
+    expect(body).toBe(`Look\n${link}`)
+    expect(references).toEqual([{ type: 'data', uri: link, begin: 5, end: 5 + link.length }])
+  })
+
+  it('needs an author address and text, and bounds the copied text', () => {
+    expect(buildForwardedCopy({ author: 'Bob', text: 'hi' })).toBeNull()
+    expect(buildForwardedCopy({ author: 'Bob', text: '  ', from: 'r@c/Bob' })).toBeNull()
+    expect(buildForwardedCopy(undefined)).toBeNull()
+    expect(Array.from(buildForwardedCopy({ author: 'Bob', text: 'a'.repeat(5000), from: 'r@c/Bob' })!.text)).toHaveLength(4000)
+  })
+})
+

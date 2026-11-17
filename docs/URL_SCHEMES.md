@@ -93,7 +93,7 @@ one ordinary message: the comment (if any), a plain-text quote attributed to the
 author (`> Nick wrote:` followed by the quoted lines, clipped at 500 characters),
 then the room message link, with the same XEP-0372 data reference as a pasted link.
 A source that is retracted or cannot be read is forwarded as the link only.
-It never sends an XEP-0297 forwarded copy.
+A forward to a room always sends this quoted form.
 
 The generated quote and link are marked with XEP-0428 Fallback Indication:
 `<fallback xmlns="urn:xmpp:fallback:0" for="urn:fluux:forward-quote:0">` with one
@@ -112,7 +112,28 @@ notice, and a failed encryption never falls back to plaintext. A failed send tha
 is retried keeps the marker. Cancelling sends nothing; a send failure keeps the
 picker and comment available. Forward is unavailable for whispers, unconfirmed
 messages and messages without a room archive id, just like Copy message link.
-Forwarding one-to-one messages and standalone XEP-0297 copies are separate changes.
+Forwarding one-to-one messages is a separate change.
+
+**Structured copy (XEP-0297).** A forward to a one-to-one chat sends a standalone
+`<forwarded xmlns="urn:xmpp:forward:0">` copy instead of the quote only when every
+device the contact is online with positively advertises `urn:fluux:forward-copy:0`.
+Fluux asks each device itself through XEP-0030, using the node and version from its
+XEP-0115 presence, and caches the answer per device and announced version. Support
+for archive or carbons wrappers, the server, the account and the client name say
+nothing about it. A device that is unknown, announced no capabilities, answered
+slowly or with an error, a mix of supporting and other devices, a contact with no
+device online, and every room, get the quoted form above. The structured copy
+carries the comment and the room link in the body (no duplicated quote), and the
+copy holds a `<delay/>` with the original time and a `<message from=...>` whose
+only child is the plain body; `from` is the room occupant address. The text is
+the sender's claim, not verified history. A receiver reads only that plain body,
+the sender and the time, bounded to 4000 characters, with control and
+bidirectional-override characters removed; nested forwards and every other
+extension are ignored, and the inner message is never handled as a new arrival,
+correction, receipt or room event. Fluux shows it labelled with the claimed
+author and time, and without a second preview of the link. In an encrypted
+chat the copy travels inside the encrypted payload only, a retry keeps it, and
+a retraction of the message removes the stored copy with the body.
 
 ## Login prefill principles
 

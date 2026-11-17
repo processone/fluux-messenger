@@ -322,6 +322,8 @@ export type {
   RoomFeatures,
   MentionReference,
   DataReference,
+  ForwardedCopy,
+  ForwardedCopyInput,
   MessageReference,
   Hat,
 

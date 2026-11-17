@@ -5,6 +5,7 @@ import { getBareJid, getLocalPart, getResource } from '../jid'
 import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID } from '../../utils/uuid'
 import { calculateCapsHash, getCapsNode } from '../caps'
+import { ForwardSupport } from '../forwardSupport'
 import { getClientName } from '../clients'
 import { PRESENCE_PRIORITY } from '../config'
 import {
@@ -55,6 +56,7 @@ export const ROSTER_CLAIMS: readonly StanzaClaim[] = [
 
 export class Roster extends BaseModule {
   private capsHash: string | null = null
+  private readonly forwardSupport = new ForwardSupport((iq, timeoutMs) => this.deps.sendIQ(iq, timeoutMs))
   private capsRevision = 0
   /** Track JIDs for which we received 'unsubscribed' but haven't seen the roster push yet */
   private _pendingSubscriptionDenials = new Set<string>()
@@ -335,11 +337,13 @@ export class Roster extends BaseModule {
     }
 
     if (type === 'unavailable') {
+      this.forwardSupport.forget(from)
       // SDK event only - binding calls store.removePresence
       this.deps.emitSDK('contacts:presence-offline', { fullJid: from })
       const contact = this.deps.stores?.roster.getContact(bareFrom)
       this.deps.emit('presence', bareFrom, contact?.presence || 'offline', contact?.statusMessage)
     } else {
+      this.forwardSupport.note(from, caps)
       // SDK event only - binding calls store.updatePresence
       this.deps.emitSDK('contacts:presence', {
         fullJid: from,
@@ -354,6 +358,16 @@ export class Roster extends BaseModule {
       const contact = this.deps.stores?.roster.getContact(bareFrom)
       this.deps.emit('presence', bareFrom, contact?.presence || 'online', contact?.statusMessage)
     }
+  }
+
+  /**
+   * Whether a forward to this contact may be a structured copy: every device the contact
+   * is online with advertises standalone forwarded-copy support. Unknown, mixed, failed
+   * and offline all answer false, which means the quoted fallback.
+   */
+  async supportsForwardedCopy(bareJid: string): Promise<boolean> {
+    const resources = Array.from(this.deps.stores?.roster.getContact(bareJid)?.resources?.keys() ?? [])
+    return this.forwardSupport.everyDeviceSupports(bareJid, resources)
   }
 
   // --- Outgoing Presence Methods ---

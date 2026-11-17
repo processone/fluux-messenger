@@ -88,6 +88,17 @@ describe('messageCache', () => {
     })
   })
 
+  // Plan: a forwarded copy holds the forwarded text, so a retraction removes it with the body.
+  it('keeps a forwarded copy across a reload and scrubs it when the message is retracted', async () => {
+    const forwarded = { author: 'Bob', text: 'Ship it', timestamp: 1000 }
+    await messageCache.saveMessage(createMockMessage('alice@example.com', { id: 'fwd', body: 'look', forwarded }))
+    expect((await messageCache.getMessages('alice@example.com')).find(m => m.id === 'fwd')?.forwarded).toEqual(forwarded)
+    await messageCache.saveMessage(createMockMessage('alice@example.com', { id: 'fwd', body: '', forwarded, isRetracted: true, retractedAt: new Date(2000) }))
+    const stored = (await messageCache.getMessages('alice@example.com')).find(m => m.id === 'fwd')
+    expect(stored?.isRetracted).toBe(true)
+    expect(stored?.forwarded).toBeUndefined()
+  })
+
   it('gets mixed chat and sender-scoped room references in one batch', async () => {
     const roomJid = 'team@conference.example.com'
     await messageCache.saveMessage(createMockMessage('alice@example.com', {

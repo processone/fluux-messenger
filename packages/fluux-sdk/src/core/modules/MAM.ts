@@ -3169,6 +3169,7 @@ export class MAM extends BaseModule {
       processedBody: parsed.processedBody,
       attachment: parsed.attachment,
       hasEncryptedContent,
+      hasForwarded: !!parsed.forwarded,
     })) {
       return null
     }
@@ -3192,6 +3193,7 @@ export class MAM extends BaseModule {
       from: bareFrom,
       body: parsed.processedBody,
       ...(parsed.references && { references: parsed.references }),
+      ...(parsed.forwarded && { forwarded: parsed.forwarded }),
       timestamp: parsed.timestamp,
       isOutgoing,
       isDelayed: true,

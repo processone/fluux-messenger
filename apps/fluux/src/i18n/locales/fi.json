@@ -518,6 +518,8 @@
         "forwardMessageLink": "Forward message",
         "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
         "forwardQuotedCopy": "Quoted copy from a forwarded message",
+        "forwardedCopyLabel": "Forwarded message from {{author}}",
+        "forwardedCopyUnknownAuthor": "an unknown sender",
         "forwardDestination": "Chat or room",
         "forwardChoose": "Choose a chat or room",
         "forwardUnavailable": "Destination unavailable",

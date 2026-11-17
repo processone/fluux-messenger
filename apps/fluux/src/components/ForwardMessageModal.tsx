@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useChatActions, useRoomActions, useRoster, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { trackSend } from '@/utils/pendingSends'
-import { composeForward, type ForwardQuote } from '@/utils/forwardMessage'
+import { buildForwardedCopy, composeForward, composeNativeForward, type ForwardQuote } from '@/utils/forwardMessage'
 import { ContactSelector } from './ContactSelector'
 import { ModalShell } from './ModalShell'
 import { TextArea } from './ui/TextInput'
@@ -65,16 +65,26 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
     setFailed(false)
     try {
       // The quote and link are marked as fallback: Fluux hides them when it can show the source.
-      const { body, references } = composeForward(comment, link, quote)
       const jid = destination.slice(5)
       if (destination.startsWith('room:')) {
         const liveRoom = roomStore.getState().rooms.get(jid)
         if (!liveRoom?.joined || liveRoom.selfOccupant?.role === 'visitor') throw new Error('Room unavailable')
+        const { body, references } = composeForward(comment, link, quote)
         await trackSend(room.sendMessage(jid, body, { references }))
       } else {
         // The SDK routes known room addresses as groupchat even via chat actions.
         if (roomStore.getState().rooms.has(jid)) throw new Error('Destination changed')
-        await trackSend(chat.sendMessage(jid, body, { references }))
+        // A structured copy only when every device the contact is online with shows one; an unknown,
+        // mixed, failed or offline answer keeps the quoted copy.
+        const copy = buildForwardedCopy(quote)
+        const native = copy && await chat.supportsForwardedCopy(jid).catch(() => false)
+        if (copy && native) {
+          const { body, references } = composeNativeForward(comment, link)
+          await trackSend(chat.sendMessage(jid, body, { references, forwarded: copy }))
+        } else {
+          const { body, references } = composeForward(comment, link, quote)
+          await trackSend(chat.sendMessage(jid, body, { references }))
+        }
       }
       onClose()
     } catch {

@@ -60,6 +60,7 @@ import type {
   ChatMessageTarget,
   MentionReference,
   MessageReference,
+  ForwardedCopy,
   FileAttachment,
   SendMessageOptions,
   ChatStateNotification,
@@ -75,7 +76,7 @@ import type {
   PollClosedData,
 } from '../types'
 import { getCorrectionStanzaIds, withCorrectionStanzaId, type StoredMessage, type StoredRoomMessage } from '../types/message-internal'
-import { parseMessageContent, parseMessageReferences, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, correctionMarks } from './messagingUtils'
+import { parseMessageContent, parseForwardedCopy, parseMessageReferences, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, correctionMarks } from './messagingUtils'
 import { checkForMention } from '../mentionDetection'
 import { parsePollElement, parsePollClosedElement } from '../poll'
 import { logWarn } from '../logger'
@@ -185,6 +186,20 @@ function forwardFallbackElement(fullBody: string, shift: number, range: { begin:
       start: String(toCodePointOffset(fullBody, shift + range.begin)),
       end: String(toCodePointOffset(fullBody, shift + range.end)),
     }))
+}
+
+/** XEP-0297: the standalone forwarded copy of one message, as a child of the outgoing message. */
+function forwardedCopyElement(copy: { from: string; text: string; timestamp?: number }): Element {
+  const inner = xml('message', { xmlns: 'jabber:client', from: copy.from, type: 'groupchat' }, xml('body', {}, copy.text))
+  return xml('forwarded', { xmlns: NS_FORWARD },
+    ...(copy.timestamp !== undefined && Number.isFinite(copy.timestamp)
+      ? [xml('delay', { xmlns: NS_DELAY, stamp: new Date(copy.timestamp).toISOString() })] : []),
+    inner)
+}
+
+/** The stored form of a copy: the author is a room nickname or a bare address, never a routing address. */
+function forwardedCopyFor(copy: { from: string; text: string; timestamp?: number }): ForwardedCopy | undefined {
+  return parseForwardedCopy(xml('message', {}, forwardedCopyElement(copy)))
 }
 
 export class Chat extends BaseModule {
@@ -885,6 +900,8 @@ export class Chat extends BaseModule {
       // reader to hide them must travel with them. Keyed by `for` so reply and OOB
       // fallbacks keep their current handling.
       `fallback|${NS_FALLBACK}|${NS_FORWARD_QUOTE}`,
+      // A standalone forwarded copy holds the forwarded text, so it rides in the payload too.
+      `forwarded|${NS_FORWARD}`,
     ])
 
   /** XEP-0444 reactions ride inside the envelope; the reacted-to id rides with them. */
@@ -937,6 +954,11 @@ export class Chat extends BaseModule {
   async sendMessage(to: string, body: string, options?: SendMessageOptions): Promise<string> {
     const { replyTo, attachment } = options ?? {}
     const references = [...(options?.references ?? [])]
+    if (options?.forwarded && this.conversationKind(to) !== 'chat') {
+      // A room's support says nothing about every present and future reader: rooms get the quoted copy.
+      throw new Error('A forwarded copy can only be sent to a one-to-one chat')
+    }
+    const forwarded = options?.forwarded ? forwardedCopyFor(options.forwarded) : undefined
     for (const ref of roomMessageLinkReferences(body)) {
       if (!references.some(existing => existing.type === 'data' && existing.uri === ref.uri)) references.push(ref)
     }
@@ -1019,6 +1041,8 @@ export class Chat extends BaseModule {
         (url, encryption) => this.attachmentWireUrl(url, encryption)))
     }
 
+    if (forwarded && options?.forwarded) children.push(forwardedCopyElement(options.forwarded))
+
     // XEP-0359: Include origin-id for echo deduplication
     children.push(createOriginIdElement(id))
 
@@ -1076,6 +1100,7 @@ export class Chat extends BaseModule {
         timestamp: new Date(),
         isOutgoing: true,
         ...(references.length && { references }),
+        ...(forwarded && { forwarded }),
         ...(replyTo && { replyTo: { id: replyTo.id, to: replyTo.to } }),
         ...(attachment && { attachment }),
         ...(outgoingSecurityContext && { securityContext: outgoingSecurityContext }),
@@ -1106,6 +1131,7 @@ export class Chat extends BaseModule {
     messageId: string,
     attachment?: FileAttachment,
     storedReferences?: MessageReference[],
+    storedForwarded?: ForwardedCopy,
   ): Promise<void> {
     const recipient = getBareJid(to)
 
@@ -1138,6 +1164,11 @@ export class Chat extends BaseModule {
       children.push(xml('reference', { xmlns: NS_REFERENCE, type: ref.type, uri: ref.uri,
         begin: String(toCodePointOffset(fullBody, ref.begin!)), end: String(toCodePointOffset(fullBody, ref.end!)) }))
       if (ref.forwardFallback) children.push(forwardFallbackElement(fullBody, 0, ref.forwardFallback))
+    }
+
+    // A retry keeps the structured copy inside the same protection as the first send.
+    if (storedForwarded) {
+      children.push(forwardedCopyElement({ from: storedForwarded.author, text: storedForwarded.text, timestamp: storedForwarded.timestamp }))
     }
 
     if (attachment) {
@@ -2294,6 +2325,7 @@ export class Chat extends BaseModule {
       processedBody: parsed.processedBody,
       attachment: parsed.attachment,
       hasEncryptedContent: !!encryptedPayload || !!unsupportedEncryption,
+      hasForwarded: !!parsed.forwarded,
     })) {
       return null
     }
@@ -2309,6 +2341,7 @@ export class Chat extends BaseModule {
       from: bareFrom,
       body: parsed.processedBody,
       ...(parsed.references && { references: parsed.references }),
+      ...(parsed.forwarded && { forwarded: parsed.forwarded }),
       timestamp: parsed.timestamp,
       isOutgoing,
       ...(parsed.isDelayed && { isDelayed: true }),

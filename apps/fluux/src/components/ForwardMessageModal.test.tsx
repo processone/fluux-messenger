@@ -5,7 +5,7 @@ import { sendsSettled } from '@/utils/pendingSends'
 import { ForwardMessageProvider, useForwardMessage } from './conversation/forwardMessageContext'
 
 const fixture = vi.hoisted(() => ({
-  chatSend: vi.fn(), roomSend: vi.fn(),
+  chatSend: vi.fn(), roomSend: vi.fn(), supports: vi.fn(),
   rooms: new Map(), conversations: new Map(),
 }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
@@ -13,7 +13,7 @@ vi.mock('@fluux/sdk', async () => ({
   // The shared picker filters with the SDK's own name/address matcher.
   matchNameOrJid: (await vi.importActual<typeof import('@fluux/sdk')>('@fluux/sdk')).matchNameOrJid,
   useRoster: () => ({ contacts: [{ jid: 'emma@fluux.chat', name: 'Emma' }, { jid: 'james@fluux.chat', name: 'James' }] }),
-  useChatActions: () => ({ sendMessage: fixture.chatSend }),
+  useChatActions: () => ({ sendMessage: fixture.chatSend, supportsForwardedCopy: fixture.supports }),
   useRoomActions: () => ({ sendMessage: fixture.roomSend }),
   roomStore: { getState: () => ({ rooms: fixture.rooms }) },
   chatStore: { getState: () => ({ conversations: fixture.conversations }) },
@@ -55,6 +55,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   fixture.chatSend.mockReset().mockResolvedValue('sent-chat-message')
   fixture.roomSend.mockReset().mockResolvedValue('sent-room-message')
+  fixture.supports.mockReset().mockResolvedValue(false)
   fixture.rooms = new Map([[roomJid, { jid: roomJid, name: 'Design', joined: true }]])
   fixture.conversations = new Map()
 })
@@ -94,6 +95,56 @@ describe('ForwardMessageModal', () => {
     const quote = '> Bob wrote:\n> Ship it\n> Tonight\n'
     expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('emma@fluux.chat',
       `Please review\n${quote}${link}`, marked('Please review\n', quote.length))
+  })
+
+  // Piece 2 of the forward plan: a structured copy only when every known device supports it; rooms always get the quote.
+  describe('standalone forwarded copy', () => {
+    const source = { author: 'Bob', text: 'Ship it', from: `${roomJid}/Bob`, timestamp: 1731490000000 }
+    const forwardTo = async (query: string, comment = 'Please review') => {
+      render(<ForwardMessageModal link={link} quote={source} onClose={vi.fn()} />)
+      fireEvent.change(picker(), { target: { value: query } })
+      fireEvent.keyDown(picker(), { key: 'Enter' })
+      fireEvent.change(screen.getByLabelText('chat.forwardComment'), { target: { value: comment } })
+      send()
+      await waitFor(() => expect(fixture.chatSend.mock.calls.length + fixture.roomSend.mock.calls.length).toBe(1))
+    }
+
+    it('sends the comment and link with the structured copy when every device supports it', async () => {
+      fixture.supports.mockResolvedValue(true)
+      await forwardTo('em')
+      expect(fixture.supports).toHaveBeenCalledWith('emma@fluux.chat')
+      expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('emma@fluux.chat', `Please review\n${link}`, {
+        references: [{ type: 'data', uri: link, begin: 'Please review\n'.length, end: 'Please review\n'.length + link.length }],
+        forwarded: { from: `${roomJid}/Bob`, text: 'Ship it', timestamp: 1731490000000 },
+      })
+    })
+
+    it.each([['unknown, mixed or offline devices', () => fixture.supports.mockResolvedValue(false)],
+      ['a failed discovery', () => fixture.supports.mockRejectedValue(new Error('timeout'))]])('keeps the quoted fallback for %s', async (_name, arrange) => {
+      arrange()
+      await forwardTo('em')
+      const quote = '> Bob wrote:\n> Ship it\n'
+      expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('emma@fluux.chat',
+        `Please review\n${quote}${link}`, marked('Please review\n', quote.length))
+    })
+
+    it('keeps the quoted fallback for a room without asking about support', async () => {
+      fixture.supports.mockResolvedValue(true)
+      await forwardTo('design')
+      expect(fixture.supports).not.toHaveBeenCalled()
+      expect(fixture.roomSend.mock.calls[0][2]).not.toHaveProperty('forwarded')
+      expect(fixture.roomSend.mock.calls[0][1]).toContain('> Bob wrote:')
+    })
+
+    it('keeps the quoted fallback when the source has no author address to attribute', async () => {
+      fixture.supports.mockResolvedValue(true)
+      render(<ForwardMessageModal link={link} quote={{ author: 'Bob', text: 'Ship it' }} onClose={vi.fn()} />)
+      fireEvent.change(picker(), { target: { value: 'em' } })
+      fireEvent.keyDown(picker(), { key: 'Enter' })
+      send()
+      await waitFor(() => expect(fixture.chatSend).toHaveBeenCalledOnce())
+      expect(fixture.chatSend.mock.calls[0][1]).toContain('> Bob wrote:')
+    })
   })
 
   it('keeps the highlighted recipient when a message from them arrives before Enter', async () => {

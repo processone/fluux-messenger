@@ -38,6 +38,12 @@ export function useChatActions() {
     [client]
   )
 
+  /** Whether every device the contact is online with shows a standalone forwarded copy. */
+  const supportsForwardedCopy = useCallback(
+    (bareJid: string): Promise<boolean> => client.contacts.supportsForwardedCopy(bareJid),
+    [client]
+  )
+
   // Hydrates the message cache before marking active (see chatStore.activateConversation)
   const setActiveConversation = useCallback(async (id: string | null) => {
     await chatStore.getState().activateConversation(id)
@@ -209,6 +215,7 @@ export function useChatActions() {
   return useMemo(
     () => ({
       sendMessage,
+      supportsForwardedCopy,
       setActiveConversation,
       addConversation,
       deleteConversation,
@@ -234,6 +241,7 @@ export function useChatActions() {
     }),
     [
       sendMessage,
+      supportsForwardedCopy,
       setActiveConversation,
       addConversation,
       deleteConversation,
