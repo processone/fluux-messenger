@@ -1126,7 +1126,7 @@ type CanonicalRow = Pick<
   | 'stanzaId' | 'localRowRef' | 'originId' | 'occupantId' | 'reactions' | 'reactionTimestamps' | 'isEdited' | 'correctionTimestamp' | 'correctionTimestampSource' | 'correctionRevision' | 'correctionStanzaIds' | 'correctionAlternatives'
   | 'isRetracted' | 'retractedAt' | 'isModerated' | 'moderatedBy' | 'moderationReason'
   | 'isMention' | 'pollClosed' | 'pollClosedAt' | 'deliveryError'
-  | 'encryptedPayload' | 'unsupportedEncryption'
+  | 'encryptedPayload' | 'contentAvailability' | 'unsupportedEncryption'
   | 'receivedAt' | 'isDelayed' | 'isOutgoing'
 >
 
@@ -1296,6 +1296,7 @@ function reconcileHistoryRow<T extends (StoredMessage | StoredRoomMessage) & Can
       originalBody: owner.originalBody,
       attachment: owner.attachment,
       encryptedPayload: owner.encryptedPayload,
+      contentAvailability: owner.contentAvailability,
       unsupportedEncryption: owner.unsupportedEncryption,
       securityContext: owner.securityContext,
       correctionTimestamp: owner.correctionTimestamp,

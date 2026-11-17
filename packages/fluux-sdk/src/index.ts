@@ -754,3 +754,5 @@ export { subscribeSettledReads } from './stores/settledReadEvents'
 export type { SettledReadEvent } from './stores/settledReadEvents'
 
 export { isNotificationMessageReady, isNotificationMessageUnread, resolveNotificationMessage } from './utils/notificationMessage'
+
+export { subscribeDecryptionActivity, isMessageDecrypting } from './core/e2ee/decryptionActivity'

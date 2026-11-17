@@ -192,6 +192,10 @@ export interface BaseMessage {
    * within the same session.
    */
   encryptedPayload?: string
+  /** Settled content availability, independent of signature trust. Missing on legacy ciphertext means waiting. Active work is never persisted. */
+  contentAvailability?:
+    | { state: 'waiting' | 'ready' | 'verification' }
+    | { state: 'failed'; reason: 'key-unavailable' | 'signature-invalid' | 'unreadable' }
   /**
    * Set when an incoming message used an end-to-end encryption protocol this
    * client has no plugin for (e.g. OMEMO when only OpenPGP is wired). Unlike

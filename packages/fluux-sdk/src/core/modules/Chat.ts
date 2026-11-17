@@ -45,6 +45,7 @@ import {
   deriveConversationContext,
   readStashedAuthoredAt,
   readStashedEncryptedPayload,
+  readStashedContentAvailability,
   readStashedSecurityContext,
   readStashedUnsupportedEncryption,
   recordUnclaimedEME,
@@ -2281,6 +2282,7 @@ export class Chat extends BaseModule {
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(isCorrection && this.correctionReceipts.withOrder(stanza, correctionMarks(parsed))),
       ...(securityContext && { securityContext }),
+      contentAvailability: readStashedContentAvailability(stanza),
       ...(encryptedPayload && { encryptedPayload }),
       ...(unsupportedEncryption && { unsupportedEncryption }),
     }
@@ -2373,6 +2375,7 @@ export class Chat extends BaseModule {
       ...(isCorrection && this.correctionReceipts.withOrder(stanza, correctionMarks(parsed))),
       occupantId: occupantId || undefined,
       ...(securityContext && { securityContext }),
+      contentAvailability: readStashedContentAvailability(stanza),
       ...(encryptedPayload && { encryptedPayload }),
       ...(unsupportedEncryption && { unsupportedEncryption }),
     }
