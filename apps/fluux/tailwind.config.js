@@ -86,7 +86,7 @@ export default {
           '100%': { opacity: '1', transform: 'scale(1)' },
         },
         'toast-in': {
-          '0%': { opacity: '0', transform: 'translateY(16px)' },
+          '0%': { opacity: '0', transform: 'translateY(-16px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         'sheet-up': {

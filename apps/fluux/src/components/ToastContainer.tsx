@@ -1,7 +1,7 @@
+import { useLayoutEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { X, CheckCircle2, AlertCircle, Info } from 'lucide-react'
-import { platform } from '@/platform'
 import { RoomAvatar } from '@/components/RoomAvatar'
 import { useToastStore, type ToastType } from '@/stores/toastStore'
 
@@ -17,12 +17,37 @@ const colorMap: Record<ToastType, { border: string; icon: string }> = {
   info: { border: 'border-s-fluux-brand', icon: 'text-fluux-brand' },
 }
 
+const GAP_PX = 12
+
+/**
+ * Top of the notice stack: just under the main pane's header (and the
+ * find-in-conversation bar when open), so notices never cover the composer.
+ * Returns null while no pane header is on screen (settings, empty state).
+ */
+function measureStackTop(): number | null {
+  const header = document.querySelector('main header')
+  if (!header) return null
+  let bottom = header.getBoundingClientRect().bottom
+  const find = document.querySelector('[data-find-on-page-bar]')
+  if (find) bottom = Math.max(bottom, find.getBoundingClientRect().bottom + 8)
+  return bottom + GAP_PX
+}
+
 export function ToastContainer() {
   const { t } = useTranslation()
   const toasts = useToastStore((s) => s.toasts)
   const removeToast = useToastStore((s) => s.removeToast)
 
-  const phone = platform().shell === 'mobile'
+  const [top, setTop] = useState<number | null>(null)
+  const hasToasts = toasts.length > 0
+
+  useLayoutEffect(() => {
+    if (!hasToasts) return
+    const update = () => setTop(measureStackTop())
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [hasToasts, toasts.length])
 
   // Arrival banners are announced politely; focus never moves.
   const announced = [...toasts].reverse().find((toast) => toast.onClick)?.message ?? ''
@@ -30,7 +55,11 @@ export function ToastContainer() {
   return createPortal(
     <>
     <div aria-live="polite" className="sr-only">{announced}</div>
-    {toasts.length > 0 && <div className={`fixed end-4 z-[9999] flex flex-col gap-2 pointer-events-none ${phone ? 'top-[calc(env(safe-area-inset-top)+1rem)]' : 'bottom-4'}`}>
+    {toasts.length > 0 && <div
+      className={`fixed end-4 z-[9999] flex flex-col gap-2 pointer-events-none ${top === null ? 'top-[calc(env(safe-area-inset-top)+4.5rem)]' : ''}`}
+      style={top === null ? undefined : { top }}
+      data-toast-stack
+    >
       {toasts.map((toast) => {
         const Icon = iconMap[toast.type]
         const colors = colorMap[toast.type]

@@ -52,4 +52,13 @@ describe('ToastContainer', () => {
     const { baseElement } = render(<ToastContainer />)
     expect(baseElement.querySelector('[aria-live="polite"]')?.textContent).toBe('Alice: hello')
   })
+
+  // FLM-228: notices anchor at the top, never the bottom where the composer is.
+  it('anchors the stack at the top of the window', () => {
+    useToastStore.getState().addToast('success', 'Top', 0)
+    render(<ToastContainer />)
+    const stack = document.querySelector('[data-toast-stack]') as HTMLElement
+    expect(stack.className).not.toContain('bottom-')
+    expect(stack.className).toContain('top-')
+  })
 })
