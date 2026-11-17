@@ -76,6 +76,25 @@ describe('ForwardMessageModal', () => {
     expect(fixture.roomSend).not.toHaveBeenCalled()
   })
 
+  it('keeps the highlighted recipient when a message from them arrives before Enter', async () => {
+    const onClose = vi.fn()
+    const { rerender } = render(<ForwardMessageModal link={link} onClose={onClose} />)
+    fireEvent.change(picker(), { target: { value: 'm' } })
+    expect(Array.from(suggestions(), row => row.textContent)).toEqual([
+      expect.stringContaining('Emma'), expect.stringContaining('James'),
+    ])
+    fireEvent.keyDown(picker(), { key: 'ArrowDown' })
+    // James writes while the list is open; Forward re-renders from its conversations subscription.
+    fixture.conversations = new Map([['james@fluux.chat', {
+      id: 'james@fluux.chat', name: 'James', type: 'chat', lastMessage: { timestamp: new Date() },
+    }]])
+    rerender(<ForwardMessageModal link={link} onClose={onClose} />)
+    fireEvent.keyDown(picker(), { key: 'Enter' })
+    send()
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('james@fluux.chat', link)
+  })
+
   it('replaces an earlier pick and sends a link without a comment to a joined room', async () => {
     const onClose = vi.fn()
     render(<ForwardMessageModal link={link} onClose={onClose} />)

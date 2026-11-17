@@ -92,8 +92,11 @@ export function ContactSelector({
   // Recent-activity ordering is a one-shot nicety for the dropdown. Read it
   // non-reactively (getState, not a subscription) so the picker does NOT re-render
   // on every conversation change while open — the combined conversations map churns
-  // on every new message / typing / meta update.
-  const recentActivityMap = (() => {
+  // on every new message / typing / meta update. Read it once, when the picker
+  // mounts: the keyboard highlight is a position in the list, so a parent re-render
+  // after a new message must not re-sort the list under it, or Enter would pick a
+  // different contact than the one highlighted.
+  const [recentActivityMap] = useState(() => {
     const map = new Map<string, number>()
     for (const conv of chatStore.getState().conversations.values()) {
       if (conv.lastMessage?.timestamp) {
@@ -101,7 +104,7 @@ export function ContactSelector({
       }
     }
     return map
-  })()
+  })
 
   // Build a set of roster JIDs for fast deduplication
   const rosterJids = new Set(contacts.map(c => c.jid))
