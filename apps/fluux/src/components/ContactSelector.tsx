@@ -41,6 +41,10 @@ export interface ContactSelectorProps {
   extraSuggestions?: Array<{ jid: string; name?: string }>
   /** Single-pick mode: when set, selecting a contact or typing a JID + Enter calls this once and skips chip selection. */
   onPick?: (jid: string) => void
+  /** Whether a typed address outside the list can be picked (default true). */
+  allowTypedJid?: boolean
+  /** Id for the search input, so a visible label can name it. */
+  inputId?: string
 }
 
 /** Unified contact entry for the dropdown */
@@ -70,6 +74,8 @@ export function ContactSelector({
   excludeJids = [],
   extraSuggestions = [],
   onPick,
+  allowTypedJid = true,
+  inputId,
 }: ContactSelectorProps) {
   const { t } = useTranslation()
   const { contacts } = useRoster()
@@ -166,7 +172,7 @@ export function ContactSelector({
   // Whether the search text is a JID the user can add outright.
   const searchIsValidJid = isValidJid(search)
   const searchJidNormalized = search.trim().toLowerCase()
-  const canAddAsJid = searchIsValidJid &&
+  const canAddAsJid = allowTypedJid && searchIsValidJid &&
     !selectedContacts.includes(searchJidNormalized) &&
     !excludeJids.includes(searchJidNormalized)
 
@@ -380,6 +386,7 @@ export function ContactSelector({
       <div ref={containerRef}>
         <TextInput
           ref={inputRef}
+          id={inputId}
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}

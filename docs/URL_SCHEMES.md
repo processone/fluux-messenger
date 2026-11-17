@@ -86,6 +86,8 @@ preview reads.
 **Forward message** on a linkable room message opens a picker of contacts, existing
 chats and currently joined rooms where you can send messages. On phones it is in
 the long-press action menu.
+Typing narrows the list by name or by the part of the address before @, and Enter
+picks the highlighted entry; only listed destinations can be picked.
 Choose one destination, optionally add a comment, then press **Send**. Fluux sends
 one ordinary message containing the comment (if any), a newline and the room
 message link, with the same XEP-0372 data reference as a pasted link. Without a
