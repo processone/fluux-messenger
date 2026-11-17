@@ -270,27 +270,18 @@ test('Forward sends a room link with an optional comment to a chosen contact', a
   await activateChat(page, 'emma@fluux.chat')
   const sent = page.locator('[data-message-body]').filter({ hasText: 'Please review' }).last()
   await expect(sent).toBeVisible()
-  // The source is readable, so the preview replaces the quote and link.
-  await expect(sent.locator('[data-room-message-preview]')).toContainText(target.body)
+  // The copy stands for the quote and link, so the recipient sees the copied text, not the generated quote or room preview.
+  await expect(sent.locator('[data-forwarded-copy]')).toContainText(target.body)
   await expect(sent).not.toContainText('wrote:')
   await expect(sent.getByRole('link', { name: link, exact: true })).toHaveCount(0)
   await forwardPicture(page, 'after-recipient')
-  // Losing access to the source restores the labelled quote and link; regaining it hides them again.
+  // The copy does not depend on access to the room.
   const setJoined = (joined: boolean) => page.evaluate(({ jid, joined }) =>
     (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState().updateRoom(jid, { joined }), { jid: ROOM, joined })
   await setJoined(false)
-  await expect(sent).toContainText('wrote:')
-  await expect(sent).toContainText('Quoted copy from a forwarded message')
-  await expect(sent.getByRole('link', { name: link, exact: true }).first()).toBeVisible()
-  await expect(sent.locator('[data-room-message-preview]')).toContainText('Join the room to see it')
-  await sent.scrollIntoViewIfNeeded()
-  await forwardPicture(page, 'after-recipient-no-access')
-  await setJoined(true)
+  await expect(sent.locator('[data-forwarded-copy]')).toContainText(target.body)
   await expect(sent).not.toContainText('wrote:')
-  await expect(sent.locator('[data-room-message-preview]')).toContainText(target.body)
-  await sent.locator('[data-room-message-preview]').getByRole('link').click()
-  await expect(page.locator(`[data-message-id="${target.id}"].message-highlight`)).toBeInViewport()
-  await forwardPicture(page, 'after-jump')
+  await forwardPicture(page, 'after-recipient-no-access')
 })
 
 // The room route runs in both engines with the desktop picker; the touch journey below is Chromium-only.
