@@ -335,13 +335,11 @@ export async function decryptStanzaInPlace(
         // securityContext either way (`unverifiable` reports a reduced trust).
         if (result.plaintext) plaintext = new TextDecoder().decode(result.plaintext)
         if (status === 'control-message') {
-          // A control message carries no user content. The stanza's outer
-          // cleartext <body> is sender- or server-controlled and would
-          // otherwise surface as a message under the plugin's trusted
-          // security context, so discard it.
-          stanza.children = stanza.children.filter(
-            (child) => typeof child === 'string' || (child as Element).name !== 'body',
-          )
+          // A control message carries no user content. Everything outside the encrypted
+          // element (<body>, OOB attachments, reactions, retractions, replies) is sender- or
+          // server-controlled and unauthenticated, so it must reach no feature handler under
+          // the plugin's trusted context: consume the stanza here, before dispatch.
+          stanza.children = []
         }
         securityContext = result.securityContext
         if (result.authoredAt) authoredAt = result.authoredAt

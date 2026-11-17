@@ -158,6 +158,28 @@ export class OmemoPlugin implements E2EEPlugin {
    * `trust:'unknown'`. Trust precedence: a fingerprint-bound verified marker
    * wins (`'verified'`), else the library BTBV state (`toTrustState`).
    */
+  /**
+   * Trust of a device judged against one specific identity key (the one a session was built
+   * with): a record bound to another key, or an unverified device of a peer that has a verified
+   * one, is `untrusted`; a fingerprint-bound verified marker for this key is `verified`.
+   */
+  private async trustForKey(peer: string, deviceId: number, ik: Uint8Array): Promise<TrustState> {
+    if (await isVerified(this.ctx.storage, peer, deviceId, hex(fingerprint(ik)))) return 'verified'
+    const record = await new PluginStorageOmemoStore(this.ctx.storage).loadTrust(peer, deviceId)
+    if (record && record.identityKey.length > 0 && !bytesEqual(record.identityKey, ik)) return 'untrusted'
+    const state = (record?.state as BtbvState | undefined) ?? 'undecided'
+    if (state === 'undecided' && (await hasAnyVerified(this.ctx.storage, peer))) return 'untrusted'
+    return toTrustState(state)
+  }
+
+  /** The per-device send check handed to the account: peer devices must not be untrusted for the key that backs their session. */
+  private authorizeSend(): (jid: string, rid: number, ik: Uint8Array) => Promise<boolean> {
+    return async (jid, rid, ik) => {
+      if (jid === this.ctx.account.jid) return true // own devices: own-device trust is out of scope here
+      return (await this.trustForKey(jid, rid, ik)) !== 'untrusted'
+    }
+  }
+
   private async resolvePeerIdentity(peer: string, deviceId: number, lookup?: BundleLookup): Promise<PeerIdentity> {
     const store = new PluginStorageOmemoStore(this.ctx.storage)
     const existing = await store.loadTrust(peer, deviceId)
@@ -389,7 +411,12 @@ export class OmemoPlugin implements E2EEPlugin {
       { jid: this.ctx.account.jid, deviceIds: reachableOwnDevs },
     ].filter((r) => r.deviceIds.length > 0)
 
-    const msg = await acc.encrypt(recipients, sceBytes)
+    const msg = await acc.encrypt(recipients, sceBytes, { authorize: this.authorizeSend() })
+    // Authorization runs against each session's own identity at wrapping time and may have
+    // refused every peer device since the checks above: never emit a message with no key for the peer.
+    if (!msg.keys.some((k) => k.jid === peer)) {
+      throw new Error(`OMEMO: peer ${peer} has no usable OMEMO devices`)
+    }
     return {
       protocolId: this.descriptor.id,
       stanzaElement: elementToData(buildEncrypted(msg)),
@@ -640,7 +667,10 @@ export class OmemoPlugin implements E2EEPlugin {
       }
     }
     if (fresh.length === 0) return
-    const msg = await acc.encrypt([{ jid: peer, deviceIds: fresh }], new Uint8Array(0))
+    const msg = await acc.encrypt([{ jid: peer, deviceIds: fresh }], new Uint8Array(0), {
+      authorize: this.authorizeSend(),
+    })
+    if (msg.keys.length === 0) return
     await this.ctx.xmpp.sendStanza(this.wrapMessage(peer, elementToData(buildEncrypted(msg))))
   }
 

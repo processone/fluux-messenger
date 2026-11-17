@@ -4,7 +4,14 @@
 import { describe, it, expect } from 'vitest'
 import { MemoryStore } from '../store/MemoryStore'
 import { OmemoAccount } from './OmemoAccount'
-import { decodeKeyExchange, encodeKeyExchange } from '../omemo2/wire'
+import {
+  decodeKeyExchange,
+  encodeKeyExchange,
+  decodeAuthMessage,
+  encodeAuthMessage,
+  decodeOmemoMessage,
+  encodeOmemoMessage,
+} from '../omemo2/wire'
 import { OmemoError } from '../errors'
 import type { OmemoStore } from '../store/types'
 
@@ -193,6 +200,79 @@ describe('replacement key exchange', () => {
   })
 })
 
+describe('crossed initiation with a delayed losing message', () => {
+  it('keeps the winning session when a late second message of the losing handshake arrives after a reply', async () => {
+    const seen = new Set<boolean>()
+    for (let seed = 150; seed < 190 && seen.size < 2; seed++) {
+      const { alice, bob, to } = await pair(seed)
+      const aDev = alice.publishableDeviceId()
+      const toAlice = [{ jid: 'alice@x', deviceIds: [aDev] }]
+      const [aik, bik] = [(await alice.publishableBundleAsync()).ik, (await bob.publishableBundleAsync()).ik]
+      let cmp = 0
+      for (let i = 0; i < 32 && cmp === 0; i++) cmp = aik[i] - bik[i]
+      seen.add(cmp > 0)
+      await bob.processBundle('alice@x', aDev, await alice.publishableBundleAsync())
+      const a1 = await alice.encrypt(to, enc('a1'))
+      const a2 = await alice.encrypt(to, enc('a2'))
+      const b1 = await bob.encrypt(toAlice, enc('b1'))
+      const b2 = await bob.encrypt(toAlice, enc('b2'))
+      // First messages cross; the winner then carries a reply BEFORE the loser's second message arrives.
+      await bob.decrypt('alice@x', a1.sid, a1)
+      await alice.decrypt('bob@x', b1.sid, b1)
+      const winnerIsAlice = cmp > 0
+      const [winner, loser, lateFromLoser] = winnerIsAlice ? [alice, bob, b2] : [bob, alice, a2]
+      const [winJid, loseJid] = winnerIsAlice ? ['bob@x', 'alice@x'] : ['alice@x', 'bob@x']
+      // The loser answers on the winning session, which clears the winner's pending flag.
+      const reply = await loser.encrypt(winnerIsAlice ? toAlice : to, enc('reply'))
+      expect(dec(await winner.decrypt(winJid, reply.sid, reply))).toBe('reply')
+      // Now the delayed second message of the losing handshake shows up: readable, but it must not replace the session.
+      expect(dec(await winner.decrypt(winJid, lateFromLoser.sid, lateFromLoser))).toBe(winnerIsAlice ? 'b2' : 'a2')
+      const next = await winner.encrypt(winnerIsAlice ? to : toAlice, enc('after'))
+      expect(dec(await loser.decrypt(loseJid, next.sid, next))).toBe('after')
+      const back = await loser.encrypt(winnerIsAlice ? toAlice : to, enc('and back'))
+      expect(dec(await winner.decrypt(winJid, back.sid, back))).toBe('and back')
+    }
+    expect(seen.size).toBe(2)
+  })
+})
+
+describe('counter gaps are unauthenticated input', () => {
+  it('reports an absurd message counter as malformed and leaves the session working', async () => {
+    const { alice, bob, to } = await pair()
+    const toAlice = [{ jid: 'alice@x', deviceIds: [alice.publishableDeviceId()] }]
+    const first = await alice.encrypt(to, enc('one'))
+    await bob.decrypt('alice@x', first.sid, first)
+    const r = await bob.encrypt(toAlice, enc('r'))
+    await alice.decrypt('bob@x', r.sid, r)
+    const next = await alice.encrypt(to, enc('two'))
+    const auth = decodeAuthMessage(next.keys[0].data)
+    const header = decodeOmemoMessage(auth.message)
+    for (const bad of [{ ...header, n: header.n + 100000 }, { ...header, pn: header.pn + 100000, n: header.n + 5000 }]) {
+      const forged = { ...next, keys: [{ ...next.keys[0], data: encodeAuthMessage({ mac: auth.mac, message: encodeOmemoMessage(bad) }) }] }
+      await expect(bob.decrypt('alice@x', next.sid, forged)).rejects.toMatchObject({ code: 'malformed' })
+    }
+    expect(dec(await bob.decrypt('alice@x', next.sid, next))).toBe('two')
+  })
+})
+
+describe('send authorization at wrapping time', () => {
+  it('asks about the identity key of the session itself and skips refused devices without advancing them', async () => {
+    const { alice, bob, to } = await pair()
+    const bobKey = (await bob.publishableBundleAsync()).ik
+    const asked: Uint8Array[] = []
+    const refused = await alice.encrypt(to, enc('no'), {
+      authorize: async (_j, _r, ik) => {
+        asked.push(ik)
+        return false
+      },
+    })
+    expect(refused.keys).toHaveLength(0)
+    expect(asked[0]).toEqual(bobKey)
+    // The refused attempt did not consume a ratchet step: the next message is still the first.
+    const m = await alice.encrypt(to, enc('yes'), { authorize: async () => true })
+    expect(dec(await bob.decrypt('alice@x', m.sid, m))).toBe('yes')
+  })
+})
 describe('key transport (empty message)', () => {
   it('carries 32 zero key bytes and no payload, and decrypts to nothing', async () => {
     const { alice, bob, to } = await pair()

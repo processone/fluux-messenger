@@ -1109,10 +1109,16 @@ describe('stanzaDecrypt — control-message status', () => {
     const manager = await makeManager(new ControlMessagePlugin())
     const stanza = buildStanza() // carries a cleartext hint body the sender or server controls
 
+    stanza.children.push(
+      xml('x', { xmlns: 'jabber:x:oob' }, xml('url', {}, 'https://evil.example/pic.png')),
+      xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: 'm0' }, xml('reaction', {}, 'x')),
+      xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'm0' }),
+    )
+
     const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
 
-    // The body would otherwise show under the plugin's trusted context.
-    expect(stanza.getChild('body')).toBeUndefined()
+    // None of it may reach a feature handler under the plugin's trusted context.
+    expect(stanza.children).toEqual([])
     expect(result.encryptedPayloadXml).toBeUndefined()
   })
 })

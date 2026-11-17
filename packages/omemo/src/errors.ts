@@ -8,8 +8,8 @@
  *   including a message whose MAC does not verify and a key exchange naming a
  *   signed prekey we never published. Anyone able to inject a stanza can produce
  *   these, so they never trigger session repair.
- * - `session-broken`: there is no usable session, or the ratchet cannot follow
- *   the sender (a gap beyond the skipped-key limit): a real desynchronisation.
+ *   A counter gap beyond the skipped-key limit is read before the MAC, so it is also malformed.
+ * - `session-broken`: there is no session for the sender and the message is not a key exchange.
  */
 export type OmemoErrorCode = 'duplicate' | 'not-addressed' | 'malformed' | 'session-broken'
 

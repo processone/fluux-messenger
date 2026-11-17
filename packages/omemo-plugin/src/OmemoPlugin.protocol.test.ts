@@ -364,6 +364,26 @@ describe('sending only to the identity that backs the session', () => {
   })
 })
 
+describe('send authorization at key wrapping', () => {
+  it('refuses a device whose stored session is under a different key than the one authorized', async () => {
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const { fingerprint } = await import('@fluux/omemo')
+    const hexOf = (u: Uint8Array) => [...fingerprint(u)].map((b) => b.toString(16).padStart(2, '0')).join('')
+    const original = (await fetchBundle(alice.c.ctx.xmpp, 'bob@x', bob.deviceId))!
+    // A session for Bob's device exists, but it was built from another identity's bundle
+    // (a replacement whose trust write never landed): the record still names the verified key.
+    const imposter = await OmemoAccount.create(new MemoryStore(), (n) => crypto.getRandomValues(new Uint8Array(n)))
+    const aliceStore = new PluginStorageOmemoStore(alice.c.ctx.storage)
+    const acc = await OmemoAccount.create(aliceStore, (n) => crypto.getRandomValues(new Uint8Array(n)))
+    await acc.processBundle('bob@x', bob.deviceId, await imposter.publishableBundleAsync())
+    await aliceStore.saveTrust('bob@x', bob.deviceId, { state: 'undecided', identityKey: original.ik })
+    await setVerified(alice.c.ctx.storage, 'bob@x', bob.deviceId, hexOf(original.ik))
+
+    await expect(send(alice, 'bob@x', 'secret')).rejects.toThrow(/no usable OMEMO devices/)
+  })
+})
+
 describe('bundle publication', () => {
   it('keeps the bundle dirty when a republish fails and retries it on the next decrypt', async () => {
     const alice = await ready('alice@x')

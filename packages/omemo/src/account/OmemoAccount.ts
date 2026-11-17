@@ -37,6 +37,7 @@ interface SessionMeta {
   spkId?: number
   ek?: number[] // ephemeral pub, initiator side, while kexPending
   peerEk?: number[] // ephemeral pub of the key exchange that created this session, responder side
+  rejectedEks?: number[][] // ephemeral pubs of crossed initiations this session won against
 }
 
 /** Session record = [u32 metaLen][meta JSON][ratchet blob]. */
@@ -228,7 +229,11 @@ export class OmemoAccount {
    * Empty `content` is a key-transport message (XEP-0384): the ratchet carries 32 zero bytes
    * and the message has no payload.
    */
-  encrypt(recipients: Array<{ jid: string; deviceIds: number[] }>, content: Uint8Array): Promise<OmemoMessage> {
+  encrypt(
+    recipients: Array<{ jid: string; deviceIds: number[] }>,
+    content: Uint8Array,
+    opts?: { authorize?: (jid: string, rid: number, identityKey: Uint8Array) => Promise<boolean> },
+  ): Promise<OmemoMessage> {
     return this.serialize(async () => {
       let keyAndHmac: Uint8Array
       let payload: Uint8Array | undefined
@@ -247,6 +252,10 @@ export class OmemoAccount {
           const stored = await this.store.loadSession(jid, rid)
           if (!stored) throw new Error(`no session for ${jid}/${rid}; call processBundle first`)
           const { meta, ratchet } = unpackSession(stored)
+          // Authorize against the identity that actually backs THIS session, read inside the
+          // serialized operation, so a session replaced or re-bound since the caller checked
+          // trust is never wrapped for. A refused device is skipped without advancing its ratchet.
+          if (opts?.authorize && !(await opts.authorize(jid, rid, this.peerKeyFromAd(Uint8Array.from(meta.ad))))) continue
           const state = deserializeRatchet(ratchet)
           state.rng = this.rng // re-inject real rng before any ratchet step (fail-loud stub otherwise)
           const ad = Uint8Array.from(meta.ad)
@@ -351,8 +360,10 @@ export class OmemoAccount {
       existing !== undefined &&
       !continuesExisting &&
       kex !== undefined &&
-      existing.meta.kexPending &&
-      compareBytes(kex.ik, this.id.edPub) < 0
+      ((existing.meta.kexPending && compareBytes(kex.ik, this.id.edPub) < 0) ||
+        // A later message of a handshake this session already won against: our reply may have
+        // cleared kexPending, but the losing exchange stays rejected.
+        (existing.meta.rejectedEks ?? []).some((ek) => bytesEqual(Uint8Array.from(ek), kex.ek)))
     const persist = !opts?.archive && !crossedAndLost
 
     let state: RatchetState
@@ -403,7 +414,8 @@ export class OmemoAccount {
         if (e.code === 'duplicate') throw new OmemoError('duplicate', e.message, senderIdentityKey)
         throw e
       }
-      throw new OmemoError('session-broken', e instanceof Error ? e.message : 'ratchet failure')
+      // Counter gaps and header oddities are read before the MAC, so anyone can produce them.
+      throw new OmemoError('malformed', e instanceof Error ? e.message : 'ratchet failure')
     }
     const keyAndHmac = result.plaintext
     if (keyAndHmac.length !== (msg.payload ? 48 : 32)) {
@@ -424,6 +436,12 @@ export class OmemoAccount {
       }
     }
 
+    if (crossedAndLost && !opts?.archive && existing && kex) {
+      // Authenticated: remember the rejected handshake next to the session that won.
+      const rejected = [...(existing.meta.rejectedEks ?? []), [...kex.ek]].slice(-8)
+      const kept: SessionMeta = { ...existing.meta, rejectedEks: rejected }
+      await this.store.saveSession(senderJid, sid, packSession(kept, existing.ratchet))
+    }
     if (persist) {
       // Receiving any message clears our kex-pending flag (peer now has our session).
       meta.kexPending = false
