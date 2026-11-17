@@ -100,7 +100,7 @@ export function withCorrectionStanzaId(existing: string[] | undefined, stanzaId:
   return existing?.includes(stanzaId) ? existing : [...(existing ?? []), stanzaId]
 }
 
-export type CorrectionAlternative = Partial<Pick<Message, 'references' | 'body' | 'originalBody' | 'attachment' | 'securityContext' | 'encryptedPayload' | 'unsupportedEncryption' | 'isEdited'>> &
+export type CorrectionAlternative = Partial<Pick<Message, 'references' | 'body' | 'originalBody' | 'attachment' | 'securityContext' | 'encryptedPayload' | 'contentAvailability' | 'unsupportedEncryption' | 'isEdited'>> &
   Pick<MessageImplState, 'correctionRevision' | 'correctionTimestamp' | 'correctionTimestampSource' | 'correctionStanzaIds'>
 
 export type CorrectionUpdates = MessageImplState & CorrectionAlternative & { isEdited?: boolean; isRetracted?: boolean; encryptedPayload?: string; from?: string; occupantId?: string }
@@ -202,7 +202,7 @@ export function correctionContent(message: CorrectionUpdates): CorrectionAlterna
   return {
     references: message.references,
     body: message.body, originalBody: message.originalBody, attachment: message.attachment,
-    securityContext: message.securityContext, encryptedPayload: message.encryptedPayload,
+    securityContext: message.securityContext, encryptedPayload: message.encryptedPayload, contentAvailability: message.contentAvailability,
     unsupportedEncryption: message.unsupportedEncryption, isEdited: message.isEdited,
     correctionRevision: message.correctionRevision, correctionTimestamp: message.correctionTimestamp,
     correctionTimestampSource: message.correctionTimestampSource, correctionStanzaIds: message.correctionStanzaIds,

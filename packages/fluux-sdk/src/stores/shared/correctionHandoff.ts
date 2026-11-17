@@ -28,6 +28,7 @@ export function reconcileCorrectionHandoff<T extends Row>(held: T | undefined, i
     originalBody: incoming.originalBody,
     attachment: incoming.attachment,
     encryptedPayload: incoming.encryptedPayload,
+    contentAvailability: incoming.contentAvailability,
     unsupportedEncryption: incoming.unsupportedEncryption,
     securityContext: incoming.securityContext,
     correctionTimestamp: incoming.correctionTimestamp,
@@ -51,7 +52,7 @@ export function reconcileCorrectionHandoff<T extends Row>(held: T | undefined, i
   return result.isRetracted ? {
     ...result, body: '', references: undefined, originalBody: undefined, attachment: undefined,
     linkPreview: undefined, poll: undefined, pollClosed: undefined,
-    encryptedPayload: undefined, unsupportedEncryption: undefined, correctionAlternatives: undefined,
+    encryptedPayload: undefined, contentAvailability: undefined, unsupportedEncryption: undefined, correctionAlternatives: undefined,
   } : result
 }
 

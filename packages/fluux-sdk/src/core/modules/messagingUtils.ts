@@ -12,7 +12,7 @@
 import type { MessageImplState } from '../types/message-internal'
 import { Element, xml } from '@xmpp/client'
 import { getBareJid } from '../jid'
-import { readStashedEncryptedPayload } from '../e2ee/stanzaDecrypt'
+import { readStashedEncryptedPayload, readStashedContentAvailability } from '../e2ee/stanzaDecrypt'
 import {
   NS_DELAY,
   NS_REFERENCE,
@@ -27,7 +27,7 @@ import {
   NS_RETRACT,
   NS_CORRECTION,
 } from '../namespaces'
-import type { MessageReference, FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
+import type { Message, MessageReference, FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
 import { processFallback } from '../../utils/fallbackUtils'
 import { CHAT_FALLBACK_TARGETS, ROOM_FALLBACK_TARGETS } from '../../utils/fallbackRegistry'
 import { isAesgcmUri, parse as parseAesgcmUri } from './AesgcmUri'
@@ -582,6 +582,7 @@ export interface CorrectionResult extends MessageImplState {
    * isn't re-decrypted on top of the applied correction.
    */
   encryptedPayload?: string
+  contentAvailability?: Message['contentAvailability']
 }
 
 /**
@@ -620,6 +621,7 @@ export function applyCorrection(
     // otherwise) so callers can unconditionally stamp/clear the target's
     // encryptedPayload — see CorrectionResult.encryptedPayload.
     encryptedPayload: readStashedEncryptedPayload(messageEl),
+    contentAvailability: readStashedContentAvailability(messageEl),
   }
 }
 

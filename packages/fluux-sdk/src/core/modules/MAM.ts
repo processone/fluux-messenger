@@ -105,6 +105,7 @@ import {
   deriveConversationContext,
   readStashedAuthoredAt,
   readStashedEncryptedPayload,
+  readStashedContentAvailability,
   readStashedSecurityContext,
   readStashedUnsupportedEncryption,
   recordUnclaimedEME,
@@ -3198,6 +3199,7 @@ export class MAM extends BaseModule {
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(securityContext && { securityContext }),
+      contentAvailability: readStashedContentAvailability(messageEl),
       ...(encryptedPayload && { encryptedPayload }),
       ...(unsupportedEncryption && { unsupportedEncryption }),
     }
@@ -3333,6 +3335,7 @@ export class MAM extends BaseModule {
       ...(parsed.attachment && { attachment: parsed.attachment }),
       occupantId: occupantId || undefined,
       ...(roomSecurityContext && { securityContext: roomSecurityContext }),
+      contentAvailability: readStashedContentAvailability(messageEl),
       ...(roomEncryptedPayload && { encryptedPayload: roomEncryptedPayload }),
       ...(roomUnsupportedEncryption && { unsupportedEncryption: roomUnsupportedEncryption }),
     }

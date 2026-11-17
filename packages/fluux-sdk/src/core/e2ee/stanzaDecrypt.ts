@@ -18,6 +18,7 @@ import { createBadgeMessageKey } from '../../diagnostics/badgeIdentity'
  * - stash the resulting security context on the stanza so downstream
  *   parsers can attach it to the emitted {@link Message}.
  */
+import type { BaseMessage } from '../types/message-base'
 import { publishDiagnostic, type BadgeDecisionDiagnostic } from '../../diagnostics/channel'
 import { getStorageScopeJid } from '../../utils/storageScope'
 import { xml } from '@xmpp/client'
@@ -132,6 +133,7 @@ const DECRYPTED_MARKER = '__e2eeDecrypted'
 const SECURITY_CONTEXT_STASH = '__securityContext'
 const AUTHORED_AT_STASH = '__authoredAt'
 const ENCRYPTED_PAYLOAD_STASH = '__encryptedPayload'
+const CONTENT_AVAILABILITY_STASH = '__contentAvailability'
 
 /**
  * Result of {@link decryptStanzaInPlace}. `attempted` is true whenever a
@@ -141,6 +143,7 @@ const ENCRYPTED_PAYLOAD_STASH = '__encryptedPayload'
  */
 export interface DecryptInPlaceResult {
   attempted: boolean
+  contentAvailability?: BaseMessage['contentAvailability']
   securityContext?: SecurityContext
   /**
    * Sender-attested composition time recovered from inside the decrypted
@@ -206,7 +209,7 @@ export async function decryptStanzaInPlace(
   manager: E2EEManager,
   senderPeer: string,
   source: InboundSource = 'live',
-  options?: { isSelfOutgoing?: boolean; archiveTimestamp?: Date; entityKind?: 'chat' | 'room' },
+  options?: { isSelfOutgoing?: boolean; archiveTimestamp?: Date; entityKind?: 'chat' | 'room'; onDecryptStart?: () => void },
 ): Promise<DecryptInPlaceResult> {
   // Observe the existing claim/decrypt path without calling plugins again or
   // adding another asynchronous layer around their result.
@@ -222,10 +225,12 @@ export async function decryptStanzaInPlace(
     [DECRYPTED_MARKER]?: boolean
     [SECURITY_CONTEXT_STASH]?: SecurityContext
     [AUTHORED_AT_STASH]?: Date
+    [CONTENT_AVAILABILITY_STASH]?: BaseMessage['contentAvailability']
   }
   if (marked[DECRYPTED_MARKER]) {
     return {
       attempted: true,
+      contentAvailability: readStashedContentAvailability(stanza),
       ...(marked[SECURITY_CONTEXT_STASH] && {
         securityContext: marked[SECURITY_CONTEXT_STASH],
       }),
@@ -263,6 +268,7 @@ export async function decryptStanzaInPlace(
   }
 
   report('decrypt-start', 'pending')
+  options?.onDecryptStart?.()
 
   // Serialize BEFORE any mutation — the encrypted element will be stripped
   // below regardless of success/failure. The full stanza is what gets
@@ -279,6 +285,7 @@ export async function decryptStanzaInPlace(
   // `failureReason` so both failure paths below can bucket it for display and
   // the diagnostic log can record it verbatim.
   let failureCode: string | undefined
+  let prerequisiteWaiting = false
   // Set when the failure is a structurally malformed payload (not valid
   // OpenPGP): it will never decrypt regardless of keys, so it is terminal —
   // do NOT stash for retry. Distinct from a signature rejection.
@@ -336,6 +343,8 @@ export async function decryptStanzaInPlace(
   } catch (err) {
     failureReason = err instanceof Error ? err.message : String(err)
     failureCode = isE2EEPluginError(err) ? err.code : undefined
+    prerequisiteWaiting = isE2EEPluginError(err) && err.kind === 'transient' &&
+      ['key-locked', 'timeout', 'server-unreachable', 'server-error', 'signature-not-yet-valid'].includes(err.code)
     if (isE2EEPluginError(err) && (err.code === 'signature-failed' || err.code === 'signature-missing')) {
       securityContext = {
         protocolId: claim.plugin.descriptor.id,
@@ -479,6 +488,11 @@ export async function decryptStanzaInPlace(
     stashPayload(stanza, originalStanzaXml)
   }
 
+  const contentAvailability: BaseMessage['contentAvailability'] =
+    failureReason !== null || securityContext?.trust === 'rejected'
+      ? prerequisiteWaiting ? { state: 'waiting' } : { state: 'failed', reason: securityContext?.failureReason ?? 'unreadable' }
+      : { state: needsDeferredVerification ? 'verification' : 'ready' }
+  marked[CONTENT_AVAILABILITY_STASH] = contentAvailability
   if (securityContext) {
     marked[SECURITY_CONTEXT_STASH] = securityContext
   }
@@ -490,6 +504,7 @@ export async function decryptStanzaInPlace(
 
   return {
     attempted: true,
+    contentAvailability,
     ...(securityContext && { securityContext }),
     ...(authoredAt && { authoredAt }),
     ...((failureReason !== null && !terminalFailure && !sessionNeedsRepair && securityContext?.trust !== 'rejected' || needsDeferredVerification) && {
@@ -786,6 +801,12 @@ export function readStashedSecurityContext(
  */
 export function readStashedAuthoredAt(stanza: Element): Date | undefined {
   return (stanza as unknown as { [AUTHORED_AT_STASH]?: Date })[AUTHORED_AT_STASH]
+}
+
+/** Settled availability, with legacy deferred ciphertext classified as waiting. */
+export function readStashedContentAvailability(stanza: Element): BaseMessage['contentAvailability'] {
+  return (stanza as unknown as Record<string, BaseMessage['contentAvailability']>)[CONTENT_AVAILABILITY_STASH]
+    ?? (readStashedEncryptedPayload(stanza) ? { state: 'waiting' } : undefined)
 }
 
 /**

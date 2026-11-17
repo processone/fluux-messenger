@@ -5,7 +5,26 @@ import { formatMessagePreview, type BaseMessage, type DecryptFailureReason } fro
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string
 
 type PreviewMessage = Parameters<typeof formatMessagePreview>[0] &
-  Pick<BaseMessage, 'isRetracted' | 'isModerated' | 'moderationReason' | 'unsupportedEncryption' | 'encryptedPayload' | 'securityContext'>
+  Pick<BaseMessage, 'isRetracted' | 'isModerated' | 'moderationReason' | 'unsupportedEncryption' | 'encryptedPayload' | 'securityContext' | 'contentAvailability'>
+
+export interface PreviewEncryptionState {
+  decrypting: boolean
+  locked: boolean
+  enabled: boolean
+}
+
+/** Conversation-list policy only; other preview surfaces keep their existing policy. */
+export function conversationDecryptionKey(message: PreviewMessage, state: PreviewEncryptionState): string | undefined {
+  if (message.isRetracted || isSpamModerated(message) || message.unsupportedEncryption) return undefined
+  if (message.encryptedPayload) {
+    if (message.contentAvailability?.state === 'verification') return 'chat.encryption.previewVerification'
+    if (!state.enabled) return 'chat.encryption.previewDisabled'
+    if (state.locked) return 'chat.encryption.previewLocked'
+    if (state.decrypting) return 'chat.encryption.previewDecrypting'
+  }
+  if (message.contentAvailability?.state === 'failed') return decryptFailureKey(message.contentAvailability.reason)
+  return message.encryptedPayload ? 'chat.encryption.previewWaiting' : undefined
+}
 
 /**
  * Localized last-message preview / notification text.
@@ -18,8 +37,9 @@ type PreviewMessage = Parameters<typeof formatMessagePreview>[0] &
  *     deleted; and a bodiless retraction would collapse to an empty preview.
  *     Ordinary retractions read "message deleted". Moderated Spam is hidden
  *     under the same policy as the conversation timeline.
- *  2. **Pending decryption.** Use the same localized failure reason as the
- *     message bubble instead of exposing the SDK fallback body.
+ *  2. **Encrypted content.** Conversation rows pass explicit account/activity
+ *     state for status wording. Other callers retain the message-bubble failure
+ *     policy. Neither policy exposes a sender-supplied fallback as plaintext.
  *  3. **Unsupported-encryption messages.** The plaintext fallback body is chosen
  *     by the sender's client (e.g. "You received a message encrypted with
  *     OMEMO…"), so it reads like a real message. This keeps preview surfaces
@@ -38,11 +58,14 @@ type PreviewMessage = Parameters<typeof formatMessagePreview>[0] &
  * It stays in the app rather than in the SDK's `formatMessagePreview` because
  * only the app has `t`; the SDK formatter remains localization-free.
  */
-export function formatLocalizedPreview(message: PreviewMessage, t: TranslateFn): string {
+export function formatLocalizedPreview(message: PreviewMessage, t: TranslateFn, encryption?: PreviewEncryptionState): string {
   if (isSpamModerated(message)) return ''
   if (message.isRetracted) return t('chat.messageDeleted')
 
-  if (message.encryptedPayload) return t(decryptFailureKey(message.securityContext?.failureReason))
+  if (encryption) {
+    const status = conversationDecryptionKey(message, encryption)
+    if (status) return t(status)
+  } else if (message.encryptedPayload) return t(decryptFailureKey(message.securityContext?.failureReason))
 
   const unsupported = message.unsupportedEncryption
   if (unsupported) {

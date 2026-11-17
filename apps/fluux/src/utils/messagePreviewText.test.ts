@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatLocalizedPreview } from './messagePreviewText'
+import { conversationDecryptionKey, formatLocalizedPreview } from './messagePreviewText'
 
 // Fake t: encodes key + interpolation so we can assert both without real i18n.
 const t = (key: string, options?: Record<string, unknown>) =>
@@ -109,5 +109,38 @@ describe('formatLocalizedPreview', () => {
         formatLocalizedPreview({ body: '', isRetracted: false, ...(message as Record<string, unknown>) }, t),
       ).toBe(expected)
     })
+  })
+})
+
+// Status wording is confined to the conversation list. Other callers retain
+// their existing policy; never surface the sender's fallback while waiting.
+describe('conversation-list content availability', () => {
+  const available = { enabled: true, locked: false, decrypting: false }
+  const encrypted = { body: 'Sender-controlled fallback', encryptedPayload: '<openpgp/>' }
+  it.each([
+    [available, 'previewWaiting'],
+    [{ ...available, decrypting: true }, 'previewDecrypting'],
+    [{ ...available, locked: true, decrypting: true }, 'previewLocked'],
+    [{ ...available, enabled: false }, 'previewDisabled'],
+  ])('uses established account availability %j', (state, key) => {
+    expect(formatLocalizedPreview(encrypted, t, state)).toBe(`chat.encryption.${key}`)
+  })
+  it('keeps verification waiting separate and hides unapproved plaintext', () => {
+    expect(formatLocalizedPreview({ ...encrypted, contentAvailability: { state: 'verification' } }, t, { ...available, decrypting: true }))
+      .toBe('chat.encryption.previewVerification')
+  })
+  it.each(['key-unavailable', 'signature-invalid', 'unreadable'] as const)('preserves completed %s failures with or without retained ciphertext', reason => {
+    const failed = { ...encrypted, contentAvailability: { state: 'failed' as const, reason },
+      securityContext: { protocolId: 'openpgp', trust: 'untrusted' as const, failureReason: reason } }
+    const expected = formatLocalizedPreview(failed, t)
+    expect(formatLocalizedPreview(failed, t, available)).toBe(expected)
+    expect(formatLocalizedPreview({ ...failed, encryptedPayload: undefined }, t, available)).toBe(expected)
+    expect(formatLocalizedPreview(failed, t, { ...available, decrypting: true })).toBe('chat.encryption.previewDecrypting')
+  })
+  it('preserves deletion and moderation precedence even during active work', () => {
+    const active = { ...available, decrypting: true }
+    expect(formatLocalizedPreview({ ...encrypted, isRetracted: true }, t, active)).toBe('chat.messageDeleted')
+    expect(formatLocalizedPreview({ ...encrypted, isRetracted: true, isModerated: true, moderationReason: 'Spam' }, t, active)).toBe('')
+    expect(conversationDecryptionKey({ ...encrypted, isRetracted: true }, active)).toBeUndefined()
   })
 })

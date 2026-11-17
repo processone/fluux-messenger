@@ -1,4 +1,4 @@
-import { afterEach, describe, it, expect, vi } from 'vitest'
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
 import { chatStore, type Message } from '@fluux/sdk'
 import { useStore } from 'zustand'
@@ -27,6 +27,8 @@ vi.mock('../Avatar', () => ({
   TypingIndicator: () => <span data-testid="typing-dot" />,
 }))
 
+vi.mock('../RoomAvatar', () => ({ RoomAvatar: () => <div data-testid="room-avatar" /> }))
+
 vi.mock('../Tooltip', () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
@@ -45,25 +47,55 @@ vi.mock('@fluux/sdk/react', () => ({
     selector({ getRoom: () => undefined }),
 }))
 
+import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
+import { beginDecryptionActivity } from '../../../../../packages/fluux-sdk/src/core/e2ee/decryptionActivity'
+
+vi.mock('@/hooks/useWebKeyLocked', () => ({ useWebKeyLocked: () => false }))
+
 import { ConversationItem } from './ConversationList'
 
 describe('ConversationItem encrypted preview recovery', () => {
+  beforeEach(() => { useEncryptionSettingsStore.setState({ openpgpEnabled: true, pluginRegisteredAt: 0 }) })
   afterEach(() => { act(() => chatStore.getState().reset()) })
 
-  it('updates the mounted row when a MAM preview resolves at the same timestamp', () => {
+  it.each(['chat', 'groupchat'] as const)('updates the shared archived %s row when a MAM preview resolves at the same timestamp', (type) => {
     const id = 'preview@example.test'
     const encrypted: Message = {
       type: 'chat', id: 'm1', stanzaId: undefined, originId: undefined,
       conversationId: id, from: id, body: '[Encrypted message: could not decrypt]',
       timestamp: new Date(), isOutgoing: false, encryptedPayload: '<openpgp/>',
     }
-    chatStore.getState().addConversation({ id, name: 'Preview fixture', type: 'chat', unreadCount: 0, lastMessage: encrypted })
+    chatStore.getState().addConversation({ id, name: 'Preview fixture', type, unreadCount: 0, lastMessage: encrypted })
+    chatStore.getState().archiveConversation(id)
     render(<ConversationItem conversationId={id} isActive={false} onClick={() => {}} />)
-    expect(screen.getByText('chat.encryption.couldNotDecryptUnreadable')).toBeInTheDocument()
+    expect(screen.getByText('chat.encryption.previewWaiting')).toBeInTheDocument()
+    act(() => useEncryptionSettingsStore.setState({ pluginRegisteredAt: 1 }))
+    expect(screen.getByText('chat.encryption.previewWaiting')).toBeInTheDocument()
+    let finish!: () => void
+    act(() => { finish = beginDecryptionActivity(id, encrypted) })
+    expect(screen.getByText('chat.encryption.previewDecrypting')).toBeInTheDocument()
+    act(() => finish())
+    expect(screen.getByText('chat.encryption.previewWaiting')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(screen.queryByText(encrypted.body)).not.toBeInTheDocument()
 
     act(() => chatStore.getState().updateLastMessagePreview(id, { ...encrypted, body: 'Recovered content', encryptedPayload: undefined }))
     expect(screen.getByText('Recovered content')).toBeInTheDocument()
     expect(screen.queryByText('chat.encryption.couldNotDecryptUnreadable')).not.toBeInTheDocument()
+  })
+
+  it('keeps the draft ahead of an active encrypted preview', () => {
+    const id = 'draft@example.test'
+    const message: Message = { type: 'chat', id: 'draft-preview', stanzaId: undefined, originId: undefined,
+      conversationId: id, from: id, body: '[dummy-plaintext payload]', timestamp: new Date(),
+      isOutgoing: false, encryptedPayload: '<plain xmlns="urn:fluux:e2ee-dummy:0">aGVsbG8=</plain>' }
+    chatStore.getState().addConversation({ id, name: 'Draft fixture', type: 'chat', unreadCount: 2, lastMessage: message })
+    chatStore.getState().setDraft(id, 'Message draft')
+    const finish = beginDecryptionActivity(id, message)
+    render(<ConversationItem conversationId={id} isActive={false} onClick={() => {}} />)
+    expect(screen.getByText('conversations.draft: Message draft')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    act(() => finish())
+    expect(chatStore.getState().conversations.get(id)?.unreadCount).toBe(2)
   })
 })

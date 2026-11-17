@@ -1,15 +1,19 @@
-import React, { useState, useRef, memo } from 'react'
+import React, { useState, useRef, memo, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { useListKeyboardNav, useRouteSync } from '@/hooks'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
 import {
   chatStore,
+  subscribeDecryptionActivity,
+  isMessageDecrypting,
   roomStore,
   isPreviewableMessage,
   type Conversation,
 } from '@fluux/sdk'
-import { formatLocalizedPreview } from '@/utils/messagePreviewText'
+import { useWebKeyLocked } from '@/hooks/useWebKeyLocked'
+import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
+import { conversationDecryptionKey, formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { shouldReplaceOnSelect } from '@/utils/navigationHistory'
 import { useChatStore, useConnectionStore, useRosterStore, useRoomStore } from '@fluux/sdk/react'
 import { Avatar, TypingIndicator } from '../Avatar'
@@ -20,7 +24,7 @@ import { formatConversationTime } from '@/utils/dateFormat'
 import { useDayChange } from '@/hooks/useDayChange'
 import { AvatarUnreadBadge } from './AvatarUnreadBadge'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { Trash2, Archive, ArchiveRestore, MessageCircle } from 'lucide-react'
+import { Trash2, Archive, ArchiveRestore, MessageCircle, Loader2 } from 'lucide-react'
 import { ListEmpty } from '../ui/ListEmpty'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { MessageRequestsBanner } from './MessageRequestsBanner'
@@ -240,6 +244,13 @@ export const ConversationItem = memo(function ConversationItem({
   const typingCount = useChatStore((s) => s.typingStates.get(conversationId)?.size ?? 0)
   const isTyping = typingCount > 0
   const draft = useChatStore((s) => s.drafts.get(conversationId))
+  const locked = useWebKeyLocked()
+  const enabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
+  const decrypting = useSyncExternalStore(subscribeDecryptionActivity,
+    () => isMessageDecrypting(conversationId, conversation?.lastMessage), () => false)
+  const encryption = { decrypting, locked, enabled }
+  const previewStatus = conversation?.lastMessage && conversationDecryptionKey(conversation.lastMessage, encryption)
+  const activeDecrypt = previewStatus === 'chat.encryption.previewDecrypting'
 
   // Re-render when the local day rolls over: this row's timestamp label is relative
   // ("Yesterday" / a time-of-day for today), and the row is memoized, so nothing
@@ -329,8 +340,9 @@ export const ConversationItem = memo(function ConversationItem({
             // carries a timestamp for ordering; it just shows no preview text
             // until a real message supersedes it.
             <p dir="auto" className={`truncate text-xs opacity-75 ${conversation.lastMessage.isRetracted ? 'italic' : ''}`}>
+              {activeDecrypt && <Loader2 className="inline size-3 me-1 align-text-bottom motion-safe:animate-spin" aria-hidden="true" />}
               {conversation.lastMessage.isOutgoing ? `${t('chat.me')}: ` : ''}
-              {formatLocalizedPreview(conversation.lastMessage, t)}
+              <span>{formatLocalizedPreview(conversation.lastMessage, t, encryption)}</span>
             </p>
           )}
         </div>

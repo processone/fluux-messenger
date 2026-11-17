@@ -1,3 +1,4 @@
+import { beginDecryptionActivity } from './decryptionActivity'
 import { badgeMessageKey } from '../../diagnostics/badgeIdentity'
 /**
  * Deferred-decrypt engine.
@@ -47,7 +48,9 @@ type RetryModification = ArchiveSignal['effect']
  * - `rejected`: signature is invalid (final, never retryable) — a real message placeholder is
  *   replaced with a "[Message rejected]" body; a bodiless-signal placeholder (forged reaction/
  *   retraction) is removed entirely so it never surfaces as a ghost bubble.
- * - `pending`: still cannot decrypt (key locked / plugin not ready), an unverified signal
+ * - `unavailable`: a completed attempt reports waiting or failed availability.
+ *   Terminal failures clear the stash without changing the existing timeline placeholder.
+ * - `pending`: plugin not ready, an interrupted attempt, an unverified signal
  *   waits for its signature check, or the message already shows this unverified text —
  *   leave `encryptedPayload`.
  */
@@ -57,6 +60,21 @@ type RetryOutcome =
   | { kind: 'unsupported'; info: { namespace: string; name: string } }
   | { kind: 'rejected'; securityContext?: MessageSecurityContext }
   | { kind: 'pending' }
+  | { kind: 'unavailable'; contentAvailability: NonNullable<Message['contentAvailability']>; clearPayload?: true; securityContext?: MessageSecurityContext }
+
+function unavailableUpdates(message: Pick<Message, 'contentAvailability'>, outcome: Extract<RetryOutcome, { kind: 'unavailable' }>): Partial<Pick<Message, 'contentAvailability' | 'encryptedPayload' | 'body' | 'securityContext'>> | undefined {
+  const previous = message.contentAvailability
+  const next = outcome.contentAvailability
+  if (!outcome.clearPayload && previous?.state === next.state &&
+      (previous.state !== 'failed' || next.state !== 'failed' || previous.reason === next.reason)) return undefined
+  return {
+    contentAvailability: outcome.contentAvailability,
+    ...(outcome.clearPayload && {
+      encryptedPayload: undefined, body: COULD_NOT_DECRYPT_BODY,
+      ...(outcome.securityContext && { securityContext: outcome.securityContext }),
+    }),
+  }
+}
 
 /**
  * Message-cache port — the durable IndexedDB slice the engine repairs for
@@ -137,6 +155,7 @@ function recoveredUpdates(
   accountScope: string | null,
 ) {
   return guardedUpdates(message, {
+    contentAvailability: { state: outcome.unverified ? 'verification' as const : 'ready' as const },
     body: outcome.body,
     references: outcome.references,
     ...(outcome.securityContext && { securityContext: outcome.securityContext }),
@@ -264,6 +283,15 @@ export class DeferredDecryptEngine {
         if (accountChanged()) return decryptedCount
         if (this.correctionRecoveries.get(key) !== request) continue
         if (!request.isCurrent()) { this.correctionRecoveries.delete(key); continue }
+        if (outcome.kind === 'unavailable') {
+          if (outcome.clearPayload) this.correctionRecoveries.delete(key)
+          const updates = unavailableUpdates(message, outcome)
+          if (updates) {
+            request.apply(guardedUpdates(message, updates, accountScope))
+            request.message = { ...message, ...updates }
+          }
+          continue
+        }
         if (outcome.kind === 'pending') continue
         this.correctionRecoveries.delete(key)
         if (outcome.kind === 'decrypted') {
@@ -272,7 +300,7 @@ export class DeferredDecryptEngine {
         } else if (outcome.kind === 'unsupported') {
           request.apply(guardedUpdates(message, { encryptedPayload: undefined, unsupportedEncryption: outcome.info }, accountScope))
         } else {
-          request.apply(guardedUpdates(message, { encryptedPayload: undefined, body: MESSAGE_REJECTED_BODY,
+          request.apply(guardedUpdates(message, { encryptedPayload: undefined, contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, body: MESSAGE_REJECTED_BODY,
             ...(outcome.kind === 'rejected' && { securityContext: outcome.securityContext }) }, accountScope))
         }
       }
@@ -296,6 +324,9 @@ export class DeferredDecryptEngine {
           if (outcome.kind === 'decrypted') {
             chatBindings.updateMessage(conversationId, msg, recoveredUpdates(msg, outcome, accountScope))
             decryptedCount++
+          } else if (outcome.kind === 'unavailable') {
+            const updates = unavailableUpdates(msg, outcome)
+            if (updates) chatBindings.updateMessage(conversationId, msg, guardedUpdates(msg, updates, accountScope))
           } else if (outcome.kind === 'modification') {
             if (!await this.dropChatPlaceholder(conversationId, msg, stores, accountScope, accountChanged, outcome)) continue
             if (accountChanged()) return decryptedCount
@@ -331,11 +362,15 @@ export class DeferredDecryptEngine {
             roomBindings.updateMessage(roomJid, msg.id, recoveredUpdates(msg, outcome, accountScope))
             decryptedCount++
             roomsToRecount.add(roomJid)
+          } else if (outcome.kind === 'unavailable') {
+            const updates = unavailableUpdates(msg, outcome)
+            if (updates) roomBindings.updateMessage(roomJid, msg.id, guardedUpdates(msg, updates, accountScope))
+            if (outcome.clearPayload) roomsToRecount.add(roomJid)
           } else if (outcome.kind === 'rejected') {
             // MUC carries no encrypted bodiless signals, so a rejected room
             // message always has real content — warn the user and clear the stash.
             roomBindings.updateMessage(roomJid, msg.id, guardedUpdates(msg, {
-              body: MESSAGE_REJECTED_BODY,
+              contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, body: MESSAGE_REJECTED_BODY,
               ...(outcome.securityContext && { securityContext: outcome.securityContext }),
               encryptedPayload: undefined,
             }, accountScope))
@@ -396,6 +431,18 @@ export class DeferredDecryptEngine {
           // message]" fallback. Heal it when this message IS the preview.
           stores.chat.refreshLastMessageContent?.(conversationId, msg, updates)
           decryptedCount++
+        } else if (outcome.kind === 'unavailable') {
+          const unavailable = unavailableUpdates(msg, outcome)
+          if (!unavailable) continue
+          const updates = guardedUpdates(msg, unavailable, accountScope)
+          await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from, accountScope, msg.cacheKey)
+          if (accountChanged()) return decryptedCount
+          if (outcome.clearPayload) {
+            await this.deps.updateSearchIndex({ ...msg, ...updates }, accountScope)
+              .catch(error => logWarn(`Failed to index recovered message: ${String(error)}`))
+            if (accountChanged()) return decryptedCount
+          }
+          stores.chat.refreshLastMessageContent?.(conversationId, msg, updates)
         } else if (outcome.kind === 'modification') {
           if (!await this.dropChatPlaceholder(conversationId, msg, stores, accountScope, accountChanged, outcome)) continue
           if (accountChanged()) return decryptedCount
@@ -406,7 +453,7 @@ export class DeferredDecryptEngine {
             if (accountChanged()) return decryptedCount
           } else {
             const updates = guardedUpdates(msg, {
-              body: MESSAGE_REJECTED_BODY,
+              contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, body: MESSAGE_REJECTED_BODY,
               ...(outcome.securityContext && { securityContext: outcome.securityContext }),
               encryptedPayload: undefined,
             }, accountScope)
@@ -452,6 +499,9 @@ export class DeferredDecryptEngine {
         if (outcome.kind === 'decrypted') {
           chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, recoveredUpdates(lastMessage, outcome, accountScope))
           decryptedCount++
+        } else if (outcome.kind === 'unavailable') {
+          const updates = unavailableUpdates(lastMessage, outcome)
+          if (updates) chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, guardedUpdates(lastMessage, updates, accountScope))
         } else if (outcome.kind === 'modification') {
           // Until decrypted, an outgoing signal can carry a fallback body and
           // become the preview even though it has no row in loaded history.
@@ -467,12 +517,12 @@ export class DeferredDecryptEngine {
           // A preview is always a real previewable message (bodiless-signal
           // placeholders are never previewable), so warn with the rejected body.
           chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, guardedUpdates(lastMessage, {
-            body: MESSAGE_REJECTED_BODY,
+            contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, body: MESSAGE_REJECTED_BODY,
             ...(outcome.securityContext && { securityContext: outcome.securityContext }),
             encryptedPayload: undefined,
           }, accountScope))
         }
-        // 'pending' means the key is still locked — leave the stash for a later pass.
+        // Pending and retained unavailable outcomes leave the stash for a later pass.
       }
 
       if (decryptedCount > 0) {
@@ -565,7 +615,7 @@ export class DeferredDecryptEngine {
     accountScope: string | null,
   ): void {
     chatBindings.updateMessage(conversationId, placeholder, guardedUpdates(placeholder, {
-      body: MESSAGE_REJECTED_BODY,
+      contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, body: MESSAGE_REJECTED_BODY,
       ...(securityContext && { securityContext }),
       encryptedPayload: undefined,
     }, accountScope))
@@ -589,6 +639,7 @@ export class DeferredDecryptEngine {
   ): Promise<RetryOutcome> {
     const scope = captureStorageScope()
     const stores = this.deps.getStores()
+    let endActivity = () => {}
     try {
       const parsedPayload = ltx.parse(encryptedPayloadXml) as unknown as Element
 
@@ -614,7 +665,9 @@ export class DeferredDecryptEngine {
       // parse, and nothing below runs for it. The stash stays for a later pass.
       const pending = decryptStanzaInPlace(
         stanza, manager, peer, 'archive',
-        { isSelfOutgoing, entityKind: messageContext },
+        { isSelfOutgoing, entityKind: messageContext, onDecryptStart: () => {
+          if (diagnosticMessage && scope.isCurrent()) endActivity = beginDecryptionActivity(peer, diagnosticMessage)
+        } },
       )
       // A subscribed publisher may have minted the key during the synchronous
       // start of this call; carry it back to a previously unobserved source row.
@@ -632,12 +685,24 @@ export class DeferredDecryptEngine {
         return { kind: 'unsupported', info: result.unsupportedEncryption }
       }
 
+      if (result.contentAvailability?.state === 'failed' && result.securityContext?.trust !== 'rejected') {
+        return {
+          kind: 'unavailable', contentAvailability: result.contentAvailability,
+          ...(!result.encryptedPayloadXml && { clearPayload: true as const }),
+          securityContext: result.securityContext && {
+            protocolId: result.securityContext.protocolId, trust: result.securityContext.trust, notes: result.securityContext.notes,
+          },
+        }
+      }
+
       // Decrypted, but the signature waits for the sender's key. Its text is
       // stored below, untrusted, as the live path stores it.
       const unverified = !!result.awaitsVerification
       if (!result.attempted || (result.encryptedPayloadXml && !unverified)) {
         // Still can't decrypt
-        return { kind: 'pending' }
+        return result.contentAvailability?.state === 'waiting'
+          ? { kind: 'unavailable', contentAvailability: { state: 'waiting' } }
+          : { kind: 'pending' }
       }
       // A reaction, retraction, link preview or correction changes another
       // message and removes its placeholder, which would also drop the
@@ -763,6 +828,8 @@ export class DeferredDecryptEngine {
     } catch (err) {
       logWarn(`E2EE deferred decrypt failed for message from ${getDomain(senderJid)}: ${err instanceof Error ? err.message : String(err)}`)
       return { kind: 'pending' }
+    } finally {
+      endActivity()
     }
   }
 
