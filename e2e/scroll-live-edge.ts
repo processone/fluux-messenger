@@ -2679,7 +2679,7 @@ test.describe('Incoming reaction under a stationary pointer', () => {
           }
           return id
         }, { kind, jid, reading, mode })
-        await expect(page.locator(`.message-row[data-message-id="${lastId}"]`)).toBeInViewport()
+        // Initial unread positioning may still own the viewport when fixture rows arrive.
         // A raw scrollTop write cancels an incoming pin as user takeover. Navigate through the
         // app instead, and wait for its measured settlement rather than the helper's fixed delay.
         await page.locator('[data-message-list]').evaluate(el => el.closest<HTMLElement>('[tabindex="0"]')!.focus())
@@ -2694,6 +2694,7 @@ test.describe('Incoming reaction under a stationary pointer', () => {
         await page.keyboard.press('End')
         const navigation = await (await navigationDone).args()[1].jsonValue()
         expect(navigation.outcome, 'End must settle the bottom before interaction starts').toBe('settled')
+        await expect(page.locator(`.message-row[data-message-id="${lastId}"]`)).toBeInViewport()
         // Replay the captured WebKit endpoint: a fractional row measurement left exactly one
         // CSS pixel below the viewport, before pointer acquisition and without reader input.
         const bottomReplay = mode === 'tall' ? await page.evaluate(async () => {
