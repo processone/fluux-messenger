@@ -518,6 +518,7 @@
         "forwardLinkOnly": "Share a link, not a copy. Only people with access to the room can read the original message.",
         "forwardDestination": "Chat or room",
         "forwardChoose": "Choose a chat or room",
+        "forwardUnavailable": "Destination unavailable",
         "forwardComment": "Comment (optional)",
         "forwardSend": "Send",
         "forwardSending": "Sending…",

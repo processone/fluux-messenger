@@ -73,6 +73,7 @@ import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
 import { findResidentRowIndex, messageRowId, messageRowKey, messageRowKeys } from './messageRowIdentity'
 import { useArrivalJump } from './useArrivalJump'
+import { ForwardMessageProvider } from './forwardMessageContext'
 
 // ============================================================================
 // TYPES
@@ -919,6 +920,7 @@ export function MessageList<T extends BaseMessage>({
   }
 
   return (
+    <ForwardMessageProvider conversationId={conversationId}>
     <LiveEdgeGrowthContext.Provider value={runKeepingLiveEdge}>
     <MessageInteractionContext.Provider value={interaction.context}>
     <MessageTargetProvider value={requestMessageTarget}>
@@ -1134,5 +1136,6 @@ export function MessageList<T extends BaseMessage>({
     </MessageTargetProvider>
     </MessageInteractionContext.Provider>
     </LiveEdgeGrowthContext.Provider>
+    </ForwardMessageProvider>
   )
 }

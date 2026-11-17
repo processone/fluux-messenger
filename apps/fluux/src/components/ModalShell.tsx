@@ -8,6 +8,8 @@ interface ModalShellProps {
   dialogLabel?: string
   align?: 'center' | 'top'
   onClose: () => void
+  /** Block every dismissal before the exit transition while an operation runs. */
+  dismissable?: boolean
   /** Tailwind width class for the panel, e.g. 'max-w-sm' (default), 'max-w-md', 'w-80' */
   width?: string
   /** Extra classes on the panel div, e.g. 'max-h-[80vh]' */
@@ -30,6 +32,7 @@ export function ModalShell({
   dialogLabel,
   align,
   onClose,
+  dismissable = true,
   width = 'max-w-sm',
   panelClassName,
   initialFocus,
@@ -38,7 +41,7 @@ export function ModalShell({
   const { t } = useTranslation()
 
   return (
-    <ModalOverlay align={align} onClose={onClose} width={width} panelClassName={panelClassName} initialFocus={initialFocus} panelProps={dialogLabel ? { role: 'dialog', 'aria-modal': true, 'aria-label': dialogLabel } : undefined}>
+    <ModalOverlay align={align} onClose={onClose} dismissable={dismissable} onEscape={dismissable ? undefined : () => {}} width={width} panelClassName={panelClassName} initialFocus={initialFocus} panelProps={dialogLabel ? { role: 'dialog', 'aria-modal': true, 'aria-label': dialogLabel } : undefined}>
       {({ close }) => (
         <>
           {/* Header */}
@@ -48,6 +51,7 @@ export function ModalShell({
               <button
                 type="button"
                 onClick={close}
+                disabled={!dismissable}
                 aria-label={t('common.close')}
                 // Escape closes the modal, so the X is a pointer-only affordance:
                 // kept out of the tab order (and thus the focus trap's initial

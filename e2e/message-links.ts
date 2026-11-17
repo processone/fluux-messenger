@@ -3,7 +3,7 @@ import type { DemoClient } from '@fluux/sdk/demo'
 import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
 import { activateChat } from './harness/scrollHarness'
-import { waitForActions } from './harness/messageInteraction'
+import { arrive, waitForActions } from './harness/messageInteraction'
 import { ROOM_JID as ROOM } from '../apps/fluux/src/demo/constants'
 
 // Room links (docs/URL_SCHEMES.md): copy a link, receive it in another chat, click
@@ -163,7 +163,7 @@ test.describe('mobile message links', () => {
 // transport boundary; no external account receives these messages.
 async function prepareForward(page: import('@playwright/test').Page) {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
-  await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(ROOM)}`)
+  await bootDemo(page, `/demo.html?tutorial=false&virt=1#/rooms/${encodeURIComponent(ROOM)}`)
   return page.evaluate(async roomJid => {
     type Stanza = { name: string; getChildText: (name: string) => string; toString: () => string }
     const scope = window as unknown as {
@@ -223,6 +223,11 @@ test('Forward sends a room link with an optional comment to a chosen contact', a
   await expect(picker.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
   await picker.getByLabel('Chat or room').selectOption('chat:emma@fluux.chat')
   await picker.getByLabel('Comment (optional)').fill('Please review')
+  await expect(page.locator('[data-message-list]')).not.toHaveAttribute('data-message-interaction', target.id)
+  await arrive(page, 'room', Array.from({ length: 80 }, (_, index) => `forward-arrival-${index}`))
+  await expect(row).toHaveCount(0)
+  await expect(picker.getByLabel('Chat or room')).toHaveValue('chat:emma@fluux.chat')
+  await expect(picker.getByLabel('Comment (optional)')).toHaveValue('Please review')
   await forwardPicture(page, 'after-picker')
   await picker.getByRole('button', { name: 'Send', exact: true }).click()
   await expect(picker).toBeHidden()
@@ -241,6 +246,10 @@ test.describe('touch forwarding', () => {
   test('Forward opens from the action sheet, cancels without sending and shares to a joined room', async ({ page, browserName }) => {
     test.skip(browserName !== 'chromium', 'Held touch uses Chromium input dispatch; the shared picker runs in both engines above.')
     const target = await prepareForward(page)
+    // Whispers remain outside the link-sharing action boundary.
+    const whisper = page.locator('[data-message-id="demo-room-whisper-out"][data-message-body]')
+    await expect(whisper).toHaveCount(1)
+    await expect(whisper.getByRole('button', { name: 'Forward message', exact: true })).toHaveCount(0)
     const link = `xmpp:${ROOM}?join;msg=${encodeURIComponent(target.stanzaId)}`
     const row = page.locator(`[data-message-id="${target.id}"][data-message-body]`)
     const open = async () => {
@@ -264,6 +273,9 @@ test.describe('touch forwarding', () => {
     expect(await page.evaluate(() => (window as unknown as { __forwardStanzas: string[] }).__forwardStanzas)).toHaveLength(0)
     await open()
     await picker.getByLabel('Chat or room').selectOption(`room:${ROOM}`)
+    await arrive(page, 'room', Array.from({ length: 80 }, (_, index) => `forward-touch-arrival-${index}`))
+    await expect(row).toHaveCount(0)
+    await expect(picker.getByLabel('Chat or room')).toHaveValue(`room:${ROOM}`)
     await forwardPicture(page, 'after-touch-picker')
     await picker.getByRole('button', { name: 'Send', exact: true }).tap()
     await expect(picker).toBeHidden()
@@ -271,10 +283,5 @@ test.describe('touch forwarding', () => {
     const sent = page.locator('[data-message-body]').filter({ has: page.getByRole('link', { name: link, exact: true }) }).last()
     await expect(sent.locator('[data-room-message-preview]')).toContainText(target.body)
     await forwardPicture(page, 'after-room-recipient')
-    // Whispers remain outside the link-sharing action boundary.
-    const whisper = page.locator('[data-message-id="demo-room-whisper-out"][data-message-body]')
-    await whisper.scrollIntoViewIfNeeded()
-    await expect(whisper).toBeVisible()
-    await expect(whisper.getByRole('button', { name: 'Forward message', exact: true })).toHaveCount(0)
   })
 })

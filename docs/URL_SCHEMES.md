@@ -84,7 +84,8 @@ Leaving a room or changing accounts hides its quote and invalidates pending
 preview reads.
 
 **Forward message** on a linkable room message opens a picker of contacts, existing
-chats and currently joined rooms. On phones it is in the long-press action menu.
+chats and currently joined rooms where you can send messages. On phones it is in
+the long-press action menu.
 Choose one destination, optionally add a comment, then press **Send**. Fluux sends
 one ordinary message containing the comment (if any), a newline and the room
 message link, with the same XEP-0372 data reference as a pasted link. Without a
