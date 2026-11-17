@@ -92,7 +92,7 @@ export function ForwardMessageModal({ link, onClose }: ForwardMessageModalProps)
           <ContactSelector inputId={pickerId} selectedContacts={destination ? [destination.slice(5)] : []}
             onSelectionChange={jids => { if (jids.length === 0) setDestination('') }} onPick={pick}
             extraSuggestions={suggestions} excludeJids={hiddenRooms} allowTypedJid={false} disabled={sending}
-            placeholder={t('chat.forwardChoose')} addMorePlaceholder={t('chat.forwardChoose')} />
+            placeholder={t('chat.forwardChoose')} addMorePlaceholder="" />
           {destination && !validDestination && <p className="mt-1 text-xs text-fluux-error">{t('chat.forwardUnavailable')}</p>}
         </div>
         <label className="block text-sm text-fluux-text">

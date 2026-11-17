@@ -31,7 +31,7 @@ export interface ContactSelectorProps {
   onSelectionChange: (jids: string[]) => void
   /** Placeholder text when no contacts selected */
   placeholder?: string
-  /** Placeholder text when contacts are already selected */
+  /** Placeholder text when contacts are already selected; an empty string shows none */
   addMorePlaceholder?: string
   /** Whether the selector is disabled */
   disabled?: boolean
@@ -416,7 +416,7 @@ export function ContactSelector({
             }, 150)
           }}
           placeholder={selectedContacts.length > 0
-            ? (addMorePlaceholder || defaultAddMorePlaceholder)
+            ? (addMorePlaceholder ?? defaultAddMorePlaceholder)
             : (placeholder || defaultPlaceholder)}
           disabled={disabled}
           className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded

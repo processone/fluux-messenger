@@ -70,6 +70,8 @@ describe('ForwardMessageModal', () => {
     expect(screen.getByLabelText('chat.forwardComment')).toHaveFocus()
     expect(picker()).toHaveValue('')
     expect(screen.getByText('Emma')).toBeInTheDocument()
+    // The field under the chosen chip must not still ask for a choice.
+    expect(picker()).toHaveAttribute('placeholder', '')
     fireEvent.change(screen.getByLabelText('chat.forwardComment'), { target: { value: 'Please review' } })
     send()
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
