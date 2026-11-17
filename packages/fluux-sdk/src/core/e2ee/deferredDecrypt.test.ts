@@ -534,6 +534,36 @@ describe('DeferredDecryptEngine', () => {
         expect(row?.forwarded).toBeUndefined()
       })
 
+      // Review: a terminal malformed-data failure is a different outcome from a rejected signature and must clear a retained copy too.
+      const malformed = () => vi.spyOn(manager, 'decryptArchive').mockRejectedValue(new E2EEPluginError('permanent', 'malformed-data', 'not a valid envelope'))
+
+      it('clears a retained copy from the durable row on a terminal malformed-data failure', async () => {
+        const { pending } = await seedTwins({ body: 'Look', forwarded: { author: 'Mallory', text: 'Forged' } }, false)
+        durable()
+        malformed()
+        await engine.retryPending()
+        const row = await messageCache.getMessage(conversationId, pending.id, pending)
+        expect(row).toMatchObject({ body: COULD_NOT_DECRYPT_BODY, encryptedPayload: undefined, contentAvailability: { state: 'failed' } })
+        expect(row?.forwarded).toBeUndefined()
+      })
+
+      it('clears a retained copy from a sidebar preview on a terminal malformed-data failure', async () => {
+        const lastMessage: Message = {
+          type: 'chat', id: 'orphan', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: 'Look',
+          forwarded: { author: 'Mallory', text: 'Forged' }, timestamp: new Date(1_700_000_002_000), isOutgoing: false, encryptedPayload: DUMMY_PAYLOAD_XML,
+        }
+        chatStore.getState().addConversation({ id: conversationId, type: 'chat', name: 'Bob', unreadCount: 0, lastMessage })
+        stores.chat.getEncryptedPreviews.mockImplementation(() => {
+          const last = chatStore.getState().conversationMeta.get(conversationId)?.lastMessage
+          return last?.encryptedPayload ? [{ conversationId, lastMessage: last }] : []
+        })
+        malformed()
+        await engine.retryPending()
+        const preview = chatStore.getState().conversationMeta.get(conversationId)?.lastMessage
+        expect(preview).toMatchObject({ encryptedPayload: undefined, contentAvailability: { state: 'failed' } })
+        expect(preview?.forwarded).toBeUndefined()
+      })
+
       it('recovers a copy into a sidebar preview that no stored row carries', async () => {
         const lastMessage: Message = {
           type: 'chat', id: 'orphan', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: COULD_NOT_DECRYPT_BODY,
