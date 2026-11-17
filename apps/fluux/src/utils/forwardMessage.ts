@@ -1,3 +1,4 @@
+import { forwardedCopyQuoteRange } from '@fluux/sdk'
 import type { BaseMessage, DataReference, MentionReference, MessageReference } from '@fluux/sdk'
 
 /** The source text a forward quotes: who wrote it and what it said. */
@@ -80,9 +81,9 @@ export function forwardFallbackRange(references?: MessageReference[]): { begin: 
   return undefined
 }
 
-/** The quote that only stands in for a copy the reader shows; undefined when there is no marked copy. */
-export function forwardedCopyFallbackRange(message: Pick<BaseMessage, 'forwarded' | 'isRetracted'>): { begin: number; end: number } | undefined {
-  return message.forwarded && !message.isRetracted ? message.forwarded.fallback : undefined
+/** The quote that only stands in for a copy the reader shows; undefined when there is no marked copy or the body changed since. */
+export function forwardedCopyFallbackRange(message: Pick<BaseMessage, 'body' | 'forwarded' | 'isRetracted'>): { begin: number; end: number } | undefined {
+  return forwardedCopyQuoteRange(message)
 }
 
 /**

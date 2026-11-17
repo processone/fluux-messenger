@@ -575,7 +575,7 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
         : processedBody.length === finalBody.length
           ? { begin: rebaseFallbackOffset(marked.begin, fallback), end: rebaseFallbackOffset(marked.end, fallback) }
           : undefined
-      if (rebased && rebased.begin < rebased.end && rebased.end <= finalBody.length) forwardedCopy = { ...parsedCopy, fallback: rebased }
+      if (rebased && rebased.begin < rebased.end && rebased.end <= finalBody.length) forwardedCopy = { ...parsedCopy, fallback: { ...rebased, text: finalBody.slice(rebased.begin, rebased.end) } }
     }
   }
 

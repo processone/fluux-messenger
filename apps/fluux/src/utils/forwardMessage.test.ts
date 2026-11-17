@@ -68,11 +68,11 @@ describe('forward composition with a copy', () => {
   })
 
   it('hides the quote only for a copy that is read and not retracted', () => {
-    const message = { body: `Look\n> Bob wrote:\n> hi\n${link}`, forwarded: { author: 'Bob', text: 'hi', fallback: { begin: 5, end: 5 + 18 + link.length } } }
+    const message = { body: `Look\n> Bob wrote:\n> hi\n${link}`, forwarded: { author: 'Bob', text: 'hi', fallback: { begin: 5, end: 5 + 18 + link.length, text: `> Bob wrote:\n> hi\n${link}` } } }
     expect(withoutForwardFallback(message, undefined, true).body).toBe('Look')
     expect(withoutForwardFallback({ ...message, isRetracted: true }, undefined, true).body).toBe(message.body)
     expect(forwardedCopyFallbackRange({ ...message, forwarded: undefined })).toBeUndefined()
-    expect(withoutForwardFallback({ ...message, forwarded: { ...message.forwarded, fallback: { begin: 5, end: 9999 } } }, undefined, true).body).toBe(message.body)
+    expect(withoutForwardFallback({ ...message, forwarded: { ...message.forwarded, fallback: { begin: 5, end: 9999, text: 'x' } } }, undefined, true).body).toBe(message.body)
   })
 
   it('needs an author address and text, and bounds the copied text', () => {

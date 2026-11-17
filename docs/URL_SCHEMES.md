@@ -122,7 +122,7 @@ marks the quote and link (code points, as in the body). Fluux asks no device wha
 supports: a reader that shows the copy may hide the marked text, and any other reader
 shows the whole body. Fluux hides the marked text only while it shows the copy; a message
 whose copy is missing (an archive may drop extensions), malformed, retracted or still
-encrypted keeps it visible, and a marker outside the body is ignored. A reader that shows
+encrypted keeps it visible, and a marker outside the body is ignored. The stored marker remembers the exact text it marked, so an edit that changes that text leaves the copy and shows the whole new body. In an encrypted chat a marker outside the payload is dropped with an outer copy, and only the payload's marker counts. Search still indexes the quote text. A reader that shows
 copies but ignores XEP-0428 would show the quote and the copy together. Every room gets
 the quoted form alone. The
 copy holds a `<delay/>` with the original time and a `<message from=...>` whose

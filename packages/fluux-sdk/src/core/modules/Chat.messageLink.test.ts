@@ -9,6 +9,7 @@ import { DummyPlaintextPlugin } from '../e2ee/DummyPlaintextPlugin'
 import type { ModuleDependencies } from './BaseModule'
 import { createMockPresenceReader, createMockStores } from '../test-utils'
 import { applyCorrection, parseMessageContent } from './messagingUtils'
+import { forwardedCopyQuoteRange } from '../../utils/forwardedCopyQuote'
 import { buildRoomMessageLink, findRoomMessageLink } from '../../utils/roomMessageLink'
 
 const room = 'team@conference.example.org'
@@ -386,7 +387,7 @@ describe('shared room message references', () => {
         const points = Array.from(quotedBody)
         expect(points.slice(Number(wire.attrs.start), Number(wire.attrs.end)).join('')).toBe(`${quoted}${link}`)
         const parsed = parseMessageContent({ messageEl: stanza, body: quotedBody })
-        expect(parsed.forwarded?.fallback).toEqual(mark)
+        expect(parsed.forwarded?.fallback).toEqual({ ...mark, text: `${quoted}${link}` })
         expect(parsed.processedBody.slice(mark.begin, mark.end)).toBe(`${quoted}${link}`)
         const event = vi.mocked(h.deps.emitSDK).mock.calls.find(([name]) => name === 'chat:message')
         expect(event?.[1]).toMatchObject({ message: { forwarded: { fallback: mark } } })
@@ -420,7 +421,7 @@ describe('shared room message references', () => {
           xml('fallback', { xmlns: NSB, for: NSF }, xml('body', { start, end })))
         const read = (el: Element) => parseMessageContent({ messageEl: el, body: quotedBody })
         // Code point 30 lies after the one emoji, which takes two UTF-16 units.
-        expect(read(withMarker('5', '30')).forwarded?.fallback).toEqual({ begin: 5, end: 31 })
+        expect(read(withMarker('5', '30')).forwarded?.fallback).toMatchObject({ begin: 5, end: 31 })
         for (const [start, end] of [['x', '4'], ['9', '9'], ['9', '3'], ['0', '9999'], ['-1', '4']]) {
           expect(read(withMarker(start, end)).forwarded?.fallback).toBeUndefined()
         }
@@ -441,16 +442,60 @@ describe('shared room message references', () => {
           expect(parsePayloadEnvelope(decoded)!.some(child => child.name === 'fallback' && child.attrs.for === NSF)).toBe(true)
           const received = xml('message', { type: 'chat', from: 'alice@example.org/web', to: 'bob@example.org' }, ...sent.children as Element[])
           await decryptStanzaInPlace(received, m, 'alice@example.org')
-          expect(parseMessageContent({ messageEl: received, body: received.getChildText('body') ?? '' }).forwarded?.fallback).toEqual(mark)
+          expect(parseMessageContent({ messageEl: received, body: received.getChildText('body') ?? '' }).forwarded?.fallback).toMatchObject(mark)
         } finally { await m.shutdown() }
+      })
+
+      it('drops a marker an intermediary added outside the payload, so it cannot hide authenticated comment text', async () => {
+        const h = harness()
+        const m = manager()
+        await m.register(new DummyPlaintextPlugin())
+        h.deps.getE2EEManager = () => m
+        try {
+          // A legitimate encrypted copy that carries no marker of its own.
+          await h.chat.sendMessage('bob@example.org', quotedBody, { references: quotedRefs, forwarded: copy })
+          const sent = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+          const forgedMarker = () => xml('fallback', { xmlns: NSB, for: NSF }, xml('body', { start: '0', end: '4' }))
+          const received = () => xml('message', { type: 'chat', from: 'alice@example.org/web', to: 'bob@example.org' }, ...(sent.children as Element[]), forgedMarker())
+          const ok = received()
+          await decryptStanzaInPlace(ok, m, 'alice@example.org')
+          const parsed = parseMessageContent({ messageEl: ok, body: ok.getChildText('body') ?? '' })
+          expect(parsed.forwarded?.text).toBe('Ship it 🚀')
+          expect(parsed.forwarded?.fallback).toBeUndefined()
+          vi.spyOn(m, 'decryptInbound').mockRejectedValue(new Error('key locked'))
+          const failed = received()
+          await decryptStanzaInPlace(failed, m, 'alice@example.org')
+          expect(failed.getChildren('fallback').some(el => (el as Element).attrs.for === NSF)).toBe(false)
+        } finally { await m.shutdown() }
+      })
+
+      it('stops hiding the quote once an edit changes the marked text, and keeps the copy', () => {
+        const message = { body: quotedBody, forwarded: { author: 'Bob', text: 'Ship it', fallback: { ...mark, text: `${quoted}${link}` } } }
+        expect(forwardedCopyQuoteRange(message)).toEqual(mark)
+        // A longer comment, a shorter one and a replaced quote all leave the stored text unmatched.
+        for (const body of [`A much longer comment\n${quoted}${link}`, `${quoted}${link}`, 'Look\nsomething else']) {
+          expect(forwardedCopyQuoteRange({ ...message, body })).toBeUndefined()
+        }
+        expect(forwardedCopyQuoteRange({ ...message, isRetracted: true })).toBeUndefined()
+      })
+
+      it('leaves the quote visible after a live or archived correction replaces the body', () => {
+        // The shared correction parser is what live receipt and archive replay both apply.
+        const stored = { body: quotedBody, forwarded: { author: 'Bob', text: 'Ship it', fallback: { ...mark, text: `${quoted}${link}` } } }
+        for (const edited of ['A much longer comment than before, with more words', 'Hi']) {
+          const correction = xml('message', { type: 'chat' }, xml('body', {}, edited), xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'm1' }))
+          const result = applyCorrection(correction, edited, stored.body)
+          expect(result.body).toBe(edited)
+          expect(forwardedCopyQuoteRange({ body: result.body, forwarded: stored.forwarded })).toBeUndefined()
+        }
       })
 
       it('keeps the marker on a retry', async () => {
         const h = harness()
-        const stored = { author: 'Bob', from: `${room}/Bob`, text: 'Ship it 🚀', fallback: mark }
+        const stored = { author: 'Bob', from: `${room}/Bob`, text: 'Ship it 🚀', fallback: { ...mark, text: `${quoted}${link}` } }
         await h.chat.resendMessage('bob@example.org', quotedBody, 'm1', undefined, quotedRefs, stored)
         const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
-        expect(parseMessageContent({ messageEl: stanza, body: stanza.getChildText('body')! }).forwarded?.fallback).toEqual(mark)
+        expect(parseMessageContent({ messageEl: stanza, body: stanza.getChildText('body')! }).forwarded?.fallback).toMatchObject(mark)
       })
     })
 

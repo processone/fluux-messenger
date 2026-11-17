@@ -118,9 +118,13 @@ const ALLOWED_PAYLOAD_CHILDREN = new Set([
  * inside the authenticated payload counts. Anything an intermediary appended outside it is dropped.
  */
 export function dropOuterForwardedCopy(stanza: Element): void {
-  stanza.children = stanza.children.filter(
-    (child) => typeof child === 'string' || !((child as Element).name === 'forwarded' && (child as Element).attrs?.xmlns === NS_FORWARD),
-  )
+  // The marker that hides body text for the copy is dropped with it: only the payload may say which text the copy replaces.
+  stanza.children = stanza.children.filter((child) => {
+    if (typeof child === 'string') return true
+    const el = child as Element
+    return !((el.name === 'forwarded' && el.attrs?.xmlns === NS_FORWARD)
+      || (el.name === 'fallback' && el.attrs?.xmlns === NS_FALLBACK && el.attrs?.for === NS_FORWARD))
+  })
 }
 
 function isAllowedPayloadChild(child: Element): boolean {

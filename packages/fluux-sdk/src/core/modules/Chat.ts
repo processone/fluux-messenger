@@ -970,7 +970,7 @@ export class Chat extends BaseModule {
     const copyFallback = options?.forwarded?.fallback
     const validCopyFallback = copyFallback && copyFallback.begin >= 0 && copyFallback.begin < copyFallback.end && copyFallback.end <= body.length
       ? copyFallback : undefined
-    if (forwarded && validCopyFallback) forwarded.fallback = validCopyFallback
+    if (forwarded && validCopyFallback) forwarded.fallback = { ...validCopyFallback, text: body.slice(validCopyFallback.begin, validCopyFallback.end) }
     for (const ref of roomMessageLinkReferences(body)) {
       if (!references.some(existing => existing.type === 'data' && existing.uri === ref.uri)) references.push(ref)
     }
@@ -1184,7 +1184,7 @@ export class Chat extends BaseModule {
     // A retry keeps the structured copy inside the same protection as the first send.
     if (storedForwarded) {
       children.push(forwardedCopyElement({ from: storedForwarded.from ?? storedForwarded.author, text: storedForwarded.text, timestamp: storedForwarded.timestamp }))
-      if (storedForwarded.fallback && storedForwarded.fallback.end <= body.length) {
+      if (storedForwarded.fallback && body.slice(storedForwarded.fallback.begin, storedForwarded.fallback.end) === storedForwarded.fallback.text) {
         children.push(forwardFallbackElement(fullBody, 0, storedForwarded.fallback, NS_FORWARD))
       }
     }

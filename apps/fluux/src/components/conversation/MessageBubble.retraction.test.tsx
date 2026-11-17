@@ -154,3 +154,20 @@ describe('the quote that stands in for a forwarded copy', () => {
     expect(view.textContent).not.toContain('Ship it')
   })
 })
+
+// Review: an edit keeps the copy but its marker, tied to the text it marked, no longer hides anything.
+describe('editing a forward that shows a copy', () => {
+  it('keeps the copy and shows the whole new body once the comment changes', () => {
+    const quote = '> Bob wrote:\n> Ship it\n'
+    const link = `xmpp:${room}?join;msg=1`
+    const message = {
+      ...resident('x'), type: 'chat', id: 'x', conversationId: peer, from: peer, isOutgoing: false, timestamp: new Date(),
+      body: `A much longer edited comment\n${quote}${link}`, isEdited: true,
+      forwarded: { author: 'Bob', text: 'Ship it', fallback: { begin: 5, end: 5 + quote.length + link.length, text: `${quote}${link}` } },
+    } as Message
+    const view = render(<MessageBubble {...props(message)} />).container
+    expect(view.querySelector('[data-forwarded-copy]')?.textContent).toContain('Ship it')
+    expect(view.textContent).toContain('A much longer edited comment')
+    expect(view.textContent).toContain('Bob wrote:')
+  })
+})

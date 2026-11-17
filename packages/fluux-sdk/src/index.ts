@@ -637,6 +637,7 @@ export type { ConsistentColorOptions } from './core/consistentColor'
 // Message preview utilities
 export { getAttachmentEmoji, formatMessagePreview, stripReplyQuote } from './utils/messagePreview'
 export type { AttachmentDisplay } from './utils/messagePreview'
+export { forwardedCopyQuoteRange } from './utils/forwardedCopyQuote'
 export { isPreviewableMessage } from './stores/shared/lastMessageUtils'
 
 // Configuration constants

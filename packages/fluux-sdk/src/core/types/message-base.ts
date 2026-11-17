@@ -270,7 +270,8 @@ export interface ForwardedCopy {
   /**
    * The text of the message body that only stands in for the copy (a quote of it), as a
    * XEP-0428 fallback for the copy. A reader that shows the copy hides it; any other reader
-   * or a message without a readable copy shows it. UTF-16 offsets in `body`.
+   * or a message without a readable copy shows it. UTF-16 offsets in `body`; `text` is the marked
+   * text, so a later edit of the body leaves the marker unused.
    */
-  fallback?: { begin: number; end: number }
+  fallback?: { begin: number; end: number; text: string }
 }
