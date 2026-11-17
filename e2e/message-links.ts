@@ -159,7 +159,7 @@ test.describe('mobile message links', () => {
 })
 
 // Forward sends one ordinary message: comment, attributed quote and room link, with the
-// quote and link marked as XEP-0428 fallback and never an XEP-0297 copy. Exercise the actual demo SDK serializer and observe its local
+// quote and link marked as XEP-0428 fallback; a contact also gets the XEP-0297 copy it stands for, a room never does. Exercise the actual demo SDK serializer and observe its local
 // transport boundary; no external account receives these messages.
 async function prepareForward(page: import('@playwright/test').Page) {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
@@ -184,6 +184,7 @@ async function prepareForward(page: import('@playwright/test').Page) {
 }
 
 const FORWARD_QUOTE = 'urn:fluux:forward-quote:0'
+const FORWARD_COPY = 'urn:xmpp:forward:0'
 const quoteOf = (target: { nick: string; body: string }) => `> ${target.nick} wrote:\n${target.body.split('\n').map(line => `> ${line}`).join('\n')}\n`
 
 async function assertForwardStanza(page: import('@playwright/test').Page, to: string, type: string, body: string, link: string, fallbackText: string) {
@@ -202,11 +203,12 @@ async function assertForwardStanza(page: import('@playwright/test').Page, to: st
       })),
     }
   }, stanzas[0])
-  const marker = parsed.fallback.find(item => item.for === FORWARD_QUOTE)
+  // A chat forward carries the copy and marks the quote for it; a room has no copy and keeps the private marker.
+  const marker = parsed.fallback.find(item => item.for === (type === 'chat' ? FORWARD_COPY : FORWARD_QUOTE))
   const range = Object.fromEntries(marker?.range ?? []) as { start: string; end: string }
   // The marker covers exactly the generated quote and link, in code points, never the comment.
   expect(Array.from(body).slice(Number(range.start), Number(range.end)).join('')).toBe(fallbackText)
-  expect({ ...parsed, fallback: undefined }).toEqual({ to, type, body, reference: { type: 'data', uri: link }, forwardedCopies: 0, fallback: undefined })
+  expect({ ...parsed, fallback: undefined }).toEqual({ to, type, body, reference: { type: 'data', uri: link }, forwardedCopies: type === 'chat' ? 1 : 0, fallback: undefined })
   await test.info().attach('outgoing-stanza', { body: stanzas[0], contentType: 'application/xml' })
   if (process.env.FLUUX_FORWARD_EVIDENCE) {
     const { writeFile } = await import('node:fs/promises')
