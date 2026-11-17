@@ -25,7 +25,7 @@
 
 import type { XMPPClient } from '@fluux/sdk/core'
 // Raw PEP: XEP-0373's nodes are not modelled by the SDK. This is the only
-// place in the app that reaches for the escape hatch, and `pepReaderFor` is
+// place in the OpenPGP code that reaches for the escape hatch, and `pepReaderFor` is
 // what keeps it to one line.
 import { queryPepNode, type PEPItem } from '@fluux/sdk/xmpp'
 

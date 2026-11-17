@@ -1,8 +1,8 @@
 /**
  * App-layer signals raised by WebOpenPGPPlugin.unlock()'s auto-recovery
  * path so the unlock dialog can react without parsing error messages.
- * Kept in the app (not the SDK): they carry UI-routing payloads and are
- * only consumed by the dialog.
+ * Kept in this package (not the SDK): they carry UI-routing payloads and are
+ * only consumed by the app's unlock dialog.
  */
 import type { KeyBundle, BackupContext } from './types'
 
