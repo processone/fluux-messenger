@@ -32,6 +32,7 @@ vi.mock('@fluux/sdk/react', () => ({
 // Identities follow the existing demo contact and room fixtures.
 const link = 'xmpp:design@conference.fluux.chat?join;msg=1731490000123456'
 const roomJid = 'design@conference.fluux.chat'
+const dan = { id: 'dan@example.org', name: 'Dan', type: 'chat', lastMessage: { timestamp: new Date() } }
 const picker = () => screen.getByLabelText('chat.forwardDestination')
 const suggestions = () => screen.queryByTestId('contact-suggestions')?.querySelectorAll('[role="button"]') ?? []
 /** Type into the destination picker and pick the highlighted entry with Enter. */
@@ -93,6 +94,45 @@ describe('ForwardMessageModal', () => {
     send()
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
     expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('james@fluux.chat', link)
+  })
+
+  it('keeps the highlighted destination when a new chat joins the list before Enter', async () => {
+    const onClose = vi.fn()
+    const { rerender } = render(<ForwardMessageModal link={link} onClose={onClose} />)
+    fireEvent.change(picker(), { target: { value: 'd' } })
+    expect(Array.from(suggestions(), row => row.textContent)).toEqual([expect.stringContaining('Design')])
+    // A first message from someone outside the roster creates a chat sorted ahead of Design.
+    fixture.conversations = new Map([[dan.id, dan]])
+    rerender(<ForwardMessageModal link={link} onClose={onClose} />)
+    expect(Array.from(suggestions(), row => row.textContent)).toEqual([
+      expect.stringContaining('Dan'), expect.stringContaining('Design'),
+    ])
+    fireEvent.keyDown(picker(), { key: 'Enter' })
+    send()
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(fixture.roomSend).toHaveBeenCalledExactlyOnceWith(roomJid, link)
+    expect(fixture.chatSend).not.toHaveBeenCalled()
+  })
+
+  it('asks for a fresh choice when the highlighted destination leaves the list', () => {
+    const diego = { id: 'diego@example.org', name: 'Diego', type: 'chat' }
+    fixture.conversations = new Map([[diego.id, diego]])
+    const props = { link, onClose: vi.fn() }
+    const { rerender } = render(<ForwardMessageModal {...props} />)
+    fireEvent.change(picker(), { target: { value: 'd' } })
+    expect(Array.from(suggestions(), row => row.textContent)).toEqual([
+      expect.stringContaining('Design'), expect.stringContaining('Diego'),
+    ])
+    // The highlighted room is left; Diego moves up to where Design was.
+    fixture.rooms = new Map([[roomJid, { jid: roomJid, name: 'Design', joined: false }]])
+    rerender(<ForwardMessageModal {...props} />)
+    expect(Array.from(suggestions(), row => row.textContent)).toEqual([expect.stringContaining('Diego')])
+    fireEvent.keyDown(picker(), { key: 'Enter' })
+    expect(within(screen.getByRole('dialog')).queryByText('Diego')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'chat.forwardSend' })).toBeDisabled()
+    fireEvent.keyDown(picker(), { key: 'ArrowDown' })
+    fireEvent.keyDown(picker(), { key: 'Enter' })
+    expect(within(screen.getByRole('dialog')).getByText('Diego')).toBeInTheDocument()
   })
 
   it('replaces an earlier pick and sends a link without a comment to a joined room', async () => {

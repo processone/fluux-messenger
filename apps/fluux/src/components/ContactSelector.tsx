@@ -82,7 +82,10 @@ export function ContactSelector({
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const [search, setSearch] = useState('')
-  const [highlightedIndex, setHighlightedIndex] = useState(0)
+  // The highlight is kept by address, not by position: the list can gain or lose an
+  // entry while open (a first message from someone new, a room you leave), and Enter
+  // must still pick the entry that is highlighted. `null` means the first entry.
+  const [highlightedJid, setHighlightedJid] = useState<string | null>(null)
   const [isFocused, setIsFocused] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -93,9 +96,8 @@ export function ContactSelector({
   // non-reactively (getState, not a subscription) so the picker does NOT re-render
   // on every conversation change while open — the combined conversations map churns
   // on every new message / typing / meta update. Read it once, when the picker
-  // mounts: the keyboard highlight is a position in the list, so a parent re-render
-  // after a new message must not re-sort the list under it, or Enter would pick a
-  // different contact than the one highlighted.
+  // mounts, so a parent re-render after a new message does not reshuffle the list
+  // while the user is reading or navigating it.
   const [recentActivityMap] = useState(() => {
     const map = new Map<string, number>()
     for (const conv of chatStore.getState().conversations.values()) {
@@ -159,9 +161,15 @@ export function ContactSelector({
     return [...rosterEntries, ...extraEntries]
   })()
 
-  // Reset highlight when filtered list changes
+  // A highlighted address that leaves the list highlights nothing until the user chooses again.
+  const highlightedIndex = highlightedJid === null
+    ? 0
+    : filteredContacts.findIndex(contact => contact.jid === highlightedJid)
+  const firstJid = filteredContacts[0]?.jid ?? null
+
+  // Typing starts over at the first match.
   useEffect(() => {
-    setHighlightedIndex(0)
+    setHighlightedJid(null)
   }, [search])
 
   const cancelPendingBlur = () => {
@@ -181,6 +189,11 @@ export function ContactSelector({
 
   // The popover shows suggestions, an add-this-JID row, or a no-match notice.
   const isPopoverOpen = isFocused && (filteredContacts.length > 0 || !!search)
+
+  // Pin the default highlight to the entry shown first, so a later list change keeps it.
+  useEffect(() => {
+    if (isPopoverOpen && highlightedJid === null && firstJid !== null) setHighlightedJid(firstJid)
+  }, [isPopoverOpen, highlightedJid, firstJid])
 
   // Place the popover against the input, in viewport coordinates.
   //
@@ -276,14 +289,14 @@ export function ContactSelector({
     if (onPick) {
       onPick(jid)
       setSearch('')
-      setHighlightedIndex(0)
+      setHighlightedJid(null)
       return
     }
     if (!selectedContacts.includes(jid)) {
       onSelectionChange([...selectedContacts, jid])
     }
     setSearch('')
-    setHighlightedIndex(0)
+    setHighlightedJid(null)
     inputRef.current?.focus()
   }
 
@@ -304,8 +317,8 @@ export function ContactSelector({
       if (filteredContacts[highlightedIndex]) {
         // Select highlighted contact from dropdown
         selectContact(filteredContacts[highlightedIndex].jid)
-      } else if (canAddAsJid) {
-        // Add arbitrary JID
+      } else if (canAddAsJid && filteredContacts.length === 0) {
+        // Add arbitrary JID (offered only when no contact matches)
         selectContact(searchJidNormalized)
       }
       return
@@ -323,32 +336,28 @@ export function ContactSelector({
       return
     }
 
+    // Move the highlight, wrapping at both ends; with nothing highlighted, start at an end.
+    const move = (step: 1 | -1) => {
+      const count = filteredContacts.length
+      const next = highlightedIndex < 0
+        ? (step > 0 ? 0 : count - 1)
+        : (highlightedIndex + step + count) % count
+      setHighlightedJid(filteredContacts[next].jid)
+    }
+
     switch (e.key) {
       case 'Tab':
         e.preventDefault()
-        if (e.shiftKey) {
-          // Shift+Tab: previous
-          setHighlightedIndex(prev =>
-            prev <= 0 ? filteredContacts.length - 1 : prev - 1
-          )
-        } else {
-          // Tab: next
-          setHighlightedIndex(prev =>
-            prev >= filteredContacts.length - 1 ? 0 : prev + 1
-          )
-        }
+        // Tab: next, Shift+Tab: previous
+        move(e.shiftKey ? -1 : 1)
         break
       case 'ArrowDown':
         e.preventDefault()
-        setHighlightedIndex(prev =>
-          prev >= filteredContacts.length - 1 ? 0 : prev + 1
-        )
+        move(1)
         break
       case 'ArrowUp':
         e.preventDefault()
-        setHighlightedIndex(prev =>
-          prev <= 0 ? filteredContacts.length - 1 : prev - 1
-        )
+        move(-1)
         break
     }
   }
