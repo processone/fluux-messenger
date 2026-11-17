@@ -315,6 +315,8 @@ Background Web Push uses a saved copy of this preference after the tab closes. U
 
 Open **Settings → Notifications**. Fluux reads macOS notification authorization and the separate app icon badge setting. A highlighted warning identifies blocked notifications or disabled badges. Use **Open system notification settings** to review them, then return to Fluux to refresh the status. If permission has never been requested, use **Enable** first. Unknown or unsupported states are shown separately; Fluux does not change permissions automatically from this panel.
 
+Use **Export badge diagnostics** in the same section to save the separate badge-decision log; advanced mode and the XMPP console are not required.
+
 This shows the current system settings, not the history of an earlier missing badge. A successful badge update does not prove that macOS displayed it. Notification authorization, badge settings, and Fluux's sound and in-app banner preferences are separate.
 
 #### My antivirus flags the Windows installer as malicious, is the app safe?

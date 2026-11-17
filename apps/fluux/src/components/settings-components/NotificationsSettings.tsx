@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Bell, BellOff, ExternalLink, Send } from 'lucide-react'
+import { Bell, BellOff, Download, ExternalLink, Send } from 'lucide-react'
 import { useConnection, useXMPPContext, connectionStore, getDomain } from '@fluux/sdk'
 import { isMacOSDesktop } from '@/utils/tauriPlatform'
 import {
@@ -16,6 +16,7 @@ import { Toggle } from '@/components/ui/Toggle'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { getTrayStatus, type TrayStatus } from '@/utils/windowBehavior'
 import { platform } from '@/platform'
+import { saveBadgeDiagnostics } from '@/utils/badgeDiagnosticsExport'
 
 type NotificationStatus = 'checking' | 'granted' | 'denied' | 'default' | 'unavailable' | 'unsupported'
 type BadgeStatus = 'enabled' | 'disabled' | 'unknown' | 'unsupported'
@@ -332,6 +333,16 @@ export function NotificationsSettings() {
                 )}
               </div>
             )}
+          {isMac && (
+            <button
+              type="button"
+              onClick={() => { void saveBadgeDiagnostics(t('console.exportBadgeDiagnosticsFailed')) }}
+              className="flex items-center gap-1.5 text-sm text-fluux-brand hover:text-fluux-text transition-colors"
+            >
+              <Download className="size-4" />
+              {t('console.exportBadgeDiagnostics')}
+            </button>
+          )}
         </div>
       </SettingsSection>
 

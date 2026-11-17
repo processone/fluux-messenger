@@ -77,6 +77,9 @@ import { refreshNotificationPermission, requestNotificationPermission } from '@/
 import { act } from '@testing-library/react'
 import { useSettingsStore } from '@/stores/settingsStore'
 
+const mockSaveBadgeDiagnostics = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+vi.mock('@/utils/badgeDiagnosticsExport', () => ({ saveBadgeDiagnostics: mockSaveBadgeDiagnostics }))
+
 const LINK = 'settings.openSystemNotificationSettings'
 
 describe('NotificationsSettings — system notification settings link', () => {
@@ -323,6 +326,45 @@ describe('NotificationsSettings — macOS badge warnings', () => {
     expect(await screen.findByText('settings.openSystemNotificationSettingsFailed')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: LINK }))
     await waitFor(() => expect(screen.queryByText('settings.openSystemNotificationSettingsFailed')).toBeNull())
+  })
+})
+
+// Captain's relocation request: export belongs to macOS Notifications, without
+// depending on authorization or opening the advanced XMPP console.
+describe('NotificationsSettings — badge diagnostics download', () => {
+  beforeEach(() => {
+    usePlatform('desktop')
+    mockIsMac = true
+    mockBadges = 'disabled'
+    mockSaveBadgeDiagnostics.mockClear()
+  })
+
+  it.each([
+    ['granted', 'settings.notificationEnabled'],
+    ['denied', 'settings.notificationDeniedMac'],
+    ['default', 'settings.notificationDefault'],
+    ['unknown', 'settings.notificationUnknownMac'],
+    ['unsupported', 'settings.notificationUnsupportedMac'],
+  ])(
+    'keeps export available for %s permission, only saving on a click', async (authorization, statusText) => {
+      mockPermState = authorization
+      render(<NotificationsSettings />)
+      await screen.findByText(statusText)
+      const button = screen.getByRole('button', { name: 'console.exportBadgeDiagnostics' })
+      expect(button).toBeEnabled()
+      expect(mockSaveBadgeDiagnostics).not.toHaveBeenCalled()
+      fireEvent.click(button)
+      expect(mockSaveBadgeDiagnostics).toHaveBeenCalledExactlyOnceWith('console.exportBadgeDiagnosticsFailed')
+    },
+  )
+
+  it('keeps this macOS export out of other-platform permission panels', async () => {
+    usePlatform('desktop', 'windows')
+    mockIsMac = false
+    render(<NotificationsSettings />)
+    await screen.findByText('settings.notificationEnabled')
+    expect(screen.queryByRole('button', { name: 'console.exportBadgeDiagnostics' })).toBeNull()
+    expect(mockSaveBadgeDiagnostics).not.toHaveBeenCalled()
   })
 })
 
