@@ -106,8 +106,23 @@ npm run tauri:ios:demo -- "Fluux iOS QA"
 ```
 
 This builds and installs **Fluux iOS Demo** (`net.processone.fluux.demo`)
-alongside the connected development app. Its separate data container keeps the
-demo's storage reset away from real accounts. The app embeds
+alongside the connected development app. Its separate app data container and
+App Group (`group.net.processone.fluux.demo.share`) keep the demo's storage
+reset away from real accounts and the regular app's notification mirror, badge,
+widget snapshot and preview ledger. The demo app, share extension, notification
+extension and widget all use that demo group. The app and notification extension
+also use the demo's own `notification-preview` keychain group. The demo commands
+retarget the generated metadata for the build or live-development session, then
+restore its original contents even if the build fails. They do not migrate or
+delete files in the regular app's group.
+
+For a signed demo, enable the demo App Group for all four demo App IDs and
+regenerate their provisioning profiles. The app and notification extension must
+also share the demo preview keychain group; the share extension and widget do
+not receive preview access. Unsigned generation checks do not prove signed
+container access on a device.
+
+The app embeds
 `demo.html?tutorial=false`, so it opens without a running Vite server or a
 reachable Mac. For live layout edits, use `npm run tauri:ios:demo:dev`,
 select a simulator in Xcode and press Run. This starts Vite on port 5194 and
