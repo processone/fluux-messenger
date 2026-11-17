@@ -504,6 +504,68 @@ describe('DeferredDecryptEngine', () => {
       })
     }
 
+    // Review: the copy must survive, or be cleared, on the durable and orphaned-preview recovery paths, not only on resident rows.
+    describe('forwarded copy on durable and preview recovery', () => {
+      const copy = xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { from: 'team@conference.example.org/Bob' }, xml('body', {}, 'Ship it')))
+      const sealed = (children: ReturnType<typeof xml>[]) =>
+        xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(serializePayloadEnvelope(children)).toString('base64')).toString()
+      const durable = () => {
+        vi.mocked(cache.getMessagesWithEncryptedPayload).mockImplementation(messageCache.getMessagesWithEncryptedPayload)
+        vi.mocked(cache.updateMessage).mockImplementation(messageCache.updateMessage)
+      }
+      const rejects = () => vi.spyOn(manager, 'decryptArchive').mockRejectedValue(new E2EEPluginError('permanent', 'signature-failed', 'bad signature'))
+
+      it('recovers a copy into a conversation that is not resident, with or without an outer body', async () => {
+        const { pending } = await seedTwins({ body: '[encrypted]', encryptedPayload: sealed([copy]) }, false)
+        durable()
+        await engine.retryPending()
+        expect(await messageCache.getMessage(conversationId, pending.id, pending)).toMatchObject({
+          body: '', forwarded: { author: 'Bob', text: 'Ship it' },
+        })
+      })
+
+      it('clears a previously unverified copy from the durable row when the signature check fails', async () => {
+        const { pending } = await seedTwins({ body: '[encrypted]', forwarded: { author: 'Mallory', text: 'Forged' } }, false)
+        durable()
+        rejects()
+        await engine.retryPending()
+        const row = await messageCache.getMessage(conversationId, pending.id, pending)
+        expect(row).toMatchObject({ body: MESSAGE_REJECTED_BODY, encryptedPayload: undefined })
+        expect(row?.forwarded).toBeUndefined()
+      })
+
+      it('recovers a copy into a sidebar preview that no stored row carries', async () => {
+        const lastMessage: Message = {
+          type: 'chat', id: 'orphan', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: COULD_NOT_DECRYPT_BODY,
+          timestamp: new Date(1_700_000_002_000), isOutgoing: false, encryptedPayload: sealed([copy]),
+        }
+        chatStore.getState().addConversation({ id: conversationId, type: 'chat', name: 'Bob', unreadCount: 0, lastMessage })
+        stores.chat.getEncryptedPreviews.mockImplementation(() => {
+          const last = chatStore.getState().conversationMeta.get(conversationId)?.lastMessage
+          return last?.encryptedPayload ? [{ conversationId, lastMessage: last }] : []
+        })
+        await engine.retryPending()
+        expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage).toMatchObject({ forwarded: { author: 'Bob', text: 'Ship it' } })
+      })
+
+      it('clears a copy from a sidebar preview when the signature check fails', async () => {
+        const lastMessage: Message = {
+          type: 'chat', id: 'orphan', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: 'Look', forwarded: { author: 'Mallory', text: 'Forged' },
+          timestamp: new Date(1_700_000_002_000), isOutgoing: false, encryptedPayload: DUMMY_PAYLOAD_XML,
+        }
+        chatStore.getState().addConversation({ id: conversationId, type: 'chat', name: 'Bob', unreadCount: 0, lastMessage })
+        stores.chat.getEncryptedPreviews.mockImplementation(() => {
+          const last = chatStore.getState().conversationMeta.get(conversationId)?.lastMessage
+          return last?.encryptedPayload ? [{ conversationId, lastMessage: last }] : []
+        })
+        rejects()
+        await engine.retryPending()
+        const preview = chatStore.getState().conversationMeta.get(conversationId)?.lastMessage
+        expect(preview).toMatchObject({ body: MESSAGE_REJECTED_BODY, encryptedPayload: undefined })
+        expect(preview?.forwarded).toBeUndefined()
+      })
+    })
+
     it.each(['unlock', 'peer', 'rejected body'])('indexes content recovered after a twin is evicted during %s', async mode => {
       const { first, pending } = await seedTwins({ body: '[encrypted second]' })
       await searchIndex.indexMessages([first, pending])
