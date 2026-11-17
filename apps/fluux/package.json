@@ -46,6 +46,7 @@
   "dependencies": {
     "@chenglou/pretext": "^1.0.0",
     "@emoji-mart/data": "^1.2.1",
+    "@fluux/openpgp-plugin": "*",
     "@fluux/sdk": "*",
     "@lexical/history": "^0.53.0",
     "@lexical/plain-text": "^0.53.0",

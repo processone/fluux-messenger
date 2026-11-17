@@ -1,5 +1,5 @@
 import type { MessageSecurityContext } from '@fluux/sdk'
-import { fingerprintsEqual } from '@/e2ee/fingerprintCompare'
+import { fingerprintsEqual } from '@fluux/openpgp-plugin'
 
 /**
  * Resolve the trust level to DISPLAY for a message's E2EE lock, given the

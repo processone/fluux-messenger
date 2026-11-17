@@ -19,13 +19,13 @@ import { E2EEPluginError } from '@fluux/sdk'
 import { EncryptionSettings } from './EncryptionSettings'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useToastStore } from '@/stores/toastStore'
-import fixtureMeta from '@/e2ee/fixtures/sequoia_meta.json'
-import migrationMeta from '@/e2ee/fixtures/migration_meta.json'
-import { withPassphraseFormatHeader } from '@/e2ee/passphraseFormatHeader'
+import fixtureMeta from '../../../../../packages/openpgp-plugin/src/fixtures/sequoia_meta.json'
+import migrationMeta from '../../../../../packages/openpgp-plugin/src/fixtures/migration_meta.json'
+import { withPassphraseFormatHeader } from '@fluux/openpgp-plugin'
 
 const ALICE_FP = fixtureMeta.aliceFingerprint
 const BOB_FP = fixtureMeta.bobFingerprint
-const fixtureFile = (name: string) => readFileSync(resolve(__dirname, '../../e2ee/fixtures', name), 'utf8')
+const fixtureFile = (name: string) => readFileSync(resolve(__dirname, '../../../../../packages/openpgp-plugin/src/fixtures', name), 'utf8')
 
 const mockCheckPepSupport = vi.fn<() => Promise<boolean>>()
 

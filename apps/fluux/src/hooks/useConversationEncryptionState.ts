@@ -6,7 +6,7 @@ import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlai
 import { usePinnedPrimaryFingerprintsStore, isTofuNew } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useCertRejectionStore, type CertRejection } from '@/stores/certRejectionStore'
 import { usePeerKeysetRevisionStore } from '@/stores/peerKeysetRevisionStore'
-import { fingerprintsEqual } from '@/e2ee/fingerprintCompare'
+import { fingerprintsEqual } from '@fluux/openpgp-plugin'
 import { useWebKeyLocked } from './useWebKeyLocked'
 
 /**

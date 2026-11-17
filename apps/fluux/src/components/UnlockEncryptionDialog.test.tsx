@@ -4,7 +4,8 @@ import { UnlockEncryptionDialog } from './UnlockEncryptionDialog'
 
 const cachePassphrase = vi.fn()
 const clearCachedPassphrase = vi.fn()
-vi.mock('@/e2ee/webPassphraseCache', () => ({
+vi.mock('@fluux/openpgp-plugin', async importOriginal => ({
+  ...(await importOriginal<typeof import('@fluux/openpgp-plugin')>()),
   cachePassphrase: (...a: unknown[]) => cachePassphrase(...a),
   clearCachedPassphrase: (...a: unknown[]) => clearCachedPassphrase(...a),
   getRememberPassphrasePreference: () => false,

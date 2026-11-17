@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { buildScopedStorageKey } from '@fluux/sdk'
-import { fingerprintsEqual } from '@/e2ee/fingerprintCompare'
+import { fingerprintsEqual } from '@fluux/openpgp-plugin'
 
 /**
  * Per-peer fingerprint verifications the user has explicitly confirmed

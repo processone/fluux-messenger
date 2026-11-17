@@ -8,7 +8,7 @@ import { syncEngineGeometry } from './harness/compositorSync'
 import type { Locator, Page } from '@playwright/test'
 import { bootDemo, reloadDemo } from './harness/demoBoot'
 
-const meta = JSON.parse(readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/sequoia_meta.json', import.meta.url), 'utf8')) as {
+const meta = JSON.parse(readFileSync(new URL('../packages/openpgp-plugin/src/fixtures/sequoia_meta.json', import.meta.url), 'utf8')) as {
   aliceFingerprint: string; backupPassphrase: string; plaintext: string
 }
 
@@ -178,11 +178,11 @@ async function reloadWithResetMarker(page: Page, expectedFingerprint: string, ex
 for (const kind of ['single-key', 'multi-key']) {
   test(`FLM-357 ${kind} file import preserves Alice backup without claiming Bob is backed up`, async ({ page }) => {
     const { decrypt, readMessage, encrypt, createMessage } = await import('openpgp')
-    const { parseSecretKeysFromBackupPayload } = await import('../apps/fluux/src/e2ee/backupKeyMaterial')
-    const { legacyNormalizeBackupPassphrase } = await import('../apps/fluux/src/e2ee/backupPassphrase')
-    const webMeta = JSON.parse(readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/web_meta.json', import.meta.url), 'utf8'))
+    const { parseSecretKeysFromBackupPayload } = await import('../packages/openpgp-plugin/src/backupKeyMaterial')
+    const { legacyNormalizeBackupPassphrase } = await import('../packages/openpgp-plugin/src/backupPassphrase')
+    const webMeta = JSON.parse(readFileSync(new URL('../packages/openpgp-plugin/src/fixtures/web_meta.json', import.meta.url), 'utf8'))
     const bobFingerprint = webMeta.bobFingerprint.toUpperCase()
-    const file = readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/web_bob_backup.asc', import.meta.url), 'utf8')
+    const file = readFileSync(new URL('../packages/openpgp-plugin/src/fixtures/web_bob_backup.asc', import.meta.url), 'utf8')
     await openRecovery(page)
     if (kind === 'single-key') {
       // F3: reproduce the historical false claim from importing Bob over Alice.
@@ -279,7 +279,7 @@ test('unconfirmed backup uses neutral decisions and acknowledged rotation re-pub
       backup: await plugin.fetchSecretKeyBackup(), publicArmored: JSON.parse(localStorage.getItem('__test_recovery_bundle')!).publicArmored }
   })
   const { decrypt, readMessage, readKey } = await import('openpgp')
-  const { parseSecretKeysFromBackupPayload } = await import('../apps/fluux/src/e2ee/backupKeyMaterial')
+  const { parseSecretKeysFromBackupPayload } = await import('../packages/openpgp-plugin/src/backupKeyMaterial')
   const original = await decrypt({ message: await readMessage({ armoredMessage: before }), passwords: [code], format: 'binary' })
   const oldKeys = await parseSecretKeysFromBackupPayload(original.data)
   const decrypted = await decrypt({ message: await readMessage({ armoredMessage: actual.backup }), passwords: [savedCode], format: 'binary' })
@@ -309,13 +309,13 @@ test('unconfirmed backup uses neutral decisions and acknowledged rotation re-pub
 for (const mode of ['guided', 'ordinary-picker']) {
   test(`legacy file retains the typed server code through ${mode} confirmation`, async ({ page }) => {
     const { decrypt, readMessage, encrypt, createMessage } = await import('openpgp')
-    const { parseSecretKeysFromBackupPayload } = await import('../apps/fluux/src/e2ee/backupKeyMaterial')
-    const { legacyNormalizeBackupPassphrase } = await import('../apps/fluux/src/e2ee/backupPassphrase')
-    const original = readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/sequoia_alice_backup.asc', import.meta.url), 'utf8')
+    const { parseSecretKeysFromBackupPayload } = await import('../packages/openpgp-plugin/src/backupKeyMaterial')
+    const { legacyNormalizeBackupPassphrase } = await import('../packages/openpgp-plugin/src/backupPassphrase')
+    const original = readFileSync(new URL('../packages/openpgp-plugin/src/fixtures/sequoia_alice_backup.asc', import.meta.url), 'utf8')
     const decoded = await decrypt({ message: await readMessage({ armoredMessage: original }), passwords: [code], format: 'binary' })
     const keys = await parseSecretKeysFromBackupPayload(decoded.data)
     if (mode === 'ordinary-picker') {
-      const bob = readFileSync(new URL('../apps/fluux/src/e2ee/fixtures/web_bob_backup.asc', import.meta.url), 'utf8')
+      const bob = readFileSync(new URL('../packages/openpgp-plugin/src/fixtures/web_bob_backup.asc', import.meta.url), 'utf8')
       const decodedBob = await decrypt({ message: await readMessage({ armoredMessage: bob }), passwords: [legacyNormalizeBackupPassphrase(code)], format: 'binary' })
       keys.push(...await parseSecretKeysFromBackupPayload(decodedBob.data))
     }
@@ -492,11 +492,11 @@ for (const phase of ['server-fetch', 'file-picker', 'confirmed-save']) {
 
 test('a real multi-key backup requires the intended fingerprint before installation', async ({ page }) => {
   const { decrypt, readMessage, encrypt, createMessage } = await import('openpgp')
-  const { parseSecretKeysFromBackupPayload } = await import('../apps/fluux/src/e2ee/backupKeyMaterial')
-  const { legacyNormalizeBackupPassphrase } = await import('../apps/fluux/src/e2ee/backupPassphrase')
+  const { parseSecretKeysFromBackupPayload } = await import('../packages/openpgp-plugin/src/backupKeyMaterial')
+  const { legacyNormalizeBackupPassphrase } = await import('../packages/openpgp-plugin/src/backupPassphrase')
   const keys = []
   for (const [name, passphrase] of [['sequoia_alice_backup.asc', code], ['web_bob_backup.asc', legacyNormalizeBackupPassphrase(code)]]) {
-    const armoredMessage = readFileSync(new URL(`../apps/fluux/src/e2ee/fixtures/${name}`, import.meta.url), 'utf8')
+    const armoredMessage = readFileSync(new URL(`../packages/openpgp-plugin/src/fixtures/${name}`, import.meta.url), 'utf8')
     const result = await decrypt({ message: await readMessage({ armoredMessage }), passwords: [passphrase], format: 'binary' })
     keys.push(...await parseSecretKeysFromBackupPayload(result.data))
   }

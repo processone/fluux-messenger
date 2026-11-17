@@ -13,7 +13,7 @@ import {
   clearCachedPassphrase,
   getRememberPassphrasePreference,
   setRememberPassphrasePreference,
-} from '@/e2ee/webPassphraseCache'
+} from '@fluux/openpgp-plugin'
 
 interface UnlockEncryptionDialogProps {
   client: XMPPClient

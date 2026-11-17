@@ -63,7 +63,7 @@ fn setup_openpgp(app: &mut tauri::App) {
     tauri::async_runtime::spawn_blocking(move || {
         if let Ok(Some(jid)) = ios_keychain::IosKeychain.get("last_user") {
             // The XEP-0373 trust-anchor UID, as `accountUserId` builds it in
-            // `src/e2ee/openpgpUserId.ts`.
+            // `packages/openpgp-plugin/src/openpgpUserId.ts`.
             let user_id = format!("xmpp:{jid}");
             state.prewarm_if_persisted(jid, user_id);
         }

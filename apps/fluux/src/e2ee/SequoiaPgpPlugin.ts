@@ -25,8 +25,7 @@ import {
   type KeychainRetryAvailability,
   classifyBoundaryError,
 } from './OpenPGPPluginBase'
-import { accountUserId } from './openpgpUserId'
-import { keyExportFilename } from './keyExportNaming'
+import { accountUserId, keyExportFilename } from '@fluux/openpgp-plugin'
 
 /**
  * Typed wrapper over Tauri's `invoke`. Abstracted so tests can inject a

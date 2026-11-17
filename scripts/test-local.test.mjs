@@ -194,6 +194,22 @@ test('deleted, renamed, setup, configs and unknown files widen explicitly; known
   assert.ok(docs.notes.every(note => note.startsWith('Documentation only:')))
 })
 
+test('OpenPGP package sources select its own suite and the app consumers, fixtures add Rust and the browser journey', () => {
+  const source = planFor(['packages/openpgp-plugin/src/backupPassphrase.ts'])
+  assert.ok(ids(source).includes('test:run --workspace=@fluux/openpgp-plugin'))
+  assert.ok(ids(source).includes('full:app'))
+  assert.ok(!ids(source).includes('full:sdk'))
+  const test = planFor(['packages/openpgp-plugin/src/backupPassphrase.test.ts'])
+  assert.ok(ids(test).includes('test:run --workspace=@fluux/openpgp-plugin'))
+  assert.ok(!ids(test).includes('full:app'))
+  const fixture = planFor(['packages/openpgp-plugin/src/fixtures/sequoia_meta.json'])
+  assert.ok(ids(fixture).some(id => id.startsWith('cargo:')))
+  assert.ok(ids(fixture).includes('test:e2e'))
+  assert.ok(ids(planFor(['packages/openpgp-plugin/package.json'])).includes('typecheck'))
+  // A removed package file is never a documentation or unknown-path fallback to the whole gate.
+  assert.ok(!ids(createPlan([{ path: 'packages/openpgp-plugin/src/armorDetect.ts', status: 'D' }])).includes('build'))
+})
+
 test('--list prints commands/reasons and cannot invoke a build, discovery or test child', t => {
   const { cwd, write } = fixture(t)
   write('package.json', readFileSync(resolve(root, 'package.json')))

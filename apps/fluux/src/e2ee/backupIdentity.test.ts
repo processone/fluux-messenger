@@ -8,12 +8,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPluginStorage, InMemoryStorageBackend, type PEPItem, type PluginContext } from '@fluux/sdk'
 import { createMessage, decrypt, encrypt, readMessage, unarmor } from 'openpgp'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
-import { clearSessionPassphrase } from './webPassphraseStore'
-import { parseSecretKeysFromBackupPayload } from './backupKeyMaterial'
-import { legacyNormalizeBackupPassphrase } from './backupPassphrase'
-import { clearBackedUpFingerprint, readBackedUpFingerprint, writeBackedUpFingerprint } from './backupMarker'
+import {
+  clearSessionPassphrase,
+  parseSecretKeysFromBackupPayload,
+  legacyNormalizeBackupPassphrase,
+  clearBackedUpFingerprint,
+  readBackedUpFingerprint,
+  writeBackedUpFingerprint,
+} from '@fluux/openpgp-plugin'
 
-const fixture = (name: string) => readFileSync(resolve(__dirname, 'fixtures', name), 'utf8')
+const fixture = (name: string) => readFileSync(resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures', name), 'utf8')
 const meta = JSON.parse(fixture('sequoia_meta.json'))
 const webMeta = JSON.parse(fixture('web_meta.json'))
 const aliceFingerprint = meta.aliceFingerprint.toLowerCase()

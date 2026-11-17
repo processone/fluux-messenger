@@ -106,7 +106,7 @@ async function startRun(accounts: Accounts) {
   // The web build: openpgp.js, key in IndexedDB, session passphrase.
   const { setPlatformForTesting } = await import('@/platform')
   const restorePlatform = setPlatformForTesting({ shell: 'web', os: 'macos' })
-  const { setSessionPassphrase, clearSessionPassphrase } = await import('./webPassphraseStore')
+  const { setSessionPassphrase, clearSessionPassphrase } = await import('@fluux/openpgp-plugin')
   setSessionPassphrase('scratch-session-passphrase-flm157')
 
   const { client: xmppClient, xml } = await import('@xmpp/client')

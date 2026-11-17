@@ -4,6 +4,7 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./src/*"],
+      "@fluux/openpgp-plugin": ["../../packages/openpgp-plugin/src/index.ts"],
       "@fluux/sdk": ["../../packages/fluux-sdk/dist/index.d.ts"],
       "@fluux/sdk/react": ["../../packages/fluux-sdk/dist/react/index.d.ts"],
       "@fluux/sdk/core": ["../../packages/fluux-sdk/dist/core/index.d.ts"],

@@ -32,7 +32,7 @@ import {
   type XMPPPrimitives,
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
-import { clearSessionPassphrase } from './webPassphraseStore'
+import { clearSessionPassphrase } from '@fluux/openpgp-plugin'
 
 // Importing these fixtures runs real openpgp.js key work, so the tests are
 // CPU-bound and inflate several-fold under the contention of a full
@@ -40,7 +40,7 @@ import { clearSessionPassphrase } from './webPassphraseStore'
 // little headroom on a loaded runner. See WebOpenPGPPlugin.test.ts.
 vi.setConfig({ testTimeout: 30_000 })
 
-const FIXTURES_DIR = resolve(__dirname, 'fixtures')
+const FIXTURES_DIR = resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures')
 const readFixture = (name: string) => readFileSync(resolve(FIXTURES_DIR, name), 'utf-8')
 
 /** A ready-to-import backup plus the passphrase and fingerprint to verify it. */

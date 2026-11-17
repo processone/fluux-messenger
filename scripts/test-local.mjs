@@ -10,6 +10,7 @@ export const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const app = 'apps/fluux'
 const sdk = 'packages/fluux-sdk'
 const native = `${app}/src-tauri`
+const openpgpPlugin = 'packages/openpgp-plugin'
 const mainManifest = `${native}/Cargo.toml`
 const nseManifest = `${native}/nse-openpgp/Cargo.toml`
 const workspaces = { app: '@xmpp/fluux', sdk: '@fluux/sdk' }
@@ -177,6 +178,18 @@ export function createPlan(changes, cwd = root) {
       widgetLab(reason); platform(reason); continue
     }
     const removed = status === 'D' || status === 'R'
+    // The OpenPGP package has its own suite and the app consumes it from source, so its files
+    // select the package tests plus the app family; its golden key files are also read by Rust.
+    if (path.startsWith(`${openpgpPlugin}/`)) {
+      npm('test:run --workspace=@fluux/openpgp-plugin', reason)
+      if (removed || !/\.test\.ts$/.test(path)) full.add('app')
+      if (path.startsWith(`${openpgpPlugin}/src/fixtures/`)) {
+        cargo(mainManifest, reason)
+        npm('test:e2e', reason)
+      }
+      if (!/\.(ts|tsx)$/.test(path) || /\/(vitest|tsup|eslint)\.config\.|\/tsconfig/.test(path)) npm('typecheck', reason)
+      continue
+    }
     // Only known documentation roots are exempt, never generated permission references.
     if (/^(docs\/.*\.(md|png|jpg|svg)|README\.md|CONTRIBUTING\.md|CHANGELOG\.md|RELEASE_NOTES\.md|LICENSE)$/.test(path)) {
       notes.add(`Documentation only: ${path}`)

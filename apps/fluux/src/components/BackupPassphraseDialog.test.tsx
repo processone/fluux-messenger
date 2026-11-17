@@ -20,7 +20,8 @@ vi.mock('react-i18next', () => ({
 
 const PASSPHRASE = 'alpha bravo charlie delta echo foxtrot golf hotel'
 
-vi.mock('@/e2ee/passphraseGenerator', () => ({
+vi.mock('@fluux/openpgp-plugin', async importOriginal => ({
+  ...(await importOriginal<typeof import('@fluux/openpgp-plugin')>()),
   USE_V6_KEYS: true,
   generateBackupPassphrase: vi.fn(() => Promise.resolve(PASSPHRASE)),
   generateBackupCode: vi.fn(() => 'AAAA-BBBB-CCCC'),
