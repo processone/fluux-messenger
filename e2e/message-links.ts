@@ -205,10 +205,14 @@ async function assertForwardStanza(page: import('@playwright/test').Page, to: st
 }
 
 async function forwardPicture(page: import('@playwright/test').Page, name: string) {
-  if (process.env.FLUUX_FORWARD_EVIDENCE) await page.screenshot({ path: `${process.env.FLUUX_FORWARD_EVIDENCE}/${name}.png` })
+  if (process.env.FLUUX_FORWARD_EVIDENCE) {
+    const engine = test.info().project.name.split('-').at(-1)
+    await page.screenshot({ path: `${process.env.FLUUX_FORWARD_EVIDENCE}/${name}-${engine}.png`, animations: 'disabled', scale: 'css' })
+  }
 }
 
 test('Forward sends a room link with an optional comment to a chosen contact', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
   const target = await prepareForward(page)
   const link = `xmpp:${ROOM}?join;msg=${encodeURIComponent(target.stanzaId)}`
   const row = page.locator(`[data-message-id="${target.id}"][data-message-body]`)
@@ -233,12 +237,14 @@ test('Forward sends a room link with an optional comment to a chosen contact', a
   await expect(picker).toBeHidden()
   await assertForwardStanza(page, 'emma@fluux.chat', 'chat', `Please review\n${link}`, link)
   await activateChat(page, 'emma@fluux.chat')
-  const sent = page.locator('[data-message-body]').filter({ hasText: `Please review\n${link}` }).last()
+  const sent = page.locator('[data-message-body]').filter({ has: page.getByRole('link', { name: link, exact: true }) }).last()
   await expect(sent).toBeVisible()
+  await expect(sent).toContainText('Please review')
   await expect(sent.locator('[data-room-message-preview]')).toContainText(target.body)
   await forwardPicture(page, 'after-recipient')
   await sent.locator('[data-room-message-preview]').getByRole('link').click()
   await expect(page.locator(`[data-message-id="${target.id}"].message-highlight`)).toBeInViewport()
+  await forwardPicture(page, 'after-jump')
 })
 
 test.describe('touch forwarding', () => {
