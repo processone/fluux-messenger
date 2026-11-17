@@ -32,6 +32,7 @@ import * as messageCache from '../../utils/messageCache'
 import * as searchIndex from '../../utils/searchIndex'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../utils/storageScope'
 import { chatStore } from '../../stores/chatStore'
+import { forwardedCopyQuoteRange } from '../../utils/forwardedCopyQuote'
 import { _resetForTesting } from '../../stores/shared/throttledStorage'
 import { _clearAllTransientForTesting } from '../../stores/shared/transientUnread'
 
@@ -162,6 +163,43 @@ describe('DeferredDecryptEngine', () => {
     expect(updates.body).toBe('Edited comment')
     if (withCopy) expect(updates.forwarded).toMatchObject({ text: 'New copy' })
     else expect(updates).not.toHaveProperty('forwarded')
+  })
+
+  // Rework: the marker travels in the payload, and a recovered edit never keeps a marker for text it replaced.
+  it('recovers a marked forward from a pending envelope with the marker bound to the recovered body', async () => {
+    const quote = '> Bob wrote:\n> Ship it\n'
+    const body = `Look\n${quote}xmpp:team@conference.example.org?join;msg=1`
+    const copy = xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { from: 'team@conference.example.org/Bob' }, xml('body', {}, 'Ship it')))
+    const marker = xml('fallback', { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:forward:0' },
+      xml('body', { start: '5', end: String(Array.from(body).length) }))
+    const envelope = serializePayloadEnvelope([xml('body', {}, body), copy, marker])
+    const pending: Message = {
+      type: 'chat', id: 'fwd-marked', stanzaId: undefined, originId: undefined, conversationId: 'bob@example.com', from: 'bob@example.com',
+      body: '[dummy-plaintext payload]', timestamp: new Date(), isOutgoing: false,
+      encryptedPayload: xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(envelope).toString('base64')).toString(),
+    }
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [pending] }])
+    await engine.retryPending()
+    const updates = stores.chat.updateMessage.mock.calls[0][2]
+    expect(forwardedCopyQuoteRange({ body: updates.body ?? '', forwarded: updates.forwarded })).toEqual({ begin: 5, end: body.length })
+    expect(updates.body?.slice(5)).toContain('> Bob wrote:')
+  })
+
+  it('recovers a comment-only edit of a marked forward without hiding any of the new comment', async () => {
+    const quote = '> Bob wrote:\n> Ship it\nxmpp:r@c?join;msg=1'
+    const envelope = serializePayloadEnvelope([xml('body', {}, 'A much longer edited comment')])
+    const pending: Message = {
+      type: 'chat', id: 'fwd-marked-edit', stanzaId: undefined, originId: undefined, conversationId: 'bob@example.com', from: 'bob@example.com',
+      body: 'Old comment', timestamp: new Date(), isOutgoing: false, isEdited: true,
+      forwarded: { author: 'Bob', text: 'Ship it', fallback: { begin: 12, end: 12 + quote.length, text: quote } },
+      encryptedPayload: xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(envelope).toString('base64')).toString(),
+    }
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [pending] }])
+    await engine.retryPending()
+    const updates = stores.chat.updateMessage.mock.calls[0][2]
+    expect(updates.body).toBe('A much longer edited comment')
+    expect(updates).not.toHaveProperty('forwarded')
+    expect(forwardedCopyQuoteRange({ body: updates.body ?? '', forwarded: pending.forwarded })).toBeUndefined()
   })
 
   it('decrypts a pending chat payload and writes back through the injected bindings', async () => {

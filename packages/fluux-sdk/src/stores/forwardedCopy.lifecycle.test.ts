@@ -13,6 +13,8 @@ import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/stora
 import { _resetForTesting } from './shared/throttledStorage'
 import { _clearAllTransientForTesting } from './shared/transientUnread'
 import { formatMessagePreview } from '../utils/messagePreview'
+import { forwardedCopyQuoteRange } from '../utils/forwardedCopyQuote'
+import { applyCorrection, correctionMarks, parseMessageContent } from '../core/modules/messagingUtils'
 
 // Review: a forwarded copy followed from the wire through the resident store, the archive and the durable
 // cache, and through deletion while the message is mounted, with disposable fixtures only.
@@ -96,3 +98,58 @@ describe('forwarded copy receive lifecycle', () => {
     expect(resident().find(m => m.id === 'gone')?.forwarded).toBeUndefined()
   })
 })
+
+// Rework: a forward whose quote is marked as the copy's fallback, followed through every receive route and an edit.
+describe('marked forward receive lifecycle', () => {
+  const quote = '> Bob wrote:\n> Ship it\nxmpp:team@conference.example.org?join;msg=1'
+  const body = `Look\n${quote}`
+  const marker = () => xml('fallback', { xmlns: 'urn:xmpp:fallback:0', for: NSF }, xml('body', { start: '5', end: String(Array.from(body).length) }))
+  const inner = () => xml('message', { type: 'chat', id: 'mk-1', from: `${peer}/web`, to: 'alice@example.org' }, xml('body', {}, body), copy(), marker())
+  const hidden = (m: Message) => forwardedCopyQuoteRange(m)
+
+  it('keeps the marker through live, carbon and archive delivery, the cache and the previews', async () => {
+    const { chat, mam, emitSDK } = chatModule()
+    chat.handle(inner())
+    chat.handle(xml('message', { from: 'alice@example.org', to: 'alice@example.org/web' },
+      xml('received', { xmlns: 'urn:xmpp:carbons:2' }, xml('forwarded', { xmlns: NSF }, inner()))))
+    for (const message of delivered(emitSDK)) chatStore.getState().addMessage(message)
+    expect(resident().filter(m => m.id === 'mk-1')).toHaveLength(1)
+    expect(hidden(resident()[0])).toEqual({ begin: 5, end: body.length })
+    expect(resident()[0].forwarded?.fallback?.text).toBe(quote)
+
+    const replay = mam.parseArchiveMessage(xml('forwarded', { xmlns: NSF }, xml('delay', { xmlns: 'urn:xmpp:delay', stamp: '2026-11-17T09:30:00Z' }), inner()), peer, 'arch-mk')
+    expect(replay && hidden(replay)).toEqual({ begin: 5, end: body.length })
+    chatStore.getState().mergeMAMMessages(peer, [replay!], {}, true, 'forward', { extras: { walkOriginTs: 0 } })
+    expect(resident().filter(m => m.id === 'mk-1' || m.forwarded)).toHaveLength(1)
+
+    await messageCache.saveMessages(resident())
+    chatStore.setState({ messages: new Map() })
+    await chatStore.getState().loadMessagesFromCache(peer, { limit: 50 })
+    expect(hidden(resident()[0])).toEqual({ begin: 5, end: body.length })
+    expect(formatMessagePreview(resident()[0])).toBe('Look')
+  })
+
+  it.each(['longer', 'shorter'])('keeps the copy and shows the whole new body after a %s edit, live and after a reload', async kind => {
+    const { chat, emitSDK } = chatModule()
+    chat.handle(inner())
+    for (const message of delivered(emitSDK)) chatStore.getState().addMessage(message)
+    const edited = kind === 'longer' ? 'A much longer comment than before, with many more words' : 'Hi'
+    const correction = xml('message', { type: 'chat', id: 'mk-edit', from: `${peer}/web`, to: 'alice@example.org' },
+      xml('body', {}, edited), xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'mk-1' }))
+    const parsed = parseMessageContent({ messageEl: correction, body: edited })
+    const result = applyCorrection(correction, edited, body)
+    chatStore.getState().updateMessage(peer, 'mk-1', { ...result, ...correctionMarks(parsed) })
+    const row = resident().find(m => m.id === 'mk-1')!
+    expect(row.body).toBe(edited)
+    expect(row.forwarded?.text).toBe('Ship it')
+    expect(hidden(row)).toBeUndefined()
+    expect(formatMessagePreview(row)).toBe(edited)
+
+    await messageCache.saveMessages(resident())
+    chatStore.setState({ messages: new Map() })
+    await chatStore.getState().loadMessagesFromCache(peer, { limit: 50 })
+    expect(resident().find(m => m.id === 'mk-1')).toMatchObject({ body: edited, forwarded: { text: 'Ship it' } })
+    expect(hidden(resident().find(m => m.id === 'mk-1')!)).toBeUndefined()
+  })
+})
+

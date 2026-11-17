@@ -25,3 +25,22 @@ describe('copy-only forwarded message', () => {
     expect(formatLocalizedPreview(message({ forwarded: undefined, isRetracted: true }), t)).toBe('chat.messageDeleted')
   })
 })
+
+// Rework: the quote that stands in for a shown copy is left out of the list preview and the notification.
+describe('forward with a marked quote', () => {
+  const quote = '> Bob wrote:\n> Ship it\nxmpp:r@c?join;msg=1'
+  const marked = (lead: string) => message({ body: `${lead}${quote}`,
+    forwarded: { author: 'Bob', text: 'Ship it', fallback: { begin: lead.length, end: lead.length + quote.length, text: quote } } })
+
+  it.each([false, true])('notifies with the comment and not the quote (web: %s)', web => {
+    expect(buildLocalMessageNotification({ kind: 'chat', entity, message: marked('Look\n') }, t, 'en', web)).toMatchObject({ title: 'Alice', body: 'Look' })
+    expect(formatLocalizedPreview(marked('Look\n'), t)).toBe('Look')
+  })
+
+  it('shows the copied text when no comment is left, and the whole body once an edit changed the marked text', () => {
+    expect(formatLocalizedPreview(marked(''), t)).toBe('Ship it')
+    const edited = { ...marked('Look\n'), body: `A much longer comment\n${quote}` }
+    expect(formatLocalizedPreview(edited, t)).toContain('Bob wrote')
+  })
+})
+
