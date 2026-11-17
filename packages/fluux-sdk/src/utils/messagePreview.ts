@@ -265,7 +265,7 @@ export function stripReplyQuote(body: string): string {
  * // 'My reply'
  * ```
  */
-export function formatMessagePreview(message: Pick<BaseMessage, 'body' | 'attachment' | 'replyTo' | 'poll' | 'pollClosed'>): string {
+export function formatMessagePreview(message: Pick<BaseMessage, 'body' | 'attachment' | 'replyTo' | 'forwarded' | 'poll' | 'pollClosed'>): string {
   // Poll messages: show title with poll emoji
   if (message.poll) {
     return `📊 ${message.poll.title}`
@@ -278,7 +278,8 @@ export function formatMessagePreview(message: Pick<BaseMessage, 'body' | 'attach
 
   // For replies, strip any quote prefix that may still be in the body
   // (in case XEP-0428 fallback indication wasn't used)
-  let previewBody = body || ''
+  // A forwarded copy without a comment previews as the copied text.
+  let previewBody = body || message.forwarded?.text || ''
   if (replyTo && previewBody.startsWith('> ')) {
     previewBody = stripReplyQuote(previewBody)
   }

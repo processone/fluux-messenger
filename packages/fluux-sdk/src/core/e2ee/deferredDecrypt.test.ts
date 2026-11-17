@@ -128,6 +128,42 @@ describe('DeferredDecryptEngine', () => {
       expect.objectContaining({ body: withBody ? 'Look' : '', forwarded: expect.objectContaining({ author: 'Bob', text: 'Ship it' }) }))
   })
 
+  // Review: a failed signature check must not leave a previously unverified (or outer) copy on display.
+  it('clears a retained forwarded copy when the deferred signature check fails', async () => {
+    const pending: Message = {
+      type: 'chat', id: 'fwd-rejected', stanzaId: undefined, originId: undefined,
+      conversationId: 'bob@example.com', from: 'bob@example.com',
+      body: 'Look', timestamp: new Date(), isOutgoing: false,
+      forwarded: { author: 'Mallory', text: 'Forged' },
+      encryptedPayload: DUMMY_PAYLOAD_XML,
+    }
+    vi.spyOn(manager, 'decryptArchive').mockRejectedValue(new E2EEPluginError('permanent', 'signature-failed', 'bad signature'))
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [pending] }])
+    await engine.retryPending()
+    const updates = stores.chat.updateMessage.mock.calls[0][2]
+    expect(updates).toEqual(expect.objectContaining({ body: MESSAGE_REJECTED_BODY, encryptedPayload: undefined }))
+    expect(updates).toHaveProperty('forwarded', undefined)
+  })
+
+  // Review: a comment-only correction carries no copy, so recovering it keeps the original's copy.
+  it.each([['comment-only', false], ['with its own copy', true]])('recovers a %s edit of a forwarded message', async (_name, withCopy) => {
+    const copy = xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { from: 'bob@example.com' }, xml('body', {}, 'New copy')))
+    const envelope = serializePayloadEnvelope([xml('body', {}, 'Edited comment'), ...(withCopy ? [copy] : [])])
+    const pending: Message = {
+      type: 'chat', id: 'fwd-edit', stanzaId: undefined, originId: undefined,
+      conversationId: 'bob@example.com', from: 'bob@example.com',
+      body: 'Old comment', timestamp: new Date(), isOutgoing: false, isEdited: true,
+      forwarded: { author: 'Bob', text: 'Original copy' },
+      encryptedPayload: xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(envelope).toString('base64')).toString(),
+    }
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [pending] }])
+    await engine.retryPending()
+    const updates = stores.chat.updateMessage.mock.calls[0][2]
+    expect(updates.body).toBe('Edited comment')
+    if (withCopy) expect(updates.forwarded).toMatchObject({ text: 'New copy' })
+    else expect(updates).not.toHaveProperty('forwarded')
+  })
+
   it('decrypts a pending chat payload and writes back through the injected bindings', async () => {
     // Verified so the outcome is committed (untrusted defers verification).
     vi.spyOn(manager, 'decryptArchive').mockResolvedValue({

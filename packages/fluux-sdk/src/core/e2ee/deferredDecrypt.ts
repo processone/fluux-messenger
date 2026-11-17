@@ -70,7 +70,7 @@ function unavailableUpdates(message: Pick<Message, 'contentAvailability'>, outco
   return {
     contentAvailability: outcome.contentAvailability,
     ...(outcome.clearPayload && {
-      encryptedPayload: undefined, body: COULD_NOT_DECRYPT_BODY,
+      encryptedPayload: undefined, forwarded: undefined, body: COULD_NOT_DECRYPT_BODY,
       ...(outcome.securityContext && { securityContext: outcome.securityContext }),
     }),
   }
@@ -158,7 +158,8 @@ function recoveredUpdates(
     contentAvailability: { state: outcome.unverified ? 'verification' as const : 'ready' as const },
     body: outcome.body,
     references: outcome.references,
-    forwarded: outcome.forwarded,
+    // A comment-only correction carries no copy of its own; the original's copy stays.
+    ...((outcome.forwarded || !message.isEdited) && { forwarded: outcome.forwarded }),
     ...(outcome.securityContext && { securityContext: outcome.securityContext }),
     ...(outcome.attachment && { attachment: outcome.attachment }),
     ...(message.isEdited && {
@@ -301,7 +302,7 @@ export class DeferredDecryptEngine {
         } else if (outcome.kind === 'unsupported') {
           request.apply(guardedUpdates(message, { encryptedPayload: undefined, unsupportedEncryption: outcome.info }, accountScope))
         } else {
-          request.apply(guardedUpdates(message, { encryptedPayload: undefined, contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, body: MESSAGE_REJECTED_BODY,
+          request.apply(guardedUpdates(message, { encryptedPayload: undefined, contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, forwarded: undefined, body: MESSAGE_REJECTED_BODY,
             ...(outcome.kind === 'rejected' && { securityContext: outcome.securityContext }) }, accountScope))
         }
       }
@@ -371,7 +372,7 @@ export class DeferredDecryptEngine {
             // MUC carries no encrypted bodiless signals, so a rejected room
             // message always has real content — warn the user and clear the stash.
             roomBindings.updateMessage(roomJid, msg.id, guardedUpdates(msg, {
-              contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, body: MESSAGE_REJECTED_BODY,
+              contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, forwarded: undefined, body: MESSAGE_REJECTED_BODY,
               ...(outcome.securityContext && { securityContext: outcome.securityContext }),
               encryptedPayload: undefined,
             }, accountScope))
@@ -454,7 +455,7 @@ export class DeferredDecryptEngine {
             if (accountChanged()) return decryptedCount
           } else {
             const updates = guardedUpdates(msg, {
-              contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, body: MESSAGE_REJECTED_BODY,
+              contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, forwarded: undefined, body: MESSAGE_REJECTED_BODY,
               ...(outcome.securityContext && { securityContext: outcome.securityContext }),
               encryptedPayload: undefined,
             }, accountScope)
@@ -518,7 +519,7 @@ export class DeferredDecryptEngine {
           // A preview is always a real previewable message (bodiless-signal
           // placeholders are never previewable), so warn with the rejected body.
           chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, guardedUpdates(lastMessage, {
-            contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, body: MESSAGE_REJECTED_BODY,
+            contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, forwarded: undefined, body: MESSAGE_REJECTED_BODY,
             ...(outcome.securityContext && { securityContext: outcome.securityContext }),
             encryptedPayload: undefined,
           }, accountScope))
@@ -616,7 +617,7 @@ export class DeferredDecryptEngine {
     accountScope: string | null,
   ): void {
     chatBindings.updateMessage(conversationId, placeholder, guardedUpdates(placeholder, {
-      contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, body: MESSAGE_REJECTED_BODY,
+      contentAvailability: { state: 'failed' as const, reason: 'signature-invalid' as const }, forwarded: undefined, body: MESSAGE_REJECTED_BODY,
       ...(securityContext && { securityContext }),
       encryptedPayload: undefined,
     }, accountScope))

@@ -374,6 +374,20 @@ describe('shared room message references', () => {
       expect(mam.parseArchiveMessage(forwarded, 'bob@example.org', 'arch1')).toMatchObject({ body: '', forwarded: { author: 'Bob', text: 'Ship it' } })
     })
 
+    // Review: a carbon wraps the whole message, so the copy inside it is read once, from the unwrapped message.
+    it.each([['received', 'bob@example.org/web', 'alice@example.org/phone', false], ['sent', 'alice@example.org/phone', 'bob@example.org', true]])(
+      'keeps the copy of a %s carbon', (kind, from, to, outgoing) => {
+        const h = harness()
+        h.chat.handle(xml('message', { from: 'alice@example.org', to: 'alice@example.org/web' },
+          xml(kind, { xmlns: 'urn:xmpp:carbons:2' }, xml('forwarded', { xmlns: NSF },
+            xml('message', { type: 'chat', id: `carbon-${kind}`, from, to },
+              xml('body', {}, 'Look'),
+              xml('forwarded', { xmlns: NSF }, xml('message', { from: `${room}/Bob` }, xml('body', {}, 'Ship it'))))))))
+        const events = vi.mocked(h.deps.emitSDK).mock.calls.filter(([name]) => name === 'chat:message')
+        expect(events).toHaveLength(1)
+        expect(events[0][1]).toMatchObject({ message: { id: `carbon-${kind}`, body: 'Look', isOutgoing: outgoing, forwarded: { author: 'Bob', text: 'Ship it' } } })
+      })
+
     // Review: a copy may arrive without an outer body and must still be delivered.
     it('delivers a copy that has no outer body', () => {
       const h = harness()

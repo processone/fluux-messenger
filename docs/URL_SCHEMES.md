@@ -135,7 +135,9 @@ author and time, and without a second preview of the link. In an encrypted
 chat the copy travels inside the encrypted payload only; a copy added outside the
 payload by anyone else is dropped. A retry keeps the copy and its original sender
 address, a copy received before the key was available is recovered with the body,
-and a copy may stand without an outer body. A retraction removes the copy from the
+and a copy may stand without an outer body, in which case the conversation list and
+notifications preview the copied text. A comment-only edit keeps the existing copy,
+while a failed signature check removes it. A retraction removes the copy from the
 open conversation and from storage along with the body.
 
 ## Login prefill principles

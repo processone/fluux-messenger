@@ -97,6 +97,13 @@ describe('messagePreview', () => {
       expect(formatMessagePreview(message)).toBe('Hello world')
     })
 
+    // Review: a forwarded copy without a comment previews as the copied text, not blank.
+    it('previews a forwarded copy that has no comment, and prefers the comment when present', () => {
+      const forwarded = { author: 'Bob', text: 'Ship *it*' }
+      expect(formatMessagePreview({ ...baseMessage, forwarded })).toBe('Ship it')
+      expect(formatMessagePreview({ ...baseMessage, body: 'Look', forwarded })).toBe('Look')
+    })
+
     it('should return empty string when no body and no attachment', () => {
       const message = { ...baseMessage, body: '' }
       expect(formatMessagePreview(message)).toBe('')

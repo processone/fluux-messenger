@@ -117,7 +117,7 @@ const ALLOWED_PAYLOAD_CHILDREN = new Set([
  * A forwarded copy holds text the forwarder chose, so on an encrypted message only the copy
  * inside the authenticated payload counts. Anything an intermediary appended outside it is dropped.
  */
-function dropOuterForwardedCopy(stanza: Element): void {
+export function dropOuterForwardedCopy(stanza: Element): void {
   stanza.children = stanza.children.filter(
     (child) => typeof child === 'string' || !((child as Element).name === 'forwarded' && (child as Element).attrs?.xmlns === NS_FORWARD),
   )
@@ -271,7 +271,6 @@ export async function decryptStanzaInPlace(
     // no plugin for" (e.g. OMEMO when only OpenPGP is wired — surface the
     // sender's XEP-0380 fallback <body> with an unsupported-method tag).
     const disposition = recordUnclaimedEME(stanza, manager, { peer: senderPeer, source, entityKind })
-    if (disposition.kind === 'retry' || disposition.kind === 'unsupported') dropOuterForwardedCopy(stanza)
     if (disposition.kind === 'retry') {
       return { attempted: false, encryptedPayloadXml: disposition.encryptedPayloadXml }
     }
@@ -790,6 +789,7 @@ export function recordUnclaimedEME(
     const name = EME_PROTOCOL_NAMES[target.namespace] ?? target.emeName ?? target.namespace
     const info: EMEIdentity = { namespace: target.namespace, name }
     ;(stanza as unknown as Record<string, EMEIdentity>)[UNSUPPORTED_ENC_STASH] = info
+    dropOuterForwardedCopy(stanza)
     logInfo(`E2EE: message uses unsupported encryption (${name} / ${target.namespace})`)
     report('unsupported')
     return { kind: 'unsupported', info }
@@ -801,6 +801,7 @@ export function recordUnclaimedEME(
   if (!target.child) return { kind: 'none' }
   const payloadXml = stanza.toString()
   stashPayload(stanza, payloadXml)
+  dropOuterForwardedCopy(stanza)
   logInfo(`E2EE: stashed encrypted payload (ns=${target.namespace}) for deferred decrypt`)
   report('unavailable')
   return { kind: 'retry', encryptedPayloadXml: payloadXml }

@@ -747,6 +747,14 @@ describe('recordUnclaimedEME', () => {
     ) as Element
   }
 
+  // Review: direct Chat/MAM callers reach recordUnclaimedEME without the decrypt helper, so it drops the unauthenticated copy itself.
+  it.each([['unsupported', true], ['retry', false]])('drops an outer forwarded copy when the stanza is %s', (_name, ready) => {
+    const stanza = omemoStanza()
+    stanza.children.push(xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { from: 'mallory@example.com' }, xml('body', {}, 'Forged'))))
+    recordUnclaimedEME(stanza, ready)
+    expect(stanza.getChild('forwarded', 'urn:xmpp:forward:0')).toBeUndefined()
+  })
+
   it('classifies an EME-tagged stanza as unsupported when plugins are ready', () => {
     const stanza = omemoStanza()
     const disposition = recordUnclaimedEME(stanza, true)
