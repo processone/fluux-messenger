@@ -16,6 +16,8 @@ declare module '@xmpp/client' {
     text(): string
     /** Append a child and return the parent (ltx `Element.append`). */
     append(child: Element | string): Element
+    /** Namespace this element resolves to through its ancestors (ltx `Element.getNS`). */
+    getNS(): string
     toString(): string
   }
   export function xml(name: string, attrs?: Record<string, string>, ...children: unknown[]): Element

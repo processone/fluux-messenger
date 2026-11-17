@@ -73,6 +73,12 @@ export class PluginStorageOmemoStore implements OmemoStore {
     await this.storage.delete(pkKey(id))
   }
 
+  async listPreKeyIds(): Promise<number[]> {
+    return (await this.storage.list('pk/'))
+      .map((k) => Number(k.slice('pk/'.length)))
+      .filter((n) => Number.isInteger(n))
+  }
+
   async loadSession(peer: string, deviceId: number): Promise<SessionRecord | null> {
     return this.storage.get(sessKey(peer, deviceId))
   }

@@ -139,7 +139,7 @@ describe('OmemoPlugin.setIdentityTrust', () => {
     await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
     const list = await pa.listPeerIdentities('bob@x')
     expect(list[0].trust).toBe('verified')
-    // getPeerTrust/getDeviceTrust are also verified-aware (Task 10 wired
+    // getPeerTrust/getDeviceTrust are also verified-aware (the adapter wires
     // isVerified into those read paths); see the "OmemoPlugin BTBV wiring"
     // describe block below for the round-trip proof on those methods.
   })

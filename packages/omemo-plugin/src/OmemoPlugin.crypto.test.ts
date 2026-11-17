@@ -16,10 +16,14 @@ async function ready(jid: string, net?: MockNetwork) {
   return { p, c }
 }
 
-/** Serialize a host `<payload>` fragment carrying a single body element. */
+/**
+ * Serialize a host `<payload>` fragment carrying a single body element, shaped as the SDK's
+ * Chat module builds it: the body carries NO explicit xmlns (it inherits jabber:client from
+ * the payload wrapper).
+ */
 function bodyPayload(text: string): Uint8Array {
   return new TextEncoder().encode(
-    serializePayloadEnvelope([xml('body', { xmlns: 'jabber:client' }, text)]),
+    serializePayloadEnvelope([xml('body', {}, text)]),
   )
 }
 
@@ -67,7 +71,7 @@ describe('OmemoPlugin encrypt/decrypt (SCE seam)', () => {
     expect(new TextDecoder().decode(r3.plaintext!)).toContain('three')
   })
 
-  it('a tampered <payload> byte yields broken-session (never a throw, never plaintext)', async () => {
+  it('a tampered <payload> byte is rejected as malformed, never as a broken session (no repair, no plaintext)', async () => {
     const alice = await ready('alice@x')
     const bob = await ready('bob@x', alice.c.net)
     const handle = await alice.p.openConversation({ kind: 'direct', peer: 'bob@x' })
@@ -83,12 +87,12 @@ describe('OmemoPlugin encrypt/decrypt (SCE seam)', () => {
     payloadEl.children[0] = flip(b64[0]) + b64.slice(1)
 
     const bobHandle = await bob.p.openConversation({ kind: 'direct', peer: 'alice@x' })
-    const res = await bob.p.decrypt(bobHandle, { protocolId: enc.protocolId, stanzaElement: stanza }, {})
-    expect(res.status).toBe('broken-session')
-    expect(res.plaintext).toBeUndefined()
+    await expect(
+      bob.p.decrypt(bobHandle, { protocolId: enc.protocolId, stanzaElement: stanza }, {}),
+    ).rejects.toMatchObject({ kind: 'permanent', code: 'malformed-data' })
   })
 
-  it('a message with no <key> for our device yields broken-session (no throw to host)', async () => {
+  it('a message with no <key> for our device is rejected as malformed, not as a broken session', async () => {
     const alice = await ready('alice@x')
     await ready('bob@x', alice.c.net) // publishes bob's devices so alice can address them
     const carol = await ready('carol@x', alice.c.net) // never addressed
@@ -97,9 +101,9 @@ describe('OmemoPlugin encrypt/decrypt (SCE seam)', () => {
     const enc = await alice.p.encrypt(handle, bodyPayload('for bob only'))
 
     const carolHandle = await carol.p.openConversation({ kind: 'direct', peer: 'alice@x' })
-    const res = await carol.p.decrypt(carolHandle, carol.p.tryClaimInbound(enc.stanzaElement)!, {})
-    expect(res.status).toBe('broken-session')
-    expect(res.plaintext).toBeUndefined()
+    await expect(
+      carol.p.decrypt(carolHandle, carol.p.tryClaimInbound(enc.stanzaElement)!, {}),
+    ).rejects.toMatchObject({ kind: 'permanent', code: 'malformed-data' })
   })
 
   it('encrypt with no peer devices throws rather than sending plaintext', async () => {

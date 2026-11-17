@@ -100,18 +100,31 @@ describe('OMEMO 2 PEP', () => {
     expect(deviceListFromXml(deviceListToXml([3, 1, 2]))).toEqual([3, 1, 2])
   })
 
-  it('publishes device-list and bundle nodes with the interop-critical open access model', async () => {
-    // Peers can only READ an `open` PEP node; a `maxItems:1`/id `current` singleton is
-    // how XEP-0384 keeps exactly one live device-list/bundle item. Assert the plugin
-    // publishes with those options so a regression to whitelist/default can't slip by.
+  it('publishes the device list as a current item and each bundle as a device-id item on one shared node', async () => {
+    // XEP-0384: peers can only READ an `open` node. The device list is a single `current`
+    // item; bundles live on ONE node with one item per device id, so it must retain many.
     const a = createMockPluginContext('a@x')
     await publishDeviceList(a.ctx.xmpp, [5, 6])
     await publishBundle(a.ctx.xmpp, 5, sampleBundle())
+    await publishBundle(a.ctx.xmpp, 6, sampleBundle())
 
-    for (const pub of a.publishes) {
-      expect(pub.itemId).toBe('current')
-      expect(pub.options).toEqual({ accessModel: 'open', maxItems: 1 })
-    }
-    expect(a.publishes).toHaveLength(2)
+    expect(a.publishes).toEqual([
+      { node: 'urn:xmpp:omemo:2:devices', itemId: 'current', options: { accessModel: 'open', maxItems: 1 } },
+      { node: 'urn:xmpp:omemo:2:bundles', itemId: '5', options: { accessModel: 'open', maxItems: 'max' } },
+      { node: 'urn:xmpp:omemo:2:bundles', itemId: '6', options: { accessModel: 'open', maxItems: 'max' } },
+    ])
+  })
+
+  it('fetches the bundle whose item id is the device id, among several devices', async () => {
+    const a = createMockPluginContext('a@x')
+    const b = createMockPluginContext('b@x', a.net)
+    const first = sampleBundle()
+    const second = { ...sampleBundle(), spkId: 2 }
+    await publishBundle(a.ctx.xmpp, 5, first)
+    await publishBundle(a.ctx.xmpp, 6, second)
+
+    expect((await fetchBundle(b.ctx.xmpp, 'a@x', 5))?.spkId).toBe(1)
+    expect((await fetchBundle(b.ctx.xmpp, 'a@x', 6))?.spkId).toBe(2)
+    expect(await fetchBundle(b.ctx.xmpp, 'a@x', 7)).toBeNull()
   })
 })

@@ -16,6 +16,7 @@
 //      (interop_decrypt_plugin.py).
 import { describe, it, expect, beforeAll } from 'vitest'
 import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { xml } from '@xmpp/client'
 import { serializePayloadEnvelope } from '@fluux/sdk'
@@ -25,13 +26,13 @@ import { OmemoPlugin } from '../OmemoPlugin'
 import { createMockPluginContext, seedPeer } from '../testing/MockPluginContext'
 import { deviceListToXml, bundleToXml, fetchBundle } from '../pep'
 import { elementToData, dataToElement } from '../stanzaData'
-import { devicesNode, bundleNode } from '../namespaces'
+import { devicesNode, bundlesNode } from '../namespaces'
 import type { XMLElementData } from '@fluux/sdk'
 
 const EXPECTED_BODY = 'interop hello from plugin'
-const HERE = new URL('.', import.meta.url).pathname
+const HERE = fileURLToPath(new URL('.', import.meta.url))
 const RUN = `${HERE}_run`
-const VENV = new URL('../../../omemo/src/interop/venv/', import.meta.url).pathname
+const VENV = fileURLToPath(new URL('../../../omemo/src/interop/venv/', import.meta.url))
 const PY = `${VENV}_run/venv/bin/python`
 
 describe.runIf(process.env.VITEST_INTEROP)('plugin body-level interop vs twomemo', () => {
@@ -62,7 +63,8 @@ describe.runIf(process.env.VITEST_INTEROP)('plugin body-level interop vs twomemo
       preKeys: bob.preKeys.map((p) => ({ id: p.id, key: b64decode(p.key) })),
     }
     seedPeer(net, 'bob@localhost', devicesNode(), elementToData(deviceListToXml([bob.deviceId])))
-    seedPeer(net, 'bob@localhost', bundleNode(bob.deviceId), elementToData(bundleToXml(bobBundle)))
+    // XEP-0384 layout: the bundle is the item whose id is the device id, on the shared bundles node.
+    seedPeer(net, 'bob@localhost', bundlesNode(), elementToData(bundleToXml(bobBundle)), String(bob.deviceId))
 
     const plugin = new OmemoPlugin()
     await plugin.init(ctx)
@@ -70,7 +72,7 @@ describe.runIf(process.env.VITEST_INTEROP)('plugin body-level interop vs twomemo
     const handle = await plugin.openConversation({ kind: 'direct', peer: 'bob@localhost' })
 
     const payload = new TextEncoder().encode(
-      serializePayloadEnvelope([xml('body', { xmlns: 'jabber:client' }, EXPECTED_BODY)]),
+      serializePayloadEnvelope([xml('body', {}, EXPECTED_BODY)]) // the host's real shape: no xmlns on <body>,
     )
     const enc = await plugin.encrypt(handle, payload)
 

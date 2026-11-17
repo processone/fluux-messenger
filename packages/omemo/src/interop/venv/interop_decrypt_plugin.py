@@ -36,18 +36,25 @@ def local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1] if "}" in tag else tag
 
 
+def qualified(el, ns: str, name: str) -> bool:
+    """True when `el` is exactly `{ns}name` (namespace-strict, as XEP-0420 requires)."""
+    return el.tag == f"{{{ns}}}{name}"
+
+
 def parse_sce_body(plaintext: bytes) -> str:
     """Independently parse the recovered bytes as a XEP-0420 SCE envelope and
-    return the text of the `<content>/<body>` element."""
-    env = ET.fromstring(plaintext.decode("utf-8"))
-    if local(env.tag) != "envelope":
-        raise ValueError(f"recovered content is <{local(env.tag)}>, expected <envelope>")
-    content = next((c for c in env if local(c.tag) == "content"), None)
+    return the text of the `<content>/<body>` element. Namespaces are checked:
+    the envelope is `urn:xmpp:sce:1`, its `<content>` too, and the body must be
+    in the stanza namespace `jabber:client` (not inherited from the SCE root)."""
+    env = ET.fromstring(plaintext)
+    if not qualified(env, "urn:xmpp:sce:1", "envelope"):
+        raise ValueError(f"recovered content is {env.tag}, expected {{urn:xmpp:sce:1}}envelope")
+    content = next((c for c in env if qualified(c, "urn:xmpp:sce:1", "content")), None)
     if content is None:
-        raise ValueError("SCE envelope has no <content>")
-    body = next((c for c in content if local(c.tag) == "body"), None)
+        raise ValueError("SCE envelope has no {urn:xmpp:sce:1}content")
+    body = next((c for c in content if qualified(c, "jabber:client", "body")), None)
     if body is None:
-        raise ValueError("SCE <content> has no <body>")
+        raise ValueError("SCE <content> has no {jabber:client}body")
     return body.text or ""
 
 

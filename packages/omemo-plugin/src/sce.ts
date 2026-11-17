@@ -18,6 +18,18 @@ import { b64encode } from '@fluux/omemo'
 import { NS_SCE } from './namespaces'
 
 /**
+ * Pins the namespace a child inherits from its current parent (e.g. a `<body>`
+ * under `<payload xmlns='jabber:client'>`), so reparenting it under `<content>`
+ * (whose namespace is `urn:xmpp:sce:1`) does not silently change it.
+ */
+function withResolvedNamespace(child: Element): Element {
+  if (child.attrs.xmlns) return child
+  const ns = child.getNS()
+  if (!ns) return child
+  return xml(child.name, { ...child.attrs, xmlns: ns }, ...child.children)
+}
+
+/**
  * Builds a XEP-0420 `<envelope>`. The `content` children are placed DIRECTLY
  * under `<content>`. A mandatory `<rpad>` of 1..200 random bytes (base64) is
  * added for length-hiding; `<from>`, `<to>` and `<time>` affix elements are
@@ -32,7 +44,7 @@ export function buildEnvelope(
   const env = xml(
     'envelope',
     { xmlns: NS_SCE },
-    xml('content', {}, ...content),
+    xml('content', {}, ...content.map(withResolvedNamespace)),
     xml('rpad', {}, b64encode(rpadRng(rpadLen))),
   )
   if (opts.from) env.append(xml('from', { jid: opts.from }))

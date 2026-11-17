@@ -11,5 +11,7 @@ export type {
   SessionRecord,
   TrustRecord,
 } from './store/types'
+export { OmemoError } from './errors'
+export type { OmemoErrorCode } from './errors'
 export { MemoryStore } from './store/MemoryStore'
 export { fingerprint } from './identity/identity'

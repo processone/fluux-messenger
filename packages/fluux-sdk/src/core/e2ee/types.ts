@@ -347,8 +347,8 @@ export type TrustState = 'verified' | 'introduced' | 'tofu' | 'untrusted' | 'unk
 
 /**
  * One trustable identity of a peer, protocol-agnostic. OMEMO maps each of a
- * peer's DEVICES to a `PeerIdentity` (`id` = device id string); a future
- * OpenPGP plugin maps its single key to a length-1 list. The host renders a
+ * peer's DEVICES to a `PeerIdentity` (`id` = device id string); an
+ * OpenPGP plugin maps each of a contact's keys to one entry (a contact may hold several). The host renders a
  * uniform per-identity list from `listPeerIdentities`, feature-detecting the
  * optional trait methods below.
  */
@@ -423,7 +423,7 @@ export interface PEPPublishOptions {
   /** `pubsub#access_model` — who may read the node. */
   accessModel?: 'open' | 'whitelist' | 'presence' | 'roster' | 'authorize'
   /** `pubsub#max_items` — cap retained items. `1` produces a current-value node. */
-  maxItems?: number
+  maxItems?: number | 'max'
   /** `pubsub#persist_items` — retain across sessions (defaults to server policy). */
   persistItems?: boolean
   /** `pubsub#send_last_published_item` — when the server replays the last item. */

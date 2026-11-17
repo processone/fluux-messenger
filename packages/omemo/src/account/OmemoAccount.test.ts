@@ -134,16 +134,19 @@ describe('OmemoAccount', () => {
     await alice.processBundle('bob@x', bDev, await bob.publishableBundleAsync())
     const m1 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], enc('archived hi'))
 
-    const before = (await bob.publishableBundleAsync()).preKeys.length
+    const before = await bob.publishableBundleAsync()
+    const usedPkId = decodeKeyExchange(m1.keys[0].data).pkId
 
     // Archive decrypt: returns plaintext, does NOT consume the one-time prekey.
     expect(dec(await bob.decrypt('alice@x', m1.sid, m1, { archive: true }))).toBe('archived hi')
-    expect((await bob.publishableBundleAsync()).preKeys.length).toBe(before)
+    expect((await bob.publishableBundleAsync()).preKeys.map((p) => p.id)).toEqual(before.preKeys.map((p) => p.id))
 
     // A subsequent NORMAL decrypt of the SAME message still works (prekey survived),
-    // and this one consumes the prekey.
+    // and this one consumes the prekey and replaces it, so the pool keeps its size.
     expect(dec(await bob.decrypt('alice@x', m1.sid, m1))).toBe('archived hi')
-    expect((await bob.publishableBundleAsync()).preKeys.length).toBe(before - 1)
+    const after = await bob.publishableBundleAsync()
+    expect(after.preKeys.some((p) => p.id === usedPkId)).toBe(false)
+    expect(after.preKeys.length).toBe(before.preKeys.length)
   })
 
   it('rejects a tampered payload', async () => {
@@ -156,7 +159,7 @@ describe('OmemoAccount', () => {
     // Flip a byte in the AEAD ciphertext payload.
     m1.payload![0] ^= 0xff
 
-    await expect(bob.decrypt('alice@x', m1.sid, m1)).rejects.toThrow(/authentication failed/)
+    await expect(bob.decrypt('alice@x', m1.sid, m1)).rejects.toMatchObject({ code: 'malformed' })
   })
 
   it('rejects a forged KeyExchange without burning the prekey or writing trust', async () => {
@@ -170,17 +173,16 @@ describe('OmemoAccount', () => {
 
     const bobBundle = await bob.publishableBundleAsync()
     await alice.processBundle('bob@x', bDev, bobBundle)
-    const usedPkId = bobBundle.preKeys[0].id // the OTK Alice (and thus the forgery) references
 
     const m1 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], enc('hi'))
     // Keep the real pkId/spkId; corrupt only the embedded authenticated message.
     const kex = decodeKeyExchange(m1.keys[0].data)
-    expect(kex.pkId).toBe(usedPkId)
+    const usedPkId = kex.pkId // the OTK Alice (and thus the forgery) references
     const badMsg = Uint8Array.from(kex.message)
     badMsg[badMsg.length - 1] ^= 0xff
     m1.keys[0].data = encodeKeyExchange({ ...kex, message: badMsg })
 
-    await expect(bob.decrypt('alice@x', m1.sid, m1)).rejects.toThrow(/authentication failed/)
+    await expect(bob.decrypt('alice@x', m1.sid, m1)).rejects.toMatchObject({ code: 'session-broken' })
 
     // No side effects: the one-time prekey survives and no trust record was written.
     expect((await bob.publishableBundleAsync()).preKeys.some((p) => p.id === usedPkId)).toBe(true)
@@ -199,7 +201,7 @@ describe('OmemoAccount', () => {
 
     // Redeliver the SAME initial message (ordinary in XMPP: MAM catch-up + live delivery).
     // Must NOT rebuild X3DH; a clean replay rejection is the correct outcome here.
-    await expect(bob.decrypt('alice@x', m1.sid, m1)).rejects.toThrow(/authentication failed/)
+    await expect(bob.decrypt('alice@x', m1.sid, m1)).rejects.toMatchObject({ code: 'duplicate' })
 
     // Alice still hasn't heard back, so her next message is still kex-flagged — and it must
     // decrypt against the established session (the OLD code rebuilt X3DH and would throw).

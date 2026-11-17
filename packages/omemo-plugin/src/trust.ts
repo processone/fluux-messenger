@@ -4,7 +4,7 @@ import type { TrustState } from '@fluux/sdk'
  * Persisted per-device trust decision (stored in `@fluux/omemo`'s `TrustRecord.state`).
  *
  * Note: explicit out-of-band fingerprint verification is tracked by a separate marker
- * (set by the verification flow) and is not represented here — see Task 10.
+ * (set by the verification flow) and is not represented here.
  */
 export type BtbvState = 'undecided' | 'trusted' | 'untrusted'
 

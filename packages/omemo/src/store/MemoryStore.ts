@@ -48,6 +48,10 @@ export class MemoryStore implements OmemoStore {
     this.preKeys.delete(id)
   }
 
+  async listPreKeyIds(): Promise<number[]> {
+    return [...this.preKeys.keys()]
+  }
+
   async loadSession(peer: string, deviceId: number): Promise<SessionRecord | null> {
     return this.sessions.get(this.key(peer, deviceId)) ?? null
   }

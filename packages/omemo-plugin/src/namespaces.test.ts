@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { NS_OMEMO, NS_DEVICES, NS_SCE, devicesNode, bundleNode } from './namespaces'
+import { NS_OMEMO, NS_DEVICES, NS_SCE, devicesNode, bundlesNode } from './namespaces'
 
 describe('namespaces', () => {
   it('has the exact OMEMO 2 / SCE strings', () => {
@@ -7,6 +7,6 @@ describe('namespaces', () => {
     expect(NS_DEVICES).toBe('urn:xmpp:omemo:2:devices')
     expect(NS_SCE).toBe('urn:xmpp:sce:1')
     expect(devicesNode()).toBe('urn:xmpp:omemo:2:devices')
-    expect(bundleNode(42)).toBe('urn:xmpp:omemo:2:bundles:42')
+    expect(bundlesNode()).toBe('urn:xmpp:omemo:2:bundles')
   })
 })

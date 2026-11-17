@@ -4,6 +4,7 @@ import { hkdf, hmacSha256 } from '../primitives/hash'
 import { concatBytes, bytesEqual } from '../primitives/bytes'
 import type { Rng } from '../primitives/bytes'
 import { encodeOmemoMessage, decodeOmemoMessage } from '../omemo2/wire'
+import { OmemoError } from '../errors'
 
 // OMEMO 2 Double Ratchet message cipher (XEP-0384 §4.3). The exact KDF labels, chain
 // constants, MAC-over-AD construction, and AES-256-CBC cipher below are an interop
@@ -148,6 +149,11 @@ export function ratchetDecrypt(
   if (skippedKey) {
     s.skipped.delete(skipId)
     return { state: s, plaintext: openMessage(skippedKey, ad, authMessage) }
+  }
+
+  // Same sending chain, index already consumed and not held as a skipped key: a replay.
+  if (s.dhRemote && bytesEqual(s.dhRemote, header.dhPub) && header.n < s.nr) {
+    throw new OmemoError('duplicate', 'ratchet message already consumed')
   }
 
   const isNewRemote = !s.dhRemote || !bytesEqual(s.dhRemote, header.dhPub)

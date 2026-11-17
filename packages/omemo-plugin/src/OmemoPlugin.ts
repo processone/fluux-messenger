@@ -1,13 +1,12 @@
 // `OmemoPlugin` — the `E2EEPlugin` adapter over `@fluux/omemo`.
 //
-// Task 10 covered the identity/probe/trust half of the trait; Task 11 adds the
-// encrypt/claim/decrypt half — the XEP-0420 SCE seam where host plaintext meets
-// OMEMO ciphertext. The host hands `encrypt` a serialized
+// It covers the identity/probe/trust half of the trait and the encrypt/claim/decrypt
+// half — the XEP-0420 SCE seam where host plaintext meets OMEMO ciphertext. The host hands `encrypt` a serialized
 // `<payload xmlns='jabber:client'>…</payload>` fragment; we SCE-wrap its children,
 // OMEMO-encrypt the envelope, and emit an `<encrypted xmlns='urn:xmpp:omemo:2'>`.
 // `decrypt` reverses that, returning a re-serialized `<payload>` (or a
 // control-message / broken-session status — never unauthenticated content).
-import { serializePayloadEnvelope, parsePayloadEnvelope } from '@fluux/sdk'
+import { serializePayloadEnvelope, parsePayloadEnvelope, E2EEPluginError } from '@fluux/sdk'
 import type {
   E2EEPlugin,
   E2EEProtocolDescriptor,
@@ -28,7 +27,7 @@ import type {
   SecurityContext,
   XMLElementData,
 } from '@fluux/sdk'
-import { OmemoAccount, fingerprint } from '@fluux/omemo'
+import { OmemoAccount, OmemoError, fingerprint } from '@fluux/omemo'
 import type { OmemoMessage } from '@fluux/omemo'
 import { PluginStorageOmemoStore } from './store'
 import { publishDeviceList, fetchDeviceList, fetchBundle, publishBundle } from './pep'
@@ -71,6 +70,8 @@ export class OmemoPlugin implements E2EEPlugin {
 
   private ctx!: PluginContext
   private account: OmemoAccount | null = null
+  /** In-flight first initialization, shared so concurrent callers never create competing identities. */
+  private accountInit: Promise<OmemoAccount> | null = null
   private readonly rng: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n))
 
   async init(ctx: PluginContext): Promise<void> {
@@ -79,19 +80,30 @@ export class OmemoPlugin implements E2EEPlugin {
 
   async shutdown(): Promise<void> {
     this.account = null
+    this.accountInit = null
   }
 
   /** Lazily creates/loads the local `OmemoAccount`. Idempotent across restarts (`OmemoAccount.create` loads an existing identity when the store has one). */
   private async ensureAccount(): Promise<OmemoAccount> {
     if (this.account) return this.account
-    const store = new PluginStorageOmemoStore(this.ctx.storage)
-    this.account = await OmemoAccount.create(store, this.rng)
-    return this.account
+    if (!this.accountInit) {
+      const store = new PluginStorageOmemoStore(this.ctx.storage)
+      this.accountInit = OmemoAccount.create(store, this.rng).then(
+        (acc) => (this.account = acc),
+        (err) => {
+          this.accountInit = null // a failed initialization may be retried
+          throw err
+        },
+      )
+    }
+    return this.accountInit
   }
 
   async ensureIdentity(): Promise<IdentityInfo> {
     const acc = await this.ensureAccount()
     const myDeviceId = acc.publishableDeviceId()
+    await acc.replenishPreKeys()
+    acc.takeBundleDirty()
     await publishBundle(this.ctx.xmpp, myDeviceId, await acc.publishableBundleAsync())
     const existing = await fetchDeviceList(this.ctx.xmpp, this.ctx.account.jid)
     if (!existing.includes(myDeviceId)) {
@@ -161,10 +173,12 @@ export class OmemoPlugin implements E2EEPlugin {
     let trust: TrustState
     if (fpHex && (await isVerified(this.ctx.storage, peer, deviceId, fpHex))) {
       trust = 'verified'
-    } else if (!fpHex) {
-      trust = 'unknown'
     } else {
-      trust = toTrustState((existing?.state as BtbvState | undefined) ?? 'undecided')
+      const state = (existing?.state as BtbvState | undefined) ?? 'undecided'
+      // BTBV: once any of the peer's devices is verified, a device we have not
+      // decided on is untrusted rather than blind-trusted — outbound included.
+      if (state === 'undecided' && (await hasAnyVerified(this.ctx.storage, peer))) trust = 'untrusted'
+      else trust = fpHex ? toTrustState(state) : 'unknown'
     }
     return { id: String(deviceId), fingerprint: fpHex, trust }
   }
@@ -241,7 +255,7 @@ export class OmemoPlugin implements E2EEPlugin {
     return (await this.resolvePeerIdentity(peer, Number(deviceId))).trust
   }
 
-  // --- Task 11: encrypt / claim / decrypt (the SCE seam). ---
+  // --- encrypt / claim / decrypt (the SCE seam). ---
 
   async openConversation(target: ConversationTarget): Promise<ConversationHandle> {
     if (target.kind !== 'direct') throw new Error('OMEMO M2a supports 1:1 conversations only')
@@ -266,12 +280,12 @@ export class OmemoPlugin implements E2EEPlugin {
     const store = new PluginStorageOmemoStore(this.ctx.storage)
     for (const rid of deviceIds) {
       if (await store.loadSession(jid, rid)) continue // established — do not clobber the ratchet
-      const bundle = await fetchBundle(this.ctx.xmpp, jid, rid)
-      if (!bundle) continue
       try {
+        const bundle = await fetchBundle(this.ctx.xmpp, jid, rid)
+        if (!bundle) continue
         await acc.processBundle(jid, rid, bundle)
       } catch {
-        /* unusable/invalid bundle for this device — skip it, encrypt to the rest */
+        /* missing, malformed or invalid bundle for this device — skip it, encrypt to the rest */
       }
     }
   }
@@ -399,12 +413,21 @@ export class OmemoPlugin implements E2EEPlugin {
   ): Promise<DecryptResult[]> {
     const out: DecryptResult[] = []
     for (const it of items) {
-      // Keep the result array index-aligned with `items`: a failure occupies its
-      // slot with a broken-session result rather than shifting later results.
+      // Keep the result array index-aligned with `items`. A failure that is not a
+      // broken session occupies its slot as `unverifiable` (no plaintext) so it
+      // neither shifts later results nor asks the host to repair a working session.
       try {
         out.push(await this.decryptWith(handle, it.payload, it.context, true))
-      } catch {
-        out.push(this.brokenResult(this.peerOf(handle)))
+      } catch (err) {
+        out.push({
+          status: 'unverifiable',
+          senderDevice: { jid: this.peerOf(handle), deviceId: '0' },
+          securityContext: {
+            protocolId: this.descriptor.id,
+            trust: 'untrusted',
+            notes: [err instanceof Error ? err.message : 'could not decrypt'],
+          },
+        })
       }
     }
     return out
@@ -453,7 +476,9 @@ export class OmemoPlugin implements E2EEPlugin {
       const identityKey = await this.fetchIdentityKey(senderJid, sid)
       await store.saveTrust(senderJid, sid, { state: resolved.store, identityKey })
     }
-    return { protocolId: this.descriptor.id, trust: toSecurityTrust(resolved.surfaced) }
+    // A fingerprint-bound verified marker outranks the BTBV state.
+    const verified = (await this.resolvePeerIdentity(senderJid, sid)).trust === 'verified'
+    return { protocolId: this.descriptor.id, trust: verified ? 'verified' : toSecurityTrust(resolved.surfaced) }
   }
 
   /**
@@ -483,6 +508,25 @@ export class OmemoPlugin implements E2EEPlugin {
     return hasAnyVerified(this.ctx.storage, peer)
   }
 
+  /**
+   * Failures that are NOT a broken session — an unreadable stanza, a message not addressed to
+   * this device, an invalid SCE envelope or mismatched affixes. They are terminal for that
+   * message but must never trigger session repair, which would overwrite a working session.
+   */
+  private malformed(why: string): E2EEPluginError {
+    return new E2EEPluginError('permanent', 'malformed-data', `OMEMO: ${why}`)
+  }
+
+  /** Re-publishes our bundle when decrypting consumed a one-time prekey (best effort). */
+  private async republishBundleIfDirty(acc: OmemoAccount): Promise<void> {
+    if (!acc.takeBundleDirty()) return
+    try {
+      await publishBundle(this.ctx.xmpp, acc.publishableDeviceId(), await acc.publishableBundleAsync())
+    } catch (err) {
+      this.ctx.logger.warn('OMEMO: could not republish bundle after prekey use', err)
+    }
+  }
+
   private async decryptWith(
     handle: ConversationHandle,
     payload: EncryptedPayload,
@@ -492,23 +536,33 @@ export class OmemoPlugin implements E2EEPlugin {
     const acc = await this.ensureAccount()
     // For a self-outgoing carbon/MAM replay the ciphertext came from OUR other
     // device, so the session partner is our own JID, not the conversation peer.
-    const senderJid = context?.isSelfOutgoing ? this.ctx.account.jid : this.peerOf(handle)
+    const conversationPeer = this.peerOf(handle)
+    const senderJid = context?.isSelfOutgoing ? this.ctx.account.jid : conversationPeer
 
     let msg: OmemoMessage
     try {
       msg = parseEncrypted(dataToElement(payload.stanzaElement))
     } catch {
-      return this.brokenResult(senderJid)
+      throw this.malformed('unreadable <encrypted> element')
     }
 
     let content: Uint8Array
     try {
-      content = await acc.decrypt(senderJid, msg.sid, msg, { archive })
-    } catch {
-      // Auth/session failure (bad HMAC, no key for us, desync). Map to
-      // broken-session — never throw to the host, never surface content.
-      return this.brokenResult(senderJid, msg.sid)
+      content = await acc.decrypt(senderJid, msg.sid, msg, { archive, ownJid: this.ctx.account.jid })
+    } catch (err) {
+      if (!(err instanceof OmemoError)) throw err
+      if (err.code === 'session-broken') return this.brokenResult(senderJid, msg.sid)
+      if (err.code === 'duplicate') {
+        // Already consumed (redelivery, replay): nothing to show, and nothing to repair.
+        return {
+          status: 'control-message',
+          senderDevice: { jid: senderJid, deviceId: String(msg.sid) },
+          securityContext: await this.resolveInboundSecurity(senderJid, msg.sid),
+        }
+      }
+      throw this.malformed(err.message)
     }
+    if (!archive) await this.republishBundleIfDirty(acc)
 
     const securityContext = await this.resolveInboundSecurity(senderJid, msg.sid)
     const senderDevice = { jid: senderJid, deviceId: String(msg.sid) }
@@ -520,9 +574,20 @@ export class OmemoPlugin implements E2EEPlugin {
     try {
       env = parseEnvelope(parseXml(new TextDecoder().decode(content)))
     } catch {
-      // Authenticated bytes that are not a valid SCE envelope: treat as a broken
-      // session rather than surfacing malformed content as a decrypted body.
-      return this.brokenResult(senderJid, msg.sid)
+      // Authenticated bytes that are not a valid SCE envelope: never surface them
+      // as a decrypted body, but the session itself is fine.
+      throw this.malformed('invalid SCE envelope')
+    }
+
+    // Present affixes must match who sent this and which conversation it belongs to,
+    // so an authenticated message cannot be redirected into another conversation.
+    const bare = (jid: string): string => jid.split('/')[0].toLowerCase()
+    const expectedTo = context?.isSelfOutgoing ? conversationPeer : this.ctx.account.jid
+    if (env.from !== undefined && bare(env.from) !== bare(senderJid)) {
+      throw this.malformed('SCE <from> does not match the sender')
+    }
+    if (env.to !== undefined && bare(env.to) !== bare(expectedTo)) {
+      throw this.malformed('SCE <to> does not match the conversation')
     }
 
     const plaintext = new TextEncoder().encode(serializePayloadEnvelope(env.content))
@@ -538,13 +603,13 @@ export class OmemoPlugin implements E2EEPlugin {
     const devs = (await fetchDeviceList(this.ctx.xmpp, peer)).slice(0, DEVICE_CAP)
     const fresh: number[] = []
     for (const rid of devs) {
-      const bundle = await fetchBundle(this.ctx.xmpp, peer, rid)
-      if (!bundle) continue
       try {
-        await acc.processBundle(peer, rid, bundle)
+        const bundle = await fetchBundle(this.ctx.xmpp, peer, rid)
+        if (!bundle) continue
+        await acc.processBundle(peer, rid, bundle, { replace: true })
         fresh.push(rid)
       } catch {
-        /* skip devices with unusable bundles */
+        /* skip devices with missing, malformed or unusable bundles */
       }
     }
     if (fresh.length === 0) return

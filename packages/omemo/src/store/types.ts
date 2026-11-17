@@ -36,6 +36,8 @@ export interface OmemoStore {
   loadPreKey(id: number): Promise<PreKeyRecord | null>
   savePreKey(id: number, r: PreKeyRecord): Promise<void>
   removePreKey(id: number): Promise<void>
+  /** Ids of every one-time prekey currently held. */
+  listPreKeyIds(): Promise<number[]>
 
   loadSession(peer: string, deviceId: number): Promise<SessionRecord | null>
   saveSession(peer: string, deviceId: number, s: SessionRecord): Promise<void>

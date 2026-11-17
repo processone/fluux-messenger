@@ -8,10 +8,12 @@ import type { XMPPPrimitives, E2EESubscription } from '@fluux/sdk'
 import type { Bundle } from '@fluux/omemo'
 import { b64encode, b64decode } from '@fluux/omemo'
 import { elementToData, dataToElement } from './stanzaData'
-import { NS_OMEMO, devicesNode, bundleNode } from './namespaces'
+import { NS_OMEMO, devicesNode, bundlesNode } from './namespaces'
 
 const CURRENT_ITEM_ID = 'current'
 const PUBLISH_OPTIONS = { accessModel: 'open' as const, maxItems: 1 }
+// XEP-0384: the bundles node holds one item per device (item id = device id), so it must retain many.
+const BUNDLE_PUBLISH_OPTIONS = { accessModel: 'open' as const, maxItems: 'max' as const }
 
 /** Parses a stanza `id` attribute as a non-negative integer, or `null` if malformed. */
 function parseDeviceId(raw: string | undefined): number | null {
@@ -88,13 +90,14 @@ export function subscribeDeviceList(
 
 export async function publishBundle(xmpp: XMPPPrimitives, deviceId: number, bundle: Bundle): Promise<void> {
   await xmpp.publishPEP(
-    bundleNode(deviceId),
-    { id: CURRENT_ITEM_ID, payload: elementToData(bundleToXml(bundle)) },
-    PUBLISH_OPTIONS,
+    bundlesNode(),
+    { id: String(deviceId), payload: elementToData(bundleToXml(bundle)) },
+    BUNDLE_PUBLISH_OPTIONS,
   )
 }
 
 export async function fetchBundle(xmpp: XMPPPrimitives, jid: string, deviceId: number): Promise<Bundle | null> {
-  const items = await xmpp.queryPEP(jid, bundleNode(deviceId), 1)
-  return items[0] ? bundleFromXml(dataToElement(items[0].payload)) : null
+  const items = await xmpp.queryPEP(jid, bundlesNode())
+  const item = items.find((i) => i.id === String(deviceId))
+  return item ? bundleFromXml(dataToElement(item.payload)) : null
 }

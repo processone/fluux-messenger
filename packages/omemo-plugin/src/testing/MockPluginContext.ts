@@ -101,7 +101,10 @@ export function createMockPluginContext(
         // READ our device-list/bundle nodes.
         publishes.push({ node, itemId: item.id, options })
         const key = pepKey(jid, node)
-        net.nodes.set(key, [item])
+        // maxItems 1 (or unset) keeps a single current item; otherwise items are
+        // kept per id, as on a multi-item node (e.g. one bundle per device id).
+        const kept = options?.maxItems === 1 || options?.maxItems === undefined ? [] : (net.nodes.get(key) ?? [])
+        net.nodes.set(key, [...kept.filter((i) => i.id !== item.id), item])
         for (const cb of net.subs.get(key) ?? []) cb(item)
       },
       async retractPEP(node) {
@@ -139,6 +142,13 @@ export function createMockPluginContext(
  * device list without standing up a full `createMockPluginContext` for
  * them (e.g. fixture data captured from a reference implementation).
  */
-export function seedPeer(net: MockNetwork, jid: string, node: string, payload: XMLElementData): void {
-  net.nodes.set(pepKey(jid, node), [{ id: 'current', payload }])
+export function seedPeer(
+  net: MockNetwork,
+  jid: string,
+  node: string,
+  payload: XMLElementData,
+  itemId = 'current',
+): void {
+  const key = pepKey(jid, node)
+  net.nodes.set(key, [...(net.nodes.get(key) ?? []).filter((i) => i.id !== itemId), { id: itemId, payload }])
 }

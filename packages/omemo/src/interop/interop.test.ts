@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { describe, it, expect, beforeAll } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -18,7 +19,7 @@ import { OmemoAccount, MemoryStore, b64decode, b64encode } from '../index'
 // bytes. A body-level test against a strict XEP-0420 SCE reference is a follow-up for the SDK
 // adapter layer, not this crypto core.
 
-const HERE = new URL('.', import.meta.url).pathname
+const HERE = fileURLToPath(new URL('.', import.meta.url))
 const SHARED = HERE + 'shared/'
 
 const run = (...args: string[]) =>

@@ -17,11 +17,14 @@ details.
 ### OMEMO (in development, not released)
 
 The primary value of OMEMO is interoperability with third-party XMPP clients (Conversations,
-Dino, Gajim, Monal). Work is on the `features/omemo` branch: a clean-room TypeScript
+Dino, Gajim, Monal). The OMEMO 2 library (`packages/omemo`) and its plugin adapter
+(`packages/omemo-plugin`) are on main but not registered in the app, so nothing is saved and no
+one sees OMEMO yet. The remaining work (desktop wiring with a sealed key store, per-device
+verification, trust redesigned for key sets) is still on the `features/omemo` branch. The library is a clean-room TypeScript
 implementation of X3DH and the Double Ratchet, built only on permissively licensed primitives
 so that no GPL or AGPL code we don't own enters the client. OMEMO 2 (`urn:xmpp:omemo:2`) comes
 first, followed by the legacy `eu.siacs.conversations.axolotl` envelope, which most clients
-still use. The branch has not been merged and is not scheduled for a release.
+still use. OMEMO is not scheduled for a release.
 
 ### MLS (future)
 
