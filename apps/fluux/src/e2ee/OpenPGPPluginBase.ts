@@ -103,48 +103,22 @@ import {
   SecretKeyBackupProbeError,
   type BackupProbeResult,
   type BackupRecoveryMode,
+  type CertRejection,
   type CertValidation,
   type DecryptOutput,
   type KeyBundle,
   type KeychainRetryAvailability,
   type KeychainRetryState,
   type KeyInstallOptions,
+  type OpenPGPHostStores,
+  type OwnKeyConflict,
   type RestoreResult,
 } from '@fluux/openpgp-plugin'
-import {
-  clearPeerVerified,
-  isPeerVerified,
-  setPeerVerified,
-  useVerifiedPeerKeysStore,
-} from '@/stores/verifiedPeerKeysStore'
-import {
-  clearKeyChangeAlert,
-  getKeyChangeAlert,
-} from '@/stores/keyChangeAlertsStore'
-import {
-  clearOwnKeyConflict,
-  getOwnKeyConflict,
-  recordOwnKeyConflict,
-  type OwnKeyConflict,
-} from '@/stores/ownKeyConflictStore'
-import {
-  setPinnedPrimaryFp,
-} from '@/stores/pinnedPrimaryFingerprintsStore'
-import {
-  clearCertRejections,
-  getCertRejections,
-  recordCertRejections,
-  type CertRejection,
-} from '@/stores/certRejectionStore'
-import { notifyPeerKeysetChanged } from '@/stores/peerKeysetRevisionStore'
 import {
   sealTrustState,
   verifyTrustStateSeal,
   clearCompromisedAndReseal,
 } from './trustStateIntegrity'
-import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
-import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
-import { setTrustStateStatus, getTrustStateStatus } from '@/stores/trustStateStatusStore'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants
@@ -287,6 +261,13 @@ function assertCurrent(current: OwnKeyFreshness | undefined): void {
 
 export abstract class OpenPGPPluginBase implements E2EEPlugin {
   readonly descriptor = OPENPGP_DESCRIPTOR
+
+  /** The host's trust and status state; the plugin touches no other store. */
+  protected readonly stores: OpenPGPHostStores
+
+  protected constructor(stores: OpenPGPHostStores) {
+    this.stores = stores
+  }
 
   protected ctx: PluginContext | null = null
   protected ownBundle: KeyBundle | null = null
@@ -447,7 +428,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Keychain retry account changed')
       this.ownBundle = unlocked
       this._keyRecoveryReason = null
-      notifyPeerKeysetChanged(ctx.account.jid)
+      this.stores.peerKeysets.notifyChanged(ctx.account.jid)
       // What a normal start does with an unlocked key. Publication stays best
       // effort, and stops once a log out or another key outdates it.
       const current = () => this.ctx === ctx && this.ownBundle === unlocked
@@ -667,39 +648,18 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     ctx.xmpp.subscribePEP(ctx.account.jid, VERIFICATIONS_NODE, () => {
       void this.syncVerificationsFromServer()
     })
-    this._verificationStoreUnsub = useVerifiedPeerKeysStore.subscribe(
-      (state, prev) => {
-        if (
-          state.verifiedFingerprintByJid !== prev.verifiedFingerprintByJid &&
-          this._syncingFromRemoteCount === 0
-        ) {
-          this.scheduleVerificationsPublish(state.verifiedFingerprintByJid)
+    this._verificationStoreUnsub = this.stores.verifiedPeers.subscribe(
+      (next) => {
+        if (this._syncingFromRemoteCount === 0) {
+          this.scheduleVerificationsPublish(next)
         }
       },
     )
 
     this._trustStoreUnsubs = [
-      usePinnedPrimaryFingerprintsStore.subscribe(
-        (state, prev) => {
-          if (state.pinnedFingerprintByJid !== prev.pinnedFingerprintByJid) {
-            this.scheduleTrustStateSeal()
-          }
-        },
-      ),
-      useVerifiedPeerKeysStore.subscribe(
-        (state, prev) => {
-          if (state.verifiedFingerprintByJid !== prev.verifiedFingerprintByJid) {
-            this.scheduleTrustStateSeal()
-          }
-        },
-      ),
-      useKeyChangeAlertsStore.subscribe(
-        (state, prev) => {
-          if (state.alertsByJid !== prev.alertsByJid) {
-            this.scheduleTrustStateSeal()
-          }
-        },
-      ),
+      this.stores.pinnedPrimaryFingerprints.subscribe(() => this.scheduleTrustStateSeal()),
+      this.stores.verifiedPeers.subscribe(() => this.scheduleTrustStateSeal()),
+      this.stores.keyChangeAlerts.subscribe(() => this.scheduleTrustStateSeal()),
     ]
 
     void this.verifyTrustStateOnInit()
@@ -721,10 +681,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     try {
       const jid = this.ctx.account.jid
       await sealTrustState(
+        this.stores,
         (plaintext, recipientKey) => this.encryptToRecipients(jid, [recipientKey], plaintext),
         ownPublicArmored,
       )
-      setTrustStateStatus('sealed')
+      this.stores.trustStateStatus.set('sealed')
     } catch {
       // Best-effort — key may be locked between scheduling and execution
     }
@@ -736,6 +697,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (!ownPublicArmored || !ownFingerprint || !this.ctx) return
     const jid = this.ctx.account.jid
     const { status, details } = await verifyTrustStateSeal(
+      this.stores,
       (ciphertext, senderPub) => this.decryptWithOwnKey(jid, ciphertext, senderPub ? [senderPub] : []),
       ownPublicArmored,
       ownFingerprint,
@@ -747,7 +709,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       await this.sealTrustStateNow()
       return
     }
-    setTrustStateStatus(status, details)
+    this.stores.trustStateStatus.set(status, details)
   }
 
   /**
@@ -768,6 +730,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (!ownPublicArmored || !this.ctx) return
     const jid = this.ctx.account.jid
     await clearCompromisedAndReseal(
+      this.stores,
       (plaintext, recipientKey) => this.encryptToRecipients(jid, [recipientKey], plaintext),
       ownPublicArmored,
     )
@@ -788,7 +751,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this._trustStoreUnsubs.forEach((u) => u())
     this._trustStoreUnsubs = []
     this.ownBundle = null
-    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
+    if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
     this.peerKeys.clear()
     this.clearKeysetSessionState()
     this.pendingVerifications.clear()
@@ -855,7 +818,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         clearPeerKeyCache(accountJid)
       }
       this.ownBundle = null
-      if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
+      if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
       this.peerKeys.clear()
       this.clearKeysetSessionState()
     })
@@ -881,7 +844,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       throw this.toPluginError('ensureIdentity', err)
     }
     this.ownBundle = bundle
-    if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
+    if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
     // A usable identity is established — clear any prior recovery flag so a
     // successful restore/import/replace lifts the host's recovery routing.
     this._keyRecoveryReason = null
@@ -909,7 +872,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (verdict === 'outdated') return
     if (verdict === 'conflict') {
       ctx.logger.warn(
-        `${this.pluginName()}: own key conflict detected (${getOwnKeyConflict()?.kind}); ` +
+        `${this.pluginName()}: own key conflict detected (${this.stores.ownKeyConflict.get()?.kind}); ` +
           `encryption blocked until resolved`,
       )
       return
@@ -962,7 +925,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         )
       }
       this.ownBundle = bundle
-      if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
+      if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
 
       try {
         await this.publishOwnPublicKeyData(bundle)
@@ -1068,7 +1031,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
       await this.forgetAccount(ctx.account.jid).catch(() => {})
       this.ownBundle = null
-      if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
+      if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
 
       this._allowSilentRegenerate = true
       let bundle: KeyBundle
@@ -1078,7 +1041,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         this._allowSilentRegenerate = false
       }
       this.ownBundle = bundle
-      if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
+      if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
 
       try {
         await this.publishOwnPublicKeyData(bundle)
@@ -1091,7 +1054,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         )
       }
 
-      clearOwnKeyConflict()
+      this.stores.ownKeyConflict.clear()
 
       // The replacement identity is usable now; the retired [E] subkey is kept
       // locally so history stays decryptable. Re-run deferred decrypts so any
@@ -1512,7 +1475,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
       this.ownBundle = bundle
       this._keyRecoveryReason = null
-      if (this.ctx) notifyPeerKeysetChanged(this.ctx.account.jid)
+      if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
 
       // Direct server restores already read their source. File and generic
       // picker installs must check the server, without publishing a backup.
@@ -1594,7 +1557,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return this.ownKeyOperation(async () => {
       await this.publishOwnPublicKeyData(bundle)
       await this.publishOwnPublicKeyMetadata(bundle)
-      clearOwnKeyConflict()
+      this.stores.ownKeyConflict.clear()
     })
   }
 
@@ -1613,10 +1576,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         sorted[0].fingerprint,
         { fromServer: true },
       )
-      clearOwnKeyConflict()
+      this.stores.ownKeyConflict.clear()
       return info
     }
-    clearOwnKeyConflict()
+    this.stores.ownKeyConflict.clear()
     return result
   }
 
@@ -1644,11 +1607,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // the stores now belong to that change, or to the next account. The
       // next sync applies the list again.
       if (!remote || !current()) return
-      const local = useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid
+      const local = this.stores.verifiedPeers.getAll()
       const plan = planVerificationUpdate(remote, local, loadAppliedVerificationsVersion())
       if (!plan.apply) return
-      for (const { jid, fingerprint } of plan.toSet) setPeerVerified(jid, fingerprint)
-      for (const jid of plan.toClear) clearPeerVerified(jid)
+      for (const { jid, fingerprint } of plan.toSet) this.stores.verifiedPeers.set(jid, fingerprint)
+      for (const jid of plan.toClear) this.stores.verifiedPeers.clear(jid)
       saveAppliedVerificationsVersion(plan.version)
       this.scheduleTrustStateSeal()
     } catch {
@@ -1768,10 +1731,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const settle = (conflict: OwnKeyConflict | null): OwnKeyCheckVerdict => {
       if (!current()) return 'outdated'
       if (!conflict) {
-        clearOwnKeyConflict()
+        this.stores.ownKeyConflict.clear()
         return 'consistent'
       }
-      recordOwnKeyConflict(conflict)
+      this.stores.ownKeyConflict.record(conflict)
       return 'conflict'
     }
 
@@ -2163,7 +2126,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       ...retainedReannounced,
     ])
     next = markDepartedInactive(next, stillAnnounced, nowIso)
-    next = capUnverifiedInactive(next, (fp) => isPeerVerified(peer, fp), UNVERIFIED_INACTIVE_CAP)
+    next = capUnverifiedInactive(next, (fp) => this.stores.verifiedPeers.isVerified(peer, fp), UNVERIFIED_INACTIVE_CAP)
     if (!this.isLatestPeerRefresh(peer, generation)) return this.cachedPeerSupport(peer)
     this.setPeerCerts(peer, next)
     this.recordKeysetHealth(peer, { incomplete: false, rejections })
@@ -2317,7 +2280,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const changed = !peerCertSetsEqual(this.peerKeys.get(peer) ?? [], certs)
     this.peerKeys.set(peer, certs)
     this.persistPeerKeyCache()
-    if (changed) notifyPeerKeysetChanged(peer)
+    if (changed) this.stores.peerKeysets.notifyChanged(peer)
   }
 
   /**
@@ -2372,8 +2335,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   ): void {
     if (health.incomplete) this.keysetIncomplete.add(peer)
     else this.keysetIncomplete.delete(peer)
-    if (health.rejections.length > 0) recordCertRejections(peer, health.rejections)
-    else clearCertRejections(peer)
+    if (health.rejections.length > 0) this.stores.certRejections.record(peer, health.rejections)
+    else this.stores.certRejections.clear(peer)
   }
 
   /**
@@ -2387,12 +2350,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * definitive path, which HAS seen the whole keyset.)
    */
   private mergeKeysetRejections(peer: BareJID, observed: CertRejection[]): void {
-    const prior = getCertRejections(peer)
+    const prior = this.stores.certRejections.get(peer)
     if (prior.length === 0 && observed.length === 0) return
     const byFingerprint = new Map<string, CertRejection>()
     for (const r of prior) byFingerprint.set(normalizeFingerprint(r.fingerprint), r)
     for (const r of observed) byFingerprint.set(normalizeFingerprint(r.fingerprint), r)
-    recordCertRejections(peer, [...byFingerprint.values()])
+    this.stores.certRejections.record(peer, [...byFingerprint.values()])
   }
 
   private persistPeerKeyCache(): void {
@@ -2455,29 +2418,29 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   async acceptPeerKeyChange(peer: BareJID, asVerified: boolean): Promise<void> {
-    const alert = getKeyChangeAlert(peer)
+    const alert = this.stores.keyChangeAlerts.get(peer)
     if (!alert) return
     const targetFp = alert.currentFingerprint
     const previousFp = alert.previousFingerprint
 
-    clearPeerVerified(peer)
-    setPinnedPrimaryFp(peer, targetFp)
+    this.stores.verifiedPeers.clear(peer)
+    this.stores.pinnedPrimaryFingerprints.set(peer, targetFp)
 
     const result = await this.refetchAndCachePeerKey(peer)
 
     if (!result.supported) {
-      setPinnedPrimaryFp(peer, previousFp)
+      this.stores.pinnedPrimaryFingerprints.set(peer, previousFp)
       throw new Error(`acceptPeerKeyChange: failed to fetch new key for ${peer}; pin rolled back`)
     }
 
-    const postFetchAlert = getKeyChangeAlert(peer)
+    const postFetchAlert = this.stores.keyChangeAlerts.get(peer)
     if (!postFetchAlert || postFetchAlert.previousFingerprint !== targetFp) {
-      clearKeyChangeAlert(peer)
+      this.stores.keyChangeAlerts.clear(peer)
     }
 
     if (asVerified) {
       if (this.getPeerFingerprints(peer).some((fp) => fp === targetFp)) {
-        setPeerVerified(peer, targetFp)
+        this.stores.verifiedPeers.set(peer, targetFp)
       }
     }
   }
@@ -2499,11 +2462,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   async encrypt(handle: ConversationHandle, plaintext: Uint8Array): Promise<EncryptedPayload> {
     const ctx = this.requireCtx()
-    if (getOwnKeyConflict()) {
+    if (this.stores.ownKeyConflict.get()) {
       throw new E2EEPluginError(
         'permanent',
         'own-key-conflict',
-        `${this.pluginName()}: own key conflict (${getOwnKeyConflict()!.kind}) must be resolved before encrypting`,
+        `${this.pluginName()}: own key conflict (${this.stores.ownKeyConflict.get()!.kind}) must be resolved before encrypting`,
       )
     }
     const peer = extractPeer(handle)
@@ -2843,7 +2806,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // encrypt() fans out to every active cert, so the peer is verified only
     // when every active cert is. A verified contact who gains an unverified
     // key drops to tofu (per-key verification is #1452).
-    return activeFps.every((fp) => isPeerVerified(peer, fp)) ? 'verified' : 'tofu'
+    return activeFps.every((fp) => this.stores.verifiedPeers.isVerified(peer, fp)) ? 'verified' : 'tofu'
   }
 
   // ---------------------------------------------------------------------------
@@ -2874,9 +2837,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   /** Active validated certs eligible for the current TOFU notification policy. */
   notificationVerifierSnapshot(accountJid: string): Record<string, { fingerprint: string; publicArmored: string }[]> | null {
     const peers: Record<string, { fingerprint: string; publicArmored: string }[]> = {}
-    if (!this.ctx || !this.ownBundle || getBareJid(this.ctx.account.jid) !== accountJid || getTrustStateStatus() !== 'sealed') return null
+    if (!this.ctx || !this.ownBundle || getBareJid(this.ctx.account.jid) !== accountJid || this.stores.trustStateStatus.get() !== 'sealed') return null
     for (const [jid, certs] of this.peerKeys) {
-      if (getKeyChangeAlert(jid)) continue
+      if (this.stores.keyChangeAlerts.get(jid)) continue
       const active = certs.filter(c => c.active).map(({ fingerprint, publicArmored }) => ({ fingerprint, publicArmored }))
       if (active.length > 0 && active.length <= 4) peers[jid] = active
     }
@@ -3041,7 +3004,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       eligibleFps.some((fp) => fingerprintsEqual(fp, output.signerFingerprint!))
     let trust: SecurityContext['trust']
     if (output.signatureVerified && signerEligible) {
-      trust = isPeerVerified(peer, output.signerFingerprint!) ? 'verified' : 'tofu'
+      trust = this.stores.verifiedPeers.isVerified(peer, output.signerFingerprint!) ? 'verified' : 'tofu'
     } else {
       trust = 'untrusted'
     }

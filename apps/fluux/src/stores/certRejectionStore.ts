@@ -1,18 +1,6 @@
 import { create } from 'zustand'
 import { buildScopedStorageKey } from '@fluux/sdk'
-
-export type CertRejectionCode =
-  | 'validation_failed'
-  | 'fingerprint_mismatch'
-  | 'uid_mismatch'
-  | 'no_encryption_subkey'
-
-export interface CertRejection {
-  fingerprint: string
-  code: CertRejectionCode
-  detail: string
-  observedAt: string
-}
+import type { CertRejection } from '@fluux/openpgp-plugin'
 
 interface CertRejectionState {
   rejectionsByJid: Record<string, CertRejection[]>

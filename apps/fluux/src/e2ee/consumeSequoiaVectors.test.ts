@@ -13,6 +13,7 @@
  * Regenerate fixtures with:
  *   cd apps/fluux/src-tauri && cargo test generate_sequoia_golden_vectors -- --ignored --nocapture
  */
+import { createAppHostStores } from './appHostStores'
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -115,7 +116,7 @@ describe.skipIf(!fixturesExist)('Sequoia → openpgp.js interop', () => {
   })
 
   it('parses Sequoia-generated public keys and extracts matching fingerprints', async () => {
-    const plugin = new TestablePlugin()
+    const plugin = new TestablePlugin(createAppHostStores())
     const { ctx } = makeCtx('test@example.com')
     setSessionPassphrase('pp')
     await plugin.init(ctx)
@@ -136,7 +137,7 @@ describe.skipIf(!fixturesExist)('Sequoia → openpgp.js interop', () => {
 
   it('imports a Sequoia-generated backup and recovers the same fingerprint', async () => {
     const backup = readFixture('sequoia_alice_backup.asc')
-    const plugin = new TestablePlugin()
+    const plugin = new TestablePlugin(createAppHostStores())
     const { ctx } = makeCtx('alice@example.com')
     await plugin.init(ctx)
 
@@ -159,7 +160,7 @@ describe.skipIf(!fixturesExist)('Sequoia → openpgp.js interop', () => {
     // encrypt/decrypt interop by importing Alice, then having Alice
     // decrypt her own copy (encrypt-to-self from Sequoia).
     const backup = readFixture('sequoia_alice_backup.asc')
-    const plugin = new TestablePlugin()
+    const plugin = new TestablePlugin(createAppHostStores())
     const { ctx } = makeCtx('alice@example.com')
     await plugin.init(ctx)
     await plugin.callBackupImport('alice@example.com', backup, meta.backupPassphrase)
@@ -182,7 +183,7 @@ describe.skipIf(!fixturesExist)('Sequoia → openpgp.js interop', () => {
 
   it('rejects a Sequoia backup with the wrong passphrase', async () => {
     const backup = readFixture('sequoia_alice_backup.asc')
-    const plugin = new TestablePlugin()
+    const plugin = new TestablePlugin(createAppHostStores())
     const { ctx } = makeCtx('alice@example.com')
     await plugin.init(ctx)
 

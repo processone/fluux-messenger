@@ -49,6 +49,7 @@
  *
  *   FLUUX_LIVE_ACCOUNTS=/path/accounts.json npx vitest run src/e2ee/resumeReplay.openpgp.live.test.ts
  */
+import { createAppHostStores } from './appHostStores'
 import 'fake-indexeddb/auto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { describe, it, expect, vi } from 'vitest'
@@ -177,7 +178,7 @@ async function startRun(accounts: Accounts) {
     subscribePEP: () => ({ unsubscribe: () => {} }),
   }
   const bobE2EE = new E2EEManager({ storage: new InMemoryStorageBackend(), account: { jid: accounts.bob.jid }, xmpp: bobPrimitives })
-  await bobE2EE.register(new WebOpenPGPPlugin())
+  await bobE2EE.register(new WebOpenPGPPlugin(createAppHostStores()))
   note('bob-plugin-ready')
 
   // Alice's network: while down, every new socket fails to connect. In

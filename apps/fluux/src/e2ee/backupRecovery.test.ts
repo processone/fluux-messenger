@@ -3,6 +3,7 @@
  * identity without migrating refused storage or replacing its source backup.
  * Native IPC is injected; real Sequoia-generated backup/key fixtures are parsed
  * and decrypted here. The owning Rust suite proves durable native storage. */
+import { createAppHostStores } from './appHostStores'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -73,7 +74,7 @@ async function setup(error = 'openpgp-storage-unavailable: macOS keychain (-2529
       subscribePEP: () => ({ unsubscribe: () => {} }),
     },
   }
-  const plugin = new SequoiaPgpPlugin({ invoke }); plugins.push(plugin)
+  const plugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke }); plugins.push(plugin)
   return { plugin, ctx, calls, publications, invoke, decode, setBackup: (value: string) => { backup = value }, setPause: (value?: () => Promise<void>) => { pause = value } }
 }
 
@@ -106,7 +107,7 @@ describe('guided backup recovery', () => {
     const f = await setup()
     const invoke: InvokeFn = (cmd, args) => cmd === 'openpgp_has_persisted_key'
       ? Promise.reject(new Error('native dispatcher disconnected')) : f.invoke(cmd, args)
-    const device = new SequoiaPgpPlugin({ invoke }); plugins.push(device)
+    const device = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke }); plugins.push(device)
     await expect(device.init(f.ctx)).rejects.toThrow(/disconnected/)
     expect(f.calls).toEqual([])
     expect(device.isKeyRecoveryNeeded()).toBe(false)
@@ -205,7 +206,7 @@ describe('guided backup recovery', () => {
       if (cmd === 'openpgp_backup_import_selected') { installs++; throw new Error(reading) }
       return f.invoke<T>(cmd, args)
     }
-    const device = new SequoiaPgpPlugin({ invoke }); plugins.push(device)
+    const device = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke }); plugins.push(device)
     await device.init(f.ctx)
     await expect(device.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid: jid })).rejects.toThrow(reading)
     await expect(device.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid: jid })).rejects.toMatchObject({ code: 'restore-outcome-uncertain' })
@@ -216,14 +217,14 @@ describe('guided backup recovery', () => {
     const f = await setup()
     const invoke: InvokeFn = (cmd, args) => cmd === 'openpgp_backup_import_selected'
       ? new Promise(() => {}) : f.invoke(cmd, args)
-    const device = new SequoiaPgpPlugin({ invoke, timeouts: { keyMaterialMs: 1000 } }); plugins.push(device)
+    const device = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke, timeouts: { keyMaterialMs: 1000 } }); plugins.push(device)
     await device.init(f.ctx)
     vi.useFakeTimers()
     try {
       const install = device.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid })
       const timedOut = expect(install).rejects.toThrow(/timeout/)
       await vi.advanceTimersByTimeAsync(1000); await timedOut
-      const replacement = new SequoiaPgpPlugin({ invoke }); plugins.push(replacement)
+      const replacement = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke }); plugins.push(replacement)
       await replacement.init(f.ctx)
       await expect(replacement.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid })).rejects.toMatchObject({ code: 'restore-outcome-uncertain' })
       expect(f.ctx.notifyKeyUnlocked).not.toHaveBeenCalled()

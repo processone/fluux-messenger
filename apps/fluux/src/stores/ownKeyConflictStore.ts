@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { OwnKeyConflict } from '@fluux/openpgp-plugin'
 
 /**
  * Own-key conflict: detected during `ensureIdentity()` or a reconnect when
@@ -28,13 +29,6 @@ import { create } from 'zustand'
  * conflicts could block the user after they already resolved it on another
  * device.
  */
-export interface OwnKeyConflict {
-  kind: 'primary-mismatch' | 'subkey-mismatch'
-  localFingerprint: string
-  publishedFingerprint: string
-  publishedDate: string
-}
-
 interface OwnKeyConflictState {
   conflict: OwnKeyConflict | null
   setConflict: (conflict: OwnKeyConflict) => void

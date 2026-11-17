@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { TrustStateCompromisedBanner } from './TrustStateCompromisedBanner'
 import { useTrustStateStatusStore } from '@/stores/trustStateStatusStore'
-import type { TrustStateStatus } from '@/stores/trustStateStatusStore'
+import type { TrustStateStatus } from '@fluux/openpgp-plugin'
 
 // Mock react-i18next — returns the key as the translation (avoids missing-key fallback noise)
 vi.mock('react-i18next', () => ({

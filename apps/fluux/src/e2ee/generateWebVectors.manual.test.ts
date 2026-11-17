@@ -14,6 +14,7 @@
  * Then run the Rust consumer:
  *   cd apps/fluux/src-tauri && cargo test consume_web_golden_vectors -- --ignored --nocapture
  */
+import { createAppHostStores } from './appHostStores'
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -90,7 +91,7 @@ afterEach(() => {
 describe('generate web golden vectors for Sequoia consumption', () => {
   it('writes fixture files', async () => {
     // Alice
-    const alice = new TestablePlugin()
+    const alice = new TestablePlugin(createAppHostStores())
     const { ctx: aliceCtx } = makeCtx('alice@example.com')
     setSessionPassphrase('alice-pp')
     await alice.init(aliceCtx)
@@ -98,7 +99,7 @@ describe('generate web golden vectors for Sequoia consumption', () => {
 
     // Bob
     clearSessionPassphrase()
-    const bob = new TestablePlugin()
+    const bob = new TestablePlugin(createAppHostStores())
     const { ctx: bobCtx } = makeCtx('bob@example.com')
     setSessionPassphrase('bob-pp')
     await bob.init(bobCtx)
