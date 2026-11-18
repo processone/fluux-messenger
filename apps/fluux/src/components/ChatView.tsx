@@ -10,7 +10,6 @@ import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { deriveCopyBody } from '@/utils/copyMessageBody'
 import { useChatActive, useContactIdentities, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, chatStore, getStorageScopeJid, currentViewportGeneration, reportViewport, type Message, type ContactIdentity, type ViewportEvidenceKey } from '@fluux/sdk'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
@@ -375,44 +374,54 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     activeConversation?.type ?? 'chat',
   )
   const { client } = useXMPPContext()
-  const setPeerVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
-  const clearPeerVerified = useVerifiedPeerKeysStore((s) => s.clearVerified)
   const addToast = useToastStore((s) => s.addToast)
   const setForcedPlaintext = useConversationPlaintextOverrideStore((s) => s.setForcedPlaintext)
   const [verifyDialogState, setVerifyDialogState] = useState<
     | { open: false }
-    | { open: true; peerJid: string; peerFingerprint: string; ownFingerprint: string | null }
+    | {
+        open: true
+        peerJid: string
+        peerFingerprint: string
+        ownFingerprint: string | null
+        protocolId: string
+        identityId: string | null
+      }
   >({ open: false })
-  const handleOpenVerify = useCallback(() => {
+  // The verify dialog is offered only when the protocol accepts a decision for this contact.
+  const canDecideTrust =
+    encryptionState.kind === 'encrypted' && (encryptionState.canVerify === true || encryptionState.canClearVerification === true)
+  const handleOpenVerify = useCallback(async () => {
     if (activeConversation?.type !== 'chat' || !activeConversation?.id) return
-    // Open the verify dialog for both encrypted (verify current key) and blocked
-    // (verify the new advertised key so encryption can resume).
-    const peerFingerprint =
-      encryptionState.kind === 'encrypted'
-        ? encryptionState.fingerprint
-        : encryptionState.kind === 'blocked'
-          ? encryptionState.advertisedFingerprint
-          : null
-    if (!peerFingerprint) return
-    const plugin = client.e2ee?.getPlugin('openpgp') as
-      | { getOwnFingerprint?: () => string | null }
-      | null
-      | undefined
+    // The dialog shows the key in use; the decision is recorded through the SDK.
+    if (encryptionState.kind !== 'encrypted' || !encryptionState.fingerprint) return
+    const { protocolId, fingerprint, identityId } = encryptionState
+    const ownFingerprint = (await client.e2ee?.getOwnFingerprint(protocolId)) ?? null
     setVerifyDialogState({
       open: true,
       peerJid: activeConversation.id,
-      peerFingerprint,
-      ownFingerprint: plugin?.getOwnFingerprint?.() ?? null,
+      peerFingerprint: fingerprint,
+      ownFingerprint,
+      protocolId,
+      identityId: identityId ?? null,
     })
   }, [client, activeConversation, encryptionState])
-  const handleVerifyConfirm = useCallback(
-    (fingerprint: string) => {
-      if (!verifyDialogState.open) return
-      setPeerVerified(verifyDialogState.peerJid, fingerprint)
-      setVerifyDialogState({ open: false })
-      addToast('success', t('chat.verifyPeer.confirmSuccess'))
+  const decideTrust = useCallback(
+    async (decision: 'verified' | 'tofu', successKey: string) => {
+      if (!verifyDialogState.open || !verifyDialogState.identityId) return
+      const { protocolId, peerJid, identityId } = verifyDialogState
+      try {
+        await client.e2ee?.setIdentityTrust(protocolId, peerJid, identityId, decision)
+        setVerifyDialogState({ open: false })
+        addToast('success', t(successKey))
+      } catch (err) {
+        addToast('error', err instanceof Error ? err.message : String(err))
+      }
     },
-    [verifyDialogState, setPeerVerified, addToast, t],
+    [client, verifyDialogState, addToast, t],
+  )
+  const handleVerifyConfirm = useCallback(
+    () => decideTrust('verified', 'chat.verifyPeer.confirmSuccess'),
+    [decideTrust],
   )
 
   const handleDisableEncryption = useCallback(() => {
@@ -472,7 +481,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           onBack={onBack}
           onSearchInConversation={handleSearchInConversation}
           encryptionState={encryptionState}
-          onEncryptionClick={encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked' ? handleOpenVerify : undefined}
+          onEncryptionClick={canDecideTrust ? () => void handleOpenVerify() : undefined}
           onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
           onEnableEncryptionClick={encryptionState.kind === 'plaintextForced' ? handleEnableEncryption : undefined}
           onShowProfile={
@@ -511,14 +520,9 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             ownJid={jid}
             ownFingerprint={verifyDialogState.ownFingerprint}
             alreadyVerified={encryptionState.kind === 'encrypted' && encryptionState.trust === 'verified'}
-            onConfirm={handleVerifyConfirm}
+            onConfirm={() => void handleVerifyConfirm()}
             onCancel={() => setVerifyDialogState({ open: false })}
-            onRevoke={() => {
-              if (!verifyDialogState.open) return
-              clearPeerVerified(verifyDialogState.peerJid)
-              setVerifyDialogState({ open: false })
-              addToast('success', t('contacts.encryption.removeVerificationSuccess'))
-            }}
+            onRevoke={() => void decideTrust('tofu', 'contacts.encryption.removeVerificationSuccess')}
           />
         )}
 
@@ -651,11 +655,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             isConnected={isConnected}
             onSwitchToMessages={onSwitchToMessages}
             encryptionState={encryptionState}
-            onEncryptionClick={
-              encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked'
-                ? handleOpenVerify
-                : undefined
-            }
+            onEncryptionClick={canDecideTrust ? () => void handleOpenVerify() : undefined}
             isDarkMode={resolvedMode === 'dark'}
           />
         </ConversationTail>

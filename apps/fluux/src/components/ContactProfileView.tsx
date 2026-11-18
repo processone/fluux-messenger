@@ -7,7 +7,6 @@ import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { useWindowDrag } from '@/hooks'
 import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { ConfirmDialog } from './ConfirmDialog'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
@@ -62,14 +61,29 @@ export function ContactProfileView({
   const isBlocked = useBlockingStore((s) => s.blockedJids.has(contact.jid))
   const { client } = useXMPPContext()
   const encryptionState = useConversationEncryptionState(contact.jid, 'chat')
-  const setVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
-  const clearVerified = useVerifiedPeerKeysStore((s) => s.clearVerified)
   const setForcedPlaintext = useConversationPlaintextOverrideStore((s) => s.setForcedPlaintext)
-  const plugin = client.e2ee?.getPlugin('openpgp') as
-    | { getOwnFingerprint?: () => string | null }
-    | null
-    | undefined
-  const ownFingerprint = plugin?.getOwnFingerprint?.() ?? null
+  const trustProtocolId = encryptionState.kind === 'encrypted' ? encryptionState.protocolId : null
+  const [ownFingerprint, setOwnFingerprint] = useState<string | null>(null)
+  useEffect(() => {
+    if (!trustProtocolId || !client.e2ee) {
+      setOwnFingerprint(null)
+      return
+    }
+    let cancelled = false
+    void client.e2ee.getOwnFingerprint(trustProtocolId).then((fp) => {
+      if (!cancelled) setOwnFingerprint(fp)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [client.e2ee, trustProtocolId])
+
+  /** Record a trust decision for the key in use; the SDK says whether the protocol accepts it. */
+  const decideTrust = (decision: 'verified' | 'tofu') => {
+    if (encryptionState.kind !== 'encrypted' || !encryptionState.identityId) return Promise.resolve()
+    return (client.e2ee?.setIdentityTrust(encryptionState.protocolId, contact.jid, encryptionState.identityId, decision) ?? Promise.resolve())
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+  }
 
   // Lazily query last activity for offline roster contacts
   useLastActivity(
@@ -171,7 +185,7 @@ export function ContactProfileView({
     } else if (pendingConfirm === 'block') {
       void blockJid(contact.jid)
     } else if (pendingConfirm === 'revokeVerify') {
-      clearVerified(contact.jid)
+      void decideTrust('tofu')
     }
     setPendingConfirm(null)
   }
@@ -283,15 +297,15 @@ export function ContactProfileView({
         />
       )}
 
-      {showVerifyDialog && encryptionState.kind === 'encrypted' && ownJid && (
+      {showVerifyDialog && encryptionState.kind === 'encrypted' && encryptionState.fingerprint && ownJid && (
         <VerifyPeerDialog
           peerName={contact.name}
           peerJid={contact.jid}
           peerFingerprint={encryptionState.fingerprint}
           ownJid={ownJid}
           ownFingerprint={ownFingerprint}
-          onConfirm={(fingerprint) => {
-            setVerified(contact.jid, fingerprint)
+          onConfirm={() => {
+            void decideTrust('verified')
             setShowVerifyDialog(false)
           }}
           onCancel={() => setShowVerifyDialog(false)}

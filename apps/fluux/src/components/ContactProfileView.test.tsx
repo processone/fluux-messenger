@@ -1,10 +1,18 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Contact } from '@fluux/sdk'
 import { ContactProfileView } from './ContactProfileView'
 
+const e2ee = vi.hoisted(() => ({
+  setIdentityTrust: vi.fn(async () => {}),
+  getOwnFingerprint: vi.fn(async () => 'OWN1234'),
+}))
+
 vi.mock('@/hooks/useConversationEncryptionState', () => ({
-  useConversationEncryptionState: () => ({ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'verified' }),
+  useConversationEncryptionState: () => ({
+    kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'verified',
+    identityId: 'ABCD1234', canClearVerification: true,
+  }),
 }))
 
 // Mock hooks used by ContactProfileView that aren't covered by the global
@@ -15,7 +23,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     ...actual,
     useXMPPContext: () => ({
       client: {
-        e2ee: null,
+        e2ee,
       },
     }),
     useBlocking: () => ({
@@ -46,13 +54,6 @@ vi.mock('@fluux/sdk/react', async (importOriginal) => {
 })
 
 // Mock app-level stores
-vi.mock('@/stores/verifiedPeerKeysStore', () => ({
-  useVerifiedPeerKeysStore: (selector: (s: { setVerified: ReturnType<typeof vi.fn>; clearVerified: ReturnType<typeof vi.fn> }) => unknown) => {
-    const state = { setVerified: vi.fn(), clearVerified: vi.fn() }
-    return selector ? selector(state) : state
-  },
-}))
-
 vi.mock('@/stores/conversationPlaintextOverrideStore', () => ({
   useConversationPlaintextOverrideStore: (selector: (s: { setForcedPlaintext: ReturnType<typeof vi.fn> }) => unknown) => {
     const state = { setForcedPlaintext: vi.fn() }
@@ -95,5 +96,18 @@ describe('ContactProfileView', () => {
     render(<ContactProfileView {...props} />)
     fireEvent.click(screen.getByRole('button', { name: 'Verified and encrypted' }))
     expect(screen.getByText('Security details')).toBeInTheDocument()
+  })
+
+  it('removes a verification through the SDK for the key in use', async () => {
+    render(<ContactProfileView {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Verified and encrypted' }))
+    fireEvent.click(screen.getByRole('button', { name: /removeVerification|Remove verification/ }))
+    fireEvent.click(screen.getAllByRole('button', { name: /removeVerification|Remove verification/ }).at(-1)!)
+    await waitFor(() => expect(e2ee.setIdentityTrust).toHaveBeenCalledWith('openpgp', contact.jid, 'ABCD1234', 'tofu'))
+  })
+
+  it('reads the own fingerprint of the protocol in use from the SDK', async () => {
+    render(<ContactProfileView {...props} />)
+    await waitFor(() => expect(e2ee.getOwnFingerprint).toHaveBeenCalledWith('openpgp'))
   })
 })

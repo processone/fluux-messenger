@@ -17,7 +17,7 @@ describe('ContactProfileGrid', () => {
         details={{ org: 'ProcessOne' }}
         isInRoster={true}
         forceOffline={false}
-        encryptionState={{ kind: 'encrypted', fingerprint: 'AB', trust: 'verified' }}
+        encryptionState={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'AB', trust: 'verified' }}
         onOpenSecurity={onOpenSecurity}
       />,
     )
@@ -62,7 +62,7 @@ describe('ContactProfileGrid', () => {
         details={{ org: 'ProcessOne' }}
         isInRoster={true}
         forceOffline={false}
-        encryptionState={{ kind: 'encrypted', fingerprint: 'AB', trust: 'verified' }}
+        encryptionState={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'AB', trust: 'verified' }}
         onOpenSecurity={() => {}}
       />,
     )

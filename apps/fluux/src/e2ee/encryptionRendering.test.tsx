@@ -68,9 +68,7 @@ vi.mock('@fluux/sdk/react', async (importOriginal) => {
 /** An OpenPGP plugin over the app's stores, answering both the plugin's own calls and the identity API. */
 class OpenPgpStandIn extends DummyPlaintextPlugin implements E2EEPlugin {
   override readonly descriptor = { ...new DummyPlaintextPlugin().descriptor, id: 'openpgp', displayName: 'OpenPGP', securityLevel: 40 }
-  private ctx: PluginContext | null = null
   override async init(ctx: PluginContext) {
-    this.ctx = ctx
     useVerifiedPeerKeysStore.subscribe(() => ctx.reportPeerIdentitiesChanged?.(PEER))
     usePeerKeysetRevisionStore.subscribe(() => ctx.reportPeerIdentitiesChanged?.(PEER))
   }
@@ -287,6 +285,8 @@ describe('encryption state as people see it', () => {
     pinnedLongAgo()
     useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: { [PEER]: A } })
     await open()
+    // The one deliberate change (FLM-268 piece 1): the saved verification holds one fingerprint
+    // per contact, so a contact with two keys no longer offers a Verify that could not make it verified.
     expect(seen()).toMatchInlineSnapshot(`
       {
         "composerLock": {
@@ -302,10 +302,9 @@ describe('encryption state as people see it', () => {
           "chat.verifyPeer.chipAriaLabel",
         ],
         "tabButtons": [
-          "Verify fingerprint",
           "contacts.encryption.disableForContact",
         ],
-        "tabText": "Encrypted (not verified)This contact has a new key that has not been verified.OpenPGP fingerprintAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555Verify fingerprintcontacts.encryption.disableForContact",
+        "tabText": "Encrypted (not verified)This contact has a new key that has not been verified.OpenPGP fingerprintAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.disableForContact",
       }
     `)
   })

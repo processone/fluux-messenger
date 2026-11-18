@@ -1,54 +1,42 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useConnectionStatus, useXMPPContext } from '@fluux/sdk'
+import type { ConversationSecurity, E2EEManager, PeerIdentity, TrustState } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
-import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
-import { usePinnedPrimaryFingerprintsStore, isTofuNew } from '@/stores/pinnedPrimaryFingerprintsStore'
-import type { CertRejection } from '@fluux/openpgp-plugin'
-import { useCertRejectionStore } from '@/stores/certRejectionStore'
-import { usePeerKeysetRevisionStore } from '@/stores/peerKeysetRevisionStore'
-import { fingerprintsEqual } from '@fluux/openpgp-plugin'
-import { useWebKeyLocked } from './useWebKeyLocked'
+
+/** Why an identity or certificate cannot receive messages, as the SDK reports it. */
+export interface EncryptionProblem {
+  id: string
+  code: string
+  detail: string
+}
 
 /**
- * Per-conversation encryption status surfaced to the composer chip.
+ * Per-conversation encryption status surfaced to the composer chip, the
+ * header shield and the Security tab. The SDK computes it from the registered
+ * protocols; the app holds no protocol branches.
  *
  * - `disabled`    — master toggle is off, we're not online, or the
  *                   conversation isn't a 1:1 chat (MUCs are not
  *                   E2EE-capable in this phase).
- * - `checking`    — we kicked off a `probePeer` and are waiting for
- *                   the PEP fetch to resolve.
- * - `encrypted`   — peer's OpenPGP public key is cached locally.
- *                   `fingerprint` is the full hex for display in the
- *                   chip tooltip — invaluable for interop testing,
- *                   where reading the peer's fingerprint off the
- *                   chip is faster than diving into the PEP node.
- *                   `trust` reflects whether the user has confirmed
- *                   the fingerprint out-of-band — `verified` lifts
- *                   the chip to the green-trust palette.
- * - `blocked`       — peer's pinned primary fingerprint differs from
- *                     what their PEP currently advertises and the
- *                     rotation hasn't been resolved by the user. The
- *                     plugin's encrypt path refuses while in this
- *                     state — the chip surfaces it so the user sees a
- *                     reason (the key-change banner has the resolution
- *                     buttons).
- * - `unsupported`   — probe completed but the peer has no advertised
- *                     OpenPGP key. Composer falls back to plaintext.
- * - `rejected`      — peer has advertised OpenPGP key(s) but every
- *                     certificate was rejected during validation (bad
- *                     UID, fingerprint mismatch, corrupt cert, etc.).
- *                     `reasons` carries one entry per rejected
- *                     fingerprint so the UI can explain what's wrong.
+ * - `checking`    — waiting for the SDK to answer for this conversation.
+ * - `encrypted`   — messages are encrypted. `trust` is the SDK's aggregate over
+ *                   the keys that receive messages. `fingerprint` is the key
+ *                   shown to the user (the one in use, or the first of several).
+ *                   `isNew` marks a contact met recently and not verified;
+ *                   `partlyVerified` a contact with a verified key whose
+ *                   messages also go to a key that is not verified.
+ *                   `canVerify` and `canClearVerification` say whether the
+ *                   protocol accepts that decision for this contact now.
+ * - `blocked`       — retired: no protocol produces it any more. Kept for the
+ *                     surfaces that still draw it.
+ * - `unsupported`   — no registered protocol can encrypt to this contact.
+ *                     Composer falls back to plaintext.
+ * - `rejected`      — keys exist but none can receive messages; `reasons`
+ *                     carries one entry per problem so the UI can explain.
  * - `plaintextForced` — user has explicitly disabled encryption for
- *                     this conversation. Messages are sent in plaintext
- *                     even if the peer has a published key.
- * - `keyLocked`     — peer supports OpenPGP and we would normally encrypt
- *                     to them, but the local private key is locked (web
- *                     session passphrase not yet entered). Outbound
- *                     encryption is blocked until the user unlocks; the
- *                     chip surfaces the locked state with a click-to-unlock
- *                     affordance. Tauri builds never reach this state.
+ *                     this conversation.
+ * - `keyLocked`     — encryption would be used, but the local private key is
+ *                     locked (web session passphrase not yet entered).
  */
 export type ConversationEncryptionState =
   | { kind: 'disabled' }
@@ -56,50 +44,71 @@ export type ConversationEncryptionState =
   | { kind: 'plaintextForced' }
   | {
       kind: 'encrypted'
-      fingerprint: string
-      /**
-       * `verified` — the user has confirmed this exact fingerprint via
-       * the verify-peer dialog. A subsequent key rotation drops back
-       * to `unverified` automatically (the store keys on
-       * fingerprint, not just JID).
-       *
-       * `unverified` — peer key is cached and we can encrypt to it,
-       * but the user hasn't confirmed it. This is the BTBV ground
-       * state: trust the cached key for cryptographic purposes,
-       * surface the unverified state in the UI.
-       */
-      trust: 'verified' | 'unverified' | 'tofu-new'
-      /**
-       * Set, with `trust: 'unverified'`, when the verified fingerprint is one
-       * of the peer's active keys but at least one other active key is not
-       * verified. Messages are encrypted to every active key, so the verified
-       * key alone does not vouch for the conversation. Absent otherwise.
-       */
-      unverifiedKeyset?: true
+      protocolId: string
+      displayName: string
+      fingerprint?: string
+      /** The key a trust decision applies to; set with `canVerify` or `canClearVerification`. */
+      identityId?: string
+      trust: TrustState
+      isNew?: true
+      partlyVerified?: true
+      canVerify?: true
+      canClearVerification?: true
     }
   | { kind: 'blocked'; pinnedFingerprint: string; advertisedFingerprint: string }
   | { kind: 'unsupported' }
-  | { kind: 'rejected'; reasons: CertRejection[] }
+  | { kind: 'rejected'; reasons: EncryptionProblem[] }
   | { kind: 'keyLocked'; fingerprint?: string }
 
-/**
- * Minimal structural type for the pieces of `SequoiaPgpPlugin` this
- * hook needs. Matches the public surface; we intentionally don't
- * depend on the concrete class so the SDK stays the sole source of
- * truth for the plugin contract.
- */
-interface OpenpgpPluginShape {
-  getPeerFingerprint?: (peer: string) => string | null
-  getPeerFingerprints?: (peer: string) => string[]
-  probePeer?: (peer: string) => Promise<{ supported: boolean; fingerprint?: string }>
+/** The identity to show for a conversation: the one in use, or the first of several in use. */
+function shownIdentity(identities: PeerIdentity[]): PeerIdentity | undefined {
+  return identities.find((i) => i.usedForEncryption)
+}
+
+async function resolveState(manager: E2EEManager, peer: string): Promise<ConversationEncryptionState> {
+  const security: ConversationSecurity = await manager.getConversationSecurity({ kind: 'direct', peer })
+  switch (security.kind) {
+    case 'plaintextForced':
+      return { kind: 'plaintextForced' }
+    case 'unsupported':
+      return { kind: 'unsupported' }
+    case 'needsDecision':
+      // A contact whose every key waits for a decision has nothing the app can use yet.
+      return { kind: 'unsupported' }
+    case 'unusable':
+      return security.problems.length > 0 ? { kind: 'rejected', reasons: security.problems } : { kind: 'unsupported' }
+    case 'locked': {
+      const group = (await manager.listPeerIdentities(peer)).find((g) => g.protocolId === security.protocolId)
+      return { kind: 'keyLocked', fingerprint: group && shownIdentity(group.identities)?.fingerprint }
+    }
+    case 'encrypted': {
+      const group = (await manager.listPeerIdentities(peer)).find((g) => g.protocolId === security.protocolId)
+      const used = group?.identities.filter((i) => i.usedForEncryption) ?? []
+      const shown = shownIdentity(group?.identities ?? [])
+      // A decision is offered only for a contact with exactly one key in use.
+      const only = used.length === 1 ? used[0] : undefined
+      return {
+        kind: 'encrypted',
+        protocolId: security.protocolId,
+        displayName: security.displayName,
+        trust: security.trust,
+        ...((security.fingerprint ?? shown?.fingerprint) ? { fingerprint: security.fingerprint ?? shown?.fingerprint } : {}),
+        ...(only ? { identityId: only.id } : {}),
+        ...(security.isNew ? { isNew: true as const } : {}),
+        ...(security.partlyVerified ? { partlyVerified: true as const } : {}),
+        ...(only?.allowedDecisions.includes('verified') ? { canVerify: true as const } : {}),
+        ...(only?.allowedDecisions.includes('tofu') && only.trust === 'verified' ? { canClearVerification: true as const } : {}),
+      }
+    }
+  }
 }
 
 /**
- * Hook powering the composer's encryption chip. Kicks off an idempotent
- * `probePeer` on every conversation change so the chip reflects reality
- * without needing the user to hit send first. The plugin's own cache
- * (SequoiaPgpPlugin.peerKeys) makes repeat calls cheap — once a peer
- * key has been fetched it stays available for the process lifetime.
+ * Hook powering the composer's encryption chip. Asks the SDK's
+ * E2EEManager for the conversation's security whenever the conversation
+ * changes, and again whenever the manager reports that a peer's keys, a trust
+ * decision or the own key's lock changed. The manager probes and caches, so a
+ * repeated question is cheap.
  *
  * `conversationType` is required because MUC rooms must always render
  * as `disabled`: group-chat E2EE isn't wired yet and silently-unencrypted
@@ -115,206 +124,50 @@ export function useConversationEncryptionState(
   // on unrelated connection churn (ownAvatar, reconnectAttempt, serverInfo, ...).
   const { status } = useConnectionStatus()
   const { client } = useXMPPContext()
-  const openpgpEnabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
-  // Changes when a plugin finishes registering. Makes the probe effect re-run
-  // after async plugin init so we never stay stuck at `disabled`.
+  // The master toggle for end-to-end encryption.
+  const encryptionEnabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
+  // Changes when a plugin finishes registering, so the question is asked again
+  // after async plugin init instead of staying `disabled`.
   const pluginRegisteredAt = useEncryptionSettingsStore((s) => s.pluginRegisteredAt)
   const online = status === 'online'
 
   // Narrow dep from `client` (which some consumers re-create per render,
-  // and every test mock re-creates per render) down to the one stable
-  // handle we actually read. Once the E2EEManager is built on `online`
-  // it keeps the same reference for the session, so this is a safe
-  // primitive to use as a dependency — changes only on login / logout
-  // or a manager rebuild.
+  // and every test mock re-creates per render) down to the one stable handle
+  // we read. The manager keeps its reference for the session.
   const e2eeManager = client.e2ee ?? null
 
-  // Subscribe to ONLY the current peer's verified fingerprint. The
-  // selector takes a primitive (string | null) so unrelated entries
-  // changing in the verifications map don't trigger a re-render here.
-  const verifiedFingerprint = useVerifiedPeerKeysStore((s) =>
-    peerJid ? (s.verifiedFingerprintByJid[peerJid] ?? null) : null,
-  )
+  const applicable = encryptionEnabled && online && conversationType === 'chat' && !!peerJid && !!e2eeManager
 
-  // Per-conversation plaintext override. Uses a per-JID primitive selector
-  // so unrelated JID changes don't trigger a re-render here.
-  const isForcedPlaintext = useConversationPlaintextOverrideStore((s) =>
-    peerJid ? peerJid in s.plaintextJids : false,
-  )
-
-  // TOFU pin for this peer. When the peer publishes their key for the first
-  // time while we're already in the conversation, cachePeerKey calls
-  // setPinnedPrimaryFp (TOFU), which updates this selector and triggers a
-  // re-render — causing the effect below to re-run and pick up the newly
-  // cached key without requiring the user to re-enter the conversation.
-  const pinnedFp = usePinnedPrimaryFingerprintsStore((s) =>
-    peerJid ? (s.pinnedFingerprintByJid[peerJid] ?? null) : null,
-  )
-
-  const certRejections = useCertRejectionStore((s) =>
-    peerJid ? (s.rejectionsByJid[peerJid] ?? null) : null,
-  )
-
-  const peerKeysetRevision = usePeerKeysetRevisionStore((s) =>
-    peerJid ? (s.revisionByJid[peerJid] ?? 0) : 0,
-  )
-
-  // Reactive web-only flag: true while the OpenPGP private key is locked
-  // (no session passphrase entered yet). Tauri builds always read `false`.
-  // Used to promote the `encrypted` state to `keyLocked` so the chip
-  // surfaces the unlock affordance instead of pretending encryption works.
-  const webKeyLocked = useWebKeyLocked()
-
-  // The base state is what the probe / cache produces — kind, peer
-  // fingerprint, and so on. Trust is derived below from this plus the
-  // verified-store snapshot, so a verify action re-renders without
-  // needing the effect to run again.
-  type BaseEncryptionState =
-    | { kind: 'disabled' }
-    | { kind: 'checking' }
-    | { kind: 'encrypted'; fingerprint: string; activeFingerprints: string[] }
-    | { kind: 'unsupported' }
-  const [base, setBase] = useState<BaseEncryptionState>({ kind: 'disabled' })
+  // The SDK's last answer, tagged with the peer it answers for so a change of
+  // conversation shows `checking` rather than the previous contact's state.
+  const [answer, setAnswer] = useState<{ peer: string; state: ConversationEncryptionState } | null>(null)
+  const [revision, setRevision] = useState(0)
 
   useEffect(() => {
-    // Short-circuit all the "not applicable" cases first.
-    if (!openpgpEnabled || !online || conversationType !== 'chat' || !peerJid) {
-      setBase({ kind: 'disabled' })
-      return
-    }
+    if (!applicable || !e2eeManager || !peerJid) return
+    return e2eeManager.onConversationSecurityChanged((changed) => {
+      if (changed === null || changed === peerJid) setRevision((r) => r + 1)
+    })
+  }, [applicable, e2eeManager, peerJid])
 
-    // Per-conversation plaintext override: skip probe entirely, no icon needed.
-    if (isForcedPlaintext) {
-      setBase({ kind: 'disabled' })
-      return
-    }
-
-    const plugin = e2eeManager?.getPlugin('openpgp') as
-      | OpenpgpPluginShape
-      | null
-      | undefined
-    if (!plugin) {
-      // Plugin not registered yet — this can happen briefly after
-      // `online` fires but before `registerE2EEPlugins` completes.
-      // Stay disabled; a later render with the plugin available will
-      // re-enter this effect and move us to `checking` / `encrypted`.
-      setBase({ kind: 'disabled' })
-      return
-    }
-
-    // Fast path 1: already-cached peer key. Avoids a pointless probe
-    // call + wipes any stale `checking` display when re-entering a
-    // conversation we've encrypted to before.
-    const activeFingerprintsOf = (fallback: string): string[] => {
-      const fps = plugin.getPeerFingerprints?.(peerJid) ?? []
-      return fps.length > 0 ? fps : [fallback]
-    }
-
-    const cachedFp = plugin.getPeerFingerprint?.(peerJid) ?? null
-    if (cachedFp) {
-      setBase({ kind: 'encrypted', fingerprint: cachedFp, activeFingerprints: activeFingerprintsOf(cachedFp) })
-      return
-    }
-
-    // Fast path 2: persisted verified fingerprint (warm-start after reconnect).
-    // When the plugin cache is cold (just reconnected), show 'encrypted'
-    // immediately from the stored fingerprint so the chip never flashes
-    // 'checking' for a contact the user already verified. Fire a background
-    // probe to repopulate the plugin cache so the actual send path works
-    // without an extra round-trip. Transient probe errors do NOT downgrade
-    // the chip — the verified fingerprint IS the authoritative state; the
-    // key-change alert path handles real rotations independently.
-    if (verifiedFingerprint) {
-      setBase({ kind: 'encrypted', fingerprint: verifiedFingerprint, activeFingerprints: [verifiedFingerprint] })
-      let cancelled = false
-      void plugin.probePeer?.(peerJid)?.then((support) => {
-        // The warm cache may announce keys beyond the verified one.
-        const fps = plugin.getPeerFingerprints?.(peerJid) ?? []
-        if (cancelled) return
-        if (!support?.supported || fps.length === 0) {
-          setBase({ kind: 'unsupported' })
-          return
-        }
-        setBase({ kind: 'encrypted', fingerprint: verifiedFingerprint, activeFingerprints: fps })
-      }, () => {
-        // Transient error: plugin cache stays cold but chip state is
-        // correct (the stored fingerprint). Next probe (conversation
-        // re-enter or reconnect) will retry.
-      })
-      return () => {
-        cancelled = true
-      }
-    }
-
-    setBase({ kind: 'checking' })
+  useEffect(() => {
+    if (!applicable || !e2eeManager || !peerJid) return
     let cancelled = false
-    void (async () => {
-      try {
-        const support = await plugin.probePeer?.(peerJid)
-        if (cancelled) return
-        const fp = plugin.getPeerFingerprint?.(peerJid) ?? support?.fingerprint ?? null
-        if (support?.supported && fp) {
-          setBase({ kind: 'encrypted', fingerprint: fp, activeFingerprints: activeFingerprintsOf(fp) })
-        } else {
-          setBase({ kind: 'unsupported' })
-        }
-      } catch {
-        // Probe failures (network hiccup, server glitch) are not a
-        // correctness signal — we just can't encrypt RIGHT NOW. Treat
-        // as unsupported until the next conversation switch retries.
-        if (!cancelled) setBase({ kind: 'unsupported' })
-      }
-    })()
-
+    void resolveState(e2eeManager, peerJid).then(
+      (state) => {
+        if (!cancelled) setAnswer({ peer: peerJid, state })
+      },
+      // A failed question is not a correctness signal: we just cannot encrypt right now.
+      () => {
+        if (!cancelled) setAnswer({ peer: peerJid, state: { kind: 'unsupported' } })
+      },
+    )
     return () => {
       cancelled = true
     }
-  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext, verifiedFingerprint, pinnedFp, pluginRegisteredAt, peerKeysetRevision])
+  }, [applicable, e2eeManager, peerJid, pluginRegisteredAt, revision])
 
-  // Merge the verification trust + pin-mismatch alert into the
-  // encrypted state. Precedence:
-  //
-  //   1. If a key-change alert is live for this peer, the conversation
-  //      is BLOCKED — outbound encryption refuses, surface the
-  //      `blocked` state regardless of the underlying cached cert.
-  //   2. Otherwise, fall through to the standard verified/unverified
-  //      derivation against the cached cert's fingerprint.
-  return useMemo<ConversationEncryptionState>(() => {
-    // Per-conversation override takes precedence over everything else.
-    // The effect already sets base to 'disabled' to skip the probe, but
-    // the memo is the single authoritative output — check here so a toggle
-    // triggers a re-render without waiting for the next effect run.
-    if (isForcedPlaintext) return { kind: 'plaintextForced' }
-    // NOTE: OpenPGP no longer produces `blocked`. The single-primary TOFU pin
-    // and its key-change alert are retired for OX — an additional announced key
-    // is normal under multi-key, and `encrypt()` has no pin gate — so a
-    // persisted alert from <=0.17.2 is a stale artifact that must not claim the
-    // conversation is blocked while sending actually works. The alert store is
-    // left untouched (sealed) for Stage 2's ordered migration (#1452).
-    if (base.kind === 'unsupported' && certRejections && certRejections.length > 0) {
-      return { kind: 'rejected', reasons: certRejections }
-    }
-    if (base.kind !== 'encrypted') return base
-    // When the peer key is cached and we would normally show `encrypted`,
-    // but the local private key is locked (web only), promote to
-    // `keyLocked` so the chip surfaces a click-to-unlock affordance. We
-    // keep the peer fingerprint around so the tooltip can still display
-    // it — handy for users who want to verify the peer before unlocking.
-    if (webKeyLocked) {
-      return { kind: 'keyLocked', fingerprint: base.fingerprint }
-    }
-    // Normalized compare: the verified fingerprint may have been synced from
-    // another OpenPGP backend (Sequoia UPPERCASE ↔ openpgp.js lowercase), so
-    // raw `===` would spuriously read as unverified. See fingerprintCompare.ts.
-    const isVerifiedFp = (fp: string) =>
-      verifiedFingerprint !== null && fingerprintsEqual(verifiedFingerprint, fp)
-    const active = base.activeFingerprints
-    if (verifiedFingerprint !== null && active.some((fp) => !isVerifiedFp(fp))) {
-      return { kind: 'encrypted', fingerprint: base.fingerprint, trust: 'unverified', unverifiedKeyset: true }
-    }
-    const trust = isVerifiedFp(base.fingerprint)
-      ? 'verified'
-      : (peerJid && isTofuNew(peerJid) ? 'tofu-new' : 'unverified')
-    return { kind: 'encrypted', fingerprint: base.fingerprint, trust }
-  }, [base, peerJid, isForcedPlaintext, verifiedFingerprint, certRejections, webKeyLocked])
+  if (!applicable) return { kind: 'disabled' }
+  if (answer === null || answer.peer !== peerJid) return { kind: 'checking' }
+  return answer.state
 }
