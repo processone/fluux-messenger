@@ -165,7 +165,7 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
       fingerprint: DEMO_AVA_FINGERPRINT,
       trust: this.avaVerified() ? 'verified' : 'tofu',
       usedForEncryption: true,
-      allowedDecisions: this.avaVerified() ? ['tofu', 'untrusted'] : ['verified', 'untrusted'],
+      allowedDecisions: this.avaVerified() ? ['tofu'] : ['verified'],
     }]
   }
 

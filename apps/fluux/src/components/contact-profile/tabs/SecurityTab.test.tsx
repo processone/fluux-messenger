@@ -78,4 +78,19 @@ describe('SecurityTab key list', () => {
     expect(within(rows[1]).queryByRole('button')).not.toBeInTheDocument()
     expect(within(rows[1]).getByText('uid_mismatch')).toBeInTheDocument()
   })
+
+  it('offers no decision on either of two active keys the SDK allows none for, and lists a rejected certificate apart', () => {
+    renderTab(encrypted([{
+      protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true,
+      identities: [
+        identity({ id: 'AAAA1111', trust: 'verified' }),
+        identity({ id: 'BBBB2222' }),
+        identity({ id: 'CCCC3333', trust: 'unknown', usedForEncryption: false, notUsedReason: 'invalid-key', problem: { code: 'uid_mismatch', detail: 'x' } }),
+      ],
+    }]))
+    const rows = screen.getAllByTestId('identity-row')
+    expect(rows).toHaveLength(3)
+    for (const row of rows) expect(within(row).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(rows[2]).getByText('contacts.encryption.receivesNoMessages: contacts.encryption.notUsedReason.invalid-key')).toBeInTheDocument()
+  })
 })
