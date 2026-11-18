@@ -1,6 +1,6 @@
 import { attachmentElements } from './attachmentElements'
 import { captureOccupantAvatar } from '../../utils/avatarState'
-import { xml, Element } from '@xmpp/client'
+import { xml, Element, type Client } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { MUCVoice } from './MUCVoice'
 import type { RoomVoiceRequest } from '../types/events'
@@ -137,6 +137,35 @@ interface JoinDeferred {
   settled: boolean
 }
 
+/** What a caller of MUC.setBookmark gives (the same shape as its options). */
+interface BookmarkSaveOptions {
+  name: string
+  nick: string
+  autojoin?: boolean
+  password?: string
+  notifyLevel?: NotifyLevel
+  notifyAll?: boolean
+}
+
+/**
+ * What a bookmark save carries over when its caller leaves it out: a publish
+ * replaces the whole stored item (see MUC.setBookmark).
+ */
+interface SavedBookmarkFields {
+  password?: string
+  notifyLevel: NotifyLevel
+  /** The `<extensions>` children Fluux does not own, serialized. */
+  extensions: string[]
+}
+
+/**
+ * Cancel a bookmark write whose account or connection changed since it was
+ * asked for (see MUC.queueBookmarkWrite).
+ */
+function assertBookmarkWriteCurrent(isCurrent: () => boolean): void {
+  if (!isCurrent()) throw new DOMException('Bookmark write cancelled: the account or connection changed', 'AbortError')
+}
+
 /**
  * Awaitable outcome of an in-flight nick change (XEP-0045 §7.6), returned by
  * {@link MUC.changeNick}. Distinct from {@link JoinDeferred} because a *failed*
@@ -203,6 +232,36 @@ export class MUC extends BaseModule {
    * followed by a restart — clears it.
    */
   private membersForbiddenRooms = new Set<string>()
+
+  /**
+   * The rooms whose bookmark, as Fluux holds it, is known to match the stored
+   * one, and the connection that showed it: the connection's bookmark refresh
+   * returned them, or Fluux saved them on that connection. A save takes what it
+   * carries over (other clients' extensions, the saved password and
+   * notification level) from Fluux's copy only for these rooms, and reads the
+   * stored bookmark first for any other.
+   *
+   * Every new connection starts with none. After a page reload, a resumed
+   * stream or a new session, Fluux's copy can be older than the stored one:
+   * the snapshot predates changes made elsewhere, and a resumed stream
+   * delivers again events Fluux already handled, older bookmark versions
+   * included, because the resume counter leaves out the answers to Fluux's
+   * own requests. The copy stays unconfirmed while the connection's refresh
+   * has not answered, and after it fails.
+   */
+  private confirmedBookmarks: { connection: Client | null; rooms: Set<string> } = { connection: null, rooms: new Set() }
+
+  /**
+   * The last bookmark write (save or removal) of each room that has one in
+   * progress. A save decides what to carry over, from Fluux's copy or a read
+   * of the stored bookmark, then publishes and updates the store. A second
+   * write of the same room started meanwhile would decide from the state
+   * before the first publish and undo it: an autojoin toggle republishing the
+   * level a notification change just replaced, for example. Each write of a
+   * room therefore starts once the previous one has finished, whatever its
+   * outcome.
+   */
+  private bookmarkWrites = new Map<string, Promise<unknown>>()
 
   /**
    * Room presence, voice data forms, and correlated message errors.
@@ -426,25 +485,21 @@ export class MUC extends BaseModule {
         }
 
         // Auto-bookmark the room if not already bookmarked; if it IS bookmarked,
-        // only re-publish when we learned a new password (setBookmark preserves
-        // the stored one, so the other fields have to be carried over here).
+        // only re-publish when we learned a new password. The notification
+        // level and other fields are left out so the save keeps the saved ones.
         if (!room.isBookmarked) {
           this.setBookmark(roomJid, {
             name: room.name,
             nick: nick,
             autojoin: false,
             password: acceptedPassword,
-            notifyLevel: savedNotifyLevel(room),
           }).catch(() => {
             // Ignore bookmark errors - room join was still successful
           })
         } else if (passwordIsNew) {
-          this.setBookmark(roomJid, {
-            name: room.name,
+          this.updateBookmark(roomJid, {
             nick: nick,
-            autojoin: room.autojoin,
             password: acceptedPassword,
-            notifyLevel: savedNotifyLevel(room),
           }).catch(() => {
             // Ignore bookmark errors - room join was still successful
           })
@@ -1949,13 +2004,14 @@ export class MUC extends BaseModule {
     this.deps.emitSDK('room:updated', { roomJid, updates: notifyLevelUpdates(level, saved) })
 
     if (!saved || !room) return
-    await this.setBookmark(roomJid, {
-      name: room.name,
-      nick: room.nickname,
-      autojoin: room.autojoin,
-      password: room.password,
-      notifyLevel: level,
-    })
+    // Only the level changes: the password and other fields are those the
+    // bookmark has when this save's turn comes.
+    const published = await this.updateBookmark(roomJid, { notifyLevel: level })
+    // A removal queued before this save won: it cleared the saved choice, and
+    // without a bookmark the choice lasts for the session.
+    if (!published && this.deps.stores?.room.getRoom(roomJid)) {
+      this.deps.emitSDK('room:updated', { roomJid, updates: notifyLevelUpdates(level, false) })
+    }
   }
 
   /**
@@ -1995,6 +2051,11 @@ export class MUC extends BaseModule {
   async fetchBookmarks(timeoutMs?: number): Promise<{ roomsToAutojoin: Array<{ jid: string; nick: string; password?: string }>; allRoomJids: string[] }> {
     const roomsToAutojoin: Array<{ jid: string; nick: string; password?: string }> = []
     const allRoomJids: string[] = []
+
+    // Until this refresh answers, no room's copy counts as confirmed, and a
+    // refresh that fails leaves it so (see confirmedBookmarks).
+    const connection = this.currentConnection()
+    this.confirmedBookmarks = { connection: null, rooms: new Set() }
 
     try {
       const iq = xml('iq', { type: 'get', id: `bookmarks_${generateUUID()}` },
@@ -2058,6 +2119,12 @@ export class MUC extends BaseModule {
           roomsToAutojoin.push({ jid, nick: resolvedNick, password })
         }
       }
+
+      // Fluux's copy of every bookmark the server returned now matches it, on
+      // the connection that asked.
+      if (connection && this.currentConnection() === connection) {
+        this.confirmedBookmarks = { connection, rooms: new Set(allRoomJids) }
+      }
     } catch (err) {
       logErr(`Bookmarks fetch failed: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -2076,9 +2143,17 @@ export class MUC extends BaseModule {
    *
    * The children of the bookmark's `<extensions>` element that Fluux does not
    * own (another client's settings, for example) are published again
-   * unchanged, as XEP-0402 requires. When the room has not read its bookmark
-   * yet, it is read from the server first, and the save rejects without
-   * publishing if that read fails.
+   * unchanged, as XEP-0402 requires. Those children, and the password and
+   * notification level when omitted, come from Fluux's copy of the bookmark
+   * only when the current connection has confirmed it: its bookmark refresh
+   * returned the room, or Fluux saved the room on it. Otherwise (after a page
+   * reload or a reconnection, while that refresh has not answered, after it
+   * failed, or for a room not bookmarked yet) the stored bookmark is read from
+   * the server first, and the save rejects without publishing if that read
+   * fails.
+   *
+   * Saves and removals of one room's bookmark run one after another, in the
+   * order they are called, so each keeps the change made before it.
    *
    * @param roomJid - The room JID to bookmark
    * @param options - Bookmark settings
@@ -2115,21 +2190,72 @@ export class MUC extends BaseModule {
     roomJid: string,
     options: { name: string; nick: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel; notifyAll?: boolean }
   ): Promise<void> {
+    return this.queueBookmarkWrite(roomJid, (isCurrent) => this.publishBookmark(roomJid, options, isCurrent))
+  }
+
+  /**
+   * Save the room's existing bookmark with `changes` over the name, nickname
+   * and autojoin it has when this write's turn comes (see bookmarkWrites), so
+   * a save Fluux makes on its own keeps a change queued before it. Publishes
+   * nothing if the room is no longer bookmarked by then, and resolves to
+   * whether it published.
+   */
+  private updateBookmark(roomJid: string, changes: Partial<BookmarkSaveOptions>): Promise<boolean> {
+    return this.queueBookmarkWrite(roomJid, async (isCurrent) => {
+      const room = this.deps.stores?.room.getRoom(roomJid)
+      if (!room?.isBookmarked) return false
+      await this.publishBookmark(roomJid, { name: room.name, nick: room.nickname, autojoin: room.autojoin, ...changes }, isCurrent)
+      return true
+    })
+  }
+
+  /**
+   * Run `write` once the room's previous bookmark write has finished, or at
+   * once when there is none (see bookmarkWrites).
+   *
+   * The write belongs to the account and connection current when it was asked
+   * for (captureQuery). It is cancelled with an `AbortError`, sending nothing,
+   * if they changed before its turn: run on another account's connection, it
+   * would publish this room's details, password included, into that account,
+   * or remove that account's bookmark. `write` receives the same check for the
+   * points where it resumes after a request.
+   */
+  private queueBookmarkWrite<T>(roomJid: string, write: (isCurrent: () => boolean) => Promise<T>): Promise<T> {
+    const { isCurrent } = this.captureQuery()
+    const run = async (): Promise<T> => {
+      assertBookmarkWriteCurrent(isCurrent)
+      return write(isCurrent)
+    }
+    const previous = this.bookmarkWrites.get(roomJid)
+    const current = previous ? previous.then(run, run) : run()
+    this.bookmarkWrites.set(roomJid, current)
+    const forget = () => {
+      if (this.bookmarkWrites.get(roomJid) === current) this.bookmarkWrites.delete(roomJid)
+    }
+    current.then(forget, forget)
+    return current
+  }
+
+  private async publishBookmark(roomJid: string, options: BookmarkSaveOptions, isCurrent: () => boolean): Promise<void> {
     // A bookmark publish REPLACES the stored item, so an unrelated write (renaming
-    // the bookmark, toggling autojoin) would drop the room password — ours or one
-    // another client stored. Omitting `password` therefore means "keep what we
-    // know"; pass an empty string to deliberately clear it (issue #1126).
-    const password = options.password ?? this.deps.stores?.room.getRoom(roomJid)?.password
+    // the bookmark, toggling autojoin) would drop what the caller leaves out: the
+    // room password, ours or one another client stored (issue #1126; pass an
+    // empty string to deliberately clear it), the saved notification level, and
+    // the <extensions> children Fluux does not own, which XEP-0402 requires a
+    // publish to keep. They are carried over from Fluux's copy only when this
+    // connection has confirmed it; otherwise from the stored bookmark, read now,
+    // so a copy older than the server's is never published (confirmedBookmarks).
+    const connection = this.currentConnection()
+    const room = this.deps.stores?.room.getRoom(roomJid)
+    const saved: SavedBookmarkFields = room?.bookmarkExtensions !== undefined && this.isBookmarkConfirmed(roomJid)
+      ? { password: room.password, notifyLevel: savedNotifyLevel(room), extensions: room.bookmarkExtensions }
+      : await this.readSavedBookmarkFields(roomJid)
+    assertBookmarkWriteCurrent(isCurrent)
 
-    // Same rule for the notification level: omitted means "keep the saved one".
+    const password = options.password ?? saved.password
     const notifyLevel: NotifyLevel = options.notifyLevel
-      ?? (options.notifyAll === undefined ? savedNotifyLevel(this.deps.stores?.room.getRoom(roomJid)) : options.notifyAll ? 'all' : 'mentions')
-
-    // And for the <extensions> children Fluux does not own: XEP-0402 requires
-    // a publish to keep them, and leaving one out deletes it from the server.
-    // A room that has not read its bookmark yet reads it now.
-    const extensions = this.deps.stores?.room.getRoom(roomJid)?.bookmarkExtensions
-      ?? await this.readBookmarkExtensions(roomJid)
+      ?? (options.notifyAll === undefined ? saved.notifyLevel : options.notifyAll ? 'all' : 'mentions')
+    const extensions = saved.extensions
 
     // Build conference element children
     const confChildren: Element[] = [xml('nick', {}, options.nick)]
@@ -2163,6 +2289,8 @@ export class MUC extends BaseModule {
     )
 
     await this.deps.sendIQ(iq)
+    assertBookmarkWriteCurrent(isCurrent)
+    this.confirmBookmark(roomJid, connection)
 
     // SDK event only - binding calls store.setBookmark
     this.deps.emitSDK('room:bookmark', {
@@ -2178,14 +2306,42 @@ export class MUC extends BaseModule {
     })
   }
 
+  /** The connection Fluux is on now; each connection attempt has its own. */
+  private currentConnection(): Client | null {
+    return this.deps.getXmpp?.() ?? null
+  }
+
+  /** Whether the current connection has confirmed Fluux's copy of the room's bookmark. */
+  private isBookmarkConfirmed(roomJid: string): boolean {
+    const connection = this.currentConnection()
+    return connection !== null
+      && this.confirmedBookmarks.connection === connection
+      && this.confirmedBookmarks.rooms.has(roomJid)
+  }
+
   /**
-   * Read the `<extensions>` children Fluux does not own from the room's stored
-   * bookmark, for a save whose room has not read them: a room restored from a
-   * snapshot an older Fluux wrote, a save made before the bookmark refresh
-   * answered, or a room not bookmarked yet. Rejects when the server does not
-   * answer, so the publish that follows cannot delete what it did not see.
+   * Record that Fluux's copy of the room's bookmark matches the stored one,
+   * after Fluux published it on `connection`. Ignored when Fluux has since
+   * moved to another connection.
    */
-  private async readBookmarkExtensions(roomJid: string): Promise<string[]> {
+  private confirmBookmark(roomJid: string, connection: Client | null): void {
+    if (!connection || this.currentConnection() !== connection) return
+    if (this.confirmedBookmarks.connection !== connection) {
+      this.confirmedBookmarks = { connection, rooms: new Set() }
+    }
+    this.confirmedBookmarks.rooms.add(roomJid)
+  }
+
+  /**
+   * Read what a save carries over from the room's stored bookmark: the
+   * password, the notification level and the `<extensions>` children Fluux
+   * does not own. Used when the current connection has not confirmed Fluux's
+   * copy (see confirmedBookmarks). A room with no stored bookmark keeps the
+   * password and level Fluux knows, with no extensions. Rejects when the
+   * server does not answer, so the publish that follows cannot replace what it
+   * did not see.
+   */
+  private async readSavedBookmarkFields(roomJid: string): Promise<SavedBookmarkFields> {
     const iq = xml('iq', { type: 'get', id: `bookmark_get_${generateUUID()}` },
       xml('pubsub', { xmlns: NS_PUBSUB },
         xml('items', { node: NS_BOOKMARKS },
@@ -2194,19 +2350,26 @@ export class MUC extends BaseModule {
       )
     )
 
+    const notStored = (): SavedBookmarkFields => {
+      const room = this.deps.stores?.room.getRoom(roomJid)
+      return { password: room?.password, notifyLevel: savedNotifyLevel(room), extensions: [] }
+    }
+
     let response: Element
     try {
       response = await this.deps.sendIQ(iq)
     } catch (err) {
       // No bookmark stored under that id, or no bookmarks node at all.
-      if (hasErrorCondition(err, 'item-not-found')) return []
+      if (hasErrorCondition(err, 'item-not-found')) return notStored()
       throw err
     }
 
     const items = response.getChild('pubsub', NS_PUBSUB)?.getChild('items')
     if (!items) throw new Error(`Bookmark read for ${roomJid} returned no items`)
     const item = items.getChildren('item').find((i) => i.attrs.id === roomJid)
-    return (item && parseBookmarkItem(item)?.extensions) || []
+    const stored = item ? parseBookmarkItem(item) : null
+    if (!stored) return notStored()
+    return { password: stored.password, notifyLevel: stored.notifyLevel, extensions: stored.extensions }
   }
 
   /**
@@ -2227,20 +2390,25 @@ export class MUC extends BaseModule {
    * - Does not remove the room from the local store
    */
   async removeBookmark(roomJid: string): Promise<void> {
-    const iq = xml(
-      'iq',
-      { type: 'set', id: `bookmark_remove_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('retract', { node: NS_BOOKMARKS },
-          xml('item', { id: roomJid })
+    // After any save of the room in progress, so that save cannot publish the
+    // bookmark again once it is removed (see bookmarkWrites).
+    return this.queueBookmarkWrite(roomJid, async (isCurrent) => {
+      const iq = xml(
+        'iq',
+        { type: 'set', id: `bookmark_remove_${generateUUID()}` },
+        xml('pubsub', { xmlns: NS_PUBSUB },
+          xml('retract', { node: NS_BOOKMARKS },
+            xml('item', { id: roomJid })
+          )
         )
       )
-    )
 
-    await this.deps.sendIQ(iq)
+      await this.deps.sendIQ(iq)
+      assertBookmarkWriteCurrent(isCurrent)
 
-    // SDK event only - binding calls store.removeBookmark
-    this.deps.emitSDK('room:bookmark-removed', { roomJid })
+      // SDK event only - binding calls store.removeBookmark
+      this.deps.emitSDK('room:bookmark-removed', { roomJid })
+    })
   }
 
   /**

@@ -229,8 +229,10 @@ export interface RoomEntity {
    * clients to preserve elements they do not understand, and a publish
    * replaces the whole stored bookmark. Empty when the bookmark has none;
    * `undefined` until Fluux has read the bookmark (for example a room restored
-   * from a snapshot an older version wrote), and then `setBookmark()` reads it
-   * from the server before publishing.
+   * from a snapshot an older version wrote). `setBookmark()` publishes this
+   * copy only when the current connection's bookmark refresh returned the room
+   * or Fluux saved it on that connection; otherwise it reads the stored
+   * bookmark from the server before publishing.
    */
   bookmarkExtensions?: string[]
 

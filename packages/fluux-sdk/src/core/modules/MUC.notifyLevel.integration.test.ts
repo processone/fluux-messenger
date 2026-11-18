@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { parse } from 'ltx'
+import type { Element } from '@xmpp/client'
 import { MUC } from './MUC'
 import type { MAM } from './MAM'
 import type { ModuleDependencies } from './BaseModule'
@@ -16,6 +18,7 @@ const ROOM = 'quiet@conference.example.org'
 describe('room notification level through the store binding', () => {
   let muc: MUC
   let sendIQ: ReturnType<typeof vi.fn>
+  const connection = {}
 
   beforeEach(() => {
     roomStore.setState(roomStore.getInitialState(), true)
@@ -33,13 +36,17 @@ describe('room notification level through the store binding', () => {
 
     sendIQ = vi.fn().mockResolvedValue(createMockElement('iq', { type: 'result' }))
     const deps = {
-      stores: { get room() { return roomStore.getState() } },
+      stores: {
+        get room() { return roomStore.getState() },
+        connection: { getOwnNickname: () => null, getJid: () => 'user@example.com/resource' },
+      },
       presence: createMockPresenceReader(),
       sendIQ,
       sendStanza: vi.fn(),
       emit: vi.fn(),
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => handlers.get(event)?.(payload),
       getCurrentJid: () => 'user@example.com/resource',
+      getXmpp: () => connection,
     } as unknown as ModuleDependencies
     muc = new MUC(deps, { forceCatchUpAllRooms: vi.fn() } as unknown as MAM)
   })
@@ -59,8 +66,14 @@ describe('room notification level through the store binding', () => {
   })
 
   it('saves Off on a bookmarked room, and it survives leaving the room', async () => {
-    // As the bookmark fetch stores it: read from the server, nothing from other clients
-    roomStore.getState().setBookmark(ROOM, { name: 'Quiet', nick: 'mynick', extensions: [] })
+    // The bookmark refresh on this connection returns the room: nothing from other clients
+    sendIQ.mockResolvedValueOnce(parse(
+      '<iq type="result"><pubsub xmlns="http://jabber.org/protocol/pubsub"><items node="urn:xmpp:bookmarks:1">' +
+      `<item id="${ROOM}"><conference xmlns="urn:xmpp:bookmarks:1" name="Quiet"><nick>mynick</nick></conference></item>` +
+      '</items></pubsub></iq>',
+    ) as unknown as Element)
+    await muc.fetchBookmarks()
+    sendIQ.mockClear()
 
     await muc.setRoomNotifyLevel(ROOM, 'none', true)
     roomStore.getState().setRoomJoined(ROOM, false)

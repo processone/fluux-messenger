@@ -16,6 +16,7 @@ import {
 import type { ModuleDependencies } from './BaseModule'
 import type { Room } from '../types/room'
 import { RoomJoinError } from '../errors'
+import { parse } from 'ltx'
 
 describe('MUC Module', () => {
   let muc: MUC
@@ -40,10 +41,30 @@ describe('MUC Module', () => {
       emit: mockEmit,
       emitSDK: mockEmitSDK,
       getCurrentJid: () => 'user@example.com/resource',
+      getXmpp: () => connection,
     } as unknown as ModuleDependencies
 
     muc = new MUC(deps, { forceCatchUpAllRooms: vi.fn() } as unknown as MAM)
   })
+
+  /** The connection Fluux is on. */
+  const connection = {}
+
+  /**
+   * Answer a bookmark refresh on this connection that returns the room, as the
+   * session start does, so a save trusts Fluux's copy of it without reading the
+   * stored bookmark first. Forgets the refresh's calls afterwards.
+   */
+  const refreshBookmarksWith = async (roomJid: string) => {
+    mockSendIQ.mockResolvedValueOnce(parse(
+      '<iq type="result"><pubsub xmlns="http://jabber.org/protocol/pubsub"><items node="urn:xmpp:bookmarks:1">' +
+      `<item id="${roomJid}"><conference xmlns="urn:xmpp:bookmarks:1" name="Room"/></item>` +
+      '</items></pubsub></iq>',
+    ))
+    await muc.fetchBookmarks()
+    mockSendIQ.mockClear()
+    mockEmitSDK.mockClear()
+  }
 
   describe('fetchBookmarks', () => {
     describe('XEP-0402 format (modern)', () => {
@@ -844,7 +865,7 @@ describe('MUC Module', () => {
   // modal reset a saved "All messages" to Mentions only.
   describe('notification level', () => {
     const ROOM = 'quiet@conference.example.org'
-    // A room loaded from the bookmark fetch, so Fluux has read its extensions: none from other clients
+    // A room the bookmark fetch loaded (see refreshBookmarksWith): no extensions from other clients
     const storedRoom = (overrides: Partial<Room> = {}) =>
       createMockRoom(ROOM, { name: 'Quiet', nickname: 'mynick', isBookmarked: true, autojoin: false, bookmarkExtensions: [], ...overrides })
     const notifyOf = (call = 0) => {
@@ -862,8 +883,9 @@ describe('MUC Module', () => {
         ],
       }])
 
-    beforeEach(() => {
+    beforeEach(async () => {
       mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+      await refreshBookmarksWith(ROOM)
     })
 
     it.each([
@@ -987,7 +1009,7 @@ describe('MUC Module', () => {
         },
       ])
 
-    // A room loaded from the bookmark fetch, so Fluux has read its extensions: none from other clients
+    // A room the bookmark fetch loaded (see refreshBookmarksWith): no extensions from other clients
     const storedRoom = (overrides: Partial<Room> = {}) =>
       createMockRoom(ROOM, { name: 'Secret', nickname: 'mynick', isBookmarked: true, autojoin: false, bookmarkExtensions: [], ...overrides })
 
@@ -1034,6 +1056,10 @@ describe('MUC Module', () => {
     })
 
     describe('setBookmark', () => {
+      beforeEach(async () => {
+        await refreshBookmarksWith(ROOM)
+      })
+
       it('keeps the stored password when the caller does not supply one', async () => {
         mockStores.room.getRoom.mockReturnValue(storedRoom({ password: 'keep-me' }))
         mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
@@ -1059,6 +1085,10 @@ describe('MUC Module', () => {
     })
 
     describe('on a successful join', () => {
+      beforeEach(async () => {
+        await refreshBookmarksWith(ROOM)
+      })
+
       it('stores a working password and writes it to the bookmark', async () => {
         mockStores.room.getRoom.mockReturnValue(storedRoom())
         mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
