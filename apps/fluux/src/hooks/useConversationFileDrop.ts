@@ -28,13 +28,23 @@ export function useConversationFileDrop(select: (conversationId: string) => void
     let mounted = true
     const unsubscribe = subscribeToConversationDrop((conversationId, paths) => {
       const drop = currentNativeDropSequence()
-      const target = chatStore.getState().activationTarget
+      // Latched: a request for another conversation cancels this read for good,
+      // even when the user comes back to the original one before it finishes.
+      // Repeated requests for the same conversation (route sync) do not cancel.
+      let moved = false
+      const stopWatching = chatStore.subscribe((state, prev) => {
+        if (state.activationTarget !== prev.activationTarget) moved = true
+      })
       void readNativeDroppedFile(paths[0]).then(
         (file) => {
-          if (!mounted || drop !== currentNativeDropSequence() || target !== chatStore.getState().activationTarget) return
+          stopWatching()
+          if (!mounted || moved || drop !== currentNativeDropSequence()) return
           dropFile(conversationId, file)
         },
-        (err) => console.error('[useConversationFileDrop] Failed to read dropped file:', err),
+        (err) => {
+          stopWatching()
+          console.error('[useConversationFileDrop] Failed to read dropped file:', err)
+        },
       )
     })
     return () => {

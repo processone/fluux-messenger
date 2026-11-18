@@ -124,6 +124,45 @@ describe('useConversationFileDrop', () => {
     restore()
   })
 
+  it('drops a slow read when the user went to another conversation and back before it finished', async () => {
+    const restore = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+    const select = vi.fn()
+    renderHook(() => useConversationFileDrop(select))
+    const el = row()
+    let finish!: (f: File) => void
+    h.read.mockImplementation(() => new Promise<File>((resolve) => { finish = resolve }))
+    h.chat.setState({ activationTarget: 'alice@example.com' })
+
+    await drop()
+    h.chat.setState({ activationTarget: 'carol@example.com' })
+    h.chat.setState({ activationTarget: 'alice@example.com' })
+    await act(async () => { finish(new File(['x'], 'late')) })
+
+    expect(select).not.toHaveBeenCalled()
+    h.chat.setState({ activationTarget: null })
+    el.remove()
+    restore()
+  })
+
+  it('keeps a read valid through repeated requests for the same conversation', async () => {
+    const restore = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+    const select = vi.fn()
+    renderHook(() => useConversationFileDrop(select))
+    const el = row()
+    let finish!: (f: File) => void
+    h.read.mockImplementation(() => new Promise<File>((resolve) => { finish = resolve }))
+    h.chat.setState({ activationTarget: 'alice@example.com' })
+
+    await drop()
+    h.chat.setState({ activationTarget: 'alice@example.com' })
+    await act(async () => { finish(new File(['x'], 'ok')) })
+
+    expect(select).toHaveBeenCalledExactlyOnceWith('bob@example.com')
+    h.chat.setState({ activationTarget: null })
+    el.remove()
+    restore()
+  })
+
   it('drops a slow read when a later drop landed on the chat pane', async () => {
     const restore = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
     const select = vi.fn()
