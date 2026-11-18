@@ -191,7 +191,8 @@ describe('useConversationEncryptionState', () => {
 
   it('reports keys the SDK could not read as a list error, not as a rejected certificate', async () => {
     const state = await stateFor({ kind: 'unusable', protocolId: 'openpgp', displayName: 'OpenPGP', problems: [{ id: '', code: 'listing-failed', detail: '' }] })
-    expect(state).toMatchObject({ kind: 'unsupported', listError: { retry: expect.any(Function) } })
+    // The conversation is still encrypted: attachments must not fall back to plaintext.
+    expect(state).toMatchObject({ kind: 'encrypted', protocolId: 'openpgp', groups: [], listError: { retry: expect.any(Function) } })
   })
 
   it('asks again when the manager reports this peer, or everyone, and ignores another peer', async () => {

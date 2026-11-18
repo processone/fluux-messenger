@@ -577,6 +577,16 @@ describe('encryption state as people see it', () => {
     expect(tab.textContent).not.toContain('contacts.encryption.listErrorTitle')
   })
 
+  it('a listing that fails from the manager\'s own first read: still encrypted, so uploads stay encrypted', async () => {
+    world.announced = [A]
+    pinnedLongAgo()
+    world.failListingFrom = 1
+    await open()
+    expect(screen.getByTestId('tab').textContent).toContain('contacts.encryption.listErrorTitle')
+    // Not a downgrade to "unsupported": the composer keeps its lock, which is what keeps an attachment encrypted.
+    expect(seen().composerLock?.label).toBe('chat.encryption.openpgpTooltip')
+  })
+
   it('a listing that fails while the own key is locked: still locked, with a list error to retry', async () => {
     world.announced = [A]
     world.locked = true

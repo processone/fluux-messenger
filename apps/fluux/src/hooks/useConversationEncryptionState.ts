@@ -89,7 +89,11 @@ async function resolveState(manager: E2EEManager, peer: string, retry: () => voi
     }
     case 'unusable': {
       // The SDK could not read the keys: say so and offer another try, not "no encryption" or "invalid".
-      if (security.problems.some((p) => p.code === 'listing-failed')) return listFailed
+      // A protocol was chosen for this contact, so messages and attachments still go out encrypted
+      // with it: keep the conversation encrypted rather than let an upload fall back to plaintext.
+      if (security.problems.some((p) => p.code === 'listing-failed')) {
+        return { kind: 'encrypted', protocolId: security.protocolId, displayName: security.displayName, trust: 'unknown', groups: [], listError: { retry } }
+      }
       if (security.problems.length === 0) return { kind: 'unsupported' }
       // The reasons are known already; the rows are a bonus if the listing fails.
       const groups = await manager.listPeerIdentities(peer).catch(() => [])
