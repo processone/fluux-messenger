@@ -9,6 +9,10 @@ import { platform } from '@/platform'
 
 type DragStateListener = (isDragging: boolean) => void
 type FileDropListener = (paths: string[]) => void
+type ConversationDropListener = (conversationId: string, paths: string[]) => void
+
+/** Attribute that marks a sidebar conversation row. */
+const CONVERSATION_ROW = '[data-conv-id]'
 
 // Evaluate once at module load time
 const isRunningInTauri = platform().nativeFileDrop
@@ -17,6 +21,7 @@ const isRunningInTauri = platform().nativeFileDrop
 let isDragging = false
 const dragStateListeners = new Set<DragStateListener>()
 const fileDropListeners = new Set<FileDropListener>()
+const conversationDropListeners = new Set<ConversationDropListener>()
 
 // Notify all listeners of drag state change
 function notifyDragState(dragging: boolean) {
@@ -30,14 +35,36 @@ function notifyFileDrop(paths: string[]) {
   fileDropListeners.forEach(listener => listener(paths))
 }
 
+/**
+ * The conversation row under a native drop. The event's position is in
+ * physical pixels; the page is laid out in CSS pixels.
+ */
+export function conversationAtPosition(position: { x: number; y: number } | undefined): string | undefined {
+  if (!position || typeof document === 'undefined') return undefined
+  const scale = window.devicePixelRatio || 1
+  const row = document.elementFromPoint(position.x / scale, position.y / scale)?.closest(CONVERSATION_ROW)
+  return row?.getAttribute('data-conv-id') ?? undefined
+}
+
+/** A drop on a conversation row goes to the row; any other drop goes to the open chat. */
+export function dispatchNativeDrop(paths: string[], position?: { x: number; y: number }) {
+  const conversationId = conversationAtPosition(position)
+  if (conversationId && conversationDropListeners.size > 0) {
+    conversationDropListeners.forEach(listener => listener(conversationId, paths))
+    return
+  }
+  notifyFileDrop(paths)
+}
+
 // Set up the global listener IMMEDIATELY (not in useEffect)
 if (isRunningInTauri) {
   // Use dynamic import but start it immediately
   import('@tauri-apps/api/webview').then(({ getCurrentWebview }) => {
     getCurrentWebview().onDragDropEvent((event) => {
-      const { type, paths } = event.payload as {
+      const { type, paths, position } = event.payload as {
         type: 'enter' | 'over' | 'drop' | 'leave'
         paths?: string[]
+        position?: { x: number; y: number }
       }
 
       if (type === 'enter' || type === 'over') {
@@ -47,7 +74,7 @@ if (isRunningInTauri) {
       } else if (type === 'drop') {
         notifyDragState(false)
         if (paths && paths.length > 0) {
-          notifyFileDrop(paths)
+          dispatchNativeDrop(paths, position)
         }
       }
     }).catch(err => {
@@ -76,6 +103,15 @@ export function subscribeToDragState(listener: DragStateListener): () => void {
 export function subscribeToFileDrop(listener: FileDropListener): () => void {
   fileDropListeners.add(listener)
   return () => fileDropListeners.delete(listener)
+}
+
+/**
+ * Subscribe to files dropped on a conversation row of the sidebar.
+ * While anyone is subscribed, such a drop does not reach the open chat.
+ */
+export function subscribeToConversationDrop(listener: ConversationDropListener): () => void {
+  conversationDropListeners.add(listener)
+  return () => conversationDropListeners.delete(listener)
 }
 
 /**

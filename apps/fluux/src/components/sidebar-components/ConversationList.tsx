@@ -24,6 +24,7 @@ import { formatConversationTime } from '@/utils/dateFormat'
 import { useDayChange } from '@/hooks/useDayChange'
 import { AvatarUnreadBadge } from './AvatarUnreadBadge'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useConversationFileDrop } from '@/hooks/useConversationFileDrop'
 import { Trash2, Archive, ArchiveRestore, MessageCircle, Loader2 } from 'lucide-react'
 import { ListEmpty } from '../ui/ListEmpty'
 import { ConfirmDialog } from '../ConfirmDialog'
@@ -80,6 +81,7 @@ export function ConversationList() {
     }
   }
   const handleConversationClick = clickRef.current
+  const handleFileDrop = useConversationFileDrop(handleConversationClick)
 
   // Keyboard navigation
   // Alt+Arrow navigation is owned by the global handler in useKeyboardShortcuts
@@ -111,6 +113,7 @@ export function ConversationList() {
               isSelected={index === selectedIndex}
               isKeyboardNav={isKeyboardNav}
               onClick={handleConversationClick}
+              onFileDrop={handleFileDrop}
               {...getItemAttribute(index)}
               {...getItemProps(index)}
             />
@@ -155,6 +158,7 @@ export function ArchiveList() {
     }
   }
   const handleConversationClick = clickRef.current
+  const handleFileDrop = useConversationFileDrop(handleConversationClick)
 
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav<string>({
     items: archivedIds,
@@ -182,6 +186,7 @@ export function ArchiveList() {
             isSelected={index === selectedIndex}
             isKeyboardNav={isKeyboardNav}
             onClick={handleConversationClick}
+            onFileDrop={handleFileDrop}
             {...getItemAttribute(index)}
             {...getItemProps(index)}
           />
@@ -207,6 +212,8 @@ interface ConversationItemProps {
   isSelected?: boolean
   isKeyboardNav?: boolean
   onClick: (conversationId: string) => void
+  /** A file dropped on the row: opens the conversation and stages the file in its composer. */
+  onFileDrop?: (conversationId: string, file: File) => void
   onMouseEnter?: (e: React.MouseEvent) => void
   onMouseMove?: (e: React.MouseEvent) => void
   'data-conv-id'?: string
@@ -219,6 +226,7 @@ export const ConversationItem = memo(function ConversationItem({
   isSelected,
   isKeyboardNav,
   onClick,
+  onFileDrop,
   onMouseEnter,
   onMouseMove,
   'data-selected': _dataSelected,
@@ -257,6 +265,10 @@ export const ConversationItem = memo(function ConversationItem({
   // else would re-evaluate it after midnight.
   useDayChange()
 
+  // Highlight while a file is dragged over the row; the depth counts nested enter/leave pairs.
+  const [isDropTarget, setIsDropTarget] = useState(false)
+  const dragDepth = useRef(0)
+
   if (!conversation) return null
   const isGroupChat = conversation.type === 'groupchat'
   const avatarSize = densityMode === 'compact' ? 'sm' : 'md'
@@ -268,6 +280,38 @@ export const ConversationItem = memo(function ConversationItem({
   const handleClick = () => {
     if (isOpen || longPressTriggered.current) return
     onClick(conversationId)
+  }
+
+  // Only files dragged in from outside the app; images dragged out of a
+  // message carry html or a link and are not offered to the conversation.
+  const isFileDrag = (e: React.DragEvent) => {
+    const types = Array.from(e.dataTransfer.types)
+    return !!onFileDrop && types.includes('Files') && !types.includes('text/html') && !types.includes('text/uri-list')
+  }
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    dragDepth.current++
+    setIsDropTarget(true)
+  }
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return
+    dragDepth.current = Math.max(0, dragDepth.current - 1)
+    if (dragDepth.current === 0) setIsDropTarget(false)
+  }
+  const handleDrop = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepth.current = 0
+    setIsDropTarget(false)
+    const file = e.dataTransfer.files[0]
+    if (file) onFileDrop?.(conversationId, file)
   }
 
   return (
@@ -283,10 +327,14 @@ export const ConversationItem = memo(function ConversationItem({
         {...rest}
         {...menuProps}
         onClick={handleClick}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         onMouseEnter={onMouseEnter}
         onMouseMove={onMouseMove}
         className={`w-full relative px-2 sidebar-row touch-menu-row rounded border flex items-center text-start cursor-pointer
-                    transition-colors ${isMenuTarget ? 'ring-2 ring-fluux-brand ring-inset z-10' : ''} ${isActive
+                    transition-colors ${isDropTarget ? 'ring-2 ring-fluux-brand ring-inset z-10' : ''} ${isMenuTarget ? 'ring-2 ring-fluux-brand ring-inset z-10' : ''} ${isActive
                       ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
                       : isMenuTarget
                         ? 'bg-fluux-hover text-fluux-text border-transparent'
