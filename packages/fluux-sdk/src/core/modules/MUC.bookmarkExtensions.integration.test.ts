@@ -12,6 +12,7 @@ import { StateSnapshot } from './stateSnapshot'
 import type { StorageAdapter } from '../types/storage'
 import { NS_BOOKMARKS, NS_FLUUX } from '../namespaces'
 import type { SDKEvents } from '../types/sdk-events'
+import { parseBookmarkItem } from '../bookmarkItem'
 
 // XEP-0402 §3.4: clients MUST preserve any XML elements they do not understand
 // within a bookmark's <extensions/>. A publish replaces the stored item, so
@@ -130,11 +131,20 @@ describe('bookmark extensions Fluux does not own', () => {
   }
 
   /** What Fluux sent since the last clear, in order: a read of the stored bookmark, or a publish. */
-  const sentKinds = () => sendIQ.mock.calls.map(([iq]) => {
+  const sentKinds = () => sendIQ.mock.calls.flatMap(([iq]) => {
     const sent = iq as Element
-    if (isPublish(sent)) return 'publish'
-    return isAllItemsRead(sent) ? 'refresh' : 'read'
+    const request = sent.getChild('pubsub')
+    if (!request) return []
+    if (request.getChild('publish')) return ['publish']
+    if (request.getChild('retract')) return ['remove']
+    return isAllItemsRead(sent) ? ['refresh'] : ['read']
   })
+
+  /** The room's answer to Fluux's own join: Fluux is in the room. */
+  const selfPresence = () => parse(
+    `<presence from="${ROOM}/tester" to="${OWN_JID}"><x xmlns="http://jabber.org/protocol/muc#user">` +
+    '<item affiliation="member" role="participant"/><status code="110"/></x></presence>',
+  ) as unknown as Element
 
   /** A new connection attempt: a page reload, or a reconnection, resumed or not. */
   const reconnect = () => { connection = {} }
@@ -365,6 +375,130 @@ describe('bookmark extensions Fluux does not own', () => {
       await muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
 
       expect(sentKinds()).toEqual(['read', 'publish'])
+    })
+
+    // Two saves of the room started while the first read of the stored
+    // bookmark is unanswered: before the fix both read the same bookmark, so
+    // the second published it over the first one's change.
+    describe('when a second save starts before the first read answers', () => {
+      /** The stored bookmark as the server keeps it across reads, publishes and removals. */
+      let stored: string | null
+      /** Reads of the stored bookmark the test has not answered yet, oldest first. */
+      let unansweredReads: Array<{ answer: () => void; fail: () => void }>
+
+      beforeEach(async () => {
+        stored = fullItem(NEWER)
+        unansweredReads = []
+        sendIQ.mockImplementation((iq: Element) => {
+          if (isAllItemsRead(iq)) return Promise.reject(new Error('timeout'))
+          if (isItemRead(iq)) {
+            // The server handles requests in the order they arrive: a read
+            // answers with the bookmark stored when it was sent, even if the
+            // test lets the answer through later.
+            const storedWhenSent = stored
+            return new Promise((resolve, reject) => {
+              unansweredReads.push({
+                answer: () => resolve(fetchResult('', storedWhenSent ?? '')),
+                fail: () => reject(new Error('timeout')),
+              })
+            })
+          }
+          const request = iq.getChild('pubsub')
+          const item = request?.getChild('publish')?.getChild('item')
+          if (item) stored = item.toString()
+          if (request?.getChild('retract')) stored = null
+          return Promise.resolve(parse('<iq type="result"/>'))
+        })
+        // The refresh on this connection fails.
+        await muc.fetchBookmarks()
+      })
+
+      /** Let every save that can move on do so, up to its next unanswered request. */
+      const settleTurn = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+      /**
+       * Answer the reads one at a time, oldest first, each only once every
+       * save started has sent what it can, until the given saves finish.
+       * Returns the most reads that were waiting at once.
+       */
+      const answerReadsUntilDone = async (...saves: Array<Promise<unknown>>) => {
+        let done = false
+        void Promise.allSettled(saves).then(() => { done = true })
+        let mostUnanswered = 0
+        while (!done) {
+          await settleTurn()
+          mostUnanswered = Math.max(mostUnanswered, unansweredReads.length)
+          unansweredReads.shift()?.answer()
+        }
+        await settleTurn()
+        return mostUnanswered
+      }
+
+      const storedBookmark = () => (stored ? parseBookmarkItem(parse(stored) as unknown as Element) : null)
+
+      it('keeps Off chosen just before an autojoin toggle', async () => {
+        const off = muc.setRoomNotifyLevel(ROOM, 'none', true)
+        const toggle = muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
+
+        const mostUnanswered = await answerReadsUntilDone(off, toggle)
+
+        await expect(Promise.all([off, toggle])).resolves.toBeDefined()
+        expect(storedBookmark()).toMatchObject({
+          autojoin: false, notifyLevel: 'none', password: 'new-secret', extensions: [NEWER_STATE],
+        })
+        expect(roomStore.getState().getRoom(ROOM)).toMatchObject({ autojoin: false, notifyOffPersistent: true })
+        // Only the first save reads: the toggle waits for it, then trusts the copy it saved.
+        expect(mostUnanswered).toBe(1)
+        expect(sentKinds()).toEqual(['refresh', 'read', 'publish', 'publish'])
+      })
+
+      it('keeps an autojoin toggle made just before a notification change', async () => {
+        const toggle = muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
+        const off = muc.setRoomNotifyLevel(ROOM, 'none', true)
+
+        await answerReadsUntilDone(toggle, off)
+
+        expect(storedBookmark()).toMatchObject({ autojoin: false, notifyLevel: 'none', password: 'new-secret' })
+        expect(sentKinds()).toEqual(['refresh', 'read', 'publish', 'publish'])
+      })
+
+      it('keeps Off chosen just before the password learned on join is saved', async () => {
+        const off = muc.setRoomNotifyLevel(ROOM, 'none', true)
+        await muc.joinRoom(ROOM, 'tester', { password: 'learned' })
+        muc.handle(selfPresence())
+
+        await answerReadsUntilDone(off)
+
+        expect(storedBookmark()).toMatchObject({ notifyLevel: 'none', password: 'learned', extensions: [NEWER_STATE] })
+        expect(sentKinds()).toEqual(['refresh', 'read', 'publish', 'publish'])
+      })
+
+      it('removes the bookmark when the removal follows a save still reading', async () => {
+        const toggle = muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
+        const remove = muc.removeBookmark(ROOM)
+
+        await answerReadsUntilDone(toggle, remove)
+
+        expect(stored).toBeNull()
+        expect(sentKinds()).toEqual(['refresh', 'read', 'publish', 'remove'])
+        // A room Fluux is not in leaves the store with its bookmark.
+        expect(roomStore.getState().getRoom(ROOM)?.isBookmarked).toBeFalsy()
+      })
+
+      it('runs the next save of the room when the one before it fails', async () => {
+        const failing = muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
+        const next = muc.setRoomNotifyLevel(ROOM, 'none', true)
+        await settleTurn()
+        expect(unansweredReads).toHaveLength(1)
+        unansweredReads.shift()!.fail()
+        await expect(failing).rejects.toThrow('timeout')
+
+        await answerReadsUntilDone(next)
+
+        await expect(next).resolves.toBeUndefined()
+        expect(sentKinds()).toEqual(['refresh', 'read', 'read', 'publish'])
+        expect(storedBookmark()).toMatchObject({ autojoin: true, notifyLevel: 'none', password: 'new-secret' })
+      })
     })
   })
 })

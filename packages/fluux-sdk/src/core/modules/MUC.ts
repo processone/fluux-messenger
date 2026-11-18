@@ -137,6 +137,16 @@ interface JoinDeferred {
   settled: boolean
 }
 
+/** What a caller of MUC.setBookmark gives (the same shape as its options). */
+interface BookmarkSaveOptions {
+  name: string
+  nick: string
+  autojoin?: boolean
+  password?: string
+  notifyLevel?: NotifyLevel
+  notifyAll?: boolean
+}
+
 /**
  * What a bookmark save carries over when its caller leaves it out: a publish
  * replaces the whole stored item (see MUC.setBookmark).
@@ -232,6 +242,18 @@ export class MUC extends BaseModule {
    * has not answered, and after it fails.
    */
   private confirmedBookmarks: { connection: Client | null; rooms: Set<string> } = { connection: null, rooms: new Set() }
+
+  /**
+   * The last bookmark write (save or removal) of each room that has one in
+   * progress. A save decides what to carry over, from Fluux's copy or a read
+   * of the stored bookmark, then publishes and updates the store. A second
+   * write of the same room started meanwhile would decide from the state
+   * before the first publish and undo it: an autojoin toggle republishing the
+   * level a notification change just replaced, for example. Each write of a
+   * room therefore starts once the previous one has finished, whatever its
+   * outcome.
+   */
+  private bookmarkWrites = new Map<string, Promise<void>>()
 
   /**
    * Room presence, voice data forms, and correlated message errors.
@@ -456,7 +478,7 @@ export class MUC extends BaseModule {
 
         // Auto-bookmark the room if not already bookmarked; if it IS bookmarked,
         // only re-publish when we learned a new password. The notification
-        // level is left out so setBookmark keeps the saved one.
+        // level and other fields are left out so the save keeps the saved ones.
         if (!room.isBookmarked) {
           this.setBookmark(roomJid, {
             name: room.name,
@@ -467,10 +489,8 @@ export class MUC extends BaseModule {
             // Ignore bookmark errors - room join was still successful
           })
         } else if (passwordIsNew) {
-          this.setBookmark(roomJid, {
-            name: room.name,
+          this.updateBookmark(roomJid, {
             nick: nick,
-            autojoin: room.autojoin,
             password: acceptedPassword,
           }).catch(() => {
             // Ignore bookmark errors - room join was still successful
@@ -1976,14 +1996,9 @@ export class MUC extends BaseModule {
     this.deps.emitSDK('room:updated', { roomJid, updates: notifyLevelUpdates(level, saved) })
 
     if (!saved || !room) return
-    // The password is left out so setBookmark keeps the saved one, read from
-    // the server when this connection has not confirmed Fluux's copy.
-    await this.setBookmark(roomJid, {
-      name: room.name,
-      nick: room.nickname,
-      autojoin: room.autojoin,
-      notifyLevel: level,
-    })
+    // Only the level changes: the password and other fields are those the
+    // bookmark has when this save's turn comes.
+    await this.updateBookmark(roomJid, { notifyLevel: level })
   }
 
   /**
@@ -2124,6 +2139,9 @@ export class MUC extends BaseModule {
    * the server first, and the save rejects without publishing if that read
    * fails.
    *
+   * Saves and removals of one room's bookmark run one after another, in the
+   * order they are called, so each keeps the change made before it.
+   *
    * @param roomJid - The room JID to bookmark
    * @param options - Bookmark settings
    * @param options.name - Display name for the room
@@ -2159,6 +2177,39 @@ export class MUC extends BaseModule {
     roomJid: string,
     options: { name: string; nick: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel; notifyAll?: boolean }
   ): Promise<void> {
+    return this.queueBookmarkWrite(roomJid, () => this.publishBookmark(roomJid, options))
+  }
+
+  /**
+   * Save the room's existing bookmark with `changes` over the name, nickname
+   * and autojoin it has when this write's turn comes (see bookmarkWrites), so
+   * a save Fluux makes on its own keeps a change queued before it. Publishes
+   * nothing if the room is no longer bookmarked by then.
+   */
+  private updateBookmark(roomJid: string, changes: Partial<BookmarkSaveOptions>): Promise<void> {
+    return this.queueBookmarkWrite(roomJid, async () => {
+      const room = this.deps.stores?.room.getRoom(roomJid)
+      if (!room?.isBookmarked) return
+      await this.publishBookmark(roomJid, { name: room.name, nick: room.nickname, autojoin: room.autojoin, ...changes })
+    })
+  }
+
+  /**
+   * Run `write` once the room's previous bookmark write has finished, or at
+   * once when there is none (see bookmarkWrites).
+   */
+  private queueBookmarkWrite(roomJid: string, write: () => Promise<void>): Promise<void> {
+    const previous = this.bookmarkWrites.get(roomJid)
+    const current = previous ? previous.then(write, write) : write()
+    this.bookmarkWrites.set(roomJid, current)
+    const forget = () => {
+      if (this.bookmarkWrites.get(roomJid) === current) this.bookmarkWrites.delete(roomJid)
+    }
+    current.then(forget, forget)
+    return current
+  }
+
+  private async publishBookmark(roomJid: string, options: BookmarkSaveOptions): Promise<void> {
     // A bookmark publish REPLACES the stored item, so an unrelated write (renaming
     // the bookmark, toggling autojoin) would drop what the caller leaves out: the
     // room password, ours or one another client stored (issue #1126; pass an
@@ -2310,20 +2361,24 @@ export class MUC extends BaseModule {
    * - Does not remove the room from the local store
    */
   async removeBookmark(roomJid: string): Promise<void> {
-    const iq = xml(
-      'iq',
-      { type: 'set', id: `bookmark_remove_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('retract', { node: NS_BOOKMARKS },
-          xml('item', { id: roomJid })
+    // After any save of the room in progress, so that save cannot publish the
+    // bookmark again once it is removed (see bookmarkWrites).
+    return this.queueBookmarkWrite(roomJid, async () => {
+      const iq = xml(
+        'iq',
+        { type: 'set', id: `bookmark_remove_${generateUUID()}` },
+        xml('pubsub', { xmlns: NS_PUBSUB },
+          xml('retract', { node: NS_BOOKMARKS },
+            xml('item', { id: roomJid })
+          )
         )
       )
-    )
 
-    await this.deps.sendIQ(iq)
+      await this.deps.sendIQ(iq)
 
-    // SDK event only - binding calls store.removeBookmark
-    this.deps.emitSDK('room:bookmark-removed', { roomJid })
+      // SDK event only - binding calls store.removeBookmark
+      this.deps.emitSDK('room:bookmark-removed', { roomJid })
+    })
   }
 
   /**
