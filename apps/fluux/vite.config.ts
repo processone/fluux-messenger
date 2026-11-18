@@ -129,6 +129,8 @@ export default defineConfig(({ mode }) => ({
       // Alias SDK to source for chunk splitting (allows manualChunks to split core vs react)
       '@fluux/sdk': resolve(__dirname, '../../packages/fluux-sdk/src'),
       // Resolved from source like the SDK; no build step.
+      '@fluux/omemo-plugin/devices': resolve(__dirname, '../../packages/omemo-plugin/src/devices.ts'),
+      '@fluux/omemo': resolve(__dirname, '../../packages/omemo/src'),
       '@fluux/openpgp-plugin': resolve(__dirname, '../../packages/openpgp-plugin/src'),
       // Override @xmpp/client's browser field which excludes SCRAM-SHA-1 from browser builds.
       // The sasl-scram-sha-1 package uses create-hash/create-hmac (browserify-era crypto)
@@ -160,7 +162,7 @@ export default defineConfig(({ mode }) => ({
     __FLUUX_ANOMALY__: JSON.stringify(resolveAnomalyGate(mode, process.env)),
   },
   optimizeDeps: {
-    exclude: ['@fluux/sdk', '@fluux/openpgp-plugin'], // Don't pre-bundle local SDK so changes are picked up
+    exclude: ['@fluux/sdk', '@fluux/openpgp-plugin', '@fluux/omemo-plugin'], // Don't pre-bundle local SDK so changes are picked up
   },
   build: {
     modulePreload: false,

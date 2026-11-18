@@ -4,6 +4,8 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./src/*"],
+      "@fluux/omemo-plugin/devices": ["../../packages/omemo-plugin/src/devices.ts"],
+      "@fluux/omemo": ["../../packages/omemo/src/index.ts"],
       "@fluux/openpgp-plugin": ["../../packages/openpgp-plugin/src/index.ts"],
       "@fluux/openpgp-plugin/*": ["../../packages/openpgp-plugin/src/*"],
       "@fluux/sdk": ["../../packages/fluux-sdk/dist/index.d.ts"],

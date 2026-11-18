@@ -8,6 +8,8 @@ interface ConfirmDialogProps {
   onConfirm: () => void
   onCancel: () => void
   variant?: 'danger' | 'warning'
+  /** The confirmed action is running: it cannot be cancelled or dismissed until it settles. */
+  busy?: boolean
 }
 
 export function ConfirmDialog({
@@ -17,6 +19,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   variant = 'danger',
+  busy = false,
 }: ConfirmDialogProps) {
   const { t } = useTranslation()
 
@@ -25,7 +28,7 @@ export function ConfirmDialog({
     : 'bg-red-500 hover:bg-red-600'
 
   return (
-    <ModalOverlay onClose={onCancel} panelClassName="p-4">
+    <ModalOverlay onClose={onCancel} dismissable={!busy} panelClassName="p-4">
       {({ close }) => (
         <>
           <h3 className="text-lg font-semibold text-fluux-text mb-2">{title}</h3>
@@ -34,6 +37,7 @@ export function ConfirmDialog({
             <button
               type="button"
               onClick={close}
+              disabled={busy}
               className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active
                          rounded-lg transition-colors"
             >
@@ -42,6 +46,7 @@ export function ConfirmDialog({
             <button
               type="button"
               onClick={onConfirm}
+              disabled={busy}
               className={`px-4 py-2 text-sm text-white ${confirmColors}
                          rounded-lg transition-colors`}
             >

@@ -18,8 +18,9 @@ details.
 
 The primary value of OMEMO is interoperability with third-party XMPP clients (Conversations,
 Dino, Gajim, Monal). The OMEMO 2 library (`packages/omemo`) and its plugin adapter
-(`packages/omemo-plugin`) are on main but not registered in the app, so nothing is saved and no
-one sees OMEMO yet. The remaining work (desktop wiring with a sealed key store, per-device
+(`packages/omemo-plugin`) are on main but not registered in the app, so Fluux saves no OMEMO key
+and sends no OMEMO message. The one visible part is Settings → Encryption, which lists the account's
+OMEMO 2 and legacy devices and removes one after confirmation, without the plugin. The remaining work (desktop wiring with a sealed key store, per-device
 verification, trust redesigned for key sets) is still on the `features/omemo` branch. The library is a clean-room TypeScript
 implementation of X3DH and the Double Ratchet, built only on permissively licensed primitives
 so that no GPL or AGPL code we don't own enters the client. OMEMO 2 (`urn:xmpp:omemo:2`) comes
