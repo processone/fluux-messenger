@@ -5,6 +5,6 @@
   "bundle": {
     "targets": ["app"],
     "createUpdaterArtifacts": false,
-    "macOS": { "files": { "PlugIns/FluuxShare.appex": null }, "entitlements": "Entitlements.plist", "infoPlist": "Info.plist" }
+    "macOS": { "files": { "PlugIns/FluuxShare.appex": null, "PlugIns/FluuxWidgets.appex": null, "Frameworks/libFluuxWidgets.dylib": null }, "entitlements": "Entitlements.plist", "infoPlist": "Info.plist" }
   }
 }

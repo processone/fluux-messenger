@@ -11,19 +11,19 @@ index 3206d55f..b5d614a8 100644
      "core:window:allow-set-theme",
      "core:window:allow-set-title",
 diff --git a/apps/fluux/src-tauri/gen/schemas/capabilities.json b/apps/fluux/src-tauri/gen/schemas/capabilities.json
-index 4cb2100d..88e4cf74 100644
+index e0726dff..4c83b5bb 100644
 --- a/apps/fluux/src-tauri/gen/schemas/capabilities.json
 +++ b/apps/fluux/src-tauri/gen/schemas/capabilities.json
 @@ -1 +1 @@
--{"android":{"identifier":"android","description":"Android shell with native XMPP TCP/TLS proxy","local":true,"windows":["main"],"permissions":["core:default","os:default","opener:default","share-inbox:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-register-listener","notification:allow-remove-listener","notification:allow-create-channel"],"platforms":["android"]},"default":{"identifier":"default","description":"Default capabilities for the XMPP client","local":true,"windows":["main"],"permissions":["core:default","core:path:default","core:window:allow-start-dragging","core:window:allow-close","core:window:allow-destroy","core:window:allow-is-fullscreen","core:window:allow-is-maximized","core:window:allow-is-minimized","core:window:allow-minimize","core:window:allow-maximize","core:window:allow-unmaximize","core:window:allow-show","core:window:allow-hide","core:window:allow-set-focus","core:window:allow-set-theme","core:window:allow-set-title","core:window:allow-request-user-attention","core:webview:allow-webview-position","core:webview:allow-set-webview-focus","core:webview:allow-create-webview-window","core:window:allow-create","shell:allow-open","opener:default","os:default","core:window:allow-set-badge-count","notification:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-show","notification:allow-register-listener","notification:allow-register-action-types","notification:allow-remove-active","window-state:default","fs:allow-temp-write-recursive","fs:allow-appcache-write-recursive","fs:allow-appcache-read-recursive","fs:allow-appcache-meta-recursive","fs:allow-appconfig-write-recursive","fs:allow-appconfig-read-recursive",{"identifier":"fs:allow-read-file","allow":[{"path":"**/*"}]},{"identifier":"fs:allow-write-file","allow":[{"path":"$HOME/**"}]},"clipboard-manager:allow-read-image","deep-link:default","dialog:allow-open","dialog:allow-save","updater:default","process:allow-restart",{"identifier":"http:default","allow":[{"url":"https://*"},{"url":"https://*:*/**"},{"url":"http://*"},{"url":"http://*:*/**"}]},"http:allow-fetch-read-body","http:allow-fetch-cancel"],"platforms":["macOS","windows","linux"]},"ios":{"identifier":"ios","description":"iOS shell with native XMPP TCP/TLS proxy, uploads, media cache and link previews","local":true,"windows":["main"],"permissions":["core:default","core:path:default","fs:allow-appcache-write-recursive","fs:allow-appcache-read-recursive","fs:allow-appcache-meta-recursive",{"identifier":"http:default","allow":[{"url":"https://*"},{"url":"https://*:*/**"},{"url":"http://*"},{"url":"http://*:*/**"}]},"http:allow-fetch-read-body","http:allow-fetch-cancel","os:default","opener:default",{"identifier":"opener:allow-open-url","allow":[{"url":"app-settings:*"}]},"share-inbox:default","share-inbox:photos","push:default","share-sheet:default","background-task:default","ios-feedback:default","deep-link:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-register-listener","notification:allow-remove-listener"],"platforms":["iOS"]},"macos-share":{"identifier":"macos-share","description":"Receive imported content from the macOS Share Extension","local":true,"windows":["main"],"permissions":["share-inbox:default"],"platforms":["macOS"]}}
+-{"android":{"identifier":"android","description":"Android shell with native XMPP TCP/TLS proxy","local":true,"windows":["main"],"permissions":["core:default","os:default","opener:default","share-inbox:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-register-listener","notification:allow-remove-listener","notification:allow-create-channel"],"platforms":["android"]},"default":{"identifier":"default","description":"Default capabilities for the XMPP client","local":true,"windows":["main"],"permissions":["core:default","core:path:default","core:window:allow-start-dragging","core:window:allow-close","core:window:allow-destroy","core:window:allow-is-fullscreen","core:window:allow-is-maximized","core:window:allow-is-minimized","core:window:allow-minimize","core:window:allow-maximize","core:window:allow-unmaximize","core:window:allow-show","core:window:allow-hide","core:window:allow-set-focus","core:window:allow-set-theme","core:window:allow-set-title","core:window:allow-request-user-attention","core:webview:allow-webview-position","core:webview:allow-set-webview-focus","core:webview:allow-create-webview-window","core:window:allow-create","shell:allow-open","opener:default","os:default","core:window:allow-set-badge-count","notification:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-show","notification:allow-register-listener","notification:allow-register-action-types","notification:allow-remove-active","window-state:default","fs:allow-temp-write-recursive","fs:allow-appcache-write-recursive","fs:allow-appcache-read-recursive","fs:allow-appcache-meta-recursive","fs:allow-appconfig-write-recursive","fs:allow-appconfig-read-recursive",{"identifier":"fs:allow-read-file","allow":[{"path":"**/*"}]},{"identifier":"fs:allow-write-file","allow":[{"path":"$HOME/**"}]},"clipboard-manager:allow-read-image","deep-link:default","dialog:allow-open","dialog:allow-save","updater:default","process:allow-restart",{"identifier":"http:default","allow":[{"url":"https://*"},{"url":"https://*:*/**"},{"url":"http://*"},{"url":"http://*:*/**"}]},"http:allow-fetch-read-body","http:allow-fetch-cancel"],"platforms":["macOS","windows","linux"]},"ios":{"identifier":"ios","description":"iOS shell with native XMPP TCP/TLS proxy, uploads, media cache and link previews","local":true,"windows":["main"],"permissions":["core:default","core:path:default","fs:allow-appcache-write-recursive","fs:allow-appcache-read-recursive","fs:allow-appcache-meta-recursive",{"identifier":"http:default","allow":[{"url":"https://*"},{"url":"https://*:*/**"},{"url":"http://*"},{"url":"http://*:*/**"}]},"http:allow-fetch-read-body","http:allow-fetch-cancel","os:default","opener:default",{"identifier":"opener:allow-open-url","allow":[{"url":"app-settings:*"}]},"share-inbox:default","share-inbox:photos","push:default","share-sheet:default","background-task:default","ios-feedback:default","widgets:default","deep-link:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-register-listener","notification:allow-remove-listener"],"platforms":["iOS"]},"macos-share":{"identifier":"macos-share","description":"Receive imported content from the macOS Share Extension","local":true,"windows":["main"],"permissions":["share-inbox:default"],"platforms":["macOS"]},"macos-widgets":{"identifier":"macos-widgets","description":"Publish unread conversation metadata and disposable avatars for the native desktop widget.","local":true,"windows":["main"],"permissions":["widgets:default","widgets:allow-set-sender-names","widgets:allow-set-notification-avatar"],"platforms":["macOS"]}}
 \ No newline at end of file
-+{"android":{"identifier":"android","description":"Android shell with native XMPP TCP/TLS proxy","local":true,"windows":["main"],"permissions":["core:default","os:default","opener:default","share-inbox:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-register-listener","notification:allow-remove-listener","notification:allow-create-channel"],"platforms":["android"]},"default":{"identifier":"default","description":"Default capabilities for the XMPP client","local":true,"windows":["main"],"permissions":["core:default","core:path:default","core:window:allow-start-dragging","core:window:allow-close","core:window:allow-destroy","core:window:allow-is-fullscreen","core:window:allow-is-maximized","core:window:allow-is-minimized","core:window:allow-minimize","core:window:allow-maximize","core:window:allow-unmaximize","core:window:allow-show","core:window:allow-hide","core:app:allow-app-hide","core:window:allow-set-focus","core:window:allow-set-theme","core:window:allow-set-title","core:window:allow-request-user-attention","core:webview:allow-webview-position","core:webview:allow-set-webview-focus","core:webview:allow-create-webview-window","core:window:allow-create","shell:allow-open","opener:default","os:default","core:window:allow-set-badge-count","notification:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-show","notification:allow-register-listener","notification:allow-register-action-types","notification:allow-remove-active","window-state:default","fs:allow-temp-write-recursive","fs:allow-appcache-write-recursive","fs:allow-appcache-read-recursive","fs:allow-appcache-meta-recursive","fs:allow-appconfig-write-recursive","fs:allow-appconfig-read-recursive",{"identifier":"fs:allow-read-file","allow":[{"path":"**/*"}]},{"identifier":"fs:allow-write-file","allow":[{"path":"$HOME/**"}]},"clipboard-manager:allow-read-image","deep-link:default","dialog:allow-open","dialog:allow-save","updater:default","process:allow-restart",{"identifier":"http:default","allow":[{"url":"https://*"},{"url":"https://*:*/**"},{"url":"http://*"},{"url":"http://*:*/**"}]},"http:allow-fetch-read-body","http:allow-fetch-cancel"],"platforms":["macOS","windows","linux"]},"ios":{"identifier":"ios","description":"iOS shell with native XMPP TCP/TLS proxy, uploads, media cache and link previews","local":true,"windows":["main"],"permissions":["core:default","core:path:default","fs:allow-appcache-write-recursive","fs:allow-appcache-read-recursive","fs:allow-appcache-meta-recursive",{"identifier":"http:default","allow":[{"url":"https://*"},{"url":"https://*:*/**"},{"url":"http://*"},{"url":"http://*:*/**"}]},"http:allow-fetch-read-body","http:allow-fetch-cancel","os:default","opener:default",{"identifier":"opener:allow-open-url","allow":[{"url":"app-settings:*"}]},"share-inbox:default","share-inbox:photos","push:default","share-sheet:default","background-task:default","ios-feedback:default","deep-link:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-register-listener","notification:allow-remove-listener"],"platforms":["iOS"]},"macos-share":{"identifier":"macos-share","description":"Receive imported content from the macOS Share Extension","local":true,"windows":["main"],"permissions":["share-inbox:default"],"platforms":["macOS"]}}
++{"android":{"identifier":"android","description":"Android shell with native XMPP TCP/TLS proxy","local":true,"windows":["main"],"permissions":["core:default","os:default","opener:default","share-inbox:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-register-listener","notification:allow-remove-listener","notification:allow-create-channel"],"platforms":["android"]},"default":{"identifier":"default","description":"Default capabilities for the XMPP client","local":true,"windows":["main"],"permissions":["core:default","core:path:default","core:window:allow-start-dragging","core:window:allow-close","core:window:allow-destroy","core:window:allow-is-fullscreen","core:window:allow-is-maximized","core:window:allow-is-minimized","core:window:allow-minimize","core:window:allow-maximize","core:window:allow-unmaximize","core:window:allow-show","core:window:allow-hide","core:app:allow-app-hide","core:window:allow-set-focus","core:window:allow-set-theme","core:window:allow-set-title","core:window:allow-request-user-attention","core:webview:allow-webview-position","core:webview:allow-set-webview-focus","core:webview:allow-create-webview-window","core:window:allow-create","shell:allow-open","opener:default","os:default","core:window:allow-set-badge-count","notification:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-show","notification:allow-register-listener","notification:allow-register-action-types","notification:allow-remove-active","window-state:default","fs:allow-temp-write-recursive","fs:allow-appcache-write-recursive","fs:allow-appcache-read-recursive","fs:allow-appcache-meta-recursive","fs:allow-appconfig-write-recursive","fs:allow-appconfig-read-recursive",{"identifier":"fs:allow-read-file","allow":[{"path":"**/*"}]},{"identifier":"fs:allow-write-file","allow":[{"path":"$HOME/**"}]},"clipboard-manager:allow-read-image","deep-link:default","dialog:allow-open","dialog:allow-save","updater:default","process:allow-restart",{"identifier":"http:default","allow":[{"url":"https://*"},{"url":"https://*:*/**"},{"url":"http://*"},{"url":"http://*:*/**"}]},"http:allow-fetch-read-body","http:allow-fetch-cancel"],"platforms":["macOS","windows","linux"]},"ios":{"identifier":"ios","description":"iOS shell with native XMPP TCP/TLS proxy, uploads, media cache and link previews","local":true,"windows":["main"],"permissions":["core:default","core:path:default","fs:allow-appcache-write-recursive","fs:allow-appcache-read-recursive","fs:allow-appcache-meta-recursive",{"identifier":"http:default","allow":[{"url":"https://*"},{"url":"https://*:*/**"},{"url":"http://*"},{"url":"http://*:*/**"}]},"http:allow-fetch-read-body","http:allow-fetch-cancel","os:default","opener:default",{"identifier":"opener:allow-open-url","allow":[{"url":"app-settings:*"}]},"share-inbox:default","share-inbox:photos","push:default","share-sheet:default","background-task:default","ios-feedback:default","widgets:default","deep-link:default","notification:allow-is-permission-granted","notification:allow-request-permission","notification:allow-notify","notification:allow-register-listener","notification:allow-remove-listener"],"platforms":["iOS"]},"macos-share":{"identifier":"macos-share","description":"Receive imported content from the macOS Share Extension","local":true,"windows":["main"],"permissions":["share-inbox:default"],"platforms":["macOS"]},"macos-widgets":{"identifier":"macos-widgets","description":"Publish unread conversation metadata and disposable avatars for the native desktop widget.","local":true,"windows":["main"],"permissions":["widgets:default","widgets:allow-set-sender-names","widgets:allow-set-notification-avatar"],"platforms":["macOS"]}}
 \ No newline at end of file
 diff --git a/apps/fluux/src-tauri/src/macos_secrets.rs b/apps/fluux/src-tauri/src/macos_secrets.rs
-index 9e769e41..5ae83846 100644
+index 4894bd64..36634de9 100644
 --- a/apps/fluux/src-tauri/src/macos_secrets.rs
 +++ b/apps/fluux/src-tauri/src/macos_secrets.rs
-@@ -496,9 +496,12 @@ mod native {
+@@ -1092,9 +1092,12 @@ mod native {
      }
      impl SecretStore for Keychain {
          fn get(&self, account: &str) -> Result<Option<String>, String> {
@@ -33,38 +33,60 @@ index 9e769e41..5ae83846 100644
          }
          fn set(&self, account: &str, secret: &str) -> Result<(), String> {
 +            if self.keychain.is_none() { let _ = (account, secret); return Ok(()); }
-             let _revision = if account == ACCOUNT {
-                 Some(self.begin_write()?)
-             } else {
-@@ -528,6 +531,7 @@ mod native {
+             let _access = super::AccessScope::begin();
+             let _revision = if is_bundle(account) {
+                 Some(self.begin_write(account)?)
+@@ -1125,6 +1128,7 @@ mod native {
          }
  
          fn delete(&self, account: &str) -> Result<(), String> {
 +            if self.keychain.is_none() { let _ = account; return Ok(()); }
-             let _revision = if account == ACCOUNT {
-                 Some(self.begin_write()?)
-             } else {
-@@ -542,6 +546,7 @@ mod native {
-     }
+             let _access = super::AccessScope::begin();
+             let _revision = if is_bundle(account) {
+                 Some(self.begin_write(account)?)
+@@ -1141,9 +1145,13 @@ mod native {
      impl Backend for Keychain {
+         #[cfg(not(test))]
+         fn schedule_cleanup(&self) {
++            // LAB ONLY (FLM-258): no legacy cleanup helper, which would reach the real keychain.
++            if self.keychain.is_none() { return; }
+             cleanup::schedule(&self.observed_revision);
+         }
+         fn fresh_accounts(&self) -> StoreResult<Vec<String>> {
++            // LAB ONLY (FLM-258): never read the installed Fluux's fresh-start record.
++            if self.keychain.is_none() { return Ok(Vec::new()); }
+             match std::fs::read_to_string(self.fresh_marker_path()?) {
+                 Ok(text) => Ok(text.lines().map(str::to_string).collect()),
+                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+@@ -1152,6 +1160,7 @@ mod native {
+         }
+ 
+         fn mark_fresh_account(&self, account: &str) -> StoreResult<()> {
++            if self.keychain.is_none() { let _ = account; return Ok(()); }
+             let path = self.fresh_marker_path()?;
+             std::fs::create_dir_all(path.parent().ok_or("Missing marker directory")?)
+                 .map_err(|e| e.to_string())?;
+@@ -1168,6 +1177,7 @@ mod native {
+         }
+ 
          fn read(&self, account: &str) -> StoreResult<Option<String>> {
 +            if self.keychain.is_none() { let _ = account; return Ok(None); }
-             let revision = if account == ACCOUNT {
-                 self.revision(false).ok()
-             } else {
-@@ -575,6 +580,7 @@ mod native {
+             let _access = super::AccessScope::begin();
+             let revision = if is_bundle(account) {
+                 // Drop the shared lock before a native lookup can prompt. A
+@@ -1195,6 +1205,7 @@ mod native {
          }
  
          fn accounts(&self) -> StoreResult<Vec<String>> {
 +            if self.keychain.is_none() { return Ok(Vec::new()); }
-             match self
-                 .query(None)
-                 .load_attributes(true)
+             // Enumeration is a native keychain operation too; retry/migration
+             // may reach it before startup has qualified (FLM-403 F4 and F31).
+             let _access = super::AccessScope::begin();
 diff --git a/apps/fluux/src-tauri/src/notifications/macos.rs b/apps/fluux/src-tauri/src/notifications/macos.rs
-index 8ea7a000..8a472218 100644
+index f6c29da1..976962fa 100644
 --- a/apps/fluux/src-tauri/src/notifications/macos.rs
 +++ b/apps/fluux/src-tauri/src/notifications/macos.rs
-@@ -149,6 +149,7 @@ pub fn setup(_app: &AppHandle) {
+@@ -152,6 +152,7 @@ pub fn setup(_app: &AppHandle) {
      // status is read later via `authorization_state()`, so the async result of
      // this request is intentionally ignored.
      prime_authorization();
@@ -72,7 +94,7 @@ index 8ea7a000..8a472218 100644
  }
  
  /// Owns only the disposable copy handed to UserNotifications, never the avatar cache.
-@@ -265,6 +266,21 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
+@@ -268,6 +269,21 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
          }
          if let Some(err) = unsafe { err.as_ref() } {
              tracing::warn!(error = ?err, "native notification scheduling reported an error");
@@ -95,10 +117,10 @@ index 8ea7a000..8a472218 100644
      });
      center.addNotificationRequest_withCompletionHandler(&request, Some(&handler));
 diff --git a/apps/fluux/src/components/LoginScreen.tsx b/apps/fluux/src/components/LoginScreen.tsx
-index 12277b04..92b0975c 100644
+index 4d050a63..8ec161c8 100644
 --- a/apps/fluux/src/components/LoginScreen.tsx
 +++ b/apps/fluux/src/components/LoginScreen.tsx
-@@ -259,6 +259,22 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
+@@ -268,6 +268,22 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
    }, [])
  
  
@@ -122,10 +144,10 @@ index 12277b04..92b0975c 100644
    useEffect(() => {
      // Only auto-connect once, when credentials are loaded from keychain
 diff --git a/apps/fluux/src/hooks/useDesktopNotifications.ts b/apps/fluux/src/hooks/useDesktopNotifications.ts
-index b836e650..1d78b431 100644
+index 65ab8fb0..4794d97c 100644
 --- a/apps/fluux/src/hooks/useDesktopNotifications.ts
 +++ b/apps/fluux/src/hooks/useDesktopNotifications.ts
-@@ -31,6 +31,7 @@ import { useToastStore } from '@/stores/toastStore'
+@@ -31,6 +31,7 @@ import { useToastStore, type RoomBanner } from '@/stores/toastStore'
  import { useSettingsStore } from '@/stores/settingsStore'
  import { iosHaptic } from '@/platform/ios/haptics'
  import { platform } from '@/platform'
@@ -143,12 +165,12 @@ index b836e650..1d78b431 100644
    const { presenceStatus } = usePresence()
    const { t, i18n } = useTranslation()
  
-@@ -300,10 +304,12 @@ export function useDesktopNotifications(): void {
+@@ -306,10 +310,12 @@ export function useDesktopNotifications(): void {
      if (!notification) return false
      requestAttention()
      if (connectionStore.getState().windowVisible) {
 +      repro('decision-inapp-banner', `body=${JSON.stringify(notification.body.slice(0, 60))}`)
-       showInAppBanner(notification, arrival, accountId)
+       showInAppBanner(notification, arrival, accountId, target)
        return true
      }
      if (!getNotificationPermissionGranted()) {
@@ -156,7 +178,7 @@ index b836e650..1d78b431 100644
        notificationDebug.desktopNotification({ title: notification.title, body: '(permission not granted)',
          ...(target.kind === 'chat' ? { conversationId: target.entity.id } : { roomJid: target.entity.jid }) })
        return true
-@@ -339,6 +345,7 @@ export function useDesktopNotifications(): void {
+@@ -345,6 +351,7 @@ export function useDesktopNotifications(): void {
      const { title, body, navType, navTarget, messageId, count } = notification
      notificationDebug.desktopNotification({ title, body: '(message preview)',
        ...(target.kind === 'chat' ? { conversationId: navTarget } : { roomJid: navTarget }) })
@@ -164,7 +186,7 @@ index b836e650..1d78b431 100644
      if (desktop) {
        if (!mobile) {
          const communication = communicationMetadata(target)
-@@ -456,6 +463,8 @@ export function useDesktopNotifications(): void {
+@@ -463,6 +470,8 @@ export function useDesktopNotifications(): void {
  
    // Route conversation notifications through the coalescer while the window is open.
    const handleConversationMessage = async (conv: Conversation, message: Message) => {
@@ -188,7 +210,7 @@ index 6af0b3c0..47356c1e 100644
  
  /**
 diff --git a/apps/fluux/src/utils/nativeNotification.ts b/apps/fluux/src/utils/nativeNotification.ts
-index 13192db3..6fcc1d2e 100644
+index 8ddd25d1..1cd71482 100644
 --- a/apps/fluux/src/utils/nativeNotification.ts
 +++ b/apps/fluux/src/utils/nativeNotification.ts
 @@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
