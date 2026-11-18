@@ -123,6 +123,11 @@ export type UnreadMarkerFrameLoop = PositionFrameLoop
 export type UnreadMarkerFrameResult =
   | { kind: 'waiting' }
   | { kind: 'unavailable' }
+  /**
+   * The frame wrote, and a released iOS fling holds that write until the fling ends: the list is
+   * still where the fling carries it, so nothing landed.
+   */
+  | { kind: 'held' }
   | {
       kind: 'positioned'
       scrollTop: number
@@ -133,6 +138,8 @@ export interface UnreadMarkerGeometry {
   scrollTop: number
   /** The scroller's full content height (`scrollHeight`). */
   contentHeight: number
+  /** A released iOS fling is still moving the list; the virtualizer holds absolute writes until it ends. */
+  pendingFling?: boolean
 }
 
 /** How an unread-marker loop ended. A fallback hands the entry to a live-edge request instead. */
@@ -351,6 +358,8 @@ interface UnreadMarkerExecutionState {
   landedContentHeight: number | null
   resolved: boolean
   resolvedAtLiveEdge: boolean
+  /** Held frames that may still give their frame back to {@link framesLeft}. */
+  heldFramesLeft: number
 }
 
 interface ExplicitTargetExecutionState {
@@ -595,6 +604,12 @@ const UNREAD_MARKER_REASSERT_FRAMES = 120
 const UNREAD_MARKER_STABLE_FRAMES = 8
 const UNREAD_MARKER_DRIFT_PX = 16
 const UNREAD_MARKER_TAKEOVER_DRIFT_PX = 300
+/**
+ * How long the unread loop waits for a released fling to let its held write land without spending
+ * its reassert frames: about ten seconds at 60 Hz, well past a fling's momentum. Past it, held
+ * frames spend the reassert budget again, so the loop still ends.
+ */
+const UNREAD_MARKER_HELD_FRAMES = 600
 // Preserved from the former hook-local pinVirtualizedBottom loop.
 const LIVE_EDGE_REASSERT_FRAMES = 60
 const LIVE_EDGE_STABLE_FRAMES = 8
@@ -724,13 +739,19 @@ export class PositioningController {
   }
 
   /**
-   * The reader's own navigation has not landed yet: a message jump, return-to-latest or Home.
-   * Visibility maintenance of a settled target and follow-live maintenance are not navigation.
+   * The reader's own navigation has not landed yet: a message jump, return-to-latest or Home,
+   * including the load each starts first, and a visit to the unread divider from return-to-latest
+   * or the jump-to-last-read pill.
+   * Visibility maintenance of a settled target, follow-live maintenance and the divider placed on
+   * entering a conversation are not navigation.
    */
   hasPendingNavigation(conversationId: string): boolean {
     const target = this.explicitTargetExecution
     if (target !== null && target.purpose === 'navigation' &&
       target.request.conversationId === conversationId && this.isExplicitTargetExecutionCurrent(target)) return true
+    const unread = this.unreadExecution
+    if (unread !== null && unread.request.source.kind === 'user-navigation' &&
+      unread.request.conversationId === conversationId && this.isUnreadExecutionCurrent(unread)) return true
     const liveEdge = this.liveEdgeExecution
     if (liveEdge !== null && liveEdge.purpose === 'navigation' &&
       liveEdge.request.conversationId === conversationId && this.isLiveEdgeExecutionCurrent(liveEdge)) return true
@@ -2052,6 +2073,7 @@ export class PositioningController {
       landedContentHeight: null,
       resolved: false,
       resolvedAtLiveEdge: false,
+      heldFramesLeft: UNREAD_MARKER_HELD_FRAMES,
     }
     this.unreadExecution = execution
 
@@ -3328,7 +3350,13 @@ export class PositioningController {
     )
     if (!lease.isCurrent()) return
 
-    if (result.kind === 'waiting') {
+    // A held frame's list is where the released fling carries it, not where the frame wrote: no
+    // landing, so the frame waits like one whose divider is not ready. Near its end a fling moves
+    // less than the settling drift on each frame, and counting those frames would settle the visit
+    // there before its write lands. The fling, not the loop, decides when the write lands, so the
+    // wait gives its frames back to the reassert budget.
+    if (result.kind === 'waiting' || result.kind === 'held') {
+      if (result.kind === 'held' && execution.heldFramesLeft-- > 0) execution.framesLeft++
       this.recordUnreadMarkerFrame(execution, false)
       if (scheduleNextFrame) this.scheduleUnreadMarkerFrame(execution, lease)
       return
@@ -3382,12 +3410,15 @@ export class PositioningController {
    * scrollbar drag. A jump that comes with a content-height change is not that: the first
    * measurement of rows positioned on estimates recalibrates every estimate, and the browser clamps
    * scrollTop into the shrunken content. The loop re-asserts the marker over such a correction.
+   * Nor is the leftover movement of a released fling while the reader's own divider visit is
+   * pending: the viewport observer attributes it to that navigation, whose write the fling holds.
    */
   private isUnreadMarkerTakenOver(execution: UnreadMarkerExecutionState): boolean {
     if (execution.landedTarget === null || execution.landedContentHeight === null) return false
     const geometry = this.readUnreadMarkerGeometry(execution)
     if (!geometry) return false
     if (geometry.contentHeight !== execution.landedContentHeight) return false
+    if (geometry.pendingFling === true && this.hasPendingNavigation(execution.request.conversationId)) return false
     return Math.abs(geometry.scrollTop - execution.landedTarget) > UNREAD_MARKER_TAKEOVER_DRIFT_PX
   }
 
@@ -3422,10 +3453,13 @@ export class PositioningController {
     execution.abortController?.abort()
     this.reportUnreadCompletion(execution, reason)
 
+    // Return-to-latest's divider visit hands its navigation over: the live edge is still the place
+    // the reader asked for.
     if (!this.acceptLiveEdgeRequest(
       execution.request.conversationId,
       { kind: 'fallback', reason },
       execution.executor.liveEdge,
+      execution.request.source.kind === 'user-navigation' ? 'navigation' : 'maintenance',
     )) this.cancelUnreadExecution()
   }
 

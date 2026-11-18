@@ -244,6 +244,12 @@ remeasurement moves the target makes convergence samples unreliable and recreate
 Before settlement, the accepted navigation can own motion from the released iOS fling that preceded
 it. The same holds for return-to-latest until its first settle and for Home while it is current:
 the library holds their write until that fling ends, and the leftover movement must not cancel it.
+That ownership starts with the request, before any frame loop owns the pixels: return-to-latest
+from a slid window first loads newer messages, and a jump outside the resident window first loads
+around its target. Return-to-latest's first step to an unread divider below the view, and the
+jump-to-last-read pill's visit, are reader navigation too, including the divider loop's own check for
+movement away from its landing, and so is the handover to the live edge when the divider cannot be
+shown or lands there; the divider placed on entering a conversation is not.
 The shared viewport observer requires both the current positioning lease and the virtualizer's
 actual pending-fling state; it applies the same attribution to native events and measurement/frame
 observations. New input still takes over, and a new finger ends the old fling. Settled maintenance,
@@ -679,8 +685,11 @@ recalibrations stop notifying after a fixed
 count per content width, line box and font. The controller's 300px drift guard applies only when
 content height is unchanged since the previous landing; a content-height correction must allow
 another marker write. The final landing's live-edge geometry determines fallback, not an earlier
-transient clamp. Regression coverage is in `tanstackMessageVirtualizer.ownership.test.tsx`,
-`positioningController.test.ts`, `useMessageListScroll.markerEntry.test.tsx`,
+transient clamp. A frame whose write a released iOS fling still holds is no landing: the list is
+where the fling carries it, so the loop neither settles there nor spends its frames waiting for the
+write to land, up to a bound well past a fling's momentum. Regression coverage is in
+`tanstackMessageVirtualizer.ownership.test.tsx`, `positioningController.test.ts`,
+`messageTargetResize.test.tsx`, `useMessageListScroll.markerEntry.test.tsx`,
 `useRowMetrics.test.tsx` and `MessageList.calibration.test.tsx` under
 `apps/fluux/src/components/conversation/`; `e2e/scroll-reading.ts` covers the first-open
 trajectory and a switch between conversations with reply rows in a browser.

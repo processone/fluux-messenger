@@ -2304,6 +2304,7 @@ describe('positioning controller unread-marker ownership', () => {
     let frameResult: UnreadMarkerFrameResult = { kind: 'waiting' }
     let scrollTop = 0
     let contentHeight = 5_000
+    let pendingFling = false
     const finish = vi.fn()
     const complete = vi.fn()
     const recordFrame = vi.fn()
@@ -2327,7 +2328,7 @@ describe('positioning controller unread-marker ownership', () => {
           finish,
         }
       },
-      readGeometry: () => ({ scrollTop, contentHeight }),
+      readGeometry: () => ({ scrollTop, contentHeight, pendingFling }),
       positionFrame,
       complete,
     }
@@ -2349,6 +2350,9 @@ describe('positioning controller unread-marker ownership', () => {
       },
       setContentHeight: (value: number) => {
         contentHeight = value
+      },
+      setPendingFling: (value: boolean) => {
+        pendingFling = value
       },
       runFrame: () => {
         const callback = callbacks.shift()
@@ -2704,6 +2708,111 @@ describe('positioning controller unread-marker ownership', () => {
     expect(entry.finish).toHaveBeenCalledTimes(1)
     expect(pill.positionFrame).toHaveBeenCalledTimes(1)
     expect(pill.callbacks).toHaveLength(1)
+  })
+
+  // Return-to-latest's divider visit owns a released fling's leftover movement like the
+  // return-to-latest it stands for, through its handover to the live edge until that first settles.
+  // The divider placed on entering a conversation, and its handover, are not the reader's navigation.
+  it.each(['entry', 'return-to-latest'] as const)('reports pending navigation only for the reader\'s divider visit (%s)', visit => {
+    const harness = unreadHarness({ kind: 'available', index: 12, mounted: false, placement: 'viable' })
+    const executor: UnreadMarkerExecutor = {
+      ...harness.executor,
+      liveEdge: {
+        ...harness.executor.liveEdge,
+        beginLoop: () => ({ schedule: callback => harness.callbacks.push(callback), recordFrame: () => {}, finish: () => {} }),
+        positionFrame: () => ({ kind: 'positioned', scrollTop: 1000, atLiveEdge: true, wrote: false, reassert: true }),
+      },
+    }
+    const controller = new PositioningController()
+    if (visit === 'entry') {
+      controller.beginUnreadMarkerEntry({ conversationId, entryFacts: unreadFacts(), executor })
+    } else {
+      observeLiveEntry(controller)
+      controller.beginUnreadMarkerNavigation({
+        conversationId,
+        navigationFacts: { firstUnreadMessageId: 'first-unread', unreadMarkerNeedsVisit: true, unreadMarkerAlign: 'start' },
+        executor,
+      })
+    }
+    const navigation = visit === 'return-to-latest'
+    expect(controller.hasPendingNavigation(conversationId)).toBe(navigation)
+    expect(controller.hasPendingNavigation('another-room')).toBe(false)
+
+    harness.setFrameResult({ kind: 'unavailable' })
+    harness.runFrame()
+    expect(controller.snapshot().active?.request.source).toEqual({ kind: 'fallback', reason: 'unread-marker-unavailable' })
+    expect(harness.callbacks.length, 'the live-edge handover owns the pixels').toBeGreaterThan(0)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(navigation)
+
+    while (harness.callbacks.length) harness.runFrame()
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
+  })
+
+  const beginDividerVisit = (
+    controller: PositioningController,
+    harness: ReturnType<typeof unreadHarness>,
+    visit: 'entry' | 'return-to-latest',
+  ) => {
+    if (visit === 'entry') {
+      controller.beginUnreadMarkerEntry({ conversationId, entryFacts: unreadFacts(), executor: harness.executor })
+      return
+    }
+    observeLiveEntry(controller)
+    controller.beginUnreadMarkerNavigation({
+      conversationId,
+      navigationFacts: { firstUnreadMessageId: 'first-unread', unreadMarkerNeedsVisit: true, unreadMarkerAlign: 'start' },
+      executor: harness.executor,
+    })
+  }
+
+  // A fling released before the press can start moving the list after the visit's first landing,
+  // and holds the visit's next write. Past the takeover distance, that movement is the reader's own
+  // divider visit's, as the viewport observer reads it; the divider placed on entering a
+  // conversation still yields to it.
+  it.each(['entry', 'return-to-latest'] as const)('keeps the held divider visit through a pending fling (%s)', visit => {
+    const harness = unreadHarness({ kind: 'available', index: 12, mounted: false, placement: 'viable' })
+    const controller = new PositioningController()
+    beginDividerVisit(controller, harness, visit)
+    harness.setFrameResult({ kind: 'positioned', scrollTop: 4439, atLiveEdge: false })
+    harness.runFrame()
+    harness.setPendingFling(true)
+    harness.setFrameResult({ kind: 'held' })
+    harness.setScrollTop(4089)
+    harness.runFrame()
+
+    const keeps = visit === 'return-to-latest'
+    expect(harness.positionFrame).toHaveBeenCalledTimes(keeps ? 2 : 1)
+    if (keeps) expect(harness.complete).not.toHaveBeenCalled()
+    else expect(harness.complete).toHaveBeenCalledWith(expect.objectContaining({ conversationId }), 'user-takeover')
+  })
+
+  // The fling, not the visit, decides when a held write lands. A fast iOS flick decelerates for
+  // about two and a half seconds, past the visit's own frames at 60 Hz; the visit still lands.
+  it('lands the divider visit after a fling that outlasts its frames', () => {
+    const harness = unreadHarness({ kind: 'available', index: 12, mounted: false, placement: 'viable' })
+    const controller = new PositioningController()
+    beginDividerVisit(controller, harness, 'return-to-latest')
+    harness.setPendingFling(true)
+    harness.setFrameResult({ kind: 'held' })
+    for (let frame = 0; frame < 150; frame += 1) harness.runFrame()
+    expect(harness.complete).not.toHaveBeenCalled()
+
+    harness.setPendingFling(false)
+    harness.setFrameResult({ kind: 'positioned', scrollTop: 5717, atLiveEdge: false })
+    while (harness.callbacks.length) harness.runFrame()
+    expect(harness.complete).toHaveBeenCalledWith(expect.objectContaining({ conversationId }), 'settled')
+    expect(harness.applyLiveEdge).not.toHaveBeenCalled()
+  })
+
+  it('still ends a divider visit whose write stays held', () => {
+    const harness = unreadHarness({ kind: 'available', index: 12, mounted: false, placement: 'viable' })
+    const controller = new PositioningController()
+    beginDividerVisit(controller, harness, 'return-to-latest')
+    harness.setPendingFling(true)
+    harness.setFrameResult({ kind: 'held' })
+    for (let frame = 0; frame < 10_000 && harness.callbacks.length; frame += 1) harness.runFrame()
+    expect(harness.complete).toHaveBeenCalledWith(expect.objectContaining({ conversationId }), 'unread-marker-unavailable')
   })
 
   it('promotes an executor-declared near-top target without issuing another marker frame', () => {

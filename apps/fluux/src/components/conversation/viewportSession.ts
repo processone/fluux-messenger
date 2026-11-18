@@ -242,10 +242,13 @@ export class ViewportSession {
     // WebKit on iOS reports such movement, far beyond rounding, while a virtualized list swaps
     // estimates for measurements as its pane appears. A new navigation can also own the previous
     // released fling on the web: its caller requires a live navigation lease and real gesture
-    // state, not an inferred destination or a timer. Matching fresh input still wins.
-    const engineMovement =
-      (this.inputAlwaysObserved || context.navigationOwnsFling === true) &&
-      context.controllerOwnsPixels && !context.interactionHeld && !trustedInputMatchesMovement
+    // state, not an inferred destination or a timer. That holds before any loop owns the pixels
+    // too, while the navigation first loads newer messages or the slice around its target.
+    // Matching fresh input still wins.
+    const engineMovement = !context.interactionHeld && !trustedInputMatchesMovement && (
+      (this.inputAlwaysObserved && context.controllerOwnsPixels) ||
+      context.navigationOwnsFling === true
+    )
     const userDelta = controllerGrowthJitter || engineMovement || layoutAnchored ? 0 : delta
     if (sameAnchor && previous) {
       this.pendingLayoutAdjustment += layoutDelta - (

@@ -68,6 +68,9 @@ function harness(virtualized: boolean, contentHeight = 1000, targetInset = 0, hi
   const geometry = { height: contentHeight, client: 600, targetTop: contentHeight - 80 - targetInset, targetHeight: 80 }
   let scrollTop = 0
   let messageCount = 20
+  let windowAtLiveEdge = !historical
+  let marker: string | undefined
+  let selectedIndexed = true
   let rowGrowthSignature = 0
   let scroller: HTMLDivElement
   let target: HTMLDivElement
@@ -112,8 +115,8 @@ function harness(virtualized: boolean, contentHeight = 1000, targetInset = 0, hi
     getVirtualItems: () => [{ index: 19, start: geometry.targetTop, size: geometry.targetHeight, key: 'selected' }],
     getTotalSize: () => geometry.height,
     itemCount: 20,
-    getOffsetForMessageId: (id) => id === 'selected' ? geometry.targetTop : null,
-    getIndexForMessageId: (id) => id === 'selected' ? 19 : null,
+    getOffsetForMessageId: (id) => id === 'selected' && selectedIndexed ? geometry.targetTop : null,
+    getIndexForMessageId: (id) => id === 'selected' && selectedIndexed ? 19 : null,
     ensureMessageMounted: vi.fn(async () => {}),
     measureElement: vi.fn(),
     scrollToOffset: (top, options) => navigationWrite(top, options?.owner, () => {
@@ -154,7 +157,8 @@ function harness(virtualized: boolean, contentHeight = 1000, targetInset = 0, hi
       onLoadAround: loadAround,
       onLoadNewer: loadNewer,
       onScrollToTop: loadOlder,
-      windowAtLiveEdge: !historical,
+      windowAtLiveEdge,
+      firstNewMessageId: marker,
       targetMessageId,
       onTargetMessageConsumed: consumeStoreTarget,
       onLiveEdgeMeasured: measuredLiveEdge,
@@ -203,7 +207,7 @@ function harness(virtualized: boolean, contentHeight = 1000, targetInset = 0, hi
         result.handleScroll(event)
       }} onWheel={result.handleWheel} data-message-list>
         <div ref={result.contentWrapperRef}>
-          <div ref={setTarget} className="message-row" data-message-id="selected" />
+          {selectedIndexed && <div ref={setTarget} className="message-row" data-message-id="selected" />}
         </div>
       </div>
     )
@@ -231,7 +235,7 @@ function harness(virtualized: boolean, contentHeight = 1000, targetInset = 0, hi
     act(() => resizeCallbacks.get(scroller)!(height))
   }
   return {
-    geometry, loadNewer, loadOlder, retained, request: (id: string) => act(() => api.requestMessageTarget(id)), scroller: scroller!, target: target!, unmount: view.unmount, writes, scrollEvents, measuredLiveEdge, consumeStoreTarget,
+    geometry, loadAround, loadNewer, loadOlder, retained, request: (id: string) => act(() => api.requestMessageTarget(id)), scroller: scroller!, target: target!, unmount: view.unmount, writes, scrollEvents, measuredLiveEdge, consumeStoreTarget,
     replayRef: () => {
       let detached: { anchoring: string; automaticAdjustmentEnabled: boolean }
       act(() => {
@@ -269,6 +273,27 @@ function harness(virtualized: boolean, contentHeight = 1000, targetInset = 0, hi
       fireEvent.scroll(scroller)
     },
     follow: () => act(() => api.scrollToBottom()),
+    end: () => fireEvent.keyDown(window, { key: 'End' }),
+    toMarker: () => act(() => api.scrollToMarker()),
+    // The unread divider sits above the selected row.
+    showMarker: () => {
+      marker = 'selected'
+      view.rerender(<HookHarness />)
+    },
+    // The resident window no longer holds the selected row (an around-load or a slide replaces it),
+    // then holds it again.
+    setSelectedResident: (resident: boolean) => {
+      selectedIndexed = resident
+      view.rerender(<HookHarness />)
+    },
+    // A newer slice arrives at the bottom of a slid window and brings it back to the live edge.
+    loadNewerSlice: (height: number) => {
+      windowAtLiveEdge = true
+      geometry.height += height
+      messageCount++
+      if (virtualizer) virtualizer.itemCount = messageCount
+      view.rerender(<HookHarness />)
+    },
     growAbove: (height: number, anchored = true) => {
       geometry.height += height
       geometry.targetTop += height
@@ -486,6 +511,250 @@ describe('return-to-latest and Home handoff from a released fling', () => {
     settle()
     expect(scope.scroller.scrollTop).toBe(releasedAt - 300)
   })
+})
+
+// The review of FLM-252's fix (findings F1 and F2): the released-fling exemption reached only
+// navigations whose frame loop already owned the pixels, and only return-to-latest's direct live-edge
+// request. Return-to-latest and End from a slid window first load newer messages, and a message
+// jump outside the resident window first loads around its target: no loop owns the pixels while they
+// load. Return-to-latest and End also first visit an unread divider below the view, then hand over
+// to the live edge when that visit lands there. Leftover movement of the old fling in any of these
+// was read as the reader's own scroll and cancelled the navigation. Same recorded readings as above
+// (4469 -> 4439, client 646). Not device proof.
+describe('return-to-latest, End and message jumps through a released fling while loading or visiting the unread divider', () => {
+  type Observation = 'frame' | 'measurement' | 'native'
+  type Navigation = 'button' | 'End' | 'last-read'
+  const flingMoves = (scope: ReturnType<typeof harness>, top: number, observation: Observation) => {
+    scope.scroller.scrollTop = top
+    scope.writes.length = 0
+    if (observation === 'measurement') scope.beforeMeasure()
+    if (observation === 'native') scope.nativeScroll(top)
+    runFrame()
+  }
+  const navigate = (scope: ReturnType<typeof harness>, navigation: Navigation) => {
+    if (navigation === 'button') scope.follow()
+    else if (navigation === 'End') scope.end()
+    else scope.toMarker()
+  }
+  const readerAt = (top: number, slid: boolean) => {
+    const scope = harness(true, 9878, 0, slid)
+    scope.geometry.client = 646
+    scope.setScrollDelivery(false)
+    scope.nativeScroll(top)
+    settle()
+    scope.loadNewer.mockClear()
+    return scope
+  }
+  const each = <T extends string>(values: readonly T[]) => (['button', 'End'] as const)
+    .flatMap(navigation => values.map(observation => ({ navigation, observation })))
+  const NEWER_SLICE = 600
+  const latestAfterSlice = 9878 + NEWER_SLICE - 646
+
+  // F1: in a slid window, the press only asks for the newer slice; the fling keeps moving while it
+  // loads, and a 'frame' sample is first read by the live-edge loop once the slice has arrived.
+  it.each(each(['frame', 'measurement', 'native'] as const))(
+    '$navigation lands on the latest message after loading newer while the old fling moves (sample: $observation)',
+    test => {
+      const scope = readerAt(4469, true)
+      scope.holdWritesDuringFling()
+      navigate(scope, test.navigation)
+      expect(scope.loadNewer, 'the slid window recenters first').toHaveBeenCalledTimes(1)
+      flingMoves(scope, 4439, test.observation)
+      scope.loadNewerSlice(NEWER_SLICE)
+      const dropped = [...scope.droppedHeldWrites]
+      scope.releaseFling()
+      settle()
+      expect({ dropped, top: scope.scroller.scrollTop }).toEqual({ dropped: [], top: latestAfterSlice })
+    },
+  )
+
+  it.each(each(['frame', 'measurement', 'native'] as const))(
+    'keeps a new wheel input as the reader\'s while $navigation loads newer (sample: $observation)',
+    test => {
+      const scope = readerAt(4469, true)
+      scope.holdWritesDuringFling()
+      navigate(scope, test.navigation)
+      scope.wheel(-20)
+      flingMoves(scope, 4439, test.observation)
+      scope.loadNewerSlice(NEWER_SLICE)
+      scope.releaseFling()
+      settle()
+      expect(scope.scroller.scrollTop).toBe(4439)
+      expect(scope.writes).toEqual([])
+    },
+  )
+
+  it.each(each(['frame', 'measurement', 'native'] as const))(
+    'keeps movement as the reader\'s without a pending fling while $navigation loads newer (sample: $observation)',
+    test => {
+      const scope = readerAt(4469, true)
+      navigate(scope, test.navigation)
+      flingMoves(scope, 4169, test.observation)
+      scope.loadNewerSlice(NEWER_SLICE)
+      settle()
+      expect(scope.scroller.scrollTop).toBe(4169)
+    },
+  )
+
+  // F1's matching phase: a jump to a message outside the resident window loads around it first.
+  // Its frame loop reads the fling as the navigation's once the slice has arrived, so only the
+  // samples taken during the load are at stake.
+  describe.each(['measurement', 'native'] as const)('message jump loading around its target (sample: %s)', observation => {
+    const jumpTarget = (scope: ReturnType<typeof harness>) => {
+      scope.geometry.targetTop = 2114
+      scope.geometry.targetHeight = 68
+      scope.setSelectedResident(false)
+      let arrived!: () => void
+      scope.loadAround.mockImplementation(() => new Promise<void>(resolve => { arrived = resolve }))
+      scope.search()
+      expect(scope.loadAround, 'the target is outside the resident window').toHaveBeenCalledTimes(1)
+      return async () => {
+        scope.setSelectedResident(true)
+        await act(async () => { arrived() })
+      }
+    }
+    const centered = (scope: ReturnType<typeof harness>) =>
+      scope.geometry.targetTop + scope.geometry.targetHeight / 2 - scope.geometry.client / 2
+
+    it('lands on the target when the old fling moves during the load', async () => {
+      const scope = readerAt(4469, true)
+      scope.holdWritesDuringFling()
+      const arrive = jumpTarget(scope)
+      flingMoves(scope, 4439, observation)
+      await arrive()
+      runFrame()
+      const dropped = [...scope.droppedHeldWrites]
+      scope.releaseFling()
+      settle()
+      expect({ dropped, top: scope.scroller.scrollTop }).toEqual({ dropped: [], top: centered(scope) })
+    })
+
+    it('keeps a new wheel input as the reader\'s during the load', async () => {
+      const scope = readerAt(4469, true)
+      scope.holdWritesDuringFling()
+      const arrive = jumpTarget(scope)
+      scope.wheel(-20)
+      flingMoves(scope, 4439, observation)
+      await arrive()
+      scope.releaseFling()
+      settle()
+      expect(scope.scroller.scrollTop).toBe(4439)
+      expect(scope.writes).toEqual([])
+    })
+  })
+
+  // F2: with the unread divider below the view, return-to-latest and End first visit the divider;
+  // the jump-to-last-read pill visits it from below. The visit was not counted as the reader's
+  // navigation, and its own frames cancelled it once the held write's fling had moved more than
+  // their takeover distance since the last frame.
+  const markerTop = 6000
+  const dividerLanding = markerTop + 80 / 2 - 646 / 2
+  // Showing the divider row, or moving it, re-pins the reader's anchor in this fixture, so the
+  // reader's position is restored afterwards.
+  const dividerReaderAt = (top: number, dividerTop = markerTop) => {
+    const scope = readerAt(top, false)
+    scope.geometry.targetTop = dividerTop
+    scope.showMarker()
+    settle()
+    scope.nativeScroll(top)
+    settle()
+    return scope
+  }
+  const visits = <T extends string>(values: readonly T[]) => (['button', 'End', 'last-read'] as const)
+    .flatMap(navigation => values.map(observation => ({ navigation, observation })))
+  // The recorded first step (30 px), then 350 px more before the visit's next frame.
+  const flingPath = (navigation: Navigation) => navigation === 'last-read'
+    ? { from: 7469, steps: [7439, 7089] }
+    : { from: 4469, steps: [4439, 4089] }
+  it.each(visits(['frame', 'measurement', 'native'] as const))(
+    '$navigation stops at the unread divider while the old fling keeps moving (sample: $observation)',
+    test => {
+      const path = flingPath(test.navigation)
+      const scope = dividerReaderAt(path.from)
+      scope.holdWritesDuringFling()
+      navigate(scope, test.navigation)
+      for (const top of path.steps) flingMoves(scope, top, test.observation)
+      const dropped = [...scope.droppedHeldWrites]
+      scope.releaseFling()
+      settle()
+      expect({ dropped, top: scope.scroller.scrollTop }).toEqual({ dropped: [], top: dividerLanding })
+    },
+  )
+
+  // As it slows down, the fling moves the list less than the visit's settling drift on each frame.
+  // The visit read those frames as its own landings and settled on the fling's position while its
+  // write was still held; the fling's next scroll events were then the reader's, and the write was
+  // refused when the fling ended. Positions read in a WebKit replay with a classic scrollbar, which
+  // holds the write until the fling ends: the visit's frames, then the fling's next scroll events.
+  const replayedVisitFrames = [1605, 1582, 1560, 1539, 1519, 1500, 1482, 1465, 1449, 1434, 1419, 1405, 1392, 1379, 1367, 1356]
+  const replayedFlingAfterVisit = [1345, 1335, 1325, 1316, 1307, 1299, 1291, 1283]
+  it.each(visits(['frame', 'measurement', 'native'] as const))(
+    '$navigation stops at the unread divider after the old fling slows down before it ends (sample: $observation)',
+    test => {
+      const from = flingPath(test.navigation).from
+      const replayed = (top: number) => from - 30 - (replayedVisitFrames[0] - top)
+      const scope = dividerReaderAt(from)
+      scope.holdWritesDuringFling()
+      navigate(scope, test.navigation)
+      for (const top of replayedVisitFrames) flingMoves(scope, replayed(top), test.observation)
+      for (const top of replayedFlingAfterVisit) flingMoves(scope, replayed(top), 'native')
+      const dropped = [...scope.droppedHeldWrites]
+      scope.releaseFling()
+      settle()
+      expect({ dropped, top: scope.scroller.scrollTop }).toEqual({ dropped: [], top: dividerLanding })
+    },
+  )
+
+  it.each(each(['measurement', 'native'] as const))(
+    'keeps a new wheel input as the reader\'s while $navigation visits the unread divider (sample: $observation)',
+    test => {
+      const scope = dividerReaderAt(4469)
+      scope.holdWritesDuringFling()
+      navigate(scope, test.navigation)
+      scope.wheel(-20)
+      flingMoves(scope, 4439, test.observation)
+      scope.releaseFling()
+      settle()
+      expect(scope.scroller.scrollTop).toBe(4439)
+    },
+  )
+
+  // F2's fallback: a divider among the newest rows that has left the resident window by the visit's
+  // first frame cannot be shown, and the visit hands over to the live edge; the old fling keeps
+  // moving after the handover.
+  const latest = 9878 - 646
+  const newestRowTop = 9878 - 80
+  const pressThenLoseDivider = (scope: ReturnType<typeof harness>, navigation: Navigation) => {
+    expect(scope.scroller.scrollTop + 646, 'the divider is below the view').toBeLessThan(newestRowTop)
+    navigate(scope, navigation)
+    scope.setSelectedResident(false)
+    runFrame()
+  }
+  it.each(each(['frame', 'measurement', 'native'] as const))(
+    '$navigation lands on the latest message when the divider visit hands over to the live edge during the old fling (sample: $observation)',
+    test => {
+      const scope = dividerReaderAt(4469, newestRowTop)
+      scope.holdWritesDuringFling()
+      pressThenLoseDivider(scope, test.navigation)
+      flingMoves(scope, 4439, test.observation)
+      const dropped = [...scope.droppedHeldWrites]
+      scope.releaseFling()
+      settle()
+      expect({ dropped, top: scope.scroller.scrollTop }).toEqual({ dropped: [], top: latest })
+    },
+  )
+
+  it.each(each(['frame', 'measurement', 'native'] as const))(
+    'keeps movement as the reader\'s without a pending fling after $navigation hands over to the live edge (sample: $observation)',
+    test => {
+      const scope = dividerReaderAt(4469, newestRowTop)
+      pressThenLoseDivider(scope, test.navigation)
+      expect(scope.scroller.scrollTop, 'the handover lands on the latest message').toBe(latest)
+      flingMoves(scope, latest - 300, test.observation)
+      settle()
+      expect(scope.scroller.scrollTop).toBe(latest - 300)
+    },
+  )
 })
 
 function startInput(scroller: HTMLDivElement, kind: 'touch' | 'keyboard' | 'scrollbar') {

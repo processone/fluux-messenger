@@ -56,7 +56,11 @@ export class UnreadMarkerBrowserAdapter {
       readGeometry: () => {
         const scroller = this.options.getScroller()
         return scroller
-          ? { scrollTop: scroller.scrollTop, contentHeight: scroller.scrollHeight }
+          ? {
+              scrollTop: scroller.scrollTop,
+              contentHeight: scroller.scrollHeight,
+              pendingFling: this.options.getVirtualizer()?.hasPendingFling?.() === true,
+            }
           : null
       },
       positionFrame: (request, lease) => this.positionFrame(request, lease),
@@ -120,8 +124,12 @@ export class UnreadMarkerBrowserAdapter {
     }
     if (!lease.isCurrent()) return { kind: 'unavailable' }
 
+    // A released iOS fling holds the virtualizer's write until it ends, and the list keeps moving
+    // with the fling meanwhile.
+    let held = false
     if (virtualizer && markerIndex !== null) {
-      virtualizer.scrollToIndex(markerIndex, { align: 'start', owner: lease.owner })
+      const write = virtualizer.scrollToIndex(markerIndex, { align: 'start', owner: lease.owner })
+      held = write.outcome().status === 'queued'
     } else {
       const top = request.desired.align === 'top-third'
         ? Math.max(0, offset - scroller.clientHeight / 3)
@@ -146,7 +154,8 @@ export class UnreadMarkerBrowserAdapter {
       scrollTop,
       distanceFromBottom,
       atLiveEdge,
+      held,
     })
-    return { kind: 'positioned', scrollTop, atLiveEdge }
+    return held ? { kind: 'held' } : { kind: 'positioned', scrollTop, atLiveEdge }
   }
 }
