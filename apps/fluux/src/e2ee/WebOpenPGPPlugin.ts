@@ -24,7 +24,7 @@
 
 import type { PrivateKey } from 'openpgp'
 import { E2EEPluginError, isE2EEPluginError } from '@fluux/sdk'
-import { OpenPGPPluginBase } from './OpenPGPPluginBase'
+import { OpenPGPPluginBase } from '@fluux/openpgp-plugin'
 import {
   accountUserId,
   keyExportFilename,

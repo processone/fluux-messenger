@@ -71,15 +71,21 @@ import {
   clearBackedUpFingerprint,
   readBackedUpFingerprint,
   writeBackedUpFingerprint,
+} from './backupMarker'
+import {
   VERIFICATIONS_NODE,
   fetchVerificationsFromServer,
   loadAppliedVerificationsVersion,
   planVerificationUpdate,
   publishVerificationsToServer,
   saveAppliedVerificationsVersion,
+} from './verificationSync'
+import {
   fingerprintsEqual,
   normalizeFingerprint,
   toXep0373Fingerprint,
+} from './fingerprintCompare'
+import {
   deserializePeerCache,
   serializePeerCache,
   activePublics,
@@ -89,31 +95,51 @@ import {
   markDepartedInactive,
   capUnverifiedInactive,
   type CachedPeerCert,
+} from './peerCertCache'
+import {
   accountUserId,
+} from './openpgpUserId'
+import {
   mergePublicKeysList,
   OX_NAMESPACE as OX_WIRE_NAMESPACE,
+} from './oxPublicKeysList'
+import {
   legacyNormalizeBackupPassphrase,
   prepareBackupPassphrase,
+} from './backupPassphrase'
+import {
   withPassphraseFormatHeader,
+} from './passphraseFormatHeader'
+import {
   isSecretKeyUnavailableError,
+} from './keyUnavailable'
+import {
   classifyBoundaryError,
+} from './classifyBoundaryError'
+import {
   OPENPGP_DESCRIPTOR,
+} from './descriptor'
+import {
   probeRemoteIdentityState,
   probeRemotePublishedFingerprints,
   SecretKeyBackupProbeError,
+} from './secretKeyProbe'
+import {
   type BackupProbeResult,
   type BackupRecoveryMode,
-  type CertRejection,
   type CertValidation,
   type DecryptOutput,
   type KeyBundle,
   type KeychainRetryAvailability,
   type KeychainRetryState,
   type KeyInstallOptions,
+  type RestoreResult,
+} from './types'
+import {
+  type CertRejection,
   type OpenPGPHostStores,
   type OwnKeyConflict,
-  type RestoreResult,
-} from '@fluux/openpgp-plugin'
+} from './hostStores'
 import {
   sealTrustState,
   verifyTrustStateSeal,
