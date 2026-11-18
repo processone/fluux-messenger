@@ -72,7 +72,9 @@ test('forward a one-to-one message to another chat: comment, quote and one struc
   await dialog.getByLabel('Comment (optional)').fill('See this')
   await dialog.getByRole('button', { name: 'Send', exact: true }).click()
   await expect(dialog).toBeHidden()
-  const [stanza] = await sent(page)
+  const stanzas = await sent(page)
+  expect(stanzas).toHaveLength(1)
+  const [stanza] = stanzas
   expect(stanza).toContain('to="liam@fluux.chat"')
   expect(stanza).toContain('See this')
   expect(stanza).toContain('Ship it on Friday')
@@ -91,7 +93,9 @@ test('forward a message that holds a copy: one flattened quote, no nested copy',
   await pickDestination(page, dialog, 'liam', /liam/i)
   await dialog.getByRole('button', { name: 'Send', exact: true }).click()
   await expect(dialog).toBeHidden()
-  const [stanza] = await sent(page)
+  const stanzas = await sent(page)
+  expect(stanzas).toHaveLength(1)
+  const [stanza] = stanzas
   expect(stanza).toContain('Carol')
   expect(stanza).toContain('The copied text')
   const inner = stanza.match(/<forwarded [\s\S]*<\/forwarded>/)![0]
@@ -107,7 +111,9 @@ test('forward a one-to-one message to a joined room: comment and quote only', as
   await dialog.getByLabel('Comment (optional)').fill('FYI')
   await dialog.getByRole('button', { name: 'Send', exact: true }).click()
   await expect(dialog).toBeHidden()
-  const [stanza] = await sent(page)
+  const stanzas = await sent(page)
+  expect(stanzas).toHaveLength(1)
+  const [stanza] = stanzas
   expect(stanza).toContain('type="groupchat"')
   expect(stanza).toContain('FYI')
   expect(stanza).toContain('Plain note for the team')
@@ -144,7 +150,9 @@ test('forward from an encrypted chat: no rooms, refused into a plain chat, deliv
   await dialog.getByLabel('Comment (optional)').fill('For your eyes')
   await dialog.getByRole('button', { name: 'Send', exact: true }).click()
   await expect(dialog).toBeHidden()
-  const [stanza] = await sent(page)
+  const stanzas = await sent(page)
+  expect(stanzas).toHaveLength(1)
+  const [stanza] = stanzas
   const [payload] = await encrypted(page)
   expect(stanza).toContain('urn:xmpp:openpgp:0')
   expect(stanza).not.toContain('Secret roadmap')
