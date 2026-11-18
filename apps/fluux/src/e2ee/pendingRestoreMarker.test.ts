@@ -7,9 +7,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { PluginContext } from '@fluux/sdk'
-import type { BackupRecoveryMode, KeyBundle } from '@fluux/openpgp-plugin'
+import { resetUncertainImportsForTesting, SequoiaPgpPlugin, type BackupRecoveryMode, type InvokeFn, type KeyBundle } from '@fluux/openpgp-plugin'
 import { createAppHostStores } from './appHostStores'
-import { resetUncertainImportsForTesting, SequoiaPgpPlugin, type InvokeFn } from './SequoiaPgpPlugin'
 
 const JID = 'me@example.com'
 const MARKER = `__wry_pending_native_restore:${JID}`

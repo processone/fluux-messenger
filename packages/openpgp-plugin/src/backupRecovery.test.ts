@@ -3,29 +3,29 @@
  * identity without migrating refused storage or replacing its source backup.
  * Native IPC is injected; real Sequoia-generated backup/key fixtures are parsed
  * and decrypted here. The owning Rust suite proves durable native storage. */
-import { createAppDesktopHost } from './appDesktopHost'
-import { createAppHostStores } from './appHostStores'
+import { createMockHostStores } from './testing/mockHostStores'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPluginStorage, InMemoryStorageBackend, type PluginContext } from '@fluux/sdk'
 import { decrypt, encrypt, readMessage, createMessage, readKey, unarmor } from 'openpgp'
 import { resetUncertainImportsForTesting, SequoiaPgpPlugin, type InvokeFn } from './SequoiaPgpPlugin'
-import { classifyBoundaryError, type KeyBundle } from '@fluux/openpgp-plugin'
-import { parseSecretKeysFromBackupPayload, legacyNormalizeBackupPassphrase } from '@fluux/openpgp-plugin'
-import { setPlatformForTesting } from '@/platform'
+import { classifyBoundaryError, type KeyBundle } from './index'
+import { parseSecretKeysFromBackupPayload, legacyNormalizeBackupPassphrase } from './index'
 
-const fixture = (name: string) => readFileSync(resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures', name), 'utf8')
+const fixture = (name: string) => readFileSync(resolve(__dirname, 'fixtures', name), 'utf8')
 const meta = JSON.parse(fixture('sequoia_meta.json'))
 const accountJid = 'alice@example.com'
 const sourceBackup = fixture('sequoia_alice_backup.asc')
-let restorePlatform: () => void
+const hostStores = createMockHostStores()
+let macosDesktop = true
+const desktopHost = () => ({ fileIO: { saveFile: async () => false, pickFile: async () => null }, macosDesktop })
 const plugins: SequoiaPgpPlugin[] = []
 vi.setConfig({ testTimeout: 30_000 })
 beforeEach(() => {
-  resetUncertainImportsForTesting(); localStorage.clear(); restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' }) })
+  resetUncertainImportsForTesting(); localStorage.clear(); hostStores.reset(); macosDesktop = true })
 afterEach(resetUncertainImportsForTesting)
-afterEach(async () => { for (const p of plugins.splice(0)) await p.shutdown(); restorePlatform() })
+afterEach(async () => { for (const p of plugins.splice(0)) await p.shutdown() })
 
 async function setup(error = 'openpgp-storage-unavailable: macOS keychain (-25293): authorization refused', jid = accountJid) {
   const calls: { cmd: string; args?: Record<string, unknown> }[] = []
@@ -75,7 +75,7 @@ async function setup(error = 'openpgp-storage-unavailable: macOS keychain (-2529
       subscribePEP: () => ({ unsubscribe: () => {} }),
     },
   }
-  const plugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke }); plugins.push(plugin)
+  const plugin = new SequoiaPgpPlugin({ stores: hostStores, ...desktopHost(), invoke }); plugins.push(plugin)
   return { plugin, ctx, calls, publications, invoke, decode, setBackup: (value: string) => { backup = value }, setPause: (value?: () => Promise<void>) => { pause = value } }
 }
 
@@ -108,7 +108,7 @@ describe('guided backup recovery', () => {
     const f = await setup()
     const invoke: InvokeFn = (cmd, args) => cmd === 'openpgp_has_persisted_key'
       ? Promise.reject(new Error('native dispatcher disconnected')) : f.invoke(cmd, args)
-    const device = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke }); plugins.push(device)
+    const device = new SequoiaPgpPlugin({ stores: hostStores, ...desktopHost(), invoke }); plugins.push(device)
     await expect(device.init(f.ctx)).rejects.toThrow(/disconnected/)
     expect(f.calls).toEqual([])
     expect(device.isKeyRecoveryNeeded()).toBe(false)
@@ -157,8 +157,8 @@ describe('guided backup recovery', () => {
     await f.plugin.shutdown(); resume(); await rejected
     expect(f.calls.some(c => c.cmd.includes('import_selected'))).toBe(false)
   })
-  it.each(['windows', 'linux', 'ios'] as const)('does not opt other platform %s out of migration', async os => {
-    restorePlatform(); restorePlatform = setPlatformForTesting({ shell: os === 'ios' ? 'mobile' : 'desktop', os })
+  it.each(['windows', 'linux', 'ios'] as const)('does not opt other platform %s out of migration', async () => {
+    macosDesktop = false
     const f = await setup(); await f.plugin.init(f.ctx)
     await f.plugin.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid })
     expect(f.calls.find(c => c.cmd === 'openpgp_backup_import_selected')?.args).not.toHaveProperty('withoutMigration')
@@ -207,7 +207,7 @@ describe('guided backup recovery', () => {
       if (cmd === 'openpgp_backup_import_selected') { installs++; throw new Error(reading) }
       return f.invoke<T>(cmd, args)
     }
-    const device = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke }); plugins.push(device)
+    const device = new SequoiaPgpPlugin({ stores: hostStores, ...desktopHost(), invoke }); plugins.push(device)
     await device.init(f.ctx)
     await expect(device.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid: jid })).rejects.toThrow(reading)
     await expect(device.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid: jid })).rejects.toMatchObject({ code: 'restore-outcome-uncertain' })
@@ -218,14 +218,14 @@ describe('guided backup recovery', () => {
     const f = await setup()
     const invoke: InvokeFn = (cmd, args) => cmd === 'openpgp_backup_import_selected'
       ? new Promise(() => {}) : f.invoke(cmd, args)
-    const device = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke, timeouts: { keyMaterialMs: 1000 } }); plugins.push(device)
+    const device = new SequoiaPgpPlugin({ stores: hostStores, ...desktopHost(), invoke, timeouts: { keyMaterialMs: 1000 } }); plugins.push(device)
     await device.init(f.ctx)
     vi.useFakeTimers()
     try {
       const install = device.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid })
       const timedOut = expect(install).rejects.toThrow(/timeout/)
       await vi.advanceTimersByTimeAsync(1000); await timedOut
-      const replacement = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke }); plugins.push(replacement)
+      const replacement = new SequoiaPgpPlugin({ stores: hostStores, ...desktopHost(), invoke }); plugins.push(replacement)
       await replacement.init(f.ctx)
       await expect(replacement.installSelectedKey(sourceBackup, meta.backupPassphrase, meta.aliceFingerprint, { accountJid })).rejects.toMatchObject({ code: 'restore-outcome-uncertain' })
       expect(f.ctx.notifyKeyUnlocked).not.toHaveBeenCalled()

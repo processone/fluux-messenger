@@ -1,7 +1,7 @@
 //! OpenPGP operations for the XEP-0373 (OX) E2EE plugin.
 //!
 //! This module exposes Tauri commands that the TypeScript-side plugin
-//! (`apps/fluux/src/e2ee/SequoiaPgpPlugin.ts`) invokes for the cryptographic
+//! (`packages/openpgp-plugin/src/SequoiaPgpPlugin.ts`) invokes for the cryptographic
 //! operations it cannot perform in the web layer. The crypto is provided by
 //! [Sequoia-PGP](https://sequoia-pgp.org/) with its pure-Rust backend.
 //!
