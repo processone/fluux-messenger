@@ -9,11 +9,16 @@ const e2ee = vi.hoisted(() => ({
   getOwnFingerprint: vi.fn(async () => 'OWN1234'),
 }))
 
-vi.mock('@/hooks/useConversationEncryptionState', () => ({
-  useConversationEncryptionState: () => ({
+const encState = vi.hoisted(() => ({
+  current: null as unknown,
+  oneKey: {
     kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'verified',
     identityId: 'ABCD1234', canClearVerification: true,
-  }),
+  },
+}))
+
+vi.mock('@/hooks/useConversationEncryptionState', () => ({
+  useConversationEncryptionState: () => encState.current ?? encState.oneKey,
 }))
 
 // Mock hooks used by ContactProfileView that aren't covered by the global
@@ -85,7 +90,10 @@ const props = {
 }
 
 describe('ContactProfileView', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    encState.current = null
+  })
 
   it('shows the card grid and no tab bar', () => {
     render(<ContactProfileView {...props} />)
@@ -115,6 +123,21 @@ describe('ContactProfileView', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /removeVerification|Remove verification/ }).at(-1)!)
     await waitFor(() =>
       expect(useToastStore.getState().toasts.some((t) => t.type === 'error' && t.message === 'keys changed')).toBe(true),
+    )
+  })
+
+  it('still sends the decision for the key the dialog opened for when a second key arrives, so the SDK can refuse it visibly', async () => {
+    const { rerender } = render(<ContactProfileView {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Verified and encrypted' }))
+    fireEvent.click(screen.getByRole('button', { name: /removeVerification|Remove verification/ }))
+    // The contact now has two keys: no decision is offered and the state carries no key id.
+    encState.current = { kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'tofu', partlyVerified: true }
+    e2ee.setIdentityTrust.mockRejectedValueOnce(new Error('decision not allowed'))
+    rerender(<ContactProfileView {...props} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /removeVerification|Remove verification/ }).at(-1)!)
+    await waitFor(() => expect(e2ee.setIdentityTrust).toHaveBeenCalledWith('openpgp', contact.jid, 'ABCD1234', 'tofu'))
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.some((t) => t.type === 'error' && t.message === 'decision not allowed')).toBe(true),
     )
   })
 })
