@@ -154,6 +154,23 @@ function retargetLibraryWrite(instance: object, layoutOffset: number, delta: num
   if (typeof lib._clampedBy === 'function') lib._clampedAdjustment = lib._clampedBy(target)
 }
 
+// virtual-core's record of a compensation write the browser clamped: the position it meant, in
+// layout coordinates, and the element max (plus held offset) the write stopped at.
+type ClampedWrite = { target: number; maxAtWrite: number }
+
+/**
+ * The library's clamped-write record as it stands before the next compensation replaces it. A
+ * write past the element's max is clamped until the spacer grows, and virtual-core keeps the
+ * meant position to retry once it has. The next compensation overwrites that record with its own
+ * just before it writes, so it is taken here, before the library resizes the row. The record is
+ * private: a library that renames it leaves each compensation on the live position, as before.
+ */
+function clampedWrite(instance: object): ClampedWrite | null {
+  const pending = (instance as { _clampedAdjustment?: ClampedWrite | null })._clampedAdjustment
+  return pending && typeof pending.target === 'number' && typeof pending.maxAtWrite === 'number'
+    ? { target: pending.target, maxAtWrite: pending.maxAtWrite } : null
+}
+
 function settleWrite(record: WriteRecord, outcome: ScrollWriteOutcome): ScrollWriteOutcome {
   record.outcome ??= outcome
   return record.outcome
@@ -205,9 +222,11 @@ type CorrectionInternals = {
 type ItemKey = ReturnType<Virtualizer<HTMLElement, Element>['options']['getItemKey']>
 // What the next measurement write corrects, judged when it was decided: the row virtual-core is
 // about to resize, or an estimate refresh whose shift at the reader is already measured.
-type Correction =
+// `owed` is an earlier compensation the browser clamped and the library has not retried yet.
+type Correction = (
   | { kind: 'resize'; index: number; key: ItemKey; start: number; end: number; first: boolean }
   | { kind: 'estimates' }
+) & { owed: ClampedWrite | null }
 // One navigation write, from the call that decided it to the outcome its receipt reads. `command`
 // is set while the library holds it for a fling; `outcome` once it has been written or refused.
 interface WriteRecord {
@@ -462,18 +481,23 @@ export function useTanstackMessageVirtualizer({
       // the reader is wrong. So the adjustment is judged against the reader's live position and
       // added to it, and the library's write bookkeeping is pointed at what is actually written.
       // An estimate refresh measured its shift at that live position just before asking.
+      // An earlier compensation the browser clamped, at a position the reader has not left since,
+      // is still owed: this one adds to the position that one meant, or the clamped part is lost.
+      // The 1.5 px is the library's own test for whether a read-back is that clamp.
       const live = scroller?.scrollTop ?? offset
       const hold = (instance as unknown as { _holdOffset?: number })._holdOffset ?? 0
+      const owed = correction?.owed
+      const base = owed && Math.abs(live + hold - owed.maxAtWrite) < 1.5 ? owed.target : live + hold
       const sameRows = instance.scrollElement === scroller && itemKeyRef.current?.items === rows
       const anchorIndex = heldAnchorIndex()
       const above = correction?.kind === 'estimates' ? sameRows
         : correction?.kind === 'resize' && sameRows
           && instance.options.getItemKey(correction.index) === correction.key
           && (anchorIndex !== undefined ? correction.index < anchorIndex
-            : correction.first ? correction.start < live + hold : correction.end <= live + hold)
+            : correction.first ? correction.start < base : correction.end <= base)
       const delta = above ? options.adjustments ?? 0 : 0
-      retargetLibraryWrite(instance, live + hold, delta)
-      elementScroll(live, { ...options, adjustments: delta }, instance)
+      retargetLibraryWrite(instance, base, delta)
+      elementScroll(base - hold, { ...options, adjustments: delta }, instance)
       observer?.({ phase: 'after', source, behavior: options.behavior })
       if (instance.scrollElement) reportWritten(instance, instance.scrollElement.scrollTop)
     },
@@ -500,7 +524,11 @@ export function useTanstackMessageVirtualizer({
       const first = known.itemSizeCache ? !known.itemSizeCache.has(key) : true
       const start = cached?.start ?? Infinity
       correctionRef.current = index >= 0
-        ? { kind: 'resize', index, key, start, end: start + (known.itemSizeCache?.get(key) ?? cached?.size ?? 0), first } : null
+        ? {
+            kind: 'resize', index, key, start, end: start + (known.itemSizeCache?.get(key) ?? cached?.size ?? 0), first,
+            owed: clampedWrite(instance),
+          }
+        : null
       if (index >= 0 && size > 0) onMeasuredRef.current?.(String(key), size)
       if (size > 0 && element.querySelector('[data-msg-text]') && !samplePendingRef.current) {
         samplePendingRef.current = true
@@ -682,7 +710,7 @@ export function useTanstackMessageVirtualizer({
     const lib = virtualizer as unknown as CorrectionInternals
     if (delta === 0 || typeof lib.applyScrollAdjustment !== 'function') return false
     commitRoomFor(delta)
-    correctionRef.current = { kind: 'estimates' }
+    correctionRef.current = { kind: 'estimates', owed: clampedWrite(virtualizer) }
     try { return lib.applyScrollAdjustment(delta) }
     finally { correctionRef.current = null }
   }

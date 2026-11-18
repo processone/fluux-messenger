@@ -142,7 +142,9 @@ it('#1601: applies each successive measurement once on the reader position after
 
 // Intent: issue #1601 / FLM-70 direction B. The write keeps TanStack's approval honest against the
 // reader's live position, and a destination or row decided before the reader took over is void.
-function harness(opts: { count?: number; estimate?: number; clientHeight?: number; scrollHeight?: number } = {}) {
+function harness(opts: {
+  count?: number; estimate?: number | ((index: number) => number); clientHeight?: number; scrollHeight?: number
+} = {}) {
   const scroller = document.body.appendChild(document.createElement('div'))
   const dims = { clientHeight: opts.clientHeight ?? 600, scrollHeight: opts.scrollHeight ?? 5000 }
   Object.defineProperties(scroller, {
@@ -196,6 +198,47 @@ it.each([false, true])('#1601 R2: a rebased write that the spacer clamps is reco
   act(() => hook.result.current.refreshEstimates?.(true))
   act(() => { scroller.dispatchEvent(new Event('scroll')) })
   expect(scroller.scrollTop).toBe(1150)
+})
+
+// Intent: a scroll to the latest message made while entry is still measuring its rows ends at the
+// live edge. Real readings from a Chromium run of the demo's first direct conversation: the reader
+// scrolled to the bottom (scrollTop 678 of a 740 px viewport over 1418 px) just as the wider entry
+// window mounted six rows above. They measured in one batch, before the spacer grew, so every
+// correction after the first was clamped at the old bottom. Each one used to start again from that
+// clamped position, dropping what the previous one was owed and leaving the reader 82 px short.
+const entryRace = {
+  clientHeight: 740, scrollHeight: 1418,
+  estimates: [52, 44, 50, 50, 78, 50, 50],
+  measured: [[0, 48], [2, 72], [3, 72], [4, 98], [5, 72], [6, 72]],
+} as const
+
+it('keeps every clamped correction when rows above the reader grow before the spacer does', () => {
+  const { clientHeight, scrollHeight, estimates, measured } = entryRace
+  const estimate = (index: number) => estimates[index] ?? 50
+  const { scroller, dims, hook, measure } = harness({ count: 21, clientHeight, scrollHeight, estimate })
+  act(() => hook.result.current.scrollToOffset(scrollHeight - clientHeight))
+  for (const [index, height] of measured) measure(index, height)
+  expect(scroller.scrollTop, 'the corrections wait at the old bottom until the spacer grows').toBe(scrollHeight - clientHeight)
+  dims.scrollHeight = scrollHeight + measured.reduce((sum, [index, height]) => sum + height - estimate(index), 0)
+  act(() => hook.result.current.refreshEstimates?.(true))
+  act(() => { scroller.dispatchEvent(new Event('scroll')) })
+  expect(dims.scrollHeight - scroller.scrollTop - clientHeight, 'the reader is back at the live edge').toBe(0)
+})
+
+// Intent: #1601 still holds while a clamped correction is owed: a reader who moved away from the
+// clamped position keeps their place, and the next correction starts from where they are.
+it('starts the next correction from the reader, not the clamped target, once the reader has moved', () => {
+  const { clientHeight, scrollHeight, estimates } = entryRace
+  const estimate = (index: number) => estimates[index] ?? 50
+  const { scroller, hook, measure } = harness({ count: 21, clientHeight, scrollHeight, estimate })
+  act(() => hook.result.current.scrollToOffset(scrollHeight - clientHeight))
+  measure(2, 72)
+  const readerTop = scrollHeight - clientHeight - 100
+  act(() => hook.result.current.setScrollWriteObserver?.(write => {
+    if (write.phase === 'before' && write.source === 'measurement') scroller.scrollTop = readerTop
+  }))
+  measure(3, 72)
+  expect(scroller.scrollTop).toBe(readerTop + 72 - estimate(3))
 })
 
 it('#1601 R3: a destination cancelled while the observer looks is not written', () => {
