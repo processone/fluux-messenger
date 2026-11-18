@@ -117,7 +117,7 @@ messages and messages without a room archive id, just like Copy message link.
 A message read from an encrypted chat can be forwarded only into an encrypted
 chat: rooms are not offered for it, and a send, retry or edit that would go out
 unencrypted is refused before anything is sent. A retracted, undecryptable or
-failed message has no Forward.
+failed message has no Forward. A message that holds a structured copy, beside a comment or alone, forwards its displayed comment and the copied text under its claimed author as one readable quote, with no nested copy.
 
 **Structured copy (XEP-0297).** A forward to a one-to-one chat is one stanza for every
 reader: the same comment, quote and link as the quoted form above, plus a standalone

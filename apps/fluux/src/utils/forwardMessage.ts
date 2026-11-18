@@ -1,5 +1,5 @@
 import { forwardedCopyQuoteRange } from '@fluux/sdk'
-import type { BaseMessage, DataReference, MentionReference, MessageReference } from '@fluux/sdk'
+import type { BaseMessage, ForwardedCopy, DataReference, MentionReference, MessageReference } from '@fluux/sdk'
 
 /** The source text a forward quotes: who wrote it and what it said. */
 export interface ForwardQuote {
@@ -24,6 +24,17 @@ export function buildForwardedCopy(quote?: ForwardQuote): { from: string; text: 
     text: Array.from(text).slice(0, MAX_COPY_CHARACTERS).join(''),
     ...(quote.timestamp !== undefined && { timestamp: quote.timestamp }),
   }
+}
+
+/**
+ * The readable text of a message that holds a structured copy: its displayed comment, then the
+ * copied text under its claimed author, flattened into one text so a forward carries no nested copy.
+ */
+export function forwardableText(displayedBody: string, copy?: Pick<ForwardedCopy, 'author' | 'text'>): string {
+  const comment = displayedBody.trim()
+  const copied = copy?.text.trim()
+  if (!copied) return comment
+  return [comment, `${copy!.author || 'Unknown sender'} wrote:\n${copied}`].filter(Boolean).join('\n')
 }
 
 const MAX_QUOTE_CHARACTERS = 500

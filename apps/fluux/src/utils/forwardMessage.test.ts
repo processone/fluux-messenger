@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildForwardedCopy, composeForwardWithCopy, forwardedCopyFallbackRange, composeForward, forwardFallbackRange, withoutForwardFallback } from './forwardMessage'
+import { buildForwardedCopy, forwardableText, composeForwardWithCopy, forwardedCopyFallbackRange, composeForward, forwardFallbackRange, withoutForwardFallback } from './forwardMessage'
 
 const link = 'xmpp:design@conference.fluux.chat?join;msg=1731490000123456'
 
@@ -94,5 +94,11 @@ describe('forward composition with a copy', () => {
       fallback: { begin: 5, end: body.length } })
     expect(composeForwardWithCopy('', undefined, { ...direct, fromEncrypted: undefined })!.forwarded)
       .toEqual({ from: 'bob@example.org', text: 'Ship it', timestamp: 5, fallback: { begin: 0, end: '> Bob wrote:\n> Ship it'.length } })
+  })
+
+  it('flattens a comment and a copy into one readable text, alone or together', () => {
+    expect(forwardableText(' Look ', { author: 'Carol', text: 'Ship it' })).toBe('Look\nCarol wrote:\nShip it')
+    expect(forwardableText('', { author: 'Carol', text: 'Ship it' })).toBe('Carol wrote:\nShip it')
+    expect(forwardableText('Look')).toBe('Look')
   })
 })

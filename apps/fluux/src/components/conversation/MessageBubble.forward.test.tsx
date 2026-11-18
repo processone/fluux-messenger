@@ -124,6 +124,29 @@ describe('forward on a one-to-one message', () => {
     expect(modal.props?.quote?.fromEncrypted).toBe(true)
   })
 
+  // The captain's ruling: a message holding a copy forwards its comment and the copied text as one quote, with no nested copy.
+  describe('message holding a structured copy', () => {
+    const forwarded = { author: 'Carol', from: 'carol@example.org', text: 'Ship it\nTonight', timestamp: 1, fallback: { begin: 5, end: 5 + '> Carol wrote:\n> Ship it'.length, text: '> Carol wrote:\n> Ship it' } }
+    it('forwards the displayed comment and the attributed copied text, without the hidden quote', () => {
+      renderDirect({ body: 'Look\n> Carol wrote:\n> Ship it', forwarded })
+      fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+      expect(modal.props?.quote).toMatchObject({ author: 'Alice', text: 'Look\nCarol wrote:\nShip it\nTonight', from: 'alice@example.com' })
+      expect(modal.props?.quote).not.toHaveProperty('forwarded')
+    })
+
+    it('offers Forward on a copy-only message and forwards the attributed copied text', () => {
+      renderDirect({ body: '', forwarded: { author: 'Carol', text: 'Ship it' } })
+      fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+      expect(modal.props?.quote).toMatchObject({ author: 'Alice', text: 'Carol wrote:\nShip it' })
+    })
+
+    it('keeps the protection flag of an encrypted copy-only message', () => {
+      renderDirect({ body: '', forwarded: { author: 'Carol', text: 'Ship it' }, securityContext: { protocol: 'openpgp', trust: 'verified' } as BaseMessage['securityContext'] })
+      fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+      expect(modal.props?.quote?.fromEncrypted).toBe(true)
+    })
+  })
+
   it.each([
     ['retracted', { isRetracted: true }],
     ['undecryptable', { encryptedPayload: '<encrypted/>' }],
