@@ -21,6 +21,11 @@ export const changelog: ChangelogEntry[] = [
       items: [
         'Settings → Encryption now lists the OMEMO devices on your account, both OMEMO 2 and legacy, with each device\'s name and key fingerprint. You can remove a device after confirming; the other devices and their names stay as they are. Fluux does not use OMEMO itself yet, so this only reads and edits the list other apps keep on your server',
       ],
+    }, {
+      type: 'fixed',
+      items: [
+        'When Fluux could not refresh your bookmarks after reconnecting, changing a room\'s bookmark, autojoin or notification setting no longer brings back an older room password, notification setting or another XMPP app\'s settings',
+      ],
     }],
   },
   {
@@ -49,7 +54,6 @@ export const changelog: ChangelogEntry[] = [
         'iOS: room notifications show the room picture. The room name stays first, with the sender above the message',
         'Changing a room\'s autojoin or editing its bookmark no longer resets its saved "All messages" notification setting to Mentions only',
         'Editing a room\'s bookmark or changing its autojoin or notification setting no longer deletes the settings another XMPP app saved in the same bookmark',
-        'When Fluux could not refresh your bookmarks after reconnecting, changing a room\'s bookmark, autojoin or notification setting no longer brings back an older room password, notification setting or another XMPP app\'s settings',
         'Scrolling up in conversations and rooms no longer jumps or skips messages when Fluux corrects its size estimate for older messages, for example after a long run of your own short replies',
         'Scrolling back through a very long conversation or room no longer gets stuck or returns to the newest messages once you go past the latest 5,000 messages, so you can read back to the start',
         'In long conversations and rooms, the messages you are reading no longer jump away when older messages finish loading while your pointer rests on a message or you keep scrolling',
