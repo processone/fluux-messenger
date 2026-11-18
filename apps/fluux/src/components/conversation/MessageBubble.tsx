@@ -17,7 +17,7 @@ import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
 import { useForwardMessage } from './forwardMessageContext'
 import { RoomMessageLinkPreview } from './RoomMessageLinkPreview'
-import { forwardFallbackRange, forwardedCopyFallbackRange, withoutForwardFallback } from '@/utils/forwardMessage'
+import { forwardFallbackRange, forwardableText, forwardedCopyFallbackRange, withoutForwardFallback } from '@/utils/forwardMessage'
 import { MessageBody } from './MessageBody'
 import { renderQuotePreview } from '@/utils/messageStyles'
 import { deriveCopyBody } from '@/utils/copyMessageBody'
@@ -582,14 +582,23 @@ export const MessageBubble = memo(function MessageBubble({
   const messageLink = roomMessageLinkFor(message, supportsMAM)
   const onCopyMessageLink = messageLink ? () => { void copyToClipboard(messageLink) } : undefined
   // A source that cannot be read, such as an undecryptable one, is forwarded as a link only.
-  const quotable = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
-  const onForward = messageLink && forwardMessage ? () => forwardMessage({
-    link: messageLink,
+  const readable = !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
+  // A message holding a copy forwards its displayed comment and the copied text as one readable quote.
+  const forwardText = readable ? (copyShown ? forwardableText(shown.body, message.forwarded) : message.body) : ''
+  const quotable = !!forwardText.trim()
+  // A room message forwards with its link; a one-to-one message has none, so it forwards its readable
+  // content. A message read from an encrypted chat is marked so it can only go into an encrypted chat.
+  const directForward = message.type === 'chat' && quotable && !message.deliveryError
+  const onForward = forwardMessage && (messageLink || directForward) ? () => forwardMessage({
+    ...(messageLink && { link: messageLink }),
     ...(quotable && { quote: {
       author: senderName,
-      text: message.body,
+      text: forwardText,
       ...(message.type === 'groupchat' && { from: message.from }),
+      ...(directForward && { from: getBareJid(message.from) }),
+      type: message.type,
       timestamp: message.timestamp.getTime(),
+      ...(directForward && message.securityContext && { fromEncrypted: true }),
     } }),
   }) : undefined
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
@@ -598,7 +607,7 @@ export const MessageBubble = memo(function MessageBubble({
   useEffect(() => {
     if (!hasViewableReactions) setReactorEmoji(null)
   }, [hasViewableReactions])
-  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody || !!saveableAttachment || hasViewableReactions || !!messageLink)
+  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody || !!saveableAttachment || hasViewableReactions || !!messageLink || !!onForward)
 
   // Long-press (touch) → open the action menu; scrolling (touchmove) or lifting
   // before the threshold cancels it. longPressFired suppresses the click that a

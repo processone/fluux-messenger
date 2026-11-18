@@ -193,8 +193,9 @@ function forwardFallbackElement(fullBody: string, shift: number, range: { begin:
 }
 
 /** XEP-0297: the standalone forwarded copy of one message, as a child of the outgoing message. */
-function forwardedCopyElement(copy: { from: string; text: string; timestamp?: number }): Element {
-  const inner = xml('message', { xmlns: 'jabber:client', from: copy.from, type: 'groupchat' }, xml('body', {}, copy.text))
+function forwardedCopyElement(copy: { from: string; text: string; timestamp?: number; type?: 'chat' | 'groupchat' }): Element {
+  // The type is the source message's own, never guessed from the address.
+  const inner = xml('message', { xmlns: 'jabber:client', from: copy.from, type: copy.type ?? 'groupchat' }, xml('body', {}, copy.text))
   return xml('forwarded', { xmlns: NS_FORWARD },
     ...(copy.timestamp !== undefined && Number.isFinite(copy.timestamp)
       ? [xml('delay', { xmlns: NS_DELAY, stamp: new Date(copy.timestamp).toISOString() })] : []),
@@ -202,8 +203,10 @@ function forwardedCopyElement(copy: { from: string; text: string; timestamp?: nu
 }
 
 /** The stored form of a copy: the author is a room nickname or a bare address, never a routing address. */
-function forwardedCopyFor(copy: { from: string; text: string; timestamp?: number }): ForwardedCopy | undefined {
-  return parseForwardedCopy(xml('message', {}, forwardedCopyElement(copy)))
+function forwardedCopyFor(copy: { from: string; text: string; timestamp?: number; fromEncrypted?: boolean; type?: 'chat' | 'groupchat' }): ForwardedCopy | undefined {
+  const parsed = parseForwardedCopy(xml('message', {}, forwardedCopyElement(copy)))
+  // The requirement is kept on the stored copy so a retry or an edit enforces it too.
+  return parsed && copy.fromEncrypted ? { ...parsed, fromEncrypted: true } : parsed
 }
 
 export class Chat extends BaseModule {
@@ -1089,6 +1092,12 @@ export class Chat extends BaseModule {
       })
     }
 
+    // Guard: a forward whose source came from an encrypted chat carries that plaintext in its
+    // body and copy; it never leaves unencrypted, whatever made the encryption step skip.
+    if (options?.forwarded?.fromEncrypted && !outgoingSecurityContext) {
+      throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+    }
+
     // Guard: an encrypted attachment's aesgcm:// OOB URL carries the AES
     // key. If stanza-level E2EE didn't move that element into the payload,
     // the key reaches the server in cleartext — abort rather than leak.
@@ -1183,7 +1192,7 @@ export class Chat extends BaseModule {
 
     // A retry keeps the structured copy inside the same protection as the first send.
     if (storedForwarded) {
-      children.push(forwardedCopyElement({ from: storedForwarded.from ?? storedForwarded.author, text: storedForwarded.text, timestamp: storedForwarded.timestamp }))
+      children.push(forwardedCopyElement({ from: storedForwarded.from ?? storedForwarded.author, text: storedForwarded.text, timestamp: storedForwarded.timestamp, type: storedForwarded.type }))
       if (storedForwarded.fallback && body.slice(storedForwarded.fallback.begin, storedForwarded.fallback.end) === storedForwarded.fallback.text) {
         children.push(forwardFallbackElement(fullBody, 0, storedForwarded.fallback, NS_FORWARD))
       }
@@ -1226,6 +1235,10 @@ export class Chat extends BaseModule {
       children,
       Chat.E2EE_PROTECTED_CHILD_KEYS,
     )
+    // A forward read from an encrypted chat is never retried unencrypted, even if encryption was turned off since.
+    if (storedForwarded?.fromEncrypted && !resendSecurityContext) {
+      throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+    }
     if (attachment?.encryption && !resendSecurityContext) {
       throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }
@@ -1431,6 +1444,10 @@ export class Chat extends BaseModule {
     const original = type === 'groupchat'
       ? this.deps.stores?.room.getMessage(to, originalMessageId)
       : this.deps.stores?.chat.getMessage(to, target)
+    // An edit opened on a row that has since left the resident window still carries the row it
+    // was opened on; read the forward's requirement from it when the store has no row.
+    const editedRow = original ?? (type === 'chat' && typeof target !== 'string'
+      ? target as Partial<Pick<Message, 'forwarded' | 'securityContext'>> : undefined)
     const referenceId = isWhisper
       ? whisper.referenceId
       : senderReference({ originId: original?.originId, id: originalMessageId })
@@ -1518,6 +1535,11 @@ export class Chat extends BaseModule {
           Chat.E2EE_PROTECTED_CHILD_KEYS,
         )
       : undefined
+    // The comment of an encrypted-source forward sits beside its quote: an edit stays encrypted too.
+    // A copy restored from a carbon or archive has lost the flag but was decrypted: it counts as protected too.
+    if (type === 'chat' && editedRow?.forwarded && (editedRow.forwarded.fromEncrypted || editedRow.securityContext) && !correctionSecurityContext) {
+      throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+    }
     if (attachment?.encryption && !correctionSecurityContext) {
       throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }

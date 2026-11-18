@@ -1,8 +1,9 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { BaseMessage } from '@fluux/sdk'
 import { MessageBubble, type MessageBubbleProps } from './MessageBubble'
 import { composeForward } from '@/utils/forwardMessage'
+import { ForwardMessageProvider } from './forwardMessageContext'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
@@ -20,6 +21,14 @@ vi.mock('./RoomMessageLinkPreview', () => ({
     return <div data-testid="source-preview" />
   },
 }))
+
+// The picker itself is covered by ForwardMessageModal.test; here it only reports what the row asked to forward.
+const modal = vi.hoisted(() => ({ props: undefined as undefined | { link?: string; quote?: Record<string, unknown> } }))
+vi.mock('../ForwardMessageModal', () => ({
+  ForwardMessageModal: (props: { link?: string; quote?: Record<string, unknown> }) => { modal.props = props; return null },
+}))
+
+vi.mock('./EncryptedPlaceholder', () => ({ EncryptedPlaceholder: () => <div /> }))
 
 const link = 'xmpp:design@conference.fluux.chat?join;msg=1731490000123456'
 const forward = composeForward('Please review', link, { author: 'Bob', text: 'Ship it' })
@@ -91,5 +100,60 @@ describe('standalone forwarded copy', () => {
     const { container } = render(<MessageBubble {...bubble({ forwarded, references: undefined, isRetracted: true })} />)
     expect(container.querySelector('[data-forwarded-copy]')).toBeNull()
     expect(screen.queryByText(/Ship it/)).toBeNull()
+  })
+})
+
+// FLM-153 piece 3: Forward is offered on a one-to-one message with readable content, not on unreadable ones.
+describe('forward on a one-to-one message', () => {
+  const renderDirect = (message: Partial<BaseMessage>) => {
+    modal.props = undefined
+    return render(<ForwardMessageProvider conversationId="alice@example.com">
+      <MessageBubble {...bubble({ body: 'Ship it', references: undefined, ...message })} /></ForwardMessageProvider>)
+  }
+
+  it('offers Forward and passes the content, the bare author address and no link', () => {
+    renderDirect({ from: 'alice@example.com/phone' })
+    fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+    expect(modal.props?.link).toBeUndefined()
+    expect(modal.props?.quote).toEqual({ author: 'Alice', text: 'Ship it', from: 'alice@example.com', type: 'chat', timestamp: Date.parse('2026-05-01T10:00:00Z') })
+  })
+
+  it('marks a message from an encrypted chat so it can only go into an encrypted chat', () => {
+    renderDirect({ securityContext: { protocolId: 'openpgp', trust: 'verified' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+    expect(modal.props?.quote?.fromEncrypted).toBe(true)
+  })
+
+  // The captain's ruling: a message holding a copy forwards its comment and the copied text as one quote, with no nested copy.
+  describe('message holding a structured copy', () => {
+    const forwarded = { author: 'Carol', from: 'carol@example.org', text: 'Ship it\nTonight', timestamp: 1, fallback: { begin: 5, end: 5 + '> Carol wrote:\n> Ship it'.length, text: '> Carol wrote:\n> Ship it' } }
+    it('forwards the displayed comment and the attributed copied text, without the hidden quote', () => {
+      renderDirect({ body: 'Look\n> Carol wrote:\n> Ship it', forwarded })
+      fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+      expect(modal.props?.quote).toMatchObject({ author: 'Alice', text: 'Look\nCarol wrote:\nShip it\nTonight', from: 'alice@example.com' })
+      expect(modal.props?.quote).not.toHaveProperty('forwarded')
+    })
+
+    it('offers Forward on a copy-only message and forwards the attributed copied text', () => {
+      renderDirect({ body: '', forwarded: { author: 'Carol', text: 'Ship it' } })
+      fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+      expect(modal.props?.quote).toMatchObject({ author: 'Alice', text: 'Carol wrote:\nShip it' })
+    })
+
+    it('keeps the protection flag of an encrypted copy-only message', () => {
+      renderDirect({ body: '', forwarded: { author: 'Carol', text: 'Ship it' }, securityContext: { protocolId: 'openpgp', trust: 'verified' } })
+      fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+      expect(modal.props?.quote?.fromEncrypted).toBe(true)
+    })
+  })
+
+  it.each([
+    ['retracted', { isRetracted: true }],
+    ['undecryptable', { encryptedPayload: '<encrypted/>' }],
+    ['failed to send', { deliveryError: 'x' }],
+    ['without text', { body: '' }],
+  ])('offers no Forward on a %s message', (_name, message) => {
+    renderDirect(message as Partial<BaseMessage>)
+    expect(screen.queryAllByRole('button', { name: 'chat.forwardMessageLink' })).toHaveLength(0)
   })
 })

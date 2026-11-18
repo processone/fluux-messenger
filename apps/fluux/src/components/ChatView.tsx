@@ -47,6 +47,7 @@ import { EasterEggMentions } from './conversation/EasterEggMentions'
 import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
 import { donateIOSConversation } from '@/platform/ios/shareSuggestions'
 import { trackSend } from '@/utils/pendingSends'
+import { encryptionSendErrorKey } from '@/e2ee/encryptionSendError'
 
 interface ChatViewProps {
   onBack?: () => void
@@ -1087,7 +1088,13 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
         onReply={() => onReply(message)}
         onEdit={() => onEdit(message)}
         onDelete={async () => setShowDeleteConfirm(true)}
-        onRetry={message.deliveryError ? () => { void retryMessage(conversationId, message.id) } : undefined}
+        onRetry={message.deliveryError ? () => {
+          retryMessage(conversationId, message.id).catch((err: unknown) => {
+            const key = encryptionSendErrorKey(err)
+            if (key) useToastStore.getState().addToast('error', t(key))
+            else console.error('Failed to resend message:', err)
+          })
+        } : undefined}
         onMediaLoad={onMediaLoad}
         replyContext={replyContext}
         onReactionPickerChange={(isOpen) => rowId && onReactionPickerChange?.(rowId, isOpen)}

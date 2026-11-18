@@ -10,6 +10,8 @@ const fixture = vi.hoisted(() => ({
 }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('@fluux/sdk', async () => ({
+  E2EEEncryptionRequiredError: (await vi.importActual<typeof import('@fluux/sdk')>('@fluux/sdk')).E2EEEncryptionRequiredError,
+  isE2EEPluginError: () => false,
   // The shared picker filters with the SDK's own name/address matcher.
   matchNameOrJid: (await vi.importActual<typeof import('@fluux/sdk')>('@fluux/sdk')).matchNameOrJid,
   useRoster: () => ({ contacts: [{ jid: 'emma@fluux.chat', name: 'Emma' }, { jid: 'james@fluux.chat', name: 'James' }] }),
@@ -133,6 +135,55 @@ describe('ForwardMessageModal', () => {
       await waitFor(() => expect(fixture.chatSend).toHaveBeenCalledOnce())
       expect(fixture.chatSend.mock.calls[0][1]).toContain('> Bob wrote:')
       expect(fixture.chatSend.mock.calls[0][2]).not.toHaveProperty('forwarded')
+    })
+  })
+
+  // FLM-153 piece 3: a one-to-one message has no link; its content is forwarded, protected if it was.
+  describe('one-to-one source', () => {
+    const direct = { author: 'Bob', text: 'Ship it', from: 'bob@example.org', timestamp: 1731490000000 }
+    const pickAndSend = (query: string) => {
+      fireEvent.change(picker(), { target: { value: query } })
+      fireEvent.keyDown(picker(), { key: 'Enter' })
+      send()
+    }
+
+    it('sends the quote and a copy with no link, the quote marked as the copy fallback', async () => {
+      render(<ForwardMessageModal quote={direct} onClose={vi.fn()} />)
+      expect(screen.getByText('chat.forwardQuoteOnly')).toBeInTheDocument()
+      pickAndSend('em')
+      await waitFor(() => expect(fixture.chatSend).toHaveBeenCalledOnce())
+      const quote = '> Bob wrote:\n> Ship it'
+      expect(fixture.chatSend).toHaveBeenCalledWith('emma@fluux.chat', quote, {
+        references: [], forwarded: { from: 'bob@example.org', text: 'Ship it', timestamp: 1731490000000, fallback: { begin: 0, end: quote.length } },
+      })
+    })
+
+    it('sends only the quote to a room', async () => {
+      render(<ForwardMessageModal quote={direct} onClose={vi.fn()} />)
+      pickAndSend('design')
+      await waitFor(() => expect(fixture.roomSend).toHaveBeenCalledOnce())
+      expect(fixture.roomSend.mock.calls[0][1]).toBe('> Bob wrote:\n> Ship it')
+    })
+
+    it('marks an encrypted source, offers no room and keeps the chat copy marked for protection', async () => {
+      render(<ForwardMessageModal quote={{ ...direct, fromEncrypted: true }} onClose={vi.fn()} />)
+      expect(screen.getByText('chat.forwardEncryptedOnly')).toBeInTheDocument()
+      fireEvent.focus(picker())
+      expect(Array.from(suggestions(), row => row.textContent).join()).not.toContain('Design')
+      pickAndSend('em')
+      await waitFor(() => expect(fixture.chatSend).toHaveBeenCalledOnce())
+      expect(fixture.chatSend.mock.calls[0][2].forwarded).toMatchObject({ fromEncrypted: true })
+      expect(fixture.roomSend).not.toHaveBeenCalled()
+    })
+
+    it('shows the encryption refusal and keeps the dialog when the destination cannot be encrypted', async () => {
+      const { E2EEEncryptionRequiredError } = await vi.importActual<typeof import('@fluux/sdk')>('@fluux/sdk')
+      fixture.chatSend.mockRejectedValue(new E2EEEncryptionRequiredError({ kind: 'direct', peer: 'emma@fluux.chat' }))
+      const onClose = vi.fn()
+      render(<ForwardMessageModal quote={{ ...direct, fromEncrypted: true }} onClose={onClose} />)
+      pickAndSend('em')
+      expect(await screen.findByRole('alert')).toHaveTextContent('chat.encryption.sendBlockedEncryptionRequired')
+      expect(onClose).not.toHaveBeenCalled()
     })
   })
 
