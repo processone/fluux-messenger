@@ -203,7 +203,7 @@ export function ArchiveList() {
 }
 
 // ============================================================================
-// ConversationItem (memoized, stateless)
+// ConversationItem (memoized; keeps only its file-drag highlight)
 // ============================================================================
 
 interface ConversationItemProps {

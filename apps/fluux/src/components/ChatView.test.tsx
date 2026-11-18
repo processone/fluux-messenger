@@ -43,6 +43,7 @@ const createContact = (overrides: Partial<Contact> = {}): Contact => ({
 
 // Mock state
 let mockActiveConversation: Conversation | null = null
+let mockScope: string | null = null
 let mockActiveMessages: Message[] = []
 let mockTypingUsers: string[] = []
 let mockContacts: Contact[] = []
@@ -87,7 +88,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   // Viewport-evidence generation plumbing. A fixed
   // scope + generation is enough for these render tests — none of them
   // exercise the SDK's real activation path, so the generation never moves.
-  getStorageScopeJid: () => null,
+  getStorageScopeJid: () => mockScope,
   currentViewportGeneration: () => 1,
   reportViewport: vi.fn(),
   useChat: () => ({
@@ -891,6 +892,19 @@ describe('ChatView', () => {
         expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
         expect(mockUploadFile).not.toHaveBeenCalled()
         expect(mockSendMessage).not.toHaveBeenCalled()
+      })
+
+      it('discards a file dropped under another account', () => {
+        render(<ChatView />)
+        mockScope = 'first@example.com'
+        useConversationFileDropStore.getState().offer('alice@example.com', createPrivateFile())
+        mockScope = 'second@example.com'
+
+        act(() => useConversationFileDropStore.setState({ pending: { ...useConversationFileDropStore.getState().pending! } }))
+
+        expect(screen.queryByTestId('pending-attachment')).not.toBeInTheDocument()
+        expect(useConversationFileDropStore.getState().pending).toBeNull()
+        mockScope = null
       })
 
       it('leaves a file offered to another conversation alone', () => {

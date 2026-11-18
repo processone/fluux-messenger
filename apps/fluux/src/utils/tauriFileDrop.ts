@@ -36,12 +36,13 @@ function notifyFileDrop(paths: string[]) {
 }
 
 /**
- * The conversation row under a native drop. The event's position is in
- * physical pixels; the page is laid out in CSS pixels.
+ * The conversation row under a native drop. The page is laid out in CSS
+ * pixels. macOS and Linux report the position in those logical units already;
+ * only Windows reports physical pixels, which the display scale converts.
  */
 export function conversationAtPosition(position: { x: number; y: number } | undefined): string | undefined {
   if (!position || typeof document === 'undefined') return undefined
-  const scale = window.devicePixelRatio || 1
+  const scale = platform().os === 'windows' ? window.devicePixelRatio || 1 : 1
   const row = document.elementFromPoint(position.x / scale, position.y / scale)?.closest(CONVERSATION_ROW)
   return row?.getAttribute('data-conv-id') ?? undefined
 }

@@ -277,7 +277,8 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   useEffect(() => {
     if (!droppedOnConversation || droppedOnConversation.conversationId !== activeConversation?.id) return
     useConversationFileDropStore.getState().take(droppedOnConversation)
-    if (!isSupported) return
+    // A file dropped under another account is discarded, never staged for this one
+    if (!isSupported || droppedOnConversation.account !== getStorageScopeJid()) return
     // The same staging as a drop on the chat: previews only, uploads on Send
     stageAttachment(droppedOnConversation.file)
     setTimeout(() => composerHandleRef.current?.focus(), 0)

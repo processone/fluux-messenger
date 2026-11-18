@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { getStorageScopeJid } from '@fluux/sdk'
 
 /**
  * A file dropped on a sidebar conversation, waiting to be staged in that
@@ -12,7 +13,14 @@ import { create } from 'zustand'
 export interface DroppedFile {
   conversationId: string
   file: File
+  /** The account that was signed in when the file was dropped; another account never receives it. */
+  account: string | null
 }
+
+/** A drop whose conversation has not opened by then (its activation was superseded) is forgotten. */
+export const DROPPED_FILE_TTL_MS = 10_000
+
+let expiry: ReturnType<typeof setTimeout> | undefined
 
 interface ConversationFileDropState {
   pending: DroppedFile | null
@@ -23,7 +31,12 @@ interface ConversationFileDropState {
 
 export const useConversationFileDropStore = create<ConversationFileDropState>((set, get) => ({
   pending: null,
-  offer: (conversationId, file) => set({ pending: { conversationId, file } }),
+  offer: (conversationId, file) => {
+    const pending = { conversationId, file, account: getStorageScopeJid() }
+    clearTimeout(expiry)
+    expiry = setTimeout(() => get().take(pending), DROPPED_FILE_TTL_MS)
+    set({ pending })
+  },
   take: (offer) => {
     if (get().pending === offer) set({ pending: null })
   },
