@@ -8,7 +8,7 @@ import { waitForActions } from './harness/messageInteraction'
 // boundary in the real app, because the demo transport drops it. The demo OpenPGP plugin stands in
 // for real encryption: it proves what is handed to encrypt and what stays outside it.
 type Scope = Window & {
-  __demoClient: DemoClient & { e2ee: { getPlugin(id: string): { encrypt(h: unknown, p: Uint8Array): Promise<unknown>; probePeer(p: string): Promise<unknown>; getPeerFingerprint(p: string): string | null } } }
+  __demoClient: Omit<DemoClient, 'e2ee'> & { e2ee: { getPlugin(id: string): { encrypt(h: unknown, p: Uint8Array): Promise<unknown>; probePeer(p: string): Promise<unknown>; getPeerFingerprint(p: string): string | null } } }
   __sent: string[]
   __encrypted: string[]
 }
