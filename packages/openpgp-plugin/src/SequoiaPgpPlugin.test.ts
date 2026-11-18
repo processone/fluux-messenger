@@ -5153,6 +5153,84 @@ describe('SequoiaPgpPlugin', () => {
       expect(hostStores.verifiedPeers.isVerified('bob@example.com', 'BOB_FP')).toBe(true)
     })
 
+    // A local verification's publish is still on the network when another
+    // device's newer list (version 7) is applied. The publish resolving later
+    // must not lower the stored version to its own (1): that would let the
+    // server replay any older signed list between the two.
+    it('keeps rejecting older lists after a publish that resolves once a newer list was applied', async () => {
+      // Own stores: plugins earlier tests left running are subscribed to the
+      // shared ones, and each would reserve a version on our local change.
+      const stores = createMockHostStores()
+      const device = new SequoiaPgpPlugin({ stores, ...desktopHost(), invoke: fake.invoke })
+      vi.useFakeTimers()
+      try {
+        let verificationsCb: ((item: PEPItem) => void) | null = null
+        let currentItem: PEPItem | null = null
+        const { ctx } = makeContext('me@example.com')
+        ctx.xmpp.subscribePEP = (_jid, node, cb) => {
+          if (node === VERIFICATIONS_NODE) verificationsCb = cb
+          return { unsubscribe: () => {} }
+        }
+        ctx.xmpp.queryPEP = async (_jid, node) =>
+          node === VERIFICATIONS_NODE && currentItem ? [currentItem] : []
+        let releasePublish!: () => void
+        const publishGate = new Promise<void>((resolve) => { releasePublish = resolve })
+        const publish = ctx.xmpp.publishPEP
+        let publishes = 0
+        ctx.xmpp.publishPEP = async (node, item, options) => {
+          if (node === VERIFICATIONS_NODE) {
+            publishes++
+            await publishGate
+          }
+          return publish(node, item, options)
+        }
+        const fp = 'FP_LATE_PUBLISH_TEST'
+        fake.accounts.set('me@example.com', {
+          fingerprint: fp,
+          publicArmored: makeOpenPgpArmor(
+            'PGP PUBLIC KEY BLOCK',
+            `Fingerprint: ${fp}\nUID: xmpp:me@example.com\nKind: public\nRotation: 0\n`,
+          ),
+          keychainBacked: true,
+        })
+        await device.init(ctx)
+        // Let init's own server read settle first: a write during it is a remote apply.
+        await vi.advanceTimersByTimeAsync(0)
+        const { loadAppliedVerificationsVersion } = await import('./index')
+        const applyServerList = async (item: PEPItem) => {
+          currentItem = item
+          verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
+          await vi.advanceTimersByTimeAsync(0)
+        }
+
+        stores.verifiedPeers.set('carol@example.com', 'CAROL_FP')
+        await vi.advanceTimersByTimeAsync(500)
+        expect(publishes).toBe(1)
+
+        // Another device's list, version 7, arrives while the publish waits.
+        await applyServerList(buildVerificationsPepItem(fp, { 'dave@example.com': 'DAVE_FP' }, 7))
+        expect(stores.verifiedPeers.isVerified('dave@example.com', 'DAVE_FP')).toBe(true)
+        expect(loadAppliedVerificationsVersion()).toBe(7)
+
+        releasePublish()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(loadAppliedVerificationsVersion()).toBe(7)
+
+        // The server replays an older signed list that still trusts erin.
+        await applyServerList(buildVerificationsPepItem(
+          fp,
+          { 'dave@example.com': 'DAVE_FP', 'erin@example.com': 'ERIN_FP' },
+          3,
+        ))
+        expect(stores.verifiedPeers.isVerified('erin@example.com', 'ERIN_FP')).toBe(false)
+        expect(stores.verifiedPeers.isVerified('dave@example.com', 'DAVE_FP')).toBe(true)
+        expect(loadAppliedVerificationsVersion()).toBe(7)
+      } finally {
+        vi.useRealTimers()
+        await device.shutdown()
+      }
+    })
+
     it('clears a locally-verified peer that a newer remote snapshot drops', async () => {
       let verificationsCb: ((item: PEPItem) => void) | null = null
       let currentItem: PEPItem | null = null

@@ -136,8 +136,9 @@ function b64Decode(encoded: string): string {
 
 /**
  * Highest snapshot version this device has applied (from a remote fetch) or
- * published. `-1` means "nothing applied yet", so a legacy v1 node (which
- * decodes to version `0`) is still picked up exactly once on first sync.
+ * reserved for its own publish. `-1` means "nothing applied yet", so a legacy
+ * v1 node (which decodes to version `0`) is still picked up exactly once on
+ * first sync.
  */
 export function loadAppliedVerificationsVersion(): number {
   try {

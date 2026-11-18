@@ -1663,6 +1663,15 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // Reserve the next version above the highest we've applied/published.
       // Real versions start at 1; 0 is reserved for legacy (v1) snapshots.
       const nextVersion = Math.max(loadAppliedVerificationsVersion(), 0) + 1
+      // Save the reservation before publishing, never after. A newer list from
+      // another device can be applied while this publish is in flight; saving
+      // when the publish resolves would lower the stored version back to this
+      // one, and the server could then replay the older signed lists in
+      // between. A version a failed publish leaves unused is a harmless gap.
+      // The trust-state seal records this version: the store change that
+      // scheduled this publish also scheduled a seal, with the same delay and
+      // after it, so that seal runs after this save.
+      saveAppliedVerificationsVersion(nextVersion)
       void publishVerificationsToServer(
         ctx,
         (plaintext, recipientKey) =>
@@ -1672,7 +1681,6 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         nextVersion,
       )
         .then(() => {
-          saveAppliedVerificationsVersion(nextVersion)
           this.scheduleTrustStateSeal()
         })
         .catch(() => {})
