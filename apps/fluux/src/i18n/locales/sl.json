@@ -275,6 +275,7 @@
         "nicknamePlaceholder": "Vaše prikazno ime v sobi",
         "pleaseEnterNickname": "Prosimo, vnesite vzdevek",
         "failedToSaveBookmark": "Shranjevanje zaznamka ni uspelo",
+        "failedToRemoveBookmark": "Odstranjevanje zaznamka ni uspelo",
         "autoJoinLabel": "Samodejna pridružitev",
         "autoJoinDescription": "Samodejno se pridruži tej sobi ob povezavi",
         "joinRoomTitle": "Pridruži se sobi",

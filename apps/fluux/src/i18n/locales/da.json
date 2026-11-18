@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Dit visningsnavn i rummet",
         "pleaseEnterNickname": "Indtast venligst et kaldenavn",
         "failedToSaveBookmark": "Kunne ikke gemme bogmærke",
+        "failedToRemoveBookmark": "Kunne ikke fjerne bogmærke",
         "autoJoinLabel": "Auto-deltag",
         "autoJoinDescription": "Deltag automatisk i dette rum ved forbindelse",
         "joinRoomTitle": "Deltag i rum",

@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "您在房间中的显示名称",
         "pleaseEnterNickname": "请输入昵称",
         "failedToSaveBookmark": "无法保存书签",
+        "failedToRemoveBookmark": "无法移除书签",
         "autoJoinLabel": "自动加入",
         "autoJoinDescription": "连接时自动加入此房间",
         "joinRoomTitle": "加入房间",

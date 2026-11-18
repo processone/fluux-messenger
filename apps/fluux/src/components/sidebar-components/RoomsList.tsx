@@ -166,14 +166,24 @@ export function RoomsList() {
         void L.leaveRoom(roomJid)
       },
       onEditBookmark: (roomJid) => latestRef.current.setEditingRoomJid(roomJid),
-      onRemoveBookmark: (roomJid) => { void latestRef.current.removeBookmark(roomJid) },
+      // The menu closes on click, so a failed bookmark write is reported in a toast;
+      // the room keeps showing its unchanged bookmark state.
+      onRemoveBookmark: (roomJid) => {
+        latestRef.current.removeBookmark(roomJid).catch(() => {
+          const L = latestRef.current
+          L.addToast('error', L.t('rooms.failedToRemoveBookmark'))
+        })
+      },
       onToggleAutojoin: (roomJid) => {
         const room = roomStore.getState().getRoom(roomJid)
         if (!room) return
-        void latestRef.current.setBookmark(roomJid, {
+        latestRef.current.setBookmark(roomJid, {
           name: room.name,
           nick: room.nickname,
           autojoin: !room.autojoin,
+        }).catch(() => {
+          const L = latestRef.current
+          L.addToast('error', L.t('rooms.failedToSaveBookmark'))
         })
       },
     }

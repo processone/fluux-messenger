@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "שם התצוגה שלך בחדר",
         "pleaseEnterNickname": "נא להזין כינוי",
         "failedToSaveBookmark": "שמירת הסימנייה נכשלה",
+        "failedToRemoveBookmark": "הסרת הסימנייה נכשלה",
         "autoJoinLabel": "הצטרפות אוטומטית",
         "autoJoinDescription": "הצטרף אוטומטית לחדר זה בעת התחברות",
         "joinRoomTitle": "הצטרפות לחדר",

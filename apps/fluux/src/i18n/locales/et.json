@@ -275,6 +275,7 @@
         "nicknamePlaceholder": "Sinu kuvatav nimi toas",
         "pleaseEnterNickname": "Palun sisesta hüüdnimi",
         "failedToSaveBookmark": "Järjehoidja salvestamine ebaõnnestus",
+        "failedToRemoveBookmark": "Järjehoidja eemaldamine ebaõnnestus",
         "autoJoinLabel": "Automaatne liitumine",
         "autoJoinDescription": "Liitu selle toaga automaatselt ühendumisel",
         "joinRoomTitle": "Liitu toaga",

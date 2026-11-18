@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Je weergavenaam in de groep",
         "pleaseEnterNickname": "Voer een bijnaam in",
         "failedToSaveBookmark": "Bladwijzer opslaan mislukt",
+        "failedToRemoveBookmark": "Bladwijzer verwijderen mislukt",
         "autoJoinLabel": "Auto-deelnemen",
         "autoJoinDescription": "Automatisch deze groep joinen bij verbinden",
         "joinRoomTitle": "Groep joinen",

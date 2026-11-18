@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Ваше отображаемое имя в конференции",
         "pleaseEnterNickname": "Пожалуйста, введите псевдоним",
         "failedToSaveBookmark": "Не удалось сохранить закладку",
+        "failedToRemoveBookmark": "Не удалось удалить закладку",
         "autoJoinLabel": "Автовход",
         "autoJoinDescription": "Автоматически входить в эту конференцию при подключении",
         "joinRoomTitle": "Войти в конференцию",

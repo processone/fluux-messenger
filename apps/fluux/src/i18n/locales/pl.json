@@ -275,6 +275,7 @@
         "nicknamePlaceholder": "Twoja nazwa wyświetlana w pokoju",
         "pleaseEnterNickname": "Proszę wpisać pseudonim",
         "failedToSaveBookmark": "Nie udało się zapisać zakładki",
+        "failedToRemoveBookmark": "Nie udało się usunąć zakładki",
         "autoJoinLabel": "Automatyczne dołączanie",
         "autoJoinDescription": "Automatycznie dołącz do tego pokoju po połączeniu",
         "joinRoomTitle": "Dołącz do pokoju",

@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Вашето показвано име в стаята",
         "pleaseEnterNickname": "Моля, въведете псевдоним",
         "failedToSaveBookmark": "Неуспешно запазване на отметка",
+        "failedToRemoveBookmark": "Неуспешно премахване на отметка",
         "autoJoinLabel": "Автоматично присъединяване",
         "autoJoinDescription": "Автоматично присъединяване към тази стая при свързване",
         "joinRoomTitle": "Присъедини се към стая",

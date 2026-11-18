@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Your display name in the room",
         "pleaseEnterNickname": "Please enter a nickname",
         "failedToSaveBookmark": "Failed to save bookmark",
+        "failedToRemoveBookmark": "Failed to remove bookmark",
         "autoJoinLabel": "Auto-join",
         "autoJoinDescription": "Automatically join this room on connect",
         "joinRoomTitle": "Join Room",

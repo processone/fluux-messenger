@@ -274,6 +274,7 @@
         "nicknamePlaceholder": "Votre nom d'affichage dans le salon",
         "pleaseEnterNickname": "Veuillez entrer un surnom",
         "failedToSaveBookmark": "Échec de l'enregistrement du favori",
+        "failedToRemoveBookmark": "Échec de la suppression du favori",
         "autoJoinLabel": "Rejoindre automatiquement",
         "autoJoinDescription": "Rejoindre automatiquement ce salon à la connexion",
         "joinRoomTitle": "Rejoindre un salon",

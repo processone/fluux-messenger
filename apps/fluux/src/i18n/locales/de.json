@@ -275,6 +275,7 @@
         "nicknamePlaceholder": "Ihr Anzeigename im Raum",
         "pleaseEnterNickname": "Bitte einen Spitznamen eingeben",
         "failedToSaveBookmark": "Lesezeichen konnte nicht gespeichert werden",
+        "failedToRemoveBookmark": "Lesezeichen konnte nicht entfernt werden",
         "autoJoinLabel": "Automatisch beitreten",
         "autoJoinDescription": "Diesem Raum automatisch beim Verbinden beitreten",
         "joinRoomTitle": "Raum beitreten",

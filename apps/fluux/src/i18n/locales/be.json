@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Ваша адлюстраванае імя ў пакоі",
         "pleaseEnterNickname": "Калі ласка, увядзіце мянушку",
         "failedToSaveBookmark": "Не атрымалася захаваць закладку",
+        "failedToRemoveBookmark": "Не атрымалася выдаліць закладку",
         "autoJoinLabel": "Аўтадалучэнне",
         "autoJoinDescription": "Аўтаматычна далучацца да гэтага пакоя пры падключэнні",
         "joinRoomTitle": "Далучыцца да пакоя",

@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Ваше відображуване ім'я в кімнаті",
         "pleaseEnterNickname": "Будь ласка, введіть псевдонім",
         "failedToSaveBookmark": "Не вдалося зберегти закладку",
+        "failedToRemoveBookmark": "Не вдалося видалити закладку",
         "autoJoinLabel": "Автоприєднання",
         "autoJoinDescription": "Автоматично приєднуватися до цієї кімнати при підключенні",
         "joinRoomTitle": "Приєднатися до кімнати",

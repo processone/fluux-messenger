@@ -275,6 +275,7 @@
         "nicknamePlaceholder": "Numele tău afișat în cameră",
         "pleaseEnterNickname": "Te rugăm să introduci un pseudonim",
         "failedToSaveBookmark": "Salvarea semnului de carte a eșuat",
+        "failedToRemoveBookmark": "Eliminarea semnului de carte a eșuat",
         "autoJoinLabel": "Intrare automată",
         "autoJoinDescription": "Intră automat în această cameră la conectare",
         "joinRoomTitle": "Intră într-o cameră",

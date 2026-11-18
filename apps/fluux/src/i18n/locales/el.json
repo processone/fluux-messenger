@@ -274,6 +274,7 @@
         "nicknamePlaceholder": "Το εμφανιζόμενο όνομά σας στο δωμάτιο",
         "pleaseEnterNickname": "Παρακαλώ εισάγετε ψευδώνυμο",
         "failedToSaveBookmark": "Αποτυχία αποθήκευσης σελιδοδείκτη",
+        "failedToRemoveBookmark": "Αποτυχία αφαίρεσης σελιδοδείκτη",
         "autoJoinLabel": "Αυτόματη είσοδος",
         "autoJoinDescription": "Αυτόματη είσοδος σε αυτό το δωμάτιο κατά τη σύνδεση",
         "joinRoomTitle": "Είσοδος σε δωμάτιο",

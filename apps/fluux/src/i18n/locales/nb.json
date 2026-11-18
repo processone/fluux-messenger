@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Ditt visningsnavn i rommet",
         "pleaseEnterNickname": "Vennligst skriv inn et kallenavn",
         "failedToSaveBookmark": "Kunne ikke lagre bokmerke",
+        "failedToRemoveBookmark": "Kunne ikke fjerne bokmerke",
         "autoJoinLabel": "Auto-bli med",
         "autoJoinDescription": "Bli automatisk med i dette rommet ved tilkobling",
         "joinRoomTitle": "Bli med i rom",
