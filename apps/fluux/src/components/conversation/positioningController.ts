@@ -123,6 +123,11 @@ export type UnreadMarkerFrameLoop = PositionFrameLoop
 export type UnreadMarkerFrameResult =
   | { kind: 'waiting' }
   | { kind: 'unavailable' }
+  /**
+   * The frame wrote, and a released iOS fling holds that write until the fling ends: the list is
+   * still where the fling carries it, so nothing landed.
+   */
+  | { kind: 'held' }
   | {
       kind: 'positioned'
       scrollTop: number
@@ -353,6 +358,8 @@ interface UnreadMarkerExecutionState {
   landedContentHeight: number | null
   resolved: boolean
   resolvedAtLiveEdge: boolean
+  /** Held frames that may still give their frame back to {@link framesLeft}. */
+  heldFramesLeft: number
 }
 
 interface ExplicitTargetExecutionState {
@@ -597,6 +604,12 @@ const UNREAD_MARKER_REASSERT_FRAMES = 120
 const UNREAD_MARKER_STABLE_FRAMES = 8
 const UNREAD_MARKER_DRIFT_PX = 16
 const UNREAD_MARKER_TAKEOVER_DRIFT_PX = 300
+/**
+ * How long the unread loop waits for a released fling to let its held write land without spending
+ * its reassert frames: about ten seconds at 60 Hz, well past a fling's momentum. Past it, held
+ * frames spend the reassert budget again, so the loop still ends.
+ */
+const UNREAD_MARKER_HELD_FRAMES = 600
 // Preserved from the former hook-local pinVirtualizedBottom loop.
 const LIVE_EDGE_REASSERT_FRAMES = 60
 const LIVE_EDGE_STABLE_FRAMES = 8
@@ -2060,6 +2073,7 @@ export class PositioningController {
       landedContentHeight: null,
       resolved: false,
       resolvedAtLiveEdge: false,
+      heldFramesLeft: UNREAD_MARKER_HELD_FRAMES,
     }
     this.unreadExecution = execution
 
@@ -3336,7 +3350,13 @@ export class PositioningController {
     )
     if (!lease.isCurrent()) return
 
-    if (result.kind === 'waiting') {
+    // A held frame's list is where the released fling carries it, not where the frame wrote: no
+    // landing, so the frame waits like one whose divider is not ready. Near its end a fling moves
+    // less than the settling drift on each frame, and counting those frames would settle the visit
+    // there before its write lands. The fling, not the loop, decides when the write lands, so the
+    // wait gives its frames back to the reassert budget.
+    if (result.kind === 'waiting' || result.kind === 'held') {
+      if (result.kind === 'held' && execution.heldFramesLeft-- > 0) execution.framesLeft++
       this.recordUnreadMarkerFrame(execution, false)
       if (scheduleNextFrame) this.scheduleUnreadMarkerFrame(execution, lease)
       return

@@ -681,6 +681,30 @@ describe('return-to-latest, End and message jumps through a released fling while
     },
   )
 
+  // As it slows down, the fling moves the list less than the visit's settling drift on each frame.
+  // The visit read those frames as its own landings and settled on the fling's position while its
+  // write was still held; the fling's next scroll events were then the reader's, and the write was
+  // refused when the fling ended. Positions read in a WebKit replay with a classic scrollbar, which
+  // holds the write until the fling ends: the visit's frames, then the fling's next scroll events.
+  const replayedVisitFrames = [1605, 1582, 1560, 1539, 1519, 1500, 1482, 1465, 1449, 1434, 1419, 1405, 1392, 1379, 1367, 1356]
+  const replayedFlingAfterVisit = [1345, 1335, 1325, 1316, 1307, 1299, 1291, 1283]
+  it.each(visits(['frame', 'measurement', 'native'] as const))(
+    '$navigation stops at the unread divider after the old fling slows down before it ends (sample: $observation)',
+    test => {
+      const from = flingPath(test.navigation).from
+      const replayed = (top: number) => from - 30 - (replayedVisitFrames[0] - top)
+      const scope = dividerReaderAt(from)
+      scope.holdWritesDuringFling()
+      navigate(scope, test.navigation)
+      for (const top of replayedVisitFrames) flingMoves(scope, replayed(top), test.observation)
+      for (const top of replayedFlingAfterVisit) flingMoves(scope, replayed(top), 'native')
+      const dropped = [...scope.droppedHeldWrites]
+      scope.releaseFling()
+      settle()
+      expect({ dropped, top: scope.scroller.scrollTop }).toEqual({ dropped: [], top: dividerLanding })
+    },
+  )
+
   it.each(each(['measurement', 'native'] as const))(
     'keeps a new wheel input as the reader\'s while $navigation visits the unread divider (sample: $observation)',
     test => {

@@ -265,7 +265,7 @@ it('N6: a held jump replaced by a jump awaiting history never lands', () => {
   const lease = leases.at(-1)!
   let frame!: ReturnType<typeof marker.positionFrame>
   act(() => { frame = marker.positionFrame(request!, lease) })
-  expect(frame.kind).toBe('positioned')
+  expect(frame.kind, 'the fling holds the marker write').toBe('held')
   expect(scroller.scrollTop).toBe(20)
 
   const waitingForHistory: ExplicitTargetExecutor = {

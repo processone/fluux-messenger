@@ -685,8 +685,11 @@ recalibrations stop notifying after a fixed
 count per content width, line box and font. The controller's 300px drift guard applies only when
 content height is unchanged since the previous landing; a content-height correction must allow
 another marker write. The final landing's live-edge geometry determines fallback, not an earlier
-transient clamp. Regression coverage is in `tanstackMessageVirtualizer.ownership.test.tsx`,
-`positioningController.test.ts`, `useMessageListScroll.markerEntry.test.tsx`,
+transient clamp. A frame whose write a released iOS fling still holds is no landing: the list is
+where the fling carries it, so the loop neither settles there nor spends its frames waiting for the
+write to land, up to a bound well past a fling's momentum. Regression coverage is in
+`tanstackMessageVirtualizer.ownership.test.tsx`, `positioningController.test.ts`,
+`messageTargetResize.test.tsx`, `useMessageListScroll.markerEntry.test.tsx`,
 `useRowMetrics.test.tsx` and `MessageList.calibration.test.tsx` under
 `apps/fluux/src/components/conversation/`; `e2e/scroll-reading.ts` covers the first-open
 trajectory and a switch between conversations with reply rows in a browser.
