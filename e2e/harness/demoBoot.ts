@@ -1,9 +1,10 @@
 /**
  * Shared demo boot for the Playwright suites.
  *
- * Each browser-invariant harness needs the same three things before it can measure
- * anything: the demo loaded, React mounted, and the stress seeding finished.
- * Keeping that here gives the readiness contract with demo.tsx a single owner.
+ * Each browser-invariant harness needs the same four things before it can measure
+ * anything: the demo loaded, React mounted, the shell's mount effects run, and the stress
+ * seeding finished. Keeping that here gives the readiness contract with demo.tsx a single
+ * owner.
  *
  * The boot is instrumented because it has an open, intermittent failure: the first webkit
  * test times out waiting for the app shell in a large fraction of CI runs, and `retries: 2`
@@ -53,6 +54,15 @@ const MOUNT_STAGES = [
     name: 'app shell visible',
     detail: 'React rendered something, but the nav never appeared — an app-level stall, not a boot one',
     probe: () => document.querySelector('[data-nav="messages"]') !== null,
+  },
+  {
+    // The shell paints before its mount effects run, and one of them replaces the route
+    // with the view saved in session storage. A navigation made between the two is undone,
+    // which after a reload sent the backup-recovery journeys to the restored view instead
+    // of Settings. demo.tsx sets the marker once those effects have run (ShellSettledProbe).
+    name: 'app shell effects ran',
+    detail: "the nav painted, but the shell's mount effects never finished — a blocked main thread, or demo.tsx no longer mounts ShellSettledProbe",
+    probe: () => (window as Window & { __fluuxShellSettled?: boolean }).__fluuxShellSettled === true,
   },
 ] as const
 
@@ -150,6 +160,9 @@ export async function bootDemo(page: Page, url: string): Promise<void> {
  * A reload starts the whole app over, so it gets the same staged budget as the first boot
  * rather than an assertion's 5s default: on a loaded runner an empty #root several seconds
  * after the reload is a slow boot, not a regression (FLM-304's keychain retry journey).
+ *
+ * Use this rather than a bare page.reload() before navigating: the reloaded shell restores
+ * the view saved before the reload, and only the 'app shell effects ran' stage waits for it.
  */
 export async function reloadDemo(page: Page): Promise<void> {
   await watchForWebKitTermination(page)

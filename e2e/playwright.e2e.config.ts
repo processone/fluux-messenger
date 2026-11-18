@@ -77,6 +77,7 @@ const SUITES = [
   { name: 'hinge-layout', testMatch: 'hinge-layout.ts' },
   { name: 'harness-activate-chat', testMatch: 'harness-activate-chat.ts' },
   { name: 'harness-navigate-room', testMatch: 'harness-navigate-room.ts' },
+  { name: 'harness-boot-readiness', testMatch: 'harness-boot-readiness.ts' },
 ] as const
 
 /**
