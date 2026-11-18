@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
 
@@ -10,23 +10,24 @@ import { test, expect, type Browser, type BrowserContext, type Page } from '@pla
 //   FLUUX_LIVE_APP=http://127.0.0.1:5391 FLUUX_LIVE_ACCOUNTS=/path/accounts.json FLUUX_LIVE_EVIDENCE=/path/dir \
 //     npx playwright test --config e2e/playwright.live.config.ts
 // accounts.json: { "ws": "ws://127.0.0.1:45280/ws", "users": { "alice": { "jid": "...", "password": "..." }, ... },
-//                  "unregisterCarol": "<shell command that deletes carol's account>" }
+//                  "labCtl": "<path of the lab control script, ending in /lab/ej.sh>" }
 const accountsFile = process.env.FLUUX_LIVE_ACCOUNTS
 test.skip(!accountsFile, 'FLUUX_LIVE_ACCOUNTS is not set')
 const config = accountsFile ? JSON.parse(readFileSync(accountsFile, 'utf8')) as {
-  ws: string; users: Record<string, { jid: string; password: string }>; unregisterCarol: string; unregisterBob: string
+  ws: string; users: Record<string, { jid: string; password: string }>; labCtl: string
 } : null
-// The fixture deletes accounts: refuse anything but a disposable loopback server and its throwaway accounts.
+// The fixture deletes accounts: refuse anything but a disposable loopback server, the exact throwaway
+// addresses and the lab's own control script (run with fixed arguments, never through a shell).
+const loopback = ['127.0.0.1', 'localhost', '[::1]']
 if (config) {
-  const host = new URL(config.ws).hostname
-  if (!['127.0.0.1', 'localhost', '::1'].includes(host)) throw new Error(`live proof refuses a non-loopback server: ${host}`)
-  for (const [name, user] of Object.entries(config.users)) {
-    if (!/^(alice|bob|carol|dave|erin)$/.test(name) || !user.jid.endsWith('@localhost')) throw new Error(`live proof refuses account ${name}`)
-  }
-  for (const command of [config.unregisterCarol, config.unregisterBob]) {
-    if (!/^\S+\/lab\/ej\.sh unregister (carol|bob) localhost$/.test(command)) throw new Error('live proof refuses an unregister command that is not a lab one')
-  }
+  if (!loopback.includes(new URL(config.ws).hostname)) throw new Error('live proof refuses a non-loopback server')
+  if (!process.env.FLUUX_LIVE_APP || !loopback.includes(new URL(process.env.FLUUX_LIVE_APP).hostname)) throw new Error('live proof refuses a non-loopback app')
+  const names = ['alice', 'bob', 'carol', 'dave', 'erin']
+  if (Object.keys(config.users).sort().join() !== [...names].sort().join()) throw new Error('live proof refuses an unexpected account set')
+  for (const name of names) if (config.users[name].jid !== `${name}@localhost`) throw new Error(`live proof refuses account address for ${name}`)
+  if (!/\/lab\/ej\.sh$/.test(config.labCtl)) throw new Error('live proof refuses a control script that is not the lab one')
 }
+function unregister(name: 'bob' | 'carol') { execFileSync(config!.labCtl, ['unregister', name, 'localhost']) }
 const PASSPHRASE = 'correct horse battery staple'
 const evidence = process.env.FLUUX_LIVE_EVIDENCE
 
@@ -174,6 +175,32 @@ test('one-to-one forwarding against a real server with real OpenPGP', async ({ b
     await shot(dave.page, 'flatten-recipient')
   })
 
+  await test.step('copy-only: forwarding a message that holds only a copy sends it as one readable quote', async () => {
+    await openChat(alice, 'dave')
+    const dialog = await openForward(alice, 'Ship it on Friday')
+    await pick(alice, dialog, 'erin', /erin/)
+    await dialog.getByRole('button', { name: 'Send', exact: true }).click()
+    await expect(dialog).toBeHidden()
+    await openChat(erin, 'alice')
+    const copyOnly = erin.page.locator('[data-message-body]').filter({ hasText: 'Forwarded message from' }).last()
+    await expect(copyOnly).toContainText('Ship it on Friday')
+    await expect(copyOnly).not.toContainText('See this')
+    const before = messagesSent(erin).length
+    const forward = await openForward(erin, 'Ship it on Friday')
+    await pick(erin, forward, 'dave', /dave/)
+    await forward.getByRole('button', { name: 'Send', exact: true }).click()
+    await expect(forward).toBeHidden()
+    const sent = sentSince(erin, before)
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toContain('Ship it on Friday')
+    expect(sent[0]).toContain('to="dave@localhost')
+    expect(sent[0].match(/<forwarded /g)).toHaveLength(1)
+    await openChat(dave, 'erin')
+    const received = dave.page.locator('[data-message-body]').filter({ hasText: 'Forwarded message from' }).last()
+    await expect(received).toContainText('Ship it on Friday')
+    await shot(dave.page, 'copy-only-recipient')
+  })
+
   await joinTeamRoom(alice)
   await joinTeamRoom(carol)
 
@@ -297,25 +324,27 @@ test('one-to-one forwarding against a real server with real OpenPGP', async ({ b
     await shot(alice.page, 'downgrade-retry-refused')
     await row.hover()
     const edit = row.getByRole('button', { name: 'Edit message', exact: true })
-    // Whether a failed row offers Edit at all is recorded, not assumed.
-    const offered = await edit.count()
-    console.log(`failed protected forward row offers Edit: ${offered > 0}`)
-    if (offered > 0) {
-      await edit.click()
-      const editor = alice.page.getByRole('combobox', { name: /^Message / })
-      await editor.press('ControlOrMeta+End')
-      await editor.pressSequentially(' plain')
-      await editor.press('Enter')
-      await alice.page.waitForTimeout(1000)
-      await shot(alice.page, 'downgrade-edit-refused')
-    }
+    await expect(edit).toBeVisible()
+    const refusals = alice.page.getByText(/Message not sent\. Encryption/)
+    const afterRetry = await refusals.count()
+    const beforeEdit = alice.frames.length
+    await edit.click()
+    const editor = alice.page.getByRole('combobox', { name: /^Message / })
+    await editor.press('ControlOrMeta+End')
+    await editor.pressSequentially(' plain')
+    await editor.press('Enter')
+    await expect.poll(() => refusals.count()).toBeGreaterThan(afterRetry)
+    await alice.page.waitForTimeout(800)
+    await shot(alice.page, 'downgrade-edit-refused')
+    expect(alice.frames.slice(beforeEdit).filter(frame => frame.startsWith('<message') && frame.includes('<body'))).toHaveLength(0)
+    await editor.press('Escape')
     expect(alice.frames.slice(start).filter(frame => frame.startsWith('<message') && frame.includes('<body'))).toHaveLength(0)
     await alice.page.getByRole('button', { name: 'Encryption disabled' }).click()
     await alice.page.getByRole('button', { name: 'Re-enable encryption' }).click()
   })
 
   await test.step('after carol leaves and alice reloads, Retry and Edit of protected forwards are refused', async () => {
-    execSync(config!.unregisterCarol)
+    unregister('carol')
     await alice.page.reload()
     // The session passphrase was lost with the page: unlock the key again.
     await alice.page.getByRole('button', { name: 'Unlock', exact: true }).first().waitFor()
@@ -380,6 +409,21 @@ test('one-to-one forwarding against a real server with real OpenPGP', async ({ b
     await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'push four' })).toBeVisible()
     await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'For bob' })).toHaveCount(0)
     await shot(alice.page, 'row-evicted')
+    // Switch encryption off for the chat while the edit of the evicted row is still open: refused, nothing sent.
+    await alice.page.locator('main button[aria-expanded][aria-label]').first().click()
+    await alice.page.getByRole('button', { name: 'Disable encryption for this conversation' }).click()
+    await expect(alice.page.getByRole('button', { name: 'Encryption disabled' })).toBeVisible()
+    const refusals = alice.page.getByText(/Message not sent\. Encryption/)
+    const known = await refusals.count()
+    const downgraded = alice.frames.length
+    await editor.press('Enter')
+    await expect.poll(() => refusals.count()).toBeGreaterThan(known)
+    await alice.page.waitForTimeout(800)
+    await shot(alice.page, 'edit-evicted-downgrade-refused')
+    expect(alice.frames.slice(downgraded).filter(frame => frame.startsWith('<message') && frame.includes('<body'))).toHaveLength(0)
+    // Back on, the same edit goes out protected.
+    await alice.page.getByRole('button', { name: 'Encryption disabled' }).click()
+    await alice.page.getByRole('button', { name: 'Re-enable encryption' }).click()
     const before = alice.frames.length
     await editor.press('Enter')
     await alice.page.waitForTimeout(1500)
