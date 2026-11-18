@@ -19,7 +19,10 @@
  *
  * Values the oldest versions stored before scoping them per account go to the
  * first account that migrates them, as those versions' loaders moved them,
- * once its claim on them is saved ({@link claimUnscopedLegacyTrust}).
+ * once its claim on them is saved ({@link claimUnscopedLegacyTrust}). Windows
+ * claim them one at a time. When the claim cannot be saved, the migration
+ * waits for the next start; when another account holds it, an account moves
+ * only its own values.
  *
  * The old seal is checked against the old data as earlier versions checked
  * it, once the account's key is usable (it may still be locked during the
@@ -57,6 +60,9 @@ const LEGACY_KEYS = {
  * values stay in place for an older version.
  */
 const LEGACY_UNSCOPED_OWNER_KEY = 'fluux-e2ee-legacy-unscoped-owner'
+
+/** The lock windows of this app take in turn to claim the unscoped values. */
+export const LEGACY_UNSCOPED_CLAIM_LOCK = 'fluux-e2ee-legacy-unscoped-claim'
 
 /** A key-change alert as earlier versions stored it. */
 export interface LegacyKeyChangeAlert {
@@ -227,21 +233,39 @@ export function readLegacyTrustState(accountJid: string, includeUnscoped = true)
 }
 
 /**
+ * Who holds the unscoped values: this account (`owned`), another one
+ * (`other-owner`), or no one, because this account's claim could not be
+ * saved (`unavailable`).
+ */
+export type UnscopedLegacyClaim = 'owned' | 'other-owner' | 'unavailable'
+
+/**
  * Claim the unscoped values for `accountJid`, the first account whose
  * migration read them; no other account reads them after that. Run before
  * the migration writes anything, so a migration that stops half way still
- * finds them on its next run. True only when the claim is saved for this
- * account: false when it could not be saved, or another account, perhaps in
- * another window, claimed them since they were read.
+ * finds them on its next run. Windows of this app claim them one at a time,
+ * under a lock they share, so two accounts cannot both find no owner and
+ * each save their own claim. Where the browser has no such lock, the claim
+ * runs at once.
  */
-export function claimUnscopedLegacyTrust(accountJid: string): boolean {
-  try {
-    if (localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY) === null) {
-      localStorage.setItem(LEGACY_UNSCOPED_OWNER_KEY, accountJid)
+export async function claimUnscopedLegacyTrust(accountJid: string): Promise<UnscopedLegacyClaim> {
+  const claim = (): UnscopedLegacyClaim => {
+    try {
+      const owner = localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY)
+      if (owner === null) localStorage.setItem(LEGACY_UNSCOPED_OWNER_KEY, accountJid)
+      const saved = owner ?? localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY)
+      if (saved === null) return 'unavailable'
+      return saved === accountJid ? 'owned' : 'other-owner'
+    } catch {
+      return 'unavailable'
     }
-    return localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY) === accountJid
+  }
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
+  if (!locks) return claim()
+  try {
+    return await locks.request(LEGACY_UNSCOPED_CLAIM_LOCK, claim)
   } catch {
-    return false
+    return 'unavailable'
   }
 }
 

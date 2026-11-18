@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { E2EEPluginError } from '@fluux/sdk'
 import { TrustRecordStore } from './trustRecords'
 import {
+  LEGACY_UNSCOPED_CLAIM_LOCK,
   claimUnscopedLegacyTrust,
   legacyRecordsMismatch,
   legacySealCheckFor,
@@ -75,11 +76,11 @@ describe('readLegacyTrustState', () => {
     expect(readLegacyTrustState(ME)).toMatchObject({ verified: { [BOB]: BOB_FP }, syncVersion: 2, usesUnscoped: true })
   })
 
-  it('gives the unscoped values to the first account that claims them, and keeps them in place', () => {
+  it('gives the unscoped values to the first account that claims them, and keeps them in place', async () => {
     const OTHER = 'other@example.com'
     saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP }, 'fluux-e2ee-verifications-version': '2' }, null)
-    claimUnscopedLegacyTrust(ME)
-    claimUnscopedLegacyTrust(OTHER)
+    await claimUnscopedLegacyTrust(ME)
+    await claimUnscopedLegacyTrust(OTHER)
 
     expect(readLegacyTrustState(OTHER)).toMatchObject({ verified: {}, syncVersion: -1, usesUnscoped: false })
     // A migration of ME that stopped half way still finds them.
@@ -87,13 +88,13 @@ describe('readLegacyTrustState', () => {
     expect(localStorage.getItem('fluux-e2ee-verified-peers')).toBe(JSON.stringify({ [BOB]: BOB_FP }))
   })
 
-  // The claim stands only once it is saved for this account: a failed save,
-  // or another account claiming them in another window since they were read,
-  // leaves them to the account that holds the claim.
+  // The claim stands only once it is saved for this account. A failed save
+  // leaves no owner, so the migration can try again; another account that
+  // claimed them since they were read keeps them.
   it.each([
-    ['cannot be saved', (_key: string, _value: string, _save: (k: string, v: string) => void) => { throw new Error('quota exceeded') }],
-    ['is taken by another account since they were read', (key: string, _value: string, save: (k: string, v: string) => void) => save(key, 'other@example.com')],
-  ])('confirms no claim that %s, and then reads only the account\'s own values', (_case, ownerWrite) => {
+    ['cannot be saved', 'unavailable', null, (_key: string, _value: string, _save: (k: string, v: string) => void) => { throw new Error('quota exceeded') }],
+    ['is taken by another account since they were read', 'other-owner', 'other@example.com', (key: string, _value: string, save: (k: string, v: string) => void) => save(key, 'other@example.com')],
+  ] as const)('confirms no claim that %s: %s', async (_case, expected, owner, ownerWrite) => {
     saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP }, 'fluux-e2ee-verifications-version': '2' }, null)
     expect(readLegacyTrustState(ME).usesUnscoped).toBe(true)
     const setItem = localStorage.setItem
@@ -101,18 +102,67 @@ describe('readLegacyTrustState', () => {
     localStorage.setItem = (key: string, value: string) =>
       key === 'fluux-e2ee-legacy-unscoped-owner' ? ownerWrite(key, value, save) : save(key, value)
     try {
-      expect(claimUnscopedLegacyTrust(ME)).toBe(false)
+      expect(await claimUnscopedLegacyTrust(ME)).toBe(expected)
     } finally {
       localStorage.setItem = setItem
     }
-    expect(readLegacyTrustState(ME, false)).toMatchObject({ verified: {}, syncVersion: -1, usesUnscoped: false })
+    expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBe(owner)
   })
 
-  it('confirms the claim of the first account', () => {
+  it('confirms the claim of the first account', async () => {
     saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP } }, null)
-    expect(claimUnscopedLegacyTrust(ME)).toBe(true)
-    expect(claimUnscopedLegacyTrust(ME)).toBe(true)
-    expect(claimUnscopedLegacyTrust('other@example.com')).toBe(false)
+    expect(await claimUnscopedLegacyTrust(ME)).toBe('owned')
+    expect(await claimUnscopedLegacyTrust(ME)).toBe('owned')
+    expect(await claimUnscopedLegacyTrust('other@example.com')).toBe('other-owner')
+  })
+
+  describe('claiming across windows', () => {
+    /** Web Locks as a browser shares them between windows of one origin: one holder per name, the others wait in turn. */
+    function sharedLocks() {
+      const queues = new Map<string, Promise<unknown>>()
+      return {
+        request<T>(name: string, callback: (lock: { name: string; mode: 'exclusive' }) => T | Promise<T>): Promise<T> {
+          const run = (queues.get(name) ?? Promise.resolve()).then(() => callback({ name, mode: 'exclusive' }))
+          queues.set(name, run.catch(() => {}))
+          return run
+        },
+      }
+    }
+    const useLocks = (locks: unknown) => Object.defineProperty(navigator, 'locks', { value: locks, configurable: true })
+    afterEach(() => {
+      delete (navigator as { locks?: unknown }).locks
+    })
+
+    it('waits while another window claims the unscoped values, then leaves them to that account', async () => {
+      saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP } }, null)
+      const locks = sharedLocks()
+      useLocks(locks)
+      // Another window, signed in to another account, found no owner and is saving its claim.
+      let otherWindowSaves!: () => void
+      const otherWindow = locks.request(LEGACY_UNSCOPED_CLAIM_LOCK, () => new Promise<void>((resolve) => {
+        otherWindowSaves = () => {
+          localStorage.setItem('fluux-e2ee-legacy-unscoped-owner', 'other@example.com')
+          resolve()
+        }
+      }))
+
+      const claim = claimUnscopedLegacyTrust(ME)
+      await new Promise((r) => setTimeout(r, 0))
+      expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBeNull()
+      otherWindowSaves()
+      await otherWindow
+
+      expect(await claim).toBe('other-owner')
+      expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBe('other@example.com')
+    })
+
+    it('reports a claim it could not take the lock for as not saved', async () => {
+      saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP } }, null)
+      useLocks({ request: () => Promise.reject(new DOMException('The operation is insecure.', 'SecurityError')) })
+
+      expect(await claimUnscopedLegacyTrust(ME)).toBe('unavailable')
+      expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBeNull()
+    })
   })
 
   it('does not read another account\'s values', () => {

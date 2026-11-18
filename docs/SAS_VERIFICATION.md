@@ -95,11 +95,16 @@ How a key with no decision stands depends on the contact (`keyStanding`):
   waits for you to verify, trust or refuse it. The conversation explains why and
   offers a way to review the keys.
 
-A held key stays held until you decide about it. When the contact loses its
-last verified key (you refuse it, remove its verification or forget it, or
-another device removes it), each key still waiting is recorded as `held`,
-including a key the contact withdrew but may announce again, and a later
-verification of another key does not approve it.
+A held key stays held until you decide about it. Each key waiting for a
+decision is recorded as `held` when the plugin reads the contact's keys,
+including a key the contact withdraws but may announce again, so its hold does
+not depend on the cache of the contact's keys. Until the trust-state check
+accepts the stored records, the cache keeps the hold, and the acceptance
+records it: a decision saved before then would be reported at the next start
+as a change made behind the plugin's back. When the contact then loses its last verified
+key (you refuse it, remove its verification or forget it, or another device
+removes it), the key stays held, and a later verification of another key does
+not approve it.
 
 While some keys are held, messages go to the keys that are used. When no key of
 the contact can be used, because every key is held or refused, nothing is sent:
@@ -123,8 +128,11 @@ decisions to plugin storage:
 The earlier records are read without being changed, so an older version still
 finds them, and are never written again. Records the oldest versions kept before
 scoping them per account go to the first account that reads them, as those
-versions moved them, once that account's claim on them is saved; without a
-saved claim, the account moves only its own records.
+versions moved them, once that account's claim on them is saved. Windows of
+the app claim them one at a time. When another account holds the claim, an
+account moves only its own records. When the claim cannot be saved, nothing is
+moved or sealed: the session uses the earlier records as read, still checks
+their seal, and the upgrade runs again at the next start.
 
 Earlier versions sealed their records too. That seal is checked against the
 earlier records as those versions checked it, once the account's key is usable.
