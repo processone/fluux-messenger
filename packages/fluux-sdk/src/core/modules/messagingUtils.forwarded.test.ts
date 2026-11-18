@@ -14,6 +14,13 @@ describe('parseForwardedCopy', () => {
       author: 'Bob', from: 'room@conference.example.org/Bob', text: 'Ship it', timestamp: Date.UTC(2026, 10, 17, 9, 30) })
   })
 
+  it('attributes a direct copy to its bare sender address, a room copy to the nickname', () => {
+    const direct = (type: string) => xml('message', { type: 'chat' }, xml('body', {}, 'hi'),
+      xml('forwarded', { xmlns: NSF }, xml('message', { xmlns: 'jabber:client', type, from: 'bob@example.org/phone' }, xml('body', {}, 'x'))))
+    expect(parseForwardedCopy(direct('chat'))).toMatchObject({ author: 'bob@example.org', type: 'chat' })
+    expect(parseForwardedCopy(direct('groupchat'))).toMatchObject({ author: 'phone', type: 'groupchat' })
+  })
+
   it('ignores a nested forward, receipts and other extensions of the inner message', () => {
     const el = copy(xml('body', {}, 'outer'), xml('forwarded', { xmlns: NSF }, xml('message', {}, xml('body', {}, 'nested'))),
       xml('request', { xmlns: 'urn:xmpp:receipts' }))

@@ -423,12 +423,14 @@ export function parseForwardedCopy(messageEl: Element): ForwardedCopy | undefine
   if (!inner || !text.trim()) return undefined
   const from = typeof inner.attrs.from === 'string' ? inner.attrs.from : ''
   const slash = from.indexOf('/')
-  // A room occupant is named by its nickname; anything else by its bare address.
-  const author = boundedPlainText(slash >= 0 && slash < from.length - 1 ? from.slice(slash + 1) : from, MAX_FORWARDED_AUTHOR_CODE_POINTS).trim()
+  const innerType = inner.attrs.type === 'chat' || inner.attrs.type === 'groupchat' ? inner.attrs.type : undefined
+  // A room occupant is named by its nickname; a direct sender (type chat) by its bare address.
+  const isOccupant = innerType !== 'chat' && slash >= 0 && slash < from.length - 1
+  const bare = slash >= 0 ? from.slice(0, slash) : from
+  const author = boundedPlainText(isOccupant ? from.slice(slash + 1) : bare, MAX_FORWARDED_AUTHOR_CODE_POINTS).trim()
   const stamp = forwarded?.getChild('delay', NS_DELAY)?.attrs.stamp
   const time = typeof stamp === 'string' ? new Date(stamp).getTime() : NaN
   const address = boundedPlainText(from, MAX_FORWARDED_ADDRESS_CODE_POINTS)
-  const innerType = inner.attrs.type === 'chat' || inner.attrs.type === 'groupchat' ? inner.attrs.type : undefined
   return { author, ...(address && address === from && { from: address }), text, ...(innerType && { type: innerType }), ...(Number.isFinite(time) && { timestamp: time }) }
 }
 
