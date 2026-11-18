@@ -713,7 +713,7 @@ function roomTimelineConfig(): timeline.TimelineConfig<RoomMessage> {
 const ROOM_ENTITY_FIELDS = Object.keys({
   jid: true, name: true, nickname: true, joined: true, isJoining: true,
   subject: true, avatar: true, avatarHash: true, avatarFromPresence: true,
-  isBookmarked: true, autojoin: true, password: true, bookmarkExtensions: true, isQuickChat: true,
+  isBookmarked: true, autojoin: true, password: true, bookmarkNick: true, bookmarkExtensions: true, isQuickChat: true,
   supportsMAM: true, supportsReactions: true, supportsHats: true,
   supportsModeration: true, isIrcGateway: true, isNonAnonymous: true,
   isPrivate: true, muted: true,
@@ -1262,7 +1262,12 @@ export interface RoomState {
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
 
   // Bookmark actions
-  setBookmark: (roomJid: string, bookmark: { name: string; nick: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel; extensions?: string[] }) => void
+  /**
+   * Record the room's bookmark. `nick` sets the nickname only while Fluux is
+   * neither in the room nor joining it; `bookmarkNick` always records the
+   * bookmark's own (see Room.bookmarkNick).
+   */
+  setBookmark: (roomJid: string, bookmark: { name: string; nick: string; bookmarkNick?: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel; extensions?: string[] }) => void
   removeBookmark: (roomJid: string) => void
 
   // Non-anonymous room acknowledgement (issue #37)
@@ -1456,6 +1461,7 @@ export const roomStore = createStore<RoomState>()(
         isBookmarked: room.isBookmarked,
         autojoin: room.autojoin,
         password: room.password,
+        bookmarkNick: room.bookmarkNick,
         bookmarkExtensions: room.bookmarkExtensions,
         isQuickChat: room.isQuickChat,
         supportsMAM: room.supportsMAM,
@@ -3153,14 +3159,19 @@ export const roomStore = createStore<RoomState>()(
 
       const existing = newRooms.get(roomJid)
       if (existing) {
+        // While Fluux is in the room or joining it, its nickname is the one the
+        // room knows it by: presence, leaving, nick changes, its own messages
+        // and mentions all use it. A bookmark only records its own nickname then.
+        const inRoom = existing.joined || !!existing.isJoining
         // Update existing room with bookmark info
         const updatedRoom = {
           ...existing,
           name: bookmark.name || existing.name,
-          nickname: bookmark.nick || existing.nickname,
+          nickname: inRoom ? existing.nickname : (bookmark.nick || existing.nickname),
           isBookmarked: true,
           autojoin: bookmark.autojoin,
           password: bookmark.password,
+          bookmarkNick: bookmark.bookmarkNick,
           bookmarkExtensions: bookmark.extensions,
           notifyAllPersistent: bookmark.notifyLevel === 'all',
           notifyOffPersistent: bookmark.notifyLevel === 'none',
@@ -3173,10 +3184,11 @@ export const roomStore = createStore<RoomState>()(
           newEntities.set(roomJid, {
             ...existingEntity,
             name: bookmark.name || existingEntity.name,
-            nickname: bookmark.nick || existingEntity.nickname,
+            nickname: updatedRoom.nickname,
             isBookmarked: true,
             autojoin: bookmark.autojoin,
             password: bookmark.password,
+            bookmarkNick: bookmark.bookmarkNick,
             bookmarkExtensions: bookmark.extensions,
           })
         }
@@ -3206,6 +3218,7 @@ export const roomStore = createStore<RoomState>()(
           isBookmarked: true,
           autojoin: bookmark.autojoin,
           password: bookmark.password,
+          bookmarkNick: bookmark.bookmarkNick,
           bookmarkExtensions: bookmark.extensions,
           notifyAllPersistent: bookmark.notifyLevel === 'all',
           notifyOffPersistent: bookmark.notifyLevel === 'none',
@@ -3227,6 +3240,7 @@ export const roomStore = createStore<RoomState>()(
           isBookmarked: true,
           autojoin: bookmark.autojoin,
           password: bookmark.password,
+          bookmarkNick: bookmark.bookmarkNick,
           bookmarkExtensions: bookmark.extensions,
         })
 
@@ -3265,6 +3279,7 @@ export const roomStore = createStore<RoomState>()(
             isBookmarked: false,
             autojoin: undefined,
             password: undefined,
+            bookmarkNick: undefined,
             // The bookmark is gone, so nothing of another client's is left to keep
             bookmarkExtensions: [],
             notifyAllPersistent: undefined,
@@ -3279,6 +3294,7 @@ export const roomStore = createStore<RoomState>()(
               isBookmarked: false,
               autojoin: undefined,
               password: undefined,
+              bookmarkNick: undefined,
               bookmarkExtensions: [],
             })
           }

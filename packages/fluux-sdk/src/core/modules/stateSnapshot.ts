@@ -74,6 +74,7 @@ interface SerializedRoom {
   isBookmarked: boolean
   autojoin?: boolean
   password?: string
+  bookmarkNick?: string
   bookmarkExtensions?: string[]
   notifyAll?: boolean
   notifyAllPersistent?: boolean
@@ -184,6 +185,7 @@ function serializeRoom(r: Room, window: RoomMessage[]): SerializedRoom {
     isBookmarked: r.isBookmarked,
     autojoin: r.autojoin,
     password: r.password,
+    bookmarkNick: r.bookmarkNick,
     bookmarkExtensions: r.bookmarkExtensions,
     notifyAll: r.notifyAll,
     notifyAllPersistent: r.notifyAllPersistent,

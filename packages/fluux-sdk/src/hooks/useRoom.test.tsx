@@ -692,7 +692,8 @@ describe('useRoom hook', () => {
       // Check the room data was updated but joined status preserved
       const room = result.current.getRoom('room@conference.example.com')
       expect(room?.name).toBe('Bookmarked Name')
-      expect(room?.nickname).toBe('newnick')
+      // Still in the room as oldnick: the bookmark does not change it.
+      expect(room?.nickname).toBe('oldnick')
       expect(room?.joined).toBe(true)
       expect(room?.isBookmarked).toBe(true)
       expect(room?.autojoin).toBe(true)

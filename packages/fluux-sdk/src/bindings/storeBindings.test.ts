@@ -529,7 +529,7 @@ describe('createStoreBindings', () => {
     })
 
     it('should handle room:bookmark', () => {
-      const bookmark = { name: 'Test Room', nick: 'Me', autojoin: true }
+      const bookmark = { name: 'Test Room', nick: 'Me', bookmarkNick: 'Me', autojoin: true }
       mockClient.emit('room:bookmark', { roomJid: 'room@conference.example.com', bookmark })
       expect(mockStores.room.setBookmark).toHaveBeenCalledWith('room@conference.example.com', bookmark)
     })

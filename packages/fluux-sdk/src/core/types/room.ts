@@ -199,7 +199,12 @@ export interface RoomEntity {
   jid: string
   /** Display name */
   name: string
-  /** Our nickname in this room */
+  /**
+   * Our nickname in this room. While Fluux is in the room or joining it, this
+   * is the nickname the room knows Fluux by, and a bookmark change never
+   * alters it (see {@link bookmarkNick}). Otherwise it is the nickname Fluux
+   * joins with, which a bookmark read or saved then sets.
+   */
   nickname: string
   /** Whether we're currently joined to the room */
   joined: boolean
@@ -222,6 +227,14 @@ export interface RoomEntity {
   /** Room password, from the bookmark or a successful join. Re-sent automatically
    *  by joinRoom() so a password-protected room rejoins without re-prompting. */
   password?: string
+  /**
+   * The `<nick>` the room's bookmark stores, as Fluux last read or saved it:
+   * `undefined` when the bookmark has none. Kept apart from {@link nickname},
+   * which stays the nickname Fluux is in the room under when the bookmark's
+   * changes. `client.rooms.setBookmark()` publishes it again when its caller
+   * leaves the nickname as Fluux shows it.
+   */
+  bookmarkNick?: string
   /**
    * The children of the bookmark's `<extensions>` element that Fluux does not
    * own, serialized as XML, such as another client's settings for the room.

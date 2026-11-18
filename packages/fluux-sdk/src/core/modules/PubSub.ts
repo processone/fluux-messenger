@@ -351,6 +351,7 @@ export class PubSub extends BaseModule {
         bookmark: {
           name: parsed.name,
           nick: parsed.nick || 'user',
+          bookmarkNick: parsed.nick,
           autojoin: parsed.autojoin,
           password: parsed.password,
           notifyLevel: parsed.notifyLevel,

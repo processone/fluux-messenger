@@ -54,9 +54,11 @@ const pepEvent = (itemsContent: string) => parse(
 
 /** A stored bookmark with a password and Fluux's own level beside the other extensions. */
 const fullItem = ({ extensions, password, notify, name = 'Team', nick = 'tester', autojoin = true }: {
-  extensions: string; password?: string; notify?: string; name?: string; nick?: string; autojoin?: boolean
+  /** `null`: the bookmark stores no nickname. */
+  extensions: string; password?: string; notify?: string; name?: string; nick?: string | null; autojoin?: boolean
 }) =>
-  `<item id="${ROOM}"><conference xmlns="${NS_BOOKMARKS}" name="${name}" autojoin="${autojoin}"><nick>${nick}</nick>` +
+  `<item id="${ROOM}"><conference xmlns="${NS_BOOKMARKS}" name="${name}" autojoin="${autojoin}">` +
+  (nick === null ? '' : `<nick>${nick}</nick>`) +
   (password ? `<password>${password}</password>` : '') +
   `<extensions>${notify ? `<notify xmlns="${NS_FLUUX}">${notify}</notify>` : ''}${extensions}</extensions></conference></item>`
 
@@ -149,8 +151,8 @@ describe('bookmark extensions Fluux does not own', () => {
   })
 
   /** The room's answer to Fluux's own join: Fluux is in the room. */
-  const selfPresence = () => parse(
-    `<presence from="${ROOM}/tester" to="${OWN_JID}"><x xmlns="http://jabber.org/protocol/muc#user">` +
+  const selfPresence = (nick = 'tester') => parse(
+    `<presence from="${ROOM}/${nick}" to="${OWN_JID}"><x xmlns="http://jabber.org/protocol/muc#user">` +
     '<item affiliation="member" role="participant"/><status code="110"/></x></presence>',
   ) as unknown as Element
 
@@ -440,6 +442,72 @@ describe('bookmark extensions Fluux does not own', () => {
         expect(publishedConference()?.attrs).toMatchObject({ name: 'Team renamed elsewhere', autojoin: 'true' })
         expect(publishedConference()?.getChildText('nick')).toBe('nick-set-elsewhere')
         expect(published().fluuxNotify).toEqual(['none'])
+      })
+
+      it('publishes no nickname when the other app removed it, and Fluux keeps joining with its own', async () => {
+        serverItem = fetchResult('', fullItem({ ...RENAMED, nick: null }))
+        const room = shown()
+        await muc.setBookmark(ROOM, { name: room.name, nick: room.nickname, autojoin: !room.autojoin })
+
+        expect(sentKinds()).toEqual(['read', 'publish'])
+        expect(publishedConference()?.getChild('nick', NS_BOOKMARKS)).toBeUndefined()
+        expect(shown()).toMatchObject({ nickname: 'tester', bookmarkNick: undefined })
+      })
+
+      it('keeps the nickname removed through a save queued behind the one that read it', async () => {
+        serverItem = fetchResult('', fullItem({ ...RENAMED, nick: null }))
+        const room = shown()
+        const off = muc.setRoomNotifyLevel(ROOM, 'none', true)
+        const toggle = muc.setBookmark(ROOM, { name: room.name, nick: room.nickname, autojoin: !room.autojoin })
+        await Promise.all([off, toggle])
+        // A later save, from the copy the first one confirmed.
+        await muc.setRoomNotifyLevel(ROOM, 'all', true)
+
+        expect(sentKinds()).toEqual(['read', 'publish', 'publish', 'publish'])
+        const publishes = sendIQ.mock.calls.map(([iq]) => parse((iq as Element).toString()) as unknown as Element).filter(isPublish)
+        const nicks = publishes.map((iq) => iq.getChild('pubsub')?.getChild('publish')?.getChild('item')
+          ?.getChild('conference', NS_BOOKMARKS)?.getChild('nick', NS_BOOKMARKS))
+        expect(nicks).toEqual([undefined, undefined, undefined])
+        expect(publishedConference()?.attrs).toMatchObject({ name: 'Team renamed elsewhere', autojoin: 'false' })
+      })
+
+      // In the room under another nickname than the bookmark's, as after a
+      // nick change in the room: saving the bookmark must not touch the
+      // nickname the room knows Fluux by.
+      describe('while Fluux is in the room under another nickname', () => {
+        beforeEach(async () => {
+          await muc.joinRoom(ROOM, 'in-room-nick')
+          muc.handle(selfPresence('in-room-nick'))
+          expect(shown()).toMatchObject({ joined: true, nickname: 'in-room-nick', selfOccupant: { nick: 'in-room-nick' } })
+          sendIQ.mockClear()
+        })
+
+        it('publishes the stored nickname and keeps the one Fluux is in the room under', async () => {
+          const room = shown()
+          await muc.setBookmark(ROOM, { name: room.name, nick: room.nickname, autojoin: !room.autojoin })
+          // A later save, from the copy the toggle confirmed.
+          await muc.setRoomNotifyLevel(ROOM, 'none', true)
+
+          expect(sentKinds()).toEqual(['read', 'publish', 'publish'])
+          expect(publishedConference()?.getChildText('nick')).toBe('nick-set-elsewhere')
+          expect(shown()).toMatchObject({
+            nickname: 'in-room-nick',
+            selfOccupant: { nick: 'in-room-nick' },
+            bookmarkNick: 'nick-set-elsewhere',
+          })
+        })
+
+        it('saves a nickname typed in the dialog to the bookmark only', async () => {
+          const room = shown()
+          await muc.setBookmark(ROOM, { name: room.name, nick: 'typed-in-dialog', autojoin: room.autojoin })
+
+          expect(publishedConference()?.getChildText('nick')).toBe('typed-in-dialog')
+          expect(shown()).toMatchObject({
+            nickname: 'in-room-nick',
+            selfOccupant: { nick: 'in-room-nick' },
+            bookmarkNick: 'typed-in-dialog',
+          })
+        })
       })
 
       it('keeps them in a toggle asked for before a save queued ahead of it read them', async () => {

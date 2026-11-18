@@ -340,15 +340,37 @@ describe('roomStore', () => {
       roomStore.getState().setBookmark('existing@conference.example.com', {
         name: 'Bookmarked Name',
         nick: 'newnick',
+        bookmarkNick: 'newnick',
         autojoin: true,
       })
 
       const room = roomStore.getState().rooms.get('existing@conference.example.com')
       expect(room?.name).toBe('Bookmarked Name')
-      expect(room?.nickname).toBe('newnick')
+      // Fluux is still in the room as oldnick: presence, leaving and its own
+      // messages use that nickname, so the bookmark's is recorded beside it.
+      expect(room?.nickname).toBe('oldnick')
+      expect(roomStore.getState().roomEntities.get('existing@conference.example.com')?.nickname).toBe('oldnick')
+      expect(room?.bookmarkNick).toBe('newnick')
       expect(room?.isBookmarked).toBe(true)
       expect(room?.autojoin).toBe(true)
       expect(room?.joined).toBe(true) // Should preserve joined status
+    })
+
+    it('should join a room it is not in with the bookmark nickname', () => {
+      roomStore.getState().addRoom(createRoom('existing@conference.example.com', {
+        nickname: 'oldnick',
+        isBookmarked: true,
+      }))
+
+      roomStore.getState().setBookmark('existing@conference.example.com', {
+        name: 'Existing Room',
+        nick: 'newnick',
+        bookmarkNick: 'newnick',
+      })
+
+      const room = roomStore.getState().rooms.get('existing@conference.example.com')
+      expect(room?.nickname).toBe('newnick')
+      expect(room?.bookmarkNick).toBe('newnick')
     })
 
     it('should use existing name if bookmark name is empty', () => {
