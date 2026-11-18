@@ -32,6 +32,9 @@ export function buildNotifyGroup({ room, t, setRoomNotifyLevel }: NotifyArgs): H
   const mode = notifyModeOf(room)
   // A level saved in the bookmark must be cleared when a session-only choice replaces it.
   const hasSavedChoice = savedNotifyLevel(room) !== 'mentions'
+  // Off is saved to the bookmark, so a room without one (a quick chat, or a joined
+  // room that is not bookmarked) keeps it for the session only.
+  const offIsSessionOnly = room.isQuickChat || !room.isBookmarked
   const select = (next: NotifyMode) => {
     switch (next) {
       case 'mentions':
@@ -45,8 +48,7 @@ export function buildNotifyGroup({ room, t, setRoomNotifyLevel }: NotifyArgs): H
         void setRoomNotifyLevel(room.jid, 'all', true)
         break
       case 'off':
-        // A quick chat has no bookmark: Off lasts for the session there.
-        void setRoomNotifyLevel(room.jid, 'none', !room.isQuickChat)
+        void setRoomNotifyLevel(room.jid, 'none', !offIsSessionOnly)
         break
     }
   }
@@ -54,7 +56,7 @@ export function buildNotifyGroup({ room, t, setRoomNotifyLevel }: NotifyArgs): H
   const items = [
     {
       key: 'off', label: t('rooms.notificationsOff'),
-      description: room.isQuickChat ? t('rooms.thisSessionOnly') : t('rooms.alwaysSavedToBookmark'),
+      description: offIsSessionOnly ? t('rooms.thisSessionOnly') : t('rooms.alwaysSavedToBookmark'),
       icon: notifyIconOf('off'), active: mode === 'off', onSelect: () => select('off'),
     },
     {

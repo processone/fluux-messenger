@@ -12,6 +12,7 @@ function room(partial: Partial<Room> = {}): Room {
     occupants: new Map(),
     notifyAllPersistent: false,
     isQuickChat: false,
+    isBookmarked: true,
     avatar: undefined,
     supportsHats: true,
     ...partial,
@@ -73,6 +74,13 @@ describe('buildNotifyGroup', () => {
 
   it('holds Off for the session in a quick chat', () => {
     const { g, setRoomNotifyLevel } = group({ isQuickChat: true })
+    choose(g, 'off')
+    expect(setRoomNotifyLevel).toHaveBeenCalledWith('room@conf.example.com', 'none', false)
+  })
+
+  it('holds Off for the session, and says so, in a joined room with no bookmark', () => {
+    const { g, setRoomNotifyLevel } = group({ isBookmarked: false })
+    expect(g.items.find((i) => i.key === 'off')!.description).toBe('rooms.thisSessionOnly')
     choose(g, 'off')
     expect(setRoomNotifyLevel).toHaveBeenCalledWith('room@conf.example.com', 'none', false)
   })
