@@ -31,7 +31,7 @@ import type {
 import { OmemoAccount, OmemoError, fingerprint, bytesEqual } from '@fluux/omemo'
 import type { OmemoMessage } from '@fluux/omemo'
 import { PluginStorageOmemoStore } from './store'
-import { publishDeviceList, fetchDeviceList, fetchBundle, bundleSource, publishBundle, type BundleLookup } from './pep'
+import { addDeviceToOwnList, fetchDeviceList, fetchBundle, bundleSource, publishBundle, type BundleLookup } from './pep'
 import { resolveInboundTrust, toTrustState, type BtbvState } from './trust'
 import { isVerified, setVerified, clearVerified, hasAnyVerified } from './verifiedDevices'
 import { buildEnvelope, parseEnvelope } from './sce'
@@ -107,10 +107,7 @@ export class OmemoPlugin implements E2EEPlugin {
     const myDeviceId = acc.publishableDeviceId()
     await acc.replenishPreKeys()
     await this.publishBundleNow(acc, true)
-    const existing = await fetchDeviceList(this.ctx.xmpp, this.ctx.account.jid)
-    if (!existing.includes(myDeviceId)) {
-      await publishDeviceList(this.ctx.xmpp, [...existing, myDeviceId])
-    }
+    await addDeviceToOwnList(this.ctx.xmpp, this.ctx.account.jid, myDeviceId)
     return {
       fingerprint: hex(acc.identityFingerprint()),
       devices: [{ jid: this.ctx.account.jid, deviceId: String(myDeviceId) }],

@@ -143,6 +143,31 @@ describe('PubSub.deleteNode', () => {
   })
 })
 
+describe('payloads that use a namespace declared above them', () => {
+  const NS = 'urn:xmpp:omemo:2'
+  // A client may declare the prefix on the item, or on the pubsub element, rather than on the payload.
+  const itemWith = () => xml('item', { id: 'current', 'xmlns:o': NS }, xml('o:devices', {}, xml('o:device', { id: '1' })))
+
+  it('keeps the declarations in scope on a queried payload', async () => {
+    const response = xml('iq', { type: 'result', id: 'x' },
+      xml('pubsub', { xmlns: 'http://jabber.org/protocol/pubsub' }, xml('items', { node: 'n' }, itemWith())))
+    const [item] = await new PubSub(makeDeps(async () => response)).query('me@example.com', 'n')
+    expect(item.payload.name).toBe('o:devices')
+    expect(item.payload.attrs['xmlns:o']).toBe(NS)
+  })
+
+  it('keeps them on a payload delivered by a notification, and the payload\'s own declaration wins', () => {
+    const pubsub = new PubSub(makeDeps(async () => xml('iq', {})))
+    const received: PEPItem[] = []
+    pubsub.subscribe('me@example.com', 'n', (item) => received.push(item))
+    const event = xml('message', { from: 'me@example.com', 'xmlns:o': 'urn:example:outer', xmlns: 'jabber:client' },
+      xml('event', { xmlns: 'http://jabber.org/protocol/pubsub#event' }, xml('items', { node: 'n' }, itemWith())))
+    pubsub.handle(event)
+    expect(received[0].payload.attrs['xmlns:o']).toBe(NS)
+    expect(received[0].payload.attrs.xmlns).toBe('http://jabber.org/protocol/pubsub#event')
+  })
+})
+
 describe('PubSub.query', () => {
   it('parses returned items and their payload children', async () => {
     const response = xml(

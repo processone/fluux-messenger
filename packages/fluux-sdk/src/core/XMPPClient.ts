@@ -125,7 +125,7 @@ import { EntityTime } from './modules/EntityTime'
 import { LastActivity } from './modules/LastActivity'
 import { MAM } from './modules/MAM'
 import { Poll } from './modules/Poll'
-import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives } from './e2ee'
+import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives, type PEPItem, type PEPPublishOptions } from './e2ee'
 import { DeferredDecryptEngine } from './e2ee/deferredDecrypt'
 import { SessionLifecycleEngine } from './sessionLifecycle'
 import { dataToElement } from './e2ee/stanzaAdapter'
@@ -138,7 +138,7 @@ import { createDefaultStoreBindings } from './defaultStoreBindings'
 import { createPresenceReader, type PresenceReader } from './presenceReader'
 import { initSearchIndex, backfillFromMessageCache, updateMessage as updateSearchIndex } from '../utils/searchIndex'
 import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage, deleteMessage as cacheDeleteMessage, deleteMessageForRecovery } from '../utils/messageCache'
-import { queryPepNodeSymbol } from './rawXmppAccess'
+import { queryPepNodeSymbol, publishPepNodeSymbol } from './rawXmppAccess'
 
 /**
  * The protocol modules the SDK drives on the consumer's behalf.
@@ -514,6 +514,12 @@ export class XMPPClient {
       enumerable: false,
       value: (jid: string, node: string, maxItems?: number) =>
         this.#internal.pubsub.query(jid, node, maxItems),
+    })
+    Object.defineProperty(this, publishPepNodeSymbol, {
+      configurable: false,
+      enumerable: false,
+      value: (node: string, item: PEPItem, options?: PEPPublishOptions) =>
+        this.#internal.pubsub.publish(node, item, options),
     })
 
     storeBinders.set(this, (stores) => this.initializeModules(stores))

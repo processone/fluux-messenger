@@ -32,8 +32,8 @@ export * from '../core/namespaces'
 // XEP-0060/XEP-0163: read a PEP node the SDK does not model. The nodes it does
 // model — avatars, nicknames, bookmarks, read markers — reach you as domain
 // state instead.
-export { queryPepNode } from './pep'
-export type { PEPItem } from '../core/e2ee'
+export { queryPepNode, publishPepNode } from './pep'
+export type { PEPItem, PEPPublishOptions } from '../core/e2ee'
 
 // XEP-0004: Data Forms — read and submit a form carried in a stanza.
 // The `DataForm` shapes themselves stay on the main entry: an app renders

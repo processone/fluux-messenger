@@ -1,9 +1,28 @@
 import { describe, it, expect } from 'vitest'
 import { OmemoPlugin } from './OmemoPlugin'
 import { createMockPluginContext } from './testing/MockPluginContext'
+import { readFileSync } from 'node:fs'
 import { fetchDeviceList, fetchBundle } from './pep'
+import { parseXml, elementToData } from './stanzaData'
+import { seedPeer } from './testing/MockPluginContext'
+import { NS_DEVICES } from './namespaces'
+import { readOwnDeviceLists } from './deviceLists'
 
 describe('OmemoPlugin identity/probe', () => {
+  it('ensureIdentity keeps the names other clients gave their devices', async () => {
+    // The reference stack's own list (see fixtures/generate_own_devices.py): two named devices and one unnamed.
+    const { omemo2 } = JSON.parse(readFileSync(new URL('./fixtures/own_devices.json', import.meta.url), 'utf8')) as { omemo2: { devices: string } }
+    const original = elementToData(parseXml(omemo2.devices))
+    const a = createMockPluginContext('a@x')
+    seedPeer(a.net, 'a@x', NS_DEVICES, original)
+    const p = new OmemoPlugin()
+    await p.init(a.ctx)
+    await p.ensureIdentity()
+    const published = a.net.nodes.get(`a@x ${NS_DEVICES}`)![0].payload
+    expect(published.children.slice(0, original.children.length)).toEqual(original.children)
+    expect(published.children).toHaveLength(original.children.length + 1)
+  })
+
   it('ensureIdentity publishes our device-list + bundle and returns a fingerprint', async () => {
     const a = createMockPluginContext('a@x')
     const p = new OmemoPlugin()
@@ -13,6 +32,27 @@ describe('OmemoPlugin identity/probe', () => {
     const devs = await fetchDeviceList(a.ctx.xmpp, 'a@x')
     expect(devs).toHaveLength(1)
     expect(await fetchBundle(a.ctx.xmpp, 'a@x', devs[0])).not.toBeNull()
+  })
+
+  it('the device list reader shows the fingerprint ensureIdentity returned for the same device', async () => {
+    const a = createMockPluginContext('a@x')
+    const p = new OmemoPlugin()
+    await p.init(a.ctx)
+    const id = await p.ensureIdentity()
+    const lists = await readOwnDeviceLists({ query: (j, n, m) => a.ctx.xmpp.queryPEP(j, n, m), publish: async () => {} }, 'a@x')
+    if (!lists.omemo2.ok) throw new Error('list should read')
+    expect(lists.omemo2.devices).toEqual([{ id: Number(id.devices?.[0]?.deviceId), fingerprint: id.fingerprint }])
+    expect(await p.getOwnFingerprint()).toBe(id.fingerprint)
+  })
+
+  it('ensureIdentity refuses a malformed device list instead of replacing it', async () => {
+    const a = createMockPluginContext('a@x')
+    const wrong = elementToData(parseXml("<wrong xmlns='urn:xmpp:omemo:2'><device id='5' label='Other'/></wrong>"))
+    seedPeer(a.net, 'a@x', NS_DEVICES, wrong)
+    const p = new OmemoPlugin()
+    await p.init(a.ctx)
+    await expect(p.ensureIdentity()).rejects.toThrow(/unexpected/)
+    expect(a.net.nodes.get(`a@x ${NS_DEVICES}`)![0].payload).toEqual(wrong)
   })
 
   it('ensureIdentity is idempotent: calling twice does not double-add our device', async () => {
