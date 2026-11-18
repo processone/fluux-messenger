@@ -468,7 +468,8 @@ the output and the result.
 
 A record's PID must be positive and equal its header's process identifier, or the
 capture stops with `pid-boundary`. One PID keeps one listed label for the whole
-capture: a PID that moves between two listed processes stops with `pid-boundary`.
+capture: a listed PID whose later record names another listed process, or an
+unlisted one, stops with `pid-boundary`.
 A PID first seen in an unlisted process and later in a listed one is accepted,
 because `xpcproxy` starts WebKit's helpers by replacing itself in the same process.
 At most 1024 listed PIDs are kept. `run(..., pid=n)` asks the relay for one

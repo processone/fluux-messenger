@@ -211,14 +211,19 @@ class LogReaderProof(unittest.TestCase):
         self.assert_private_absent(saved, outside_saved, result, outside)
 
     def test_pid_attribution_fails_closed(self):
+        # A listed PID that later names an unlisted process, then the listed one
+        # again, must not keep its first attribution.
+        unlisted = [frame(record(321, APP)), frame(record(321, RUNNINGBOARD)), frame(record(321, APP))]
         cases = {
-            "procid-differs": ([frame(record(321, APP, procid=322))], 0, "parse_record"),
-            "zero-pid": ([frame(record(0, APP))], 0, "parse_record"),
-            "listed-label-changes": ([frame(record(321, APP)), frame(record(321, WEBCONTENT))], 1, "_attribute"),
+            "procid-differs": ([frame(record(321, APP, procid=322))], 0, "parse_record", None),
+            "zero-pid": ([frame(record(0, APP))], 0, "parse_record", None),
+            "listed-label-changes": ([frame(record(321, APP)), frame(record(321, WEBCONTENT))], 1, "_attribute", None),
+            "listed-to-unlisted": (unlisted, 1, "_attribute", None),
+            "restricted-listed-to-unlisted": (unlisted, 1, "_attribute", 321),
         }
-        for name, (frames, written, site) in cases.items():
+        for name, (frames, written, site, pid) in cases.items():
             with self.subTest(case=name):
-                result, saved, relay, _, _ = exercise(frames)
+                result, saved, relay, _, _ = exercise(frames, pid=pid)
                 PROOF.append({"scenario": "pid-attribution", "case": name, "result": result})
                 self.assertEqual((result["reason"], result["fault"]["site"]), ("pid-boundary", site))
                 self.assertEqual(len(self.lines(saved)), written)

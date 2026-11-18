@@ -222,16 +222,19 @@ class LogReader:
     def _attribute(self, pid, label, only):
         if only is not None and pid != only:
             raise Boundary("pid-boundary")
-        if label is None:
-            return
         known = self.labels.get(pid)
-        if known is None:
-            if len(self.labels) >= MAX_PIDS:
+        if known is not None:
+            if known != label:
+                # Once listed, a PID keeps its process for the whole capture,
+                # whether the next record names another listed process or none.
                 raise Boundary("pid-boundary")
-            self.labels[pid] = label
-        elif known != label:
-            # One PID cannot speak for two listed processes in one capture.
+            return
+        if label is None:
+            # An unlisted process, such as xpcproxy before it executes WebKit.
+            return
+        if len(self.labels) >= MAX_PIDS:
             raise Boundary("pid-boundary")
+        self.labels[pid] = label
 
     def _phase(self):
         if not self.started:
