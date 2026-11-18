@@ -20,7 +20,9 @@ import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, o
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { usePendingAttachment } from '@/hooks/usePendingAttachment'
-import { useConversationEncryptionState, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { useConversationEncryptionState, encryptionSendBlock, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { HeldKeysBanner } from './HeldKeysBanner'
+import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
 import { useConversationFileDropStore } from '@/stores/conversationFileDropStore'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { EasterEggAnimation } from './easter-eggs/EasterEggAnimation'
@@ -424,6 +426,13 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     [decideTrust],
   )
 
+  const requestContactSecurity = useContactSecurityRequestStore((s) => s.requestContactSecurity)
+  /** Open the contact's Security details, where each held key can be trusted or verified. */
+  const handleReviewKeys = useCallback((peer: string) => {
+    requestContactSecurity(peer)
+    onShowProfile?.(peer)
+  }, [requestContactSecurity, onShowProfile])
+
   const handleDisableEncryption = useCallback(() => {
     if (activeConversation?.type !== 'chat' || !activeConversation?.id) return
     const jid = activeConversation.id
@@ -502,14 +511,15 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           }
         />
 
-        {/* Key-change alert banner — UNMOUNTED in Stage 1. The single-primary
-            TOFU pin and its key-change alert are retired for OpenPGP (an extra
-            announced key is normal under multi-key, and `encrypt()` no longer
-            gates on an alert), so a persisted alert from ≤0.17.2 would otherwise
-            render a "blocked / re-verify" banner — and offer an accept action
-            that re-pins off the retired model — while sending works fine. The
-            component and the sealed alert store are left intact; Stage 2 remounts
-            a reworded banner driven by the derived `unverified-keyset` state. */}
+        {/* Why some or all of the contact's keys receive no messages: a verified
+            contact's new key waits for the user's decision, or every key was refused. */}
+        {activeConversation.type === 'chat' && (
+          <HeldKeysBanner
+            state={encryptionState}
+            peerName={activeConversation.name}
+            onReview={onShowProfile ? () => handleReviewKeys(activeConversation.id) : undefined}
+          />
+        )}
 
         {/* Verify-peer dialog — opened from the encryption icon in the header */}
         {verifyDialogState.open && jid && (
@@ -1311,6 +1321,17 @@ export const MessageInput = memo(function MessageInput({
     // it was cleared at submission.
     if (encryptionState.kind === 'keyLocked') {
       openWebUnlockDialog()
+      return false
+    }
+
+    // Nothing can be sent while every key of the contact waits for the user's
+    // decision or was refused: the SDK refuses to encrypt and never falls back
+    // to plaintext. Stop here so a staged file is not uploaded unencrypted.
+    const sendBlock = encryptionSendBlock(encryptionState)
+    if (sendBlock) {
+      useToastStore.getState().addToast('error', t(sendBlock === 'distrusted'
+        ? 'chat.encryption.sendBlockedKeysDistrusted'
+        : 'chat.encryption.sendBlockedKeyChanged'))
       return false
     }
 

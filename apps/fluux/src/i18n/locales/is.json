@@ -211,6 +211,8 @@
             "tryAgain": "Reyna aftur",
             "needsDecisionTitle": "Bíður ákvörðunar þinnar",
             "needsDecisionDescription": "Ekki er hægt að dulrita skilaboð til þessa tengiliðar fyrr en þú hefur ákveðið með lykil.",
+            "distrustedTitle": "Engir traustir lyklar",
+            "distrustedDescription": "Ekki er hægt að senda skilaboð til þessa tengiliðar fyrr en þú treystir einum af lyklum hans.",
             "receivesWhenUnlocked": "Fær skilaboðin þín þegar þú aflæsir",
             "keyTrust": {
                 "verified": "Staðfestur",
@@ -638,6 +640,13 @@
             "sendBlockedKeyLocked": "Skilaboð ekki send. Aflæstu dulkóðunarlyklinum þínum til að senda þessi skilaboð.",
             "sendBlockedKeyConflict": "Skilaboð ekki send. Leystu árekstur dulkóðunarlykilsins þíns áður en þú sendir.",
             "sendBlockedGeneric": "Skilaboð ekki send. Dulkóðun mistókst.",
+            "sendBlockedKeysDistrusted": "Skilaboð ekki send. Þú treystir engum lykli þessa tengiliðs. Treystu einum þeirra áður en þú sendir.",
+            "heldKeys": {
+                "partial": "Þú staðfestir {{name}}, svo nýi lykillinn fær engin skilaboð fyrr en þú treystir honum eða staðfestir hann.",
+                "all": "Þú staðfestir {{name}}, svo nýi lykillinn fær engin skilaboð fyrr en þú treystir honum eða staðfestir hann. Þangað til geturðu ekki sent skilaboð.",
+                "distrusted": "Þú treystir engum lykli tengiliðarins {{name}}. Þú getur ekki sent skilaboð fyrr en þú treystir einum þeirra.",
+                "review": "Yfirfara lykla"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Dulkóðun læst",
@@ -704,15 +713,6 @@
             "alreadyVerifiedBanner": "Þessi lykill hefur þegar verið staðfestur. Þú getur endurstaðfest ef þig grunar eitthvað.",
             "confirmSuccess": "Fingrafar staðfest",
             "revokeAction": "Fjarlægja staðfestingu"
-        },
-        "keyChangeBanner": {
-            "title": "Dulritunarlykill {{name}} hefur breyst",
-            "body": "Þessi tengiliður virðist hafa skipt um dulkóðunarlykil sinn. Þú getur staðfest nýja fingrafarið til að endurheimta fullt traust, eða samþykkt það án staðfestingar til að halda áfram með grunntraust.",
-            "reVerify": "Staðfesta aftur",
-            "encryptionBlocked": "Dulkóðun er í bið fyrir þessa samræðu þar til þú leysir breytinguna.",
-            "acceptWithoutVerifying": "Samþykkja án staðfestingar",
-            "acceptedWithoutVerifying": "Nýr lykill samþykktur. Jafningi er óstaðfestur",
-            "acceptFailed": "Ekki tókst að samþykkja nýja lykilinn. Reyndu aftur"
         },
         "offlinePlaceholder": "Ónettengt. Þú getur sent um leið og tengingin kemst á aftur.",
         "loadImage": "Hlaða mynd",
@@ -1080,7 +1080,7 @@
             "rotatePluginUnavailable": "OpenPGP-eining ekki tiltæk",
             "trustStateCompromised": {
                 "title": "Heilleikaskoðun trauststöðu mistókst",
-                "description": "Staðbundin traustagögn kunna að hafa verið breytt. Þögul endurstifting lykils er lokuð til að koma í veg fyrir lykilskipti.",
+                "description": "Staðbundin traustagögn kunna að hafa verið breytt. Athugaðu lykla tengiliða þinna áður en þú heldur áfram.",
                 "reestablishButton": "Endurstaðfesta og halda áfram"
             },
             "ownKeyConflict": {

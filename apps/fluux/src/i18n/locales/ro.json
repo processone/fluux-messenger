@@ -213,6 +213,8 @@
             "tryAgain": "Încearcă din nou",
             "needsDecisionTitle": "Așteaptă decizia ta",
             "needsDecisionDescription": "Mesajele către acest contact nu pot fi criptate până când decizi asupra unei chei.",
+            "distrustedTitle": "Nicio cheie de încredere",
+            "distrustedDescription": "Nu se pot trimite mesaje acestui contact până nu ai încredere în una dintre cheile sale.",
             "receivesWhenUnlocked": "Va primi mesajele tale după deblocare",
             "keyTrust": {
                 "verified": "Verificată",
@@ -642,6 +644,13 @@
             "sendBlockedKeyLocked": "Mesaj netrimis. Deblochează cheia ta de criptare pentru a trimite acest mesaj.",
             "sendBlockedKeyConflict": "Mesaj netrimis. Rezolvă conflictul cheii tale de criptare înainte de a trimite.",
             "sendBlockedGeneric": "Mesaj netrimis. Criptarea a eșuat.",
+            "sendBlockedKeysDistrusted": "Mesaj netrimis. Nu ai încredere în nicio cheie a acestui contact. Acordă încredere uneia dintre ele înainte de a trimite.",
+            "heldKeys": {
+                "partial": "Ai verificat contactul {{name}}, așa că cheia sa nouă nu primește mesaje până nu ai încredere în ea sau o verifici.",
+                "all": "Ai verificat contactul {{name}}, așa că cheia sa nouă nu primește mesaje până nu ai încredere în ea sau o verifici. Până atunci nu poți trimite mesaje.",
+                "distrusted": "Nu ai încredere în nicio cheie a contactului {{name}}. Nu poți trimite mesaje până nu ai încredere în una dintre ele.",
+                "review": "Revizuiește cheile"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Criptare blocată",
@@ -708,15 +717,6 @@
             "alreadyVerifiedBanner": "Această cheie a fost deja verificată. Puteți reverifica dacă aveți îndoieli.",
             "confirmSuccess": "Amprentă verificată",
             "revokeAction": "Elimină verificarea"
-        },
-        "keyChangeBanner": {
-            "title": "Cheia de criptare a lui {{name}} s-a schimbat",
-            "body": "Se pare că acest contact și-a rotit cheia de criptare. Poți verifica noua amprentă pentru a restabili încrederea deplină sau o poți accepta fără verificare pentru a continua cu încredere de bază.",
-            "reVerify": "Reverifică",
-            "encryptionBlocked": "Criptarea este suspendată pentru această conversație până când rezolvi modificarea.",
-            "acceptWithoutVerifying": "Acceptă fără verificare",
-            "acceptedWithoutVerifying": "Cheie nouă acceptată. Contactul nu este verificat",
-            "acceptFailed": "Nu s-a putut accepta noua cheie. Încearcă din nou"
         },
         "offlinePlaceholder": "Offline. Vei putea trimite imediat ce te reconectezi.",
         "loadImage": "Încarcă imaginea",
@@ -1084,7 +1084,7 @@
             "rotatePluginUnavailable": "Modulul OpenPGP indisponibil",
             "trustStateCompromised": {
                 "title": "Verificarea integrității stării de încredere a eșuat",
-                "description": "Datele locale de încredere pot fi fost falsificate. Refixarea silențioasă a cheii este blocată pentru a preveni substituirea cheilor.",
+                "description": "Datele locale de încredere pot fi fost falsificate. Verifică cheile contactelor tale înainte de a continua.",
                 "reestablishButton": "Reverifică și continuă"
             },
             "ownKeyConflict": {

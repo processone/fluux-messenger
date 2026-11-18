@@ -6,7 +6,6 @@
  * and unlocks the same key without generating or restoring one. Native IPC is
  * injected; the key is the real Sequoia-generated fixture. The owning Rust
  * suites prove the native reads (macos_secrets.rs, openpgp.rs). */
-import { createMockHostStores } from './testing/mockHostStores'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -24,12 +23,11 @@ const REFUSAL = 'openpgp-storage-unavailable: macOS keychain (-128): user cancel
 const DESYNC = 'decrypt persisted TSK: decrypt primary secret key: unexpected EOF'
 const RETRY = 'openpgp_retry_keychain_access'
 const SECRET_NODE = 'urn:xmpp:openpgp:0:secret-key'
-const hostStores = createMockHostStores()
 let macosDesktop = true
 const desktopHost = () => ({ fileIO: { saveFile: async () => false, pickFile: async () => null }, macosDesktop })
 const plugins: SequoiaPgpPlugin[] = []
 vi.setConfig({ testTimeout: 30_000 })
-beforeEach(() => { resetUncertainImportsForTesting(); hostStores.reset(); macosDesktop = true })
+beforeEach(() => { resetUncertainImportsForTesting(); macosDesktop = true })
 afterEach(async () => { for (const p of plugins.splice(0)) await p.shutdown(); resetUncertainImportsForTesting() })
 
 /** What the user answers on each macOS prompt the retry opens. */
@@ -94,7 +92,7 @@ async function setup({ initError = REFUSAL, refused = true, backup = 'absent' as
       subscribePEP: () => ({ unsubscribe: () => {} }),
     },
   }
-  const plugin = new SequoiaPgpPlugin({ stores: hostStores, ...desktopHost(), invoke, timeouts: retryLimitMs ? { keyMaterialMs: retryLimitMs } : undefined }); plugins.push(plugin)
+  const plugin = new SequoiaPgpPlugin({ ...desktopHost(), invoke, timeouts: retryLimitMs ? { keyMaterialMs: retryLimitMs } : undefined }); plugins.push(plugin)
   await plugin.init(ctx)
   return { plugin, ctx, calls, publications, alice, answer: (...next: Answer[]) => answers.push(...next),
     setPause: (value?: () => Promise<void>) => { pause = value },

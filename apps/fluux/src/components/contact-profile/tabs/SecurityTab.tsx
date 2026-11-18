@@ -43,13 +43,13 @@ export function SecurityTab({
           <>
             <ExplanationPanel
               icon={<ShieldX className={`size-5 ${trustVisual('rejected').colorClass} flex-shrink-0`} />}
-              title={t('contacts.encryption.rejectedTitle')}
-              description={t('contacts.encryption.rejectedDescription')}
+              title={t(state.distrusted ? 'contacts.encryption.distrustedTitle' : 'contacts.encryption.rejectedTitle')}
+              description={t(state.distrusted ? 'contacts.encryption.distrustedDescription' : 'contacts.encryption.rejectedDescription')}
               tone="danger"
             />
             {state.groups && state.groups.length > 0 ? (
               <IdentityGroups groups={state.groups} onDecide={onDecide} />
-            ) : (
+            ) : state.distrusted ? null : (
               <div className="space-y-2">
                 {state.reasons.map((r, i) => (
                   <div key={i} className="rounded-lg bg-fluux-bg/40 px-3 py-2">

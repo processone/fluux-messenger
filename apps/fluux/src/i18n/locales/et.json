@@ -213,6 +213,8 @@
             "tryAgain": "Proovi uuesti",
             "needsDecisionTitle": "Ootab teie otsust",
             "needsDecisionDescription": "Sellele kontaktile ei saa sõnumeid krüptida, kuni olete võtme kohta otsustanud.",
+            "distrustedTitle": "Usaldatud võtmeid pole",
+            "distrustedDescription": "Sellele kontaktile ei saa sõnumeid saata enne, kui usaldate üht tema võtit.",
             "receivesWhenUnlocked": "Saab teie sõnumeid pärast lukustuse avamist",
             "keyTrust": {
                 "verified": "Kinnitatud",
@@ -640,6 +642,13 @@
             "sendBlockedKeyLocked": "Sõnumit ei saadetud. Selle sõnumi saatmiseks ava oma krüpteerimisvõti.",
             "sendBlockedKeyConflict": "Sõnumit ei saadetud. Lahenda enne saatmist oma krüpteerimisvõtme vastuolu.",
             "sendBlockedGeneric": "Sõnumit ei saadetud. Krüpteerimine ebaõnnestus.",
+            "sendBlockedKeysDistrusted": "Sõnumit ei saadetud. Sa ei usalda ühtegi selle kontakti võtit. Usalda enne saatmist üht neist.",
+            "heldKeys": {
+                "partial": "Oled kontakti {{name}} kinnitanud, seega uus võti ei saa sõnumeid enne, kui seda usaldad või kinnitad.",
+                "all": "Oled kontakti {{name}} kinnitanud, seega uus võti ei saa sõnumeid enne, kui seda usaldad või kinnitad. Seni ei saa sa sõnumeid saata.",
+                "distrusted": "Sa ei usalda ühtegi kontakti {{name}} võtit. Sa ei saa sõnumeid saata enne, kui usaldad üht neist.",
+                "review": "Vaata võtmed üle"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Krüpteerimine on lukus",
@@ -706,15 +715,6 @@
             "alreadyVerifiedBanner": "See võti on juba kinnitatud. Saate selle uuesti kinnitada, kui teil on kahtlusi.",
             "confirmSuccess": "Sõrmejälg kinnitatud",
             "revokeAction": "Eemalda kinnitus"
-        },
-        "keyChangeBanner": {
-            "title": "{{name}} krüpteerimisvõti on muutunud",
-            "body": "Tundub, et see kontakt on oma krüpteerimisvõtme vahetanud. Saad uue sõrmejälje kinnitada täieliku usalduse taastamiseks või selle ilma kinnitamata vastu võtta, et jätkata põhilise usaldusega.",
-            "reVerify": "Kinnita uuesti",
-            "encryptionBlocked": "Krüpteerimine on selle vestluse jaoks peatatud, kuni muudatuse lahendad.",
-            "acceptWithoutVerifying": "Võta vastu ilma kinnitamata",
-            "acceptedWithoutVerifying": "Uus võti vastu võetud. Kontakt on kinnitamata",
-            "acceptFailed": "Uue võtme vastuvõtmine ebaõnnestus. Proovi uuesti"
         },
         "offlinePlaceholder": "Võrguühenduseta. Saad saata kohe pärast taasühendamist.",
         "loadImage": "Laadi pilt",
@@ -1082,7 +1082,7 @@
             "rotatePluginUnavailable": "OpenPGP moodul pole saadaval",
             "trustStateCompromised": {
                 "title": "Usalduse oleku terviklikkuse kontroll ebaõnnestus",
-                "description": "Kohalikke usaldusandmeid võidi muuta. Vaikne võtme uuesti kinnitamine on blokeeritud võtme asendamise vältimiseks.",
+                "description": "Kohalikke usaldusandmeid võidi muuta. Kontrollige enne jätkamist oma kontaktide võtmeid.",
                 "reestablishButton": "Kinnita uuesti ja jätka"
             },
             "ownKeyConflict": {

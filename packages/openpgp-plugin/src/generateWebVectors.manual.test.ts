@@ -14,7 +14,6 @@
  * Then run the Rust consumer:
  *   cd apps/fluux/src-tauri && cargo test consume_web_golden_vectors -- --ignored --nocapture
  */
-import { createMockHostStores } from './testing/mockHostStores'
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -28,7 +27,6 @@ import {
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase, setSessionPassphrase } from './index'
 
-const hostStores = createMockHostStores()
 
 const FIXTURES_DIR = resolve(__dirname, './fixtures')
 const BACKUP_PASSPHRASE = 'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW'
@@ -75,7 +73,6 @@ function makeCtx(accountJid: string) {
 
 beforeEach(async () => {
   localStorage.clear()
-  hostStores.reset()
   clearSessionPassphrase()
 })
 
@@ -86,7 +83,7 @@ afterEach(() => {
 describe('generate web golden vectors for Sequoia consumption', () => {
   it('writes fixture files', async () => {
     // Alice
-    const alice = new TestablePlugin(hostStores)
+    const alice = new TestablePlugin()
     const { ctx: aliceCtx } = makeCtx('alice@example.com')
     setSessionPassphrase('alice-pp')
     await alice.init(aliceCtx)
@@ -94,7 +91,7 @@ describe('generate web golden vectors for Sequoia consumption', () => {
 
     // Bob
     clearSessionPassphrase()
-    const bob = new TestablePlugin(hostStores)
+    const bob = new TestablePlugin()
     const { ctx: bobCtx } = makeCtx('bob@example.com')
     setSessionPassphrase('bob-pp')
     await bob.init(bobCtx)

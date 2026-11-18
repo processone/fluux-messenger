@@ -212,6 +212,8 @@
             "tryAgain": "Mēģināt vēlreiz",
             "needsDecisionTitle": "Gaida jūsu lēmumu",
             "needsDecisionDescription": "Ziņas šai kontaktpersonai nevar šifrēt, kamēr neesat izlēmis par atslēgu.",
+            "distrustedTitle": "Nav uzticamu atslēgu",
+            "distrustedDescription": "Šai kontaktpersonai nevar sūtīt ziņas, kamēr neuzticaties kādai no tās atslēgām.",
             "receivesWhenUnlocked": "Saņems jūsu ziņas pēc atslēgšanas",
             "keyTrust": {
                 "verified": "Apstiprināta",
@@ -641,6 +643,13 @@
             "sendBlockedKeyLocked": "Ziņojums nav nosūtīts. Atbloķējiet savu šifrēšanas atslēgu, lai nosūtītu šo ziņojumu.",
             "sendBlockedKeyConflict": "Ziņojums nav nosūtīts. Pirms sūtīšanas atrisiniet savas šifrēšanas atslēgas konfliktu.",
             "sendBlockedGeneric": "Ziņojums nav nosūtīts. Šifrēšana neizdevās.",
+            "sendBlockedKeysDistrusted": "Ziņojums nav nosūtīts. Jūs neuzticaties nevienai šī kontakta atslēgai. Pirms sūtīšanas uzticieties vienai no tām.",
+            "heldKeys": {
+                "partial": "Jūs verificējāt {{name}}, tāpēc jaunā atslēga nesaņem ziņas, līdz jūs tai uzticaties vai to verificējat.",
+                "all": "Jūs verificējāt {{name}}, tāpēc jaunā atslēga nesaņem ziņas, līdz jūs tai uzticaties vai to verificējat. Līdz tam jūs nevarat sūtīt ziņas.",
+                "distrusted": "Jūs neuzticaties nevienai {{name}} atslēgai. Jūs nevarat sūtīt ziņas, līdz uzticaties vienai no tām.",
+                "review": "Pārskatīt atslēgas"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Šifrēšana ir bloķēta",
@@ -707,15 +716,6 @@
             "alreadyVerifiedBanner": "Šī atslēga jau ir verificēta. Varat to verificēt atkārtoti, ja jums ir šaubas.",
             "confirmSuccess": "Pirkstu nospiedums pārbaudīts",
             "revokeAction": "Noņemt verifikāciju"
-        },
-        "keyChangeBanner": {
-            "title": "{{name}} šifrēšanas atslēga ir mainījusies",
-            "body": "Šķiet, ka šis kontakts ir nomainījis savu šifrēšanas atslēgu. Varat verificēt jauno pirkstu nospiedumu, lai atjaunotu pilnīgu uzticību, vai pieņemt to bez verificēšanas, lai turpinātu ar pamata uzticību.",
-            "reVerify": "Pārbaudīt vēlreiz",
-            "encryptionBlocked": "Šifrēšana ir apturēta šai sarunai, līdz atrisināsiet izmaiņu.",
-            "acceptWithoutVerifying": "Pieņemt bez verificēšanas",
-            "acceptedWithoutVerifying": "Jaunā atslēga pieņemta. Partneris nav verificēts",
-            "acceptFailed": "Neizdevās pieņemt jauno atslēgu. Mēģiniet vēlreiz"
         },
         "offlinePlaceholder": "Bezsaistē. Varēsi sūtīt, tiklīdz savienojums atjaunosies.",
         "loadImage": "Ielādēt attēlu",
@@ -1083,7 +1083,7 @@
             "rotatePluginUnavailable": "OpenPGP modulis nav pieejams",
             "trustStateCompromised": {
                 "title": "Uzticības stāvokļa integritātes pārbaude neizdevās",
-                "description": "Vietējie uzticības dati var būt tikuši sagrozīti. Klusa atslēgas atkārtota piespraušana ir bloķēta, lai novērstu atslēgu aizstāšanu.",
+                "description": "Vietējie uzticības dati var būt tikuši sagrozīti. Pirms turpināt, pārbaudiet savu kontaktpersonu atslēgas.",
                 "reestablishButton": "Atkārtoti verificēt un turpināt"
             },
             "ownKeyConflict": {

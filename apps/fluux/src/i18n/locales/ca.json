@@ -213,6 +213,8 @@
             "tryAgain": "Torna-ho a provar",
             "needsDecisionTitle": "Esperant la vostra decisió",
             "needsDecisionDescription": "Els missatges a aquest contacte no es poden xifrar fins que decidiu sobre una clau.",
+            "distrustedTitle": "Cap clau de confiança",
+            "distrustedDescription": "No es poden enviar missatges a aquest contacte fins que confieu en una de les seves claus.",
             "receivesWhenUnlocked": "Rebrà els vostres missatges un cop desbloquegeu",
             "keyTrust": {
                 "verified": "Verificat",
@@ -642,6 +644,13 @@
             "sendBlockedKeyLocked": "Missatge no enviat. Desbloquegeu la vostra clau de xifratge per enviar aquest missatge.",
             "sendBlockedKeyConflict": "Missatge no enviat. Resoleu el conflicte de la vostra clau de xifratge abans d'enviar.",
             "sendBlockedGeneric": "Missatge no enviat. El xifratge ha fallat.",
+            "sendBlockedKeysDistrusted": "Missatge no enviat. No confieu en cap clau d'aquest contacte. Confieu en una d'elles abans d'enviar.",
+            "heldKeys": {
+                "partial": "Heu verificat {{name}}, per això la seva clau nova no rep missatges fins que hi confieu o la verifiqueu.",
+                "all": "Heu verificat {{name}}, per això la seva clau nova no rep missatges fins que hi confieu o la verifiqueu. Fins aleshores no podeu enviar missatges.",
+                "distrusted": "No confieu en cap clau de {{name}}. No podeu enviar missatges fins que confieu en una d'elles.",
+                "review": "Revisa les claus"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Xifratge bloquejat",
@@ -708,15 +717,6 @@
             "alreadyVerifiedBanner": "Aquesta clau ja ha estat verificada. Podeu tornar a verificar-la si teniu dubtes.",
             "confirmSuccess": "Empremta verificada",
             "revokeAction": "Elimina la verificació"
-        },
-        "keyChangeBanner": {
-            "title": "La clau de xifratge de {{name}} ha canviat",
-            "body": "Sembla que aquest contacte ha rotat la seva clau de xifratge. Pots verificar la nova empremta per restaurar la confiança plena, o acceptar-la sense verificar per continuar amb confiança bàsica.",
-            "reVerify": "Tornar a verificar",
-            "encryptionBlocked": "El xifratge està en pausa per a aquesta conversa fins que resolguis el canvi.",
-            "acceptWithoutVerifying": "Acceptar sense verificar",
-            "acceptedWithoutVerifying": "Clau nova acceptada. El contacte no està verificat",
-            "acceptFailed": "No s'ha pogut acceptar la clau nova. Torna-ho a provar"
         },
         "offlinePlaceholder": "Fora de línia. Podràs enviar en reconnectar.",
         "loadImage": "Carrega la imatge",
@@ -1084,7 +1084,7 @@
             "rotatePluginUnavailable": "Mòdul OpenPGP no disponible",
             "trustStateCompromised": {
                 "title": "La verificació d'integritat de l'estat de confiança ha fallat",
-                "description": "Les dades de confiança locals poden haver estat manipulades. El reassignament silenciós de claus està bloquejat per evitar la substitució de claus.",
+                "description": "Les dades de confiança locals poden haver estat manipulades. Comproveu les claus dels vostres contactes abans de continuar.",
                 "reestablishButton": "Reverificar i continuar"
             },
             "ownKeyConflict": {

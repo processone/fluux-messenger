@@ -20,7 +20,6 @@ import { accountUserId } from './openpgpUserId'
 import { keyExportFilename } from './keyExportNaming'
 import { classifyBoundaryError } from './classifyBoundaryError'
 import type { OpenPGPFileIO } from './hostFileIO'
-import type { OpenPGPHostStores } from './hostStores'
 import type {
   BackupRecoveryMode,
   CertValidation,
@@ -36,8 +35,6 @@ import type {
 export type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>
 
 export interface SequoiaPgpPluginOptions {
-  /** The host's trust and status state. */
-  stores: OpenPGPHostStores
   /** Native save and open dialogs for key-file export and import. */
   fileIO: OpenPGPFileIO
   /**
@@ -132,7 +129,7 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   private readonly macosDesktop: boolean
 
   constructor(options: SequoiaPgpPluginOptions) {
-    super(options.stores)
+    super()
     this.fileIO = options.fileIO
     this.macosDesktop = options.macosDesktop
     this.invoke = boundedInvoke(options.invoke, { ...NATIVE_CALL_TIMEOUTS_MS, ...options.timeouts }, options.macosDesktop)

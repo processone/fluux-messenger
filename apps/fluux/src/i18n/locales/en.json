@@ -212,6 +212,8 @@
             "tryAgain": "Try again",
             "needsDecisionTitle": "Waiting for your decision",
             "needsDecisionDescription": "Messages can't be encrypted to this contact until you decide on a key.",
+            "distrustedTitle": "Keys not trusted",
+            "distrustedDescription": "Messages can't be sent to this contact until you trust one of their keys.",
             "receivesWhenUnlocked": "Receives your messages once you unlock",
             "keyTrust": {
                 "verified": "Verified",
@@ -664,6 +666,13 @@
             "sendBlockedKeyLocked": "Message not sent. Unlock your encryption key to send this message.",
             "sendBlockedKeyConflict": "Message not sent. Resolve your encryption key conflict before sending.",
             "sendBlockedGeneric": "Message not sent. Encryption failed.",
+            "sendBlockedKeysDistrusted": "Message not sent. You don't trust any of this contact's keys. Trust one of them before sending.",
+            "heldKeys": {
+                "partial": "You verified {{name}}, so their new key receives no messages until you trust or verify it.",
+                "all": "You verified {{name}}, so their new key receives no messages until you trust or verify it. You can't send messages until then.",
+                "distrusted": "You don't trust any of {{name}}'s keys. You can't send messages until you trust one of them.",
+                "review": "Review keys"
+            },
             "tooltip": {
                 "header": "Encrypted",
                 "protocol": {
@@ -704,15 +713,6 @@
             "alreadyVerifiedBanner": "This key has already been verified. You can re-verify if you have any doubts.",
             "confirmSuccess": "Fingerprint verified",
             "revokeAction": "Remove verification"
-        },
-        "keyChangeBanner": {
-            "title": "{{name}}'s encryption key has changed",
-            "body": "This contact appears to have rotated their encryption key. You can verify the new fingerprint to restore full trust, or accept it without verifying to continue with basic trust.",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "reVerify": "Verify and accept",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted. Peer is unverified",
-            "acceptFailed": "Couldn't accept the new key. Try again"
         },
         "offlinePlaceholder": "Offline. You can send as soon as you reconnect.",
         "loadImage": "Load image",
@@ -948,7 +948,7 @@
             "rotatePluginUnavailable": "OpenPGP plugin not available",
             "trustStateCompromised": {
                 "title": "Trust state integrity check failed",
-                "description": "Local trust data may have been tampered with. Silent key re-pinning is blocked to prevent key substitution.",
+                "description": "Local trust data may have been tampered with. Check your contacts' keys before you continue.",
                 "reestablishButton": "Re-verify and continue"
             },
             "ownKeyConflict": {

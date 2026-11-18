@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, CloudUpload, CloudDownload } from 'lucide-react'
 import { useXMPPContext } from '@fluux/sdk'
-import { useOwnKeyConflictStore } from '@/stores/ownKeyConflictStore'
+import { useOwnKeyConflict } from '@/e2ee/openpgpTrustView'
 import { useToastStore } from '@/stores/toastStore'
 import { RestorePassphraseDialog } from './RestorePassphraseDialog'
 
@@ -45,7 +45,7 @@ function formatFingerprintShort(fp: string): string {
 export function OwnKeyConflictBanner() {
   const { t } = useTranslation()
   const { client } = useXMPPContext()
-  const conflict = useOwnKeyConflictStore((s) => s.conflict)
+  const conflict = useOwnKeyConflict()
   const addToast = useToastStore((s) => s.addToast)
 
   const [busy, setBusy] = useState(false)

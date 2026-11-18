@@ -4,13 +4,15 @@ import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { messageRowId, findMessageRowElement, messageTargetRowId } from './messageRowIdentity'
 import { MessageTargetProvider } from './messageTargetContext'
 import { pickChromeSampleEl, pickWidthSampleEl } from './useRowMetrics'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act, within } from '@testing-library/react'
 import { MessageBubble, buildReplyContext, type MessageBubbleProps } from './MessageBubble'
 import type { BaseMessage } from '@fluux/sdk'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { useWrappedCodeBlocksStore } from '@/stores/wrappedCodeBlocksStore'
-import { setPeerVerified, clearPeerVerified } from '@/stores/verifiedPeerKeysStore'
+import { createPluginStorage, InMemoryStorageBackend } from '@fluux/sdk'
+import { TrustRecordStore } from '@fluux/openpgp-plugin'
+import { setOpenPGPTrustView } from '@/e2ee/openpgpTrustView'
 import type { DensityMode } from '@/stores/settingsStore'
 import { useRef, type ReactNode } from 'react'
 import { MessageToolbar, type MessageToolbarProps } from './MessageToolbar'
@@ -677,64 +679,79 @@ describe('MessageBubble', () => {
       ).toBeNull()
     })
 
-    it('upgrades a tofu lock to verified once the peer is verified out-of-band', () => {
-      // Frozen-color regression: verifying a peer must recolor their already-
-      // decrypted `tofu` messages to `verified` live — the stored
-      // securityContext.trust does NOT change, so the bubble must derive the
-      // displayed trust from the live verification store.
-      const peer = 'verifytest@example.com'
-      const fingerprint = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
-      clearPeerVerified(peer)
-      const props = createDefaultProps({
-        message: createTestMessage({
-          from: peer,
-          // The message carries its signing fingerprint; the live upgrade keys
-          // on a MATCH against the verified one, not mere JID existence.
-          securityContext: { protocolId: 'openpgp', trust: 'tofu', fingerprint },
-        }),
+    describe('live key decisions', () => {
+      // The plugin keeps the user's decision about each key in its trust
+      // records; the bubble reads them through the plugin's trust view.
+      let records: TrustRecordStore
+      beforeEach(async () => {
+        records = new TrustRecordStore()
+        await records.attach(createPluginStorage(new InMemoryStorageBackend(), 'e2ee/openpgp'))
+        setOpenPGPTrustView({
+          getTrustState: () => ({ status: 'sealed' }),
+          getOwnKeyConflict: () => null,
+          getKeyDecisions: (peer) => records.decisionsView(peer),
+          subscribeTrustView: (listener) => records.subscribe((change) => listener(change.peers)),
+        }, { onConversationSecurityChanged: () => () => {} })
       })
-      const { container } = render(<MessageBubble {...props} />)
-      expect(
-        container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
-      ).not.toBeNull()
+      afterEach(() => setOpenPGPTrustView(null))
 
-      // User confirms the peer's fingerprint out-of-band — a store update only,
-      // no prop/securityContext change on the message.
-      act(() => {
-        setPeerVerified(peer, fingerprint)
-      })
+      it('upgrades a tofu lock to verified once the signing key is verified out-of-band', () => {
+        // Frozen-color regression: verifying a key must recolor the already-
+        // decrypted `tofu` messages it signed to `verified` live — the stored
+        // securityContext.trust does NOT change, so the bubble must derive the
+        // displayed trust from the live decisions.
+        const peer = 'verifytest@example.com'
+        const fingerprint = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
+        const props = createDefaultProps({
+          message: createTestMessage({
+            from: peer,
+            // The message carries its signing fingerprint; the live upgrade keys
+            // on that key's decision, not on the contact having any verified key.
+            securityContext: { protocolId: 'openpgp', trust: 'tofu', fingerprint },
+          }),
+        })
+        const { container } = render(<MessageBubble {...props} />)
+        expect(
+          container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
+        ).not.toBeNull()
 
-      expect(
-        container.querySelector('[aria-label="Encrypted with openpgp, trust verified"]'),
-      ).not.toBeNull()
-      expect(
-        container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
-      ).toBeNull()
-      clearPeerVerified(peer)
-    })
+        // User confirms the key out-of-band — a decision only, no
+        // prop/securityContext change on the message.
+        act(() => {
+          records.setDecision(peer, fingerprint, 'verified')
+        })
 
-    it('downgrades a verified lock back to tofu when verification is cleared', () => {
-      const peer = 'verifytest2@example.com'
-      const fingerprint = 'FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000'
-      setPeerVerified(peer, fingerprint)
-      const props = createDefaultProps({
-        message: createTestMessage({
-          from: peer,
-          securityContext: { protocolId: 'openpgp', trust: 'verified', fingerprint },
-        }),
-      })
-      const { container } = render(<MessageBubble {...props} />)
-      expect(
-        container.querySelector('[aria-label="Encrypted with openpgp, trust verified"]'),
-      ).not.toBeNull()
-
-      act(() => {
-        clearPeerVerified(peer)
+        expect(
+          container.querySelector('[aria-label="Encrypted with openpgp, trust verified"]'),
+        ).not.toBeNull()
+        expect(
+          container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
+        ).toBeNull()
       })
 
-      expect(
-        container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
-      ).not.toBeNull()
+      it('downgrades a verified lock back to tofu when verification is removed', () => {
+        const peer = 'verifytest2@example.com'
+        const fingerprint = 'FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000'
+        records.setDecision(peer, fingerprint, 'verified')
+        const props = createDefaultProps({
+          message: createTestMessage({
+            from: peer,
+            securityContext: { protocolId: 'openpgp', trust: 'verified', fingerprint },
+          }),
+        })
+        const { container } = render(<MessageBubble {...props} />)
+        expect(
+          container.querySelector('[aria-label="Encrypted with openpgp, trust verified"]'),
+        ).not.toBeNull()
+
+        act(() => {
+          records.setDecision(peer, fingerprint, 'tofu')
+        })
+
+        expect(
+          container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
+        ).not.toBeNull()
+      })
     })
 
     it('re-renders the tooltip when only the security notes change', () => {

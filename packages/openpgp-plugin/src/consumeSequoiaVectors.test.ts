@@ -13,7 +13,6 @@
  * Regenerate fixtures with:
  *   cd apps/fluux/src-tauri && cargo test generate_sequoia_golden_vectors -- --ignored --nocapture
  */
-import { createMockHostStores } from './testing/mockHostStores'
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -27,7 +26,6 @@ import {
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase, setSessionPassphrase } from './index'
 
-const hostStores = createMockHostStores()
 
 // Decrypting and verifying the Sequoia fixtures is real openpgp.js work, so
 // the tests are CPU-bound and inflate several-fold under the contention of a
@@ -90,7 +88,6 @@ const fixturesExist = existsSync(META_PATH)
 
 beforeEach(async () => {
   localStorage.clear()
-  hostStores.reset()
   clearSessionPassphrase()
 })
 
@@ -111,7 +108,7 @@ describe.skipIf(!fixturesExist)('Sequoia → openpgp.js interop', () => {
   })
 
   it('parses Sequoia-generated public keys and extracts matching fingerprints', async () => {
-    const plugin = new TestablePlugin(hostStores)
+    const plugin = new TestablePlugin()
     const { ctx } = makeCtx('test@example.com')
     setSessionPassphrase('pp')
     await plugin.init(ctx)
@@ -132,7 +129,7 @@ describe.skipIf(!fixturesExist)('Sequoia → openpgp.js interop', () => {
 
   it('imports a Sequoia-generated backup and recovers the same fingerprint', async () => {
     const backup = readFixture('sequoia_alice_backup.asc')
-    const plugin = new TestablePlugin(hostStores)
+    const plugin = new TestablePlugin()
     const { ctx } = makeCtx('alice@example.com')
     await plugin.init(ctx)
 
@@ -155,7 +152,7 @@ describe.skipIf(!fixturesExist)('Sequoia → openpgp.js interop', () => {
     // encrypt/decrypt interop by importing Alice, then having Alice
     // decrypt her own copy (encrypt-to-self from Sequoia).
     const backup = readFixture('sequoia_alice_backup.asc')
-    const plugin = new TestablePlugin(hostStores)
+    const plugin = new TestablePlugin()
     const { ctx } = makeCtx('alice@example.com')
     await plugin.init(ctx)
     await plugin.callBackupImport('alice@example.com', backup, meta.backupPassphrase)
@@ -178,7 +175,7 @@ describe.skipIf(!fixturesExist)('Sequoia → openpgp.js interop', () => {
 
   it('rejects a Sequoia backup with the wrong passphrase', async () => {
     const backup = readFixture('sequoia_alice_backup.asc')
-    const plugin = new TestablePlugin(hostStores)
+    const plugin = new TestablePlugin()
     const { ctx } = makeCtx('alice@example.com')
     await plugin.init(ctx)
 

@@ -211,6 +211,8 @@
             "tryAgain": "Bandyti dar kartą",
             "needsDecisionTitle": "Laukiama jūsų sprendimo",
             "needsDecisionDescription": "Žinučių šiam adresatui negalima šifruoti, kol nenusprendžiate dėl rakto.",
+            "distrustedTitle": "Nėra patikimų raktų",
+            "distrustedDescription": "Šiam adresatui negalima siųsti žinučių, kol nepasitikėsite vienu iš jo raktų.",
             "receivesWhenUnlocked": "Gaus jūsų žinutes, kai atrakinsite",
             "keyTrust": {
                 "verified": "Patvirtintas",
@@ -642,6 +644,13 @@
             "sendBlockedKeyLocked": "Pranešimas neišsiųstas. Atrakinkite savo šifravimo raktą, kad galėtumėte išsiųsti šį pranešimą.",
             "sendBlockedKeyConflict": "Pranešimas neišsiųstas. Prieš siųsdami išspręskite savo šifravimo rakto konfliktą.",
             "sendBlockedGeneric": "Pranešimas neišsiųstas. Šifravimas nepavyko.",
+            "sendBlockedKeysDistrusted": "Pranešimas neišsiųstas. Nepasitikite nė vienu šio kontakto raktu. Prieš siųsdami pasitikėkite vienu iš jų.",
+            "heldKeys": {
+                "partial": "Patvirtinote {{name}}, todėl naujasis raktas negauna žinučių, kol juo nepasitikėsite arba jo nepatvirtinsite.",
+                "all": "Patvirtinote {{name}}, todėl naujasis raktas negauna žinučių, kol juo nepasitikėsite arba jo nepatvirtinsite. Iki tol negalite siųsti žinučių.",
+                "distrusted": "Nepasitikite nė vienu {{name}} raktu. Negalite siųsti žinučių, kol nepasitikėsite vienu iš jų.",
+                "review": "Peržiūrėti raktus"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Šifravimas užrakintas",
@@ -708,15 +717,6 @@
             "alreadyVerifiedBanner": "Šis raktas jau buvo patvirtintas. Galite patvirtinti iš naujo, jei kyla abejonių.",
             "confirmSuccess": "Pirštų atspaudas patvirtintas",
             "revokeAction": "Pašalinti patvirtinimą"
-        },
-        "keyChangeBanner": {
-            "title": "{{name}} šifravimo raktas pasikeitė",
-            "body": "Atrodo, kad šis kontaktas pakeitė savo šifravimo raktą. Galite patvirtinti naują pirštų atspaudą, kad atkurtumėte visišką pasitikėjimą, arba priimti jį nepatvirtinus, kad tęstumėte su pagrindiniu pasitikėjimu.",
-            "reVerify": "Patvirtinti iš naujo",
-            "encryptionBlocked": "Šifravimas pristabdytas šiam pokalbiui, kol neišspręsite pakeitimo.",
-            "acceptWithoutVerifying": "Priimti nepatvirtinus",
-            "acceptedWithoutVerifying": "Naujas raktas priimtas. Kontaktas nepatvirtintas",
-            "acceptFailed": "Nepavyko priimti naujo rakto. Bandykite dar kartą"
         },
         "offlinePlaceholder": "Neprisijungus. Siųsti galėsite prisijungę iš naujo.",
         "loadImage": "Įkelti nuotrauką",
@@ -1084,7 +1084,7 @@
             "rotatePluginUnavailable": "OpenPGP modulis nepasiekiamas",
             "trustStateCompromised": {
                 "title": "Pasitikėjimo būsenos vientisumo patikra nepavyko",
-                "description": "Vietiniai pasitikėjimo duomenys galėjo būti pakeisti. Tylus rakto pakartotinis prisegimas užblokuotas, kad būtų išvengta raktų pakeitimo.",
+                "description": "Vietiniai pasitikėjimo duomenys galėjo būti pakeisti. Prieš tęsdami patikrinkite savo kontaktų raktus.",
                 "reestablishButton": "Pakartotinai patikrinti ir tęsti"
             },
             "ownKeyConflict": {

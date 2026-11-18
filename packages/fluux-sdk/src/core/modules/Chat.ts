@@ -790,8 +790,9 @@ export class Chat extends BaseModule {
       // mid-flight failure occurred (openConversation, encrypt, or similar
       // — all run inside encryptOutbound and surface here). This is
       // NOT a policy question: encryption was expected for this peer, so we
-      // must never silently downgrade to plaintext — pin-mismatch, key-locked
-      // and own-key-conflict all surface here, and leaking the body at the
+      // must never silently downgrade to plaintext — a contact's keys waiting
+      // for a decision or all refused, key-locked and own-key-conflict all
+      // surface here, and leaking the body at the
       // exact moment tampering is suspected is the worst outcome. Re-throw so
       // the UI can prompt to unlock / verify / resolve. A forced-plaintext
       // conversation selects no plugin and never reaches this catch.

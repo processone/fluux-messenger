@@ -6,11 +6,7 @@ import { platform } from '@/platform'
 import { getCredentials } from '@/utils/keychain'
 import { getSession } from '@/utils/sessionStorage'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
-import { usePeerKeysetRevisionStore } from '@/stores/peerKeysetRevisionStore'
-import { useTrustStateStatusStore } from '@/stores/trustStateStatusStore'
-import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
-import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
+import { subscribeOpenPGPKeyChanges } from '@/e2ee/openpgpTrustView'
 import { useIOSPreviewSettingsStore, type PreviewFailure, type PreviewProblem } from './previewSettings'
 
 export interface PreviewState {
@@ -201,10 +197,10 @@ export function startIOSNotificationPreviews(client: XMPPClient): () => void {
   }
   const stopReadLedger = startIOSReadLedger()
   updateAccount()
+  // The snapshot holds the keys that receive messages: refresh when a contact's
+  // keys, a key decision or the trust-state verdict changes.
   const unsubscribes = [connectionStore.subscribe(updateAccount),
-    useEncryptionSettingsStore.subscribe(schedule), usePeerKeysetRevisionStore.subscribe(schedule),
-    useKeyChangeAlertsStore.subscribe(schedule), useTrustStateStatusStore.subscribe(schedule),
-    usePinnedPrimaryFingerprintsStore.subscribe(schedule), useVerifiedPeerKeysStore.subscribe(schedule)]
+    useEncryptionSettingsStore.subscribe(schedule), subscribeOpenPGPKeyChanges(schedule)]
   i18n.on('languageChanged', schedule)
   schedule()
   return () => {

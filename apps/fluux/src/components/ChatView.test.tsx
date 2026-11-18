@@ -13,6 +13,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import { useConversationFileDropStore } from '@/stores/conversationFileDropStore'
+import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
+import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { ChatView } from './ChatView'
 import { messageRowId } from './conversation/messageRowIdentity'
 import type { Message, Contact, Conversation, FileAttachment } from '@fluux/sdk'
@@ -69,7 +71,7 @@ const mockClearAnimation = vi.fn()
 const mockProcessMessageForLinkPreview = vi.fn().mockResolvedValue(undefined)
 
 // Mutable encryption state — set per test
-let mockEncryptionState: { kind: string; protocolId?: string; displayName?: string; fingerprint?: string; trust?: string; listError?: { retry: () => void } } = { kind: 'disabled' }
+let mockEncryptionState: ConversationEncryptionState | { kind: string; protocolId?: string; displayName?: string; fingerprint?: string; trust?: string; listError?: { retry: () => void } } = { kind: 'disabled' }
 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', async (importOriginal) => ({
@@ -381,6 +383,7 @@ vi.mock('lucide-react', () => ({
   ShieldAlert: () => <span data-testid="icon-shield-alert">ShieldAlert</span>,
   ShieldOff: () => <span data-testid="icon-shield-off">ShieldOff</span>,
   ShieldX: () => <span data-testid="icon-shield-x">ShieldX</span>,
+  AlertTriangle: () => <span data-testid="icon-alert-triangle">AlertTriangle</span>,
   Archive: () => <span data-testid="icon-archive">Archive</span>,
   ArchiveRestore: () => <span data-testid="icon-archive-restore">Unarchive</span>,
   User: () => <span data-testid="icon-user">User</span>,
@@ -444,7 +447,8 @@ vi.mock('./Avatar', () => ({
   getConsistentTextColor: () => '#000000',
 }))
 
-vi.mock('@/hooks/useConversationEncryptionState', () => ({
+vi.mock('@/hooks/useConversationEncryptionState', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/useConversationEncryptionState')>()),
   useConversationEncryptionState: () => mockEncryptionState,
 }))
 
@@ -1000,6 +1004,55 @@ describe('ChatView', () => {
 
       expect(mockUploadFile).not.toHaveBeenCalled()
       expect(mockSendMessage).not.toHaveBeenCalled()
+    })
+  })
+
+  // Issue #1452: while every key of a contact waits for a decision or was refused, the SDK
+  // refuses to encrypt; the app must not upload the staged file unencrypted first.
+  describe('Attachments when the contact\'s keys are held', () => {
+    const createPrivateFile = () => new File(['Confidential meeting notes'], 'meeting-notes.txt', { type: 'text/plain' })
+
+    beforeEach(() => {
+      mockActiveConversation = { id: 'alice@example.com', name: 'Alice Smith', type: 'chat', unreadCount: 0 }
+      mockContacts = [createContact()]
+      window.HTMLElement.prototype.scrollTo = vi.fn()
+    })
+
+    it.each([
+      ['every key waits for a decision', { kind: 'unsupported', needsDecision: true } as const],
+      ['every key was refused', { kind: 'rejected', reasons: [{ id: 'A', code: 'distrusted', detail: '' }], distrusted: true } as const],
+    ])('uploads and sends nothing when %s', async (_case, state) => {
+      const file = createPrivateFile()
+      mockEncryptionState = state
+      render(<ChatView />)
+      act(() => mockDropOptions.onFileDrop(file))
+
+      await act(async () => { fireEvent.click(screen.getByTestId('send-button')) })
+
+      expect(mockUploadFile).not.toHaveBeenCalled()
+      expect(mockSendMessage).not.toHaveBeenCalled()
+      expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
+    })
+  })
+
+  describe('Held-keys notice', () => {
+    beforeEach(() => {
+      mockActiveConversation = { id: 'alice@example.com', name: 'Alice Smith', type: 'chat', unreadCount: 0 }
+      mockContacts = [createContact()]
+      useContactSecurityRequestStore.setState({ jid: null })
+    })
+
+    it('explains a verified contact\'s new key and opens their Security details to review it', () => {
+      mockEncryptionState = { kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', trust: 'verified', waiting: 1 }
+      const onShowProfile = vi.fn()
+      render(<ChatView onShowProfile={onShowProfile} />)
+
+      const notice = screen.getByRole('alert')
+      expect(notice).toHaveTextContent('chat.encryption.heldKeys.partial')
+      fireEvent.click(within(notice).getByRole('button', { name: /chat\.encryption\.heldKeys\.review/ }))
+
+      expect(onShowProfile).toHaveBeenCalledWith('alice@example.com')
+      expect(useContactSecurityRequestStore.getState().jid).toBe('alice@example.com')
     })
   })
 

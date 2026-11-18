@@ -6,7 +6,7 @@ import type { PluginStorage } from '@fluux/sdk'
 // verified marker is bound to the exact fingerprint: when a device's identity
 // key (hence fingerprint) changes, the stored hex no longer matches and the
 // device reverts to unverified — the same key-binding property OpenPGP's
-// verifiedPeerKeysStore provides.
+// per-key trust records provide.
 
 const enc = new TextEncoder()
 const dec = new TextDecoder()

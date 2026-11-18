@@ -10,38 +10,41 @@
  * `tabButtons` and `fingerprints` were deliberately revised in piece 3
  * (FLM-274), which replaces the single fingerprint with one row per key, each
  * with its trust tag, whether it receives messages and its decisions.
- * They drive the hook from the same inputs
- * both read: the app's OpenPGP stores and an OpenPGP plugin registered with a
- * real E2EEManager, so they hold the data side fixed and compare only what is
+ * They drive the hook from an OpenPGP plugin registered with a real
+ * E2EEManager, so they hold the data side fixed and compare only what is
  * rendered.
  *
- * The plugin is a stand-in that follows the real one's rules (one used identity
- * per announced key, verified when it equals the contact's saved fingerprint,
- * Verify allowed only for a one-key contact, a replaced verified key listed as
- * unused); the real one is covered in packages/openpgp-plugin.
+ * Issue #1452 (OpenPGP half) deliberately revised the cases of a verified
+ * contact with a new key: that key now waits for the user's decision and
+ * receives nothing meanwhile, and every key offers its own decisions.
+ *
+ * The plugin is a stand-in that follows the real one's rules through the
+ * plugin's own trust records and `keyStanding` (one identity per announced key,
+ * a verified contact's undecided key held, a replaced verified key listed as
+ * unused, rejected certificates listed with their reason); the real one is
+ * covered in packages/openpgp-plugin. `recentlyMet` stands for a protocol that
+ * marks a contact met recently, which the SDK reports as `isNew`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { E2EEPlugin, PeerIdentity, PluginContext } from '@fluux/sdk'
-import { E2EEManager, InMemoryStorageBackend } from '@fluux/sdk'
+import { E2EEManager, InMemoryStorageBackend, createPluginStorage } from '@fluux/sdk'
+import { TrustRecordStore, canonicalFingerprint, keyStanding } from '@fluux/openpgp-plugin'
 import { DummyPlaintextPlugin } from '../../../../packages/fluux-sdk/src/core/e2ee/DummyPlaintextPlugin'
 import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { ChatHeader } from '@/components/ChatHeader'
 import { MessageComposer } from '@/components/MessageComposer'
 import { SecurityGlanceCard } from '@/components/contact-profile/cards/SecurityGlanceCard'
 import { SecurityTab } from '@/components/contact-profile/tabs/SecurityTab'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
-import { usePinnedPrimaryFingerprintsStore, isTofuNew } from '@/stores/pinnedPrimaryFingerprintsStore'
-import { useCertRejectionStore } from '@/stores/certRejectionStore'
+import { HeldKeysBanner } from '@/components/HeldKeysBanner'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
-import { usePeerKeysetRevisionStore } from '@/stores/peerKeysetRevisionStore'
 
 const PEER = 'bob@example.com'
 const A = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
 const B = 'BBBB1111CCCC2222DDDD3333EEEE4444FFFF5555'
 
-const world = vi.hoisted(() => ({ announced: [] as string[], locked: false, listCalls: 0, failListingFrom: null as number | null }))
+const world = vi.hoisted(() => ({ announced: [] as string[], locked: false, recentlyMet: false, listCalls: 0, failListingFrom: null as number | null }))
 const manager = vi.hoisted(() => ({ current: null as unknown }))
 
 vi.mock('@fluux/sdk', async (importOriginal) => {
@@ -71,12 +74,14 @@ vi.mock('@fluux/sdk/react', async (importOriginal) => {
   }
 })
 
-/** An OpenPGP plugin over the app's stores, answering both the plugin's own calls and the identity API. */
+/** The stand-in's trust records: the user's decision about each key, and rejected certificates. */
+let records: TrustRecordStore
+
+/** An OpenPGP plugin over its own trust records, answering both the plugin's own calls and the identity API. */
 class OpenPgpStandIn extends DummyPlaintextPlugin implements E2EEPlugin {
   override readonly descriptor = { ...new DummyPlaintextPlugin().descriptor, id: 'openpgp', displayName: 'OpenPGP', securityLevel: 40 }
   override async init(ctx: PluginContext) {
-    useVerifiedPeerKeysStore.subscribe(() => ctx.reportPeerIdentitiesChanged?.(PEER))
-    usePeerKeysetRevisionStore.subscribe(() => ctx.reportPeerIdentitiesChanged?.(PEER))
+    records.subscribe(() => ctx.reportPeerIdentitiesChanged?.(PEER))
   }
   getPeerFingerprints(): string[] {
     return [...world.announced]
@@ -96,24 +101,29 @@ class OpenPgpStandIn extends DummyPlaintextPlugin implements E2EEPlugin {
   async listPeerIdentities(peer: string): Promise<PeerIdentity[]> {
     world.listCalls += 1
     if (world.failListingFrom !== null && world.listCalls >= world.failListingFrom) throw new Error('listing failed')
-    const saved = useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid[peer]
-    const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+    const decisions = records.decisionsView(peer)
+    const holds = records.hasVerified(peer)
     const out: PeerIdentity[] = world.announced.map((fp) => {
-      const verified = saved !== undefined && same(saved, fp)
-      const isNew = !verified && isTofuNew(peer)
+      const standing = keyStanding(decisions[canonicalFingerprint(fp)!], holds)
       return {
         id: fp,
         fingerprint: fp,
-        trust: verified ? 'verified' : 'tofu',
-        usedForEncryption: true,
-        allowedDecisions: world.announced.length === 1 ? [verified ? 'tofu' : 'verified'] : [],
-        ...(isNew ? { isNew } : {}),
-      } as PeerIdentity
+        trust: standing.trust,
+        usedForEncryption: standing.used,
+        ...(standing.notUsedReason ? { notUsedReason: standing.notUsedReason } : {}),
+        allowedDecisions: [...standing.allowedDecisions],
+        ...(world.recentlyMet && standing.used && standing.trust !== 'verified' ? { isNew: true } : {}),
+      }
     })
-    if (saved && world.announced.length > 0 && !world.announced.some((fp) => same(saved, fp))) {
-      out.push({ id: saved, fingerprint: saved, trust: 'verified', usedForEncryption: false, notUsedReason: 'no-key', allowedDecisions: [] })
+    const listed = (fp: string) => out.findIndex((i) => canonicalFingerprint(i.id) === canonicalFingerprint(fp))
+    if (out.length > 0) {
+      for (const fp of records.verifiedFingerprints(peer)) {
+        if (listed(fp) >= 0) continue
+        out.push({ id: fp, fingerprint: fp, trust: 'verified', usedForEncryption: false, notUsedReason: 'no-key', allowedDecisions: ['tofu'] })
+      }
     }
-    for (const r of useCertRejectionStore.getState().rejectionsByJid[peer] ?? []) {
+    for (const r of records.rejectionsOf(peer)) {
+      if (listed(r.fingerprint) >= 0) continue
       out.push({
         id: r.fingerprint, fingerprint: r.fingerprint, trust: 'unknown', usedForEncryption: false,
         notUsedReason: 'invalid-key', problem: { code: r.code, detail: r.detail }, allowedDecisions: [],
@@ -121,10 +131,8 @@ class OpenPgpStandIn extends DummyPlaintextPlugin implements E2EEPlugin {
     }
     return out
   }
-  async setIdentityTrust(peer: string, id: string, decision: string) {
-    const store = useVerifiedPeerKeysStore.getState()
-    if (decision === 'verified') store.setVerified(peer, id)
-    else store.clearVerified(peer)
+  async setIdentityTrust(peer: string, id: string, decision: 'verified' | 'tofu' | 'untrusted') {
+    records.setDecision(peer, id, decision)
   }
 }
 
@@ -146,6 +154,9 @@ function Surfaces() {
       </div>
       <div data-testid="tab">
         <SecurityTab state={state} onDecide={() => {}} onDisableEncryption={() => {}} onEnableEncryption={() => {}} />
+      </div>
+      <div data-testid="notice">
+        <HeldKeysBanner state={state} peerName="Bob" />
       </div>
     </div>
   )
@@ -190,9 +201,9 @@ describe('encryption state as people see it', () => {
     world.locked = false
     world.listCalls = 0
     world.failListingFrom = null
-    useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-    usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {}, pinnedAtByJid: {} })
-    useCertRejectionStore.setState({ rejectionsByJid: {} })
+    world.recentlyMet = false
+    records = new TrustRecordStore()
+    await records.attach(createPluginStorage(new InMemoryStorageBackend(), 'e2ee/openpgp'))
     useConversationPlaintextOverrideStore.setState({ plaintextJids: {} })
     useEncryptionSettingsStore.setState({ openpgpEnabled: true, pluginRegisteredAt: Date.now() })
     const m = new E2EEManager({
@@ -210,12 +221,8 @@ describe('encryption state as people see it', () => {
     manager.current = null
   })
 
-  const pinnedLongAgo = () =>
-    usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: { [PEER]: A }, pinnedAtByJid: { [PEER]: '2020-01-01T00:00:00Z' } })
-
   it('an unverified one-key contact: gray shield, Verify offered', async () => {
     world.announced = [A]
-    pinnedLongAgo()
     await open()
     expect(seen()).toMatchInlineSnapshot(`
       {
@@ -245,16 +252,17 @@ describe('encryption state as people see it', () => {
         ],
         "tabButtons": [
           "Verify fingerprint",
+          "contacts.encryption.distrustButton",
           "contacts.encryption.disableForContact",
         ],
-        "tabText": "Encrypted (not verified)OpenPGPcontacts.encryption.keyTrust.tofuAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagesVerify fingerprintcontacts.encryption.disableForContact",
+        "tabText": "Encrypted (not verified)OpenPGPcontacts.encryption.keyTrust.tofuAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagesVerify fingerprintcontacts.encryption.distrustButtoncontacts.encryption.disableForContact",
       }
     `)
   })
 
   it('a recently met contact: gray shield, new-contact wording', async () => {
     world.announced = [A]
-    usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: { [PEER]: A }, pinnedAtByJid: { [PEER]: new Date().toISOString() } })
+    world.recentlyMet = true
     await open()
     expect(seen()).toMatchInlineSnapshot(`
       {
@@ -284,17 +292,17 @@ describe('encryption state as people see it', () => {
         ],
         "tabButtons": [
           "Verify fingerprint",
+          "contacts.encryption.distrustButton",
           "contacts.encryption.disableForContact",
         ],
-        "tabText": "Encrypted (not verified)OpenPGPcontacts.encryption.keyTrust.tofuAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagesVerify fingerprintcontacts.encryption.disableForContact",
+        "tabText": "Encrypted (not verified)OpenPGPcontacts.encryption.keyTrust.tofuAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagesVerify fingerprintcontacts.encryption.distrustButtoncontacts.encryption.disableForContact",
       }
     `)
   })
 
   it('a verified one-key contact: teal shield, Remove verification offered', async () => {
     world.announced = [A]
-    pinnedLongAgo()
-    useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: { [PEER]: A } })
+    records.setDecision(PEER, A, 'verified')
     await open()
     expect(seen()).toMatchInlineSnapshot(`
       {
@@ -324,116 +332,109 @@ describe('encryption state as people see it', () => {
         ],
         "tabButtons": [
           "contacts.encryption.removeVerification",
+          "contacts.encryption.distrustButton",
           "contacts.encryption.disableForContact",
         ],
-        "tabText": "VerifiedOpenPGPcontacts.encryption.keyTrust.verifiedAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagescontacts.encryption.removeVerificationcontacts.encryption.disableForContact",
+        "tabText": "VerifiedOpenPGPcontacts.encryption.keyTrust.verifiedAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagescontacts.encryption.removeVerificationcontacts.encryption.distrustButtoncontacts.encryption.disableForContact",
       }
     `)
   })
 
   it('a verified key that differs only in letter case still reads verified', async () => {
     world.announced = [A]
-    pinnedLongAgo()
-    useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: { [PEER]: A.toLowerCase() } })
+    records.setDecision(PEER, A.toLowerCase(), 'verified')
     await open()
     expect(seen().composerLock?.icon).toEqual(['lucide-shield-check'])
   })
 
-  it('a verified contact who announces an extra key: not verified, new-key explanation', async () => {
+  it('a verified contact who announces an extra key: still verified, the new key waits for a decision', async () => {
     world.announced = [A, B]
-    pinnedLongAgo()
-    useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: { [PEER]: A } })
+    records.setDecision(PEER, A, 'verified')
     await open()
-    // The one deliberate change (FLM-268 piece 1): the saved verification holds one fingerprint
-    // per contact, so a contact with two keys no longer offers a Verify that could not make it verified.
+    // Issue #1452: messages go to the verified key only. The new key is listed with its own
+    // decisions and receives nothing until the user trusts or verifies it.
     expect(seen()).toMatchInlineSnapshot(`
       {
         "composerLock": {
           "color": [
-            "text-fluux-muted",
+            "text-fluux-encryption",
           ],
           "icon": [
-            "lucide-shield",
+            "lucide-shield-check",
           ],
-          "label": "This contact has a new key that has not been verified.",
+          "label": "chat.encryption.verifiedTooltip",
         },
         "fingerprints": [
           "AAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555",
           "BBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555",
         ],
-        "glance": "Encrypted, not verified",
+        "glance": "Verified and encrypted",
         "glanceColors": [
-          "text-fluux-muted",
+          "text-fluux-encryption",
           "text-fluux-text",
           "text-fluux-muted",
         ],
         "headerButtons": [
-          "chat.verifyPeer.chipAriaLabel",
+          "chat.encryption.encryptedTo",
         ],
         "headerColors": [
-          "text-fluux-muted",
+          "text-fluux-encryption",
         ],
         "tabButtons": [
+          "contacts.encryption.removeVerification",
+          "contacts.encryption.distrustButton",
+          "Verify fingerprint",
+          "contacts.encryption.trustButton",
+          "contacts.encryption.distrustButton",
           "contacts.encryption.disableForContact",
         ],
-        "tabText": "Encrypted (not verified)This contact has a new key that has not been verified.OpenPGPcontacts.encryption.keyTrust.verifiedAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagescontacts.encryption.keyTrust.tofuBBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555contacts.encryption.receivesMessagescontacts.encryption.disableForContact",
+        "tabText": "VerifiedOpenPGPcontacts.encryption.keyTrust.verifiedAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagescontacts.encryption.removeVerificationcontacts.encryption.distrustButtoncontacts.encryption.keyTrust.unknownBBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555contacts.encryption.receivesNoMessages: contacts.encryption.notUsedReason.awaiting-decisionVerify fingerprintcontacts.encryption.trustButtoncontacts.encryption.distrustButtoncontacts.encryption.disableForContact",
       }
     `)
   })
 
-  it('a verified key the contact replaced: not verified, new-key explanation', async () => {
+  it('a verified key the contact replaced: the new key waits for a decision and nothing is encrypted', async () => {
     world.announced = [B]
-    pinnedLongAgo()
-    useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: { [PEER]: A } })
+    records.setDecision(PEER, A, 'verified')
     await open()
     expect(seen()).toMatchInlineSnapshot(`
       {
-        "composerLock": {
-          "color": [
-            "text-fluux-muted",
-          ],
-          "icon": [
-            "lucide-shield",
-          ],
-          "label": "This contact has a new key that has not been verified.",
-        },
+        "composerLock": null,
         "fingerprints": [
           "BBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555",
           "AAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555",
         ],
-        "glance": "Encrypted, not verified",
+        "glance": "contacts.encryption.needsDecisionTitle",
         "glanceColors": [
-          "text-fluux-muted",
+          "text-fluux-yellow",
           "text-fluux-text",
           "text-fluux-muted",
         ],
-        "headerButtons": [
-          "chat.verifyPeer.chipAriaLabel",
-        ],
-        "headerColors": [
-          "text-fluux-muted",
-        ],
+        "headerButtons": [],
+        "headerColors": [],
         "tabButtons": [
           "Verify fingerprint",
-          "contacts.encryption.disableForContact",
+          "contacts.encryption.trustButton",
+          "contacts.encryption.distrustButton",
+          "contacts.encryption.removeVerification",
         ],
-        "tabText": "Encrypted (not verified)This contact has a new key that has not been verified.OpenPGPcontacts.encryption.keyTrust.tofuBBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555contacts.encryption.receivesMessagesVerify fingerprintcontacts.encryption.keyTrust.verifiedAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesNoMessages: contacts.encryption.notUsedReason.no-keycontacts.encryption.disableForContact",
+        "tabText": "contacts.encryption.needsDecisionTitlecontacts.encryption.needsDecisionDescriptionOpenPGPcontacts.encryption.keyTrust.unknownBBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555contacts.encryption.receivesNoMessages: contacts.encryption.notUsedReason.awaiting-decisionVerify fingerprintcontacts.encryption.trustButtoncontacts.encryption.distrustButtoncontacts.encryption.keyTrust.verifiedAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesNoMessages: contacts.encryption.notUsedReason.no-keycontacts.encryption.removeVerification",
       }
     `)
   })
 
   it('a recently met contact whose verified key was replaced still offers Verify', async () => {
     world.announced = [B]
-    usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: { [PEER]: B }, pinnedAtByJid: { [PEER]: new Date().toISOString() } })
-    useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: { [PEER]: A } })
+    world.recentlyMet = true
+    records.setDecision(PEER, A, 'verified')
     await open()
     expect(seen().tabButtons).toContain('Verify fingerprint')
-    expect(seen().composerLock?.label).toBe('This contact has a new key that has not been verified.')
+    // The new key is held whatever the protocol says about the contact: no lock, nothing encrypted to it.
+    expect(seen().composerLock).toBeNull()
   })
 
   it('a never-verified contact with two keys: plain gray shield', async () => {
     world.announced = [A, B]
-    pinnedLongAgo()
     await open()
     expect(seen().composerLock?.icon).toEqual(['lucide-shield'])
     expect(seen().composerLock?.label).not.toBe('This contact has a new key that has not been verified.')
@@ -442,10 +443,9 @@ describe('encryption state as people see it', () => {
 
   it('flips to verified when the contact is verified while the chat is open', async () => {
     world.announced = [A]
-    pinnedLongAgo()
     await open()
     expect(seen().composerLock?.icon).toEqual(['lucide-shield'])
-    await act(async () => { useVerifiedPeerKeysStore.getState().setVerified(PEER, A) })
+    await act(async () => { await (manager.current as E2EEManager).setIdentityTrust('openpgp', PEER, A, 'verified') })
     await waitFor(() => expect(seen().composerLock?.icon).toEqual(['lucide-shield-check']))
   })
 
@@ -456,9 +456,7 @@ describe('encryption state as people see it', () => {
   })
 
   it('a contact whose only certificates were rejected: rejected explanation with each reason', async () => {
-    useCertRejectionStore.setState({
-      rejectionsByJid: { [PEER]: [{ fingerprint: B, code: 'no_encryption_subkey', detail: 'no subkey', observedAt: '2024-01-01T00:00:00Z' }] },
-    })
+    records.setRejections(PEER, [{ fingerprint: B, code: 'no_encryption_subkey', detail: 'no subkey', observedAt: '2024-01-01T00:00:00Z' }])
     await open()
     expect(seen()).toMatchInlineSnapshot(`
       {
@@ -538,15 +536,16 @@ describe('encryption state as people see it', () => {
         ],
         "tabButtons": [
           "Verify fingerprint",
+          "contacts.encryption.distrustButton",
         ],
-        "tabText": "chat.encryption.keyLockedchat.encryption.keyLockedTooltipOpenPGPcontacts.encryption.keyTrust.tofuAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesWhenUnlockedVerify fingerprint",
+        "tabText": "chat.encryption.keyLockedchat.encryption.keyLockedTooltipOpenPGPcontacts.encryption.keyTrust.tofuAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesWhenUnlockedVerify fingerprintcontacts.encryption.distrustButton",
       }
     `)
   })
 
   it('the header tooltip names the new-contact state', async () => {
     world.announced = [A]
-    usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: { [PEER]: A }, pinnedAtByJid: { [PEER]: new Date().toISOString() } })
+    world.recentlyMet = true
     await open()
     vi.useFakeTimers()
     try {
@@ -561,7 +560,6 @@ describe('encryption state as people see it', () => {
 
   it('a listing that fails after the first read: a list error that Try again recovers, never missing rows', async () => {
     world.announced = [A]
-    pinnedLongAgo()
     // The manager's own read succeeds (call 1); the app's listing (call 2) fails and the manager drops the plugin.
     world.failListingFrom = 2
     await open()
@@ -579,7 +577,6 @@ describe('encryption state as people see it', () => {
 
   it('a listing that fails from the manager\'s own first read: still encrypted, so uploads stay encrypted', async () => {
     world.announced = [A]
-    pinnedLongAgo()
     world.failListingFrom = 1
     await open()
     expect(screen.getByTestId('tab').textContent).toContain('contacts.encryption.listErrorTitle')
@@ -597,4 +594,53 @@ describe('encryption state as people see it', () => {
     // The header keeps its unlock affordance, so a send still asks to unlock and uploads nothing.
     expect(seen().headerButtons.length).toBeGreaterThan(0)
   })
+
+  // Issue #1452: the conversation says why a contact's key receives nothing.
+  describe('the held-keys notice in the conversation', () => {
+    const notice = () => screen.getByTestId('notice').textContent
+
+    it('explains the new key of a verified contact while the verified key keeps receiving', async () => {
+      world.announced = [A, B]
+      records.setDecision(PEER, A, 'verified')
+      await open()
+      expect(notice()).toContain('chat.encryption.heldKeys.partial')
+      expect(seen().composerLock?.icon).toEqual(['lucide-shield-check'])
+    })
+
+    it('says nothing can be sent when the only key of a verified contact is new', async () => {
+      world.announced = [B]
+      records.setDecision(PEER, A, 'verified')
+      await open()
+      expect(notice()).toContain('chat.encryption.heldKeys.all')
+    })
+
+    it('says nothing for a never-verified contact, whose new keys are used at once', async () => {
+      world.announced = [A, B]
+      await open()
+      expect(notice()).toBe('')
+      expect(seen().tabText).not.toContain('notUsedReason.awaiting-decision')
+    })
+
+    it('goes away once the user trusts the new key, which then receives messages', async () => {
+      world.announced = [A, B]
+      records.setDecision(PEER, A, 'verified')
+      await open()
+      expect(notice()).toContain('chat.encryption.heldKeys.partial')
+      await act(async () => { await (manager.current as E2EEManager).setIdentityTrust('openpgp', PEER, B, 'tofu') })
+      await waitFor(() => expect(notice()).toBe(''))
+      expect(seen().tabText).not.toContain('notUsedReason.awaiting-decision')
+    })
+
+    it('explains a contact whose every key the user refused, everywhere it shows', async () => {
+      world.announced = [A]
+      records.setDecision(PEER, A, 'untrusted')
+      await open()
+      expect(notice()).toContain('chat.encryption.heldKeys.distrusted')
+      expect(seen().glance).toContain('contacts.encryption.distrustedTitle')
+      expect(seen().headerButtons).toEqual(['contacts.encryption.distrustedTitle'])
+      expect(seen().tabText).toContain('contacts.encryption.distrustedDescription')
+      expect(seen().tabText).not.toContain('contacts.encryption.rejectedDescription')
+    })
+  })
+
 })

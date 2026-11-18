@@ -3,7 +3,7 @@ import { connectionStore } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
 import { setPlatformForTesting } from '@/platform'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
-import { usePeerKeysetRevisionStore } from '@/stores/peerKeysetRevisionStore'
+import { setOpenPGPTrustView } from '@/e2ee/openpgpTrustView'
 import { useIOSPreviewSettingsStore } from './previewSettings'
 import { startIOSNotificationPreviews, setIOSNotificationPreviews, purgeIOSNotificationPreviews } from './notificationPreviews'
 vi.mock('@fluux/sdk', async (importOriginal) => {
@@ -40,7 +40,14 @@ describe('account-scoped notification provisioning triggers', () => {
   let stop: (() => void) | undefined
   const peers = { 'alice@nse.invalid': [{ fingerprint: 'synthetic-key', publicArmored: 'synthetic-public' }] }
   const client = { e2ee: { getPlugin: () => ({ getOwnFingerprint: () => 'synthetic-own', notificationVerifierSnapshot: (account: string) => account === 'bob@nse.invalid' ? peers : null }) } } as unknown as XMPPClient
+  // The E2EE manager's signal that a contact's keys changed, as the registered plugin reports it.
+  const keyListeners = new Set<(peer: string | null) => void>()
+  const keysChanged = (peer: string) => keyListeners.forEach((listener) => listener(peer))
   beforeEach(() => {
+    setOpenPGPTrustView({
+      getTrustState: () => ({ status: 'sealed' }), getOwnKeyConflict: () => null,
+      getKeyDecisions: () => ({}), subscribeTrustView: () => () => {},
+    }, { onConversationSecurityChanged: (listener) => { keyListeners.add(listener); return () => { keyListeners.delete(listener) } } })
     localStorage.clear(); lab.shared = null; lab.reads = 0; lab.password = 'synthetic'; lab.materialError = null
     lab.token = null; lab.provisionError = null; lab.provisioned = []; lab.invalidated = []
     restore = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
@@ -48,7 +55,7 @@ describe('account-scoped notification provisioning triggers', () => {
     useEncryptionSettingsStore.setState({ openpgpEnabled: true })
     useIOSPreviewSettingsStore.getState().setAccount(null)
   })
-  afterEach(async () => { stop?.(); stop = undefined; await purgeIOSNotificationPreviews(); restore() })
+  afterEach(async () => { stop?.(); stop = undefined; await purgeIOSNotificationPreviews(); restore(); setOpenPGPTrustView(null) })
   it('previews are on by default once OpenPGP is ready', async () => {
     stop = startIOSNotificationPreviews(client)
     await vi.waitFor(() => expect(lab.shared).toMatchObject({ account: 'bob@nse.invalid', opt_in: true, peers }))
@@ -87,7 +94,7 @@ describe('account-scoped notification provisioning triggers', () => {
     stop = startIOSNotificationPreviews(client)
     await setIOSNotificationPreviews(true)
     await purgeIOSNotificationPreviews()
-    usePeerKeysetRevisionStore.getState().notifyPeerKeysetChanged('alice@nse.invalid')
+    keysChanged('alice@nse.invalid')
     await Promise.resolve(); await Promise.resolve()
     expect(lab.shared).toBeNull()
   })
@@ -95,7 +102,7 @@ describe('account-scoped notification provisioning triggers', () => {
     stop = startIOSNotificationPreviews(client)
     await setIOSNotificationPreviews(true)
     const before = lab.reads
-    usePeerKeysetRevisionStore.getState().notifyPeerKeysetChanged('bob@nse.invalid')
+    keysChanged('bob@nse.invalid')
     await vi.waitFor(() => expect(lab.reads).toBeGreaterThan(before))
     useEncryptionSettingsStore.setState({ openpgpEnabled: false })
     await vi.waitFor(() => expect(lab.shared).toBeNull())
@@ -107,7 +114,7 @@ describe('account-scoped notification provisioning triggers', () => {
     await vi.waitFor(() => expect(useIOSPreviewSettingsStore.getState().missingCredential).toBe(true))
     expect(lab.shared).toBeNull()
     lab.password = 'synthetic'
-    usePeerKeysetRevisionStore.getState().notifyPeerKeysetChanged('alice@nse.invalid')
+    keysChanged('alice@nse.invalid')
     await vi.waitFor(() => expect(lab.shared?.account).toBe('bob@nse.invalid'))
     expect(useIOSPreviewSettingsStore.getState().missingCredential).toBe(false)
   })
@@ -139,7 +146,7 @@ describe('account-scoped notification provisioning triggers', () => {
     await vi.waitFor(() => expect(useIOSPreviewSettingsStore.getState().failure).toEqual({ problem: 'server' }))
     expect(localStorage.getItem('fluux-ios-ox-previews:bob@nse.invalid')).toBeNull()
     lab.materialError = null
-    usePeerKeysetRevisionStore.getState().notifyPeerKeysetChanged('alice@nse.invalid')
+    keysChanged('alice@nse.invalid')
     await vi.waitFor(() => expect(lab.shared?.account).toBe('bob@nse.invalid'))
     expect(useIOSPreviewSettingsStore.getState().failure).toBeNull()
   })
@@ -149,7 +156,7 @@ describe('account-scoped notification provisioning triggers', () => {
     expect(lab.provisioned).toEqual([{ accountJid: 'bob@nse.invalid', server: 'tls://127.0.0.1:15223', password: 'synthetic', userAgentId: 'synthetic-agent' }])
     expect(lab.token).toMatchObject({ account: 'bob@nse.invalid', userAgentId: 'synthetic-agent', token: 'synthetic-token' })
     lab.password = ''
-    usePeerKeysetRevisionStore.getState().notifyPeerKeysetChanged('alice@nse.invalid')
+    keysChanged('alice@nse.invalid')
     await vi.waitFor(() => expect(lab.shared).toMatchObject({ account: 'bob@nse.invalid', password: '' }))
     expect(lab.provisioned).toHaveLength(1)
     expect(useIOSPreviewSettingsStore.getState().missingCredential).toBe(false)

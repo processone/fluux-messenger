@@ -11,8 +11,13 @@ import type {
   PeerIdentity,
   IdentityTrustDecision,
 } from '@fluux/sdk'
-import { isPeerVerified, clearPeerVerified, useVerifiedPeerKeysStore } from '../stores/verifiedPeerKeysStore'
-import type { KeyBundle, BackupProbeResult } from '@fluux/openpgp-plugin'
+import type {
+  KeyBundle,
+  BackupProbeResult,
+  KeyDecision,
+  OwnKeyConflict,
+  TrustStateVerdict,
+} from '@fluux/openpgp-plugin'
 
 const OPENPGP_DESCRIPTOR: E2EEProtocolDescriptor = {
   id: 'openpgp',
@@ -31,6 +36,7 @@ const OPENPGP_DESCRIPTOR: E2EEProtocolDescriptor = {
 const DEMO_FINGERPRINT = 'BAF0DF7BE3E7B61C891E7FEB3E37798300000001'
 const DEMO_AVA_FINGERPRINT = 'A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2'
 const DEMO_BACKUP_PASSPHRASE = 'correct horse battery staple demo phrase two three'
+const NO_DECISIONS: Readonly<Record<string, KeyDecision>> = Object.freeze({})
 
 function randomFingerprint(): string {
   const hex = '0123456789ABCDEF'
@@ -59,7 +65,8 @@ interface DemoE2EEState {
  * via casts on `client.e2ee.getPlugin('openpgp')`.
  *
  * State lives in memory — no IndexedDB, no keychain, no PEP. Every
- * operation simulates a short delay so loading states are visible.
+ * operation simulates a short delay so loading states are visible. Ava's key
+ * starts verified so the verified badge shows on her conversation.
  *
  * URL param `?e2ee=conflict` starts the plugin with no local key but
  * an existing "server" identity, triggering the IdentityChoiceDialog.
@@ -69,6 +76,9 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
 
   private state: DemoE2EEState
   private ctx: PluginContext | null = null
+  private avaDecisions: Readonly<Record<string, KeyDecision>> = Object.freeze({ [DEMO_AVA_FINGERPRINT]: 'verified' })
+  private readonly trustListeners = new Set<(peers: readonly string[] | null) => void>()
+  private readonly trustState: TrustStateVerdict = { status: 'sealed' }
 
   constructor(opts?: { forceConflict?: boolean }) {
     this.state = {
@@ -153,9 +163,8 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
     return this.avaVerified() ? ('verified' as const) : ('tofu' as const)
   }
 
-  /** Ava's key is verified while the shared verified-key store (seeded by demo.tsx) holds it. */
   private avaVerified(): boolean {
-    return isPeerVerified('ava@fluux.chat', DEMO_AVA_FINGERPRINT)
+    return this.avaDecisions[DEMO_AVA_FINGERPRINT] === 'verified'
   }
 
   async listPeerIdentities(peer: string): Promise<PeerIdentity[]> {
@@ -171,8 +180,30 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
 
   async setIdentityTrust(peer: string, _id: string, decision: IdentityTrustDecision) {
     if (peer !== 'ava@fluux.chat') return
-    if (decision === 'verified') useVerifiedPeerKeysStore.getState().setVerified(peer, DEMO_AVA_FINGERPRINT)
-    else clearPeerVerified(peer)
+    this.avaDecisions = Object.freeze({ [DEMO_AVA_FINGERPRINT]: decision })
+    for (const listener of [...this.trustListeners]) listener([peer])
+    this.ctx?.reportPeerIdentitiesChanged?.(peer)
+  }
+
+  // --- Trust view read by the app (see e2ee/openpgpTrustView.ts) ---
+
+  getTrustState(): TrustStateVerdict {
+    return this.trustState
+  }
+
+  getOwnKeyConflict(): OwnKeyConflict | null {
+    return null
+  }
+
+  getKeyDecisions(peer: string): Readonly<Record<string, KeyDecision>> {
+    return peer === 'ava@fluux.chat' ? this.avaDecisions : NO_DECISIONS
+  }
+
+  subscribeTrustView(listener: (peers: readonly string[] | null) => void): () => void {
+    this.trustListeners.add(listener)
+    return () => {
+      this.trustListeners.delete(listener)
+    }
   }
 
   async getDeviceTrust() {

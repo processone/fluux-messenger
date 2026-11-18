@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import type { PluginContext, XMLElementData } from '@fluux/sdk'
 import {
-  VERIFICATIONS_NODE,
-  publishVerificationsToServer,
-  fetchVerificationsFromServer,
-  planVerificationUpdate,
+  LEGACY_VERIFICATIONS_NODE,
+  VERIFICATION_SETS_NODE,
+  fetchLegacyVerifications,
+  fetchVerificationSets,
+  publishVerificationSets,
   type DecryptFn,
 } from './verificationSync'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function b64(text: string): string {
+  return btoa(unescape(encodeURIComponent(text)))
+}
 
 function unb64(encoded: string): string {
   return decodeURIComponent(escape(atob(encoded)))
@@ -19,6 +24,8 @@ function unb64(encoded: string): string {
 const OWN_FP = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
 const OWN_PUBLIC = 'OWN-PUBLIC-ARMOR'
 const OWN_JID = 'me@example.com'
+const BOB_FP = 'B0B0000000000000000000000000000000000012'
+const BOB_FP_2 = 'B0B0000000000000000000000000000000000022'
 
 const passthroughEncrypt = async (plaintext: string) => plaintext
 
@@ -36,44 +43,56 @@ function decryptReturning(meta: DecryptMeta): DecryptFn {
 
 /** A self-signed decrypt that passes the own-key signature gate. */
 function selfSignedDecrypt(plaintext: string): DecryptFn {
-  return decryptReturning({
-    plaintext,
-    signatureVerified: true,
-    signerFingerprint: OWN_FP,
-    signaturePresent: true,
-  })
+  return decryptReturning({ plaintext, signatureVerified: true, signerFingerprint: OWN_FP, signaturePresent: true })
 }
+
+/** The passthrough "ciphertext" back to plaintext, signed by `signer`. */
+const decryptSignedBy = (signer: string | null, verified = true): DecryptFn => async (ciphertext) => ({
+  plaintext: ciphertext, signatureVerified: verified, signerFingerprint: signer, signaturePresent: true,
+})
 
 type PepItem = { id: string; payload: XMLElementData }
 
-/** Minimal ctx exposing the PEP primitives the module touches. */
+/** Minimal ctx exposing the PEP primitives the module touches, one item per node. */
 function makeCtx(): {
   ctx: PluginContext
   published: Array<{ node: string; item: PepItem; options?: unknown }>
-  setNode: (item: PepItem | null) => void
+  setNode: (node: string, item: PepItem | null) => void
+  failQuery: (node: string, error: Error) => void
 } {
   const published: Array<{ node: string; item: PepItem; options?: unknown }> = []
-  let node: PepItem | null = null
+  const nodes = new Map<string, PepItem>()
+  const failures = new Map<string, Error>()
   const ctx = {
     xmpp: {
       publishPEP: async (n: string, item: PepItem, options?: unknown) => {
         published.push({ node: n, item, options })
-        node = item
+        nodes.set(n, item)
       },
-      queryPEP: async () => (node ? [node] : []),
+      queryPEP: async (_jid: string, n: string) => {
+        const failure = failures.get(n)
+        if (failure) throw failure
+        const item = nodes.get(n)
+        return item ? [item] : []
+      },
     },
   } as unknown as PluginContext
-  return { ctx, published, setNode: (item) => (node = item) }
+  return {
+    ctx,
+    published,
+    setNode: (n, item) => (item ? nodes.set(n, item) : nodes.delete(n)),
+    failQuery: (n, error) => failures.set(n, error),
+  }
 }
 
-/** A verifications item with an arbitrary (decrypt-ignored) data child. */
-function itemWithData(dataChild: string): PepItem {
+/** A verifications item whose data child holds base64 of `ciphertext`. */
+function itemOn(node: string, ciphertext: string): PepItem {
   return {
     id: 'current',
     payload: {
       name: 'verifications-data',
-      attrs: { xmlns: VERIFICATIONS_NODE },
-      children: [{ name: 'data', attrs: {}, children: [dataChild] }],
+      attrs: { xmlns: node },
+      children: [{ name: 'data', attrs: {}, children: [b64(ciphertext)] }],
     },
   }
 }
@@ -87,235 +106,138 @@ function decodePublishedPayload(item: PepItem): Record<string, unknown> {
   return JSON.parse(unb64(text)) as Record<string, unknown>
 }
 
-const VALID_V1_PAYLOAD = JSON.stringify({
-  v: 1,
-  ts: 1000,
-  verifications: { 'bob@example.com': 'BOB_FP' },
-})
+const setsJson = (verified: Record<string, string[]>, version: number) =>
+  JSON.stringify({ v: 1, ts: 1000, version, verified })
 
 // ---------------------------------------------------------------------------
-// publishVerificationsToServer
+// publishVerificationSets
 // ---------------------------------------------------------------------------
 
-describe('publishVerificationsToServer', () => {
-  it('publishes even when the verifications map is empty (revocation of the last entry)', async () => {
+describe('publishVerificationSets', () => {
+  it('publishes every verified key of each contact with the version, to the set node only', async () => {
     const { ctx, published } = makeCtx()
-    await publishVerificationsToServer(ctx, passthroughEncrypt, OWN_PUBLIC, {}, 1)
+    await publishVerificationSets(ctx, passthroughEncrypt, OWN_PUBLIC, { 'bob@example.com': [BOB_FP, BOB_FP_2] }, 3)
+
     expect(published).toHaveLength(1)
-    expect(published[0].node).toBe(VERIFICATIONS_NODE)
-    expect(decodePublishedPayload(published[0].item).verifications).toEqual({})
+    expect(published[0].node).toBe(VERIFICATION_SETS_NODE)
+    expect(published[0].item.payload.attrs.xmlns).toBe(VERIFICATION_SETS_NODE)
+    expect(published[0].options).toMatchObject({ accessModel: 'whitelist', maxItems: 1 })
+    expect(decodePublishedPayload(published[0].item)).toMatchObject({
+      v: 1, version: 3, verified: { 'bob@example.com': [BOB_FP, BOB_FP_2] },
+    })
   })
 
-  it('embeds v:2 and the supplied monotonic version in the payload', async () => {
+  it('publishes even when no key is verified (removal of the last verification)', async () => {
     const { ctx, published } = makeCtx()
-    await publishVerificationsToServer(
-      ctx,
-      passthroughEncrypt,
-      OWN_PUBLIC,
-      { 'alice@example.com': 'ALICE_FP' },
-      7,
-    )
-    const payload = decodePublishedPayload(published[0].item)
-    expect(payload.v).toBe(2)
-    expect(payload.version).toBe(7)
-    expect(payload.verifications).toEqual({ 'alice@example.com': 'ALICE_FP' })
+    await publishVerificationSets(ctx, passthroughEncrypt, OWN_PUBLIC, {}, 4)
+    expect(decodePublishedPayload(published[0].item)).toMatchObject({ version: 4, verified: {} })
+  })
+
+  it('reads back what it published', async () => {
+    const { ctx } = makeCtx()
+    await publishVerificationSets(ctx, passthroughEncrypt, OWN_PUBLIC, { 'bob@example.com': [BOB_FP] }, 2)
+    expect(await fetchVerificationSets(ctx, decryptSignedBy(OWN_FP), OWN_JID, OWN_PUBLIC, OWN_FP)).toEqual({
+      kind: 'snapshot', sets: { 'bob@example.com': [BOB_FP] }, version: 2,
+    })
   })
 })
 
 // ---------------------------------------------------------------------------
-// fetchVerificationsFromServer — signature enforcement
+// fetchVerificationSets
 // ---------------------------------------------------------------------------
 
-describe('fetchVerificationsFromServer — signature enforcement', () => {
-  function fetchWith(meta: DecryptMeta, ownFp: string = OWN_FP) {
+describe('fetchVerificationSets — signature enforcement', () => {
+  const read = async (decrypt: DecryptFn) => {
     const { ctx, setNode } = makeCtx()
-    setNode(itemWithData('AAAA'))
-    return fetchVerificationsFromServer(ctx, decryptReturning(meta), OWN_JID, OWN_PUBLIC, ownFp)
+    setNode(VERIFICATION_SETS_NODE, itemOn(VERIFICATION_SETS_NODE, setsJson({ 'bob@example.com': [BOB_FP] }, 5)))
+    return fetchVerificationSets(ctx, decrypt, OWN_JID, OWN_PUBLIC, OWN_FP)
   }
 
-  it('returns the map for a payload validly signed by our own primary key', async () => {
-    const result = await fetchWith({
-      plaintext: VALID_V1_PAYLOAD,
-      signatureVerified: true,
-      signerFingerprint: OWN_FP,
-      signaturePresent: true,
-    })
-    expect(result).toEqual({ verifications: { 'bob@example.com': 'BOB_FP' }, version: 0 })
-  })
-
-  it('rejects an unsigned payload (server-forged ciphertext to our public key)', async () => {
-    const result = await fetchWith({
-      plaintext: VALID_V1_PAYLOAD,
-      signatureVerified: false,
-      signerFingerprint: null,
-      signaturePresent: false,
-    })
-    expect(result).toBeNull()
-  })
-
-  it('rejects a payload whose signature is present but does not verify', async () => {
-    const result = await fetchWith({
-      plaintext: VALID_V1_PAYLOAD,
-      signatureVerified: false,
-      signerFingerprint: OWN_FP,
-      signaturePresent: true,
-    })
-    expect(result).toBeNull()
-  })
-
-  it('rejects a payload validly signed by a key other than our own primary key', async () => {
-    const result = await fetchWith({
-      plaintext: VALID_V1_PAYLOAD,
-      signatureVerified: true,
-      signerFingerprint: 'DEADBEEF0000111122223333444455556666AAAA',
-      signaturePresent: true,
-    })
-    expect(result).toBeNull()
-  })
-
-  it('rejects a verified signature with no signer fingerprint (defensive)', async () => {
-    const result = await fetchWith({
-      plaintext: VALID_V1_PAYLOAD,
-      signatureVerified: true,
-      signerFingerprint: null,
-      signaturePresent: true,
-    })
-    expect(result).toBeNull()
+  it('returns the sets for a payload validly signed by our own primary key', async () => {
+    expect(await read(decryptSignedBy(OWN_FP))).toEqual({ kind: 'snapshot', sets: { 'bob@example.com': [BOB_FP] }, version: 5 })
   })
 
   it('matches the signer fingerprint case-insensitively', async () => {
-    const result = await fetchWith(
-      {
-        plaintext: VALID_V1_PAYLOAD,
-        signatureVerified: true,
-        signerFingerprint: OWN_FP.toLowerCase(),
-        signaturePresent: true,
-      },
-      OWN_FP.toUpperCase(),
-    )
-    expect(result).toEqual({ verifications: { 'bob@example.com': 'BOB_FP' }, version: 0 })
+    expect((await read(decryptSignedBy(OWN_FP.toLowerCase()))).kind).toBe('snapshot')
+  })
+
+  it.each([
+    ['an unsigned payload (server-forged ciphertext to our public key)', decryptReturning({ plaintext: setsJson({ 'bob@example.com': [BOB_FP] }, 5), signatureVerified: false, signerFingerprint: null, signaturePresent: false })],
+    ['a signature that does not verify', decryptSignedBy(OWN_FP, false)],
+    ['a payload signed by another key', decryptSignedBy('FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000')],
+    ['a verified signature with no signer fingerprint', decryptSignedBy(null)],
+  ])('treats %s as unreadable, never as absent', async (_label, decrypt) => {
+    expect(await read(decrypt)).toEqual({ kind: 'unreadable' })
   })
 })
 
-// ---------------------------------------------------------------------------
-// fetchVerificationsFromServer — version handling
-// ---------------------------------------------------------------------------
-
-describe('fetchVerificationsFromServer — version', () => {
-  it('returns the verifications and version from a v2 payload', async () => {
-    const { ctx, setNode } = makeCtx()
-    setNode(itemWithData('AAAA'))
-    const json = JSON.stringify({ v: 2, ts: 1000, version: 5, verifications: { 'a@x': 'A' } })
-    const result = await fetchVerificationsFromServer(
-      ctx,
-      selfSignedDecrypt(json),
-      OWN_JID,
-      OWN_PUBLIC,
-      OWN_FP,
-    )
-    expect(result).toEqual({ verifications: { 'a@x': 'A' }, version: 5 })
-  })
-
-  it('defaults version to 0 for a legacy v1 payload (no version field)', async () => {
-    const { ctx, setNode } = makeCtx()
-    setNode(itemWithData('AAAA'))
-    const json = JSON.stringify({ v: 1, ts: 1000, verifications: { 'a@x': 'A' } })
-    const result = await fetchVerificationsFromServer(
-      ctx,
-      selfSignedDecrypt(json),
-      OWN_JID,
-      OWN_PUBLIC,
-      OWN_FP,
-    )
-    expect(result).toEqual({ verifications: { 'a@x': 'A' }, version: 0 })
-  })
-
-  it('returns null when the node is absent', async () => {
+describe('fetchVerificationSets — node state', () => {
+  it('is absent when the node holds no item', async () => {
     const { ctx } = makeCtx()
-    const result = await fetchVerificationsFromServer(
-      ctx,
-      selfSignedDecrypt(VALID_V1_PAYLOAD),
-      OWN_JID,
-      OWN_PUBLIC,
-      OWN_FP,
-    )
-    expect(result).toBeNull()
+    expect(await fetchVerificationSets(ctx, selfSignedDecrypt('{}'), OWN_JID, OWN_PUBLIC, OWN_FP)).toEqual({ kind: 'absent' })
+  })
+
+  it('is absent when the server answers item-not-found', async () => {
+    const { ctx, failQuery } = makeCtx()
+    failQuery(VERIFICATION_SETS_NODE, new Error('PEP query failed: item-not-found'))
+    expect(await fetchVerificationSets(ctx, selfSignedDecrypt('{}'), OWN_JID, OWN_PUBLIC, OWN_FP)).toEqual({ kind: 'absent' })
+  })
+
+  it('is unreadable when the query fails for another reason', async () => {
+    const { ctx, failQuery } = makeCtx()
+    failQuery(VERIFICATION_SETS_NODE, new Error('remote-server-timeout'))
+    expect(await fetchVerificationSets(ctx, selfSignedDecrypt('{}'), OWN_JID, OWN_PUBLIC, OWN_FP)).toEqual({ kind: 'unreadable' })
+  })
+
+  it.each([
+    ['a payload of another format', JSON.stringify({ v: 2, version: 1, verifications: {} })],
+    ['a payload without a version', JSON.stringify({ v: 1, verified: {} })],
+    ['a payload whose sets are not a map', JSON.stringify({ v: 1, version: 1, verified: [] })],
+    ['text that is not JSON', 'not json'],
+  ])('is unreadable for %s', async (_label, plaintext) => {
+    const { ctx, setNode } = makeCtx()
+    setNode(VERIFICATION_SETS_NODE, itemOn(VERIFICATION_SETS_NODE, 'x'))
+    expect(await fetchVerificationSets(ctx, selfSignedDecrypt(plaintext), OWN_JID, OWN_PUBLIC, OWN_FP)).toEqual({ kind: 'unreadable' })
+  })
+
+  it('drops entries that are not lists of fingerprints', async () => {
+    const { ctx, setNode } = makeCtx()
+    setNode(VERIFICATION_SETS_NODE, itemOn(VERIFICATION_SETS_NODE, 'x'))
+    const plaintext = JSON.stringify({ v: 1, version: 2, verified: { 'bob@example.com': [BOB_FP, 7, ''], 'eve@example.com': 'E7E0' } })
+    expect(await fetchVerificationSets(ctx, selfSignedDecrypt(plaintext), OWN_JID, OWN_PUBLIC, OWN_FP)).toEqual({
+      kind: 'snapshot', sets: { 'bob@example.com': [BOB_FP] }, version: 2,
+    })
   })
 })
 
 // ---------------------------------------------------------------------------
-// planVerificationUpdate — the security-critical convergence logic
+// fetchLegacyVerifications
 // ---------------------------------------------------------------------------
 
-describe('planVerificationUpdate', () => {
-  it('ignores a snapshot whose version is not newer than the last applied (replay/rollback defense)', () => {
-    const plan = planVerificationUpdate(
-      { verifications: { 'alice@x': 'A' }, version: 3 },
-      { 'alice@x': 'A' },
-      3,
-    )
-    expect(plan.apply).toBe(false)
-    expect(plan.toSet).toEqual([])
-    expect(plan.toClear).toEqual([])
-    expect(plan.version).toBe(3)
+describe('fetchLegacyVerifications', () => {
+  const readLegacy = async (plaintext: string, decrypt: DecryptFn = selfSignedDecrypt(plaintext)) => {
+    const { ctx, setNode } = makeCtx()
+    setNode(LEGACY_VERIFICATIONS_NODE, itemOn(LEGACY_VERIFICATIONS_NODE, plaintext))
+    return fetchLegacyVerifications(ctx, decrypt, OWN_JID, OWN_PUBLIC, OWN_FP)
+  }
 
-    const older = planVerificationUpdate(
-      { verifications: { 'alice@x': 'A', 'bob@x': 'B' }, version: 2 },
-      { 'bob@x': 'B' },
-      3,
-    )
-    expect(older.apply).toBe(false)
-    expect(older.toClear).toEqual([])
+  it('reads one verified key per contact, with the version, as sets', async () => {
+    const plaintext = JSON.stringify({ v: 2, ts: 1000, version: 6, verifications: { 'bob@example.com': BOB_FP } })
+    expect(await readLegacy(plaintext)).toEqual({ sets: { 'bob@example.com': [BOB_FP] }, version: 6 })
   })
 
-  it('clears a locally-verified peer absent from a newer remote snapshot (revocation propagates)', () => {
-    const plan = planVerificationUpdate(
-      { verifications: { 'bob@x': 'B' }, version: 4 },
-      { 'alice@x': 'A', 'bob@x': 'B' },
-      3,
-    )
-    expect(plan.apply).toBe(true)
-    expect(plan.toClear).toEqual(['alice@x'])
-    expect(plan.toSet).toEqual([])
-    expect(plan.version).toBe(4)
+  it('reads a payload without a version as version 0', async () => {
+    const plaintext = JSON.stringify({ v: 1, ts: 1000, verifications: { 'bob@example.com': BOB_FP } })
+    expect(await readLegacy(plaintext)).toEqual({ sets: { 'bob@example.com': [BOB_FP] }, version: 0 })
   })
 
-  it('clears everything when a newer snapshot is empty (last revocation propagates)', () => {
-    const plan = planVerificationUpdate(
-      { verifications: {}, version: 1 },
-      { 'alice@x': 'A' },
-      0,
-    )
-    expect(plan.apply).toBe(true)
-    expect(plan.toClear).toEqual(['alice@x'])
-    expect(plan.toSet).toEqual([])
+  it('ignores a payload signed by another key', async () => {
+    const plaintext = JSON.stringify({ v: 2, ts: 1000, version: 6, verifications: { 'bob@example.com': BOB_FP } })
+    expect(await readLegacy(plaintext, decryptSignedBy('FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000'))).toBeNull()
   })
 
-  it('sets new and changed fingerprints from a newer snapshot', () => {
-    const plan = planVerificationUpdate(
-      { verifications: { 'alice@x': 'A2', 'carol@x': 'C' }, version: 1 },
-      { 'alice@x': 'A1' },
-      0,
-    )
-    expect(plan.apply).toBe(true)
-    expect(plan.toSet).toEqual(
-      expect.arrayContaining([
-        { jid: 'alice@x', fingerprint: 'A2' },
-        { jid: 'carol@x', fingerprint: 'C' },
-      ]),
-    )
-    expect(plan.toSet).toHaveLength(2)
-    expect(plan.toClear).toEqual([])
-  })
-
-  it('applies a legacy (version 0) snapshot on a fresh device (lastApplied -1)', () => {
-    const plan = planVerificationUpdate(
-      { verifications: { 'alice@x': 'A' }, version: 0 },
-      {},
-      -1,
-    )
-    expect(plan.apply).toBe(true)
-    expect(plan.toSet).toEqual([{ jid: 'alice@x', fingerprint: 'A' }])
-    expect(plan.version).toBe(0)
+  it('is null when the node is absent', async () => {
+    const { ctx } = makeCtx()
+    expect(await fetchLegacyVerifications(ctx, selfSignedDecrypt('{}'), OWN_JID, OWN_PUBLIC, OWN_FP)).toBeNull()
   })
 })

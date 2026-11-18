@@ -16,8 +16,10 @@ export function encryptionSendErrorKey(err: unknown): string | null {
   }
   if (isE2EEPluginError(err)) {
     switch (err.code) {
-      case 'pin-mismatch':
+      case 'peer-keys-awaiting-decision':
         return 'chat.encryption.sendBlockedKeyChanged'
+      case 'peer-keys-distrusted':
+        return 'chat.encryption.sendBlockedKeysDistrusted'
       case 'key-locked':
         return 'chat.encryption.sendBlockedKeyLocked'
       case 'own-key-conflict':

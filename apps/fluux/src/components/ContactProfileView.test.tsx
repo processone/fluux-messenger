@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Contact } from '@fluux/sdk'
 import { ContactProfileView } from './ContactProfileView'
 import { useToastStore } from '@/stores/toastStore'
+import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
 
 const e2ee = vi.hoisted(() => ({
   setIdentityTrust: vi.fn(async () => {}),
@@ -109,6 +110,21 @@ describe('ContactProfileView', () => {
     render(<ContactProfileView {...props} />)
     fireEvent.click(screen.getByRole('button', { name: 'Verified and encrypted' }))
     expect(screen.getByText('Security details')).toBeInTheDocument()
+  })
+
+  // Issue #1452: Review keys on a conversation's held-keys notice lands on this contact's keys.
+  it('opens the security detail when a conversation asked to review this contact\'s keys', () => {
+    useContactSecurityRequestStore.getState().requestContactSecurity(contact.jid)
+    render(<ContactProfileView {...props} />)
+    expect(screen.getByText('Security details')).toBeInTheDocument()
+    expect(useContactSecurityRequestStore.getState().jid).toBeNull()
+  })
+
+  it('does not open the security detail for a request about another contact', () => {
+    useContactSecurityRequestStore.getState().requestContactSecurity('someone@example.com')
+    render(<ContactProfileView {...props} />)
+    expect(screen.queryByText('Security details')).not.toBeInTheDocument()
+    useContactSecurityRequestStore.getState().clearContactSecurityRequest()
   })
 
   it('removes a verification through the SDK for the key in use', async () => {

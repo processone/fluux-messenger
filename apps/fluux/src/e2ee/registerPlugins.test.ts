@@ -37,6 +37,7 @@ vi.mock('@fluux/openpgp-plugin/web', () => ({
   }),
 }))
 import { WebOpenPGPPlugin } from '@fluux/openpgp-plugin/web'
+import { LocalStorageStorageBackend } from './LocalStorageStorageBackend'
 
 type Logger = ReturnType<NonNullable<XMPPClient['e2ee']>['getDiagnosticLogger']>
 
@@ -51,6 +52,7 @@ function makeClient(register: () => Promise<void>, logger: Logger = {
       getAccountJid: () => 'me@example.com',
       setForcedPlaintext: vi.fn(),
     },
+    setE2EEStorageBackend: vi.fn(),
   } as unknown as XMPPClient
 }
 
@@ -145,16 +147,21 @@ describe('registerE2EEPlugins engine', () => {
     setPlatformForTesting({ shell: 'desktop', os: 'macos' })
   })
 
-  it('registers the native engine on iOS, as on desktop', async () => {
+  it('registers the native engine on iOS, as on desktop, with storage that survives a restart', async () => {
     setPlatformForTesting({ shell: 'mobile', os: 'ios' })
     useEncryptionSettingsStore.setState({ openpgpEnabled: true, pluginRegisteredAt: 0, registrationError: null })
     vi.mocked(SequoiaPgpPlugin).mockClear()
     const register = vi.fn().mockResolvedValue(undefined)
+    const client = makeClient(register)
 
-    await registerE2EEPlugins(makeClient(register))
+    await registerE2EEPlugins(client)
 
     expect(SequoiaPgpPlugin).toHaveBeenCalledTimes(1)
     expect(register).toHaveBeenCalledTimes(1)
+    // The plugin's trust decisions go to a per-account store kept by the app, set before it registers.
+    expect(client.setE2EEStorageBackend).toHaveBeenCalledWith(expect.any(LocalStorageStorageBackend), 'openpgp')
+    expect(vi.mocked(client.setE2EEStorageBackend).mock.invocationCallOrder[0])
+      .toBeLessThan(register.mock.invocationCallOrder[0])
   })
 })
 

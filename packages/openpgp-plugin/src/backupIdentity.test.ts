@@ -2,7 +2,6 @@
 /** Intent FLM-357: installing a file must not claim that an unrelated server
  * backup protects its identity. Use the committed Alice/Bob interop keys and
  * the real web crypto/install path; only PEP transport and storage are local. */
-import { createMockHostStores } from './testing/mockHostStores'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -18,7 +17,6 @@ import {
   writeBackedUpFingerprint,
 } from './index'
 
-const hostStores = createMockHostStores()
 
 const fixture = (name: string) => readFileSync(resolve(__dirname, './fixtures', name), 'utf8')
 const meta = JSON.parse(fixture('sequoia_meta.json'))
@@ -69,7 +67,7 @@ async function setup() {
       subscribePEP: () => ({ unsubscribe: () => {} }),
     },
   }
-  const plugin = new InspectableWebPlugin(hostStores); plugins.push(plugin)
+  const plugin = new InspectableWebPlugin(); plugins.push(plugin)
   await plugin.init(ctx)
   return { plugin, ctx, nodes, publications }
 }

@@ -15,7 +15,6 @@
  * would break Rust↔Web interop, even if the web→web round-trip still
  * passes.
  */
-import { createMockHostStores } from './testing/mockHostStores'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   InMemoryStorageBackend,
@@ -27,7 +26,6 @@ import {
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase, setSessionPassphrase } from './index'
 
-const hostStores = createMockHostStores()
 
 // These round-trips generate and re-wrap real OpenPGP keys, so the tests are
 // CPU-bound and inflate several-fold under the contention of a full
@@ -73,7 +71,6 @@ function makeCtx(accountJid: string, sharedBackend?: InMemoryStorageBackend) {
 
 beforeEach(async () => {
   localStorage.clear()
-  hostStores.reset()
   clearSessionPassphrase()
 })
 
@@ -83,7 +80,7 @@ afterEach(() => {
 
 describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire format', () => {
   it('emits an ASCII-armored OpenPGP MESSAGE (not a key block)', async () => {
-    const plugin = new TestableWebOpenPGPPlugin(hostStores)
+    const plugin = new TestableWebOpenPGPPlugin()
     const { ctx } = makeCtx('alice@example.com')
     setSessionPassphrase('session-pp')
     await plugin.init(ctx)
@@ -101,7 +98,7 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
   })
 
   it('uses a SKESK (passphrase-protected) container, not PKESK', async () => {
-    const plugin = new TestableWebOpenPGPPlugin(hostStores)
+    const plugin = new TestableWebOpenPGPPlugin()
     const { ctx } = makeCtx('alice@example.com')
     setSessionPassphrase('session-pp')
     await plugin.init(ctx)
@@ -127,7 +124,7 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
   })
 
   it('produces a payload that decrypts to a binary TSK with secret-key packets', async () => {
-    const plugin = new TestableWebOpenPGPPlugin(hostStores)
+    const plugin = new TestableWebOpenPGPPlugin()
     const { ctx } = makeCtx('alice@example.com')
     setSessionPassphrase('session-pp')
     await plugin.init(ctx)
@@ -155,7 +152,7 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
     // passphrase to their KDF byte-for-byte. A backup we publish must
     // therefore be encrypted to the exact displayed string — the
     // pre-0.17.2 lowercasing made our backups unreadable elsewhere.
-    const plugin = new TestableWebOpenPGPPlugin(hostStores)
+    const plugin = new TestableWebOpenPGPPlugin()
     const { ctx } = makeCtx('alice@example.com')
     setSessionPassphrase('session-pp')
     await plugin.init(ctx)
@@ -191,7 +188,7 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
       passwords: [code],
     })) as string
 
-    const dest = new TestableWebOpenPGPPlugin(hostStores)
+    const dest = new TestableWebOpenPGPPlugin()
     const { ctx } = makeCtx('alice@example.com')
     await dest.init(ctx)
 
@@ -229,7 +226,7 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
     //    confirm the import recovers the same fingerprint, the same
     //    public material, and a usable secret key.
     clearSessionPassphrase()
-    const dest = new TestableWebOpenPGPPlugin(hostStores)
+    const dest = new TestableWebOpenPGPPlugin()
     const { ctx } = makeCtx('alice@example.com')
     await dest.init(ctx) // locked — fine for import
 
@@ -256,7 +253,7 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
       passwords: ['the-real-passphrase'],
     })) as string
 
-    const dest = new TestableWebOpenPGPPlugin(hostStores)
+    const dest = new TestableWebOpenPGPPlugin()
     const { ctx } = makeCtx('alice@example.com')
     await dest.init(ctx)
 
@@ -275,7 +272,7 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
     // that survives a second pass through encrypt/decrypt — proving the
     // recovered TSK isn't degraded (e.g. losing a subkey or its binding
     // signature) on import.
-    const plugin = new TestableWebOpenPGPPlugin(hostStores)
+    const plugin = new TestableWebOpenPGPPlugin()
     const { ctx } = makeCtx('alice@example.com')
     setSessionPassphrase('session-pp')
     await plugin.init(ctx)
@@ -300,7 +297,7 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
     // Import the re-wrapped backup on a fresh plugin and verify the
     // recovered key matches the original.
     clearSessionPassphrase()
-    const dest = new TestableWebOpenPGPPlugin(hostStores)
+    const dest = new TestableWebOpenPGPPlugin()
     const { ctx: destCtx } = makeCtx('alice@example.com')
     await dest.init(destCtx)
     const restored = await dest.callBackupImport('alice@example.com', second, 'pp-two')

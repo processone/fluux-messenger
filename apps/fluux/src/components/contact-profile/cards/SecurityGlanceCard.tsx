@@ -29,9 +29,12 @@ export function getGlance(
     case 'plaintextForced':
       return { icon: LockOpen, label: t('contacts.encryption.glanceDisabled'), tone: 'neutral' }
     case 'unsupported':
-      return { icon: LockOpen, label: t('contacts.encryption.glanceNotEncrypted'), tone: 'neutral' }
+      // Keys that wait for a decision: nothing is sent, so never say "not encrypted".
+      return state.needsDecision
+        ? { icon: ShieldAlert, label: t('contacts.encryption.needsDecisionTitle'), tone: 'warning' }
+        : { icon: LockOpen, label: t('contacts.encryption.glanceNotEncrypted'), tone: 'neutral' }
     case 'rejected':
-      return { icon: ShieldX, label: t('contacts.encryption.rejectedTitle'), tone: 'danger' }
+      return { icon: ShieldX, label: t(state.distrusted ? 'contacts.encryption.distrustedTitle' : 'contacts.encryption.rejectedTitle'), tone: 'danger' }
     case 'blocked':
       return { icon: ShieldAlert, label: t('chat.encryption.blocked'), tone: 'warning' }
     case 'checking':

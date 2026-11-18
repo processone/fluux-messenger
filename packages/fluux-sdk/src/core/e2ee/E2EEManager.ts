@@ -390,10 +390,11 @@ export class E2EEManager {
    * a pinned key for this peer", so plaintext is an implicit per-peer downgrade
    * and must be blocked even under the opportunistic global policy. `untrusted`
    * and `unknown` are excluded: the former is a deliberate not-trusted marker
-   * (forward-looking — the current OpenPGP plugin never reports `untrusted` for
-   * peer trust, so key-changed peers do not rely on this exclusion: they still
-   * report `tofu` from the cached old key and encrypt() throws pin-mismatch),
-   * the latter means we have never seen a key (legitimate first contact).
+   * (forward-looking — the OpenPGP plugin never reports `untrusted` for peer
+   * trust: a contact whose keys all wait for a decision or were all refused
+   * reports `tofu`, and encrypt() throws peer-keys-awaiting-decision or
+   * peer-keys-distrusted), the latter means we have never seen a key
+   * (legitimate first contact).
    *
    * Plugin trust-check errors are treated as not-established (fail-open) so a
    * transient plugin fault never permanently blocks the send path.

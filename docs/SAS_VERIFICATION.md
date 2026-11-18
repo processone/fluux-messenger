@@ -24,9 +24,10 @@ key lookups; steps 2 and 3 close that gap (see [Security](#security)).
 ## Background
 
 Fluux uses OpenPGP for XMPP ([XEP-0373](https://xmpp.org/extensions/xep-0373.html)).
-Public keys are published to PEP and discovered automatically; a new key is
-accepted Trust-On-First-Use. Verification lets two humans confirm out-of-band
-(phone, in person) that they hold the expected public key, lifting trust from
+Public keys are published to PEP and discovered automatically. A contact's keys
+are used without asking until you verify one of them (blind trust before
+verification). Verification lets two humans confirm out-of-band (phone, in
+person) that they hold the expected public key, lifting that key's trust from
 `tofu` to `verified`.
 
 Trust states (`packages/fluux-sdk/src/core/e2ee/types.ts`, `TrustState`):
@@ -67,27 +68,79 @@ peer's. A client that just shows all 8 digits still interoperates.
 1. Both sides have exchanged a message, so each holds the other's PEP key.
 2. The dialog shows "your code" (read aloud) and an input for "their code".
 3. The typed half is checked against the expected half; a match enables confirm.
-4. On confirm, the peer's current fingerprint is recorded as verified.
+4. On confirm, that key is recorded as verified. Each key of a contact is
+   verified on its own: verifying one key says nothing about another.
 
 ## Trust storage and lifecycle
 
-`apps/fluux/src/stores/verifiedPeerKeysStore.ts`: a per-account map of bare JID to
-verified fingerprint, in localStorage.
+The OpenPGP plugin keeps one decision per key of each contact
+(`packages/openpgp-plugin/src/trustRecords.ts`), in its own plugin storage under
+`trust-records`, sealed against tampering
+(`packages/openpgp-plugin/src/trustStateIntegrity.ts`). A decision is bound to the
+canonical fingerprint, never to the JID:
 
-- Trust is shown as `verified` only while every active key the contact announces
-  matches the stored verified fingerprint (`isPeerVerified`, compared via
-  `fingerprintsEqual`, which is case- and whitespace-insensitive).
-- A changed or additional active key changes the display to unverified and
-  explains that the keyset needs verification. Encryption continues to every
-  active key. **Bind verified state to the fingerprint, not the JID.**
+| Decision    | Shown as    | Receives messages |
+| ----------- | ----------- | ----------------- |
+| `verified`  | verified    | yes               |
+| `tofu`      | trusted     | yes               |
+| `untrusted` | not trusted | no                |
+| none        | see below   | see below         |
+
+How a key with no decision stands depends on the contact (`keyStanding`):
+
+- **Contact never verified:** the key is used at once and shown as `tofu`.
+- **Contact verified** (any of its keys has a `verified` decision, retired keys
+  included): the key is held. It is shown as `unknown`, receives no messages and
+  waits for you to verify, trust or refuse it. The conversation explains why and
+  offers a way to review the keys.
+
+While some keys are held, messages go to the keys that are used. When no key of
+the contact can be used, because every key is held or refused, nothing is sent:
+no message, no unencrypted fallback and no plain file upload.
+
+Comparisons go through `fingerprintsEqual`, which ignores case and whitespace.
+
+### Upgrading from earlier versions
+
+Earlier versions kept one verified fingerprint per contact in the app's own
+storage. On the first sign-in after an upgrade, the plugin reads those records
+once (`packages/openpgp-plugin/src/legacyTrustMigration.ts`) and writes per-key
+decisions to plugin storage:
+
+- each verified fingerprint becomes a `verified` decision for that key;
+- a pending key-change alert's previous key was verified, so it becomes
+  `verified` too, and the contact's newer key is held;
+- certificate rejections and the sync version carry over; pinned fingerprints
+  are dropped, since per-key decisions replace them.
+
+The earlier records are read without being changed, so an older version still
+finds them, and are never written again.
 
 ## Cross-device sync (optional)
 
-`packages/openpgp-plugin/src/verificationSync.ts` publishes the verification map to a
-private PEP node `urn:xmpp:fluux:verifications:0` (whitelist), sign+encrypted to
-the account's own key. A fetched snapshot is applied only if it is signed by the
-own key (authorship) and carries a strictly higher `version` (replay defence). A
-third-party client can verify locally without this.
+`packages/openpgp-plugin/src/verificationSync.ts` publishes every contact's
+verified keys to a private PEP node `urn:xmpp:fluux:verifications:1`
+(whitelist), signed and encrypted to the account's own key. The decrypted payload
+is a set per contact:
+
+```json
+{ "v": 1, "ts": 1763460000000, "version": 7, "verified": { "bob@example.com": ["<fingerprint>", "<fingerprint>"] } }
+```
+
+`ts` is the publish time in milliseconds since the epoch. A fetched snapshot is
+applied only if it is signed by the own key (authorship)
+and carries a strictly higher `version` (replay defence). Applying it makes each
+listed key verified; a key verified locally but absent from the snapshot loses
+its verification and stays trusted (`tofu`).
+
+Only verifications sync. A key you trusted or refused without verifying keeps
+that decision on the device where you made it, so a key held on one device is
+held on each device until you decide there.
+
+Earlier versions published one fingerprint per contact to
+`urn:xmpp:fluux:verifications:0`. A device reads that node once, only when the
+`:1` node does not exist yet, and never writes it. A third-party client can
+verify locally without either node.
 
 ## Implementing in another client
 
@@ -95,8 +148,8 @@ third-party client can verify locally without this.
    XEP-0373 PEP key (40 hex for v4, 64 for v6; do not truncate).
 2. Implement the algorithm above; confirm against the test vector.
 3. Optionally implement the half assignment, or just show all 8 digits.
-4. Compare out-of-band; on a match, store the peer's current fingerprint as
-   verified and gate that state on the fingerprint still matching.
+4. Compare out-of-band; on a match, store that fingerprint as verified. Keep
+   the decision per key: a key the contact adds later is not verified.
 
 Nothing here is bound to Fluux internals: the SAS is two fingerprints plus SHA-256.
 
@@ -142,9 +195,10 @@ control, and verified state is per fingerprint.
 | SAS derivation and split       | `packages/fluux-sdk/src/core/e2ee/sas.ts`                    |
 | Trust state type               | `packages/fluux-sdk/src/core/e2ee/types.ts` (`TrustState`)   |
 | Verify dialog (SAS + fallback) | `apps/fluux/src/components/VerifyPeerDialog.tsx`             |
-| Verified-key storage           | `apps/fluux/src/stores/verifiedPeerKeysStore.ts`            |
+| Per-key trust decisions        | `packages/openpgp-plugin/src/trustRecords.ts`                 |
+| Upgrade from earlier versions  | `packages/openpgp-plugin/src/legacyTrustMigration.ts`         |
 | Fingerprint normalisation      | `packages/openpgp-plugin/src/fingerprintCompare.ts`                  |
-| Trust lifting to `verified`    | `packages/openpgp-plugin/src/OpenPGPPluginBase.ts` (`isPeerVerified`) |
+| Key standing and holding       | `packages/openpgp-plugin/src/trustRecords.ts` (`keyStanding`) |
 | Cross-device sync (PEP)        | `packages/openpgp-plugin/src/verificationSync.ts`                    |
 | Web plugin (openpgp.js), loaded on demand | `packages/openpgp-plugin/src/WebOpenPGPPlugin.ts` (entry `@fluux/openpgp-plugin/web`) |
 

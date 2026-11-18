@@ -211,6 +211,8 @@
             "tryAgain": "Yritä uudelleen",
             "needsDecisionTitle": "Odottaa päätöstäsi",
             "needsDecisionDescription": "Tälle yhteystiedolle ei voi salata viestejä, ennen kuin olet päättänyt avaimesta.",
+            "distrustedTitle": "Ei luotettuja avaimia",
+            "distrustedDescription": "Tälle yhteystiedolle ei voi lähettää viestejä ennen kuin luotat johonkin sen avaimista.",
             "receivesWhenUnlocked": "Vastaanottaa viestisi, kun avaat lukituksen",
             "keyTrust": {
                 "verified": "Vahvistettu",
@@ -638,6 +640,13 @@
             "sendBlockedKeyLocked": "Viestiä ei lähetetty. Avaa salausavaimesi lukitus lähettääksesi tämän viestin.",
             "sendBlockedKeyConflict": "Viestiä ei lähetetty. Ratkaise salausavaimesi ristiriita ennen lähettämistä.",
             "sendBlockedGeneric": "Viestiä ei lähetetty. Salaus epäonnistui.",
+            "sendBlockedKeysDistrusted": "Viestiä ei lähetetty. Et luota yhteenkään tämän yhteyshenkilön avaimeen. Luota johonkin niistä ennen lähettämistä.",
+            "heldKeys": {
+                "partial": "Olet varmentanut yhteystiedon {{name}}, joten uusi avain ei vastaanota viestejä ennen kuin luotat siihen tai varmennat sen.",
+                "all": "Olet varmentanut yhteystiedon {{name}}, joten uusi avain ei vastaanota viestejä ennen kuin luotat siihen tai varmennat sen. Siihen asti et voi lähettää viestejä.",
+                "distrusted": "Et luota yhteenkään yhteystiedon {{name}} avaimeen. Et voi lähettää viestejä ennen kuin luotat johonkin niistä.",
+                "review": "Tarkista avaimet"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Salaus lukittu",
@@ -704,15 +713,6 @@
             "alreadyVerifiedBanner": "Tämä avain on jo vahvistettu. Voit vahvistaa sen uudelleen, jos sinulla on epäilyksiä.",
             "confirmSuccess": "Sormenjälki vahvistettu",
             "revokeAction": "Poista varmennus"
-        },
-        "keyChangeBanner": {
-            "title": "Käyttäjän {{name}} salausavain on vaihtunut",
-            "body": "Tämä yhteystieto näyttää vaihtaneen salausavaimensa. Voit vahvistaa uuden sormenjäljen palauttaaksesi täyden luottamuksen tai hyväksyä sen vahvistamatta jatkaaksesi perusluottamuksella.",
-            "reVerify": "Vahvista uudelleen",
-            "encryptionBlocked": "Salaus on keskeytetty tässä keskustelussa, kunnes ratkaiset muutoksen.",
-            "acceptWithoutVerifying": "Hyväksy vahvistamatta",
-            "acceptedWithoutVerifying": "Uusi avain hyväksytty. Vertaista ei ole vahvistettu",
-            "acceptFailed": "Uuden avaimen hyväksyminen epäonnistui. Yritä uudelleen"
         },
         "offlinePlaceholder": "Offline-tilassa. Voit lähettää heti, kun yhteys palautuu.",
         "loadImage": "Lataa kuva",
@@ -1080,7 +1080,7 @@
             "rotatePluginUnavailable": "OpenPGP-moduuli ei saatavilla",
             "trustStateCompromised": {
                 "title": "Luottamustilan eheyden tarkistus epäonnistui",
-                "description": "Paikallisia luottamustietoja on voitu peukaloida. Hiljainen avaimen uudelleenkiinnitys on estetty avaimen vaihdon estämiseksi.",
+                "description": "Paikallisia luottamustietoja on voitu peukaloida. Tarkista yhteystietojesi avaimet ennen kuin jatkat.",
                 "reestablishButton": "Vahvista uudelleen ja jatka"
             },
             "ownKeyConflict": {

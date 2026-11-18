@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import type { ConversationSecurity, PeerIdentity, PeerIdentityGroup } from '@fluux/sdk'
-import { useConversationEncryptionState } from './useConversationEncryptionState'
+import { encryptionSendBlock, useConversationEncryptionState } from './useConversationEncryptionState'
 
 vi.mock('@fluux/sdk', async (importOriginal) => ({
   ...((await importOriginal()) as Record<string, unknown>),
@@ -154,6 +154,33 @@ describe('useConversationEncryptionState', () => {
     const waiting = identity('1', { trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision', allowedDecisions: ['verified', 'tofu'] })
     expect(await stateFor({ kind: 'needsDecision', protocolId: 'openpgp', displayName: 'OpenPGP', waiting: 1 }, [waiting]))
       .toEqual({ kind: 'unsupported', needsDecision: true, groups: [group([waiting])] })
+  })
+
+  it('counts the keys of a verified contact that wait for a decision while the others receive messages', async () => {
+    const used = identity('1', { trust: 'verified', allowedDecisions: ['tofu', 'untrusted'] })
+    const held = identity('2', { trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision', allowedDecisions: ['verified', 'tofu', 'untrusted'] })
+    const state = await stateFor(encrypted({ trust: 'verified', verified: 1, waiting: 1 }), [used, held])
+    expect(state).toMatchObject({ kind: 'encrypted', trust: 'verified', waiting: 1 })
+    expect(encryptionSendBlock(state)).toBeNull()
+  })
+
+  it('blocks sending to a contact whose every key waits for a decision', async () => {
+    const held = identity('1', { trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision', allowedDecisions: ['verified', 'tofu', 'untrusted'] })
+    const state = await stateFor({ kind: 'needsDecision', protocolId: 'openpgp', displayName: 'OpenPGP', waiting: 1 }, [held])
+    expect(encryptionSendBlock(state)).toBe('awaiting-decision')
+  })
+
+  it('blocks sending to a contact whose every key the user refused, and keeps the reasons', async () => {
+    const refused = identity('1', { trust: 'untrusted', usedForEncryption: false, notUsedReason: 'distrusted', allowedDecisions: ['verified', 'tofu'] })
+    const problems = [{ id: '1', code: 'distrusted', detail: '' }]
+    const state = await stateFor({ kind: 'unusable', protocolId: 'openpgp', displayName: 'OpenPGP', problems }, [refused])
+    expect(state).toEqual({ kind: 'rejected', reasons: problems, groups: [group([refused])], distrusted: true })
+    expect(encryptionSendBlock(state)).toBe('distrusted')
+  })
+
+  it('does not block sending for certificates that were rejected', async () => {
+    const problems = [{ id: 'FPX', code: 'no_encryption_subkey', detail: 'no subkey' }]
+    expect(encryptionSendBlock(await stateFor({ kind: 'unusable', protocolId: 'openpgp', displayName: 'OpenPGP', problems }))).toBeNull()
   })
 
   it('keeps the reasons when the keys of a rejected contact cannot be listed', async () => {
