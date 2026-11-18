@@ -13,6 +13,7 @@ import asyncio, copy, json, sys
 import xml.etree.ElementTree as ET
 from importlib.metadata import version
 
+import xeddsa
 import oldmemo, oldmemo.etree, twomemo, twomemo.etree
 from omemo import SessionManager, Storage
 from omemo.storage import Just, Nothing
@@ -60,10 +61,14 @@ async def main(out):
             "generator": "generate_own_devices.py", "OMEMO": version("OMEMO"),
             "Twomemo": version("Twomemo"), "Oldmemo": version("Oldmemo"),
         },
-        "omemo2": {"devices": xml(twomemo.etree.serialize_device_list(LISTS[twomemo.twomemo.NAMESPACE])), "bundles": {}},
-        "legacy": {"devices": xml(oldmemo.etree.serialize_device_list(LISTS[oldmemo.oldmemo.NAMESPACE])), "bundles": {}},
+        "omemo2": {"devices": xml(twomemo.etree.serialize_device_list(LISTS[twomemo.twomemo.NAMESPACE])), "bundles": {}, "fingerprints": {}},
+        "legacy": {"devices": xml(oldmemo.etree.serialize_device_list(LISTS[oldmemo.oldmemo.NAMESPACE])), "bundles": {}, "fingerprints": {}},
     }
+    # The reference's own identity key in Curve25519 form, the 32 bytes both protocols' clients display.
+    curve = lambda b: xeddsa.ed25519_pub_to_curve25519_pub(b.bundle.identity_key).hex()
     for (ns, dev), b in BUNDLES.items():
+        side = "omemo2" if ns == twomemo.twomemo.NAMESPACE else "legacy"
+        result[side]["fingerprints"][str(dev)] = curve(b)
         if ns == twomemo.twomemo.NAMESPACE:
             result["omemo2"]["bundles"][str(dev)] = xml(twomemo.etree.serialize_bundle(b))
         elif ns == oldmemo.oldmemo.NAMESPACE:

@@ -125,18 +125,30 @@ function fromBase64(text: string): Uint8Array | null {
   }
 }
 
-/** The text of `<local>` inside a bundle root, as the 32-byte identity key in hex; `null` when unreadable. */
-function identityFingerprint(bundle: XMLElementData, protocol: DeviceListProtocol): string | null {
+/**
+ * The identity key a bundle publishes, as the hex of its 32-byte Curve25519 form: the fingerprint the plugin
+ * itself shows. A legacy key is already that, behind a type byte (0x05). An OMEMO 2 `ik` is the Ed25519 key and
+ * is converted the way the plugin converts it. `null` when the key is missing or unreadable.
+ */
+async function identityFingerprint(bundle: XMLElementData, protocol: DeviceListProtocol): Promise<string | null> {
   const ns = protocol === 'omemo2' ? NS_OMEMO : NS_LEGACY_OMEMO
   if (!isElement(bundle, {}, 'bundle', ns)) return null
   const scope = scopeOf(bundle, {})
   const key = elementChildren(bundle).find((c) => isElement(c, scope, protocol === 'omemo2' ? 'ik' : 'identityKey', ns))
   const text = key?.children.filter((c): c is string => typeof c === 'string').join('')
   let bytes = text ? fromBase64(text) : null
-  // Legacy keys are Curve25519 with a leading type byte (0x05); the fingerprint is the 32 key bytes.
-  if (bytes && protocol === 'legacy' && bytes.length === 33 && bytes[0] === 0x05) bytes = bytes.slice(1)
-  if (!bytes || bytes.length !== 32) return null
-  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+  if (!bytes) return null
+  try {
+    if (protocol === 'legacy') {
+      if (bytes.length === 33 && bytes[0] === 0x05) bytes = bytes.slice(1)
+    } else if (bytes.length === 32) {
+      // Loaded here, not at the top, so reading only a legacy list never pulls in the crypto package.
+      bytes = (await import('@fluux/omemo')).fingerprint(bytes)
+    }
+  } catch {
+    return null
+  }
+  return bytes.length === 32 ? [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('') : null
 }
 
 /** Fingerprints by device id; a missing or unreadable bundle leaves its device out of the map. */
@@ -153,14 +165,14 @@ async function readFingerprints(
     const items = await pep.query(jid, NS_BUNDLES).catch(() => [] as PEPItem[])
     for (const item of items) {
       const id = parseId(item.id)
-      const print = id !== null && ids.includes(id) ? identityFingerprint(item.payload, protocol) : null
+      const print = id !== null && ids.includes(id) ? await identityFingerprint(item.payload, protocol) : null
       if (id !== null && print) found.set(id, print)
     }
   } else {
     await Promise.all(
       ids.map(async (id) => {
         const item = await readItem(pep, jid, `${NS_LEGACY_BUNDLES_PREFIX}${id}`, 1).catch(() => null)
-        const print = item ? identityFingerprint(item.payload, protocol) : null
+        const print = item ? await identityFingerprint(item.payload, protocol) : null
         if (print) found.set(id, print)
       }),
     )

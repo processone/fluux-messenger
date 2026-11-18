@@ -423,11 +423,27 @@ function subscriptionKey(jid: string, node: string): string {
   return `${jid}\u0000${node}`
 }
 
+/**
+ * `elementToData` copies only the attributes the payload carries itself, so a prefix or default namespace
+ * declared on `item`, `items`, `pubsub`, `event` or the stanza is lost, and a payload that uses it (or one of
+ * its children does) reaches a plugin with that prefix unbound. Copy every declaration in scope onto the
+ * detached root, the nearest for each name, unless the payload declares that name itself.
+ */
+function withInheritedNamespaces(payload: XMLElementData, source: Element): XMLElementData {
+  const attrs = { ...payload.attrs }
+  for (let node = (source as Element & { parent?: Element | null }).parent ?? null; node; node = (node as Element & { parent?: Element | null }).parent ?? null) {
+    for (const [attr, value] of Object.entries(node.attrs)) {
+      if ((attr === 'xmlns' || attr.startsWith('xmlns:')) && attrs[attr] === undefined) attrs[attr] = value
+    }
+  }
+  return { ...payload, attrs }
+}
+
 function parseItems(itemsEl: Element): PEPItem[] {
   return itemsEl.getChildren('item').flatMap((itemEl) => {
     const firstChild = itemEl.children.find((c): c is Element => typeof c !== 'string')
     if (!firstChild) return []
-    const payload: XMLElementData = elementToData(firstChild)
+    const payload = withInheritedNamespaces(elementToData(firstChild), firstChild)
     return [{
       id: itemEl.attrs.id ?? '',
       payload,
