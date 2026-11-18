@@ -117,9 +117,20 @@ test('a page WebKit terminates while the demo boots fails the boot at once with 
     const entryHeld = new Promise<void>(resolve => {
       releaseEntry = resolve
     })
-    await page.route('**/assets/demo-*.js', route => entryHeld.then(() => route.continue()).catch(() => {}))
+    let markEntryRequested: () => void = () => {}
+    const entryRequested = new Promise<void>(resolve => {
+      markEntryRequested = resolve
+    })
+    await page.route('**/assets/demo-*.js', route => {
+      markEntryRequested()
+      return entryHeld.then(() => route.continue()).catch(() => {})
+    })
 
     const boot = bootDemo(page, new URL('/demo.html?tutorial=false', baseURL).href).then(() => null, (error: Error) => error)
+    // The helper exits start only once the demo is loading: bootDemo has finished waiting for
+    // the watch and navigated, so the termination lands inside the boot, not before it.
+    const loading = await Promise.race([entryRequested.then(() => true), boot.then(() => false)])
+    expect(loading, 'the boot reached the demo entry module').toBe(true)
     const thirdExitAt = await endGpuHelperThreeTimes(owner)
     const error = await boot
     const waitedMs = Date.now() - thirdExitAt
