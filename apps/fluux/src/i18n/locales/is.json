@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Birtingarheiti þitt í herberginu",
         "pleaseEnterNickname": "Vinsamlegast sláðu inn gælunafn",
         "failedToSaveBookmark": "Ekki tókst að vista bókamerki",
+        "failedToRemoveBookmark": "Ekki tókst að fjarlægja bókamerki",
         "autoJoinLabel": "Sjálfvirk innganga",
         "autoJoinDescription": "Ganga sjálfkrafa í þetta herbergi við tengingu",
         "joinRoomTitle": "Ganga í herbergi",

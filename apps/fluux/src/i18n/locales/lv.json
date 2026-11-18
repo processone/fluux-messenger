@@ -274,6 +274,7 @@
         "nicknamePlaceholder": "Jūsu attēlojamais vārds istabā",
         "pleaseEnterNickname": "Lūdzu, ievadiet segvārdu",
         "failedToSaveBookmark": "Neizdevās saglabāt grāmatzīmi",
+        "failedToRemoveBookmark": "Neizdevās noņemt grāmatzīmi",
         "autoJoinLabel": "Automātiska pievienošanās",
         "autoJoinDescription": "Automātiski pievienoties šai istabai savienojuma laikā",
         "joinRoomTitle": "Pievienoties istabai",

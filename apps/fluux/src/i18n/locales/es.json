@@ -275,6 +275,7 @@
         "nicknamePlaceholder": "Tu nombre en la sala",
         "pleaseEnterNickname": "Por favor introduce un apodo",
         "failedToSaveBookmark": "Error al guardar marcador",
+        "failedToRemoveBookmark": "Error al eliminar marcador",
         "autoJoinLabel": "Auto-unirse",
         "autoJoinDescription": "Unirse automáticamente a esta sala al conectar",
         "joinRoomTitle": "Unirse a Sala",

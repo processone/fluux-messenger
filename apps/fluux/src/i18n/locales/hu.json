@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Az Ön megjelenítési neve a szobában",
         "pleaseEnterNickname": "Kérem, adjon meg egy becenevet",
         "failedToSaveBookmark": "Nem sikerült menteni a könyvjelzőt",
+        "failedToRemoveBookmark": "Nem sikerült eltávolítani a könyvjelzőt",
         "autoJoinLabel": "Automatikus csatlakozás",
         "autoJoinDescription": "Automatikus csatlakozás ehhez a szobához kapcsolódáskor",
         "joinRoomTitle": "Csatlakozás szobához",

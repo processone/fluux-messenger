@@ -275,6 +275,7 @@
         "nicknamePlaceholder": "L-isem li jidher tiegħek fil-kamra",
         "pleaseEnterNickname": "Jekk jogħġbok daħħal laqam",
         "failedToSaveBookmark": "Ma rnexxiex jissejvja l-bookmark",
+        "failedToRemoveBookmark": "Ma rnexxiex jitneħħa l-bookmark",
         "autoJoinLabel": "Dħul awtomatiku",
         "autoJoinDescription": "Idħol f'din il-kamra awtomatikament meta tikkonnettja",
         "joinRoomTitle": "Idħol f'Kamra",

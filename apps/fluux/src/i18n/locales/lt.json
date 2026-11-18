@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Jūsų rodomas vardas kambaryje",
         "pleaseEnterNickname": "Prašome įvesti slapyvardį",
         "failedToSaveBookmark": "Nepavyko išsaugoti žymės",
+        "failedToRemoveBookmark": "Nepavyko pašalinti žymės",
         "autoJoinLabel": "Automatinis prisijungimas",
         "autoJoinDescription": "Automatiškai prisijungti prie šio kambario prisijungus",
         "joinRoomTitle": "Prisijungti prie kambario",

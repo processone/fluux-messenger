@@ -275,6 +275,7 @@
         "nicknamePlaceholder": "Il tuo nome visualizzato nella stanza",
         "pleaseEnterNickname": "Inserisci un soprannome",
         "failedToSaveBookmark": "Impossibile salvare il preferito",
+        "failedToRemoveBookmark": "Impossibile rimuovere il preferito",
         "autoJoinLabel": "Ingresso automatico",
         "autoJoinDescription": "Entra automaticamente in questa stanza alla connessione",
         "joinRoomTitle": "Entra nella stanza",

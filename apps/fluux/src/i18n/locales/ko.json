@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "대화방에서의 표시 이름",
         "pleaseEnterNickname": "닉네임을 입력하세요",
         "failedToSaveBookmark": "북마크 저장 실패",
+        "failedToRemoveBookmark": "북마크 제거 실패",
         "autoJoinLabel": "자동 참여",
         "autoJoinDescription": "연결 시 자동으로 이 대화방에 참여",
         "joinRoomTitle": "대화방 참여",

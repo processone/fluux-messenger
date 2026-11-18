@@ -275,6 +275,7 @@
         "nicknamePlaceholder": "Vaše zobrazované jméno v místnosti",
         "pleaseEnterNickname": "Prosím zadejte přezdívku",
         "failedToSaveBookmark": "Nepodařilo se uložit záložku",
+        "failedToRemoveBookmark": "Nepodařilo se odebrat záložku",
         "autoJoinLabel": "Automatické připojení",
         "autoJoinDescription": "Automaticky se připojit k této místnosti při přihlášení",
         "joinRoomTitle": "Vstoupit do místnosti",

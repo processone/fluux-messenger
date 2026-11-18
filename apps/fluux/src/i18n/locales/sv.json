@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Ditt visningsnamn i rummet",
         "pleaseEnterNickname": "Ange ett smeknamn",
         "failedToSaveBookmark": "Kunde inte spara bokmärke",
+        "failedToRemoveBookmark": "Kunde inte ta bort bokmärke",
         "autoJoinLabel": "Auto-anslut",
         "autoJoinDescription": "Anslut automatiskt till detta rum vid anslutning",
         "joinRoomTitle": "Gå med i rum",

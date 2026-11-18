@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Vaše ime za prikaz u sobi",
         "pleaseEnterNickname": "Molimo unesite nadimak",
         "failedToSaveBookmark": "Spremanje oznake nije uspjelo",
+        "failedToRemoveBookmark": "Uklanjanje oznake nije uspjelo",
         "autoJoinLabel": "Automatsko pridruživanje",
         "autoJoinDescription": "Automatski se pridruži ovoj sobi pri povezivanju",
         "joinRoomTitle": "Pridruži se sobi",

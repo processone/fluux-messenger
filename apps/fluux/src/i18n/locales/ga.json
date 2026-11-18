@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "D'ainm taispeána sa seomra",
         "pleaseEnterNickname": "Cuir isteach leasainm le do thoil",
         "failedToSaveBookmark": "Theip ar shábháil leabharmhairc",
+        "failedToRemoveBookmark": "Theip ar bhaint leabharmhairc",
         "autoJoinLabel": "Uath-iontráil",
         "autoJoinDescription": "Téigh isteach sa seomra seo go huathoibríoch ar cheangal",
         "joinRoomTitle": "Téigh Isteach i Seomra",

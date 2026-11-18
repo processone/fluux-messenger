@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "اسمك المعروض في الغرفة",
         "pleaseEnterNickname": "يرجى إدخال اسم مستعار",
         "failedToSaveBookmark": "فشل حفظ المفضلة",
+        "failedToRemoveBookmark": "فشل إزالة المفضلة",
         "autoJoinLabel": "الانضمام التلقائي",
         "autoJoinDescription": "الانضمام تلقائيًا لهذه الغرفة عند الاتصال",
         "joinRoomTitle": "الانضمام إلى غرفة",

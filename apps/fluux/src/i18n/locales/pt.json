@@ -275,6 +275,7 @@
         "nicknamePlaceholder": "O seu nome na sala",
         "pleaseEnterNickname": "Por favor introduza uma alcunha",
         "failedToSaveBookmark": "Falha ao guardar marcador",
+        "failedToRemoveBookmark": "Falha ao remover marcador",
         "autoJoinLabel": "Entrada automática",
         "autoJoinDescription": "Entrar automaticamente nesta sala ao ligar",
         "joinRoomTitle": "Entrar na sala",

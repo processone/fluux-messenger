@@ -275,6 +275,7 @@
         "nicknamePlaceholder": "El teu nom visible a la sala",
         "pleaseEnterNickname": "Introdueix un sobrenom",
         "failedToSaveBookmark": "No s'ha pogut desar el marcador",
+        "failedToRemoveBookmark": "No s'ha pogut eliminar el marcador",
         "autoJoinLabel": "Unió automàtica",
         "autoJoinDescription": "Uneix-te automàticament a aquesta sala en connectar",
         "joinRoomTitle": "Uneix-te a una sala",

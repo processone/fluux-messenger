@@ -273,6 +273,7 @@
         "nicknamePlaceholder": "Näyttönimesi huoneessa",
         "pleaseEnterNickname": "Syötä lempinimi",
         "failedToSaveBookmark": "Kirjanmerkin tallennus epäonnistui",
+        "failedToRemoveBookmark": "Kirjanmerkin poisto epäonnistui",
         "autoJoinLabel": "Automaattinen liittyminen",
         "autoJoinDescription": "Liity automaattisesti tähän huoneeseen yhdistettäessä",
         "joinRoomTitle": "Liity huoneeseen",
