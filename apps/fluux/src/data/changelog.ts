@@ -29,6 +29,7 @@ export const changelog: ChangelogEntry[] = [
         'Changing a room bookmark\'s nickname while you are in the room, in Fluux or in another XMPP app, no longer changes the nickname Fluux uses for you in that room',
         'A room bookmarked without a nickname in another XMPP app now joins under your profile name or account name instead of "user"',
         'When changing a room\'s Auto-join or removing its bookmark from the rooms list fails, Fluux now shows an error. Before, nothing told you that the change did not go through',
+        'When a notification setting you choose in a room\'s header cannot be saved to the room\'s bookmark, Fluux now shows an error. Before, nothing told you that the setting was not saved',
         'Reloading Fluux while a Settings page such as Encryption is open now keeps that page open instead of switching to Profile',
         'After a page reload or a reconnection, your server no longer sends again what Fluux had already received, and servers that limit how much they keep waiting for confirmation no longer disconnect Fluux during a long session',
       ],

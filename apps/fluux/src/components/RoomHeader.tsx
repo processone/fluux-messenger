@@ -27,6 +27,7 @@ import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflow
 import { buildNotifyGroup, buildManagementGroup, notifyModeOf, notifyIconOf } from './header/roomHeaderActions'
 import { inlineClass, kebabClass, KEBAB_TRIGGER_CLASS } from './header/headerOverflow'
 import { useRoomUiStore } from '../stores/roomUiStore'
+import { useToastStore } from '@/stores/toastStore'
 import {
   ArrowLeft,
   Users,
@@ -82,6 +83,7 @@ export function RoomHeader({
   const closeConfig = useRoomUiStore((s) => s.closeConfig)
   const openInvite = useRoomUiStore((s) => s.openInvite)
   const closeInvite = useRoomUiStore((s) => s.closeInvite)
+  const addToast = useToastStore((s) => s.addToast)
 
   // Get self occupant to check affiliation
   const selfOccupant = room.nickname ? room.occupants.get(room.nickname) : undefined
@@ -94,7 +96,10 @@ export function RoomHeader({
 
   const mode = notifyModeOf(room)
   const NotifyIcon = notifyIconOf(mode)
-  const notifyGroup = buildNotifyGroup({ room, t, setRoomNotifyLevel })
+  const notifyGroup = buildNotifyGroup({
+    room, t, setRoomNotifyLevel,
+    onSaveFailed: () => addToast('error', t('rooms.failedToSaveBookmark')),
+  })
   const managementGroup = buildManagementGroup({
     room, t, isOwner, canManageRoom,
     onConfig: openConfig,

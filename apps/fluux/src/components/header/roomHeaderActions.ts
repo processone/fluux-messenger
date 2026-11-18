@@ -26,29 +26,36 @@ interface NotifyArgs {
   room: Room
   t: TFunction
   setRoomNotifyLevel: (jid: string, level: NotifyLevel, persistent?: boolean) => Promise<void>
+  /** Called when a choice could not be saved to the room's bookmark. */
+  onSaveFailed: () => void
 }
 
-export function buildNotifyGroup({ room, t, setRoomNotifyLevel }: NotifyArgs): HeaderActionGroup {
+export function buildNotifyGroup({ room, t, setRoomNotifyLevel, onSaveFailed }: NotifyArgs): HeaderActionGroup {
   const mode = notifyModeOf(room)
   // A level saved in the bookmark must be cleared when a session-only choice replaces it.
   const hasSavedChoice = savedNotifyLevel(room) !== 'mentions'
   // Levels are saved to the bookmark, so a room without one (a quick chat, or a joined
   // room that is not bookmarked) keeps Off for the session only and has no saved All messages.
   const hasNoBookmark = room.isQuickChat || !room.isBookmarked
+  // The menu closes on click, so a saved level the bookmark write refuses is
+  // reported through onSaveFailed instead of being dropped unhandled.
+  const setLevel = (level: NotifyLevel, persistent: boolean) => {
+    setRoomNotifyLevel(room.jid, level, persistent).catch(onSaveFailed)
+  }
   const select = (next: NotifyMode) => {
     switch (next) {
       case 'mentions':
-        void setRoomNotifyLevel(room.jid, 'mentions', hasSavedChoice)
+        setLevel('mentions', hasSavedChoice)
         break
       case 'all-session':
-        if (hasSavedChoice) void setRoomNotifyLevel(room.jid, 'mentions', true)
-        void setRoomNotifyLevel(room.jid, 'all', false)
+        if (hasSavedChoice) setLevel('mentions', true)
+        setLevel('all', false)
         break
       case 'all-always':
-        void setRoomNotifyLevel(room.jid, 'all', true)
+        setLevel('all', true)
         break
       case 'off':
-        void setRoomNotifyLevel(room.jid, 'none', !hasNoBookmark)
+        setLevel('none', !hasNoBookmark)
         break
     }
   }

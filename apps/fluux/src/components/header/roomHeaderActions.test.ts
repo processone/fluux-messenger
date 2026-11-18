@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { Room } from '@fluux/sdk'
 import { AtSign, BellOff } from 'lucide-react'
 import { buildNotifyGroup, buildManagementGroup, notifyModeOf } from './roomHeaderActions'
@@ -38,7 +38,8 @@ describe('notifyModeOf', () => {
 describe('buildNotifyGroup', () => {
   const group = (partial: Partial<Room> = {}) => {
     const setRoomNotifyLevel = vi.fn().mockResolvedValue(undefined)
-    return { setRoomNotifyLevel, g: buildNotifyGroup({ room: room(partial), t, setRoomNotifyLevel }) }
+    const onSaveFailed = vi.fn()
+    return { setRoomNotifyLevel, onSaveFailed, g: buildNotifyGroup({ room: room(partial), t, setRoomNotifyLevel, onSaveFailed }) }
   }
   const choose = (g: ReturnType<typeof group>['g'], key: string) => g.items.find((i) => i.key === key)!.onSelect()
 
@@ -107,6 +108,40 @@ describe('buildNotifyGroup', () => {
     const { g, setRoomNotifyLevel } = group()
     choose(g, 'all-always')
     expect(setRoomNotifyLevel).toHaveBeenCalledWith('room@conf.example.com', 'all', true)
+  })
+
+  describe('when the bookmark refuses a saved level', () => {
+    // Only a saved level waits on the bookmark write; a session choice never fails.
+    const refusingSaves = (partial: Partial<Room>) => {
+      const made = group(partial)
+      made.setRoomNotifyLevel.mockImplementation((_jid: string, _level: string, persistent?: boolean) =>
+        persistent ? Promise.reject(Object.assign(new Error('conflict'), { name: 'StanzaError', condition: 'conflict' })) : Promise.resolve())
+      return made
+    }
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason) }
+    afterEach(() => {
+      process.off('unhandledRejection', onUnhandled)
+      unhandled.length = 0
+    })
+
+    it.each([
+      ['off', {}],
+      ['all-always', {}],
+      ['mentions', { notifyAllPersistent: true }],
+      ['all-session', { notifyOffPersistent: true }],
+    ] as const)('reports a refused %s save once and leaves no unhandled rejection', async (key, partial) => {
+      process.on('unhandledRejection', onUnhandled)
+      const { g, onSaveFailed } = refusingSaves(partial)
+
+      choose(g, key)
+
+      await vi.waitFor(() => expect(onSaveFailed).toHaveBeenCalledTimes(1))
+      // Node reports an unhandled rejection once the microtasks after it have run.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(onSaveFailed).toHaveBeenCalledTimes(1)
+      expect(unhandled).toEqual([])
+    })
   })
 })
 
