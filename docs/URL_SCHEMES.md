@@ -83,7 +83,7 @@ the same in-app navigation as the text link; it does not join automatically.
 Leaving a room or changing accounts hides its quote and invalidates pending
 preview reads.
 
-**Forward message** on a linkable room message opens a picker of contacts, existing
+**Forward message** on a linkable room message, or on a readable one-to-one message, opens a picker of contacts, existing
 chats and currently joined rooms where you can send messages. On phones it is in
 the long-press action menu.
 Typing narrows the list by name or by the part of the address before @, and Enter
@@ -94,6 +94,8 @@ author (`> Nick wrote:` followed by the quoted lines, clipped at 500 characters)
 then the room message link, with the same XEP-0372 data reference as a pasted link.
 A source that is retracted or cannot be read is forwarded as the link only.
 A forward to a room always sends this quoted form.
+
+A one-to-one message has no room link, so its forward is the comment and the quote only, with no link or data reference. The quote is attributed to the message's author and sender address. To a one-to-one chat it also carries the structured copy below, whose fallback marker covers the quote alone.
 
 The generated quote and link are marked with XEP-0428 Fallback Indication:
 `<fallback xmlns="urn:xmpp:fallback:0" for="urn:fluux:forward-quote:0">` with one
@@ -112,7 +114,10 @@ notice, and a failed encryption never falls back to plaintext. A failed send tha
 is retried keeps the marker. Cancelling sends nothing; a send failure keeps the
 picker and comment available. Forward is unavailable for whispers, unconfirmed
 messages and messages without a room archive id, just like Copy message link.
-Forwarding one-to-one messages is a separate change.
+A message read from an encrypted chat can be forwarded only into an encrypted
+chat: rooms are not offered for it, and a send, retry or edit that would go out
+unencrypted is refused before anything is sent. A retracted, undecryptable or
+failed message has no Forward.
 
 **Structured copy (XEP-0297).** A forward to a one-to-one chat is one stanza for every
 reader: the same comment, quote and link as the quoted form above, plus a standalone
@@ -126,7 +131,7 @@ encrypted keeps it visible, and a marker outside the body is ignored. The stored
 copies but ignores XEP-0428 would show the quote and the copy together. Every room gets
 the quoted form alone. The
 copy holds a `<delay/>` with the original time and a `<message from=...>` whose
-only child is the plain body; `from` is the room occupant address. The text is
+only child is the plain body; `from` is the room occupant address for a room message (the inner message type is `groupchat`) and the bare address for a one-to-one message (type `chat`). The text is
 the sender's claim, not verified history. A receiver reads only that plain body,
 the sender and the time, bounded to 4000 characters, with control and
 bidirectional-override characters removed; nested forwards and every other

@@ -194,7 +194,8 @@ function forwardFallbackElement(fullBody: string, shift: number, range: { begin:
 
 /** XEP-0297: the standalone forwarded copy of one message, as a child of the outgoing message. */
 function forwardedCopyElement(copy: { from: string; text: string; timestamp?: number }): Element {
-  const inner = xml('message', { xmlns: 'jabber:client', from: copy.from, type: 'groupchat' }, xml('body', {}, copy.text))
+  // A room occupant's address names a room message; a bare address names a one-to-one message.
+  const inner = xml('message', { xmlns: 'jabber:client', from: copy.from, type: copy.from.includes('/') ? 'groupchat' : 'chat' }, xml('body', {}, copy.text))
   return xml('forwarded', { xmlns: NS_FORWARD },
     ...(copy.timestamp !== undefined && Number.isFinite(copy.timestamp)
       ? [xml('delay', { xmlns: NS_DELAY, stamp: new Date(copy.timestamp).toISOString() })] : []),
@@ -202,8 +203,10 @@ function forwardedCopyElement(copy: { from: string; text: string; timestamp?: nu
 }
 
 /** The stored form of a copy: the author is a room nickname or a bare address, never a routing address. */
-function forwardedCopyFor(copy: { from: string; text: string; timestamp?: number }): ForwardedCopy | undefined {
-  return parseForwardedCopy(xml('message', {}, forwardedCopyElement(copy)))
+function forwardedCopyFor(copy: { from: string; text: string; timestamp?: number; fromEncrypted?: boolean }): ForwardedCopy | undefined {
+  const parsed = parseForwardedCopy(xml('message', {}, forwardedCopyElement(copy)))
+  // The requirement is kept on the stored copy so a retry or an edit enforces it too.
+  return parsed && copy.fromEncrypted ? { ...parsed, fromEncrypted: true } : parsed
 }
 
 export class Chat extends BaseModule {
@@ -1232,6 +1235,10 @@ export class Chat extends BaseModule {
       children,
       Chat.E2EE_PROTECTED_CHILD_KEYS,
     )
+    // A forward read from an encrypted chat is never retried unencrypted, even if encryption was turned off since.
+    if (storedForwarded?.fromEncrypted && !resendSecurityContext) {
+      throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+    }
     if (attachment?.encryption && !resendSecurityContext) {
       throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }
@@ -1524,6 +1531,10 @@ export class Chat extends BaseModule {
           Chat.E2EE_PROTECTED_CHILD_KEYS,
         )
       : undefined
+    // The comment of an encrypted-source forward sits beside its quote: an edit stays encrypted too.
+    if (type === 'chat' && original?.forwarded?.fromEncrypted && !correctionSecurityContext) {
+      throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+    }
     if (attachment?.encryption && !correctionSecurityContext) {
       throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }

@@ -268,6 +268,11 @@ export interface ForwardedCopy {
   /** Original timestamp (ms since epoch) when the copy named one. */
   timestamp?: number
   /**
+   * Outgoing only: the copy's source was read from an encrypted chat. A retry or an edit of
+   * this message is refused unless it is encrypted again; never set on a received copy.
+   */
+  fromEncrypted?: true
+  /**
    * The text of the message body that only stands in for the copy (a quote of it), as a
    * XEP-0428 fallback for the copy. A reader that shows the copy hides it; any other reader
    * or a message without a readable copy shows it. UTF-16 offsets in `body`; `text` is the marked
