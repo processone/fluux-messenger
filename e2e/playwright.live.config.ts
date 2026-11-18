@@ -1,4 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
+import { requireLockedInstall } from './harness/installGuard'
+
+// Before anything runs: see e2e/harness/installGuard.ts.
+requireLockedInstall()
 
 // Live proof of one-to-one forwarding against a disposable local XMPP server (see e2e/forward-direct.live.ts).
 // Nothing here starts a server or an app: set FLUUX_LIVE_APP and FLUUX_LIVE_ACCOUNTS first.
