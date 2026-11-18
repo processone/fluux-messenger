@@ -1,15 +1,22 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
+import type { PeerIdentity, PeerIdentityGroup } from '@fluux/sdk'
 import { ContactSecurityDetail } from './ContactSecurityDetail'
 
 const noop = () => {}
+const key = (fingerprint: string, trust: PeerIdentity['trust']): PeerIdentity => ({
+  id: fingerprint, fingerprint, trust, usedForEncryption: true, allowedDecisions: [],
+})
+const group = (identities: PeerIdentity[]): PeerIdentityGroup => ({
+  protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true, identities,
+})
 
 describe('ContactSecurityDetail', () => {
   it('renders the security details header and the fingerprint from SecurityTab', () => {
     render(
       <ContactSecurityDetail
-        state={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'verified' }}
-        onVerify={noop} onRequestRevoke={noop} onDisableEncryption={noop}
+        state={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'verified', groups: [group([key('ABCD1234', 'verified')])] }}
+        onDecide={noop} onDisableEncryption={noop}
         onEnableEncryption={noop} onClose={noop}
       />,
     )
@@ -20,8 +27,8 @@ describe('ContactSecurityDetail', () => {
   it('explains an unverified keyset and does not present the contact as verified', () => {
     render(
       <ContactSecurityDetail
-        state={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'tofu', partlyVerified: true }}
-        onVerify={noop} onRequestRevoke={noop} onDisableEncryption={noop}
+        state={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'tofu', partlyVerified: true, groups: [group([key('ABCD1234', 'tofu')])] }}
+        onDecide={noop} onDisableEncryption={noop}
         onEnableEncryption={noop} onClose={noop}
       />,
     )
@@ -32,8 +39,8 @@ describe('ContactSecurityDetail', () => {
   it('shows no keyset explanation for a single-key contact', () => {
     render(
       <ContactSecurityDetail
-        state={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'tofu', canVerify: true }}
-        onVerify={noop} onRequestRevoke={noop} onDisableEncryption={noop}
+        state={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'tofu', canVerify: true, groups: [group([key('ABCD1234', 'tofu')])] }}
+        onDecide={noop} onDisableEncryption={noop}
         onEnableEncryption={noop} onClose={noop}
       />,
     )
@@ -45,7 +52,7 @@ describe('ContactSecurityDetail', () => {
     render(
       <ContactSecurityDetail
         state={{ kind: 'unsupported' }}
-        onVerify={noop} onRequestRevoke={noop} onDisableEncryption={noop}
+        onDecide={noop} onDisableEncryption={noop}
         onEnableEncryption={noop} onClose={onClose}
       />,
     )

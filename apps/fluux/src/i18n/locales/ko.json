@@ -202,7 +202,33 @@
             "glanceEncrypted": "암호화됨, 미확인",
             "glanceNotEncrypted": "암호화되지 않음",
             "glanceDisabled": "암호화 꺼짐",
-            "glanceLocked": "암호화됨, 잠김"
+            "glanceLocked": "암호화됨, 잠김",
+            "methodInUse": "사용 중",
+            "receivesMessages": "내 메시지를 받음",
+            "receivesNoMessages": "내 메시지를 받지 않음",
+            "wouldReceiveMessages": "이 방식이면 받음",
+            "listErrorTitle": "키를 불러오지 못했습니다",
+            "listErrorDescription": "이 연락처의 키를 읽을 수 없습니다. 다시 시도하세요.",
+            "tryAgain": "다시 시도",
+            "needsDecisionTitle": "결정을 기다리는 중",
+            "needsDecisionDescription": "키에 대해 결정하기 전까지는 이 연락처에 보내는 메시지를 암호화할 수 없습니다.",
+            "receivesWhenUnlocked": "잠금을 해제하면 내 메시지를 받음",
+            "keyTrust": {
+                "verified": "확인됨",
+                "introduced": "소개됨",
+                "tofu": "신뢰함, 확인되지 않음",
+                "unknown": "결정을 기다리는 중",
+                "untrusted": "신뢰하지 않음"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "결정을 기다리는 중",
+                "distrusted": "신뢰하지 않음",
+                "no-key": "상대가 더 이상 게시하지 않음",
+                "invalid-key": "유효하지 않은 인증서",
+                "over-limit": "기기가 너무 많아 이 기기는 건너뜀"
+            },
+            "trustButton": "이 키 신뢰",
+            "distrustButton": "이 키 신뢰하지 않음"
         },
         "actionsMenu": "작업 더 보기"
     },

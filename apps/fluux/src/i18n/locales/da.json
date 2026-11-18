@@ -201,7 +201,33 @@
             "glanceEncrypted": "Krypteret, ikke bekræftet",
             "glanceNotEncrypted": "Ikke krypteret",
             "glanceDisabled": "Kryptering slået fra",
-            "glanceLocked": "Krypteret, låst"
+            "glanceLocked": "Krypteret, låst",
+            "methodInUse": "I brug",
+            "receivesMessages": "Modtager dine beskeder",
+            "receivesNoMessages": "Modtager ikke dine beskeder",
+            "wouldReceiveMessages": "Ville modtage med denne metode",
+            "listErrorTitle": "Nøglerne kunne ikke indlæses",
+            "listErrorDescription": "Kontaktens nøgler kunne ikke læses. Prøv igen.",
+            "tryAgain": "Prøv igen",
+            "needsDecisionTitle": "Venter på din beslutning",
+            "needsDecisionDescription": "Beskeder til denne kontakt kan ikke krypteres, før du har taget stilling til en nøgle.",
+            "receivesWhenUnlocked": "Modtager dine beskeder, når du låser op",
+            "keyTrust": {
+                "verified": "Verificeret",
+                "introduced": "Introduceret",
+                "tofu": "Betroet, ikke verificeret",
+                "unknown": "Venter på din beslutning",
+                "untrusted": "Ikke betroet"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "venter på din beslutning",
+                "distrusted": "du stoler ikke på den",
+                "no-key": "kontakten udgiver den ikke længere",
+                "invalid-key": "ugyldigt certifikat",
+                "over-limit": "for mange enheder, denne springes over"
+            },
+            "trustButton": "Stol på denne nøgle",
+            "distrustButton": "Stol ikke på denne nøgle"
         },
         "actionsMenu": "Flere handlinger",
         "requestsHeading": "Anmodninger"

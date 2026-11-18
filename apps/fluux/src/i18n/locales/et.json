@@ -203,7 +203,33 @@
             "glanceEncrypted": "Krüptitud, kontrollimata",
             "glanceNotEncrypted": "Krüptimata",
             "glanceDisabled": "Krüptimine väljas",
-            "glanceLocked": "Krüptitud, lukustatud"
+            "glanceLocked": "Krüptitud, lukustatud",
+            "methodInUse": "Kasutusel",
+            "receivesMessages": "Saab teie sõnumeid",
+            "receivesNoMessages": "Ei saa teie sõnumeid",
+            "wouldReceiveMessages": "Saaks selle meetodiga",
+            "listErrorTitle": "Võtmeid ei saanud laadida",
+            "listErrorDescription": "Selle kontakti võtmeid ei saanud lugeda. Proovige uuesti.",
+            "tryAgain": "Proovi uuesti",
+            "needsDecisionTitle": "Ootab teie otsust",
+            "needsDecisionDescription": "Sellele kontaktile ei saa sõnumeid krüptida, kuni olete võtme kohta otsustanud.",
+            "receivesWhenUnlocked": "Saab teie sõnumeid pärast lukustuse avamist",
+            "keyTrust": {
+                "verified": "Kinnitatud",
+                "introduced": "Tutvustatud",
+                "tofu": "Usaldatud, kinnitamata",
+                "unknown": "Ootab teie otsust",
+                "untrusted": "Ei usaldata"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "ootab teie otsust",
+                "distrusted": "te ei usalda seda",
+                "no-key": "kontakt ei avalda seda enam",
+                "invalid-key": "kehtetu sertifikaat",
+                "over-limit": "liiga palju seadmeid, see jäetakse vahele"
+            },
+            "trustButton": "Usalda seda võtit",
+            "distrustButton": "Ära usalda seda võtit"
         },
         "actionsMenu": "Rohkem toiminguid",
         "requestsHeading": "Taotlused"

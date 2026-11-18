@@ -201,7 +201,33 @@
             "glanceEncrypted": "Dulkóðað, ekki staðfest",
             "glanceNotEncrypted": "Ekki dulkóðað",
             "glanceDisabled": "Dulkóðun slökkt",
-            "glanceLocked": "Dulkóðað, læst"
+            "glanceLocked": "Dulkóðað, læst",
+            "methodInUse": "Í notkun",
+            "receivesMessages": "Fær skilaboðin þín",
+            "receivesNoMessages": "Fær ekki skilaboðin þín",
+            "wouldReceiveMessages": "Myndi fá með þessari aðferð",
+            "listErrorTitle": "Ekki tókst að hlaða lyklunum",
+            "listErrorDescription": "Ekki tókst að lesa lykla þessa tengiliðar. Reyndu aftur.",
+            "tryAgain": "Reyna aftur",
+            "needsDecisionTitle": "Bíður ákvörðunar þinnar",
+            "needsDecisionDescription": "Ekki er hægt að dulrita skilaboð til þessa tengiliðar fyrr en þú hefur ákveðið með lykil.",
+            "receivesWhenUnlocked": "Fær skilaboðin þín þegar þú aflæsir",
+            "keyTrust": {
+                "verified": "Staðfestur",
+                "introduced": "Kynntur",
+                "tofu": "Treyst, óstaðfestur",
+                "unknown": "Bíður ákvörðunar þinnar",
+                "untrusted": "Ekki treyst"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "bíður ákvörðunar þinnar",
+                "distrusted": "þú treystir honum ekki",
+                "no-key": "tengiliðurinn birtir hann ekki lengur",
+                "invalid-key": "ógilt skilríki",
+                "over-limit": "of mörg tæki, þessu er sleppt"
+            },
+            "trustButton": "Treysta þessum lykli",
+            "distrustButton": "Treysta ekki þessum lykli"
         },
         "actionsMenu": "Fleiri aðgerðir",
         "requestsHeading": "Beiðnir"

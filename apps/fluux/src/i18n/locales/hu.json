@@ -201,7 +201,33 @@
             "glanceEncrypted": "Titkosított, nem ellenőrzött",
             "glanceNotEncrypted": "Nem titkosított",
             "glanceDisabled": "Titkosítás kikapcsolva",
-            "glanceLocked": "Titkosított, zárolt"
+            "glanceLocked": "Titkosított, zárolt",
+            "methodInUse": "Használatban",
+            "receivesMessages": "Megkapja az üzeneteit",
+            "receivesNoMessages": "Nem kapja meg az üzeneteit",
+            "wouldReceiveMessages": "Ezzel a módszerrel megkapná",
+            "listErrorTitle": "A kulcsok nem tölthetők be",
+            "listErrorDescription": "A partner kulcsait nem sikerült beolvasni. Próbálja újra.",
+            "tryAgain": "Újrapróbálás",
+            "needsDecisionTitle": "Az Ön döntésére vár",
+            "needsDecisionDescription": "Az ehhez a partnerhez küldött üzenetek nem titkosíthatók, amíg nem dönt egy kulcsról.",
+            "receivesWhenUnlocked": "Feloldás után megkapja az üzeneteit",
+            "keyTrust": {
+                "verified": "Ellenőrzött",
+                "introduced": "Bemutatott",
+                "tofu": "Megbízott, nem ellenőrzött",
+                "unknown": "Az Ön döntésére vár",
+                "untrusted": "Nem megbízott"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "az Ön döntésére vár",
+                "distrusted": "Ön nem bízik benne",
+                "no-key": "a partner már nem teszi közzé",
+                "invalid-key": "érvénytelen tanúsítvány",
+                "over-limit": "túl sok eszköz, ez ki lesz hagyva"
+            },
+            "trustButton": "Megbízás ebben a kulcsban",
+            "distrustButton": "Nem bízom ebben a kulcsban"
         },
         "actionsMenu": "További műveletek",
         "requestsHeading": "Kérések"

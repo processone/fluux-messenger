@@ -203,7 +203,33 @@
             "glanceEncrypted": "Šifrováno, neověřeno",
             "glanceNotEncrypted": "Nešifrováno",
             "glanceDisabled": "Šifrování vypnuto",
-            "glanceLocked": "Šifrováno, uzamčeno"
+            "glanceLocked": "Šifrováno, uzamčeno",
+            "methodInUse": "Používá se",
+            "receivesMessages": "Přijímá vaše zprávy",
+            "receivesNoMessages": "Nepřijímá vaše zprávy",
+            "wouldReceiveMessages": "Přijímal by touto metodou",
+            "listErrorTitle": "Klíče se nepodařilo načíst",
+            "listErrorDescription": "Klíče tohoto kontaktu se nepodařilo přečíst. Zkuste to znovu.",
+            "tryAgain": "Zkusit znovu",
+            "needsDecisionTitle": "Čeká na vaše rozhodnutí",
+            "needsDecisionDescription": "Zprávy tomuto kontaktu nelze šifrovat, dokud se o klíči nerozhodnete.",
+            "receivesWhenUnlocked": "Přijme vaše zprávy po odemknutí",
+            "keyTrust": {
+                "verified": "Ověřený",
+                "introduced": "Představený",
+                "tofu": "Důvěryhodný, neověřený",
+                "unknown": "Čeká na vaše rozhodnutí",
+                "untrusted": "Nedůvěryhodný"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "čeká na vaše rozhodnutí",
+                "distrusted": "nedůvěřujete mu",
+                "no-key": "kontakt jej už nezveřejňuje",
+                "invalid-key": "neplatný certifikát",
+                "over-limit": "příliš mnoho zařízení, toto je přeskočeno"
+            },
+            "trustButton": "Důvěřovat tomuto klíči",
+            "distrustButton": "Nedůvěřovat tomuto klíči"
         },
         "actionsMenu": "Další akce",
         "requestsHeading": "Žádosti"

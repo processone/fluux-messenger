@@ -2,12 +2,11 @@ import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { ModalOverlay } from '../ModalOverlay'
-import { SecurityTab } from './tabs/SecurityTab'
+import { SecurityTab, type SecurityTabProps } from './tabs/SecurityTab'
 
 interface ContactSecurityDetailProps {
   state: ConversationEncryptionState
-  onVerify: () => void
-  onRequestRevoke: () => void
+  onDecide: SecurityTabProps['onDecide']
   onDisableEncryption: () => void
   onEnableEncryption: () => void
   onClose: () => void
@@ -15,8 +14,7 @@ interface ContactSecurityDetailProps {
 
 export function ContactSecurityDetail({
   state,
-  onVerify,
-  onRequestRevoke,
+  onDecide,
   onDisableEncryption,
   onEnableEncryption,
   onClose,
@@ -43,8 +41,7 @@ export function ContactSecurityDetail({
       <div className="flex-1 overflow-y-auto min-h-0">
         <SecurityTab
           state={state}
-          onVerify={onVerify}
-          onRequestRevoke={onRequestRevoke}
+          onDecide={onDecide}
           onDisableEncryption={onDisableEncryption}
           onEnableEncryption={onEnableEncryption}
         />

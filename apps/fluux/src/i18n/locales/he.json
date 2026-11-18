@@ -201,7 +201,33 @@
             "glanceEncrypted": "מוצפן, לא מאומת",
             "glanceNotEncrypted": "לא מוצפן",
             "glanceDisabled": "הצפנה כבויה",
-            "glanceLocked": "מוצפן, נעול"
+            "glanceLocked": "מוצפן, נעול",
+            "methodInUse": "בשימוש",
+            "receivesMessages": "מקבל את ההודעות שלך",
+            "receivesNoMessages": "לא מקבל את ההודעות שלך",
+            "wouldReceiveMessages": "יקבל בשיטה זו",
+            "listErrorTitle": "לא ניתן לטעון את המפתחות",
+            "listErrorDescription": "לא ניתן היה לקרוא את המפתחות של איש קשר זה. נסה שוב.",
+            "tryAgain": "נסה שוב",
+            "needsDecisionTitle": "ממתין להחלטתך",
+            "needsDecisionDescription": "לא ניתן להצפין הודעות לאיש קשר זה עד שתחליט לגבי מפתח.",
+            "receivesWhenUnlocked": "יקבל את ההודעות שלך לאחר שתבטל את הנעילה",
+            "keyTrust": {
+                "verified": "מאומת",
+                "introduced": "הוצג",
+                "tofu": "מהימן, לא מאומת",
+                "unknown": "ממתין להחלטתך",
+                "untrusted": "לא מהימן"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "ממתין להחלטתך",
+                "distrusted": "אינך סומך עליו",
+                "no-key": "איש הקשר כבר לא מפרסם אותו",
+                "invalid-key": "אישור לא תקין",
+                "over-limit": "יותר מדי מכשירים, המכשיר הזה מדולג"
+            },
+            "trustButton": "לסמוך על המפתח הזה",
+            "distrustButton": "לא לסמוך על המפתח הזה"
         },
         "actionsMenu": "פעולות נוספות",
         "requestsHeading": "בקשות"

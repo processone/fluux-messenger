@@ -201,7 +201,33 @@
             "glanceEncrypted": "Užšifruota, nepatvirtinta",
             "glanceNotEncrypted": "Neužšifruota",
             "glanceDisabled": "Šifravimas išjungtas",
-            "glanceLocked": "Užšifruota, užrakinta"
+            "glanceLocked": "Užšifruota, užrakinta",
+            "methodInUse": "Naudojamas",
+            "receivesMessages": "Gauna jūsų žinutes",
+            "receivesNoMessages": "Negauna jūsų žinučių",
+            "wouldReceiveMessages": "Gautų šiuo metodu",
+            "listErrorTitle": "Nepavyko įkelti raktų",
+            "listErrorDescription": "Nepavyko nuskaityti šio adresato raktų. Bandykite dar kartą.",
+            "tryAgain": "Bandyti dar kartą",
+            "needsDecisionTitle": "Laukiama jūsų sprendimo",
+            "needsDecisionDescription": "Žinučių šiam adresatui negalima šifruoti, kol nenusprendžiate dėl rakto.",
+            "receivesWhenUnlocked": "Gaus jūsų žinutes, kai atrakinsite",
+            "keyTrust": {
+                "verified": "Patvirtintas",
+                "introduced": "Pristatytas",
+                "tofu": "Patikimas, nepatvirtintas",
+                "unknown": "Laukiama jūsų sprendimo",
+                "untrusted": "Nepatikimas"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "laukiama jūsų sprendimo",
+                "distrusted": "jūs juo nepasitikite",
+                "no-key": "adresatas jo nebeskelbia",
+                "invalid-key": "netinkamas sertifikatas",
+                "over-limit": "per daug įrenginių, šis praleidžiamas"
+            },
+            "trustButton": "Pasitikėti šiuo raktu",
+            "distrustButton": "Nepasitikėti šiuo raktu"
         },
         "actionsMenu": "Daugiau veiksmų",
         "requestsHeading": "Prašymai"

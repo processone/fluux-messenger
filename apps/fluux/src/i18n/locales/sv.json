@@ -201,7 +201,33 @@
             "glanceEncrypted": "Krypterat, ej verifierat",
             "glanceNotEncrypted": "Inte krypterat",
             "glanceDisabled": "Kryptering av",
-            "glanceLocked": "Krypterat, låst"
+            "glanceLocked": "Krypterat, låst",
+            "methodInUse": "Används",
+            "receivesMessages": "Tar emot dina meddelanden",
+            "receivesNoMessages": "Tar inte emot dina meddelanden",
+            "wouldReceiveMessages": "Skulle ta emot med den här metoden",
+            "listErrorTitle": "Nycklarna kunde inte läsas in",
+            "listErrorDescription": "Kontaktens nycklar kunde inte läsas. Försök igen.",
+            "tryAgain": "Försök igen",
+            "needsDecisionTitle": "Väntar på ditt beslut",
+            "needsDecisionDescription": "Meddelanden till den här kontakten kan inte krypteras förrän du har bestämt dig för en nyckel.",
+            "receivesWhenUnlocked": "Tar emot dina meddelanden när du låser upp",
+            "keyTrust": {
+                "verified": "Verifierad",
+                "introduced": "Introducerad",
+                "tofu": "Betrodd, inte verifierad",
+                "unknown": "Väntar på ditt beslut",
+                "untrusted": "Inte betrodd"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "väntar på ditt beslut",
+                "distrusted": "du litar inte på den",
+                "no-key": "kontakten publicerar den inte längre",
+                "invalid-key": "ogiltigt certifikat",
+                "over-limit": "för många enheter, den här hoppas över"
+            },
+            "trustButton": "Lita på den här nyckeln",
+            "distrustButton": "Lita inte på den här nyckeln"
         },
         "actionsMenu": "Fler åtgärder",
         "requestsHeading": "Förfrågningar"

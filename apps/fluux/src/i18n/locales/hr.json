@@ -201,7 +201,33 @@
             "glanceEncrypted": "Šifrirano, nije potvrđeno",
             "glanceNotEncrypted": "Nije šifrirano",
             "glanceDisabled": "Šifriranje isključeno",
-            "glanceLocked": "Šifrirano, zaključano"
+            "glanceLocked": "Šifrirano, zaključano",
+            "methodInUse": "U upotrebi",
+            "receivesMessages": "Prima vaše poruke",
+            "receivesNoMessages": "Ne prima vaše poruke",
+            "wouldReceiveMessages": "Primao bi ovom metodom",
+            "listErrorTitle": "Ključevi se nisu mogli učitati",
+            "listErrorDescription": "Ključevi ovog kontakta nisu se mogli pročitati. Pokušajte ponovno.",
+            "tryAgain": "Pokušaj ponovno",
+            "needsDecisionTitle": "Čeka vašu odluku",
+            "needsDecisionDescription": "Poruke ovom kontaktu ne mogu se šifrirati dok ne odlučite o ključu.",
+            "receivesWhenUnlocked": "Primit će vaše poruke nakon otključavanja",
+            "keyTrust": {
+                "verified": "Potvrđen",
+                "introduced": "Predstavljen",
+                "tofu": "Pouzdan, nepotvrđen",
+                "unknown": "Čeka vašu odluku",
+                "untrusted": "Nepouzdan"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "čeka vašu odluku",
+                "distrusted": "ne vjerujete mu",
+                "no-key": "kontakt ga više ne objavljuje",
+                "invalid-key": "nevažeći certifikat",
+                "over-limit": "previše uređaja, ovaj se preskače"
+            },
+            "trustButton": "Vjeruj ovom ključu",
+            "distrustButton": "Ne vjeruj ovom ključu"
         },
         "actionsMenu": "Više radnji",
         "requestsHeading": "Zahtjevi"

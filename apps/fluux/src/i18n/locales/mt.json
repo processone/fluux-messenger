@@ -203,7 +203,33 @@
             "glanceEncrypted": "Kriptat, mhux ivverifikat",
             "glanceNotEncrypted": "Mhux kriptat",
             "glanceDisabled": "Kriptaġġ mitfi",
-            "glanceLocked": "Kriptat, imsakkar"
+            "glanceLocked": "Kriptat, imsakkar",
+            "methodInUse": "Qed jintuża",
+            "receivesMessages": "Jirċievi l-messaġġi tiegħek",
+            "receivesNoMessages": "Ma jirċievix il-messaġġi tiegħek",
+            "wouldReceiveMessages": "Kien jirċievi b'dan il-metodu",
+            "listErrorTitle": "Iċ-ċwievet ma setgħux jitgħabbew",
+            "listErrorDescription": "Iċ-ċwievet ta' dan il-kuntatt ma setgħux jinqraw. Erġa' pprova.",
+            "tryAgain": "Erġa' pprova",
+            "needsDecisionTitle": "Jistenna d-deċiżjoni tiegħek",
+            "needsDecisionDescription": "Il-messaġġi lil dan il-kuntatt ma jistgħux jiġu kkriptati sakemm tiddeċiedi dwar ċavetta.",
+            "receivesWhenUnlocked": "Se jirċievi l-messaġġi tiegħek wara li tneħħi l-lock",
+            "keyTrust": {
+                "verified": "Ivverifikat",
+                "introduced": "Introdott",
+                "tofu": "Fdat, mhux ivverifikat",
+                "unknown": "Jistenna d-deċiżjoni tiegħek",
+                "untrusted": "Mhux fdat"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "jistenna d-deċiżjoni tiegħek",
+                "distrusted": "ma tafdahx",
+                "no-key": "il-kuntatt m'għadux jippubblikah",
+                "invalid-key": "ċertifikat invalidu",
+                "over-limit": "wisq apparati, dan jinqabeż"
+            },
+            "trustButton": "Afda din iċ-ċavetta",
+            "distrustButton": "Tafdax din iċ-ċavetta"
         },
         "actionsMenu": "Aktar azzjonijiet",
         "requestsHeading": "Talbiet"

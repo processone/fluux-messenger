@@ -201,7 +201,33 @@
             "glanceEncrypted": "Зашифровано, не проверено",
             "glanceNotEncrypted": "Не зашифровано",
             "glanceDisabled": "Шифрование отключено",
-            "glanceLocked": "Зашифровано, заблокировано"
+            "glanceLocked": "Зашифровано, заблокировано",
+            "methodInUse": "Используется",
+            "receivesMessages": "Получает ваши сообщения",
+            "receivesNoMessages": "Не получает ваши сообщения",
+            "wouldReceiveMessages": "Получал бы при этом методе",
+            "listErrorTitle": "Не удалось загрузить ключи",
+            "listErrorDescription": "Не удалось прочитать ключи этого контакта. Повторите попытку.",
+            "tryAgain": "Повторить",
+            "needsDecisionTitle": "Ждёт вашего решения",
+            "needsDecisionDescription": "Сообщения этому контакту нельзя шифровать, пока вы не решите, как поступить с ключом.",
+            "receivesWhenUnlocked": "Получит ваши сообщения после разблокировки",
+            "keyTrust": {
+                "verified": "Проверен",
+                "introduced": "Рекомендован",
+                "tofu": "Доверенный, не проверен",
+                "unknown": "Ждёт вашего решения",
+                "untrusted": "Не доверенный"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "ждёт вашего решения",
+                "distrusted": "вы ему не доверяете",
+                "no-key": "контакт больше его не публикует",
+                "invalid-key": "недействительный сертификат",
+                "over-limit": "слишком много устройств, это пропускается"
+            },
+            "trustButton": "Доверять этому ключу",
+            "distrustButton": "Не доверять этому ключу"
         },
         "actionsMenu": "Другие действия",
         "requestsHeading": "Запросы"

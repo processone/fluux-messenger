@@ -26,6 +26,10 @@ function identity(id: string, over: Partial<PeerIdentity> = {}): PeerIdentity {
   return { id, fingerprint: `FP${id}`, trust: 'tofu', usedForEncryption: true, allowedDecisions: ['verified'], ...over }
 }
 
+function group(identities: PeerIdentity[] = [identity('1')]): PeerIdentityGroup {
+  return { protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true, identities }
+}
+
 function fakeManager(security: ConversationSecurity | (() => Promise<ConversationSecurity>), identities: PeerIdentity[] = [identity('1')]) {
   let listener: ((peer: string | null) => void) | null = null
   const manager = {
@@ -95,6 +99,7 @@ describe('useConversationEncryptionState', () => {
     expect(result.current).toEqual({
       kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', trust: 'tofu', fingerprint: 'FP1',
       identityId: '1', canVerify: true,
+      groups: [{ protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true, identities: [identity('1')] }],
     })
     expect(manager.getConversationSecurity).toHaveBeenCalledWith({ kind: 'direct', peer: PEER })
   })
@@ -112,6 +117,10 @@ describe('useConversationEncryptionState', () => {
     )
     expect(state).toEqual({
       kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', trust: 'tofu', fingerprint: 'FP1', partlyVerified: true,
+      groups: [{
+        protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true,
+        identities: [identity('1', { allowedDecisions: [] }), identity('2', { allowedDecisions: [] })],
+      }],
     })
   })
 
@@ -122,12 +131,11 @@ describe('useConversationEncryptionState', () => {
   it('maps keys that cannot receive messages to rejected, with each reason', async () => {
     const problems = [{ id: 'FPX', code: 'no_encryption_subkey', detail: 'no subkey' }]
     expect(await stateFor({ kind: 'unusable', protocolId: 'openpgp', displayName: 'OpenPGP', problems }))
-      .toEqual({ kind: 'rejected', reasons: problems })
+      .toEqual({ kind: 'rejected', reasons: problems, groups: [group()] })
   })
 
   it.each<[string, ConversationSecurity]>([
     ['no protocol is usable', { kind: 'unsupported' }],
-    ['every key waits for a decision', { kind: 'needsDecision', protocolId: 'omemo', displayName: 'OMEMO', waiting: 2 }],
     ['unusable keys give no reason', { kind: 'unusable', protocolId: 'openpgp', displayName: 'OpenPGP', problems: [] }],
   ])('maps %s to unsupported', async (_name, security) => {
     expect(await stateFor(security)).toEqual({ kind: 'unsupported' })
@@ -139,11 +147,52 @@ describe('useConversationEncryptionState', () => {
 
   it('maps a locked own key to keyLocked and keeps the contact key for the tooltip', async () => {
     expect(await stateFor({ kind: 'locked', protocolId: 'openpgp', displayName: 'OpenPGP' }))
-      .toEqual({ kind: 'keyLocked', fingerprint: 'FP1' })
+      .toEqual({ kind: 'keyLocked', fingerprint: 'FP1', groups: [group()] })
   })
 
-  it('treats a failed question as unsupported rather than crashing', async () => {
-    expect(await stateFor(async () => { throw new Error('boom') })).toEqual({ kind: 'unsupported' })
+  it('keeps the keys of a contact whose every key waits for a decision', async () => {
+    const waiting = identity('1', { trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision', allowedDecisions: ['verified', 'tofu'] })
+    expect(await stateFor({ kind: 'needsDecision', protocolId: 'openpgp', displayName: 'OpenPGP', waiting: 1 }, [waiting]))
+      .toEqual({ kind: 'unsupported', needsDecision: true, groups: [group([waiting])] })
+  })
+
+  it('keeps the reasons when the keys of a rejected contact cannot be listed', async () => {
+    const problems = [{ id: 'FPX', code: 'no_encryption_subkey', detail: 'no subkey' }]
+    const { manager } = fakeManager({ kind: 'unusable', protocolId: 'openpgp', displayName: 'OpenPGP', problems })
+    manager.listPeerIdentities.mockRejectedValue(new Error('boom'))
+    wire({ manager })
+    const hook = renderHook(() => useConversationEncryptionState(PEER, 'chat'))
+    await waitFor(() => expect(hook.result.current.kind).toBe('rejected'))
+    expect(hook.result.current).toEqual({ kind: 'rejected', reasons: problems })
+  })
+
+  it('reports a failed question as a list error that asks again when retried', async () => {
+    const { manager } = fakeManager(encrypted())
+    manager.getConversationSecurity.mockRejectedValueOnce(new Error('boom'))
+    wire({ manager })
+    const { result } = renderHook(() => useConversationEncryptionState(PEER, 'chat'))
+    await waitFor(() => expect(result.current).toMatchObject({ kind: 'unsupported', listError: { retry: expect.any(Function) } }))
+    act(() => { (result.current as { listError: { retry: () => void } }).listError.retry() })
+    await waitFor(() => expect(result.current.kind).toBe('encrypted'))
+    expect(manager.getConversationSecurity).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    ['encrypted', encrypted(), { kind: 'encrypted', trust: 'tofu', fingerprint: 'FP1' }],
+    ['locked', { kind: 'locked', protocolId: 'openpgp', displayName: 'OpenPGP' } as ConversationSecurity, { kind: 'keyLocked' }],
+  ])('keeps a %s conversation as it is when its keys cannot be listed, and offers a retry', async (_name, security, expected) => {
+    const { manager } = fakeManager(security)
+    manager.listPeerIdentities.mockResolvedValue([])
+    wire({ manager })
+    const hook = renderHook(() => useConversationEncryptionState(PEER, 'chat'))
+    await waitFor(() => expect(hook.result.current.kind).not.toBe('checking'))
+    expect(hook.result.current).toMatchObject({ ...expected, listError: { retry: expect.any(Function) } })
+  })
+
+  it('reports keys the SDK could not read as a list error, not as a rejected certificate', async () => {
+    const state = await stateFor({ kind: 'unusable', protocolId: 'openpgp', displayName: 'OpenPGP', problems: [{ id: '', code: 'listing-failed', detail: '' }] })
+    // The conversation is still encrypted: attachments must not fall back to plaintext.
+    expect(state).toMatchObject({ kind: 'encrypted', protocolId: 'openpgp', groups: [], listError: { retry: expect.any(Function) } })
   })
 
   it('asks again when the manager reports this peer, or everyone, and ignores another peer', async () => {

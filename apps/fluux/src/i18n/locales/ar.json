@@ -201,7 +201,33 @@
             "glanceEncrypted": "مشفّر، غير موثّق",
             "glanceNotEncrypted": "غير مشفّر",
             "glanceDisabled": "التشفير معطّل",
-            "glanceLocked": "مشفّر، مقفل"
+            "glanceLocked": "مشفّر، مقفل",
+            "methodInUse": "قيد الاستخدام",
+            "receivesMessages": "يستقبل رسائلك",
+            "receivesNoMessages": "لا يستقبل رسائلك",
+            "wouldReceiveMessages": "سيستقبل بهذه الطريقة",
+            "listErrorTitle": "تعذّر تحميل المفاتيح",
+            "listErrorDescription": "تعذّرت قراءة مفاتيح جهة الاتصال هذه. حاول مرة أخرى.",
+            "tryAgain": "حاول مرة أخرى",
+            "needsDecisionTitle": "في انتظار قرارك",
+            "needsDecisionDescription": "لا يمكن تشفير الرسائل إلى جهة الاتصال هذه إلى أن تقرر بشأن مفتاح.",
+            "receivesWhenUnlocked": "يستقبل رسائلك بعد أن تفتح القفل",
+            "keyTrust": {
+                "verified": "موثّق",
+                "introduced": "مُقدَّم",
+                "tofu": "موثوق، غير موثّق",
+                "unknown": "في انتظار قرارك",
+                "untrusted": "غير موثوق"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "في انتظار قرارك",
+                "distrusted": "أنت لا تثق به",
+                "no-key": "لم يعد جهة الاتصال تنشره",
+                "invalid-key": "شهادة غير صالحة",
+                "over-limit": "عدد الأجهزة كبير جدًا، يتم تجاهل هذا الجهاز"
+            },
+            "trustButton": "الوثوق بهذا المفتاح",
+            "distrustButton": "عدم الوثوق بهذا المفتاح"
         },
         "actionsMenu": "إجراءات أخرى",
         "requestsHeading": "طلبات"

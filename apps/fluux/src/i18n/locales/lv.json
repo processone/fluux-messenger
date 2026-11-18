@@ -202,7 +202,33 @@
             "glanceEncrypted": "Šifrēts, nepārbaudīts",
             "glanceNotEncrypted": "Nešifrēts",
             "glanceDisabled": "Šifrēšana izslēgta",
-            "glanceLocked": "Šifrēts, bloķēts"
+            "glanceLocked": "Šifrēts, bloķēts",
+            "methodInUse": "Lieto",
+            "receivesMessages": "Saņem jūsu ziņas",
+            "receivesNoMessages": "Nesaņem jūsu ziņas",
+            "wouldReceiveMessages": "Saņemtu ar šo metodi",
+            "listErrorTitle": "Neizdevās ielādēt atslēgas",
+            "listErrorDescription": "Neizdevās nolasīt šīs kontaktpersonas atslēgas. Mēģiniet vēlreiz.",
+            "tryAgain": "Mēģināt vēlreiz",
+            "needsDecisionTitle": "Gaida jūsu lēmumu",
+            "needsDecisionDescription": "Ziņas šai kontaktpersonai nevar šifrēt, kamēr neesat izlēmis par atslēgu.",
+            "receivesWhenUnlocked": "Saņems jūsu ziņas pēc atslēgšanas",
+            "keyTrust": {
+                "verified": "Apstiprināta",
+                "introduced": "Iepazīstināta",
+                "tofu": "Uzticama, neapstiprināta",
+                "unknown": "Gaida jūsu lēmumu",
+                "untrusted": "Neuzticama"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "gaida jūsu lēmumu",
+                "distrusted": "jūs tai neuzticaties",
+                "no-key": "kontaktpersona to vairs nepublicē",
+                "invalid-key": "nederīgs sertifikāts",
+                "over-limit": "pārāk daudz ierīču, šī tiek izlaista"
+            },
+            "trustButton": "Uzticēties šai atslēgai",
+            "distrustButton": "Neuzticēties šai atslēgai"
         },
         "actionsMenu": "Vairāk darbību",
         "requestsHeading": "Pieprasījumi"

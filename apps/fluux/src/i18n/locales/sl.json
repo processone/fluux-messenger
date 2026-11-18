@@ -203,7 +203,33 @@
             "glanceEncrypted": "Šifrirano, ni preverjeno",
             "glanceNotEncrypted": "Ni šifrirano",
             "glanceDisabled": "Šifriranje izklopljeno",
-            "glanceLocked": "Šifrirano, zaklenjeno"
+            "glanceLocked": "Šifrirano, zaklenjeno",
+            "methodInUse": "V uporabi",
+            "receivesMessages": "Prejema vaša sporočila",
+            "receivesNoMessages": "Ne prejema vaših sporočil",
+            "wouldReceiveMessages": "Prejemal bi s to metodo",
+            "listErrorTitle": "Ključev ni bilo mogoče naložiti",
+            "listErrorDescription": "Ključev tega stika ni bilo mogoče prebrati. Poskusite znova.",
+            "tryAgain": "Poskusi znova",
+            "needsDecisionTitle": "Čaka na vašo odločitev",
+            "needsDecisionDescription": "Sporočil temu stiku ni mogoče šifrirati, dokler se ne odločite glede ključa.",
+            "receivesWhenUnlocked": "Prejel bo vaša sporočila po odklepu",
+            "keyTrust": {
+                "verified": "Preverjen",
+                "introduced": "Predstavljen",
+                "tofu": "Zaupanja vreden, nepreverjen",
+                "unknown": "Čaka na vašo odločitev",
+                "untrusted": "Ni zaupanja vreden"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "čaka na vašo odločitev",
+                "distrusted": "ne zaupate mu",
+                "no-key": "stik ga ne objavlja več",
+                "invalid-key": "neveljavno potrdilo",
+                "over-limit": "preveč naprav, ta je preskočena"
+            },
+            "trustButton": "Zaupaj temu ključu",
+            "distrustButton": "Ne zaupaj temu ključu"
         },
         "actionsMenu": "Več dejanj",
         "requestsHeading": "Zahteve"

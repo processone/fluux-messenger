@@ -203,7 +203,33 @@
             "glanceEncrypted": "Cifrado, sin verificar",
             "glanceNotEncrypted": "Sin cifrar",
             "glanceDisabled": "Cifrado desactivado",
-            "glanceLocked": "Cifrado, bloqueado"
+            "glanceLocked": "Cifrado, bloqueado",
+            "methodInUse": "En uso",
+            "receivesMessages": "Recibe tus mensajes",
+            "receivesNoMessages": "No recibe tus mensajes",
+            "wouldReceiveMessages": "Recibiría con este método",
+            "listErrorTitle": "No se pudieron cargar las claves",
+            "listErrorDescription": "No se pudieron leer las claves de este contacto. Inténtalo de nuevo.",
+            "tryAgain": "Reintentar",
+            "needsDecisionTitle": "Esperando tu decisión",
+            "needsDecisionDescription": "Los mensajes a este contacto no se pueden cifrar hasta que decidas sobre una clave.",
+            "receivesWhenUnlocked": "Recibirá tus mensajes cuando desbloquees",
+            "keyTrust": {
+                "verified": "Verificada",
+                "introduced": "Presentada",
+                "tofu": "De confianza, sin verificar",
+                "unknown": "Esperando tu decisión",
+                "untrusted": "Sin confianza"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "esperando tu decisión",
+                "distrusted": "no confías en ella",
+                "no-key": "el contacto ya no la publica",
+                "invalid-key": "certificado no válido",
+                "over-limit": "demasiados dispositivos, este se omite"
+            },
+            "trustButton": "Confiar en esta clave",
+            "distrustButton": "No confiar en esta clave"
         },
         "actionsMenu": "Más acciones",
         "requestsHeading": "Solicitudes"

@@ -14,6 +14,10 @@ const encState = vi.hoisted(() => ({
   oneKey: {
     kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'verified',
     identityId: 'ABCD1234', canClearVerification: true,
+    groups: [{
+      protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true,
+      identities: [{ id: 'ABCD1234', fingerprint: 'ABCD1234', trust: 'verified', usedForEncryption: true, allowedDecisions: ['tofu'] }],
+    }],
   },
 }))
 

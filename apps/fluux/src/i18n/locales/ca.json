@@ -203,7 +203,33 @@
             "glanceEncrypted": "Xifrat, no verificat",
             "glanceNotEncrypted": "No xifrat",
             "glanceDisabled": "Xifratge desactivat",
-            "glanceLocked": "Xifrat, bloquejat"
+            "glanceLocked": "Xifrat, bloquejat",
+            "methodInUse": "En ús",
+            "receivesMessages": "Rep els vostres missatges",
+            "receivesNoMessages": "No rep els vostres missatges",
+            "wouldReceiveMessages": "Rebria amb aquest mètode",
+            "listErrorTitle": "No s'han pogut carregar les claus",
+            "listErrorDescription": "No s'han pogut llegir les claus d'aquest contacte. Torneu-ho a provar.",
+            "tryAgain": "Torna-ho a provar",
+            "needsDecisionTitle": "Esperant la vostra decisió",
+            "needsDecisionDescription": "Els missatges a aquest contacte no es poden xifrar fins que decidiu sobre una clau.",
+            "receivesWhenUnlocked": "Rebrà els vostres missatges un cop desbloquegeu",
+            "keyTrust": {
+                "verified": "Verificat",
+                "introduced": "Introduït",
+                "tofu": "De confiança, no verificat",
+                "unknown": "Esperant la vostra decisió",
+                "untrusted": "No és de confiança"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "esperant la vostra decisió",
+                "distrusted": "no hi confieu",
+                "no-key": "el contacte ja no el publica",
+                "invalid-key": "certificat no vàlid",
+                "over-limit": "massa dispositius, aquest s'omet"
+            },
+            "trustButton": "Confia en aquesta clau",
+            "distrustButton": "No confiïs en aquesta clau"
         },
         "actionsMenu": "Més accions",
         "requestsHeading": "Sol·licituds"

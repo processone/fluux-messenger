@@ -69,7 +69,7 @@ const mockClearAnimation = vi.fn()
 const mockProcessMessageForLinkPreview = vi.fn().mockResolvedValue(undefined)
 
 // Mutable encryption state — set per test
-let mockEncryptionState: { kind: string; protocolId?: string; displayName?: string; fingerprint?: string; trust?: string } = { kind: 'disabled' }
+let mockEncryptionState: { kind: string; protocolId?: string; displayName?: string; fingerprint?: string; trust?: string; listError?: { retry: () => void } } = { kind: 'disabled' }
 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', async (importOriginal) => ({
@@ -964,6 +964,42 @@ describe('ChatView', () => {
       expect(mockUploadFile).toHaveBeenCalledExactlyOnceWith(file, { encrypt: false })
       expect(mockSendMessage).not.toHaveBeenCalled()
       expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
+    })
+  })
+
+  describe('Attachments when the contact\'s keys could not be listed', () => {
+    const createPrivateFile = () => new File(['Confidential meeting notes'], 'meeting-notes.txt', { type: 'text/plain' })
+
+    beforeEach(() => {
+      mockActiveConversation = { id: 'alice@example.com', name: 'Alice Smith', type: 'chat', unreadCount: 0 }
+      mockContacts = [createContact()]
+      window.HTMLElement.prototype.scrollTo = vi.fn()
+    })
+
+    it('still encrypts the upload of an encrypted conversation and never uploads the file in plaintext', async () => {
+      const file = createPrivateFile()
+      const attachment: FileAttachment = { url: 'https://upload.example.com/x', name: file.name, mediaType: file.type, size: file.size }
+      mockUploadFile.mockResolvedValueOnce(attachment)
+      mockEncryptionState = { kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', trust: 'tofu', listError: { retry: vi.fn() } }
+      render(<ChatView />)
+      act(() => mockDropOptions.onFileDrop(file))
+
+      await act(async () => { fireEvent.click(screen.getByTestId('send-button')) })
+
+      expect(mockUploadFile).toHaveBeenCalledExactlyOnceWith(file, { encrypt: true })
+      expect(mockUploadFile).not.toHaveBeenCalledWith(expect.anything(), { encrypt: false })
+    })
+
+    it('uploads and sends nothing while the own key is locked', async () => {
+      const file = createPrivateFile()
+      mockEncryptionState = { kind: 'keyLocked', listError: { retry: vi.fn() } }
+      render(<ChatView />)
+      act(() => mockDropOptions.onFileDrop(file))
+
+      await act(async () => { fireEvent.click(screen.getByTestId('send-button')) })
+
+      expect(mockUploadFile).not.toHaveBeenCalled()
+      expect(mockSendMessage).not.toHaveBeenCalled()
     })
   })
 
