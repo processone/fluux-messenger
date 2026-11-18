@@ -246,9 +246,10 @@ it. The same holds for return-to-latest until its first settle and for Home whil
 the library holds their write until that fling ends, and the leftover movement must not cancel it.
 That ownership starts with the request, before any frame loop owns the pixels: return-to-latest
 from a slid window first loads newer messages, and a jump outside the resident window first loads
-around its target. Return-to-latest's first step to an unread divider below the view is the same
-navigation, and so is its handover to the live edge when the divider cannot be shown or lands there;
-the divider placed on entering a conversation is not.
+around its target. Return-to-latest's first step to an unread divider below the view, and the
+jump-to-last-read pill's visit, are reader navigation too, including the divider loop's own check for
+movement away from its landing, and so is the handover to the live edge when the divider cannot be
+shown or lands there; the divider placed on entering a conversation is not.
 The shared viewport observer requires both the current positioning lease and the virtualizer's
 actual pending-fling state; it applies the same attribution to native events and measurement/frame
 observations. New input still takes over, and a new finger ends the old fling. Settled maintenance,

@@ -56,7 +56,11 @@ export class UnreadMarkerBrowserAdapter {
       readGeometry: () => {
         const scroller = this.options.getScroller()
         return scroller
-          ? { scrollTop: scroller.scrollTop, contentHeight: scroller.scrollHeight }
+          ? {
+              scrollTop: scroller.scrollTop,
+              contentHeight: scroller.scrollHeight,
+              pendingFling: this.options.getVirtualizer()?.hasPendingFling?.() === true,
+            }
           : null
       },
       positionFrame: (request, lease) => this.positionFrame(request, lease),

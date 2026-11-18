@@ -2304,6 +2304,7 @@ describe('positioning controller unread-marker ownership', () => {
     let frameResult: UnreadMarkerFrameResult = { kind: 'waiting' }
     let scrollTop = 0
     let contentHeight = 5_000
+    let pendingFling = false
     const finish = vi.fn()
     const complete = vi.fn()
     const recordFrame = vi.fn()
@@ -2327,7 +2328,7 @@ describe('positioning controller unread-marker ownership', () => {
           finish,
         }
       },
-      readGeometry: () => ({ scrollTop, contentHeight }),
+      readGeometry: () => ({ scrollTop, contentHeight, pendingFling }),
       positionFrame,
       complete,
     }
@@ -2349,6 +2350,9 @@ describe('positioning controller unread-marker ownership', () => {
       },
       setContentHeight: (value: number) => {
         contentHeight = value
+      },
+      setPendingFling: (value: boolean) => {
+        pendingFling = value
       },
       runFrame: () => {
         const callback = callbacks.shift()
@@ -2743,6 +2747,34 @@ describe('positioning controller unread-marker ownership', () => {
     while (harness.callbacks.length) harness.runFrame()
     expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
     expect(controller.hasPendingNavigation(conversationId)).toBe(false)
+  })
+
+  // A released fling keeps moving the list while it holds the visit's write. Past the takeover
+  // distance, that movement is the reader's own divider visit's, as the viewport observer reads it;
+  // the divider placed on entering a conversation still yields to it.
+  it.each(['entry', 'return-to-latest'] as const)('keeps the held divider visit through a pending fling (%s)', visit => {
+    const harness = unreadHarness({ kind: 'available', index: 12, mounted: false, placement: 'viable' })
+    const controller = new PositioningController()
+    if (visit === 'entry') {
+      controller.beginUnreadMarkerEntry({ conversationId, entryFacts: unreadFacts(), executor: harness.executor })
+    } else {
+      observeLiveEntry(controller)
+      controller.beginUnreadMarkerNavigation({
+        conversationId,
+        navigationFacts: { firstUnreadMessageId: 'first-unread', unreadMarkerNeedsVisit: true, unreadMarkerAlign: 'start' },
+        executor: harness.executor,
+      })
+    }
+    harness.setPendingFling(true)
+    harness.setFrameResult({ kind: 'positioned', scrollTop: 4439, atLiveEdge: false })
+    harness.runFrame()
+    harness.setScrollTop(4089)
+    harness.runFrame()
+
+    const keeps = visit === 'return-to-latest'
+    expect(harness.positionFrame).toHaveBeenCalledTimes(keeps ? 2 : 1)
+    if (keeps) expect(harness.complete).not.toHaveBeenCalled()
+    else expect(harness.complete).toHaveBeenCalledWith(expect.objectContaining({ conversationId }), 'user-takeover')
   })
 
   it('promotes an executor-declared near-top target without issuing another marker frame', () => {
