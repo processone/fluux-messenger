@@ -8,19 +8,38 @@ import { fileURLToPath } from 'node:url'
 import { webkit } from 'playwright'
 
 const source = readFileSync(new URL('./sampler.js', import.meta.url), 'utf8')
+const viewport = { width: 390, height: 844 }
+const content = `<style>body{margin:0}#root{height:844px}[data-message-list]{height:120px;overflow:auto}[data-message-id]{height:40px}</style><div id="root"><div data-message-list>${Array.from({ length: 12 }, (_, i) => `<div data-index="${i}" data-message-id="disposable-${i}">Disposable row ${i}</div>`).join('')}</div></div>`
 const browser = await webkit.launch({ headless: true })
 const samples = []
-let version
+let version, spacing
 try {
   version = browser.version()
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
-  await page.setContent(`<style>body{margin:0}#root{height:844px}[data-message-list]{height:120px;overflow:auto}[data-message-id]{height:40px}</style><div id="root"><div data-message-list>${Array.from({ length: 12 }, (_, i) => `<div data-index="${i}" data-message-id="disposable-${i}">Disposable row ${i}</div>`).join('')}</div></div>`)
+  // The 250 ms spacing is checked on a separate page whose clock is paused before it
+  // opens, so slow round trips on a loaded machine cannot carry time past the spacing.
+  const paused = await browser.newContext({ viewport })
+  await paused.clock.install({ time: 0 })
+  await paused.clock.pauseAt(1000)
+  const timed = await paused.newPage()
+  await timed.setContent(content)
+  await timed.evaluate(source)
+  const pull = () => timed.evaluate(() => window.__flm350_measurements.sample())
+  assert.equal((await pull()).gapMs, null)
+  assert.equal(await pull(), null)
+  await timed.clock.runFor(249)
+  assert.equal(await pull(), null)
+  await timed.clock.runFor(1)
+  const accepted = await pull()
+  assert.equal(accepted?.gapMs, 250)
+  spacing = { clock: 'paused', rejectedAfterMs: [0, 249], acceptedGapMs: accepted.gapMs }
+  // Measurements handed to the reader come from a page on the real clock.
+  const page = await browser.newPage({ viewport })
+  await page.setContent(content)
   await page.evaluate(source)
   const sample = () => page.evaluate(() => window.__flm350_measurements.sample())
   samples.push(await sample())
   assert.equal(samples[0].mountedRows, 12)
   assert.equal(samples[0].intersectingRows, 3)
-  assert.equal(await sample(), null)
   await page.waitForFunction(t => performance.now() - t >= 250, samples.at(-1).elapsedMs)
   await page.evaluate(() => { document.querySelector('[data-message-list]').style.display = 'none' })
   samples.push(await sample())
@@ -66,7 +85,7 @@ try {
   assert.equal(proof.error, undefined)
   service = JSON.parse(proof.stdout)
   console.log(JSON.stringify({ boundary: 'disposable WebKit + actual host reader and opener; not an iPhone',
-    webkit: version, browserClosed: true, samples, samplerRemovedAndReattached: true, transport, service }, null, 2))
+    webkit: version, browserClosed: true, samples, samplerRemovedAndReattached: true, spacing, transport, service }, null, 2))
   // Preserve completed failed-case observations as well as their nonzero exit status.
   assert.equal(run.status, 0)
   assert.equal(proof.status, 0)

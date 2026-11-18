@@ -37,14 +37,18 @@ Generated peer keys stay in the disposable fixture directory and are removed.
 Production worker code never writes or loads a key file.
 
 The command also closes a real disposable WebKit browser after measuring visible,
-hidden and missing message-list states, rejecting immediate duplicate pulls,
-reporting an error category without its payload, and removing/reinstalling the
-FLM-350 sampler. It then runs the actual Python reader on local sockets carrying
-those measurements in WebKit inspector frames. The peer includes unrelated apps,
-private title/URL/console/error fields, identity/page/session changes, malformed
-responses, byte exhaustion and unresponsive connections. It prints only sanitized
-proof. Python 3.10+ and Node satisfying the project's engine requirement are needed;
-there is no Python package dependency. No device is discovered or accessed.
+hidden and missing message-list states, reporting an error category without its
+payload, and removing/reinstalling the FLM-350 sampler. A separate page in that
+browser checks the sampler's 250 ms spacing on a clock paused before the page
+opens: pulls 0 ms and 249 ms after an accepted sample return nothing, and a pull
+250 ms after it returns a sample with a 250 ms gap, however slowly a loaded
+machine answers. The command then runs the actual Python reader on local sockets
+carrying only the real-clock measurements in WebKit inspector frames. The peer
+includes unrelated apps, private title/URL/console/error fields, identity/page/session
+changes, malformed responses, byte exhaustion and unresponsive connections. It
+prints only sanitized proof. Python 3.10+ and Node satisfying the project's engine
+requirement are needed; there is no Python package dependency. No device is
+discovered or accessed.
 
 **Proof boundary:** the wire peer stands in for `webinspectord`. This proves the
 host reader's framing, requests, filtering, accounting and bounded socket closure,
