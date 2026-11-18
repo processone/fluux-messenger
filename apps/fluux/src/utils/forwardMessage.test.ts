@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeForward, forwardFallbackRange, withoutForwardFallback } from './forwardMessage'
+import { buildForwardedCopy, composeForwardWithCopy, forwardedCopyFallbackRange, composeForward, forwardFallbackRange, withoutForwardFallback } from './forwardMessage'
 
 const link = 'xmpp:design@conference.fluux.chat?join;msg=1731490000123456'
 
@@ -49,3 +49,37 @@ describe('forward composition', () => {
     expect(withoutForwardFallback(message).body).toBe(message.body)
   })
 })
+
+// Piece 2 of the forward plan: a structured copy needs the claimed author and its quote is marked as the copy's fallback.
+describe('forward composition with a copy', () => {
+  const quote = { author: 'Bob', text: 'Ship it', from: 'room@c/Bob', timestamp: 5 }
+
+  it('keeps the whole quoted body and marks its quote and link as the fallback of the copy', () => {
+    const { body, references, forwarded } = composeForwardWithCopy(' Look ', link, quote)!
+    expect(body).toBe(composeForward(' Look ', link, quote).body)
+    expect(forwarded).toEqual({ from: 'room@c/Bob', text: 'Ship it', timestamp: 5, fallback: { begin: 5, end: body.length } })
+    // The copy's marker is the only one: the link is a plain data reference.
+    expect(references).toEqual([{ type: 'data', uri: link, begin: body.length - link.length, end: body.length }])
+  })
+
+  it('builds nothing without an author address or text', () => {
+    expect(composeForwardWithCopy('Look', link, { author: 'Bob', text: 'hi' })).toBeNull()
+    expect(composeForwardWithCopy('Look', link, undefined)).toBeNull()
+  })
+
+  it('hides the quote only for a copy that is read and not retracted', () => {
+    const message = { body: `Look\n> Bob wrote:\n> hi\n${link}`, forwarded: { author: 'Bob', text: 'hi', fallback: { begin: 5, end: 5 + 18 + link.length, text: `> Bob wrote:\n> hi\n${link}` } } }
+    expect(withoutForwardFallback(message, undefined, true).body).toBe('Look')
+    expect(withoutForwardFallback({ ...message, isRetracted: true }, undefined, true).body).toBe(message.body)
+    expect(forwardedCopyFallbackRange({ ...message, forwarded: undefined })).toBeUndefined()
+    expect(withoutForwardFallback({ ...message, forwarded: { ...message.forwarded, fallback: { begin: 5, end: 9999, text: 'x' } } }, undefined, true).body).toBe(message.body)
+  })
+
+  it('needs an author address and text, and bounds the copied text', () => {
+    expect(buildForwardedCopy({ author: 'Bob', text: 'hi' })).toBeNull()
+    expect(buildForwardedCopy({ author: 'Bob', text: '  ', from: 'r@c/Bob' })).toBeNull()
+    expect(buildForwardedCopy(undefined)).toBeNull()
+    expect(Array.from(buildForwardedCopy({ author: 'Bob', text: 'a'.repeat(5000), from: 'r@c/Bob' })!.text)).toHaveLength(4000)
+  })
+})
+

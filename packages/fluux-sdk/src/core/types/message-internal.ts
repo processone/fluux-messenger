@@ -100,7 +100,7 @@ export function withCorrectionStanzaId(existing: string[] | undefined, stanzaId:
   return existing?.includes(stanzaId) ? existing : [...(existing ?? []), stanzaId]
 }
 
-export type CorrectionAlternative = Partial<Pick<Message, 'references' | 'body' | 'originalBody' | 'attachment' | 'securityContext' | 'encryptedPayload' | 'contentAvailability' | 'unsupportedEncryption' | 'isEdited'>> &
+export type CorrectionAlternative = Partial<Pick<Message, 'references' | 'forwarded' | 'body' | 'originalBody' | 'attachment' | 'securityContext' | 'encryptedPayload' | 'contentAvailability' | 'unsupportedEncryption' | 'isEdited'>> &
   Pick<MessageImplState, 'correctionRevision' | 'correctionTimestamp' | 'correctionTimestampSource' | 'correctionStanzaIds'>
 
 export type CorrectionUpdates = MessageImplState & CorrectionAlternative & { isEdited?: boolean; isRetracted?: boolean; encryptedPayload?: string; from?: string; occupantId?: string }

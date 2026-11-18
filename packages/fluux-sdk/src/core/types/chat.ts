@@ -111,6 +111,27 @@ export interface SendMessageOptions {
   references?: MessageReference[]
   /** File to attach (XEP-0066, XEP-0363). */
   attachment?: FileAttachment
+  /**
+   * Send a structured forwarded copy (XEP-0297) of one message beside the body. Only for a
+   * 1:1 chat; a room gets the quoted body alone. No device is asked: a reader that cannot show
+   * the copy shows the body, and `fallback` marks the part of it a copy-reader may hide.
+   */
+  forwarded?: ForwardedCopyInput
+}
+
+/** What a forward names about the message it copies. */
+export interface ForwardedCopyInput {
+  /** Address of the claimed original author, for a room message the occupant address. */
+  from: string
+  /** Plain text of the original body. */
+  text: string
+  /** Original timestamp (ms since epoch). */
+  timestamp?: number
+  /**
+   * The quote and link in the sent body that stand for this copy (UTF-16 offsets in that body).
+   * They go out as a XEP-0428 fallback for the copy, so a reader that shows the copy hides them.
+   */
+  fallback?: { begin: number; end: number }
 }
 
 /**

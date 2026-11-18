@@ -17,7 +17,7 @@ import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
 import { useForwardMessage } from './forwardMessageContext'
 import { RoomMessageLinkPreview } from './RoomMessageLinkPreview'
-import { forwardFallbackRange, withoutForwardFallback } from '@/utils/forwardMessage'
+import { forwardFallbackRange, forwardedCopyFallbackRange, withoutForwardFallback } from '@/utils/forwardMessage'
 import { MessageBody } from './MessageBody'
 import { renderQuotePreview } from '@/utils/messageStyles'
 import { deriveCopyBody } from '@/utils/copyMessageBody'
@@ -424,7 +424,11 @@ export const MessageBubble = memo(function MessageBubble({
   const [sourceShown, setSourceShown] = useState(false)
   const hasForwardFallback = !!forwardFallbackRange(message.references)
   const hideForwardFallback = hasForwardFallback && sourceShown
-  const shown = hideForwardFallback ? withoutForwardFallback(message, mentions) : { body: message.body, mentions }
+  // A copy that is shown replaces the quote it came with; a copy that is missing, retracted or
+  // still encrypted leaves the quote visible.
+  const copyShown = !!message.forwarded && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
+  const hideCopyQuote = copyShown && !!forwardedCopyFallbackRange(message)
+  const shown = hideForwardFallback || hideCopyQuote ? withoutForwardFallback(message, mentions, hideCopyQuote) : { body: message.body, mentions }
   const [reactorEmoji, setReactorEmoji] = useState<string | null>(null)
   const actionAnchor = useRef<HTMLElement | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -581,7 +585,12 @@ export const MessageBubble = memo(function MessageBubble({
   const quotable = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   const onForward = messageLink && forwardMessage ? () => forwardMessage({
     link: messageLink,
-    ...(quotable && { quote: { author: senderName, text: message.body } }),
+    ...(quotable && { quote: {
+      author: senderName,
+      text: message.body,
+      ...(message.type === 'groupchat' && { from: message.from }),
+      timestamp: message.timestamp.getTime(),
+    } }),
   }) : undefined
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   const saveableAttachment = !message.isRetracted && !message.encryptedPayload ? message.attachment : undefined
@@ -858,7 +867,18 @@ export const MessageBubble = memo(function MessageBubble({
             </>
           )}
 
-          <RoomMessageLinkPreview message={message} formatTime={formatTime} isDarkMode={isDarkMode} onSourceShown={hasForwardFallback ? setSourceShown : undefined} />
+          {message.forwarded && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption && (
+            <div data-forwarded-copy className="mt-1 pl-2 border-l-2 border-fluux-hover">
+              <div className="text-xs text-fluux-muted">
+                {t('chat.forwardedCopyLabel', { author: message.forwarded.author || t('chat.forwardedCopyUnknownAuthor') })}
+                {message.forwarded.timestamp !== undefined && ` · ${formatTime(new Date(message.forwarded.timestamp))}`}
+              </div>
+              <div className="text-sm text-fluux-text whitespace-pre-wrap break-words">{message.forwarded.text}</div>
+            </div>
+          )}
+
+          {/* A structured copy already shows the source, so no second preview of the same link. */}
+          {!(message.forwarded && !message.isRetracted) && <RoomMessageLinkPreview message={message} formatTime={formatTime} isDarkMode={isDarkMode} onSourceShown={hasForwardFallback ? setSourceShown : undefined} />}
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
           {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}

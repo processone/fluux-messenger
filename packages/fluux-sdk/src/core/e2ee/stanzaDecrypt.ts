@@ -33,6 +33,7 @@ import { logInfo } from '../logger'
 import {
   NS_EME,
   NS_REFERENCE,
+  NS_FORWARD,
   NS_OOB,
   NS_FILE_METADATA,
   NS_REACTIONS,
@@ -92,6 +93,8 @@ export function decryptFailureReasonFor(code: string | undefined): DecryptFailur
 // sender from the stanza envelope rather than from the payload.
 const ALLOWED_PAYLOAD_CHILDREN = new Set([
   `reference\0${NS_REFERENCE}`,
+  // A forwarded copy of one message; the parser reads only its plain body, sender and time.
+  `forwarded\0${NS_FORWARD}`,
   `x\0${NS_OOB}`,
   `file\0${NS_FILE_METADATA}`,
   `reactions\0${NS_REACTIONS}`,
@@ -109,6 +112,20 @@ const ALLOWED_PAYLOAD_CHILDREN = new Set([
   `acknowledged\0${NS_CHAT_MARKERS}`,
   ...['active', 'composing', 'paused', 'inactive', 'gone'].map((state) => `${state}\0${NS_CHATSTATES}`),
 ])
+
+/**
+ * A forwarded copy holds text the forwarder chose, so on an encrypted message only the copy
+ * inside the authenticated payload counts. Anything an intermediary appended outside it is dropped.
+ */
+export function dropOuterForwardedCopy(stanza: Element): void {
+  // The marker that hides body text for the copy is dropped with it: only the payload may say which text the copy replaces.
+  stanza.children = stanza.children.filter((child) => {
+    if (typeof child === 'string') return true
+    const el = child as Element
+    return !((el.name === 'forwarded' && el.attrs?.xmlns === NS_FORWARD)
+      || (el.name === 'fallback' && el.attrs?.xmlns === NS_FALLBACK && el.attrs?.for === NS_FORWARD))
+  })
+}
 
 function isAllowedPayloadChild(child: Element): boolean {
   if (child.name === 'body') return true
@@ -276,6 +293,8 @@ export async function decryptStanzaInPlace(
   // cleartext context (XEP-0461 <reply>, XEP-0428 <fallback> ranges) that
   // the retry needs to re-run fallback stripping on the decrypted body.
   const originalStanzaXml = stanza.toString()
+  // Whatever the outcome, an outer copy is unauthenticated; the payload's own copy is added back on success.
+  dropOuterForwardedCopy(stanza)
 
   let plaintext: string | null = null
   let securityContext: SecurityContext | null = null
@@ -774,6 +793,7 @@ export function recordUnclaimedEME(
     const name = EME_PROTOCOL_NAMES[target.namespace] ?? target.emeName ?? target.namespace
     const info: EMEIdentity = { namespace: target.namespace, name }
     ;(stanza as unknown as Record<string, EMEIdentity>)[UNSUPPORTED_ENC_STASH] = info
+    dropOuterForwardedCopy(stanza)
     logInfo(`E2EE: message uses unsupported encryption (${name} / ${target.namespace})`)
     report('unsupported')
     return { kind: 'unsupported', info }
@@ -785,6 +805,7 @@ export function recordUnclaimedEME(
   if (!target.child) return { kind: 'none' }
   const payloadXml = stanza.toString()
   stashPayload(stanza, payloadXml)
+  dropOuterForwardedCopy(stanza)
   logInfo(`E2EE: stashed encrypted payload (ns=${target.namespace}) for deferred decrypt`)
   report('unavailable')
   return { kind: 'retry', encryptedPayloadXml: payloadXml }

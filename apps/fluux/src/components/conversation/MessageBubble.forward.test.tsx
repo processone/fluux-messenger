@@ -65,3 +65,31 @@ describe('forwarded message quote and link', () => {
     expect(screen.queryByText('chat.forwardQuotedCopy')).toBeNull()
   })
 })
+
+// Piece 2 of the forward plan: a received structured copy is shown, labelled and attributed to the claimed author.
+describe('standalone forwarded copy', () => {
+  const forwarded = { author: 'Bob', text: 'Ship it\nTonight', timestamp: Date.UTC(2026, 4, 1, 9, 0) }
+
+  it('shows the copy beside the forwarder\'s comment and no second preview of the same link', () => {
+    const { container } = render(<MessageBubble {...bubble({ body: `Please review\n${link}`, references: undefined, forwarded })} />)
+    expect(screen.getByText('Please review', { exact: false })).toBeTruthy()
+    const copy = container.querySelector('[data-forwarded-copy]')!
+    expect(copy.textContent).toContain('chat.forwardedCopyLabel')
+    expect(copy.textContent).toContain('Ship it')
+    expect(copy.textContent).toContain('14:30')
+    expect(screen.queryByTestId('source-preview')).toBeNull()
+  })
+
+  it('shows the text as plain text, never as markup', () => {
+    const { container } = render(<MessageBubble {...bubble({ forwarded: { author: 'Bob', text: '<img src=x onerror=alert(1)>' }, references: undefined })} />)
+    expect(container.querySelector('[data-forwarded-copy] img')).toBeNull()
+    expect(container.querySelector('[data-forwarded-copy]')!.textContent).toContain('<img src=x')
+  })
+
+  // Review: a deletion removes the copied text from view even while the resident row still holds it.
+  it('hides the copy once the message is retracted', () => {
+    const { container } = render(<MessageBubble {...bubble({ forwarded, references: undefined, isRetracted: true })} />)
+    expect(container.querySelector('[data-forwarded-copy]')).toBeNull()
+    expect(screen.queryByText(/Ship it/)).toBeNull()
+  })
+})

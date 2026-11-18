@@ -10,6 +10,7 @@
 export interface RenderabilityCheckFields {
   body?: string
   attachment?: unknown
+  forwarded?: unknown
   poll?: unknown
   pollClosed?: unknown
   isRetracted?: boolean
@@ -41,6 +42,7 @@ export function isRenderableStoredMessage(message: RenderabilityCheckFields): bo
   return (
     (typeof message.body === 'string' && message.body.trim().length > 0) ||
     message.attachment != null ||
+    message.forwarded != null ||
     message.poll != null ||
     message.pollClosed != null ||
     message.isRetracted === true ||

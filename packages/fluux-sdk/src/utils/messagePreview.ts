@@ -4,6 +4,7 @@
  * Utilities for formatting message previews in conversation/room lists.
  */
 
+import { forwardedCopyQuoteRange } from './forwardedCopyQuote'
 import type { BaseMessage, FileAttachment, ReplyInfo } from '../core/types'
 
 /**
@@ -265,7 +266,7 @@ export function stripReplyQuote(body: string): string {
  * // 'My reply'
  * ```
  */
-export function formatMessagePreview(message: Pick<BaseMessage, 'body' | 'attachment' | 'replyTo' | 'poll' | 'pollClosed'>): string {
+export function formatMessagePreview(message: Pick<BaseMessage, 'body' | 'attachment' | 'replyTo' | 'forwarded' | 'poll' | 'pollClosed'>): string {
   // Poll messages: show title with poll emoji
   if (message.poll) {
     return `📊 ${message.poll.title}`
@@ -278,7 +279,13 @@ export function formatMessagePreview(message: Pick<BaseMessage, 'body' | 'attach
 
   // For replies, strip any quote prefix that may still be in the body
   // (in case XEP-0428 fallback indication wasn't used)
-  let previewBody = body || ''
+  // A forwarded copy without a comment previews as the copied text.
+  // The quote that only stands in for a copy the reader shows is left out of the preview.
+  const marked = forwardedCopyQuoteRange({ body, forwarded: message.forwarded })
+  const visibleBody = marked
+    ? `${body.slice(0, marked.begin).trimEnd()}\n${body.slice(marked.end).trimStart()}`.trim()
+    : body
+  let previewBody = visibleBody || message.forwarded?.text || ''
   if (replyTo && previewBody.startsWith('> ')) {
     previewBody = stripReplyQuote(previewBody)
   }

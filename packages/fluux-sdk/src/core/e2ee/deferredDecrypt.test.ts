@@ -32,6 +32,7 @@ import * as messageCache from '../../utils/messageCache'
 import * as searchIndex from '../../utils/searchIndex'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../utils/storageScope'
 import { chatStore } from '../../stores/chatStore'
+import { forwardedCopyQuoteRange } from '../../utils/forwardedCopyQuote'
 import { _resetForTesting } from '../../stores/shared/throttledStorage'
 import { _clearAllTransientForTesting } from '../../stores/shared/transientUnread'
 
@@ -110,6 +111,95 @@ describe('DeferredDecryptEngine', () => {
     await engine.retryPending()
     expect(stores.chat.updateMessage).toHaveBeenCalledWith('bob@example.com', pending,
       expect.objectContaining({ body: 'See the room update', references: [{ type: 'data', uri }] }))
+  })
+
+  // Review: a copy received before the key was available is recovered with the body, even without an outer body.
+  it.each([['with a body', true], ['without an outer body', false]])('recovers a forwarded copy %s from a pending encrypted envelope', async (_name, withBody) => {
+    const copy = xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { from: 'team@conference.example.org/Bob' }, xml('body', {}, 'Ship it')))
+    const envelope = serializePayloadEnvelope([...(withBody ? [xml('body', {}, 'Look')] : []), copy])
+    const pending: Message = {
+      type: 'chat', id: 'fwd-pending', stanzaId: undefined, originId: undefined,
+      conversationId: 'bob@example.com', from: 'bob@example.com',
+      body: '[dummy-plaintext payload]', timestamp: new Date(), isOutgoing: false,
+      encryptedPayload: xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(envelope).toString('base64')).toString(),
+    }
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [pending] }])
+    await engine.retryPending()
+    expect(stores.chat.updateMessage).toHaveBeenCalledWith('bob@example.com', pending,
+      expect.objectContaining({ body: withBody ? 'Look' : '', forwarded: expect.objectContaining({ author: 'Bob', text: 'Ship it' }) }))
+  })
+
+  // Review: a failed signature check must not leave a previously unverified (or outer) copy on display.
+  it('clears a retained forwarded copy when the deferred signature check fails', async () => {
+    const pending: Message = {
+      type: 'chat', id: 'fwd-rejected', stanzaId: undefined, originId: undefined,
+      conversationId: 'bob@example.com', from: 'bob@example.com',
+      body: 'Look', timestamp: new Date(), isOutgoing: false,
+      forwarded: { author: 'Mallory', text: 'Forged' },
+      encryptedPayload: DUMMY_PAYLOAD_XML,
+    }
+    vi.spyOn(manager, 'decryptArchive').mockRejectedValue(new E2EEPluginError('permanent', 'signature-failed', 'bad signature'))
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [pending] }])
+    await engine.retryPending()
+    const updates = stores.chat.updateMessage.mock.calls[0][2]
+    expect(updates).toEqual(expect.objectContaining({ body: MESSAGE_REJECTED_BODY, encryptedPayload: undefined }))
+    expect(updates).toHaveProperty('forwarded', undefined)
+  })
+
+  // Review: a comment-only correction carries no copy, so recovering it keeps the original's copy.
+  it.each([['comment-only', false], ['with its own copy', true]])('recovers a %s edit of a forwarded message', async (_name, withCopy) => {
+    const copy = xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { from: 'bob@example.com' }, xml('body', {}, 'New copy')))
+    const envelope = serializePayloadEnvelope([xml('body', {}, 'Edited comment'), ...(withCopy ? [copy] : [])])
+    const pending: Message = {
+      type: 'chat', id: 'fwd-edit', stanzaId: undefined, originId: undefined,
+      conversationId: 'bob@example.com', from: 'bob@example.com',
+      body: 'Old comment', timestamp: new Date(), isOutgoing: false, isEdited: true,
+      forwarded: { author: 'Bob', text: 'Original copy' },
+      encryptedPayload: xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(envelope).toString('base64')).toString(),
+    }
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [pending] }])
+    await engine.retryPending()
+    const updates = stores.chat.updateMessage.mock.calls[0][2]
+    expect(updates.body).toBe('Edited comment')
+    if (withCopy) expect(updates.forwarded).toMatchObject({ text: 'New copy' })
+    else expect(updates).not.toHaveProperty('forwarded')
+  })
+
+  // Rework: the marker travels in the payload, and a recovered edit never keeps a marker for text it replaced.
+  it('recovers a marked forward from a pending envelope with the marker bound to the recovered body', async () => {
+    const quote = '> Bob wrote:\n> Ship it\n'
+    const body = `Look\n${quote}xmpp:team@conference.example.org?join;msg=1`
+    const copy = xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { from: 'team@conference.example.org/Bob' }, xml('body', {}, 'Ship it')))
+    const marker = xml('fallback', { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:forward:0' },
+      xml('body', { start: '5', end: String(Array.from(body).length) }))
+    const envelope = serializePayloadEnvelope([xml('body', {}, body), copy, marker])
+    const pending: Message = {
+      type: 'chat', id: 'fwd-marked', stanzaId: undefined, originId: undefined, conversationId: 'bob@example.com', from: 'bob@example.com',
+      body: '[dummy-plaintext payload]', timestamp: new Date(), isOutgoing: false,
+      encryptedPayload: xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(envelope).toString('base64')).toString(),
+    }
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [pending] }])
+    await engine.retryPending()
+    const updates = stores.chat.updateMessage.mock.calls[0][2]
+    expect(forwardedCopyQuoteRange({ body: updates.body ?? '', forwarded: updates.forwarded })).toEqual({ begin: 5, end: body.length })
+    expect(updates.body?.slice(5)).toContain('> Bob wrote:')
+  })
+
+  it('recovers a comment-only edit of a marked forward without hiding any of the new comment', async () => {
+    const quote = '> Bob wrote:\n> Ship it\nxmpp:r@c?join;msg=1'
+    const envelope = serializePayloadEnvelope([xml('body', {}, 'A much longer edited comment')])
+    const pending: Message = {
+      type: 'chat', id: 'fwd-marked-edit', stanzaId: undefined, originId: undefined, conversationId: 'bob@example.com', from: 'bob@example.com',
+      body: 'Old comment', timestamp: new Date(), isOutgoing: false, isEdited: true,
+      forwarded: { author: 'Bob', text: 'Ship it', fallback: { begin: 12, end: 12 + quote.length, text: quote } },
+      encryptedPayload: xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(envelope).toString('base64')).toString(),
+    }
+    stores.chat.getAllStoredMessages.mockReturnValue([{ id: 'bob@example.com', messages: [pending] }])
+    await engine.retryPending()
+    const updates = stores.chat.updateMessage.mock.calls[0][2]
+    expect(updates.body).toBe('A much longer edited comment')
+    expect(updates).not.toHaveProperty('forwarded')
+    expect(forwardedCopyQuoteRange({ body: updates.body ?? '', forwarded: pending.forwarded })).toBeUndefined()
   })
 
   it('decrypts a pending chat payload and writes back through the injected bindings', async () => {
@@ -451,6 +541,98 @@ describe('DeferredDecryptEngine', () => {
         securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
       })
     }
+
+    // Review: the copy must survive, or be cleared, on the durable and orphaned-preview recovery paths, not only on resident rows.
+    describe('forwarded copy on durable and preview recovery', () => {
+      const copy = xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { from: 'team@conference.example.org/Bob' }, xml('body', {}, 'Ship it')))
+      const sealed = (children: ReturnType<typeof xml>[]) =>
+        xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, Buffer.from(serializePayloadEnvelope(children)).toString('base64')).toString()
+      const durable = () => {
+        vi.mocked(cache.getMessagesWithEncryptedPayload).mockImplementation(messageCache.getMessagesWithEncryptedPayload)
+        vi.mocked(cache.updateMessage).mockImplementation(messageCache.updateMessage)
+      }
+      const rejects = () => vi.spyOn(manager, 'decryptArchive').mockRejectedValue(new E2EEPluginError('permanent', 'signature-failed', 'bad signature'))
+
+      it('recovers a copy into a conversation that is not resident, with or without an outer body', async () => {
+        const { pending } = await seedTwins({ body: '[encrypted]', encryptedPayload: sealed([copy]) }, false)
+        durable()
+        await engine.retryPending()
+        expect(await messageCache.getMessage(conversationId, pending.id, pending)).toMatchObject({
+          body: '', forwarded: { author: 'Bob', text: 'Ship it' },
+        })
+      })
+
+      it('clears a previously unverified copy from the durable row when the signature check fails', async () => {
+        const { pending } = await seedTwins({ body: '[encrypted]', forwarded: { author: 'Mallory', text: 'Forged' } }, false)
+        durable()
+        rejects()
+        await engine.retryPending()
+        const row = await messageCache.getMessage(conversationId, pending.id, pending)
+        expect(row).toMatchObject({ body: MESSAGE_REJECTED_BODY, encryptedPayload: undefined })
+        expect(row?.forwarded).toBeUndefined()
+      })
+
+      // Review: a terminal malformed-data failure is a different outcome from a rejected signature and must clear a retained copy too.
+      const malformed = () => vi.spyOn(manager, 'decryptArchive').mockRejectedValue(new E2EEPluginError('permanent', 'malformed-data', 'not a valid envelope'))
+
+      it('clears a retained copy from the durable row on a terminal malformed-data failure', async () => {
+        const { pending } = await seedTwins({ body: 'Look', forwarded: { author: 'Mallory', text: 'Forged' } }, false)
+        durable()
+        malformed()
+        await engine.retryPending()
+        const row = await messageCache.getMessage(conversationId, pending.id, pending)
+        expect(row).toMatchObject({ body: COULD_NOT_DECRYPT_BODY, encryptedPayload: undefined, contentAvailability: { state: 'failed' } })
+        expect(row?.forwarded).toBeUndefined()
+      })
+
+      it('clears a retained copy from a sidebar preview on a terminal malformed-data failure', async () => {
+        const lastMessage: Message = {
+          type: 'chat', id: 'orphan', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: 'Look',
+          forwarded: { author: 'Mallory', text: 'Forged' }, timestamp: new Date(1_700_000_002_000), isOutgoing: false, encryptedPayload: DUMMY_PAYLOAD_XML,
+        }
+        chatStore.getState().addConversation({ id: conversationId, type: 'chat', name: 'Bob', unreadCount: 0, lastMessage })
+        stores.chat.getEncryptedPreviews.mockImplementation(() => {
+          const last = chatStore.getState().conversationMeta.get(conversationId)?.lastMessage
+          return last?.encryptedPayload ? [{ conversationId, lastMessage: last }] : []
+        })
+        malformed()
+        await engine.retryPending()
+        const preview = chatStore.getState().conversationMeta.get(conversationId)?.lastMessage
+        expect(preview).toMatchObject({ encryptedPayload: undefined, contentAvailability: { state: 'failed' } })
+        expect(preview?.forwarded).toBeUndefined()
+      })
+
+      it('recovers a copy into a sidebar preview that no stored row carries', async () => {
+        const lastMessage: Message = {
+          type: 'chat', id: 'orphan', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: COULD_NOT_DECRYPT_BODY,
+          timestamp: new Date(1_700_000_002_000), isOutgoing: false, encryptedPayload: sealed([copy]),
+        }
+        chatStore.getState().addConversation({ id: conversationId, type: 'chat', name: 'Bob', unreadCount: 0, lastMessage })
+        stores.chat.getEncryptedPreviews.mockImplementation(() => {
+          const last = chatStore.getState().conversationMeta.get(conversationId)?.lastMessage
+          return last?.encryptedPayload ? [{ conversationId, lastMessage: last }] : []
+        })
+        await engine.retryPending()
+        expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage).toMatchObject({ forwarded: { author: 'Bob', text: 'Ship it' } })
+      })
+
+      it('clears a copy from a sidebar preview when the signature check fails', async () => {
+        const lastMessage: Message = {
+          type: 'chat', id: 'orphan', stanzaId: undefined, originId: undefined, conversationId, from: conversationId, body: 'Look', forwarded: { author: 'Mallory', text: 'Forged' },
+          timestamp: new Date(1_700_000_002_000), isOutgoing: false, encryptedPayload: DUMMY_PAYLOAD_XML,
+        }
+        chatStore.getState().addConversation({ id: conversationId, type: 'chat', name: 'Bob', unreadCount: 0, lastMessage })
+        stores.chat.getEncryptedPreviews.mockImplementation(() => {
+          const last = chatStore.getState().conversationMeta.get(conversationId)?.lastMessage
+          return last?.encryptedPayload ? [{ conversationId, lastMessage: last }] : []
+        })
+        rejects()
+        await engine.retryPending()
+        const preview = chatStore.getState().conversationMeta.get(conversationId)?.lastMessage
+        expect(preview).toMatchObject({ body: MESSAGE_REJECTED_BODY, encryptedPayload: undefined })
+        expect(preview?.forwarded).toBeUndefined()
+      })
+    })
 
     it.each(['unlock', 'peer', 'rejected body'])('indexes content recovered after a twin is evicted during %s', async mode => {
       const { first, pending } = await seedTwins({ body: '[encrypted second]' })

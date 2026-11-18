@@ -97,6 +97,27 @@ describe('messagePreview', () => {
       expect(formatMessagePreview(message)).toBe('Hello world')
     })
 
+    // Review: a forwarded copy without a comment previews as the copied text, not blank.
+    it('previews a forwarded copy that has no comment, and prefers the comment when present', () => {
+      const forwarded = { author: 'Bob', text: 'Ship *it*' }
+      expect(formatMessagePreview({ ...baseMessage, forwarded })).toBe('Ship it')
+      expect(formatMessagePreview({ ...baseMessage, body: 'Look', forwarded })).toBe('Look')
+    })
+
+    // Rework: the quote that stands in for a shown copy is left out; with a comment only the comment previews.
+    it('leaves the marked quote out of the preview, and previews the copied text when nothing else is left', () => {
+      const quote = '> Bob wrote:\n> Ship it\n'
+      const marked = (lead: string) => ({ ...baseMessage, body: `${lead}${quote}xmpp:r@c?join;msg=1`,
+        forwarded: { author: 'Bob', text: 'Ship it', fallback: { begin: lead.length, end: lead.length + quote.length + 'xmpp:r@c?join;msg=1'.length,
+          text: `${quote}xmpp:r@c?join;msg=1` } } })
+      expect(formatMessagePreview(marked('Look\n'))).toBe('Look')
+      expect(formatMessagePreview(marked(''))).toBe('Ship it')
+      expect(formatMessagePreview({ ...marked('Look\n'), forwarded: { author: 'Bob', text: 'Ship it', fallback: { begin: 2, end: 9999, text: 'x' } } }))
+        .toContain('Bob wrote')
+      // An edit that changed the marked text: the preview shows the new body whole.
+      expect(formatMessagePreview({ ...marked('Longer comment\n') , forwarded: marked('Look\n').forwarded })).toContain('Bob wrote')
+    })
+
     it('should return empty string when no body and no attachment', () => {
       const message = { ...baseMessage, body: '' }
       expect(formatMessagePreview(message)).toBe('')

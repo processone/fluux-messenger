@@ -193,6 +193,10 @@ describe('isPreviewableMessage', () => {
     expect(isPreviewableMessage({ body: '   \n\t' })).toBe(false)
   })
 
+  it('is true for a forwarded copy with no body', () => {
+    expect(isPreviewableMessage({ body: '', forwarded: { author: 'Bob', text: 'Ship it' } })).toBe(true)
+  })
+
   it('is true for a file attachment with no body', () => {
     expect(
       isPreviewableMessage({ body: '', attachment: { url: 'https://x/y.png', name: 'y.png' } })

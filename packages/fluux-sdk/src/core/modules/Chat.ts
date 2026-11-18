@@ -60,6 +60,7 @@ import type {
   ChatMessageTarget,
   MentionReference,
   MessageReference,
+  ForwardedCopy,
   FileAttachment,
   SendMessageOptions,
   ChatStateNotification,
@@ -75,7 +76,7 @@ import type {
   PollClosedData,
 } from '../types'
 import { getCorrectionStanzaIds, withCorrectionStanzaId, type StoredMessage, type StoredRoomMessage } from '../types/message-internal'
-import { parseMessageContent, parseMessageReferences, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, correctionMarks } from './messagingUtils'
+import { parseMessageContent, parseForwardedCopy, parseMessageReferences, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, correctionMarks } from './messagingUtils'
 import { checkForMention } from '../mentionDetection'
 import { parsePollElement, parsePollClosedElement } from '../poll'
 import { logWarn } from '../logger'
@@ -178,13 +179,31 @@ interface MessageEnvelopeContext {
   delayEl?: Element
 }
 
-/** XEP-0428: mark a forward's generated quote and link (offsets are UTF-16 in the sent text). */
-function forwardFallbackElement(fullBody: string, shift: number, range: { begin: number; end: number }): Element {
-  return xml('fallback', { xmlns: NS_FALLBACK, for: NS_FORWARD_QUOTE },
+/**
+ * XEP-0428: mark a forward's generated quote and link (offsets are UTF-16 in the sent text).
+ * With a structured copy the target is the copy's own namespace, so any client that reads the
+ * copy knows what the marked text stands for; without one it is Fluux's private quote marker.
+ */
+function forwardFallbackElement(fullBody: string, shift: number, range: { begin: number; end: number }, target: string = NS_FORWARD_QUOTE): Element {
+  return xml('fallback', { xmlns: NS_FALLBACK, for: target },
     xml('body', {
       start: String(toCodePointOffset(fullBody, shift + range.begin)),
       end: String(toCodePointOffset(fullBody, shift + range.end)),
     }))
+}
+
+/** XEP-0297: the standalone forwarded copy of one message, as a child of the outgoing message. */
+function forwardedCopyElement(copy: { from: string; text: string; timestamp?: number }): Element {
+  const inner = xml('message', { xmlns: 'jabber:client', from: copy.from, type: 'groupchat' }, xml('body', {}, copy.text))
+  return xml('forwarded', { xmlns: NS_FORWARD },
+    ...(copy.timestamp !== undefined && Number.isFinite(copy.timestamp)
+      ? [xml('delay', { xmlns: NS_DELAY, stamp: new Date(copy.timestamp).toISOString() })] : []),
+    inner)
+}
+
+/** The stored form of a copy: the author is a room nickname or a bare address, never a routing address. */
+function forwardedCopyFor(copy: { from: string; text: string; timestamp?: number }): ForwardedCopy | undefined {
+  return parseForwardedCopy(xml('message', {}, forwardedCopyElement(copy)))
 }
 
 export class Chat extends BaseModule {
@@ -480,7 +499,8 @@ export class Chat extends BaseModule {
 
     // Process actual message
     // Poll messages have their body stripped by fallback processing, so also check for poll elements
-    if (body || stanza.getChild('x', NS_OOB) || stanza.getChild('poll', NS_POLL) || stanza.getChild('poll-closed', NS_POLL)) {
+    // A forwarded copy can stand without an outer body.
+    if (body || stanza.getChild('x', NS_OOB) || stanza.getChild('poll', NS_POLL) || stanza.getChild('poll-closed', NS_POLL) || (type !== 'groupchat' && parseForwardedCopy(stanza))) {
       let message: Message | RoomMessage | null
       if (type === 'groupchat') {
         message = this.processRoomMessage(stanza, from, bareFrom, body || '', isCarbonCopy, isSentCarbon)
@@ -824,7 +844,7 @@ export class Chat extends BaseModule {
     }
     // The forward marker is in the same frame as the references: move it with them.
     for (const child of children) {
-      if (child.name !== 'fallback' || child.attrs.for !== NS_FORWARD_QUOTE) continue
+      if (child.name !== 'fallback' || (child.attrs.for !== NS_FORWARD_QUOTE && child.attrs.for !== NS_FORWARD)) continue
       const range = child.getChild('body', NS_FALLBACK)
       if (!range) continue
       for (const attribute of ['start', 'end']) {
@@ -885,6 +905,10 @@ export class Chat extends BaseModule {
       // reader to hide them must travel with them. Keyed by `for` so reply and OOB
       // fallbacks keep their current handling.
       `fallback|${NS_FALLBACK}|${NS_FORWARD_QUOTE}`,
+      // The same for the marker of a structured copy: it names the text the copy replaces.
+      `fallback|${NS_FALLBACK}|${NS_FORWARD}`,
+      // A standalone forwarded copy holds the forwarded text, so it rides in the payload too.
+      `forwarded|${NS_FORWARD}`,
     ])
 
   /** XEP-0444 reactions ride inside the envelope; the reacted-to id rides with them. */
@@ -937,6 +961,16 @@ export class Chat extends BaseModule {
   async sendMessage(to: string, body: string, options?: SendMessageOptions): Promise<string> {
     const { replyTo, attachment } = options ?? {}
     const references = [...(options?.references ?? [])]
+    if (options?.forwarded && this.conversationKind(to) !== 'chat') {
+      // A room's support says nothing about every present and future reader: rooms get the quoted copy.
+      throw new Error('A forwarded copy can only be sent to a one-to-one chat')
+    }
+    const forwarded = options?.forwarded ? forwardedCopyFor(options.forwarded) : undefined
+    // The marked quote must lie inside the body the caller passed; otherwise nothing is marked.
+    const copyFallback = options?.forwarded?.fallback
+    const validCopyFallback = copyFallback && copyFallback.begin >= 0 && copyFallback.begin < copyFallback.end && copyFallback.end <= body.length
+      ? copyFallback : undefined
+    if (forwarded && validCopyFallback) forwarded.fallback = { ...validCopyFallback, text: body.slice(validCopyFallback.begin, validCopyFallback.end) }
     for (const ref of roomMessageLinkReferences(body)) {
       if (!references.some(existing => existing.type === 'data' && existing.uri === ref.uri)) references.push(ref)
     }
@@ -1019,6 +1053,11 @@ export class Chat extends BaseModule {
         (url, encryption) => this.attachmentWireUrl(url, encryption)))
     }
 
+    if (forwarded && options?.forwarded) {
+      children.push(forwardedCopyElement(options.forwarded))
+      if (validCopyFallback) children.push(forwardFallbackElement(fullBody, fallbackEnd, validCopyFallback, NS_FORWARD))
+    }
+
     // XEP-0359: Include origin-id for echo deduplication
     children.push(createOriginIdElement(id))
 
@@ -1076,6 +1115,7 @@ export class Chat extends BaseModule {
         timestamp: new Date(),
         isOutgoing: true,
         ...(references.length && { references }),
+        ...(forwarded && { forwarded }),
         ...(replyTo && { replyTo: { id: replyTo.id, to: replyTo.to } }),
         ...(attachment && { attachment }),
         ...(outgoingSecurityContext && { securityContext: outgoingSecurityContext }),
@@ -1106,6 +1146,7 @@ export class Chat extends BaseModule {
     messageId: string,
     attachment?: FileAttachment,
     storedReferences?: MessageReference[],
+    storedForwarded?: ForwardedCopy,
   ): Promise<void> {
     const recipient = getBareJid(to)
 
@@ -1138,6 +1179,14 @@ export class Chat extends BaseModule {
       children.push(xml('reference', { xmlns: NS_REFERENCE, type: ref.type, uri: ref.uri,
         begin: String(toCodePointOffset(fullBody, ref.begin!)), end: String(toCodePointOffset(fullBody, ref.end!)) }))
       if (ref.forwardFallback) children.push(forwardFallbackElement(fullBody, 0, ref.forwardFallback))
+    }
+
+    // A retry keeps the structured copy inside the same protection as the first send.
+    if (storedForwarded) {
+      children.push(forwardedCopyElement({ from: storedForwarded.from ?? storedForwarded.author, text: storedForwarded.text, timestamp: storedForwarded.timestamp }))
+      if (storedForwarded.fallback && body.slice(storedForwarded.fallback.begin, storedForwarded.fallback.end) === storedForwarded.fallback.text) {
+        children.push(forwardFallbackElement(fullBody, 0, storedForwarded.fallback, NS_FORWARD))
+      }
     }
 
     if (attachment) {
@@ -2294,6 +2343,7 @@ export class Chat extends BaseModule {
       processedBody: parsed.processedBody,
       attachment: parsed.attachment,
       hasEncryptedContent: !!encryptedPayload || !!unsupportedEncryption,
+      hasForwarded: !!parsed.forwarded,
     })) {
       return null
     }
@@ -2309,6 +2359,7 @@ export class Chat extends BaseModule {
       from: bareFrom,
       body: parsed.processedBody,
       ...(parsed.references && { references: parsed.references }),
+      ...(parsed.forwarded && { forwarded: parsed.forwarded }),
       timestamp: parsed.timestamp,
       isOutgoing,
       ...(parsed.isDelayed && { isDelayed: true }),

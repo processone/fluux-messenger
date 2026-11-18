@@ -96,6 +96,46 @@ describe('ForwardMessageModal', () => {
       `Please review\n${quote}${link}`, marked('Please review\n', quote.length))
   })
 
+  // Piece 2 of the forward plan: a chat gets one stanza with the quote, the copy and a fallback marker; rooms get the quote.
+  describe('standalone forwarded copy', () => {
+    const source = { author: 'Bob', text: 'Ship it', from: `${roomJid}/Bob`, timestamp: 1731490000000 }
+    const forwardTo = async (query: string, comment = 'Please review') => {
+      render(<ForwardMessageModal link={link} quote={source} onClose={vi.fn()} />)
+      fireEvent.change(picker(), { target: { value: query } })
+      fireEvent.keyDown(picker(), { key: 'Enter' })
+      fireEvent.change(screen.getByLabelText('chat.forwardComment'), { target: { value: comment } })
+      send()
+      await waitFor(() => expect(fixture.chatSend.mock.calls.length + fixture.roomSend.mock.calls.length).toBe(1))
+    }
+
+    it('sends the comment, quote and link with the copy, and marks the quote and link as its fallback', async () => {
+      await forwardTo('em')
+      const lead = 'Please review\n'
+      const quote = '> Bob wrote:\n> Ship it\n'
+      expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('emma@fluux.chat', `${lead}${quote}${link}`, {
+        references: [{ type: 'data', uri: link, begin: lead.length + quote.length, end: lead.length + quote.length + link.length }],
+        forwarded: { from: `${roomJid}/Bob`, text: 'Ship it', timestamp: 1731490000000,
+          fallback: { begin: lead.length, end: lead.length + quote.length + link.length } },
+      })
+    })
+
+    it('keeps the quoted fallback alone for a room', async () => {
+      await forwardTo('design')
+      expect(fixture.roomSend.mock.calls[0][2]).not.toHaveProperty('forwarded')
+      expect(fixture.roomSend.mock.calls[0][1]).toContain('> Bob wrote:')
+    })
+
+    it('keeps the quoted fallback alone when the source has no author address to attribute', async () => {
+      render(<ForwardMessageModal link={link} quote={{ author: 'Bob', text: 'Ship it' }} onClose={vi.fn()} />)
+      fireEvent.change(picker(), { target: { value: 'em' } })
+      fireEvent.keyDown(picker(), { key: 'Enter' })
+      send()
+      await waitFor(() => expect(fixture.chatSend).toHaveBeenCalledOnce())
+      expect(fixture.chatSend.mock.calls[0][1]).toContain('> Bob wrote:')
+      expect(fixture.chatSend.mock.calls[0][2]).not.toHaveProperty('forwarded')
+    })
+  })
+
   it('keeps the highlighted recipient when a message from them arrives before Enter', async () => {
     const onClose = vi.fn()
     const { rerender } = render(<ForwardMessageModal link={link} onClose={onClose} />)

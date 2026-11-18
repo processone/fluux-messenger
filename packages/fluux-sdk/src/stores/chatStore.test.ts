@@ -5273,6 +5273,19 @@ describe('chatStore', () => {
       expect(chatStore.getState().pendingRetractions.get(convId) ?? []).toHaveLength(0)
     })
 
+    // Review: a forwarded copy holds the forwarded text, so a deletion removes it from the resident row on every path.
+    it('removes a forwarded copy from the resident row on a live retraction and on a replayed one', () => {
+      const copy = { author: 'Bob', text: 'Ship it' }
+      chatStore.setState({ activeConversationId: convId })
+      chatStore.getState().addMessage({ ...incoming('live'), forwarded: copy })
+      chatStore.getState().updateMessage(convId, 'live', { isRetracted: true, retractedAt: new Date() })
+      expect(chatStore.getState().messages.get(convId)?.find(m => m.id === 'live')).toMatchObject({ isRetracted: true, forwarded: undefined })
+
+      chatStore.getState().recordPendingRetraction(convId, 'late', convId)
+      chatStore.getState().addMessage({ ...incoming('late'), forwarded: copy })
+      expect(chatStore.getState().messages.get(convId)?.find(m => m.id === 'late')).toMatchObject({ isRetracted: true, forwarded: undefined })
+    })
+
     it('applies to a resident target without recording anything', async () => {
       chatStore.setState({ activeConversationId: convId })
       chatStore.getState().addMessage(incoming('msg-1'))

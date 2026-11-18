@@ -17,6 +17,7 @@ import {
   NS_DELAY,
   NS_REFERENCE,
   NS_FALLBACK,
+  NS_FORWARD,
   NS_FORWARD_QUOTE,
   NS_REPLY,
   NS_OOB,
@@ -29,7 +30,7 @@ import {
   NS_RETRACT,
   NS_CORRECTION,
 } from '../namespaces'
-import type { Message, MessageReference, DataReference, FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
+import type { Message, ForwardedCopy, MessageReference, DataReference, FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
 import { processFallback, rebaseFallbackOffset } from '../../utils/fallbackUtils'
 import { CHAT_FALLBACK_TARGETS, ROOM_FALLBACK_TARGETS } from '../../utils/fallbackRegistry'
 import { isAesgcmUri, parse as parseAesgcmUri } from './AesgcmUri'
@@ -395,6 +396,60 @@ function attachForwardFallback(stanza: Element, body: string, references: Messag
   }
 }
 
+const MAX_FORWARDED_CODE_POINTS = 4000
+const MAX_FORWARDED_AUTHOR_CODE_POINTS = 120
+const MAX_FORWARDED_ADDRESS_CODE_POINTS = 1023
+
+/** Drop control characters other than newline and tab, then bound the length in code points. */
+function boundedPlainText(value: string, limit: number): string {
+  // eslint-disable-next-line no-control-regex
+  const cleaned = value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/g, '')
+  const characters = Array.from(cleaned)
+  return characters.length > limit ? `${characters.slice(0, limit).join('').trimEnd()}…` : cleaned
+}
+
+/**
+ * XEP-0297: the one structured copy a message carries beside its own body. Bounded and
+ * non-recursive: only the forwarded message's plain body, sender and original time are read.
+ * A nested forward, receipts, routing addresses and every other extension are ignored, and the
+ * inner message is never routed as a message of its own. Attribution to the sender of the
+ * outer message stays separate: the author here is only the forwarder's claim.
+ */
+export function parseForwardedCopy(messageEl: Element): ForwardedCopy | undefined {
+  const forwarded = messageEl.getChildren('forwarded').find((el: Element) => el.attrs?.xmlns === NS_FORWARD)
+  const inner = forwarded?.getChildren('message').find((el: Element) => !el.attrs?.xmlns || el.attrs.xmlns === 'jabber:client')
+  const body = inner?.getChildren('body').find((el: Element) => !el.attrs?.xmlns || el.attrs.xmlns === 'jabber:client')
+  const text = body ? boundedPlainText(body.text(), MAX_FORWARDED_CODE_POINTS) : ''
+  if (!inner || !text.trim()) return undefined
+  const from = typeof inner.attrs.from === 'string' ? inner.attrs.from : ''
+  const slash = from.indexOf('/')
+  // A room occupant is named by its nickname; anything else by its bare address.
+  const author = boundedPlainText(slash >= 0 && slash < from.length - 1 ? from.slice(slash + 1) : from, MAX_FORWARDED_AUTHOR_CODE_POINTS).trim()
+  const stamp = forwarded?.getChild('delay', NS_DELAY)?.attrs.stamp
+  const time = typeof stamp === 'string' ? new Date(stamp).getTime() : NaN
+  const address = boundedPlainText(from, MAX_FORWARDED_ADDRESS_CODE_POINTS)
+  return { author, ...(address && address === from && { from: address }), text, ...(Number.isFinite(time) && { timestamp: time }) }
+}
+
+/**
+ * XEP-0428: the part of the body that only stands in for the forwarded copy, as a
+ * `<fallback for="urn:xmpp:forward:0">` range (code points in the raw body). Returned as
+ * UTF-16 offsets, or undefined when it is missing or does not lie inside the body.
+ */
+function parseForwardedCopyFallback(messageEl: Element, body: string): { begin: number; end: number } | undefined {
+  const codePoints = Array.from(body).length
+  for (const fallback of messageEl.getChildren('fallback')) {
+    const el = fallback as Element
+    if (el.attrs?.xmlns !== NS_FALLBACK || el.attrs?.for !== NS_FORWARD) continue
+    const range = el.getChild('body', NS_FALLBACK)
+    if (!range || !/^\d+$/.test(range.attrs.start ?? '') || !/^\d+$/.test(range.attrs.end ?? '')) continue
+    const start = Number(range.attrs.start), stop = Number(range.attrs.end)
+    if (start >= stop || stop > codePoints) continue
+    return { begin: fromCodePointOffset(body, start), end: fromCodePointOffset(body, stop) }
+  }
+  return undefined
+}
+
 /** Result from parseMessageContent. */
 export interface ParsedMessageContent {
   timestamp: Date
@@ -412,6 +467,7 @@ export interface ParsedMessageContent {
   attachment?: FileAttachment
   processedBody: string
   references?: MessageReference[]
+  forwarded?: ForwardedCopy
 }
 
 /**
@@ -489,6 +545,7 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
 
   // XEP-0066: Out of Band Data
   const attachment = parseOobData(messageEl)
+  const parsedCopy = parseForwardedCopy(messageEl)
 
   // XEP-0428: Process fallback text removal
   const fallback = processFallback(messageEl, body, { validTargets: fallbackTargets }, replyTo)
@@ -507,6 +564,21 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     finalBody = processedBody.replace(attachment.url, '').trim()
   }
 
+  // The marked quote is kept with the copy, never stripped here: only a reader that shows the
+  // copy hides it. Reply and attachment fallback removal moves it; if it no longer fits, the
+  // quote simply stays visible.
+  let forwardedCopy = parsedCopy
+  if (parsedCopy) {
+    const marked = parseForwardedCopyFallback(messageEl, body)
+    if (marked) {
+      const rebased = finalBody === body ? marked
+        : processedBody.length === finalBody.length
+          ? { begin: rebaseFallbackOffset(marked.begin, fallback), end: rebaseFallbackOffset(marked.end, fallback) }
+          : undefined
+      if (rebased && rebased.begin < rebased.end && rebased.end <= finalBody.length) forwardedCopy = { ...parsedCopy, fallback: { ...rebased, text: finalBody.slice(rebased.begin, rebased.end) } }
+    }
+  }
+
   return {
     timestamp,
     timestampSource,
@@ -522,6 +594,7 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     replyTo,
     attachment,
     processedBody: finalBody,
+    ...(messageContext !== 'room' && forwardedCopy && { forwarded: forwardedCopy }),
     references: rebaseForwardReferences(parseMessageReferences(messageEl), body, finalBody, fallback),
   }
 }
@@ -573,13 +646,15 @@ export function hasRenderableContent(content: {
   hasPoll?: boolean
   hasPollClosed?: boolean
   hasEncryptedContent?: boolean
+  hasForwarded?: boolean
 }): boolean {
   return (
     content.processedBody.trim().length > 0 ||
     content.attachment != null ||
     content.hasPoll === true ||
     content.hasPollClosed === true ||
-    content.hasEncryptedContent === true
+    content.hasEncryptedContent === true ||
+    content.hasForwarded === true
   )
 }
 

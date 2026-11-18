@@ -31,7 +31,7 @@ export interface MessageWithTimestamp {
  */
 export type PreviewableMessage = Pick<
   BaseMessage,
-  'body' | 'attachment' | 'poll' | 'pollClosed' | 'isRetracted' | 'unsupportedEncryption'
+  'body' | 'attachment' | 'forwarded' | 'poll' | 'pollClosed' | 'isRetracted' | 'unsupportedEncryption'
 >
 
 /**
@@ -60,6 +60,7 @@ export function isPreviewableMessage(msg: PreviewableMessage): boolean {
   if (msg.unsupportedEncryption) return true
   if (msg.poll || msg.pollClosed) return true
   if (msg.attachment) return true
+  if (msg.forwarded) return true
   return !!(msg.body && msg.body.trim().length > 0)
 }
 

@@ -1,9 +1,27 @@
+import { forwardedCopyQuoteRange } from '@fluux/sdk'
 import type { BaseMessage, DataReference, MentionReference, MessageReference } from '@fluux/sdk'
 
 /** The source text a forward quotes: who wrote it and what it said. */
 export interface ForwardQuote {
   author: string
   text: string
+  /** Address of the claimed author, for a room message the occupant address; needed for a structured copy. */
+  from?: string
+  /** When the source was sent (ms since epoch). */
+  timestamp?: number
+}
+
+const MAX_COPY_CHARACTERS = 4000
+
+/** The structured copy of the source; null when it cannot be built (no author address or no text). */
+export function buildForwardedCopy(quote?: ForwardQuote): { from: string; text: string; timestamp?: number } | null {
+  const text = quote?.text.trim()
+  if (!quote?.from || !text) return null
+  return {
+    from: quote.from,
+    text: Array.from(text).slice(0, MAX_COPY_CHARACTERS).join(''),
+    ...(quote.timestamp !== undefined && { timestamp: quote.timestamp }),
+  }
 }
 
 const MAX_QUOTE_CHARACTERS = 500
@@ -33,22 +51,52 @@ export function composeForward(comment: string, link: string, quote?: ForwardQuo
   }
 }
 
+/**
+ * Compose a forward to a one-to-one chat: the same comment, quote and link as any forward,
+ * plus a structured copy of the source. The quote and link are marked as the fallback for the
+ * copy, so a reader that shows the copy hides them and every other reader shows them. Nothing
+ * about the reader's support is checked. Null when no copy can be built.
+ */
+export function composeForwardWithCopy(comment: string, link: string, quote?: ForwardQuote): {
+  body: string
+  references: DataReference[]
+  forwarded: { from: string; text: string; timestamp?: number; fallback: { begin: number; end: number } }
+} | null {
+  const copy = buildForwardedCopy(quote)
+  if (!copy) return null
+  const { body, references } = composeForward(comment, link, quote)
+  const fallback = forwardFallbackRange(references)
+  if (!fallback) return null
+  // The copy's own marker replaces the private one, so the range is declared once.
+  return {
+    body,
+    references: references.map(ref => ref.type === 'data' ? { type: 'data' as const, uri: ref.uri, begin: ref.begin, end: ref.end } : ref),
+    forwarded: { ...copy, fallback },
+  }
+}
+
 /** The marked quote and link a reader may hide once it shows the source itself. */
 export function forwardFallbackRange(references?: MessageReference[]): { begin: number; end: number } | undefined {
   for (const reference of references ?? []) if (reference.type === 'data' && reference.forwardFallback) return reference.forwardFallback
   return undefined
 }
 
+/** The quote that only stands in for a copy the reader shows; undefined when there is no marked copy or the body changed since. */
+export function forwardedCopyFallbackRange(message: Pick<BaseMessage, 'body' | 'forwarded' | 'isRetracted'>): { begin: number; end: number } | undefined {
+  return forwardedCopyQuoteRange(message)
+}
+
 /**
  * Remove only the marked [begin, end) interval, keeping text on both sides. A mention
- * after it moves up with the text; one inside it is dropped.
+ * after it moves up with the text; one inside it is dropped. The range is a forward's
+ * marked quote and link, or the quote a shown copy replaces.
  */
-export function withoutForwardFallback(message: Pick<BaseMessage, 'body' | 'references'>, mentions?: MentionReference[]): {
+export function withoutForwardFallback(message: Pick<BaseMessage, 'body' | 'references' | 'forwarded' | 'isRetracted'>, mentions?: MentionReference[], copyShown = false): {
   body: string
   mentions?: MentionReference[]
 } {
-  const range = forwardFallbackRange(message.references)
-  if (!range) return { body: message.body, mentions }
+  const range = copyShown ? forwardedCopyFallbackRange(message) : forwardFallbackRange(message.references)
+  if (!range || range.end > message.body.length) return { body: message.body, mentions }
   const before = message.body.slice(0, range.begin).trimEnd()
   const rest = message.body.slice(range.end)
   const after = rest.trimStart()

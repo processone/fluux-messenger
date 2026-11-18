@@ -97,7 +97,7 @@ import type {
   HistoryPagingSearchOptions,
   ArchivingPreferences,
 } from '../types'
-import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, parseStanzaId, parseArchiveStanzaId, parseOriginId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, isMessageSignal } from './messagingUtils'
+import { parseMessageContent, parseForwardedCopy, parseOgpFastening, applyRetraction, applyCorrection, parseStanzaId, parseArchiveStanzaId, parseOriginId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, isMessageSignal } from './messagingUtils'
 import { getDomain } from '../jid'
 import { logInfo, logError as logErr } from '../logger'
 import {
@@ -3146,7 +3146,7 @@ export class MAM extends BaseModule {
 
     // Accept messages with body OR OOB attachment OR encrypted content
     // (file-only messages have no body; encrypted-but-bodiless render a placeholder)
-    if (!body && !messageEl.getChild('x', NS_OOB) && !hasEncryptedContent) return null
+    if (!body && !messageEl.getChild('x', NS_OOB) && !hasEncryptedContent && !parseForwardedCopy(messageEl)) return null
 
     const bareFrom = getBareJid(from)
     const ownBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
@@ -3169,6 +3169,7 @@ export class MAM extends BaseModule {
       processedBody: parsed.processedBody,
       attachment: parsed.attachment,
       hasEncryptedContent,
+      hasForwarded: !!parsed.forwarded,
     })) {
       return null
     }
@@ -3192,6 +3193,7 @@ export class MAM extends BaseModule {
       from: bareFrom,
       body: parsed.processedBody,
       ...(parsed.references && { references: parsed.references }),
+      ...(parsed.forwarded && { forwarded: parsed.forwarded }),
       timestamp: parsed.timestamp,
       isOutgoing,
       isDelayed: true,

@@ -492,6 +492,7 @@ function scrubRetractedContent<T extends StoredMessage | StoredRoomMessage>(row:
     ...row,
     body: '',
     references: undefined,
+    forwarded: undefined,
     correctionAlternatives: undefined,
     originalBody: undefined,
     attachment: undefined,
@@ -506,7 +507,7 @@ function scrubRetractedContent<T extends StoredMessage | StoredRoomMessage>(row:
 /** Whether a row flagged `isRetracted` still holds anything {@link scrubRetractedContent} removes. */
 function retainsRetractedContent(row: StoredMessage | StoredRoomMessage): boolean {
   return row.isRetracted === true && (!!row.body || !!row.correctionAlternatives?.length || !!row.originalBody
-    || !!row.references || !!row.attachment || !!row.linkPreview || !!row.poll || !!row.pollClosed
+    || !!row.references || !!row.forwarded || !!row.attachment || !!row.linkPreview || !!row.poll || !!row.pollClosed
     || !!row.encryptedPayload || !!row.unsupportedEncryption)
 }
 
@@ -1292,6 +1293,7 @@ function reconcileHistoryRow<T extends (StoredMessage | StoredRoomMessage) & Can
     ...(owner.isEdited || owner !== page ? {
       body: owner.body,
       references: owner.references,
+      forwarded: owner.forwarded,
       isEdited: owner.isEdited,
       originalBody: owner.originalBody,
       attachment: owner.attachment,

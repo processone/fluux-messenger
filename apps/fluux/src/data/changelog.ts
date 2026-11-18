@@ -28,7 +28,7 @@ export const changelog: ChangelogEntry[] = [
         'macOS: message notifications now show who wrote to you, with the sender and room details. They look like those of other chat apps',
         'Room messages: copy a link to an archived message from its More menu or mobile actions. Opening it in Fluux takes you to that message; rooms you have not joined ask you to join first',
         'Shared room message links show a quote from your own room history when you have joined the room, or a Join prompt otherwise. Sharing sends only the link, not a copy of the room message',
-        'Forward a room message to a contact, chat or joined room, with an optional comment. The forward carries a quoted copy and a link to the original. Fluux hides the quote and link when it can show the original message itself; other apps and encrypted chats you cannot read here keep them visible',
+        'Forward a room message to a contact, chat or joined room, with an optional comment. The forward carries a quoted copy and a link to the original. Fluux hides the quote and link when it can show the original message itself; other apps and encrypted chats you cannot read here keep them visible. A forward to a contact also carries a structured copy of the message and marks the quote and link as its fallback, so Fluux shows the copy with its author and time instead of the quote, while an app or device that cannot show the copy, or an archive that drops it, still shows the quote and link. Rooms get the quote and link only',
       ],
     }, {
       type: 'fixed',
