@@ -354,6 +354,7 @@ export class PubSub extends BaseModule {
           autojoin: parsed.autojoin,
           password: parsed.password,
           notifyLevel: parsed.notifyLevel,
+          extensions: parsed.extensions,
         },
       })
     }

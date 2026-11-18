@@ -56,6 +56,8 @@ A client that finds a `<notify>` element with any other text (an empty element, 
 
 A client that publishes a bookmark MUST carry the level the room already has unless the user is changing it. A bookmark publish replaces the stored item; omitting the element therefore resets the room to Mentions only. This applies to every publish: renaming the room, changing autojoin or the nickname, storing a password learned on join, and bookmarking a room on join.
 
+The same publish MUST keep every other child of `<extensions>` unchanged, as XEP-0402 requires for elements a client does not understand. Fluux writes only its own `<notify>` element and publishes the other children exactly as it last read them, so another client's settings for the room, such as XEP-0492 notification settings, survive a change made in Fluux.
+
 ---
 
 ## 4. Session choice

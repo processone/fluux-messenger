@@ -10,7 +10,7 @@ import { stripNickWhitespace, resolveDefaultMucNick } from '../nick'
 import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
 import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
-import { parseBookmarkItem } from '../bookmarkItem'
+import { buildForeignExtensions, parseBookmarkItem } from '../bookmarkItem'
 import { notifyLevelUpdates, savedNotifyLevel, type NotifyLevel } from '../notifyLevel'
 import { createOriginIdElement } from './messagingUtils'
 import { PRESENCE_PRIORITY } from '../config'
@@ -2017,7 +2017,7 @@ export class MUC extends BaseModule {
       for (const item of items.getChildren('item')) {
         const parsed = parseBookmarkItem(item)
         if (!parsed) continue
-        const { jid, name, autojoin, nick, password, notifyLevel } = parsed
+        const { jid, name, autojoin, nick, password, notifyLevel, extensions } = parsed
 
         allRoomJids.push(jid)
         const resolvedNick = nick || defaultNick
@@ -2029,7 +2029,7 @@ export class MUC extends BaseModule {
           // that races with fetchBookmarks during fresh session reconnect.
           this.deps.emitSDK('room:bookmark', {
             roomJid: jid,
-            bookmark: { name, nick: resolvedNick, autojoin, password, notifyLevel },
+            bookmark: { name, nick: resolvedNick, autojoin, password, notifyLevel, extensions },
           })
         } else {
           const room: Room = {
@@ -2042,6 +2042,7 @@ export class MUC extends BaseModule {
             password,
             notifyAllPersistent: notifyLevel === 'all',
             notifyOffPersistent: notifyLevel === 'none',
+            bookmarkExtensions: extensions,
             occupants: new Map(),
             unreadCount: 0,
             mentionsCount: 0,
@@ -2072,6 +2073,10 @@ export class MUC extends BaseModule {
    *
    * Saves a room bookmark to the user's PEP storage. The bookmark
    * persists across sessions and can be used for auto-joining.
+   *
+   * The children of the bookmark's `<extensions>` element that Fluux does not
+   * own (another client's settings, for example) are published again
+   * unchanged, as XEP-0402 requires.
    *
    * @param roomJid - The room JID to bookmark
    * @param options - Bookmark settings
@@ -2118,19 +2123,23 @@ export class MUC extends BaseModule {
     const notifyLevel: NotifyLevel = options.notifyLevel
       ?? (options.notifyAll === undefined ? savedNotifyLevel(this.deps.stores?.room.getRoom(roomJid)) : options.notifyAll ? 'all' : 'mentions')
 
+    // And for the <extensions> children Fluux does not own: XEP-0402 requires
+    // a publish to keep them, and leaving one out deletes it from the server.
+    const extensions = this.deps.stores?.room.getRoom(roomJid)?.bookmarkExtensions
+
     // Build conference element children
     const confChildren: Element[] = [xml('nick', {}, options.nick)]
     if (password) {
       confChildren.push(xml('password', {}, password))
     }
 
+    const extensionChildren = buildForeignExtensions(extensions)
     // Mentions only is the default and is stored as no element at all
     if (notifyLevel !== 'mentions') {
-      confChildren.push(
-        xml('extensions', {},
-          xml('notify', { xmlns: NS_FLUUX }, notifyLevel)
-        )
-      )
+      extensionChildren.unshift(xml('notify', { xmlns: NS_FLUUX }, notifyLevel))
+    }
+    if (extensionChildren.length > 0) {
+      confChildren.push(xml('extensions', {}, ...extensionChildren))
     }
 
     const iq = xml(
@@ -2160,6 +2169,7 @@ export class MUC extends BaseModule {
         autojoin: options.autojoin,
         password: password || undefined,
         notifyLevel,
+        extensions,
       },
     })
   }

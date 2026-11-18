@@ -1,6 +1,8 @@
 // Type declaration for ltx module (used in xml-parsing tests)
 declare module 'ltx' {
   export function parse(xml: string): Element
+  /** Deep copy of an element and its children, detached from any parent. */
+  export function clone<T>(el: T): T
 
   export class Element {
     name: string

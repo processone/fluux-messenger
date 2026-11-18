@@ -476,6 +476,8 @@ export interface RoomEvents {
       autojoin?: boolean
       password?: string
       notifyLevel?: NotifyLevel
+      /** Serialized `<extensions>` children Fluux does not own; see {@link Room.bookmarkExtensions} */
+      extensions?: string[]
     }
   }
 

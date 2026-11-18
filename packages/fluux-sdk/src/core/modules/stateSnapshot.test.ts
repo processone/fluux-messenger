@@ -291,6 +291,21 @@ describe('StateSnapshot', () => {
       })
     })
 
+    // XEP-0402 §3.4: a bookmark publish must keep the <extensions> children
+    // Fluux does not own. A resume after a short disconnect (a page reload)
+    // skips the bookmark fetch, so the next publish reads them from the rooms
+    // hydrate restored.
+    it('round-trips a bookmark\'s kept extensions through flush and hydrate', async () => {
+      const kept = ['<state xmlns="http://myclient.example/bookmark/state" minimized="true"/>']
+      roomStore.getState().addRoom(makeRoom('room@conf.example.com', { isBookmarked: true, bookmarkExtensions: kept }))
+
+      await snapshot.flush()
+      roomStore.getState().removeRoom('room@conf.example.com')
+      await snapshot.hydrate('user@example.com')
+
+      expect(roomStore.getState().rooms.get('room@conf.example.com')?.bookmarkExtensions).toEqual(kept)
+    })
+
     it('restores server info, own nickname and avatar hash', async () => {
       adapterData.store.set('user@example.com', {
         serverInfo: {
