@@ -50,14 +50,32 @@ const pepEvent = (itemsContent: string) => parse(
   `<event xmlns="http://jabber.org/protocol/pubsub#event"><items node="${NS_BOOKMARKS}">${itemsContent}</items></event></message>`,
 ) as unknown as Element
 
+/** A stored bookmark with a password and Fluux's own level beside the other extensions. */
+const fullItem = ({ extensions, password, notify }: { extensions: string; password?: string; notify?: string }) =>
+  `<item id="${ROOM}"><conference xmlns="${NS_BOOKMARKS}" name="Team" autojoin="true"><nick>tester</nick>` +
+  (password ? `<password>${password}</password>` : '') +
+  `<extensions>${notify ? `<notify xmlns="${NS_FLUUX}">${notify}</notify>` : ''}${extensions}</extensions></conference></item>`
+
+/** Fluux's copy, from a refresh on an earlier connection. */
+const OLDER = { extensions: CLIENT_STATE, password: 'old-secret' }
+/** What another app stored afterwards, while Fluux was away. */
+const NEWER_STATE = '<state xmlns="http://myclient.example/bookmark/state" minimized="false"/>'
+const NEWER = { extensions: NEWER_STATE, password: 'new-secret', notify: 'all' }
+
+const isItemRead = (iq: Element) => !!iq.getChild('pubsub')?.getChild('items')
+const isAllItemsRead = (iq: Element) => isItemRead(iq) && !iq.getChild('pubsub')?.getChild('items')?.getChild('item')
+
 describe('bookmark extensions Fluux does not own', () => {
   let muc: MUC
   let pubsub: PubSub
   let sendIQ: ReturnType<typeof vi.fn>
   let serverItem: Element
+  /** The connection Fluux is on; each connection attempt has its own. */
+  let connection: object
 
   beforeEach(() => {
     roomStore.setState(roomStore.getInitialState(), true)
+    connection = {}
 
     const handlers = new Map<string, (payload: unknown) => void>()
     const source = {
@@ -80,6 +98,7 @@ describe('bookmark extensions Fluux does not own', () => {
       emit: vi.fn(),
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => handlers.get(event)?.(payload),
       getCurrentJid: () => OWN_JID,
+      getXmpp: () => connection,
     } as unknown as ModuleDependencies
     muc = new MUC(deps, { forceCatchUpAllRooms: vi.fn() } as unknown as MAM)
     pubsub = new PubSub(deps)
@@ -101,6 +120,31 @@ describe('bookmark extensions Fluux does not own', () => {
       foreign: children.filter((c) => !c.is('notify', NS_FLUUX)).map(String),
       fluuxNotify: children.filter((c) => c.is('notify', NS_FLUUX)).map((c) => c.getText()),
     }
+  }
+
+  /** The bookmark Fluux published last, as the server reads it. */
+  const publishedConference = () => {
+    const sent = sendIQ.mock.calls[sendIQ.mock.calls.length - 1]![0] as Element
+    return (parse(sent.toString()) as unknown as Element).getChild('pubsub')?.getChild('publish')
+      ?.getChild('item')?.getChild('conference', NS_BOOKMARKS)
+  }
+
+  /** What Fluux sent since the last clear, in order: a read of the stored bookmark, or a publish. */
+  const sentKinds = () => sendIQ.mock.calls.map(([iq]) => {
+    const sent = iq as Element
+    if (isPublish(sent)) return 'publish'
+    return isAllItemsRead(sent) ? 'refresh' : 'read'
+  })
+
+  /** A new connection attempt: a page reload, or a reconnection, resumed or not. */
+  const reconnect = () => { connection = {} }
+
+  /** The server answers bookmark publishes, and fails every read the test names. */
+  const failReads = (which: (iq: Element) => boolean) => {
+    sendIQ.mockImplementation(async (iq: Element) => {
+      if (isItemRead(iq) && which(iq)) throw new Error('timeout')
+      return isItemRead(iq) ? serverItem : parse('<iq type="result"/>')
+    })
   }
 
   /** Restore the stores from a snapshot an older Fluux wrote, as a page reload does. */
@@ -186,5 +230,141 @@ describe('bookmark extensions Fluux does not own', () => {
     await muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: true })
 
     expect(published().foreign).toEqual([])
+  })
+
+  // A copy Fluux holds can be older than the stored bookmark after a page
+  // reload or a reconnection: the snapshot predates changes made elsewhere, and
+  // a resumed stream delivers again events Fluux already handled. Only the
+  // connection's own bookmark refresh, or Fluux's own save on it, shows the
+  // copy is current.
+  describe('after a reconnection or a page reload', () => {
+    beforeEach(async () => {
+      serverItem = fetchResult('', fullItem(OLDER))
+      await muc.fetchBookmarks()
+      reconnect()
+      serverItem = fetchResult('', fullItem(NEWER))
+      sendIQ.mockClear()
+    })
+
+    it('keeps what another app stored while Fluux was away when the bookmark refresh fails', async () => {
+      failReads(isAllItemsRead)
+      await muc.fetchBookmarks()
+      expect(roomStore.getState().getRoom(ROOM)?.password).toBe('old-secret')
+
+      // Toggling autojoin from the room menu names nothing else.
+      await muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
+
+      expect(sentKinds()).toEqual(['refresh', 'read', 'publish'])
+      expect(published()).toEqual({ foreign: [NEWER_STATE], fluuxNotify: ['all'] })
+      expect(publishedConference()?.getChildText('password')).toBe('new-secret')
+      expect(roomStore.getState().getRoom(ROOM)).toMatchObject({ password: 'new-secret', notifyAllPersistent: true, bookmarkExtensions: [NEWER_STATE] })
+    })
+
+    it('reads the stored bookmark when a resumed stream delivered an older version again and no refresh ran', async () => {
+      // A short resume skips the refresh. The server sends again a bookmark
+      // event Fluux had handled, older than what it stores now.
+      pubsub.handle(pepEvent(fullItem(OLDER)))
+
+      await muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
+
+      expect(sentKinds()).toEqual(['read', 'publish'])
+      expect(published()).toEqual({ foreign: [NEWER_STATE], fluuxNotify: ['all'] })
+      expect(publishedConference()?.getChildText('password')).toBe('new-secret')
+    })
+
+    it('keeps the stored password when the notification level changes', async () => {
+      failReads(isAllItemsRead)
+      await muc.fetchBookmarks()
+
+      await muc.setRoomNotifyLevel(ROOM, 'none', true)
+
+      expect(sentKinds()).toEqual(['refresh', 'read', 'publish'])
+      expect(published()).toEqual({ foreign: [NEWER_STATE], fluuxNotify: ['none'] })
+      expect(publishedConference()?.getChildText('password')).toBe('new-secret')
+    })
+
+    it('publishes nothing when the bookmark refresh and the read both fail', async () => {
+      failReads(() => true)
+      await muc.fetchBookmarks()
+
+      await expect(muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })).rejects.toThrow('timeout')
+
+      expect(sentKinds()).toEqual(['refresh', 'read'])
+    })
+
+    it('reads while the refresh has not answered, and trusts Fluux\'s copy once it has', async () => {
+      let answerRefresh!: () => void
+      sendIQ.mockImplementation((iq: Element) => {
+        if (isAllItemsRead(iq)) return new Promise((resolve) => { answerRefresh = () => resolve(serverItem) })
+        return Promise.resolve(isItemRead(iq) ? serverItem : parse('<iq type="result"/>'))
+      })
+      const refresh = muc.fetchBookmarks()
+
+      await muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
+      expect(sentKinds()).toEqual(['refresh', 'read', 'publish'])
+
+      answerRefresh()
+      await refresh
+      sendIQ.mockClear()
+      await muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: true })
+
+      expect(sentKinds()).toEqual(['publish'])
+      expect(published()).toEqual({ foreign: [NEWER_STATE], fluuxNotify: ['all'] })
+    })
+
+    it('publishes from Fluux\'s copy without a read once this connection\'s refresh answered', async () => {
+      await muc.fetchBookmarks()
+      sendIQ.mockClear()
+
+      await muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
+
+      expect(sentKinds()).toEqual(['publish'])
+      expect(published()).toEqual({ foreign: [NEWER_STATE], fluuxNotify: ['all'] })
+      expect(publishedConference()?.getChildText('password')).toBe('new-secret')
+    })
+
+    it('reads only before the first save of a room when the refresh failed', async () => {
+      failReads(isAllItemsRead)
+      await muc.fetchBookmarks()
+
+      await muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
+      await muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: true })
+
+      expect(sentKinds()).toEqual(['refresh', 'read', 'publish', 'publish'])
+      expect(published()).toEqual({ foreign: [NEWER_STATE], fluuxNotify: ['all'] })
+    })
+
+    it('reads a room the refresh did not return', async () => {
+      const OTHER = 'other@conference.localhost'
+      sendIQ.mockImplementation(async (iq: Element) => {
+        if (isAllItemsRead(iq)) {
+          return fetchResult('', `<item id="${OTHER}"><conference xmlns="${NS_BOOKMARKS}" name="Other"/></item>`)
+        }
+        return isItemRead(iq) ? serverItem : parse('<iq type="result"/>')
+      })
+      await muc.fetchBookmarks()
+
+      await muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: true })
+
+      expect(sentKinds()).toEqual(['refresh', 'read', 'publish'])
+      expect(published().foreign).toEqual([NEWER_STATE])
+    })
+
+    it('confirms nothing with a refresh that answers after Fluux moved to another connection', async () => {
+      let answerRefresh!: () => void
+      sendIQ.mockImplementation((iq: Element) => {
+        if (isAllItemsRead(iq)) return new Promise((resolve) => { answerRefresh = () => resolve(serverItem) })
+        return Promise.resolve(isItemRead(iq) ? serverItem : parse('<iq type="result"/>'))
+      })
+      const refresh = muc.fetchBookmarks()
+      reconnect()
+      answerRefresh()
+      await refresh
+      sendIQ.mockClear()
+
+      await muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
+
+      expect(sentKinds()).toEqual(['read', 'publish'])
+    })
   })
 })
