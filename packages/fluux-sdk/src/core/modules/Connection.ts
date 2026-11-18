@@ -16,6 +16,7 @@ import {
   createSmPatchState,
   patchSmAckDebounce,
   patchSmAckQueue,
+  patchSmInboundCount,
   flushSmAckDebounce,
   clearSmAckDebounce,
   setSmAckImmediate,
@@ -2101,6 +2102,7 @@ export class Connection extends BaseModule {
 
       patchSmAckDebounce(this.smPatchState, xmppClient)
       patchSmAckQueue(sm)
+      patchSmInboundCount(xmppClient)
     }
 
     // Intercept <stream:features> before middleware to strip <sm> when SM was
