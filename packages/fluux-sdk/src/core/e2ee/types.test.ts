@@ -3,11 +3,13 @@ import type { PeerIdentity, TrustState, E2EEPlugin } from './types'
 import { DummyPlaintextPlugin } from './DummyPlaintextPlugin'
 
 describe('PeerIdentity', () => {
-  it('is importable from ./types and shaped as { id, fingerprint, trust }', () => {
+  it('is importable from ./types and shaped with the final fields', () => {
     const identity: PeerIdentity = {
       id: '12345',
       fingerprint: 'ABCD1234',
       trust: 'tofu',
+      usedForEncryption: true,
+      allowedDecisions: ['verified', 'untrusted'],
     }
 
     expect(identity.id).toBe('12345')
@@ -22,7 +24,7 @@ describe('PeerIdentity', () => {
   it('accepts every TrustState value', () => {
     const states: TrustState[] = ['verified', 'introduced', 'tofu', 'untrusted', 'unknown']
     for (const trust of states) {
-      const identity: PeerIdentity = { id: 'x', fingerprint: '', trust }
+      const identity: PeerIdentity = { id: 'x', fingerprint: '', trust, usedForEncryption: false, allowedDecisions: [] }
       expect(identity.trust).toBe(trust)
     }
   })

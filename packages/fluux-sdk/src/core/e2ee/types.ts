@@ -353,13 +353,74 @@ export type TrustState = 'verified' | 'introduced' | 'tofu' | 'untrusted' | 'unk
  * optional trait methods below.
  */
 export interface PeerIdentity {
-  /** Stable identity id within the protocol (OMEMO: the device id, as a string). */
+  /** Stable identity id within the protocol (OMEMO: the device id; OpenPGP: the key fingerprint). */
   id: string
   /** Hex fingerprint/safety-number for out-of-band comparison; `''` if no key is known yet. */
   fingerprint: string
-  /** Resolved trust for this identity. */
+  /** Resolved trust for this identity. A key waiting for a decision reads `unknown`. */
   trust: TrustState
+  /** Whether messages to the peer are encrypted to this identity. */
+  usedForEncryption: boolean
+  /** Why this identity receives no messages. Set only when `usedForEncryption` is false. */
+  notUsedReason?: IdentityNotUsedReason
+  /** What is wrong with the identity itself, e.g. a rejected OpenPGP certificate. */
+  problem?: { code: string; detail: string }
+  /** Device name, when the protocol publishes one. */
+  label?: string
+  /** True while the identity appeared without the user having seen it; drives the "new contact" nudge. */
+  isNew?: boolean
+  /** Decisions {@link E2EEPlugin.setIdentityTrust} accepts for this identity right now. */
+  allowedDecisions: IdentityTrustDecision[]
 }
+
+/** Why an identity receives no messages. */
+export type IdentityNotUsedReason = 'awaiting-decision' | 'distrusted' | 'no-key' | 'invalid-key'
+
+/**
+ * An explicit trust decision for one identity.
+ * `verified` pins the fingerprint after an out-of-band comparison; `tofu`
+ * accepts the identity without verifying (it approves a waiting identity and
+ * is how a verification is removed); `untrusted` refuses it.
+ */
+export type IdentityTrustDecision = 'verified' | 'tofu' | 'untrusted'
+
+/** One protocol's identities for a peer, as the manager aggregates them. */
+export interface PeerIdentityGroup {
+  protocolId: string
+  displayName: string
+  /** True for the protocol {@link E2EEManager.getConversationSecurity} would use. */
+  inUse: boolean
+  identities: PeerIdentity[]
+}
+
+/**
+ * The encryption state of one conversation, computed by the manager from the
+ * registered plugins so the app needs no protocol branches.
+ *
+ * - `plaintextForced`: the user turned encryption off for this chat.
+ * - `unsupported`: no registered protocol is usable with this chat.
+ * - `unusable`: keys exist but none can receive messages; `problems` says why.
+ * - `needsDecision`: the contact is verified and every usable key is waiting for a decision.
+ * - `locked`: the own key is present but not usable now.
+ * - `encrypted`: messages are encrypted; `trust` is the aggregate and
+ *   `fingerprint` is set when exactly one key is used.
+ */
+export type ConversationSecurity =
+  | { kind: 'plaintextForced' }
+  | { kind: 'unsupported' }
+  | { kind: 'unusable'; protocolId: string; displayName: string; problems: { id: string; code: string; detail: string }[] }
+  | { kind: 'needsDecision'; protocolId: string; displayName: string; waiting: number }
+  | { kind: 'locked'; protocolId: string; displayName: string }
+  | {
+      kind: 'encrypted'
+      protocolId: string
+      displayName: string
+      trust: TrustState
+      fingerprint?: string
+      used: number
+      verified: number
+      waiting: number
+    }
 
 /** A verification flow a plugin supports. */
 export interface VerificationMethod {
@@ -521,6 +582,17 @@ export interface PluginContext {
    * plugin-registered event, so firing here too would be redundant.
    */
   notifyKeyUnlocked?(): void
+
+  /**
+   * Tell the host that `peer`'s identities changed (keys announced or
+   * retired, a trust decision, a rejection). The host emits its
+   * conversation-security change event. Optional like
+   * {@link PluginContext.notifyKeyUnlocked}.
+   */
+  reportPeerIdentitiesChanged?(peer: BareJID): void
+
+  /** Tell the host that the account's own key became usable or locked, which changes every conversation. */
+  reportLocalKeyStateChanged?(): void
 }
 
 /**
@@ -646,13 +718,21 @@ export interface E2EEPlugin {
    */
   listPeerIdentities?(peer: BareJID): Promise<PeerIdentity[]>
 
+  /** Optional: the account's own fingerprint for out-of-band comparison; `null` when there is none yet. */
+  getOwnFingerprint?(): string | null | Promise<string | null>
+
+  /** Optional: true while the account's own key exists but cannot be used now (e.g. a web passphrase not entered). */
+  isLocked?(): boolean
+
   /**
    * Optional: record an explicit trust decision for one identity. `id` is the
    * `PeerIdentity.id` (OMEMO: the device id string). `'verified'` pins the
-   * current fingerprint out-of-band; `'untrusted'` revokes/marks it. Both
-   * operations are idempotent.
+   * current fingerprint out-of-band; `'tofu'` accepts it without verifying
+   * (approves a waiting identity, removes a verification); `'untrusted'`
+   * refuses it. Only decisions in the identity's `allowedDecisions` are
+   * accepted. All operations are idempotent.
    */
-  setIdentityTrust?(peer: BareJID, id: string, decision: 'verified' | 'untrusted'): Promise<void>
+  setIdentityTrust?(peer: BareJID, id: string, decision: IdentityTrustDecision): Promise<void>
 
   /**
    * If an incoming stanza's encrypted element belongs to this plugin, return
