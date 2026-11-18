@@ -90,7 +90,8 @@ class Relay:
                 while self.sock.recv(65536):
                     pass
                 self.closed_by_reader = True
-        except EOFError:
+        except (EOFError, BrokenPipeError, ConnectionResetError):
+            # The reader closed its end, before a later send or during the wait.
             self.closed_by_reader = True
         except OSError:
             pass
