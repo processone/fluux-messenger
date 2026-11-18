@@ -7,7 +7,7 @@ import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { useWindowDrag } from '@/hooks'
 import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
+import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { ConfirmDialog } from './ConfirmDialog'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
@@ -55,6 +55,9 @@ export function ContactProfileView({
   const [error, setError] = useState<string | null>(null)
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null)
   const [showVerifyDialog, setShowVerifyDialog] = useState(false)
+  // The key a dialog opened for. A decision is sent for it, so if the contact's keys changed
+  // meanwhile the SDK refuses it and the person sees why, rather than the dialog doing nothing.
+  const [trustTarget, setTrustTarget] = useState<{ protocolId: string; identityId: string } | null>(null)
   const [pepNickname, setPepNickname] = useState<string | null>(null)
   const [details, setDetails] = useState<ProfileDetails | null>(null)
 
@@ -62,14 +65,30 @@ export function ContactProfileView({
   const isBlocked = useBlockingStore((s) => s.blockedJids.has(contact.jid))
   const { client } = useXMPPContext()
   const encryptionState = useConversationEncryptionState(contact.jid, 'chat')
-  const setVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
-  const clearVerified = useVerifiedPeerKeysStore((s) => s.clearVerified)
   const setForcedPlaintext = useConversationPlaintextOverrideStore((s) => s.setForcedPlaintext)
-  const plugin = client.e2ee?.getPlugin('openpgp') as
-    | { getOwnFingerprint?: () => string | null }
-    | null
-    | undefined
-  const ownFingerprint = plugin?.getOwnFingerprint?.() ?? null
+  const addToast = useToastStore((s) => s.addToast)
+  const [ownFingerprint, setOwnFingerprint] = useState<string | null>(null)
+
+  /** Read the own fingerprint when Verify opens, so a replaced or recovered key never shows a stale code. */
+  const openVerify = async () => {
+    if (encryptionState.kind !== 'encrypted') return
+    setTrustTarget(encryptionState.identityId ? { protocolId: encryptionState.protocolId, identityId: encryptionState.identityId } : null)
+    setOwnFingerprint((await client.e2ee?.getOwnFingerprint(encryptionState.protocolId)) ?? null)
+    setShowVerifyDialog(true)
+  }
+
+  /**
+   * Record a trust decision for the key in use; the SDK says whether the protocol accepts it.
+   * A failure is shown to the person, including a decision for a key the contact no longer has.
+   */
+  const decideTrust = async (decision: 'verified' | 'tofu') => {
+    if (!trustTarget) return
+    try {
+      await client.e2ee?.setIdentityTrust(trustTarget.protocolId, contact.jid, trustTarget.identityId, decision)
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : String(err))
+    }
+  }
 
   // Lazily query last activity for offline roster contacts
   useLastActivity(
@@ -87,6 +106,7 @@ export function ContactProfileView({
     setError(null)
     setPendingConfirm(null)
     setShowVerifyDialog(false)
+    setTrustTarget(null)
     setPepNickname(null)
     setDetails(null)
   }, [contact.jid, contact.name])
@@ -165,13 +185,13 @@ export function ContactProfileView({
     client.e2ee?.invalidateCapability(contact.jid)
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (pendingConfirm === 'remove') {
       onRemoveContact()
     } else if (pendingConfirm === 'block') {
       void blockJid(contact.jid)
     } else if (pendingConfirm === 'revokeVerify') {
-      clearVerified(contact.jid)
+      await decideTrust('tofu')
     }
     setPendingConfirm(null)
   }
@@ -263,8 +283,13 @@ export function ContactProfileView({
         {securityOpen && (
           <ContactSecurityDetail
             state={encryptionState}
-            onVerify={() => setShowVerifyDialog(true)}
-            onRequestRevoke={() => setPendingConfirm('revokeVerify')}
+            onVerify={() => void openVerify()}
+            onRequestRevoke={() => {
+              if (encryptionState.kind === 'encrypted' && encryptionState.identityId) {
+                setTrustTarget({ protocolId: encryptionState.protocolId, identityId: encryptionState.identityId })
+              }
+              setPendingConfirm('revokeVerify')
+            }}
             onDisableEncryption={handleDisableEncryption}
             onEnableEncryption={handleEnableEncryption}
             onClose={() => setSecurityOpen(false)}
@@ -277,22 +302,21 @@ export function ContactProfileView({
           title={confirmConfig.title}
           message={confirmConfig.message}
           confirmLabel={confirmConfig.confirmLabel}
-          onConfirm={handleConfirm}
+          onConfirm={() => void handleConfirm()}
           onCancel={() => setPendingConfirm(null)}
           variant="danger"
         />
       )}
 
-      {showVerifyDialog && encryptionState.kind === 'encrypted' && ownJid && (
+      {showVerifyDialog && encryptionState.kind === 'encrypted' && encryptionState.fingerprint && ownJid && (
         <VerifyPeerDialog
           peerName={contact.name}
           peerJid={contact.jid}
           peerFingerprint={encryptionState.fingerprint}
           ownJid={ownJid}
           ownFingerprint={ownFingerprint}
-          onConfirm={(fingerprint) => {
-            setVerified(contact.jid, fingerprint)
-            setShowVerifyDialog(false)
+          onConfirm={() => {
+            void decideTrust('verified').then(() => setShowVerifyDialog(false))
           }}
           onCancel={() => setShowVerifyDialog(false)}
         />

@@ -2883,17 +2883,40 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const out: PeerIdentity[] = active.map((fp) => {
       const verified = this.stores.verifiedPeers.isVerified(peer, fp)
       const allowedDecisions: IdentityTrustDecision[] = active.length === 1 ? [verified ? 'tofu' : 'verified'] : []
-      return { id: fp, fingerprint: fp, trust: verified ? 'verified' : 'tofu', usedForEncryption: true, allowedDecisions }
+      const isNew = !verified && this.stores.pinnedPrimaryFingerprints.isNew?.(peer) === true
+      return { id: fp, fingerprint: fp, trust: verified ? 'verified' : 'tofu', usedForEncryption: true, allowedDecisions, ...(isNew ? { isNew } : {}) }
     })
+    // A saved verification that no announced key matches belongs to a key the contact no longer
+    // announces. List it unused so the aggregate can tell a replaced verified key from a
+    // contact never verified.
+    const savedVerified = this.stores.verifiedPeers.getAll()[peer]
+    if (savedVerified && active.length > 0 && !active.some((fp) => normalizeFingerprint(fp) === normalizeFingerprint(savedVerified))) {
+      out.push({
+        id: savedVerified,
+        fingerprint: savedVerified,
+        trust: 'verified',
+        usedForEncryption: false,
+        notUsedReason: 'no-key',
+        allowedDecisions: [],
+      })
+    }
     for (const rejection of this.stores.certRejections.get(peer)) {
       if (active.some((fp) => normalizeFingerprint(fp) === normalizeFingerprint(rejection.fingerprint))) continue
+      // One identity per key: a rejected certificate that is also the saved verified key keeps
+      // its verification and gains the rejection's reason and detail.
+      const same = out.findIndex((i) => normalizeFingerprint(i.id) === normalizeFingerprint(rejection.fingerprint))
+      const problem = { code: rejection.code, detail: rejection.detail }
+      if (same >= 0) {
+        out[same] = { ...out[same], notUsedReason: 'invalid-key', problem }
+        continue
+      }
       out.push({
         id: rejection.fingerprint,
         fingerprint: rejection.fingerprint,
         trust: 'unknown',
         usedForEncryption: false,
         notUsedReason: 'invalid-key',
-        problem: { code: rejection.code, detail: rejection.detail },
+        problem,
         allowedDecisions: [],
       })
     }

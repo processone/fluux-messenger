@@ -69,7 +69,7 @@ const mockClearAnimation = vi.fn()
 const mockProcessMessageForLinkPreview = vi.fn().mockResolvedValue(undefined)
 
 // Mutable encryption state — set per test
-let mockEncryptionState: { kind: string; fingerprint?: string; trust?: string } = { kind: 'disabled' }
+let mockEncryptionState: { kind: string; protocolId?: string; displayName?: string; fingerprint?: string; trust?: string } = { kind: 'disabled' }
 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', async (importOriginal) => ({
@@ -995,7 +995,7 @@ describe('ChatView', () => {
     })
 
     it('suppresses processMessageForLinkPreview when conversation is encrypted', async () => {
-      mockEncryptionState = { kind: 'encrypted', fingerprint: 'abc123', trust: 'tofu' }
+      mockEncryptionState = { kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'abc123', trust: 'tofu' }
       render(<ChatView />)
 
       fireEvent.click(screen.getByTestId('send-button'))

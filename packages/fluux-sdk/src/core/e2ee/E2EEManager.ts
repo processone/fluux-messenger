@@ -860,6 +860,7 @@ export class E2EEManager {
     const verified = used.filter((i) => i.trust === 'verified').length
     const trust: TrustState =
       verified === used.length ? 'verified' : used.some((i) => i.trust === 'introduced') ? 'introduced' : 'tofu'
+    const partlyVerified = verified < used.length && identities.some((i) => i.trust === 'verified')
     return {
       kind: 'encrypted',
       protocolId,
@@ -869,6 +870,9 @@ export class E2EEManager {
       used: used.length,
       verified,
       waiting,
+      ...(partlyVerified ? { partlyVerified: true as const } : {}),
+      // A key replacing a verified one is the partly verified case, not a new contact.
+      ...(verified === 0 && !partlyVerified && used.some((i) => i.isNew) ? { isNew: true as const } : {}),
     }
   }
 

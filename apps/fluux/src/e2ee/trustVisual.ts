@@ -1,3 +1,5 @@
+import type { TrustState } from '@fluux/sdk'
+
 /**
  * The single source of truth for the COLOR of an E2EE trust indicator.
  *
@@ -13,8 +15,8 @@
 export type TrustTone = 'verified' | 'calm' | 'warning' | 'danger'
 
 export type TrustVisualState =
-  | 'verified'      // out-of-band-confirmed peer key
-  | 'trusted'       // tofu / tofu-new / introduced / encrypted-unverified
+  | TrustState      // every state the SDK reports for an identity or a conversation
+  | 'trusted'       // encrypted and not verified: tofu, a new contact, a partly verified one
   | 'decryptFailed' // per-message untrusted: could not decrypt this message
   | 'rejected'      // forged or absent signature
   | 'keyChanged'    // peer key rotated, encryption blocked pending acceptance
@@ -35,8 +37,12 @@ export function trustVisual(state: TrustVisualState): TrustVisual {
     case 'keyChanged':
       return { colorClass: 'text-fluux-yellow', tone: 'warning' }
     case 'rejected':
+    case 'untrusted':
       return { colorClass: 'text-fluux-error', tone: 'danger' }
     case 'trusted':
+    case 'tofu':
+    case 'introduced':
+    case 'unknown':
     case 'keyLocked':
     case 'plaintext':
     case 'checking':

@@ -1893,6 +1893,48 @@ describe('SequoiaPgpPlugin', () => {
         expect(list.find((i) => i.id === A.fingerprint)?.usedForEncryption).toBe(true)
       })
 
+      it('lists a verified key the contact no longer announces as unused, beside the new key', async () => {
+        const A = validKey('KEYAAAA0001')
+        const B = validKey('KEYBBBB0002')
+        await peerWith(B)
+        hostStores.verifiedPeers.set(PEER, A.fingerprint)
+        const list = await plugin.listPeerIdentities(PEER)
+        expect(list.find((i) => i.id === B.fingerprint)).toMatchObject({ trust: 'tofu', usedForEncryption: true })
+        expect(list.find((i) => i.id === A.fingerprint)).toMatchObject({
+          trust: 'verified', usedForEncryption: false, notUsedReason: 'no-key', allowedDecisions: [],
+        })
+      })
+
+      it('lists a saved verified key that was also rejected once, keeping its verification and the reason', async () => {
+        const A = validKey('KEYAAAA0001')
+        const B = validKey('KEYBBBB0002')
+        await peerWith(B)
+        hostStores.verifiedPeers.set(PEER, A.fingerprint)
+        hostStores.certRejections.record(PEER, [
+          { fingerprint: A.fingerprint, code: 'no_encryption_subkey', detail: 'gone', observedAt: '2024-01-01T00:00:00Z' },
+        ])
+        const list = await plugin.listPeerIdentities(PEER)
+        expect(list.filter((i) => i.id === A.fingerprint)).toEqual([
+          expect.objectContaining({ trust: 'verified', usedForEncryption: false, notUsedReason: 'invalid-key', problem: { code: 'no_encryption_subkey', detail: 'gone' } }),
+        ])
+        expect(list).toHaveLength(2)
+      })
+
+      it('marks an unverified key new while the host says the pin is recent', async () => {
+        const A = validKey('KEYAAAA0001')
+        await peerWith(A)
+        const stores = hostStores.pinnedPrimaryFingerprints as { isNew?: (jid: string) => boolean }
+        const previous = stores.isNew
+        stores.isNew = () => true
+        try {
+          expect((await plugin.listPeerIdentities(PEER))[0]).toMatchObject({ isNew: true })
+          hostStores.verifiedPeers.set(PEER, A.fingerprint)
+          expect((await plugin.listPeerIdentities(PEER))[0].isNew).toBeUndefined()
+        } finally {
+          stores.isNew = previous
+        }
+      })
+
       it('reports a change on a new keyset, a rejection and a verification', async () => {
         const A = validKey('KEYAAAA0001')
         const N = makeNoEncryptionBundle(fake, 'KEYNOENC0003', PEER)

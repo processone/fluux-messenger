@@ -8,7 +8,10 @@ import type {
   ConversationHandle,
   EncryptedPayload,
   DecryptResult,
+  PeerIdentity,
+  IdentityTrustDecision,
 } from '@fluux/sdk'
+import { isPeerVerified, clearPeerVerified, useVerifiedPeerKeysStore } from '../stores/verifiedPeerKeysStore'
 import type { KeyBundle, BackupProbeResult } from '@fluux/openpgp-plugin'
 
 const OPENPGP_DESCRIPTOR: E2EEProtocolDescriptor = {
@@ -145,8 +148,31 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
     }
   }
 
-  async getPeerTrust() {
-    return 'unknown' as const
+  async getPeerTrust(peer?: string) {
+    if (peer !== 'ava@fluux.chat') return 'unknown' as const
+    return this.avaVerified() ? ('verified' as const) : ('tofu' as const)
+  }
+
+  /** Ava's key is verified while the shared verified-key store (seeded by demo.tsx) holds it. */
+  private avaVerified(): boolean {
+    return isPeerVerified('ava@fluux.chat', DEMO_AVA_FINGERPRINT)
+  }
+
+  async listPeerIdentities(peer: string): Promise<PeerIdentity[]> {
+    if (peer !== 'ava@fluux.chat') return []
+    return [{
+      id: DEMO_AVA_FINGERPRINT,
+      fingerprint: DEMO_AVA_FINGERPRINT,
+      trust: this.avaVerified() ? 'verified' : 'tofu',
+      usedForEncryption: true,
+      allowedDecisions: this.avaVerified() ? ['tofu', 'untrusted'] : ['verified', 'untrusted'],
+    }]
+  }
+
+  async setIdentityTrust(peer: string, _id: string, decision: IdentityTrustDecision) {
+    if (peer !== 'ava@fluux.chat') return
+    if (decision === 'verified') useVerifiedPeerKeysStore.getState().setVerified(peer, DEMO_AVA_FINGERPRINT)
+    else clearPeerVerified(peer)
   }
 
   async getDeviceTrust() {

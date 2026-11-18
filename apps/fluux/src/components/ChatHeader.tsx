@@ -20,6 +20,7 @@ import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
 import { inlineClass, kebabClass } from './header/headerOverflow'
 import { trustVisual } from '@/e2ee/trustVisual'
+import { encryptionLabel } from '@/e2ee/encryptionLabel'
 
 export interface ChatHeaderProps {
   name: string
@@ -372,12 +373,10 @@ function EncryptionIcon({
 
   // encrypted — shield/lock icon + popover with verify + disable options.
   const verified = state.kind === 'encrypted' && state.trust === 'verified'
-  const tofuNew = state.kind === 'encrypted' && state.trust === 'tofu-new'
-  const unverifiedKeyset = state.kind === 'encrypted' && state.unverifiedKeyset === true
-  // `tofu-new` (freshly TOFU-pinned, unchanged, not yet OOB-verified) renders
-  // the same neutral gray Shield as `unverified` — homogeneous with the Settings
-  // → Encryption screen and the Security tab. `tofuNew` survives only to pick a
-  // gentler tooltip below. The yellow ShieldAlert is reserved exclusively
+  // A contact met recently and not yet verified renders the same neutral gray
+  // Shield as any other unverified contact — homogeneous with the Settings
+  // → Encryption screen and the Security tab. The flag only picks a gentler
+  // tooltip below. The yellow ShieldAlert is reserved exclusively
   // for the genuine `blocked` (key-changed) alert, so the two states do not
   // share an alarming icon.
   const Icon = verified ? ShieldCheck : Shield
@@ -389,15 +388,8 @@ function EncryptionIcon({
   if (!hasActions) {
     const tooltip = (
       <div>
-        <div>{verified
-          ? t('chat.encryption.verifiedTooltip')
-          : unverifiedKeyset
-            ? t('chat.encryption.unverifiedKeysetTooltip')
-            : tofuNew
-              ? t('chat.encryption.tofuNewTooltip', 'New contact. Verify fingerprint for full trust')
-              : t('chat.encryption.openpgpTooltip')
-        }</div>
-        {state.kind === 'encrypted' && (
+        <div>{state.kind === 'encrypted' && encryptionLabel(t, state, { withNewContact: true })}</div>
+        {state.kind === 'encrypted' && state.fingerprint && (
           <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
         )}
       </div>
@@ -420,15 +412,10 @@ function EncryptionIcon({
       <Tooltip
         content={state.kind === 'encrypted' ? (
           <div>
-            <div>{verified
-              ? t('chat.encryption.verifiedTooltip')
-              : unverifiedKeyset
-                ? t('chat.encryption.unverifiedKeysetTooltip')
-                : tofuNew
-                  ? t('chat.encryption.tofuNewTooltip', 'New contact. Verify fingerprint for full trust')
-                  : t('chat.encryption.openpgpTooltip')
-            }</div>
-            <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
+            <div>{encryptionLabel(t, state, { withNewContact: true })}</div>
+            {state.fingerprint && (
+              <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
+            )}
           </div>
         ) : null}
         position="bottom"

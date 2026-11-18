@@ -20,6 +20,7 @@ import { mergeFailedDraft } from '@/utils/mergeFailedDraft'
 import { encryptionSendErrorKey } from '@/e2ee/encryptionSendError'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { trustVisual } from '@/e2ee/trustVisual'
+import { encryptionLabel } from '@/e2ee/encryptionLabel'
 import { useToastStore } from '@/stores/toastStore'
 import { platform } from '@/platform'
 import { photoBlocksSend, type PendingAttachment } from '@/hooks/usePendingAttachment'
@@ -967,11 +968,11 @@ export function MessageComposer({
   const lockInfo: { Icon: typeof Shield; colorClass: string; label: string } | null =
     enc?.kind === 'encrypted'
       ? enc.trust === 'verified'
-        ? { Icon: ShieldCheck, colorClass: trustVisual('verified').colorClass, label: t('chat.encryption.verifiedTooltip') }
+        ? { Icon: ShieldCheck, colorClass: trustVisual('verified').colorClass, label: encryptionLabel(t, enc) }
         : {
             Icon: Shield,
             colorClass: trustVisual('trusted').colorClass,
-            label: t(enc.unverifiedKeyset ? 'chat.encryption.unverifiedKeysetTooltip' : 'chat.encryption.openpgpTooltip'),
+            label: encryptionLabel(t, enc),
           }
       : enc?.kind === 'blocked'
         ? { Icon: ShieldAlert, colorClass: trustVisual('keyChanged').colorClass, label: t('chat.encryption.blockedTooltip') }

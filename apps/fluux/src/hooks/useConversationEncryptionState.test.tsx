@@ -1,871 +1,186 @@
 /**
- * State-machine unit tests for the composer's encryption-status hook.
- * The hook is the data half of the encryption chip — get it right and
- * the UI just renders from the returned state.
+ * The composer chip's hook reads the SDK's answer and nothing else (FLM-268,
+ * piece 2). The rendered result for real OpenPGP data is pinned in
+ * e2ee/encryptionRendering.test.tsx; these cases pin the mapping from each
+ * SDK answer to the state the surfaces draw, and when the question is asked again.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
+import type { ConversationSecurity, PeerIdentity, PeerIdentityGroup } from '@fluux/sdk'
 import { useConversationEncryptionState } from './useConversationEncryptionState'
 
-// Reach for the mocks the app-level test setup installs. `useChatStore` is
-// already stubbed there, but `useConnection` / `useXMPPContext` /
-// `useEncryptionSettingsStore` need per-test control, so we override here.
-vi.mock('@fluux/sdk', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>
-  return {
-    ...actual,
-    useConnection: vi.fn(),
-    useConnectionStatus: vi.fn(),
-    useXMPPContext: vi.fn(),
-  }
-})
-vi.mock('@/stores/encryptionSettingsStore', () => ({
-  useEncryptionSettingsStore: vi.fn(),
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...((await importOriginal()) as Record<string, unknown>),
+  useConnectionStatus: vi.fn(),
+  useXMPPContext: vi.fn(),
 }))
-// Lock-state hook stays under per-test control. Default to `false`
-// (unlocked) so the bulk of the suite, which tests other transitions,
-// is not affected by the keyLocked promotion path.
-vi.mock('@/hooks/useWebKeyLocked', () => ({
-  useWebKeyLocked: vi.fn(() => false),
-}))
+vi.mock('@/stores/encryptionSettingsStore', () => ({ useEncryptionSettingsStore: vi.fn() }))
 
-import { useConnection, useConnectionStatus, useXMPPContext } from '@fluux/sdk'
+import { useConnectionStatus, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
-import { useWebKeyLocked } from '@/hooks/useWebKeyLocked'
 
-const mockedUseConnection = useConnection as unknown as ReturnType<typeof vi.fn>
-const mockedUseConnectionStatus = useConnectionStatus as unknown as ReturnType<typeof vi.fn>
-const mockedUseXMPPContext = useXMPPContext as unknown as ReturnType<typeof vi.fn>
-const mockedUseEncryptionSettingsStore =
-  useEncryptionSettingsStore as unknown as ReturnType<typeof vi.fn>
-const mockedUseWebKeyLocked = useWebKeyLocked as unknown as ReturnType<typeof vi.fn>
+const PEER = 'bob@example.com'
+const OTHER = 'carol@example.com'
 
-interface FakePlugin {
-  getPeerFingerprint: ReturnType<typeof vi.fn>
-  getPeerFingerprints?: ReturnType<typeof vi.fn>
-  probePeer: ReturnType<typeof vi.fn>
+function identity(id: string, over: Partial<PeerIdentity> = {}): PeerIdentity {
+  return { id, fingerprint: `FP${id}`, trust: 'tofu', usedForEncryption: true, allowedDecisions: ['verified'], ...over }
 }
 
-function wireMocks(opts: {
-  online?: boolean
-  openpgpEnabled?: boolean
-  plugin?: FakePlugin | null
-}) {
-  const conn = { status: opts.online === false ? 'offline' : 'online' }
-  mockedUseConnection.mockReturnValue(conn)
-  mockedUseConnectionStatus.mockReturnValue(conn)
-  mockedUseXMPPContext.mockReturnValue({
-    client: {
-      e2ee: opts.plugin === undefined
-        ? null
-        : {
-            getPlugin: (id: string) => (id === 'openpgp' ? opts.plugin : null),
-          },
-    },
-  })
-  mockedUseEncryptionSettingsStore.mockImplementation((selector: (s: { openpgpEnabled: boolean }) => unknown) =>
-    selector({ openpgpEnabled: opts.openpgpEnabled ?? true }),
-  )
-}
-
-function makePlugin(overrides: Partial<FakePlugin> = {}): FakePlugin {
-  return {
-    getPeerFingerprint: vi.fn().mockReturnValue(null),
-    probePeer: vi.fn().mockResolvedValue({ supported: false }),
-    ...overrides,
+function fakeManager(security: ConversationSecurity | (() => Promise<ConversationSecurity>), identities: PeerIdentity[] = [identity('1')]) {
+  let listener: ((peer: string | null) => void) | null = null
+  const manager = {
+    getConversationSecurity: vi.fn(typeof security === 'function' ? security : async () => security),
+    listPeerIdentities: vi.fn(async (): Promise<PeerIdentityGroup[]> => [
+      { protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true, identities },
+    ]),
+    onConversationSecurityChanged: vi.fn((cb: (peer: string | null) => void) => {
+      listener = cb
+      return () => { listener = null }
+    }),
   }
+  return { manager, emit: (peer: string | null) => act(async () => { listener?.(peer) }) }
+}
+
+function wire(opts: { manager?: unknown; online?: boolean; enabled?: boolean }) {
+  vi.mocked(useConnectionStatus).mockReturnValue({ status: opts.online === false ? 'offline' : 'online' } as never)
+  vi.mocked(useXMPPContext).mockReturnValue({ client: { e2ee: opts.manager ?? null } } as never)
+  vi.mocked(useEncryptionSettingsStore).mockImplementation(((selector: (s: object) => unknown) =>
+    selector({ openpgpEnabled: opts.enabled ?? true, pluginRegisteredAt: 1 })) as never)
+}
+
+const encrypted = (over: Partial<Extract<ConversationSecurity, { kind: 'encrypted' }>> = {}): ConversationSecurity => ({
+  kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', trust: 'tofu', fingerprint: 'FP1', used: 1, verified: 0, waiting: 0, ...over,
+})
+
+async function stateFor(security: ConversationSecurity | (() => Promise<ConversationSecurity>), identities?: PeerIdentity[]) {
+  const { manager } = fakeManager(security, identities)
+  wire({ manager })
+  const hook = renderHook(() => useConversationEncryptionState(PEER, 'chat'))
+  await waitFor(() => expect(hook.result.current.kind).not.toBe('checking'))
+  return hook.result.current
 }
 
 describe('useConversationEncryptionState', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    // Default the lock-state hook to "unlocked" so existing tests aren't
-    // affected by the keyLocked promotion path.
-    mockedUseWebKeyLocked.mockReturnValue(false)
-  })
-  afterEach(() => {
-    vi.restoreAllMocks()
+  beforeEach(() => vi.clearAllMocks())
+
+  it('subscribes to connection via the narrow useConnectionStatus', () => {
+    wire({ manager: fakeManager(encrypted()).manager })
+    renderHook(() => useConversationEncryptionState(PEER, 'chat'))
+    expect(useConnectionStatus).toHaveBeenCalled()
   })
 
-  it('subscribes to connection via the narrow useConnectionStatus, not the broad useConnection', () => {
-    // Perf guard: this hook is mounted per active conversation and reads
-    // only `status`. useConnection subscribes to ~16 connection fields, so unrelated
-    // churn (ownAvatar, reconnectAttempt, serverInfo, ...) would re-render the chip.
-    // useConnectionStatus subscribes to status/jid/error only.
-    wireMocks({ plugin: makePlugin() })
-    renderHook(() => useConversationEncryptionState('bob@example.com', 'chat'))
-    expect(mockedUseConnectionStatus).toHaveBeenCalled()
-    expect(mockedUseConnection).not.toHaveBeenCalled()
-  })
-
-  it("stays 'disabled' when the master toggle is off", () => {
-    wireMocks({ openpgpEnabled: false, plugin: makePlugin() })
-    const { result } = renderHook(() =>
-      useConversationEncryptionState('bob@example.com', 'chat'),
-    )
+  it.each([
+    ['the master toggle is off', { enabled: false }, 'chat'],
+    ['the account is offline', { online: false }, 'chat'],
+    ['it is a group chat', {}, 'groupchat'],
+  ] as const)('stays disabled and asks nothing when %s', (_name, opts, type) => {
+    const { manager } = fakeManager(encrypted())
+    wire({ manager, ...opts })
+    const { result } = renderHook(() => useConversationEncryptionState(PEER, type))
     expect(result.current).toEqual({ kind: 'disabled' })
+    expect(manager.getConversationSecurity).not.toHaveBeenCalled()
   })
 
-  it("stays 'disabled' for MUC conversations even with encryption enabled", () => {
-    wireMocks({ plugin: makePlugin() })
-    const { result } = renderHook(() =>
-      useConversationEncryptionState('room@muc.example.com', 'groupchat'),
+  it('stays disabled while no manager exists', () => {
+    wire({ manager: null })
+    expect(renderHook(() => useConversationEncryptionState(PEER, 'chat')).result.current).toEqual({ kind: 'disabled' })
+  })
+
+  it('reports checking until the SDK answers, then the encrypted state with the key to show', async () => {
+    const { manager } = fakeManager(encrypted())
+    wire({ manager })
+    const { result } = renderHook(() => useConversationEncryptionState(PEER, 'chat'))
+    expect(result.current).toEqual({ kind: 'checking' })
+    await waitFor(() => expect(result.current.kind).toBe('encrypted'))
+    expect(result.current).toEqual({
+      kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', trust: 'tofu', fingerprint: 'FP1',
+      identityId: '1', canVerify: true,
+    })
+    expect(manager.getConversationSecurity).toHaveBeenCalledWith({ kind: 'direct', peer: PEER })
+  })
+
+  it('offers removing a verification, not verifying, for a verified one-key contact', async () => {
+    const state = await stateFor(encrypted({ trust: 'verified', verified: 1 }), [identity('1', { trust: 'verified', allowedDecisions: ['tofu'] })])
+    expect(state).toMatchObject({ kind: 'encrypted', trust: 'verified', canClearVerification: true })
+    expect(state).not.toHaveProperty('canVerify')
+  })
+
+  it('offers no decision for a contact with several keys, and shows the first key', async () => {
+    const state = await stateFor(
+      encrypted({ used: 2, fingerprint: undefined, partlyVerified: true }),
+      [identity('1', { allowedDecisions: [] }), identity('2', { allowedDecisions: [] })],
     )
-    expect(result.current).toEqual({ kind: 'disabled' })
-  })
-
-  it("stays 'disabled' when offline", () => {
-    wireMocks({ online: false, plugin: makePlugin() })
-    const { result } = renderHook(() =>
-      useConversationEncryptionState('bob@example.com', 'chat'),
-    )
-    expect(result.current).toEqual({ kind: 'disabled' })
-  })
-
-  it("stays 'disabled' when the plugin isn't registered yet", () => {
-    // E2EE manager exists but no openpgp plugin yet — happens briefly
-    // between the `online` event and registerE2EEPlugins completing.
-    wireMocks({ plugin: null })
-    const { result } = renderHook(() =>
-      useConversationEncryptionState('bob@example.com', 'chat'),
-    )
-    expect(result.current).toEqual({ kind: 'disabled' })
-  })
-
-  it("returns 'encrypted' instantly when the peer key is already cached", () => {
-    const plugin = makePlugin({
-      getPeerFingerprint: vi.fn().mockReturnValue('ABCD1234'),
-    })
-    wireMocks({ plugin })
-    const { result } = renderHook(() =>
-      useConversationEncryptionState('bob@example.com', 'chat'),
-    )
-    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'unverified' })
-    // Fast path: no probe triggered.
-    expect(plugin.probePeer).not.toHaveBeenCalled()
-  })
-
-  it("goes through 'checking' then 'encrypted' on a successful probe", async () => {
-    // First lookup: cache miss. After probe: cache hit.
-    const fp = 'EEFF00001111'
-    let cacheHit = false
-    const plugin = makePlugin({
-      getPeerFingerprint: vi.fn().mockImplementation(() => (cacheHit ? fp : null)),
-      probePeer: vi.fn().mockImplementation(async () => {
-        cacheHit = true
-        return { supported: true }
-      }),
-    })
-    wireMocks({ plugin })
-    const { result } = renderHook(() =>
-      useConversationEncryptionState('bob@example.com', 'chat'),
-    )
-    // Synchronously in 'checking' state while probe is in flight.
-    expect(result.current.kind).toBe('checking')
-    await waitFor(() => {
-      expect(result.current).toEqual({ kind: 'encrypted', fingerprint: fp, trust: 'unverified' })
-    })
-    expect(plugin.probePeer).toHaveBeenCalledWith('bob@example.com')
-  })
-
-  it("uses the probe's discovered fingerprint when the plugin cache is not readable yet", async () => {
-    const plugin = makePlugin({
-      getPeerFingerprint: vi.fn().mockReturnValue(null),
-      probePeer: vi.fn().mockResolvedValue({
-        supported: true,
-        fingerprint: 'D94E599C93F7EB648D2880D8829C29E7F50FD65F',
-      }),
-    })
-    wireMocks({ plugin })
-    const { result } = renderHook(() =>
-      useConversationEncryptionState('lovetox@hydrant.one', 'chat'),
-    )
-    await waitFor(() => {
-      expect(result.current).toEqual({
-        kind: 'encrypted',
-        fingerprint: 'D94E599C93F7EB648D2880D8829C29E7F50FD65F',
-        trust: 'unverified',
-      })
+    expect(state).toEqual({
+      kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', trust: 'tofu', fingerprint: 'FP1', partlyVerified: true,
     })
   })
 
-  it("falls to 'unsupported' when the probe returns supported=false", async () => {
-    const plugin = makePlugin({
-      probePeer: vi.fn().mockResolvedValue({ supported: false }),
-    })
-    wireMocks({ plugin })
-    const { result } = renderHook(() =>
-      useConversationEncryptionState('bob@example.com', 'chat'),
-    )
-    await waitFor(() => {
-      expect(result.current).toEqual({ kind: 'unsupported' })
-    })
+  it('carries the new-contact flag', async () => {
+    expect(await stateFor(encrypted({ isNew: true }))).toMatchObject({ kind: 'encrypted', isNew: true })
   })
 
-  it("treats probe exceptions as 'unsupported' rather than crashing", async () => {
-    const plugin = makePlugin({
-      probePeer: vi.fn().mockRejectedValue(new Error('server glitch')),
-    })
-    wireMocks({ plugin })
-    const { result } = renderHook(() =>
-      useConversationEncryptionState('bob@example.com', 'chat'),
-    )
-    await waitFor(() => {
-      expect(result.current).toEqual({ kind: 'unsupported' })
-    })
+  it('maps keys that cannot receive messages to rejected, with each reason', async () => {
+    const problems = [{ id: 'FPX', code: 'no_encryption_subkey', detail: 'no subkey' }]
+    expect(await stateFor({ kind: 'unusable', protocolId: 'openpgp', displayName: 'OpenPGP', problems }))
+      .toEqual({ kind: 'rejected', reasons: problems })
   })
 
-  it('cancels a pending probe if the conversation changes before it resolves', async () => {
-    // Slow probe on the first peer. Before it resolves, we switch the
-    // hook to a new peer whose key is already cached. The switched-to
-    // state must stick; the first probe's resolution must NOT bounce
-    // the UI back to unsupported/encrypted for alice.
-    let resolveAliceProbe: (v: { supported: boolean }) => void = () => {}
-    const plugin = makePlugin({
-      getPeerFingerprint: vi.fn().mockImplementation((peer: string) =>
-        peer === 'bob@example.com' ? 'BOBFP' : null,
-      ),
-      probePeer: vi.fn().mockImplementation((peer: string) => {
-        if (peer === 'alice@example.com') {
-          return new Promise((resolve) => {
-            resolveAliceProbe = resolve
-          })
-        }
-        return Promise.resolve({ supported: true })
-      }),
-    })
-    wireMocks({ plugin })
-    const { result, rerender } = renderHook(
-      (peer: string) => useConversationEncryptionState(peer, 'chat'),
-      { initialProps: 'alice@example.com' },
-    )
-    // Probing alice…
-    expect(result.current.kind).toBe('checking')
-
-    // Switch to bob — immediate cache hit.
-    rerender('bob@example.com')
-    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'BOBFP', trust: 'unverified' })
-
-    // Now let the stale alice probe resolve. The hook's cancellation
-    // flag must prevent this from overwriting the bob state.
-    await act(async () => {
-      resolveAliceProbe({ supported: true })
-      await new Promise((r) => setTimeout(r, 0))
-    })
-    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'BOBFP', trust: 'unverified' })
+  it.each<[string, ConversationSecurity]>([
+    ['no protocol is usable', { kind: 'unsupported' }],
+    ['every key waits for a decision', { kind: 'needsDecision', protocolId: 'omemo', displayName: 'OMEMO', waiting: 2 }],
+    ['unusable keys give no reason', { kind: 'unusable', protocolId: 'openpgp', displayName: 'OpenPGP', problems: [] }],
+  ])('maps %s to unsupported', async (_name, security) => {
+    expect(await stateFor(security)).toEqual({ kind: 'unsupported' })
   })
 
-  describe('verification trust derivation', () => {
-    // Use the real verification store rather than re-mocking. The
-    // assertions below depend on the JID + fingerprint pair pinning,
-    // which is the whole point — mocking the store would let a bug
-    // in that pinning logic slip past.
-    const mod = '@/stores/verifiedPeerKeysStore'
-    type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
-    let store: VerifiedStore
-    beforeEach(async () => {
-      localStorage.clear()
-      store = (await import(mod)) as VerifiedStore
-      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-    })
-    afterEach(() => {
-      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-    })
-
-    it("returns trust='verified' when the cached fingerprint is in the store", () => {
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', 'CAFE1234')
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue('CAFE1234'),
-      })
-      wireMocks({ plugin })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toEqual({
-        kind: 'encrypted',
-        fingerprint: 'CAFE1234',
-        trust: 'verified',
-      })
-    })
-
-    it("returns trust='verified' when the verified fingerprint differs only in case from the cached one (cross-backend sync)", () => {
-      // A native (Sequoia) device verified the peer and synced the
-      // fingerprint in UPPERCASE; this web (openpgp.js) device's plugin cache
-      // reports the same key lowercase. The lock must still be green.
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('adrien@example.com', 'AABBCCDDEEFF00112233445566778899AABBCCDD')
-      const plugin = makePlugin({
-        getPeerFingerprint: vi
-          .fn()
-          .mockReturnValue('aabbccddeeff00112233445566778899aabbccdd'),
-      })
-      wireMocks({ plugin })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('adrien@example.com', 'chat'),
-      )
-      expect(result.current).toEqual({
-        kind: 'encrypted',
-        fingerprint: 'aabbccddeeff00112233445566778899aabbccdd',
-        trust: 'verified',
-      })
-    })
-
-    it("auto-demotes to 'unverified' when the cached fingerprint differs from the verified one", () => {
-      // Pin to the OLD fingerprint, but the cache returns a NEW one —
-      // simulates a key rotation that hasn't been re-confirmed. The
-      // chip must drop back to BTBV trust until the user re-verifies.
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', 'OLD_FP_VALUE')
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue('NEW_FP_VALUE'),
-      })
-      wireMocks({ plugin })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toEqual({
-        kind: 'encrypted',
-        fingerprint: 'NEW_FP_VALUE',
-        trust: 'unverified',
-        unverifiedKeyset: true,
-      })
-    })
-
-    it('flips to verified when the user verifies mid-render (store update reflows the hook)', () => {
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue('FP'),
-      })
-      wireMocks({ plugin })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      // Pre-verify state.
-      expect(result.current).toMatchObject({ trust: 'unverified' })
-      // User confirms the fingerprint via the dialog — the hook's
-      // verifiedFingerprint subscription should pick the change up
-      // without needing a remount.
-      act(() => {
-        store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'FP')
-      })
-      expect(result.current).toMatchObject({ trust: 'verified' })
-    })
+  it('maps the user turning encryption off to plaintextForced', async () => {
+    expect(await stateFor({ kind: 'plaintextForced' })).toEqual({ kind: 'plaintextForced' })
   })
 
-  describe('unverified keyset (verified contact with an extra active key)', () => {
-    // The verified store holds one fingerprint per contact while encrypt()
-    // fans out to every active announced key, so a verified fingerprint only
-    // vouches for the conversation when it is the contact's only active key.
-    const mod = '@/stores/verifiedPeerKeysStore'
-    type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
-    let store: VerifiedStore
-    beforeEach(async () => {
-      localStorage.clear()
-      store = (await import(mod)) as VerifiedStore
-      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-    })
-    afterEach(() => {
-      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-    })
-
-    const keysetPlugin = (active: string[]) =>
-      makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue(active[0] ?? null),
-        getPeerFingerprints: vi.fn().mockReturnValue(active),
-      })
-
-    it('is not verified when a verified contact also has an unverified active key', () => {
-      store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'VERIFIED_FP')
-      wireMocks({ plugin: keysetPlugin(['VERIFIED_FP', 'NEW_FP']) })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toEqual({
-        kind: 'encrypted',
-        fingerprint: 'VERIFIED_FP',
-        trust: 'unverified',
-        unverifiedKeyset: true,
-      })
-    })
-
-    it('is not verified when the verified key has been replaced', () => {
-      store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'RETIRED_FP')
-      wireMocks({ plugin: keysetPlugin(['REPLACEMENT_FP']) })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toEqual({
-        kind: 'encrypted',
-        fingerprint: 'REPLACEMENT_FP',
-        trust: 'unverified',
-        unverifiedKeyset: true,
-      })
-    })
-
-    it('flags the keyset whatever the order the keys are announced in', () => {
-      store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'VERIFIED_FP')
-      wireMocks({ plugin: keysetPlugin(['NEW_FP', 'verified_fp']) })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toMatchObject({ trust: 'unverified', unverifiedKeyset: true })
-    })
-
-    it('stays verified when the verified key is the only active key', () => {
-      store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'VERIFIED_FP')
-      wireMocks({ plugin: keysetPlugin(['VERIFIED_FP']) })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toEqual({
-        kind: 'encrypted',
-        fingerprint: 'VERIFIED_FP',
-        trust: 'verified',
-      })
-    })
-
-    it('leaves a never-verified contact with several keys unchanged', () => {
-      wireMocks({ plugin: keysetPlugin(['KEY_A', 'KEY_B']) })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toEqual({
-        kind: 'encrypted',
-        fingerprint: 'KEY_A',
-        trust: 'unverified',
-      })
-    })
-
-    it('flags the keyset once the reconnect probe reports an extra active key', async () => {
-      store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'VERIFIED_FP')
-      const getPeerFingerprints = vi.fn().mockReturnValue([])
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue(null),
-        getPeerFingerprints,
-        probePeer: vi.fn().mockImplementation(async () => {
-          getPeerFingerprints.mockReturnValue(['VERIFIED_FP', 'NEW_FP'])
-          return { supported: true, fingerprint: 'VERIFIED_FP' }
-        }),
-      })
-      wireMocks({ plugin })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toMatchObject({ trust: 'verified' })
-      await waitFor(() =>
-        expect(result.current).toMatchObject({ trust: 'unverified', unverifiedKeyset: true }),
-      )
-    })
-
-    it('updates when a peer keyset refresh adds an unverified key', async () => {
-      const revisions = await import('@/stores/peerKeysetRevisionStore')
-      revisions.usePeerKeysetRevisionStore.setState({ revisionByJid: {} })
-      store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'VERIFIED_FP')
-      const getPeerFingerprints = vi.fn().mockReturnValue(['VERIFIED_FP'])
-      wireMocks({ plugin: makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue('VERIFIED_FP'),
-        getPeerFingerprints,
-      }) })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toMatchObject({ trust: 'verified' })
-
-      act(() => {
-        getPeerFingerprints.mockReturnValue(['VERIFIED_FP', 'NEW_FP'])
-        revisions.notifyPeerKeysetChanged('bob@example.com')
-      })
-
-      await waitFor(() =>
-        expect(result.current).toMatchObject({ trust: 'unverified', unverifiedKeyset: true }),
-      )
-    })
+  it('maps a locked own key to keyLocked and keeps the contact key for the tooltip', async () => {
+    expect(await stateFor({ kind: 'locked', protocolId: 'openpgp', displayName: 'OpenPGP' }))
+      .toEqual({ kind: 'keyLocked', fingerprint: 'FP1' })
   })
 
-  describe('retired key-change alerts (≤0.17.2 residue)', () => {
-    const mod = '@/stores/keyChangeAlertsStore'
-    type KeyChangeStore = typeof import('@/stores/keyChangeAlertsStore')
-    let store: KeyChangeStore
-
-    beforeEach(async () => {
-      localStorage.clear()
-      store = (await import(mod)) as KeyChangeStore
-      store.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-    })
-
-    afterEach(() => {
-      store.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-    })
-
-    it('never reports blocked for a persisted alert — the pin gate is retired', async () => {
-      // An upgrading user can carry a keyChangeAlert written by ≤0.17.2. OpenPGP
-      // no longer raises alerts and `encrypt()` has no pin gate, so a residual
-      // alert must NOT claim the conversation is blocked while sending works.
-      // (The alert store itself is deliberately left intact and sealed for
-      // Stage 2's ordered migration — this only stops the UI acting on it.)
-      store.recordKeyChangeAlert('bob@example.com', 'OLD_FP', 'NEW_FP')
-
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue('NEW_FP'),
-        probePeer: vi.fn().mockResolvedValue({ supported: true }),
-      })
-      wireMocks({ plugin })
-
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-
-      await waitFor(() => {
-        expect(result.current.kind).toBe('encrypted')
-      })
-      expect(result.current.kind).not.toBe('blocked')
-    })
+  it('treats a failed question as unsupported rather than crashing', async () => {
+    expect(await stateFor(async () => { throw new Error('boom') })).toEqual({ kind: 'unsupported' })
   })
 
-  // ---------------------------------------------------------------------------
-  // Reconnect fast-path tests
-  //
-  // After a reconnect the plugin cache is cold (getPeerFingerprint → null).
-  // For a peer the user has already verified the hook must return 'encrypted'
-  // immediately from the persisted fingerprint — no 'checking' flash — and
-  // fire a background probe to warm the plugin cache.
-  // ---------------------------------------------------------------------------
-  // ---------------------------------------------------------------------------
-  // Forced-plaintext override tests
-  //
-  // When the user has explicitly disabled encryption for a conversation, the
-  // hook must return `plaintextForced` regardless of what the plugin cache or
-  // probe reports — including when the peer has a verified fingerprint.
-  // ---------------------------------------------------------------------------
-  describe('forced-plaintext override', () => {
-    const overrideMod = '@/stores/conversationPlaintextOverrideStore'
-    type OverrideStore = typeof import('@/stores/conversationPlaintextOverrideStore')
-    let overrideStore: OverrideStore
-
-    beforeEach(async () => {
-      localStorage.clear()
-      overrideStore = (await import(overrideMod)) as OverrideStore
-      overrideStore.useConversationPlaintextOverrideStore.setState({ plaintextJids: {} })
-    })
-
-    afterEach(() => {
-      overrideStore.useConversationPlaintextOverrideStore.setState({ plaintextJids: {} })
-    })
-
-    it("returns 'plaintextForced' when the override store has the peer JID", () => {
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue(null),
-        probePeer: vi.fn().mockResolvedValue({ supported: false }),
-      })
-      wireMocks({ plugin })
-
-      act(() => {
-        overrideStore.useConversationPlaintextOverrideStore
-          .getState()
-          .setForcedPlaintext('bob@example.com', true)
-      })
-
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toEqual({ kind: 'plaintextForced' })
-    })
-
-    it("returns 'plaintextForced' even when the plugin cache has a fingerprint", () => {
-      // Override takes precedence over the cached key — memo is authoritative.
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue('ABCD1234'),
-      })
-      wireMocks({ plugin })
-
-      act(() => {
-        overrideStore.useConversationPlaintextOverrideStore
-          .getState()
-          .setForcedPlaintext('bob@example.com', true)
-      })
-
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toEqual({ kind: 'plaintextForced' })
-    })
-
-    it('does not trigger a probe when forced plaintext (effect short-circuits)', async () => {
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue(null),
-        probePeer: vi.fn().mockResolvedValue({ supported: true }),
-      })
-      wireMocks({ plugin })
-
-      act(() => {
-        overrideStore.useConversationPlaintextOverrideStore
-          .getState()
-          .setForcedPlaintext('bob@example.com', true)
-      })
-
-      renderHook(() => useConversationEncryptionState('bob@example.com', 'chat'))
-
-      // Flush microtasks to confirm no probe was triggered.
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, 0))
-      })
-
-      expect(plugin.probePeer).not.toHaveBeenCalled()
-    })
-
-    it('returns to normal probe behavior once the override is removed', async () => {
-      const fp = 'CAFE5678'
-      let cacheHit = false
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockImplementation(() => (cacheHit ? fp : null)),
-        probePeer: vi.fn().mockImplementation(async () => {
-          cacheHit = true
-          return { supported: true }
-        }),
-      })
-      wireMocks({ plugin })
-
-      act(() => {
-        overrideStore.useConversationPlaintextOverrideStore
-          .getState()
-          .setForcedPlaintext('bob@example.com', true)
-      })
-
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toEqual({ kind: 'plaintextForced' })
-
-      // User re-enables encryption.
-      act(() => {
-        overrideStore.useConversationPlaintextOverrideStore
-          .getState()
-          .setForcedPlaintext('bob@example.com', false)
-      })
-
-      // Hook transitions back through 'checking' then 'encrypted'.
-      await waitFor(() => {
-        expect(result.current).toEqual({ kind: 'encrypted', fingerprint: fp, trust: 'unverified' })
-      })
-    })
-
-    it("'plaintextForced' applies only to the targeted JID, not to other peers", () => {
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockImplementation((peer: string) =>
-          peer === 'alice@example.com' ? 'ALICE_FP' : null,
-        ),
-      })
-      wireMocks({ plugin })
-
-      act(() => {
-        overrideStore.useConversationPlaintextOverrideStore
-          .getState()
-          .setForcedPlaintext('bob@example.com', true)
-      })
-
-      const { result: aliceResult } = renderHook(() =>
-        useConversationEncryptionState('alice@example.com', 'chat'),
-      )
-      expect(aliceResult.current).toEqual({
-        kind: 'encrypted',
-        fingerprint: 'ALICE_FP',
-        trust: 'unverified',
-      })
-    })
+  it('asks again when the manager reports this peer, or everyone, and ignores another peer', async () => {
+    const { manager, emit } = fakeManager(encrypted())
+    wire({ manager })
+    const { result } = renderHook(() => useConversationEncryptionState(PEER, 'chat'))
+    await waitFor(() => expect(result.current.kind).toBe('encrypted'))
+    const asked = () => manager.getConversationSecurity.mock.calls.length
+    const before = asked()
+    await emit(OTHER)
+    expect(asked()).toBe(before)
+    manager.getConversationSecurity.mockResolvedValueOnce(encrypted({ trust: 'verified', verified: 1 }))
+    await emit(PEER)
+    await waitFor(() => expect(asked()).toBe(before + 1))
+    await waitFor(() => expect(result.current).toMatchObject({ trust: 'verified' }))
+    await emit(null)
+    await waitFor(() => expect(asked()).toBe(before + 2))
   })
 
-  describe('reconnect fast path for verified peers', () => {
-    const mod = '@/stores/verifiedPeerKeysStore'
-    type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
-    let store: VerifiedStore
-
-    beforeEach(async () => {
-      localStorage.clear()
-      store = (await import(mod)) as VerifiedStore
-      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-    })
-
-    afterEach(() => {
-      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-    })
-
-    it("returns 'encrypted' immediately from the stored fingerprint when plugin cache is cold", () => {
-      // Peer has a verified fingerprint persisted from a previous session, but
-      // the plugin cache is empty (simulates cold start or post-reconnect state).
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', 'STORED_FP')
-
-      const plugin = makePlugin({
-        // Cache miss — plugin hasn't seen this peer yet this session.
-        getPeerFingerprint: vi.fn().mockReturnValue(null),
-        // Probe resolves eventually but the hook must NOT wait for it.
-        probePeer: vi.fn().mockResolvedValue({ supported: true }),
-      })
-      wireMocks({ plugin })
-
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-
-      // Must be synchronously 'encrypted' — no 'checking' flash.
-      expect(result.current).toEqual({
-        kind: 'encrypted',
-        fingerprint: 'STORED_FP',
-        trust: 'verified',
-      })
-    })
-
-    it('fires a background probe to warm the plugin cache even when fast-path applies', async () => {
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', 'STORED_FP')
-
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue(null),
-        probePeer: vi.fn().mockResolvedValue({ supported: true }),
-      })
-      wireMocks({ plugin })
-
-      renderHook(() => useConversationEncryptionState('bob@example.com', 'chat'))
-
-      // Flush the background microtask queue.
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, 0))
-      })
-
-      expect(plugin.probePeer).toHaveBeenCalledWith('bob@example.com')
-    })
-
-    it('keeps showing encrypted when the background probe fails (transient error)', async () => {
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', 'STORED_FP')
-
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue(null),
-        // Network hiccup — probe throws.
-        probePeer: vi.fn().mockRejectedValue(new Error('timeout')),
-      })
-      wireMocks({ plugin })
-
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-
-      // Flush the rejected promise.
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, 0))
-      })
-
-      // Must NOT fall to 'unsupported' — the stored fingerprint is authoritative.
-      expect(result.current).toEqual({
-        kind: 'encrypted',
-        fingerprint: 'STORED_FP',
-        trust: 'verified',
-      })
-    })
-
-    it("becomes 'unsupported' when the background probe finds no active key", async () => {
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', 'STORED_FP')
-
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue(null),
-        getPeerFingerprints: vi.fn().mockReturnValue([]),
-        probePeer: vi.fn().mockResolvedValue({ supported: false }),
-      })
-      wireMocks({ plugin })
-
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-
-      expect(result.current).toMatchObject({ kind: 'encrypted', trust: 'verified' })
-      await waitFor(() => {
-        expect(result.current).toEqual({ kind: 'unsupported' })
-      })
-    })
-
-    it("goes through 'checking' normally for an unverified peer with cold cache", async () => {
-      // No verified fingerprint stored → should behave as before: 'checking'
-      // then 'encrypted' after the probe resolves.
-      const fp = 'FRESH_FP'
-      let cacheHit = false
-      const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockImplementation(() => (cacheHit ? fp : null)),
-        probePeer: vi.fn().mockImplementation(async () => {
-          cacheHit = true
-          return { supported: true }
-        }),
-      })
-      wireMocks({ plugin })
-
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-
-      // No stored fingerprint → should show 'checking' while probe runs.
-      expect(result.current.kind).toBe('checking')
-
-      await waitFor(() => {
-        expect(result.current).toEqual({
-          kind: 'encrypted',
-          fingerprint: fp,
-          trust: 'unverified',
-        })
-      })
-    })
+  it('shows checking, not the previous contact, after switching conversation', async () => {
+    const { manager } = fakeManager(encrypted())
+    wire({ manager })
+    const { result, rerender } = renderHook(({ jid }) => useConversationEncryptionState(jid, 'chat'), { initialProps: { jid: PEER } })
+    await waitFor(() => expect(result.current.kind).toBe('encrypted'))
+    manager.getConversationSecurity.mockImplementationOnce(() => new Promise(() => {}))
+    rerender({ jid: OTHER })
+    expect(result.current).toEqual({ kind: 'checking' })
   })
 
-  describe('web key-locked promotion', () => {
-    it("promotes 'encrypted' to 'keyLocked' when the web private key is locked", () => {
-      mockedUseWebKeyLocked.mockReturnValue(true)
-      const fp = 'LOCKED_FP'
-      wireMocks({
-        plugin: makePlugin({
-          getPeerFingerprint: vi.fn().mockReturnValue(fp),
-        }),
-      })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toEqual({ kind: 'keyLocked', fingerprint: fp })
-    })
-
-    it("returns 'encrypted' when the key becomes unlocked", () => {
-      mockedUseWebKeyLocked.mockReturnValue(false)
-      const fp = 'UNLOCKED_FP'
-      wireMocks({
-        plugin: makePlugin({
-          getPeerFingerprint: vi.fn().mockReturnValue(fp),
-        }),
-      })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      expect(result.current).toMatchObject({ kind: 'encrypted', fingerprint: fp })
-    })
-
-    it("does not affect 'unsupported' peers when locked", () => {
-      mockedUseWebKeyLocked.mockReturnValue(true)
-      wireMocks({
-        plugin: makePlugin({
-          probePeer: vi.fn().mockResolvedValue({ supported: false }),
-        }),
-      })
-      const { result } = renderHook(() =>
-        useConversationEncryptionState('bob@example.com', 'chat'),
-      )
-      // Lock state must not bubble up for peers we wouldn't encrypt to
-      // anyway — would be confusing UX.
-      return waitFor(() => {
-        expect(result.current).toEqual({ kind: 'unsupported' })
-      })
-    })
+  it('drops an answer that arrives after the conversation changed', async () => {
+    let release: (s: ConversationSecurity) => void = () => {}
+    const { manager } = fakeManager(() => new Promise<ConversationSecurity>((r) => { release = r }))
+    wire({ manager })
+    const { result, rerender } = renderHook(({ jid }) => useConversationEncryptionState(jid, 'chat'), { initialProps: { jid: PEER } })
+    manager.getConversationSecurity.mockImplementationOnce(() => new Promise(() => {}))
+    rerender({ jid: OTHER })
+    await act(async () => { release(encrypted()) })
+    expect(result.current).toEqual({ kind: 'checking' })
   })
 })

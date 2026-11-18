@@ -1614,7 +1614,7 @@ describe('MessageComposer', () => {
         <MessageComposer
           placeholder="Type a message"
           onSend={vi.fn().mockResolvedValue(true)}
-          encryptionState={{ kind: 'encrypted', fingerprint: 'abc', trust: 'verified' }}
+          encryptionState={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'abc', trust: 'verified' }}
         />
       )
       const textarea = screen.getByPlaceholderText('Type a message')
@@ -1681,7 +1681,7 @@ describe('MessageComposer', () => {
     // routine encrypted-but-unverified peer, teal only once verified — matching the
     // per-message bubble shield so the two are never inconsistent.
     it('shows a calm gray shield when encrypted but unverified', () => {
-      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'unverified' }} />)
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'a', trust: 'tofu', canVerify: true }} />)
       const icon = container.querySelector('[data-encryption-lock] .lucide-shield')!
       expect(icon).not.toBeNull()
       expect(icon.classList.contains('text-fluux-muted')).toBe(true)
@@ -1689,21 +1689,21 @@ describe('MessageComposer', () => {
     })
 
     it('shows a calm gray shield when trust is tofu-new', () => {
-      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'tofu-new' }} />)
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'a', trust: 'tofu', isNew: true }} />)
       const icon = container.querySelector('[data-encryption-lock] .lucide-shield')!
       expect(icon).not.toBeNull()
       expect(icon.classList.contains('text-fluux-muted')).toBe(true)
     })
 
     it('shows a teal shield-check when verified', () => {
-      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'verified' }} />)
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'a', trust: 'verified' }} />)
       const icon = container.querySelector('[data-encryption-lock] .lucide-shield-check')!
       expect(icon).not.toBeNull()
       expect(icon.classList.contains('text-fluux-encryption')).toBe(true)
     })
 
     it('labels the calm shield with the unverified-keyset explanation', () => {
-      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'unverified', unverifiedKeyset: true }} />)
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'a', trust: 'tofu', partlyVerified: true }} />)
       const lock = container.querySelector('[data-encryption-lock]')!
       expect(lock.querySelector('.lucide-shield')!.classList.contains('text-fluux-muted')).toBe(true)
       expect(lock.getAttribute('aria-label')).toBe('This contact has a new key that has not been verified.')
@@ -1716,7 +1716,7 @@ describe('MessageComposer', () => {
 
     it('calls onEncryptionClick when the lock is activated', () => {
       const onEncryptionClick = vi.fn()
-      const { container } = render(<MessageComposer {...base} onEncryptionClick={onEncryptionClick} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'unverified' }} />)
+      const { container } = render(<MessageComposer {...base} onEncryptionClick={onEncryptionClick} encryptionState={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'a', trust: 'tofu', canVerify: true }} />)
       fireEvent.click(container.querySelector('[data-encryption-lock]')!)
       expect(onEncryptionClick).toHaveBeenCalledTimes(1)
     })

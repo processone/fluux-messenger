@@ -8,7 +8,7 @@ describe('ContactSecurityDetail', () => {
   it('renders the security details header and the fingerprint from SecurityTab', () => {
     render(
       <ContactSecurityDetail
-        state={{ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'verified' }}
+        state={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'verified' }}
         onVerify={noop} onRequestRevoke={noop} onDisableEncryption={noop}
         onEnableEncryption={noop} onClose={noop}
       />,
@@ -20,7 +20,7 @@ describe('ContactSecurityDetail', () => {
   it('explains an unverified keyset and does not present the contact as verified', () => {
     render(
       <ContactSecurityDetail
-        state={{ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'unverified', unverifiedKeyset: true }}
+        state={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'tofu', partlyVerified: true }}
         onVerify={noop} onRequestRevoke={noop} onDisableEncryption={noop}
         onEnableEncryption={noop} onClose={noop}
       />,
@@ -32,7 +32,7 @@ describe('ContactSecurityDetail', () => {
   it('shows no keyset explanation for a single-key contact', () => {
     render(
       <ContactSecurityDetail
-        state={{ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'unverified' }}
+        state={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'tofu', canVerify: true }}
         onVerify={noop} onRequestRevoke={noop} onDisableEncryption={noop}
         onEnableEncryption={noop} onClose={noop}
       />,

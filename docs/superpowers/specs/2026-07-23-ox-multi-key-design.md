@@ -116,11 +116,15 @@ The "no usable encryption subkey" case is a **new** definitive-rejection reason 
 
 ### Trust derivation
 
-**Current Stage 1 conversation contract.** A conversation is `verified` only when every active
-validated fingerprint equals the stored verified fingerprint. If the contact has a stored
-verified fingerprint and any active key does not match it, the conversation is `unverified` with
-`unverifiedKeyset: true`; sending still encrypts to every active valid key. The signal is derived
-and session-only. The set-based derivation described below is a Stage 2 design for #1452, not
+**Current Stage 1 conversation contract.** The SDK derives the conversation state from the
+plugin's identity list (`E2EEManager.getConversationSecurity`); the app holds no OpenPGP
+derivation and re-asks on the manager's conversation-security change event. A conversation is
+`verified` only when every key that receives messages is verified. If the contact has a saved
+verified fingerprint and a key that receives messages does not match it (an extra key, or the
+verified key replaced), the trust is `tofu` with `partlyVerified`; sending still encrypts to every
+active valid key. A contact met recently and not verified carries `isNew` instead. Verify and
+Remove verification are offered only for a contact with exactly one key, because the store holds
+one fingerprint per contact. The set-based derivation described below is a Stage 2 design for #1452, not
 current behaviour.
 
 Two pure derivations, unit-tested in isolation. They answer different questions — per-message
@@ -193,13 +197,14 @@ confirmed fingerprint **array**.
 | peer key cache (`peerKeys`) | `Map<JID, CachedPeerCert[]>`, deduped by fingerprint and partitioned active/inactive |
 | `verifiedPeerKeysStore` | Unchanged `Record<JID, string>` |
 | `keyChangeAlertsStore` / `pinnedPrimaryFingerprintsStore` | Preserved for the later ordered migration; OX no longer uses them as a send gate |
-| `peerKeysetRevisionStore` | Session-only per-JID revision used to rerun the conversation derivation; it is not persisted |
+| `peerKeysetRevisionStore` | Session-only per-JID revision the plugin bumps when the active set changes; the manager turns it into its conversation-security event; it is not persisted |
 
 ### Reactive active-keyset surface (Stage 1)
 
 `getPeerFingerprints(jid)` exposes the active validated fingerprints. Whenever a peer cache
 refresh changes that set, the plugin increments the session-only per-JID revision; the
-conversation hook subscribes to that primitive revision and recalculates its derived status.
+manager emits its conversation-security event for that peer, and the conversation hook re-asks
+the manager for the derived status.
 The announced-set and structured-health interfaces described in the original design are deferred
 to #1452.
 

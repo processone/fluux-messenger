@@ -33,7 +33,7 @@ describe('MessageComposer responsive layout', () => {
       <MessageComposer
         placeholder="Type a message"
         onSend={onSend}
-        encryptionState={{ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'unverified' }}
+        encryptionState={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'tofu', canVerify: true }}
       />
     )
 
@@ -61,7 +61,7 @@ describe('MessageComposer responsive layout', () => {
       <MessageComposer
         placeholder="Type a message"
         onSend={onSend}
-        encryptionState={{ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'unverified' }}
+        encryptionState={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'ABCD1234', trust: 'tofu', canVerify: true }}
       />
     )
 

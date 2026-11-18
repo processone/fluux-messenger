@@ -89,6 +89,8 @@ export interface OpenPGPHostStores {
     set(jid: string, fingerprint: string): void
     getAll(): Readonly<Record<string, string>>
     subscribe(listener: HostMapListener<string>): HostStoreUnsubscribe
+    /** Optional: true while the pin is recent enough for the UI to nudge about a new contact. */
+    isNew?(jid: string): boolean
   }
   trustStateStatus: {
     set(status: TrustStateStatus, details?: string[]): void

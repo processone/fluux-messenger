@@ -21,6 +21,12 @@ describe('trustVisual', () => {
   it('maps rejected to the error token', () => {
     expect(trustVisual('rejected')).toEqual({ colorClass: 'text-fluux-error', tone: 'danger' })
   })
+  it('maps every identity trust state: verified teal, an untrusted key red, the rest calm gray', () => {
+    expect(trustVisual('untrusted')).toEqual({ colorClass: 'text-fluux-error', tone: 'danger' })
+    for (const state of ['tofu', 'introduced', 'unknown'] as const) {
+      expect(trustVisual(state)).toEqual({ colorClass: 'text-fluux-muted', tone: 'calm' })
+    }
+  })
   it('maps plaintext and checking to calm gray', () => {
     expect(trustVisual('plaintext')).toEqual({ colorClass: 'text-fluux-muted', tone: 'calm' })
     expect(trustVisual('checking')).toEqual({ colorClass: 'text-fluux-muted', tone: 'calm' })

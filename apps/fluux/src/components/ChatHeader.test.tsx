@@ -228,8 +228,8 @@ describe('ChatHeader', () => {
   })
 
   describe('Encryption menu', () => {
-    const encrypted = (trust: 'verified' | 'unverified' | 'tofu-new') =>
-      ({ kind: 'encrypted', fingerprint: 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555', trust }) as const
+    const encrypted = (trust: 'verified' | 'tofu') =>
+      ({ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555', trust }) as const
 
     it('labels the verify item "Verify ... key" when the key is not yet verified', () => {
       const contact = setupContact()
@@ -239,7 +239,7 @@ describe('ChatHeader', () => {
           type="chat"
           contact={contact}
           jid={contact.jid}
-          encryptionState={encrypted('unverified')}
+          encryptionState={encrypted('tofu')}
           onEncryptionClick={vi.fn()}
           onDisableEncryptionClick={vi.fn()}
         />
@@ -314,7 +314,7 @@ describe('ChatHeader', () => {
           type="chat"
           contact={contact}
           jid={contact.jid}
-          encryptionState={{ kind: 'encrypted', fingerprint: 'AAAA1111', trust: 'unverified', unverifiedKeyset: true }}
+          encryptionState={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'AAAA1111', trust: 'tofu', partlyVerified: true }}
           onEncryptionClick={vi.fn()}
           onDisableEncryptionClick={vi.fn()}
         />
@@ -333,7 +333,7 @@ describe('ChatHeader', () => {
           type="chat"
           contact={contact}
           jid={contact.jid}
-          encryptionState={{ kind: 'encrypted', fingerprint: 'AAAA1111', trust: 'unverified' }}
+          encryptionState={{ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'AAAA1111', trust: 'tofu', canVerify: true }}
           onEncryptionClick={vi.fn()}
           onDisableEncryptionClick={vi.fn()}
         />

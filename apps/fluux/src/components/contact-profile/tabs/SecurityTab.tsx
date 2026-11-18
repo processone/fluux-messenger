@@ -114,7 +114,7 @@ export function SecurityTab({
                   ? t('contacts.encryption.verified')
                   : t('contacts.encryption.tofu')
               }
-              description={state.unverifiedKeyset ? t('chat.encryption.unverifiedKeysetTooltip') : undefined}
+              description={state.partlyVerified ? t('chat.encryption.unverifiedKeysetTooltip') : undefined}
               tone={state.trust === 'verified' ? 'success' : 'neutral'}
             />
 
@@ -124,12 +124,12 @@ export function SecurityTab({
               </label>
               <div className="rounded-lg bg-fluux-bg/40 px-3 py-2">
                 <code className="block text-xs font-mono text-fluux-text break-all leading-relaxed">
-                  {formatFingerprint(state.fingerprint)}
+                  {state.fingerprint ? formatFingerprint(state.fingerprint) : ''}
                 </code>
               </div>
             </div>
 
-            {state.trust === 'unverified' && (
+            {state.trust !== 'verified' && !state.isNew && state.canVerify && (
               <button
                 type="button"
                 onClick={onVerify}
@@ -140,7 +140,7 @@ export function SecurityTab({
               </button>
             )}
 
-            {state.trust === 'verified' && (
+            {state.trust === 'verified' && state.canClearVerification && (
               <button
                 type="button"
                 onClick={onRequestRevoke}
