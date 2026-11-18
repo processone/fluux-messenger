@@ -131,7 +131,8 @@ async function describeStall(
 export async function bootDemo(page: Page, url: string): Promise<void> {
   // Every suite boots through here, so this is where a page starts being watched for the
   // macOS WebKit termination that would otherwise leave it hanging until the test limit.
-  watchForWebKitTermination(page)
+  // Awaited before navigating, so a termination during the boot is seen too.
+  await watchForWebKitTermination(page)
   const diagnostics = attachDiagnostics(page)
   const deadline = Date.now() + MOUNT_BUDGET_MS
 
@@ -151,7 +152,7 @@ export async function bootDemo(page: Page, url: string): Promise<void> {
  * after the reload is a slow boot, not a regression (FLM-304's keychain retry journey).
  */
 export async function reloadDemo(page: Page): Promise<void> {
-  watchForWebKitTermination(page)
+  await watchForWebKitTermination(page)
   const diagnostics = attachDiagnostics(page)
   const deadline = Date.now() + MOUNT_BUDGET_MS
   await page.reload({ waitUntil: 'domcontentloaded', timeout: remainingUntil(deadline) })

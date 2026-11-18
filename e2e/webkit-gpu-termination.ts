@@ -4,12 +4,13 @@
  * hanging until the test limit. The watch lives in e2e/harness/webkitTermination.ts and starts
  * in bootDemo, which every suite boots through.
  *
- * The test ends the GPU helper three times within 30 s. WebKit counts these exits exactly as it
- * counts the helpers it kills for missing their deadline, and terminates the page itself. The
- * test ends only the helper of a browser it launched for itself.
+ * The tests end the GPU helper three times within 30 s. WebKit counts these exits exactly as it
+ * counts the helpers it kills for missing their deadline, and terminates the page itself. They
+ * end only the helper of a browser they launched for themselves: once after the demo booted,
+ * and once while the boot is still loading, which is when a helper misses its launch deadline.
  */
 import { execFileSync } from 'node:child_process'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Browser, type PlaywrightWorkerArgs } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
 import { GPU_TERMINATION_REASON, TERMINATION_ANNOTATION } from './harness/webkitTermination'
 
@@ -51,9 +52,25 @@ async function endGpuHelper(owner: string, ended: Set<number>): Promise<void> {
   }
 }
 
+/** A WebKit browser of the test's own, whose helpers carry `owner` in their environment. */
+async function launchOwnWebKit(playwright: PlaywrightWorkerArgs['playwright'], owner: string): Promise<Browser> {
+  return playwright.webkit.launch({ env: { ...process.env, [`__XPC_${OWNER_VARIABLE}`]: owner } })
+}
+
+async function endGpuHelperThreeTimes(owner: string): Promise<number> {
+  const ended = new Set<number>()
+  for (let exit = 1; exit <= 3; exit++) await endGpuHelper(owner, ended)
+  return Date.now()
+}
+
+function expectTerminationRecorded(): void {
+  const annotation = test.info().annotations.find(entry => entry.type === TERMINATION_ANNOTATION)
+  expect(annotation?.description, 'the test records the reason for later calls').toContain(GPU_TERMINATION_REASON)
+}
+
 test('a page WebKit terminates after three GPU helper exits fails at once with the reason', async ({ playwright, baseURL }) => {
   const owner = `${process.pid}-${Date.now()}`
-  const browser = await playwright.webkit.launch({ env: { ...process.env, [`__XPC_${OWNER_VARIABLE}`]: owner } })
+  const browser = await launchOwnWebKit(playwright, owner)
   try {
     const context = await browser.newContext()
     const page = await context.newPage()
@@ -64,17 +81,52 @@ test('a page WebKit terminates after three GPU helper exits fails at once with t
       .waitForFunction(() => false, undefined, { timeout: PENDING_CALL_LIMIT_MS })
       .then(() => null, (error: Error) => error)
 
-    const ended = new Set<number>()
-    for (let exit = 1; exit <= 3; exit++) await endGpuHelper(owner, ended)
-    const thirdExitAt = Date.now()
-
+    const thirdExitAt = await endGpuHelperThreeTimes(owner)
     const error = await pendingCall
     const waitedMs = Date.now() - thirdExitAt
     expect(error?.message, 'the pending call names WebKit\'s reason').toContain(GPU_TERMINATION_REASON)
     expect(waitedMs, 'the pending call failed soon after the third exit').toBeLessThan(FAST_FAILURE_MS)
     await expect(page.evaluate(() => 1), 'a later call fails at once').rejects.toThrow()
-    const annotation = test.info().annotations.find(entry => entry.type === TERMINATION_ANNOTATION)
-    expect(annotation?.description, 'the test records the reason for later calls').toContain(GPU_TERMINATION_REASON)
+    expectTerminationRecorded()
+  } finally {
+    await browser.close()
+  }
+})
+
+test('a page WebKit terminates while the demo boots fails the boot at once with the reason', async ({ playwright, baseURL }) => {
+  const owner = `${process.pid}-${Date.now()}`
+  const browser = await launchOwnWebKit(playwright, owner)
+  try {
+    const context = await browser.newContext()
+    // Keeps drawing from the first moment of each document, as a loading page does, so WebKit
+    // starts a new GPU helper after each exit.
+    await context.addInitScript(() => {
+      const canvas = document.createElement('canvas')
+      let frame = 0
+      setInterval(() => {
+        if (!canvas.isConnected) document.documentElement?.appendChild(canvas)
+        const drawing = canvas.getContext('2d')
+        if (!drawing) return
+        drawing.fillStyle = `hsl(${frame++ % 360} 50% 50%)`
+        drawing.fillRect(0, 0, canvas.width, canvas.height)
+      }, 16)
+    })
+    const page = await context.newPage()
+    // Holds the demo's entry module, so the boot stays in its navigation until the termination.
+    let releaseEntry: () => void = () => {}
+    const entryHeld = new Promise<void>(resolve => {
+      releaseEntry = resolve
+    })
+    await page.route('**/assets/demo-*.js', route => entryHeld.then(() => route.continue()).catch(() => {}))
+
+    const boot = bootDemo(page, new URL('/demo.html?tutorial=false', baseURL).href).then(() => null, (error: Error) => error)
+    const thirdExitAt = await endGpuHelperThreeTimes(owner)
+    const error = await boot
+    const waitedMs = Date.now() - thirdExitAt
+    releaseEntry()
+    expect(error?.message, 'the boot names WebKit\'s reason').toContain(GPU_TERMINATION_REASON)
+    expect(waitedMs, 'the boot failed soon after the third exit').toBeLessThan(FAST_FAILURE_MS)
+    expectTerminationRecorded()
   } finally {
     await browser.close()
   }

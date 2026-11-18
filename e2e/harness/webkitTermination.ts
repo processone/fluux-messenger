@@ -14,7 +14,8 @@
  *
  * The browser does log the termination, to the macOS unified log. While a worker has WebKit
  * pages, this module reads those log lines and, when this worker's own browser terminates its
- * pages, closes them with the reason. Playwright then rejects the pending call with that
+ * pages, closes them with the reason. A page is watched from before it navigates: the watch
+ * returns only once the reader receives lines. Playwright then rejects the pending call with that
  * reason as its message. A later call fails at once with Playwright's plain "has been closed",
  * so the reason is also written to the test's output and added to its annotations.
  *
@@ -26,7 +27,7 @@
  * "WebKit GPU helper terminations" in docs/DEVELOPER.md for what was measured about why the
  * helper misses its deadline.
  */
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
 import { test, type Page } from '@playwright/test'
 
 /** The reason WebKit gives the terminated pages, as it writes it to the log. */
@@ -36,22 +37,39 @@ export const GPU_TERMINATION_REASON = 'GPUProcessCrashedTooManyTimes'
 export const TERMINATION_ANNOTATION = 'webkit-page-terminated'
 
 /**
+ * A line this worker writes to the log itself until its reader receives it: `log stream` only
+ * delivers lines logged after it has subscribed, and says nothing when it has.
+ */
+const READY_TOKEN = `fluux-e2e-webkit-watch-ready-${process.pid}`
+const READY_PROBE_MS = 100
+/** Normally ready in a few probes; past this the log is taken to be unreadable here. */
+const READY_LIMIT_MS = 10_000
+
+/**
  * Lines the browser's UI process writes: each GPU helper exit with its reason, and the
  * termination itself. Rare enough that every worker can read the same stream and keep only
- * its own browsers' lines.
+ * its own browsers' lines. Plus this worker's readiness line.
  */
 const LOG_PREDICATE = [
-  'process == "Playwright"',
+  '(process == "Playwright"',
   'subsystem == "com.apple.WebKit"',
-  `(eventMessage CONTAINS "GPUProcessProxy::gpuProcessExited" OR eventMessage CONTAINS "${GPU_TERMINATION_REASON}")`,
-].join(' AND ')
+  `(eventMessage CONTAINS "GPUProcessProxy::gpuProcessExited" OR eventMessage CONTAINS "${GPU_TERMINATION_REASON}"))`,
+].join(' AND ') + ` OR (process == "logger" AND eventMessage CONTAINS "${READY_TOKEN}")`
 
 /**
  * Run the log reader under a shell that waits for its standard input to close, then stops it.
  * The worker holds the other end of that pipe, so the reader ends with the worker, even when
- * the worker is killed and runs no cleanup of its own.
+ * the worker is killed and runs no cleanup of its own. The shell hands its output pipe to
+ * `log` alone, so the pipe closes when `log` exits, whatever the reason, and the worker sees it.
  */
-const READER_SCRIPT = '/usr/bin/log stream --style ndjson --predicate "$1" & reader=$!; read -r _; kill "$reader" 2>/dev/null'
+const READER_SCRIPT = [
+  'exec 3>&1 >/dev/null',
+  '/usr/bin/log stream --style ndjson --predicate "$1" >&3 3>&- &',
+  'reader=$!',
+  'exec 3>&-',
+  'read -r _',
+  'kill "$reader" 2>/dev/null',
+].join('\n')
 
 const GPU_EXIT = /GPUProcessProxy::gpuProcessExited: reason=(\w+)/
 
@@ -64,23 +82,41 @@ interface LogEntry {
   eventMessage?: string
 }
 
+interface Reader {
+  /** Settles true once the reader has received this worker's readiness line, false if it ends first. */
+  ready: Promise<boolean>
+  markReady: () => void
+}
+
 const watchedPages = new Set<Page>()
 const terminations = new WeakMap<Page, string>()
 const helperExits = new Map<number, string[]>()
-let reader: ChildProcess | null = null
-let partialLine = ''
+let reader: Reader | null = null
+/** Set once a reader failed to become ready: later pages do not wait for the log again. */
+let logUnreadable = false
 
 /**
  * Close `page` with WebKit's reason if this worker's WebKit browser terminates it after its
- * GPU helper exited too often. No-op outside macOS WebKit; safe to call more than once.
+ * GPU helper exited too often. Resolves once the log reader receives lines, so call it before
+ * the page navigates. No-op outside macOS WebKit; safe to call more than once.
  */
-export function watchForWebKitTermination(page: Page): void {
+export async function watchForWebKitTermination(page: Page): Promise<void> {
   if (process.platform !== 'darwin') return
   if (page.context().browser()?.browserType().name() !== 'webkit') return
-  if (watchedPages.has(page) || page.isClosed()) return
-  startReader()
-  watchedPages.add(page)
-  page.once('close', () => watchedPages.delete(page))
+  // Before the already-watched check: a reload of a watched page restarts a reader that ended.
+  const ready = startReader()
+  if (!watchedPages.has(page) && !page.isClosed()) {
+    watchedPages.add(page)
+    page.once('close', () => watchedPages.delete(page))
+  }
+  if (await ready) return
+  if (!logUnreadable) {
+    logUnreadable = true
+    console.warn(
+      'The macOS log could not be read, so a page WebKit terminates after its GPU helper exits ' +
+        'will hang until the test limit instead of failing with the reason.',
+    )
+  }
 }
 
 /** The message `page` was closed with, if this module closed it. */
@@ -88,34 +124,63 @@ export function webkitTerminationOf(page: Page): string | undefined {
   return terminations.get(page)
 }
 
-function startReader(): void {
-  if (reader) return
+/**
+ * The running reader's readiness, starting a reader if none runs. A reader that ends, because
+ * `log` exited or never became ready, is forgotten, and the next page starts another, unless
+ * the log has proved unreadable here. Either way the suites run on, without the fast failure.
+ */
+function startReader(): Promise<boolean> {
+  if (logUnreadable) return Promise.resolve(false)
+  if (reader) return reader.ready
+
   const child = spawn('/bin/sh', ['-c', READER_SCRIPT, 'webkit-termination-reader', LOG_PREDICATE], {
     stdio: ['pipe', 'pipe', 'ignore'],
   })
-  reader = child
-  // A failed start leaves the suites as they were: they still run, without the fast failure.
-  child.on('error', () => {
-    if (reader === child) reader = null
-  })
-  child.on('exit', () => {
-    if (reader === child) reader = null
-  })
+  let settle: (ready: boolean) => void = () => {}
+  const current: Reader = {
+    ready: new Promise<boolean>(resolve => {
+      settle = resolve
+    }),
+    markReady: () => {
+      clearInterval(probe)
+      settle(true)
+    },
+  }
+  reader = current
+
+  const end = () => {
+    clearInterval(probe)
+    settle(false)
+    if (reader === current) reader = null
+    child.stdin?.end()
+  }
+  child.on('error', end)
+  child.stdout?.on('close', end)
+
+  const deadline = Date.now() + READY_LIMIT_MS
+  const probe = setInterval(() => {
+    if (Date.now() > deadline) end()
+    else execFile('/usr/bin/logger', [READY_TOKEN], () => {})
+  }, READY_PROBE_MS)
+
+  let partialLine = ''
   child.stdout?.setEncoding('utf8')
   child.stdout?.on('data', (chunk: string) => {
     partialLine += chunk
     const lines = partialLine.split('\n')
     partialLine = lines.pop() ?? ''
-    for (const line of lines) handleLine(line)
+    for (const line of lines) handleLine(line, current)
   })
   // The reader must not hold the worker open: the pipe closing at exit is what stops it.
+  probe.unref()
   child.unref()
   for (const stream of [child.stdin, child.stdout]) {
     ;(stream as unknown as { unref?: () => void } | null)?.unref?.()
   }
+  return current.ready
 }
 
-function handleLine(line: string): void {
+function handleLine(line: string, from: Reader): void {
   let entry: LogEntry
   try {
     entry = JSON.parse(line) as LogEntry
@@ -124,6 +189,10 @@ function handleLine(line: string): void {
   }
   const pid = entry.processID
   const message = entry.eventMessage ?? ''
+  if (message.includes(READY_TOKEN)) {
+    from.markReady()
+    return
+  }
   if (typeof pid !== 'number' || !isOwnDescendant(pid)) return
 
   const exit = GPU_EXIT.exec(message)

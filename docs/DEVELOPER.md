@@ -211,13 +211,17 @@ does not reload them. Playwright reports no crash for this, so a test would wait
 that no longer exists until its 180-second limit.
 
 `e2e/harness/webkitTermination.ts` turns that wait into an immediate failure. `bootDemo`
-starts the watch for each WebKit page on macOS: it reads the browser's own lines from the
-macOS unified log, and when the worker's browser terminates its pages for this reason it
-closes them with a message that names the reason and lists the helper exits the browser
-logged. The pending Playwright call fails with that message, which is also printed in the
-test's output and kept as the test's `webkit-page-terminated` annotation. Linux, where CI
-runs, does not start the watch. The `gpu-termination-webkit` project ends its own browser's
-GPU helper three times and checks that the failure arrives within seconds:
+and `reloadDemo` start the watch for each WebKit page on macOS before it navigates: one
+reader per test worker follows the browser's own lines in the macOS unified log, and the
+boot waits until that reader receives lines. When the worker's browser terminates its pages
+for this reason, the watch closes them with a message that names the reason and lists the
+helper exits the browser logged. The pending Playwright call fails with that message, which
+is also printed in the test's output and kept as the test's `webkit-page-terminated`
+annotation. A reader whose log process ends is replaced at the next boot or reload; if the
+log cannot be read at all, the run prints one warning and continues without the fast
+failure. Linux, where CI runs, does not start the watch. The `gpu-termination-webkit` project
+ends its own browser's GPU helper three times, once after the demo booted and once during the
+boot, and checks that the failure arrives within seconds:
 
 ```bash
 npm run test:e2e -- --project=gpu-termination-webkit
