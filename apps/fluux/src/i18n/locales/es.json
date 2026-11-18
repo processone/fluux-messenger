@@ -906,6 +906,30 @@
         },
         "encryption": {
             "experimental": "Experimental",
+            "omemoDevices": {
+                "title": "Dispositivos OMEMO",
+                "description": "Dispositivos que otras aplicaciones han registrado en tu cuenta para OMEMO. Fluux aún no usa OMEMO; esta lista solo sirve para revisarlos y quitarlos.",
+                "offline": "Conéctate para ver tus dispositivos OMEMO.",
+                "loading": "Cargando dispositivos…",
+                "loadFailed": "No se pudieron leer tus dispositivos OMEMO.",
+                "retry": "Reintentar",
+                "listUnreadable": "No se pudo leer esta lista.",
+                "empty": "Sin dispositivos.",
+                "unnamed": "Dispositivo sin nombre",
+                "deviceId": "ID del dispositivo {{id}}",
+                "noFingerprint": "Clave no disponible",
+                "remove": "Quitar",
+                "removeDevice": "Quitar {{name}}",
+                "removeTitle": "¿Quitar este dispositivo?",
+                "removeMessage": "{{name}} se quitará de la lista de dispositivos OMEMO de tu cuenta y tus contactos dejarán de cifrarle mensajes. Puede volver a añadirse la próxima vez que se conecte.",
+                "removeAction": "Quitar dispositivo",
+                "removed": "Dispositivo quitado.",
+                "removeFailed": "No se pudo quitar el dispositivo.",
+                "protocol": {
+                    "omemo2": "OMEMO 2",
+                    "legacy": "OMEMO antiguo"
+                }
+            },
             "openpgpLabel": "Cifrado de extremo a extremo OpenPGP",
             "openpgpDescription": "Publica una clave pública en tu servidor y cifra los mensajes 1:1 con los contactos que también tengan una.",
             "statusLabel": "Estado",

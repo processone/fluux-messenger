@@ -20,6 +20,8 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
       '@fluux/sdk': resolve(__dirname, '../../packages/fluux-sdk/src'),
+      '@fluux/omemo-plugin/devices': resolve(__dirname, '../../packages/omemo-plugin/src/devices.ts'),
+      '@fluux/omemo': resolve(__dirname, '../../packages/omemo/src'),
       '@fluux/openpgp-plugin': resolve(__dirname, '../../packages/openpgp-plugin/src'),
     },
   },

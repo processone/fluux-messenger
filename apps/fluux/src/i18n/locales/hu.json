@@ -902,6 +902,30 @@
         },
         "encryption": {
             "experimental": "Kísérleti",
+            "omemoDevices": {
+                "title": "OMEMO devices",
+                "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
+                "offline": "Connect to see your OMEMO devices.",
+                "loading": "Loading devices…",
+                "loadFailed": "Couldn't read your OMEMO devices.",
+                "retry": "Try again",
+                "listUnreadable": "This list couldn't be read.",
+                "empty": "No devices.",
+                "unnamed": "Unnamed device",
+                "deviceId": "Device ID {{id}}",
+                "noFingerprint": "Key unavailable",
+                "remove": "Remove",
+                "removeDevice": "Remove {{name}}",
+                "removeTitle": "Remove this device?",
+                "removeMessage": "{{name}} will be removed from your account's OMEMO device list, and contacts will stop encrypting messages to it. It may add itself again the next time it connects.",
+                "removeAction": "Remove device",
+                "removed": "Device removed.",
+                "removeFailed": "Couldn't remove the device.",
+                "protocol": {
+                    "omemo2": "OMEMO 2",
+                    "legacy": "Legacy OMEMO"
+                }
+            },
             "openpgpLabel": "OpenPGP végpontok közötti titkosítás",
             "openpgpDescription": "Tegye közzé a nyilvános kulcsát a szerverén, és titkosítsa a kétszemélyes üzeneteket azoknak a névjegyeknek, akiknek szintén van kulcsuk.",
             "statusLabel": "Állapot",

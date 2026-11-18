@@ -902,6 +902,30 @@
         },
         "encryption": {
             "experimental": "Experimenteel",
+            "omemoDevices": {
+                "title": "OMEMO-apparaten",
+                "description": "Apparaten die andere apps voor OMEMO op je account hebben geregistreerd. Fluux gebruikt OMEMO nog niet; deze lijst dient alleen om ze te bekijken en te verwijderen.",
+                "offline": "Verbind om je OMEMO-apparaten te zien.",
+                "loading": "Apparaten laden…",
+                "loadFailed": "Je OMEMO-apparaten konden niet worden gelezen.",
+                "retry": "Opnieuw proberen",
+                "listUnreadable": "Deze lijst kon niet worden gelezen.",
+                "empty": "Geen apparaten.",
+                "unnamed": "Naamloos apparaat",
+                "deviceId": "Apparaat-ID {{id}}",
+                "noFingerprint": "Sleutel niet beschikbaar",
+                "remove": "Verwijderen",
+                "removeDevice": "{{name}} verwijderen",
+                "removeTitle": "Dit apparaat verwijderen?",
+                "removeMessage": "{{name}} wordt uit de OMEMO-apparatenlijst van je account verwijderd en contacten versleutelen geen berichten meer voor dit apparaat. Het kan zichzelf bij de volgende verbinding opnieuw toevoegen.",
+                "removeAction": "Apparaat verwijderen",
+                "removed": "Apparaat verwijderd.",
+                "removeFailed": "Het apparaat kon niet worden verwijderd.",
+                "protocol": {
+                    "omemo2": "OMEMO 2",
+                    "legacy": "Oudere OMEMO"
+                }
+            },
             "openpgpLabel": "OpenPGP end-to-end-versleuteling",
             "openpgpDescription": "Publiceer een openbare sleutel op je server en versleutel 1-op-1-berichten naar contacten die er ook een hebben.",
             "statusLabel": "Status",

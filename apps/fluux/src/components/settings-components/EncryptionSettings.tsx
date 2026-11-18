@@ -34,6 +34,7 @@ import {
   SecretKeyBackupProbeError,
 } from '@fluux/openpgp-plugin'
 import { platform } from '@/platform'
+import { OmemoDevicesSection } from './OmemoDevicesSection'
 
 type PluginStatus =
   | 'recovery-needed'
@@ -1437,6 +1438,8 @@ export function EncryptionSettings() {
         )}
       </div>
       </SettingsSection>
+
+      <OmemoDevicesSection />
 
       {showDeleteConfirm && fingerprint && (
         <DeleteOpenpgpKeyDialog
