@@ -13,7 +13,7 @@
  * Regenerate fixtures with:
  *   cd apps/fluux/src-tauri && cargo test generate_sequoia_golden_vectors -- --ignored --nocapture
  */
-import { createAppHostStores } from './appHostStores'
+import { createMockHostStores } from './testing/mockHostStores'
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -25,7 +25,9 @@ import {
   type XMPPPrimitives,
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
-import { clearSessionPassphrase, setSessionPassphrase } from '@fluux/openpgp-plugin'
+import { clearSessionPassphrase, setSessionPassphrase } from './index'
+
+const hostStores = createMockHostStores()
 
 // Decrypting and verifying the Sequoia fixtures is real openpgp.js work, so
 // the tests are CPU-bound and inflate several-fold under the contention of a
@@ -33,7 +35,7 @@ import { clearSessionPassphrase, setSessionPassphrase } from '@fluux/openpgp-plu
 // little headroom on a loaded runner. See WebOpenPGPPlugin.test.ts.
 vi.setConfig({ testTimeout: 30_000 })
 
-const FIXTURES_DIR = resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures')
+const FIXTURES_DIR = resolve(__dirname, './fixtures')
 const META_PATH = resolve(FIXTURES_DIR, 'sequoia_meta.json')
 
 class TestablePlugin extends WebOpenPGPPlugin {
@@ -88,14 +90,7 @@ const fixturesExist = existsSync(META_PATH)
 
 beforeEach(async () => {
   localStorage.clear()
-  const verifiedStore = await import('@/stores/verifiedPeerKeysStore')
-  const alertsStore = await import('@/stores/keyChangeAlertsStore')
-  const pinStore = await import('@/stores/pinnedPrimaryFingerprintsStore')
-  const ownConflictStore = await import('@/stores/ownKeyConflictStore')
-  verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-  alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-  pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
-  ownConflictStore.useOwnKeyConflictStore.setState({ conflict: null })
+  hostStores.reset()
   clearSessionPassphrase()
 })
 
@@ -116,7 +111,7 @@ describe.skipIf(!fixturesExist)('Sequoia → openpgp.js interop', () => {
   })
 
   it('parses Sequoia-generated public keys and extracts matching fingerprints', async () => {
-    const plugin = new TestablePlugin(createAppHostStores())
+    const plugin = new TestablePlugin(hostStores)
     const { ctx } = makeCtx('test@example.com')
     setSessionPassphrase('pp')
     await plugin.init(ctx)
@@ -137,7 +132,7 @@ describe.skipIf(!fixturesExist)('Sequoia → openpgp.js interop', () => {
 
   it('imports a Sequoia-generated backup and recovers the same fingerprint', async () => {
     const backup = readFixture('sequoia_alice_backup.asc')
-    const plugin = new TestablePlugin(createAppHostStores())
+    const plugin = new TestablePlugin(hostStores)
     const { ctx } = makeCtx('alice@example.com')
     await plugin.init(ctx)
 
@@ -160,7 +155,7 @@ describe.skipIf(!fixturesExist)('Sequoia → openpgp.js interop', () => {
     // encrypt/decrypt interop by importing Alice, then having Alice
     // decrypt her own copy (encrypt-to-self from Sequoia).
     const backup = readFixture('sequoia_alice_backup.asc')
-    const plugin = new TestablePlugin(createAppHostStores())
+    const plugin = new TestablePlugin(hostStores)
     const { ctx } = makeCtx('alice@example.com')
     await plugin.init(ctx)
     await plugin.callBackupImport('alice@example.com', backup, meta.backupPassphrase)
@@ -183,7 +178,7 @@ describe.skipIf(!fixturesExist)('Sequoia → openpgp.js interop', () => {
 
   it('rejects a Sequoia backup with the wrong passphrase', async () => {
     const backup = readFixture('sequoia_alice_backup.asc')
-    const plugin = new TestablePlugin(createAppHostStores())
+    const plugin = new TestablePlugin(hostStores)
     const { ctx } = makeCtx('alice@example.com')
     await plugin.init(ctx)
 

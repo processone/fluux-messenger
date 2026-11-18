@@ -21,7 +21,7 @@
  *                 (a) the passphrase field masked the 9x4 code and (b)
  *                 readPrivateKeys() choked on the leading public block.
  */
-import { createAppHostStores } from './appHostStores'
+import { createMockHostStores } from './testing/mockHostStores'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -33,7 +33,9 @@ import {
   type XMPPPrimitives,
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
-import { clearSessionPassphrase } from '@fluux/openpgp-plugin'
+import { clearSessionPassphrase } from './index'
+
+const hostStores = createMockHostStores()
 
 // Importing these fixtures runs real openpgp.js key work, so the tests are
 // CPU-bound and inflate several-fold under the contention of a full
@@ -41,7 +43,7 @@ import { clearSessionPassphrase } from '@fluux/openpgp-plugin'
 // little headroom on a loaded runner. See WebOpenPGPPlugin.test.ts.
 vi.setConfig({ testTimeout: 30_000 })
 
-const FIXTURES_DIR = resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures')
+const FIXTURES_DIR = resolve(__dirname, './fixtures')
 const readFixture = (name: string) => readFileSync(resolve(FIXTURES_DIR, name), 'utf-8')
 
 /** A ready-to-import backup plus the passphrase and fingerprint to verify it. */
@@ -143,14 +145,7 @@ function makeCtx(accountJid: string) {
 
 beforeEach(async () => {
   localStorage.clear()
-  const verifiedStore = await import('@/stores/verifiedPeerKeysStore')
-  const alertsStore = await import('@/stores/keyChangeAlertsStore')
-  const pinStore = await import('@/stores/pinnedPrimaryFingerprintsStore')
-  const ownConflictStore = await import('@/stores/ownKeyConflictStore')
-  verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-  alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-  pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
-  ownConflictStore.useOwnKeyConflictStore.setState({ conflict: null })
+  hostStores.reset()
   clearSessionPassphrase()
 })
 
@@ -158,7 +153,7 @@ describe('migration backup import (other tools → Fluux)', () => {
   for (const [name, makeVector] of Object.entries(VECTOR_SPECS)) {
     it(`imports a ${name} backup and recovers a usable secret key`, async () => {
       const { backup, passphrase, fingerprint } = await makeVector()
-      const plugin = new TestablePlugin(createAppHostStores())
+      const plugin = new TestablePlugin(hostStores)
       const ctx = makeCtx('migrant@example.com')
       await plugin.init(ctx) // locked — fine for import
 
@@ -191,7 +186,7 @@ describe('migration backup import (other tools → Fluux)', () => {
 
     it(`rejects a ${name} backup with the wrong passphrase`, async () => {
       const { backup } = await makeVector()
-      const plugin = new TestablePlugin(createAppHostStores())
+      const plugin = new TestablePlugin(hostStores)
       const ctx = makeCtx('migrant@example.com')
       await plugin.init(ctx)
 

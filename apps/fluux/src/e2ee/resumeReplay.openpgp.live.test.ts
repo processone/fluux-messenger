@@ -112,7 +112,7 @@ async function startRun(accounts: Accounts) {
 
   const { client: xmppClient, xml } = await import('@xmpp/client')
   const { E2EEManager, InMemoryStorageBackend } = await import('@fluux/sdk')
-  const { WebOpenPGPPlugin } = await import('./WebOpenPGPPlugin')
+  const { WebOpenPGPPlugin } = await import('@fluux/openpgp-plugin/web')
   type Primitives = ConstructorParameters<typeof E2EEManager>[0]['xmpp']
   const toElement = (data: XMLElementData): Element =>
     xml(data.name, data.attrs, ...data.children.map((c) => typeof c === 'string' ? c : toElement(c)))
