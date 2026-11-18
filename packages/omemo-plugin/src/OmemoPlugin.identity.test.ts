@@ -1,9 +1,27 @@
 import { describe, it, expect } from 'vitest'
 import { OmemoPlugin } from './OmemoPlugin'
 import { createMockPluginContext } from './testing/MockPluginContext'
+import { readFileSync } from 'node:fs'
 import { fetchDeviceList, fetchBundle } from './pep'
+import { parseXml, elementToData } from './stanzaData'
+import { seedPeer } from './testing/MockPluginContext'
+import { NS_DEVICES } from './namespaces'
 
 describe('OmemoPlugin identity/probe', () => {
+  it('ensureIdentity keeps the names other clients gave their devices', async () => {
+    // The reference stack's own list (see fixtures/generate_own_devices.py): two named devices and one unnamed.
+    const { omemo2 } = JSON.parse(readFileSync(new URL('./fixtures/own_devices.json', import.meta.url), 'utf8')) as { omemo2: { devices: string } }
+    const original = elementToData(parseXml(omemo2.devices))
+    const a = createMockPluginContext('a@x')
+    seedPeer(a.net, 'a@x', NS_DEVICES, original)
+    const p = new OmemoPlugin()
+    await p.init(a.ctx)
+    await p.ensureIdentity()
+    const published = a.net.nodes.get(`a@x ${NS_DEVICES}`)![0].payload
+    expect(published.children.slice(0, original.children.length)).toEqual(original.children)
+    expect(published.children).toHaveLength(original.children.length + 1)
+  })
+
   it('ensureIdentity publishes our device-list + bundle and returns a fingerprint', async () => {
     const a = createMockPluginContext('a@x')
     const p = new OmemoPlugin()

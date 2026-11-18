@@ -9,6 +9,7 @@ import type { Bundle } from '@fluux/omemo'
 import { b64encode, b64decode } from '@fluux/omemo'
 import { elementToData, dataToElement } from './stanzaData'
 import { NS_OMEMO, devicesNode, bundlesNode } from './namespaces'
+import { addOwnOmemo2Device } from './deviceLists'
 
 const CURRENT_ITEM_ID = 'current'
 const PUBLISH_OPTIONS = { accessModel: 'open' as const, maxItems: 1 }
@@ -71,6 +72,20 @@ export async function publishDeviceList(xmpp: XMPPPrimitives, deviceIds: number[
   await xmpp.publishPEP(
     devicesNode(),
     { id: CURRENT_ITEM_ID, payload: elementToData(deviceListToXml(deviceIds)) },
+    PUBLISH_OPTIONS,
+  )
+}
+
+/**
+ * Adds our device to our own device list, leaving the other devices' entries (names included) as their
+ * clients published them. `publishDeviceList` rebuilds a list from ids and so drops names: never use it on a
+ * list that may hold devices this code did not create.
+ */
+export function addDeviceToOwnList(xmpp: XMPPPrimitives, jid: string, deviceId: number): Promise<void> {
+  return addOwnOmemo2Device(
+    { query: (j, node, max) => xmpp.queryPEP(j, node, max), publish: (node, item, options) => xmpp.publishPEP(node, item, options) },
+    jid,
+    deviceId,
     PUBLISH_OPTIONS,
   )
 }
