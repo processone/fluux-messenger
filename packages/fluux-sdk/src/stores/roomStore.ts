@@ -3247,7 +3247,8 @@ export const roomStore = createStore<RoomState>()(
             isBookmarked: false,
             autojoin: undefined,
             password: undefined,
-            bookmarkExtensions: undefined,
+            // The bookmark is gone, so nothing of another client's is left to keep
+            bookmarkExtensions: [],
             notifyAllPersistent: undefined,
             notifyOffPersistent: undefined,
           })
@@ -3260,7 +3261,7 @@ export const roomStore = createStore<RoomState>()(
               isBookmarked: false,
               autojoin: undefined,
               password: undefined,
-              bookmarkExtensions: undefined,
+              bookmarkExtensions: [],
             })
           }
 

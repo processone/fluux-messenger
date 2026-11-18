@@ -2076,7 +2076,9 @@ export class MUC extends BaseModule {
    *
    * The children of the bookmark's `<extensions>` element that Fluux does not
    * own (another client's settings, for example) are published again
-   * unchanged, as XEP-0402 requires.
+   * unchanged, as XEP-0402 requires. When the room has not read its bookmark
+   * yet, it is read from the server first, and the save rejects without
+   * publishing if that read fails.
    *
    * @param roomJid - The room JID to bookmark
    * @param options - Bookmark settings
@@ -2125,7 +2127,9 @@ export class MUC extends BaseModule {
 
     // And for the <extensions> children Fluux does not own: XEP-0402 requires
     // a publish to keep them, and leaving one out deletes it from the server.
+    // A room that has not read its bookmark yet reads it now.
     const extensions = this.deps.stores?.room.getRoom(roomJid)?.bookmarkExtensions
+      ?? await this.readBookmarkExtensions(roomJid)
 
     // Build conference element children
     const confChildren: Element[] = [xml('nick', {}, options.nick)]
@@ -2172,6 +2176,37 @@ export class MUC extends BaseModule {
         extensions,
       },
     })
+  }
+
+  /**
+   * Read the `<extensions>` children Fluux does not own from the room's stored
+   * bookmark, for a save whose room has not read them: a room restored from a
+   * snapshot an older Fluux wrote, a save made before the bookmark refresh
+   * answered, or a room not bookmarked yet. Rejects when the server does not
+   * answer, so the publish that follows cannot delete what it did not see.
+   */
+  private async readBookmarkExtensions(roomJid: string): Promise<string[]> {
+    const iq = xml('iq', { type: 'get', id: `bookmark_get_${generateUUID()}` },
+      xml('pubsub', { xmlns: NS_PUBSUB },
+        xml('items', { node: NS_BOOKMARKS },
+          xml('item', { id: roomJid })
+        )
+      )
+    )
+
+    let response: Element
+    try {
+      response = await this.deps.sendIQ(iq)
+    } catch (err) {
+      // No bookmark stored under that id, or no bookmarks node at all.
+      if (hasErrorCondition(err, 'item-not-found')) return []
+      throw err
+    }
+
+    const items = response.getChild('pubsub', NS_PUBSUB)?.getChild('items')
+    if (!items) throw new Error(`Bookmark read for ${roomJid} returned no items`)
+    const item = items.getChildren('item').find((i) => i.attrs.id === roomJid)
+    return (item && parseBookmarkItem(item)?.extensions) || []
   }
 
   /**

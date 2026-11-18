@@ -22,10 +22,11 @@ export interface ParsedBookmark {
   notifyLevel: NotifyLevel
   /**
    * The children of `<extensions>` that Fluux does not own, serialized, in
-   * document order. `undefined` when there are none. See
+   * document order. Empty when the bookmark has none: the server's answer is
+   * known, unlike a room whose bookmark has not been read. See
    * {@link readForeignExtensions}.
    */
-  extensions?: string[]
+  extensions: string[]
 }
 
 /**
@@ -49,7 +50,7 @@ export function parseBookmarkItem(item: Element): ParsedBookmark | null {
   const password = conference.getChildText('password') || undefined
   const extensionsEl = conference.getChild('extensions')
   const notifyLevel = parseNotifyLevel(extensionsEl?.getChild('notify', NS_FLUUX)?.getText())
-  const extensions = extensionsEl ? readForeignExtensions(extensionsEl) : undefined
+  const extensions = extensionsEl ? readForeignExtensions(extensionsEl) : []
 
   return { jid, name, nick, autojoin, password, notifyLevel, extensions }
 }
@@ -68,22 +69,22 @@ function isOwnExtension(child: Element): boolean {
  * element dropped here is deleted from the server — for every client of the
  * account (for example another client's XEP-0492 notification setting).
  */
-export function readForeignExtensions(extensions: Element): string[] | undefined {
+export function readForeignExtensions(extensions: Element): string[] {
   const kept: string[] = []
   for (const child of extensions.children) {
     if (typeof child === 'string' || isOwnExtension(child)) continue
     kept.push(serializeDetached(child))
   }
-  return kept.length > 0 ? kept : undefined
+  return kept
 }
 
 /**
  * Rebuild the elements kept by {@link readForeignExtensions} for a publish.
  * An entry that no longer parses is skipped rather than failing the publish.
  */
-export function buildForeignExtensions(serialized: readonly string[] | undefined): Element[] {
+export function buildForeignExtensions(serialized: readonly string[]): Element[] {
   const elements: Element[] = []
-  for (const xmlText of serialized ?? []) {
+  for (const xmlText of serialized) {
     try {
       elements.push(parseXml(xmlText) as Element)
     } catch (err) {
@@ -94,53 +95,26 @@ export function buildForeignExtensions(serialized: readonly string[] | undefined
 }
 
 /**
- * `child.toString()` alone loses a namespace prefix declared on an ancestor
- * (`<conference xmlns:x='…'><extensions><x:state/>`): the string would no
- * longer parse to the same element, and the server would reject the publish.
- * Copy each such declaration onto the detached copy. The default namespace
- * needs nothing: the copy goes back under `<extensions>`, where an unprefixed
- * element without `xmlns` resolves exactly as it did before.
+ * `child.toString()` alone loses every namespace declaration made on an
+ * ancestor: a prefix (`<conference xmlns:x='…'><extensions><x:state/>`), one
+ * used only inside an attribute value, or a default namespace the element
+ * inherits. Republished under Fluux's own `<conference xmlns='urn:xmpp:bookmarks:1'>`,
+ * the copy would then fail to parse or move into the bookmarks namespace.
+ * Copy every declaration in scope onto the detached copy, the nearest one for
+ * each name, unless the element declares that name itself.
  */
 function serializeDetached(child: Element): string {
   const copy = clone(child)
-  for (const prefix of usedPrefixes(child)) {
-    const declaration = `xmlns:${prefix}`
-    if (copy.attrs[declaration] !== undefined) continue
-    const namespace = findPrefixNamespace(child, prefix)
-    if (namespace) copy.attrs[declaration] = namespace
+  for (let node = parentOf(child); node; node = parentOf(node)) {
+    for (const [attr, value] of Object.entries(node.attrs)) {
+      const isDeclaration = attr === 'xmlns' || attr.startsWith('xmlns:')
+      if (isDeclaration && copy.attrs[attr] === undefined) copy.attrs[attr] = value
+    }
   }
   return copy.toString()
-}
-
-/** The namespace `prefix` resolves to at `el`, looking at `el` and its ancestors. */
-function findPrefixNamespace(el: Element, prefix: string): string | undefined {
-  for (let node: Element | null = el; node; node = parentOf(node)) {
-    const namespace = node.attrs[`xmlns:${prefix}`]
-    if (namespace) return namespace
-  }
-  return undefined
 }
 
 /** ltx links every parsed element to its parent; the SDK's Element type leaves the field out. */
 function parentOf(el: Element): Element | null {
   return (el as Element & { parent?: Element | null }).parent ?? null
-}
-
-/** Namespace prefixes used by element or attribute names anywhere in `el`. */
-function usedPrefixes(el: Element, found = new Set<string>()): Set<string> {
-  const addPrefixOf = (qualifiedName: string) => {
-    const colon = qualifiedName.indexOf(':')
-    if (colon > 0) found.add(qualifiedName.slice(0, colon))
-  }
-  addPrefixOf(el.name)
-  for (const attr of Object.keys(el.attrs)) {
-    if (attr === 'xmlns' || attr.startsWith('xmlns:')) continue
-    addPrefixOf(attr)
-  }
-  for (const child of el.children) {
-    if (typeof child !== 'string') usedPrefixes(child, found)
-  }
-  // `xml:` is bound by the XML specification itself and never declared.
-  found.delete('xml')
-  return found
 }

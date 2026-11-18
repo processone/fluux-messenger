@@ -8,6 +8,8 @@ import type { ModuleDependencies } from './BaseModule'
 import { createStoreBindings, type StoreRefs } from '../../bindings/storeBindings'
 import { roomStore } from '../../stores/roomStore'
 import { createMockPresenceReader, createMockStoreRefs } from '../test-utils'
+import { StateSnapshot } from './stateSnapshot'
+import type { StorageAdapter } from '../types/storage'
 import { NS_BOOKMARKS, NS_FLUUX } from '../namespaces'
 import type { SDKEvents } from '../types/sdk-events'
 
@@ -17,6 +19,7 @@ import type { SDKEvents } from '../types/sdk-events'
 // password or changing Fluux's own notify level deleted every extension
 // another client of the account had stored for the room.
 const OWN_JID = 'tester@localhost/fluux'
+const ACCOUNT = 'tester@localhost'
 const ROOM = 'team@conference.localhost'
 
 // XEP-0402's Example 5 client state, and an XEP-0492 notification setting.
@@ -27,11 +30,19 @@ const bookmarkItem = (extensions: string) =>
   `<item id="${ROOM}"><conference xmlns="${NS_BOOKMARKS}" name="Team" autojoin="true">` +
   `<nick>tester</nick><extensions>${extensions}</extensions></conference></item>`
 
-/** The server's answer to Fluux's bookmark fetch. */
-const fetchResult = (extensions: string) => parse(
-  `<iq type="result" from="tester@localhost" to="${OWN_JID}">` +
-  `<pubsub xmlns="http://jabber.org/protocol/pubsub"><items node="${NS_BOOKMARKS}">${bookmarkItem(extensions)}</items></pubsub></iq>`,
+/** The server's answer to a bookmark read: every bookmark, or the one item asked for. */
+const fetchResult = (extensions: string, item = bookmarkItem(extensions)) => parse(
+  `<iq type="result" from="${ACCOUNT}" to="${OWN_JID}">` +
+  `<pubsub xmlns="http://jabber.org/protocol/pubsub"><items node="${NS_BOOKMARKS}">${item}</items></pubsub></iq>`,
 ) as unknown as Element
+
+/** The room as a snapshot written by a Fluux version that did not keep extensions holds it. */
+const preChangeSnapshotRoom = {
+  jid: ROOM, name: 'Team', nickname: 'tester', joined: false, occupants: [],
+  unreadCount: 0, mentionsCount: 0, isBookmarked: true, autojoin: true, messages: [],
+}
+
+const isPublish = (iq: Element) => !!iq.getChild('pubsub')?.getChild('publish')
 
 /** A PEP notification another client's publish or retraction triggers. */
 const pepEvent = (itemsContent: string) => parse(
@@ -74,16 +85,31 @@ describe('bookmark extensions Fluux does not own', () => {
     pubsub = new PubSub(deps)
   })
 
-  /** The <extensions> children of the last bookmark Fluux published, split by owner. */
-  const published = () => {
-    const iq = sendIQ.mock.calls[sendIQ.mock.calls.length - 1]![0] as Element
+  /** The <extensions> children of the last bookmark Fluux published, as the server reads them. */
+  const publishedChildren = () => {
+    const sent = sendIQ.mock.calls[sendIQ.mock.calls.length - 1]![0] as Element
+    const iq = parse(sent.toString()) as unknown as Element
     const extensions = iq.getChild('pubsub')?.getChild('publish')?.getChild('item')
       ?.getChild('conference', NS_BOOKMARKS)?.getChild('extensions')
-    const children = (extensions?.children ?? []).filter((c): c is Element => typeof c !== 'string')
+    return (extensions?.children ?? []).filter((c): c is Element => typeof c !== 'string')
+  }
+
+  /** The same children, split by owner. */
+  const published = () => {
+    const children = publishedChildren()
     return {
       foreign: children.filter((c) => !c.is('notify', NS_FLUUX)).map(String),
       fluuxNotify: children.filter((c) => c.is('notify', NS_FLUUX)).map((c) => c.getText()),
     }
+  }
+
+  /** Restore the stores from a snapshot an older Fluux wrote, as a page reload does. */
+  const hydratePreChangeSnapshot = async () => {
+    const storageAdapter = { getRooms: vi.fn(async () => [preChangeSnapshotRoom]) } as unknown as StorageAdapter
+    await new StateSnapshot({ storageAdapter, getJid: () => ACCOUNT }).hydrate(ACCOUNT)
+    const restored = roomStore.getState().getRoom(ROOM)
+    expect(restored?.isBookmarked).toBe(true)
+    expect(restored?.bookmarkExtensions).toBeUndefined()
   }
 
   it('publishes the other clients\' extensions unchanged when the bookmark is renamed', async () => {
@@ -92,6 +118,43 @@ describe('bookmark extensions Fluux does not own', () => {
     await muc.setBookmark(ROOM, { name: 'Team renamed', nick: 'tester', autojoin: true })
 
     expect(published().foreign).toEqual([CLIENT_STATE, NOTIFICATION_SETTINGS])
+  })
+
+  it('keeps the namespaces another client\'s extensions inherit when the bookmark is renamed', async () => {
+    // A default namespace and a prefix used only in an attribute value, both
+    // declared above <extensions> rather than on the extensions themselves.
+    serverItem = fetchResult('', `<item id="${ROOM}">` +
+      `<b:conference xmlns:b="${NS_BOOKMARKS}" xmlns="urn:example:client" xmlns:q="urn:example:quiet" name="Team" autojoin="true">` +
+      '<b:nick>tester</b:nick><b:extensions><state minimized="true"/><setting level="q:never"/></b:extensions></b:conference></item>')
+    await muc.fetchBookmarks()
+
+    await muc.setBookmark(ROOM, { name: 'Team renamed', nick: 'tester', autojoin: true })
+
+    const [state, setting] = publishedChildren() as Array<Element & { findNS(prefix: string): string | undefined }>
+    expect(state!.is('state', 'urn:example:client')).toBe(true)
+    expect(state!.attrs.minimized).toBe('true')
+    expect(setting!.is('setting', 'urn:example:client')).toBe(true)
+    expect(setting!.findNS('q')).toBe('urn:example:quiet')
+  })
+
+  it('reads the bookmark before the first save after a reload from an older snapshot, while the bookmark refresh has not answered', async () => {
+    await hydratePreChangeSnapshot()
+
+    await muc.setBookmark(ROOM, { name: 'Team renamed', nick: 'tester', autojoin: true })
+
+    expect(published().foreign).toEqual([CLIENT_STATE, NOTIFICATION_SETTINGS])
+  })
+
+  it('publishes nothing when that read fails, so the save cannot delete what it did not see', async () => {
+    await hydratePreChangeSnapshot()
+    sendIQ.mockImplementation(async (iq: Element) => {
+      if (iq.getChild('pubsub')?.getChild('items')) throw new Error('timeout')
+      return parse('<iq type="result"/>')
+    })
+
+    await expect(muc.setBookmark(ROOM, { name: 'Team renamed', nick: 'tester', autojoin: true })).rejects.toThrow('timeout')
+
+    expect(sendIQ.mock.calls.map(([iq]) => iq as Element).filter(isPublish)).toEqual([])
   })
 
   it('replaces only Fluux\'s own notify element when the level changes', async () => {

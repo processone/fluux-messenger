@@ -229,7 +229,7 @@ describe('PubSub Module', () => {
 
       expect(emitSDKSpy).toHaveBeenCalledWith('room:bookmark', {
         roomJid: 'room@conference.example.com',
-        bookmark: { name: 'My Room', nick: 'mynick', autojoin: true, password: undefined, notifyLevel: 'mentions' },
+        bookmark: { name: 'My Room', nick: 'mynick', autojoin: true, password: undefined, notifyLevel: 'mentions', extensions: [] },
       })
     })
 

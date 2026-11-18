@@ -57,6 +57,7 @@ export const createMockRoom = (jid: string, overrides: Partial<Room> = {}): Room
   isQuickChat: overrides.isQuickChat,
   autojoin: overrides.autojoin,
   password: overrides.password,
+  bookmarkExtensions: overrides.bookmarkExtensions,
   notifyAll: overrides.notifyAll,
   notifyAllPersistent: overrides.notifyAllPersistent,
   notifyOff: overrides.notifyOff,

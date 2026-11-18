@@ -745,17 +745,25 @@ describe('MUC Module', () => {
   })
 
   describe('setBookmark', () => {
-    it('publishes bookmark in XEP-0402 format', async () => {
-      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+    // No room in the store, so the save first reads the room's bookmark; the
+    // server holds none for it.
+    beforeEach(() => {
+      mockSendIQ.mockImplementation(async (iq: { attrs: { type: string } }) => iq.attrs.type === 'get'
+        ? createMockElement('iq', { type: 'result' }, [{
+          name: 'pubsub', attrs: { xmlns: 'http://jabber.org/protocol/pubsub' },
+          children: [{ name: 'items', attrs: { node: 'urn:xmpp:bookmarks:1' }, children: [] }],
+        }])
+        : createMockElement('iq', { type: 'result' }))
+    })
 
+    it('publishes bookmark in XEP-0402 format', async () => {
       await muc.setBookmark('room@conference.example.org', {
         name: 'Test Room',
         nick: 'mynick',
         autojoin: true,
       })
 
-      expect(mockSendIQ).toHaveBeenCalledTimes(1)
-      const sentIq = mockSendIQ.mock.calls[0][0]
+      const sentIq = mockSendIQ.mock.calls[mockSendIQ.mock.calls.length - 1][0]
 
       // Verify structure
       expect(sentIq.attrs.type).toBe('set')
@@ -783,8 +791,6 @@ describe('MUC Module', () => {
     }
 
     it('includes the notify extension when the level is all', async () => {
-      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
-
       await muc.setBookmark('room@conference.example.org', {
         name: 'Test Room',
         nick: 'mynick',
@@ -799,8 +805,6 @@ describe('MUC Module', () => {
     })
 
     it('publishes none when the level is Off', async () => {
-      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
-
       await muc.setBookmark('room@conference.example.org', { name: 'Test Room', nick: 'mynick', notifyLevel: 'none' })
 
       expect(publishedNotify().children[0]).toBe('none')
@@ -811,16 +815,12 @@ describe('MUC Module', () => {
     })
 
     it('publishes no notify element for Mentions only', async () => {
-      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
-
       await muc.setBookmark('room@conference.example.org', { name: 'Test Room', nick: 'mynick', notifyLevel: 'mentions' })
 
       expect(publishedNotify()).toBeUndefined()
     })
 
     it('updates local store after successful bookmark', async () => {
-      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
-
       await muc.setBookmark('room@conference.example.org', {
         name: 'Test Room',
         nick: 'mynick',
@@ -844,8 +844,9 @@ describe('MUC Module', () => {
   // modal reset a saved "All messages" to Mentions only.
   describe('notification level', () => {
     const ROOM = 'quiet@conference.example.org'
+    // A room loaded from the bookmark fetch, so Fluux has read its extensions: none from other clients
     const storedRoom = (overrides: Partial<Room> = {}) =>
-      createMockRoom(ROOM, { name: 'Quiet', nickname: 'mynick', isBookmarked: true, autojoin: false, ...overrides })
+      createMockRoom(ROOM, { name: 'Quiet', nickname: 'mynick', isBookmarked: true, autojoin: false, bookmarkExtensions: [], ...overrides })
     const notifyOf = (call = 0) => {
       const conference = mockSendIQ.mock.calls[call][0].children[0].children[0].children[0].children[0]
       return conference.children.find((c: { name: string }) => c.name === 'extensions')
@@ -986,8 +987,9 @@ describe('MUC Module', () => {
         },
       ])
 
+    // A room loaded from the bookmark fetch, so Fluux has read its extensions: none from other clients
     const storedRoom = (overrides: Partial<Room> = {}) =>
-      createMockRoom(ROOM, { name: 'Secret', nickname: 'mynick', isBookmarked: true, autojoin: false, ...overrides })
+      createMockRoom(ROOM, { name: 'Secret', nickname: 'mynick', isBookmarked: true, autojoin: false, bookmarkExtensions: [], ...overrides })
 
     describe('joinRoom', () => {
       it('reuses the password we already know for the room', async () => {

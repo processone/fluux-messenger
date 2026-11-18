@@ -19,7 +19,9 @@ describe('parseBookmarkItem', () => {
     ))
 
     expect(parseBookmarkItem(el)).toEqual({
-      jid: 'room@conf.example.com', name: 'My Room', nick: 'me', autojoin: true, password: 's3cret', notifyLevel: 'all',
+      // Fluux's own notify is all <extensions> holds: nothing to keep, and the
+      // empty list says so, so a save need not read the bookmark again.
+      jid: 'room@conf.example.com', name: 'My Room', nick: 'me', autojoin: true, password: 's3cret', notifyLevel: 'all', extensions: [],
     })
   })
 
@@ -63,6 +65,28 @@ describe('parseBookmarkItem', () => {
 
     expect(parsed?.extensions).toEqual([clientState, notificationSettings])
     expect(parsed?.notifyLevel).toBe('none')
+  })
+
+  it('keeps a default namespace the extension inherits, so it does not move into the bookmarks namespace', () => {
+    const el = item('r@c',
+      `<b:conference xmlns:b="${NS_BOOKMARKS}" xmlns="urn:example:client"><b:extensions><state minimized="true"/></b:extensions></b:conference>`)
+
+    const [kept] = parseBookmarkItem(el)?.extensions ?? []
+    const readBack = parse(kept!) as unknown as Element
+
+    expect(readBack.is('state', 'urn:example:client')).toBe(true)
+  })
+
+  it('keeps a prefix the extension uses only in an attribute value', () => {
+    const el = item('r@c', conference(
+      '<extensions><setting xmlns="urn:example:client" level="q:never"/></extensions>',
+      ' xmlns:q="urn:example:quiet"',
+    ))
+
+    const [kept] = parseBookmarkItem(el)?.extensions ?? []
+    const readBack = parse(kept!) as unknown as Element & { findNS(prefix: string): string | undefined }
+
+    expect(readBack.findNS('q')).toBe('urn:example:quiet')
   })
 
   it('keeps a namespace prefix declared above the extension, so the kept copy reads back the same', () => {

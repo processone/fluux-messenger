@@ -59,7 +59,8 @@ describe('room notification level through the store binding', () => {
   })
 
   it('saves Off on a bookmarked room, and it survives leaving the room', async () => {
-    roomStore.getState().setBookmark(ROOM, { name: 'Quiet', nick: 'mynick' })
+    // As the bookmark fetch stores it: read from the server, nothing from other clients
+    roomStore.getState().setBookmark(ROOM, { name: 'Quiet', nick: 'mynick', extensions: [] })
 
     await muc.setRoomNotifyLevel(ROOM, 'none', true)
     roomStore.getState().setRoomJoined(ROOM, false)
