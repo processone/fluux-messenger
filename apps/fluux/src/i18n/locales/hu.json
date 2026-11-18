@@ -642,8 +642,8 @@
             "sendBlockedGeneric": "Az üzenet nem lett elküldve. A titkosítás sikertelen volt.",
             "sendBlockedKeysDistrusted": "Az üzenet nem lett elküldve. A partner egyik kulcsában sem bízik meg. Küldés előtt bízzon meg az egyikben.",
             "heldKeys": {
-                "partial": "Ön ellenőrizte ezt a partnert: {{name}}, ezért az új kulcsa nem kap üzeneteket, amíg meg nem bízik benne, vagy nem ellenőrzi.",
-                "all": "Ön ellenőrizte ezt a partnert: {{name}}, ezért az új kulcsa nem kap üzeneteket, amíg meg nem bízik benne, vagy nem ellenőrzi. Addig nem küldhet üzenetet.",
+                "partial": "{{name}} új kulcsot adott hozzá, miután Ön ellenőrizte. A kulcs nem kap üzeneteket, amíg meg nem bízik benne, vagy nem ellenőrzi.",
+                "all": "{{name}} új kulcsot adott hozzá, miután Ön ellenőrizte. A kulcs nem kap üzeneteket, amíg meg nem bízik benne, vagy nem ellenőrzi. Addig nem küldhet üzenetet.",
                 "distrusted": "Nem bízik meg {{name}} egyik kulcsában sem. Nem küldhet üzenetet, amíg meg nem bízik az egyikben.",
                 "review": "Kulcsok áttekintése"
             },

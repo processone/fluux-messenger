@@ -642,8 +642,8 @@
             "sendBlockedGeneric": "Skilaboð ekki send. Dulkóðun mistókst.",
             "sendBlockedKeysDistrusted": "Skilaboð ekki send. Þú treystir engum lykli þessa tengiliðs. Treystu einum þeirra áður en þú sendir.",
             "heldKeys": {
-                "partial": "Þú staðfestir {{name}}, svo nýi lykillinn fær engin skilaboð fyrr en þú treystir honum eða staðfestir hann.",
-                "all": "Þú staðfestir {{name}}, svo nýi lykillinn fær engin skilaboð fyrr en þú treystir honum eða staðfestir hann. Þangað til geturðu ekki sent skilaboð.",
+                "partial": "{{name}} bætti við nýjum lykli eftir að þú staðfestir tengiliðinn. Lykillinn fær engin skilaboð fyrr en þú treystir honum eða staðfestir hann.",
+                "all": "{{name}} bætti við nýjum lykli eftir að þú staðfestir tengiliðinn. Lykillinn fær engin skilaboð fyrr en þú treystir honum eða staðfestir hann. Þangað til geturðu ekki sent skilaboð.",
                 "distrusted": "Þú treystir engum lykli tengiliðarins {{name}}. Þú getur ekki sent skilaboð fyrr en þú treystir einum þeirra.",
                 "review": "Yfirfara lykla"
             },

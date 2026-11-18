@@ -646,8 +646,8 @@
             "sendBlockedGeneric": "Pranešimas neišsiųstas. Šifravimas nepavyko.",
             "sendBlockedKeysDistrusted": "Pranešimas neišsiųstas. Nepasitikite nė vienu šio kontakto raktu. Prieš siųsdami pasitikėkite vienu iš jų.",
             "heldKeys": {
-                "partial": "Patvirtinote {{name}}, todėl naujasis raktas negauna žinučių, kol juo nepasitikėsite arba jo nepatvirtinsite.",
-                "all": "Patvirtinote {{name}}, todėl naujasis raktas negauna žinučių, kol juo nepasitikėsite arba jo nepatvirtinsite. Iki tol negalite siųsti žinučių.",
+                "partial": "{{name}} pridėjo naują raktą po to, kai patvirtinote šį kontaktą. Raktas negauna žinučių, kol juo nepasitikėsite arba jo nepatvirtinsite.",
+                "all": "{{name}} pridėjo naują raktą po to, kai patvirtinote šį kontaktą. Raktas negauna žinučių, kol juo nepasitikėsite arba jo nepatvirtinsite. Iki tol negalite siųsti žinučių.",
                 "distrusted": "Nepasitikite nė vienu {{name}} raktu. Negalite siųsti žinučių, kol nepasitikėsite vienu iš jų.",
                 "review": "Peržiūrėti raktus"
             },

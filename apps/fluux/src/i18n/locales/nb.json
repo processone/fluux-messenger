@@ -642,8 +642,8 @@
             "sendBlockedGeneric": "Meldingen ble ikke sendt. Kryptering mislyktes.",
             "sendBlockedKeysDistrusted": "Meldingen ble ikke sendt. Du stoler ikke på noen av nøklene til denne kontakten. Stol på én av dem før du sender.",
             "heldKeys": {
-                "partial": "Du har bekreftet {{name}}, så den nye nøkkelen mottar ingen meldinger før du stoler på den eller bekrefter den.",
-                "all": "Du har bekreftet {{name}}, så den nye nøkkelen mottar ingen meldinger før du stoler på den eller bekrefter den. Til da kan du ikke sende meldinger.",
+                "partial": "{{name}} har lagt til en ny nøkkel etter at du bekreftet kontakten. Den mottar ingen meldinger før du stoler på den eller bekrefter den.",
+                "all": "{{name}} har lagt til en ny nøkkel etter at du bekreftet kontakten. Den mottar ingen meldinger før du stoler på den eller bekrefter den. Til da kan du ikke sende meldinger.",
                 "distrusted": "Du stoler ikke på noen av nøklene til {{name}}. Du kan ikke sende meldinger før du stoler på én av dem.",
                 "review": "Gjennomgå nøkler"
             },

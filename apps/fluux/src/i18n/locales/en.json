@@ -668,8 +668,8 @@
             "sendBlockedGeneric": "Message not sent. Encryption failed.",
             "sendBlockedKeysDistrusted": "Message not sent. You don't trust any of this contact's keys. Trust one of them before sending.",
             "heldKeys": {
-                "partial": "You verified {{name}}, so their new key receives no messages until you trust or verify it.",
-                "all": "You verified {{name}}, so their new key receives no messages until you trust or verify it. You can't send messages until then.",
+                "partial": "{{name}} added a new key after you verified them. It receives no messages until you trust or verify it.",
+                "all": "{{name}} added a new key after you verified them. It receives no messages until you trust or verify it. You can't send messages until then.",
                 "distrusted": "You don't trust any of {{name}}'s keys. You can't send messages until you trust one of them.",
                 "review": "Review keys"
             },

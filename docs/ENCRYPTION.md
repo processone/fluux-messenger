@@ -57,7 +57,7 @@ Each key is decided on its own. A contact's Security details list every key they
 - **Trust** it without verifying, so it receives your messages.
 - **Refuse** it, so it receives nothing. If you refuse every key of a contact, Fluux sends them nothing.
 
-Once you verify any key of a contact, Fluux holds each new key they announce until you decide about it, as described above.
+Once you verify any key of a contact, Fluux holds each new key they announce until you decide about it, as described above. A held key stays held even if the contact later has no verified key left, for example after you refuse or unverify the key you had verified: only your own decision about the held key lets it receive messages.
 
 Your verifications reach your other devices through your server, signed and encrypted to your own key, so the server cannot read or forge them. A decision to trust or refuse a key without verifying it stays on the device where you made it.
 

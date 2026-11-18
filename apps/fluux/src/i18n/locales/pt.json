@@ -646,8 +646,8 @@
             "sendBlockedGeneric": "Mensagem não enviada. A criptografia falhou.",
             "sendBlockedKeysDistrusted": "Mensagem não enviada. Não confia em nenhuma chave deste contacto. Confie numa delas antes de enviar.",
             "heldKeys": {
-                "partial": "Verificou {{name}}, por isso a nova chave não recebe mensagens até confiar nela ou a verificar.",
-                "all": "Verificou {{name}}, por isso a nova chave não recebe mensagens até confiar nela ou a verificar. Até lá não pode enviar mensagens.",
+                "partial": "{{name}} adicionou uma nova chave depois de o ter verificado. Não recebe mensagens até confiar nela ou a verificar.",
+                "all": "{{name}} adicionou uma nova chave depois de o ter verificado. Não recebe mensagens até confiar nela ou a verificar. Até lá não pode enviar mensagens.",
                 "distrusted": "Não confia em nenhuma chave de {{name}}. Não pode enviar mensagens até confiar numa delas.",
                 "review": "Rever chaves"
             },

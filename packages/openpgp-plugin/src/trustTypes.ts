@@ -47,5 +47,9 @@ export interface TrustStateVerdict {
  * - `tofu`: the user approved this key without verifying it, or removed its
  *   verification. It is used for encryption.
  * - `untrusted`: the user refused this key. It is never used for encryption.
+ * - `held`: no decision yet, and the key keeps waiting for one although the
+ *   contact is no longer verified. It was waiting when the contact lost its
+ *   last verified key, and a decision about another key never approves it.
+ *   It is not used for encryption.
  */
-export type KeyDecision = 'verified' | 'tofu' | 'untrusted'
+export type KeyDecision = 'verified' | 'tofu' | 'untrusted' | 'held'

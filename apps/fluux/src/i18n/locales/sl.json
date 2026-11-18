@@ -648,8 +648,8 @@
             "sendBlockedGeneric": "Sporočilo ni bilo poslano. Šifriranje ni uspelo.",
             "sendBlockedKeysDistrusted": "Sporočilo ni bilo poslano. Ne zaupate nobenemu ključu tega stika. Pred pošiljanjem zaupajte enemu od njih.",
             "heldKeys": {
-                "partial": "Stik {{name}} ste preverili, zato njegov novi ključ ne prejema sporočil, dokler mu ne zaupate ali ga ne preverite.",
-                "all": "Stik {{name}} ste preverili, zato njegov novi ključ ne prejema sporočil, dokler mu ne zaupate ali ga ne preverite. Do takrat ne morete pošiljati sporočil.",
+                "partial": "Stik {{name}} je dodal nov ključ, potem ko ste ga preverili. Ključ ne prejema sporočil, dokler mu ne zaupate ali ga ne preverite.",
+                "all": "Stik {{name}} je dodal nov ključ, potem ko ste ga preverili. Ključ ne prejema sporočil, dokler mu ne zaupate ali ga ne preverite. Do takrat ne morete pošiljati sporočil.",
                 "distrusted": "Ne zaupate nobenemu ključu stika {{name}}. Sporočil ne morete pošiljati, dokler ne zaupate enemu od njih.",
                 "review": "Preglej ključe"
             },

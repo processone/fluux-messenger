@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { E2EEPluginError } from '@fluux/sdk'
+import { TrustRecordStore } from './trustRecords'
 import {
+  claimUnscopedLegacyTrust,
+  legacyRecordsMismatch,
   legacySealCheckFor,
   parseLegacySealCheck,
   readLegacyTrustState,
@@ -63,12 +66,25 @@ describe('readLegacyTrustState', () => {
       syncVersion: 7,
       seal: 'SEAL',
       sealInitialized: true,
+      usesUnscoped: false,
     })
   })
 
   it('reads the unscoped values earlier versions kept before scoping by account', () => {
     saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP }, 'fluux-e2ee-verifications-version': '2' }, null)
-    expect(readLegacyTrustState(ME)).toMatchObject({ verified: { [BOB]: BOB_FP }, syncVersion: 2 })
+    expect(readLegacyTrustState(ME)).toMatchObject({ verified: { [BOB]: BOB_FP }, syncVersion: 2, usesUnscoped: true })
+  })
+
+  it('gives the unscoped values to the first account that claims them, and keeps them in place', () => {
+    const OTHER = 'other@example.com'
+    saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP }, 'fluux-e2ee-verifications-version': '2' }, null)
+    claimUnscopedLegacyTrust(ME)
+    claimUnscopedLegacyTrust(OTHER)
+
+    expect(readLegacyTrustState(OTHER)).toMatchObject({ verified: {}, syncVersion: -1, usesUnscoped: false })
+    // A migration of ME that stopped half way still finds them.
+    expect(readLegacyTrustState(ME)).toMatchObject({ verified: { [BOB]: BOB_FP }, syncVersion: 2, usesUnscoped: true })
+    expect(localStorage.getItem('fluux-e2ee-verified-peers')).toBe(JSON.stringify({ [BOB]: BOB_FP }))
   })
 
   it('does not read another account\'s values', () => {
@@ -85,7 +101,7 @@ describe('readLegacyTrustState', () => {
 
 describe('trustRecordsFromLegacy', () => {
   const legacy = (over: Partial<LegacyTrustState>): LegacyTrustState => ({
-    verified: {}, pins: {}, alerts: {}, rejections: {}, syncVersion: -1, seal: null, sealInitialized: false, ...over,
+    verified: {}, pins: {}, alerts: {}, rejections: {}, syncVersion: -1, seal: null, sealInitialized: false, usesUnscoped: false, ...over,
   })
 
   it('keeps each verified key verified', () => {
@@ -107,7 +123,42 @@ describe('trustRecordsFromLegacy', () => {
       rejections: { [BOB]: [rejection, { ...rejection, code: 'made_up' as never }] },
       syncVersion: 5,
     }), NOW)
-    expect(records).toEqual({ v: 1, peers: {}, rejections: { [BOB]: [rejection] }, syncVersion: 5 })
+    expect(records).toEqual({ v: 1, peers: {}, rejections: { [BOB]: [rejection] }, syncVersion: 5, setsAdopted: false })
+  })
+})
+
+describe('legacyRecordsMismatch', () => {
+  const state = { verified: { [BOB]: BOB_FP }, alerts: { [CAROL]: ALERT }, syncVersion: 4 }
+  const migrated = () => {
+    saveLegacy({
+      'fluux-e2ee-verified-peers': state.verified,
+      'fluux-e2ee-key-change-alerts': state.alerts,
+      'fluux-e2ee-verifications-version': String(state.syncVersion),
+    })
+    const legacy = readLegacyTrustState(ME)
+    const records = new TrustRecordStore()
+    records.replace(trustRecordsFromLegacy(legacy, NOW))
+    return { check: legacySealCheckFor(legacy)!, records }
+  }
+
+  it('finds nothing when the records are what the migration made of the old data', () => {
+    const { check, records } = migrated()
+    expect(legacyRecordsMismatch(check, records)).toEqual([])
+  })
+
+  it('finds a decision changed behind the plugin', () => {
+    const { check, records } = migrated()
+    records.setDecision(CAROL, CAROL_NEW_FP, 'verified')
+    expect(legacyRecordsMismatch(check, records)).toEqual(['trust decisions differ from the upgraded trust state'])
+  })
+
+  it('finds a changed sync version or an adopted set node', () => {
+    const changed = migrated()
+    changed.records.setSyncVersion(9)
+    expect(legacyRecordsMismatch(changed.check, changed.records)).toEqual(['verification sync state differs from the upgraded trust state'])
+    const adopted = migrated()
+    adopted.records.adoptSets()
+    expect(legacyRecordsMismatch(adopted.check, adopted.records)).toEqual(['verification sync state differs from the upgraded trust state'])
   })
 })
 

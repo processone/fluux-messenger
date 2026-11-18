@@ -161,6 +161,17 @@ describe('verifyTrustStateSeal: no seal and tamper verdicts', () => {
     expect(await verify()).toEqual({ status: 'compromised', details: ['verification sync version differs'] })
   })
 
+  it('names an adoption of the set node changed behind the plugin', async () => {
+    records.setDecision(PEER, PEER_FP, 'verified')
+    records.adoptSets()
+    await seal()
+    // Storage edited outside the plugin: the older sync node would be read again.
+    const edited = emptyTrustRecords()
+    edited.peers[PEER] = { [PEER_FP]: { decision: 'verified', decidedAt: '2024-01-01T00:00:00Z' } }
+    records.replace(edited)
+    expect(await verify()).toEqual({ status: 'compromised', details: ['verification sync format differs'] })
+  })
+
   it('is sealed again for the same decisions saved in another order', async () => {
     records.setDecisions([
       { peer: PEER, fingerprint: PEER_FP, decision: 'verified' },

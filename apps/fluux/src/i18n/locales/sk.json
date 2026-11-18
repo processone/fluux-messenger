@@ -647,8 +647,8 @@
             "sendBlockedGeneric": "Správa nebola odoslaná. Šifrovanie zlyhalo.",
             "sendBlockedKeysDistrusted": "Správa nebola odoslaná. Nedôverujete žiadnemu kľúču tohto kontaktu. Pred odoslaním jednému z nich dôverujte.",
             "heldKeys": {
-                "partial": "Kontakt {{name}} ste overili, preto jeho nový kľúč nedostáva správy, kým mu nebudete dôverovať alebo ho neoveríte.",
-                "all": "Kontakt {{name}} ste overili, preto jeho nový kľúč nedostáva správy, kým mu nebudete dôverovať alebo ho neoveríte. Dovtedy nemôžete odosielať správy.",
+                "partial": "Kontakt {{name}} pridal nový kľúč potom, ako ste ho overili. Kľúč nedostáva správy, kým mu nebudete dôverovať alebo ho neoveríte.",
+                "all": "Kontakt {{name}} pridal nový kľúč potom, ako ste ho overili. Kľúč nedostáva správy, kým mu nebudete dôverovať alebo ho neoveríte. Dovtedy nemôžete odosielať správy.",
                 "distrusted": "Nedôverujete žiadnemu kľúču kontaktu {{name}}. Nemôžete odosielať správy, kým jednému z nich nebudete dôverovať.",
                 "review": "Skontrolovať kľúče"
             },

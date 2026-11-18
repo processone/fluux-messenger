@@ -646,8 +646,8 @@
             "sendBlockedGeneric": "Mesaj netrimis. Criptarea a eșuat.",
             "sendBlockedKeysDistrusted": "Mesaj netrimis. Nu ai încredere în nicio cheie a acestui contact. Acordă încredere uneia dintre ele înainte de a trimite.",
             "heldKeys": {
-                "partial": "Ai verificat contactul {{name}}, așa că cheia sa nouă nu primește mesaje până nu ai încredere în ea sau o verifici.",
-                "all": "Ai verificat contactul {{name}}, așa că cheia sa nouă nu primește mesaje până nu ai încredere în ea sau o verifici. Până atunci nu poți trimite mesaje.",
+                "partial": "Contactul {{name}} a adăugat o cheie nouă după ce l-ai verificat. Nu primește mesaje până nu ai încredere în ea sau o verifici.",
+                "all": "Contactul {{name}} a adăugat o cheie nouă după ce l-ai verificat. Nu primește mesaje până nu ai încredere în ea sau o verifici. Până atunci nu poți trimite mesaje.",
                 "distrusted": "Nu ai încredere în nicio cheie a contactului {{name}}. Nu poți trimite mesaje până nu ai încredere în una dintre ele.",
                 "review": "Revizuiește cheile"
             },

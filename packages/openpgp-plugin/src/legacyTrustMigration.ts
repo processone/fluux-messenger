@@ -17,15 +17,21 @@
  * - pinned fingerprints are dropped: per-key records replace the pin;
  * - certificate rejections and the sync version are carried over.
  *
+ * Values the oldest versions stored before scoping them per account go to the
+ * first account that migrates them, as those versions' loaders moved them
+ * ({@link claimUnscopedLegacyTrust}).
+ *
  * The old seal is checked against the old data exactly as earlier versions
  * checked it, once the account's key is usable (it may still be locked during
- * the migration). Until then the check waits in plugin storage
- * ({@link PendingLegacySealCheck}).
+ * the migration), and the records against what the migration made of that
+ * data ({@link legacyRecordsMismatch}). Until then the check waits in plugin
+ * storage ({@link PendingLegacySealCheck}).
  */
 
 import { buildScopedStorageKey } from '@fluux/sdk'
-import { canonicalFingerprint, emptyTrustRecords, type TrustRecordsData } from './trustRecords'
-import type { CertRejection, TrustStateVerdict } from './trustTypes'
+import { canonicalFingerprint, emptyTrustRecords, type TrustRecordStore, type TrustRecordsData } from './trustRecords'
+import { canonicalJson } from './trustStateIntegrity'
+import type { CertRejection, KeyDecision, TrustStateVerdict } from './trustTypes'
 import { fingerprintsEqual } from './fingerprintCompare'
 import type { DecryptFn } from './verificationSync'
 
@@ -41,6 +47,14 @@ const LEGACY_KEYS = {
   seal: 'fluux-e2ee-trust-state-seal',
   sealInitialized: 'fluux-e2ee-trust-integrity-init',
 } as const
+
+/**
+ * The account that took the values earlier versions stored before scoping
+ * them per account. Earlier loaders moved each unscoped value to the first
+ * account that loaded it; this marker keeps that single owner while the
+ * values stay in place for an older version.
+ */
+const LEGACY_UNSCOPED_OWNER_KEY = 'fluux-e2ee-legacy-unscoped-owner'
 
 /** A key-change alert as earlier versions stored it. */
 export interface LegacyKeyChangeAlert {
@@ -63,6 +77,11 @@ export interface LegacyTrustState extends LegacySealSnapshot {
   seal: string | null
   /** Whether a seal was ever written for this account. */
   sealInitialized: boolean
+  /**
+   * Some value came from the unscoped keys: the migration claims them for
+   * this account first (see {@link claimUnscopedLegacyTrust}).
+   */
+  usesUnscoped: boolean
 }
 
 /** A check of the old seal against the old data, waiting for a usable key. */
@@ -77,18 +96,36 @@ export interface PendingLegacySealCheck {
 // Reading the old stores (read only)
 // ---------------------------------------------------------------------------
 
+/** Notes whether a read fell back to an unscoped value. */
+interface UnscopedUse {
+  used: boolean
+}
+
+/**
+ * Whether `accountJid` may read the unscoped values: no account claimed them
+ * yet, or this one did.
+ */
+function mayReadUnscoped(accountJid: string): boolean {
+  const owner = localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY)
+  return owner === null || owner === accountJid
+}
+
 /**
  * The account-scoped value, or the unscoped one earlier versions stored before
- * values were scoped per account. Earlier loaders moved the unscoped value to
- * the scoped key when they read it; this reader only reads.
+ * values were scoped per account, unless another account claimed those.
+ * Earlier loaders moved the unscoped value to the scoped key when they read
+ * it; this reader only reads.
  */
-function readScopedOrUnscoped(base: string, accountJid: string): string | null {
+function readScopedOrUnscoped(base: string, accountJid: string, unscoped: UnscopedUse): string | null {
   const scoped = buildScopedStorageKey(base, accountJid)
   const raw = localStorage.getItem(scoped)
   if (raw) return raw
-  if (scoped !== base) {
-    const unscoped = localStorage.getItem(base)
-    if (unscoped) return unscoped
+  if (scoped !== base && mayReadUnscoped(accountJid)) {
+    const value = localStorage.getItem(base)
+    if (value) {
+      unscoped.used = true
+      return value
+    }
   }
   return null
 }
@@ -105,17 +142,17 @@ function parseObject(raw: string | null): Record<string, unknown> {
 }
 
 /** Earlier stores kept only string → non-empty string entries. */
-function readFingerprintMap(base: string, accountJid: string): Record<string, string> {
+function readFingerprintMap(base: string, accountJid: string, unscoped: UnscopedUse): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(parseObject(readScopedOrUnscoped(base, accountJid)))) {
+  for (const [k, v] of Object.entries(parseObject(readScopedOrUnscoped(base, accountJid, unscoped)))) {
     if (typeof v === 'string' && v.length > 0) out[k] = v
   }
   return out
 }
 
-function readAlerts(accountJid: string): Record<string, LegacyKeyChangeAlert> {
+function readAlerts(accountJid: string, unscoped: UnscopedUse): Record<string, LegacyKeyChangeAlert> {
   const out: Record<string, LegacyKeyChangeAlert> = {}
-  for (const [k, v] of Object.entries(parseObject(readScopedOrUnscoped(LEGACY_KEYS.alerts, accountJid)))) {
+  for (const [k, v] of Object.entries(parseObject(readScopedOrUnscoped(LEGACY_KEYS.alerts, accountJid, unscoped)))) {
     if (
       v &&
       typeof v === 'object' &&
@@ -140,19 +177,22 @@ function isLegacyRejection(v: unknown): v is CertRejection {
   )
 }
 
-function readRejections(accountJid: string): Record<string, CertRejection[]> {
+function readRejections(accountJid: string, unscoped: UnscopedUse): Record<string, CertRejection[]> {
   const out: Record<string, CertRejection[]> = {}
-  for (const [k, v] of Object.entries(parseObject(readScopedOrUnscoped(LEGACY_KEYS.rejections, accountJid)))) {
+  for (const [k, v] of Object.entries(parseObject(readScopedOrUnscoped(LEGACY_KEYS.rejections, accountJid, unscoped)))) {
     if (Array.isArray(v) && v.every(isLegacyRejection)) out[k] = v
   }
   return out
 }
 
 /** `-1` when no version was saved, as earlier versions read it. */
-function readSyncVersion(accountJid: string): number {
+function readSyncVersion(accountJid: string, unscoped: UnscopedUse): number {
   const scoped = buildScopedStorageKey(LEGACY_KEYS.syncVersion, accountJid)
   let raw = localStorage.getItem(scoped)
-  if (raw === null && scoped !== LEGACY_KEYS.syncVersion) raw = localStorage.getItem(LEGACY_KEYS.syncVersion)
+  if (raw === null && scoped !== LEGACY_KEYS.syncVersion && mayReadUnscoped(accountJid)) {
+    raw = localStorage.getItem(LEGACY_KEYS.syncVersion)
+    if (raw !== null) unscoped.used = true
+  }
   if (raw === null) return -1
   const n = Number.parseInt(raw, 10)
   return Number.isFinite(n) ? n : -1
@@ -164,18 +204,36 @@ function readSyncVersion(accountJid: string): number {
  */
 export function readLegacyTrustState(accountJid: string): LegacyTrustState {
   try {
+    const unscoped: UnscopedUse = { used: false }
     return {
-      verified: readFingerprintMap(LEGACY_KEYS.verified, accountJid),
-      pins: readFingerprintMap(LEGACY_KEYS.pins, accountJid),
-      alerts: readAlerts(accountJid),
-      rejections: readRejections(accountJid),
-      syncVersion: readSyncVersion(accountJid),
+      verified: readFingerprintMap(LEGACY_KEYS.verified, accountJid, unscoped),
+      pins: readFingerprintMap(LEGACY_KEYS.pins, accountJid, unscoped),
+      alerts: readAlerts(accountJid, unscoped),
+      rejections: readRejections(accountJid, unscoped),
+      syncVersion: readSyncVersion(accountJid, unscoped),
       seal: localStorage.getItem(buildScopedStorageKey(LEGACY_KEYS.seal, accountJid)) || null,
       sealInitialized: localStorage.getItem(buildScopedStorageKey(LEGACY_KEYS.sealInitialized, accountJid)) === '1',
+      usesUnscoped: unscoped.used,
     }
   } catch {
     // No localStorage: nothing to migrate.
-    return { verified: {}, pins: {}, alerts: {}, rejections: {}, syncVersion: -1, seal: null, sealInitialized: false }
+    return { verified: {}, pins: {}, alerts: {}, rejections: {}, syncVersion: -1, seal: null, sealInitialized: false, usesUnscoped: false }
+  }
+}
+
+/**
+ * Claim the unscoped values for `accountJid`, the first account whose
+ * migration read them; no other account reads them after that. Run before
+ * the migration writes anything, so a migration that stops half way still
+ * finds them on its next run.
+ */
+export function claimUnscopedLegacyTrust(accountJid: string): void {
+  try {
+    if (localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY) === null) {
+      localStorage.setItem(LEGACY_UNSCOPED_OWNER_KEY, accountJid)
+    }
+  } catch {
+    // No localStorage: nothing was read from it either.
   }
 }
 
@@ -190,22 +248,57 @@ const REJECTION_CODES: ReadonlySet<string> = new Set([
   'no_encryption_subkey',
 ])
 
-/** The trust records the old state maps to (see the module comment). */
-export function trustRecordsFromLegacy(legacy: LegacyTrustState, now: string): TrustRecordsData {
-  const data = emptyTrustRecords()
+/** The decisions the old verified keys and alerts map to (see the module comment). */
+function legacyDecisions(
+  legacy: Pick<LegacySealSnapshot, 'verified' | 'alerts'>,
+): Record<string, Record<string, KeyDecision>> {
+  const out: Record<string, Record<string, KeyDecision>> = {}
   const verify = (peer: string, fingerprint: string) => {
     const fp = canonicalFingerprint(fingerprint)
     if (!fp) return
-    data.peers[peer] = { ...(data.peers[peer] ?? {}), [fp]: { decision: 'verified', decidedAt: now } }
+    out[peer] = { ...(out[peer] ?? {}), [fp]: 'verified' }
   }
   for (const [peer, fp] of Object.entries(legacy.verified)) verify(peer, fp)
   for (const [peer, alert] of Object.entries(legacy.alerts)) verify(peer, alert.previousFingerprint)
+  return out
+}
+
+function legacySyncVersion(syncVersion: number): number {
+  return Number.isInteger(syncVersion) && syncVersion >= -1 ? syncVersion : -1
+}
+
+/** The trust records the old state maps to (see the module comment). */
+export function trustRecordsFromLegacy(legacy: LegacyTrustState, now: string): TrustRecordsData {
+  const data = emptyTrustRecords()
+  for (const [peer, keys] of Object.entries(legacyDecisions(legacy))) {
+    data.peers[peer] = Object.fromEntries(Object.entries(keys).map(([fp, decision]) => [fp, { decision, decidedAt: now }]))
+  }
   for (const [peer, list] of Object.entries(legacy.rejections)) {
     const kept = list.filter((r) => REJECTION_CODES.has(r.code)).map((r) => ({ ...r }))
     if (kept.length > 0) data.rejections[peer] = kept
   }
-  data.syncVersion = Number.isInteger(legacy.syncVersion) && legacy.syncVersion >= -1 ? legacy.syncVersion : -1
+  data.syncVersion = legacySyncVersion(legacy.syncVersion)
   return data
+}
+
+/**
+ * What differs between the records and what the migration made of the data
+ * the old seal covers. The old seal vouches for that data only, so the
+ * records are sealed anew only while nothing differs: decisions, sync
+ * version, and the set node not yet adopted.
+ */
+export function legacyRecordsMismatch(
+  check: PendingLegacySealCheck,
+  records: Pick<TrustRecordStore, 'decisions' | 'syncVersion' | 'setsAdopted'>,
+): string[] {
+  const details: string[] = []
+  if (canonicalJson(legacyDecisions(check.snapshot)) !== canonicalJson(records.decisions())) {
+    details.push('trust decisions differ from the upgraded trust state')
+  }
+  if (legacySyncVersion(check.snapshot.syncVersion) !== records.syncVersion() || records.setsAdopted()) {
+    details.push('verification sync state differs from the upgraded trust state')
+  }
+  return details
 }
 
 function legacySnapshotIsEmpty(snapshot: LegacySealSnapshot): boolean {

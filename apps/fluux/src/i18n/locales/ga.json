@@ -648,8 +648,8 @@
             "sendBlockedGeneric": "Níor seoladh an teachtaireacht. Theip ar an gcriptiú.",
             "sendBlockedKeysDistrusted": "Níor seoladh an teachtaireacht. Níl iontaoibh agat as aon cheann d'eochracha an teagmhálaí seo. Bíodh iontaoibh agat as ceann acu sula seolann tú.",
             "heldKeys": {
-                "partial": "D'fhíoraigh tú {{name}}, mar sin ní fhaigheann an eochair nua aon teachtaireacht go dtí go mbíonn iontaoibh agat aisti nó go bhfíoraíonn tú í.",
-                "all": "D'fhíoraigh tú {{name}}, mar sin ní fhaigheann an eochair nua aon teachtaireacht go dtí go mbíonn iontaoibh agat aisti nó go bhfíoraíonn tú í. Ní féidir leat teachtaireachtaí a sheoladh go dtí sin.",
+                "partial": "Chuir {{name}} eochair nua leis tar éis duit an teagmhálaí a fhíorú. Ní fhaigheann sí aon teachtaireacht go dtí go mbíonn iontaoibh agat aisti nó go bhfíoraíonn tú í.",
+                "all": "Chuir {{name}} eochair nua leis tar éis duit an teagmhálaí a fhíorú. Ní fhaigheann sí aon teachtaireacht go dtí go mbíonn iontaoibh agat aisti nó go bhfíoraíonn tú í. Ní féidir leat teachtaireachtaí a sheoladh go dtí sin.",
                 "distrusted": "Níl iontaoibh agat as aon cheann d'eochracha {{name}}. Ní féidir leat teachtaireachtaí a sheoladh go dtí go mbíonn iontaoibh agat as ceann acu.",
                 "review": "Athbhreithnigh eochracha"
             },

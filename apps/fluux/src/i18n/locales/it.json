@@ -646,8 +646,8 @@
             "sendBlockedGeneric": "Messaggio non inviato. Cifratura non riuscita.",
             "sendBlockedKeysDistrusted": "Messaggio non inviato. Non ti fidi di nessuna chiave di questo contatto. Fidati di una di esse prima di inviare.",
             "heldKeys": {
-                "partial": "Hai verificato {{name}}, quindi la sua nuova chiave non riceve messaggi finché non ti fidi di essa o non la verifichi.",
-                "all": "Hai verificato {{name}}, quindi la sua nuova chiave non riceve messaggi finché non ti fidi di essa o non la verifichi. Fino ad allora non puoi inviare messaggi.",
+                "partial": "{{name}} ha aggiunto una nuova chiave dopo che l'hai verificato. Non riceve messaggi finché non ti fidi di essa o non la verifichi.",
+                "all": "{{name}} ha aggiunto una nuova chiave dopo che l'hai verificato. Non riceve messaggi finché non ti fidi di essa o non la verifichi. Fino ad allora non puoi inviare messaggi.",
                 "distrusted": "Non ti fidi di nessuna chiave di {{name}}. Non puoi inviare messaggi finché non ti fidi di una di esse.",
                 "review": "Rivedi le chiavi"
             },

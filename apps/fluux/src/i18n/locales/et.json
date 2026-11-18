@@ -644,8 +644,8 @@
             "sendBlockedGeneric": "Sõnumit ei saadetud. Krüpteerimine ebaõnnestus.",
             "sendBlockedKeysDistrusted": "Sõnumit ei saadetud. Sa ei usalda ühtegi selle kontakti võtit. Usalda enne saatmist üht neist.",
             "heldKeys": {
-                "partial": "Oled kontakti {{name}} kinnitanud, seega uus võti ei saa sõnumeid enne, kui seda usaldad või kinnitad.",
-                "all": "Oled kontakti {{name}} kinnitanud, seega uus võti ei saa sõnumeid enne, kui seda usaldad või kinnitad. Seni ei saa sa sõnumeid saata.",
+                "partial": "Kontakt {{name}} lisas uue võtme pärast seda, kui sa ta kinnitasid. See ei saa sõnumeid enne, kui seda usaldad või kinnitad.",
+                "all": "Kontakt {{name}} lisas uue võtme pärast seda, kui sa ta kinnitasid. See ei saa sõnumeid enne, kui seda usaldad või kinnitad. Seni ei saa sa sõnumeid saata.",
                 "distrusted": "Sa ei usalda ühtegi kontakti {{name}} võtit. Sa ei saa sõnumeid saata enne, kui usaldad üht neist.",
                 "review": "Vaata võtmed üle"
             },

@@ -84,6 +84,7 @@ canonical fingerprint, never to the JID:
 | `verified`  | verified    | yes               |
 | `tofu`      | trusted     | yes               |
 | `untrusted` | not trusted | no                |
+| `held`      | unknown     | no                |
 | none        | see below   | see below         |
 
 How a key with no decision stands depends on the contact (`keyStanding`):
@@ -93,6 +94,11 @@ How a key with no decision stands depends on the contact (`keyStanding`):
   included): the key is held. It is shown as `unknown`, receives no messages and
   waits for you to verify, trust or refuse it. The conversation explains why and
   offers a way to review the keys.
+
+A held key stays held until you decide about it. When the contact loses its
+last verified key (you refuse it, remove its verification or forget it, or
+another device removes it), each key still waiting is recorded as `held`, and a
+later verification of another key does not approve it.
 
 While some keys are held, messages go to the keys that are used. When no key of
 the contact can be used, because every key is held or refused, nothing is sent:
@@ -114,7 +120,15 @@ decisions to plugin storage:
   are dropped, since per-key decisions replace them.
 
 The earlier records are read without being changed, so an older version still
-finds them, and are never written again.
+finds them, and are never written again. Records the oldest versions kept before
+scoping them per account go to the first account that reads them, as those
+versions moved them.
+
+Earlier versions sealed their records too. That seal is checked against the
+earlier records as those versions checked it, once the account's key is usable,
+and the new records are checked against what the upgrade made of the earlier
+ones. Until both checks pass, nothing is sealed, published or applied from the
+server; a failed check is reported for you to review and reseal.
 
 ## Cross-device sync (optional)
 
@@ -138,9 +152,12 @@ that decision on the device where you made it, so a key held on one device is
 held on each device until you decide there.
 
 Earlier versions published one fingerprint per contact to
-`urn:xmpp:fluux:verifications:0`. A device reads that node once, only when the
-`:1` node does not exist yet, and never writes it. A third-party client can
-verify locally without either node.
+`urn:xmpp:fluux:verifications:0`. A device reads that node only while the `:1`
+node does not exist yet, and never writes it. Once the device has read or
+written the `:1` node, it records that in its sealed trust records and never
+reads `:0` again, even when `:1` later goes missing: it publishes its own
+verified keys to `:1` instead. A third-party client can verify locally without
+either node.
 
 ## Implementing in another client
 

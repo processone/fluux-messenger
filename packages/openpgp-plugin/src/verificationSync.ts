@@ -36,10 +36,12 @@
  * Earlier versions published one verified fingerprint per contact to
  * `urn:xmpp:fluux:verifications:0`. The set format lives on a new node so an
  * older client, which may keep writing the older node, can never roll back or
- * shrink the sets. A device that finds the new node uses it and never reads
- * the older one again. When the new node is absent, the device reads the
- * older node (a payload without a version decodes to version `0`), applies it
- * under the same version rule, and publishes the winner to the new node.
+ * shrink the sets. A device that has read or written the new node records
+ * that in its sealed trust records and never reads the older one again, even
+ * if the new node later goes missing. Until then, when the new node is absent,
+ * the device reads the older node (a payload without a version decodes to
+ * version `0`), applies it under the same version rule, and publishes the
+ * winner to the new node.
  */
 
 import type { PluginContext, XMLElementData } from '@fluux/sdk'

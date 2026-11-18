@@ -648,8 +648,8 @@
             "sendBlockedGeneric": "Zpráva nebyla odeslána. Šifrování selhalo.",
             "sendBlockedKeysDistrusted": "Zpráva nebyla odeslána. Nedůvěřujete žádnému klíči tohoto kontaktu. Před odesláním jednomu z nich důvěřujte.",
             "heldKeys": {
-                "partial": "Kontakt {{name}} jste ověřili, proto jeho nový klíč nedostává zprávy, dokud mu nebudete důvěřovat nebo ho neověříte.",
-                "all": "Kontakt {{name}} jste ověřili, proto jeho nový klíč nedostává zprávy, dokud mu nebudete důvěřovat nebo ho neověříte. Do té doby nemůžete odesílat zprávy.",
+                "partial": "Kontakt {{name}} přidal nový klíč poté, co jste ho ověřili. Klíč nedostává zprávy, dokud mu nebudete důvěřovat nebo ho neověříte.",
+                "all": "Kontakt {{name}} přidal nový klíč poté, co jste ho ověřili. Klíč nedostává zprávy, dokud mu nebudete důvěřovat nebo ho neověříte. Do té doby nemůžete odesílat zprávy.",
                 "distrusted": "Nedůvěřujete žádnému klíči kontaktu {{name}}. Nemůžete odesílat zprávy, dokud jednomu z nich nebudete důvěřovat.",
                 "review": "Zkontrolovat klíče"
             },

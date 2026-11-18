@@ -1,7 +1,7 @@
 /**
  * Trust-state integrity: a sealed copy of the trust decisions and the
- * verification-sync version, to detect changes made to storage behind the
- * plugin's back.
+ * verification-sync state (its version, and whether the set node was
+ * adopted), to detect changes made to storage behind the plugin's back.
  *
  * The seal is the decisions encrypted to the account's own key, which also
  * signs them. It is rewritten after every change of a decision or of the sync
@@ -33,6 +33,7 @@ interface TrustStateSealPayload {
   sealedAt: string
   decisions: Record<string, Record<string, KeyDecision>>
   syncVersion: number
+  setsAdopted: boolean
 }
 
 /** JSON with every object's keys sorted, at every depth. */
@@ -67,6 +68,7 @@ export async function sealTrustState(
     sealedAt: new Date().toISOString(),
     decisions: records.decisions(),
     syncVersion: records.syncVersion(),
+    setsAdopted: records.setsAdopted(),
   }
   const armored = await encryptFn(JSON.stringify(payload), ownPublicArmored)
   await storage.put(TRUST_SEAL_STORAGE_KEY, encodeText(armored))
@@ -126,5 +128,6 @@ export async function verifyTrustStateSeal(
   const details: string[] = []
   if (canonicalJson(payload.decisions) !== canonicalJson(records.decisions())) details.push('trust decisions differ')
   if (payload.syncVersion !== records.syncVersion()) details.push('verification sync version differs')
+  if ((payload.setsAdopted === true) !== records.setsAdopted()) details.push('verification sync format differs')
   return details.length > 0 ? { status: 'compromised', details } : { status: 'sealed' }
 }

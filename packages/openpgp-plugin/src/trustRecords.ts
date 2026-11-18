@@ -13,7 +13,8 @@
  * verified (see {@link keyStanding}): a contact is verified while any of its
  * keys has a `verified` record, retired keys included. A key with no record is
  * used without asking (blind trust) for a contact never verified, and is held
- * until the user decides for a verified contact.
+ * until the user decides for a verified contact. A key with a `held` record
+ * stays held either way.
  */
 
 import type { PluginStorage } from '@fluux/sdk'
@@ -37,6 +38,11 @@ export interface TrustRecordsData {
   rejections: Record<string, CertRejection[]>
   /** Highest verification-sync version applied or reserved; `-1` when none. */
   syncVersion: number
+  /**
+   * The account's verifications live on the set node: this device read it or
+   * published it once. The older node is never read again after that.
+   */
+  setsAdopted: boolean
 }
 
 /** What one change to the records touched. */
@@ -47,7 +53,7 @@ export interface TrustRecordsChange {
   decisions: boolean
   /** The verified keys of some contact changed: they sync across devices. */
   verified: boolean
-  /** The sync version changed: the trust-state seal covers it. */
+  /** The sync version or the set adoption changed: the trust-state seal covers both. */
   syncVersion: boolean
   /**
    * Every record was replaced at once: read from storage, replaced by the
@@ -66,7 +72,7 @@ export interface KeyDecisionChange {
   decision: KeyDecision | null
 }
 
-const DECISIONS: ReadonlySet<string> = new Set(['verified', 'tofu', 'untrusted'])
+const DECISIONS: ReadonlySet<string> = new Set(['verified', 'tofu', 'untrusted', 'held'])
 const FINGERPRINT_PATTERN = /^(?:[0-9A-F]{40}|[0-9A-F]{64})$/
 const REJECTION_CODES: ReadonlySet<string> = new Set([
   'validation_failed',
@@ -76,7 +82,7 @@ const REJECTION_CODES: ReadonlySet<string> = new Set([
 ])
 
 export function emptyTrustRecords(): TrustRecordsData {
-  return { v: 1, peers: {}, rejections: {}, syncVersion: -1 }
+  return { v: 1, peers: {}, rejections: {}, syncVersion: -1, setsAdopted: false }
 }
 
 /**
@@ -147,6 +153,7 @@ export function parseTrustRecords(bytes: Uint8Array): TrustRecordsData | null {
   if (typeof parsed.syncVersion === 'number' && Number.isInteger(parsed.syncVersion) && parsed.syncVersion >= -1) {
     data.syncVersion = parsed.syncVersion
   }
+  data.setsAdopted = parsed.setsAdopted === true
   return data
 }
 
@@ -159,7 +166,8 @@ export interface KeyStanding {
   trust: 'verified' | 'tofu' | 'untrusted' | 'unknown'
   used: boolean
   notUsedReason?: 'awaiting-decision' | 'distrusted'
-  allowedDecisions: KeyDecision[]
+  /** The decisions the user may take; `held` is never one of them. */
+  allowedDecisions: Array<Exclude<KeyDecision, 'held'>>
 }
 
 /**
@@ -175,11 +183,15 @@ export function keyStanding(decision: KeyDecision | undefined, holdsNewKeys: boo
       return { trust: 'tofu', used: true, allowedDecisions: ['verified', 'untrusted'] }
     case 'untrusted':
       return { trust: 'untrusted', used: false, notUsedReason: 'distrusted', allowedDecisions: ['verified', 'tofu'] }
+    case 'held':
+      return awaitingDecision()
     default:
-      return holdsNewKeys
-        ? { trust: 'unknown', used: false, notUsedReason: 'awaiting-decision', allowedDecisions: ['verified', 'tofu', 'untrusted'] }
-        : { trust: 'tofu', used: true, allowedDecisions: ['verified', 'untrusted'] }
+      return holdsNewKeys ? awaitingDecision() : { trust: 'tofu', used: true, allowedDecisions: ['verified', 'untrusted'] }
   }
+}
+
+function awaitingDecision(): KeyStanding {
+  return { trust: 'unknown', used: false, notUsedReason: 'awaiting-decision', allowedDecisions: ['verified', 'tofu', 'untrusted'] }
 }
 
 /**
@@ -337,6 +349,10 @@ export class TrustRecordStore {
     return this.data.syncVersion
   }
 
+  setsAdopted(): boolean {
+    return this.data.setsAdopted
+  }
+
   // ---- writes ----
 
   /** Record decisions; a change equal to the current decision is skipped. */
@@ -384,6 +400,14 @@ export class TrustRecordStore {
   setSyncVersion(version: number): void {
     if (version === this.data.syncVersion) return
     this.data = { ...this.data, syncVersion: version }
+    this.persist()
+    this.emit({ peers: [], decisions: false, verified: false, syncVersion: true, loaded: false })
+  }
+
+  /** Record that the account's verifications live on the set node; it stays so. */
+  adoptSets(): void {
+    if (this.data.setsAdopted) return
+    this.data = { ...this.data, setsAdopted: true }
     this.persist()
     this.emit({ peers: [], decisions: false, verified: false, syncVersion: true, loaded: false })
   }

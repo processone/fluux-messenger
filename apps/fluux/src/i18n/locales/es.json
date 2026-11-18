@@ -646,8 +646,8 @@
             "sendBlockedGeneric": "Mensaje no enviado. El cifrado ha fallado.",
             "sendBlockedKeysDistrusted": "Mensaje no enviado. No confías en ninguna clave de este contacto. Confía en una de ellas antes de enviar.",
             "heldKeys": {
-                "partial": "Verificaste a {{name}}, así que su nueva clave no recibe mensajes hasta que confíes en ella o la verifiques.",
-                "all": "Verificaste a {{name}}, así que su nueva clave no recibe mensajes hasta que confíes en ella o la verifiques. Hasta entonces no puedes enviar mensajes.",
+                "partial": "{{name}} añadió una clave nueva después de que lo verificaras. No recibe mensajes hasta que confíes en ella o la verifiques.",
+                "all": "{{name}} añadió una clave nueva después de que lo verificaras. No recibe mensajes hasta que confíes en ella o la verifiques. Hasta entonces no puedes enviar mensajes.",
                 "distrusted": "No confías en ninguna clave de {{name}}. No puedes enviar mensajes hasta que confíes en una de ellas.",
                 "review": "Revisar claves"
             },

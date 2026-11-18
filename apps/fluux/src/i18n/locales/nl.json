@@ -642,8 +642,8 @@
             "sendBlockedGeneric": "Bericht niet verzonden. Versleuteling mislukt.",
             "sendBlockedKeysDistrusted": "Bericht niet verzonden. Je vertrouwt geen enkele sleutel van dit contact. Vertrouw er een voordat je verzendt.",
             "heldKeys": {
-                "partial": "Je hebt {{name}} geverifieerd, dus de nieuwe sleutel ontvangt geen berichten totdat je hem vertrouwt of verifieert.",
-                "all": "Je hebt {{name}} geverifieerd, dus de nieuwe sleutel ontvangt geen berichten totdat je hem vertrouwt of verifieert. Tot die tijd kun je geen berichten verzenden.",
+                "partial": "{{name}} heeft een nieuwe sleutel toegevoegd nadat je dit contact hebt geverifieerd. Die ontvangt geen berichten totdat je hem vertrouwt of verifieert.",
+                "all": "{{name}} heeft een nieuwe sleutel toegevoegd nadat je dit contact hebt geverifieerd. Die ontvangt geen berichten totdat je hem vertrouwt of verifieert. Tot die tijd kun je geen berichten verzenden.",
                 "distrusted": "Je vertrouwt geen enkele sleutel van {{name}}. Je kunt geen berichten verzenden totdat je er een vertrouwt.",
                 "review": "Sleutels bekijken"
             },

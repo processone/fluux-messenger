@@ -10,6 +10,7 @@ import type { InvokeFn } from './SequoiaPgpPlugin'
 import { resetUncertainImportsForTesting, SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 import { deleteOwnKey, legacyNormalizeBackupPassphrase } from './index'
 import {
+  canonicalFingerprint,
   emptyTrustRecords,
   parseTrustRecords,
   serializeTrustRecords,
@@ -1001,12 +1002,14 @@ describe('SequoiaPgpPlugin', () => {
       publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
 
       const querySpy = vi.spyOn(built.ctx.xmpp, 'queryPEP')
+      // The plugin reads its own account's nodes in the background meanwhile.
+      const bobQueries = () => querySpy.mock.calls.filter(([jid]) => jid === 'bob@example.com').length
       await plugin.probePeer('bob@example.com')
       // First probe: one queryPEP for metadata, one for the data node.
-      expect(querySpy).toHaveBeenCalledTimes(2)
+      expect(bobQueries()).toBe(2)
       await plugin.probePeer('bob@example.com')
       // Second probe hits the in-plugin cache — no additional queryPEP.
-      expect(querySpy).toHaveBeenCalledTimes(2)
+      expect(bobQueries()).toBe(2)
     })
 
     it('resolves a peer that advertises only v6-fingerprint', async () => {
@@ -1972,6 +1975,56 @@ describe('SequoiaPgpPlugin', () => {
           trust: 'tofu', usedForEncryption: true,
         })
         expect(trustRecordsOf(plugin).decisionOf(PEER, P2.fingerprint)).toBe('tofu')
+      })
+
+      // The user's choice: a key waiting for a decision stays held until the
+      // user decides, even once the contact has no verified key left.
+      it.each([
+        ['the user refuses the verified key', async (P1: KeyBundle) => plugin.setIdentityTrust(PEER, P1.fingerprint, 'untrusted')],
+        ['the user removes its verification', async (P1: KeyBundle) => plugin.setIdentityTrust(PEER, P1.fingerprint, 'tofu')],
+      ])('keeps the new key held when %s', async (_case, change) => {
+        const { P1, P2 } = await verifiedBobGainsKey()
+        await change(P1)
+
+        expect(trustRecordsOf(plugin).hasVerified(PEER)).toBe(false)
+        expect((await plugin.listPeerIdentities(PEER)).find((i) => i.id === P2.fingerprint)).toMatchObject({
+          trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision',
+        })
+        const recipients = (await plugin.listPeerIdentities(PEER)).filter((i) => i.usedForEncryption).map((i) => i.id)
+        expect(recipients).not.toContain(P2.fingerprint)
+      })
+
+      it('keeps the new key held when the user forgets the verified key the contact no longer announces', async () => {
+        const { bobPep, P1, P2 } = await verifiedBobGainsKey()
+        bobPep.announce([P2])
+        plugin.onPeerKeysChanged(PEER)
+        await flush()
+        await plugin.setIdentityTrust(PEER, P1.fingerprint, 'tofu')
+
+        expect(trustRecordsOf(plugin).hasVerified(PEER)).toBe(false)
+        await expect(plugin.encrypt(await openBob(), encodeBodyAsPayload('nobody'))).rejects.toMatchObject({
+          code: 'peer-keys-awaiting-decision',
+        })
+      })
+
+      it('keeps a held key held when the user later verifies another key of the contact', async () => {
+        const { bobPep, P1, P2 } = await verifiedBobGainsKey()
+        await plugin.setIdentityTrust(PEER, P1.fingerprint, 'tofu')
+        const P3 = validKey('CCCC000000000000000000000000000000000003')
+        bobPep.announce([P1, P2, P3])
+        plugin.onPeerKeysChanged(PEER)
+        await flush()
+        await plugin.setIdentityTrust(PEER, P3.fingerprint, 'verified')
+
+        const list = await plugin.listPeerIdentities(PEER)
+        expect(list.find((i) => i.id === P2.fingerprint)).toMatchObject({ usedForEncryption: false, notUsedReason: 'awaiting-decision' })
+        expect(list.find((i) => i.id === P1.fingerprint)).toMatchObject({ trust: 'tofu', usedForEncryption: true })
+
+        // The user's own decision still lets it receive messages.
+        await plugin.setIdentityTrust(PEER, P2.fingerprint, 'tofu')
+        expect((await plugin.listPeerIdentities(PEER)).find((i) => i.id === P2.fingerprint)).toMatchObject({
+          trust: 'tofu', usedForEncryption: true,
+        })
       })
 
       it('never holds a new key of the account itself', async () => {
@@ -5069,6 +5122,80 @@ describe('SequoiaPgpPlugin', () => {
       expect(getTrustStateStatus()).toBe('sealed')
       expect(await built.ctx.storage.get('legacy-seal-check')).toBeNull()
     })
+
+    // The check of the earlier seal waits while the key is unusable; the
+    // records changed meanwhile, behind the plugin's back, must not be
+    // sealed in its place.
+    it.each([
+      ['while the check waits', false, 'trust decisions differ from the upgraded trust state'],
+      ['and the waiting check is removed', true, 'Trust state seal was removed but trust records contain data'],
+    ])('reports records changed behind the plugin %s, and seals nothing', async (_case, removeCheck, detail) => {
+      saveEarlierVersion()
+      const first = makeContext(ME)
+      fake.failNextOwnDecryptWith('key-unrecoverable')
+      await plugin.init(first.ctx)
+      await vi.waitFor(() => expect(getTrustStateStatus()).toBe('awaiting-key'))
+      await plugin.shutdown()
+      const storage = first.ctx.storage
+      const records = JSON.parse(new TextDecoder().decode((await storage.get('trust-records'))!))
+      records.peers['mallory@example.com'] = { [CAROL_NEW_FP]: { decision: 'verified', decidedAt: '2026-11-18T10:00:00.000Z' } }
+      await storage.put('trust-records', new TextEncoder().encode(JSON.stringify(records)))
+      if (removeCheck) await storage.delete('legacy-seal-check')
+
+      const restarted = new SequoiaPgpPlugin({ ...desktopHost(), invoke: fake.invoke })
+      await restarted.init(makeContext(ME, { storage }).ctx)
+      try {
+        await vi.waitFor(() => expect(getTrustStateStatus(restarted)).toBe('compromised'))
+        expect(restarted.getTrustState().details).toEqual([detail])
+        await new Promise((r) => setTimeout(r, 700))
+        expect(getTrustStateStatus(restarted)).toBe('compromised')
+        expect(await storage.get('trust-seal')).toBeNull()
+      } finally {
+        await restarted.shutdown()
+      }
+    })
+
+    it('does not sync or seal a compromised upgrade until the user reseals it', async () => {
+      // The set node is absent: a sync would move the verified keys to it and
+      // reserve a new version, which used to seal the reported records.
+      saveEarlierVersion({ ...EARLIER, verified: { 'bob@example.com': CAROL_NEW_FP } })
+      const built = makeContext(ME)
+      await plugin.init(built.ctx)
+      await vi.waitFor(() => expect(getTrustStateStatus()).toBe('compromised'))
+      await new Promise((r) => setTimeout(r, 700))
+
+      const setsPublished = () => built.published.filter((p) => p.node === 'urn:xmpp:fluux:verifications:1')
+      expect(getTrustStateStatus()).toBe('compromised')
+      expect(setsPublished()).toEqual([])
+      expect(trustRecordsOf(plugin).syncVersion()).toBe(4)
+      expect(await built.ctx.storage.get('trust-seal')).toBeNull()
+
+      await plugin.resealTrustState()
+      await vi.waitFor(() => expect(setsPublished()).toHaveLength(1))
+      expect(trustRecordsOf(plugin).syncVersion()).toBe(5)
+    })
+
+    it('moves the values earlier versions kept before scoping by account into the first account only', async () => {
+      // Very early versions kept one unscoped copy; their loaders moved it to
+      // the first account that loaded it.
+      localStorage.setItem('fluux-e2ee-verified-peers', JSON.stringify({ 'bob@example.com': BOB_FP }))
+      localStorage.setItem('fluux-e2ee-verifications-version', '6')
+      await plugin.init(makeContext(ME).ctx)
+      expect(trustRecordsOf(plugin).isVerified('bob@example.com', BOB_FP)).toBe(true)
+      expect(trustRecordsOf(plugin).syncVersion()).toBe(6)
+      await plugin.shutdown()
+
+      const second = new SequoiaPgpPlugin({ ...desktopHost(), invoke: fake.invoke })
+      await second.init(makeContext('other@example.com').ctx)
+      try {
+        expect(trustRecordsOf(second).hasVerified('bob@example.com')).toBe(false)
+        expect(trustRecordsOf(second).syncVersion()).toBe(-1)
+      } finally {
+        await second.shutdown()
+      }
+      // The values stay in place for an earlier version.
+      expect(localStorage.getItem('fluux-e2ee-verified-peers')).toBe(JSON.stringify({ 'bob@example.com': BOB_FP }))
+    })
   })
 
   describe('verification trust', () => {
@@ -5096,11 +5223,15 @@ describe('SequoiaPgpPlugin', () => {
       expect(trust).toBe('tofu')
     })
 
-    it("decrypt marks a message signed by a refused key 'untrusted', with a note", async () => {
+    it("decrypt keeps a refused key's valid signature as 'tofu' with its fingerprint, so a later Trust shows", async () => {
+      // The refusal is applied when the app shows the message, from the
+      // signing fingerprint; baking `untrusted` here would outlive a later
+      // Trust or Verify of the same key.
       const { alice, bob } = await buildCrossPublishedPair(fake)
       await alice.plugin.probePeer('bob@example.com')
       await bob.plugin.probePeer('alice@example.com')
-      await bob.plugin.setIdentityTrust('alice@example.com', alice.plugin.getOwnFingerprint()!, 'untrusted')
+      const aliceFp = alice.plugin.getOwnFingerprint()!
+      await bob.plugin.setIdentityTrust('alice@example.com', aliceFp, 'untrusted')
 
       const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
       const payload = await alice.plugin.encrypt(handle, encodeBodyAsPayload('from a refused key'))
@@ -5108,8 +5239,10 @@ describe('SequoiaPgpPlugin', () => {
       const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
       const decrypted = await bob.plugin.decrypt(bobHandle, claim)
 
-      expect(decrypted.securityContext.trust).toBe('untrusted')
-      expect(decrypted.securityContext.notes).toEqual(['Signed by a key you marked as not trusted'])
+      expect(decrypted.securityContext.trust).toBe('tofu')
+      expect(decrypted.securityContext.notes).toBeUndefined()
+      expect(canonicalFingerprint(decrypted.securityContext.fingerprint!)).toBe(canonicalFingerprint(aliceFp))
+      expect(bob.plugin.getKeyDecisions('alice@example.com')).toEqual({ [canonicalFingerprint(aliceFp)!]: 'untrusted' })
     })
 
     it("decrypt produces 'verified' security context when the sender is verified", async () => {
@@ -5330,6 +5463,43 @@ describe('SequoiaPgpPlugin', () => {
       expect(setsPublishes(built.published)).toEqual([])
     })
 
+    it('never reads the older node again once the set node was read, even when the set node is later absent', async () => {
+      const built = makeContext('me@example.com')
+      const fp = '5C00000000000000000000000000000000000021'
+      ownKey(fp)
+      const server = serverNodes(built)
+      server.nodes.sets = setsItem(fp, { 'bob@example.com': [BOB_FP] }, 2)
+      // An older client of this account wrote alice to the older node, with a higher version.
+      server.nodes.legacy = legacyItem(fp, { 'alice@example.com': ALICE_FP }, 9)
+      await plugin.init(built.ctx)
+      await settle()
+      expect(trustRecordsOf(plugin).setsAdopted()).toBe(true)
+
+      // The server stops serving the set node.
+      server.nodes.sets = null
+      server.notify(SETS_NODE)
+      await settle()
+      expect(trustRecordsOf(plugin).verifiedSets()).toEqual({ 'bob@example.com': [BOB_FP] })
+      // The verified keys go back to the set node, never to the older one.
+      expect(decodePublished(setsPublishes(built.published).at(-1)!.item)).toMatchObject({
+        version: 3, verified: { 'bob@example.com': [BOB_FP] },
+      })
+      await plugin.shutdown()
+
+      // After a restart the set node is absent again.
+      const again = makeContext('me@example.com', { storage: built.ctx.storage })
+      serverNodes(again).nodes.legacy = server.nodes.legacy
+      const restarted = new SequoiaPgpPlugin({ ...desktopHost(), invoke: fake.invoke })
+      await restarted.init(again.ctx)
+      try {
+        await vi.waitFor(() => expect(getTrustStateStatus(restarted)).toBe('sealed'))
+        await settle()
+        expect(trustRecordsOf(restarted).verifiedSets()).toEqual({ 'bob@example.com': [BOB_FP] })
+      } finally {
+        await restarted.shutdown()
+      }
+    })
+
     it('publishes nothing when nothing is verified anywhere', async () => {
       const built = makeContext('me@example.com')
       ownKey('5C00000000000000000000000000000000000021')
@@ -5423,6 +5593,35 @@ describe('SequoiaPgpPlugin', () => {
       expect(trustRecordsOf(plugin).isVerified('dave@example.com', DAVE_FP)).toBe(true)
       // D2 was in use before the verification: it stays in use, approved.
       expect(trustRecordsOf(plugin).decisionOf('dave@example.com', ERIN_FP)).toBe('tofu')
+    })
+
+    // The user's choice: a key waiting for a decision stays held after the
+    // contact's last verification goes, here removed on another device.
+    it('keeps a held key held when another device removes the contact\'s last verification', async () => {
+      const built = makeContext('me@example.com')
+      const fp = '3E46E00000000000000000000000000000000028'
+      ownKey(fp)
+      const server = serverNodes(built)
+      await plugin.init(built.ctx)
+      const davePep = installDavePep(built)
+      davePep.announce([validDaveKey(DAVE_FP)])
+      await plugin.probePeer('dave@example.com')
+      server.nodes.sets = setsItem(fp, { 'dave@example.com': [DAVE_FP] }, 2)
+      server.notify(SETS_NODE)
+      await settle()
+      davePep.announce([validDaveKey(DAVE_FP), validDaveKey(ERIN_FP)])
+      plugin.onPeerKeysChanged('dave@example.com')
+      await settle()
+      expect((await plugin.listPeerIdentities('dave@example.com')).find((i) => i.id === ERIN_FP)?.notUsedReason).toBe('awaiting-decision')
+
+      server.nodes.sets = setsItem(fp, {}, 3)
+      server.notify(SETS_NODE)
+      await settle()
+
+      expect(trustRecordsOf(plugin).hasVerified('dave@example.com')).toBe(false)
+      expect((await plugin.listPeerIdentities('dave@example.com')).find((i) => i.id === ERIN_FP)).toMatchObject({
+        usedForEncryption: false, notUsedReason: 'awaiting-decision',
+      })
     })
 
     it('does not publish again for a list it applied from the server', async () => {

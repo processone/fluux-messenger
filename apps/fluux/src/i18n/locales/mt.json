@@ -650,8 +650,8 @@
             "sendBlockedGeneric": "Il-messaġġ ma ntbagħatx. L-encryption falla.",
             "sendBlockedKeysDistrusted": "Il-messaġġ ma ntbagħatx. Ma tafda l-ebda ċavetta ta' dan il-kuntatt. Afda waħda minnhom qabel ma tibgħat.",
             "heldKeys": {
-                "partial": "Ivverifikajt lil {{name}}, għalhekk iċ-ċavetta l-ġdida ma tirċievi l-ebda messaġġ sakemm tafdaha jew tivverifikaha.",
-                "all": "Ivverifikajt lil {{name}}, għalhekk iċ-ċavetta l-ġdida ma tirċievi l-ebda messaġġ sakemm tafdaha jew tivverifikaha. Sa dakinhar ma tistax tibgħat messaġġi.",
+                "partial": "{{name}} żied ċavetta ġdida wara li vverifikajtu. Ma tirċievi l-ebda messaġġ sakemm tafdaha jew tivverifikaha.",
+                "all": "{{name}} żied ċavetta ġdida wara li vverifikajtu. Ma tirċievi l-ebda messaġġ sakemm tafdaha jew tivverifikaha. Sa dakinhar ma tistax tibgħat messaġġi.",
                 "distrusted": "Ma tafda l-ebda ċavetta ta' {{name}}. Ma tistax tibgħat messaġġi sakemm tafda waħda minnhom.",
                 "review": "Irrevedi ċ-ċwievet"
             },

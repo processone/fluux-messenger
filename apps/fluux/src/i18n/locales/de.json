@@ -644,8 +644,8 @@
             "sendBlockedGeneric": "Nachricht nicht gesendet. Verschlüsselung fehlgeschlagen.",
             "sendBlockedKeysDistrusted": "Nachricht nicht gesendet. Du vertraust keinem Schlüssel dieses Kontakts. Vertraue einem davon vor dem Senden.",
             "heldKeys": {
-                "partial": "Du hast {{name}} verifiziert, daher erhält der neue Schlüssel keine Nachrichten, bis du ihm vertraust oder ihn verifizierst.",
-                "all": "Du hast {{name}} verifiziert, daher erhält der neue Schlüssel keine Nachrichten, bis du ihm vertraust oder ihn verifizierst. Bis dahin kannst du keine Nachrichten senden.",
+                "partial": "{{name}} hat einen neuen Schlüssel hinzugefügt, nachdem du den Kontakt verifiziert hast. Er erhält keine Nachrichten, bis du ihm vertraust oder ihn verifizierst.",
+                "all": "{{name}} hat einen neuen Schlüssel hinzugefügt, nachdem du den Kontakt verifiziert hast. Er erhält keine Nachrichten, bis du ihm vertraust oder ihn verifizierst. Bis dahin kannst du keine Nachrichten senden.",
                 "distrusted": "Du vertraust keinem Schlüssel von {{name}}. Du kannst keine Nachrichten senden, bis du einem davon vertraust.",
                 "review": "Schlüssel prüfen"
             },

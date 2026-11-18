@@ -642,8 +642,8 @@
             "sendBlockedGeneric": "Meddelandet skickades inte. Krypteringen misslyckades.",
             "sendBlockedKeysDistrusted": "Meddelandet skickades inte. Du litar inte på någon av den här kontaktens nycklar. Lita på en av dem innan du skickar.",
             "heldKeys": {
-                "partial": "Du har verifierat {{name}}, så den nya nyckeln tar inte emot några meddelanden förrän du litar på den eller verifierar den.",
-                "all": "Du har verifierat {{name}}, så den nya nyckeln tar inte emot några meddelanden förrän du litar på den eller verifierar den. Fram till dess kan du inte skicka meddelanden.",
+                "partial": "{{name}} har lagt till en ny nyckel efter att du verifierade kontakten. Den tar inte emot några meddelanden förrän du litar på den eller verifierar den.",
+                "all": "{{name}} har lagt till en ny nyckel efter att du verifierade kontakten. Den tar inte emot några meddelanden förrän du litar på den eller verifierar den. Fram till dess kan du inte skicka meddelanden.",
                 "distrusted": "Du litar inte på någon av nycklarna för {{name}}. Du kan inte skicka meddelanden förrän du litar på en av dem.",
                 "review": "Granska nycklar"
             },

@@ -642,8 +642,8 @@
             "sendBlockedGeneric": "Viestiä ei lähetetty. Salaus epäonnistui.",
             "sendBlockedKeysDistrusted": "Viestiä ei lähetetty. Et luota yhteenkään tämän yhteyshenkilön avaimeen. Luota johonkin niistä ennen lähettämistä.",
             "heldKeys": {
-                "partial": "Olet varmentanut yhteystiedon {{name}}, joten uusi avain ei vastaanota viestejä ennen kuin luotat siihen tai varmennat sen.",
-                "all": "Olet varmentanut yhteystiedon {{name}}, joten uusi avain ei vastaanota viestejä ennen kuin luotat siihen tai varmennat sen. Siihen asti et voi lähettää viestejä.",
+                "partial": "{{name}} lisäsi uuden avaimen sen jälkeen, kun varmensit yhteystiedon. Avain ei vastaanota viestejä ennen kuin luotat siihen tai varmennat sen.",
+                "all": "{{name}} lisäsi uuden avaimen sen jälkeen, kun varmensit yhteystiedon. Avain ei vastaanota viestejä ennen kuin luotat siihen tai varmennat sen. Siihen asti et voi lähettää viestejä.",
                 "distrusted": "Et luota yhteenkään yhteystiedon {{name}} avaimeen. Et voi lähettää viestejä ennen kuin luotat johonkin niistä.",
                 "review": "Tarkista avaimet"
             },

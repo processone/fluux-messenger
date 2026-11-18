@@ -646,8 +646,8 @@
             "sendBlockedGeneric": "Missatge no enviat. El xifratge ha fallat.",
             "sendBlockedKeysDistrusted": "Missatge no enviat. No confieu en cap clau d'aquest contacte. Confieu en una d'elles abans d'enviar.",
             "heldKeys": {
-                "partial": "Heu verificat {{name}}, per això la seva clau nova no rep missatges fins que hi confieu o la verifiqueu.",
-                "all": "Heu verificat {{name}}, per això la seva clau nova no rep missatges fins que hi confieu o la verifiqueu. Fins aleshores no podeu enviar missatges.",
+                "partial": "{{name}} ha afegit una clau nova després que el verifiquéssiu. No rep missatges fins que hi confieu o la verifiqueu.",
+                "all": "{{name}} ha afegit una clau nova després que el verifiquéssiu. No rep missatges fins que hi confieu o la verifiqueu. Fins aleshores no podeu enviar missatges.",
                 "distrusted": "No confieu en cap clau de {{name}}. No podeu enviar missatges fins que confieu en una d'elles.",
                 "review": "Revisa les claus"
             },

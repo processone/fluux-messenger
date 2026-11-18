@@ -65,6 +65,7 @@ describe('parseTrustRecords', () => {
       peers: { [BOB]: { [FP_A]: { decision: 'verified', decidedAt: '2024-01-01T00:00:00.000Z' } } },
       rejections: {},
       syncVersion: -1,
+      setsAdopted: false,
     })
   })
 
@@ -81,6 +82,8 @@ describe('keyStanding', () => {
     ['untrusted', false, { trust: 'untrusted', used: false, notUsedReason: 'distrusted', allowedDecisions: ['verified', 'tofu'] }],
     [undefined, false, { trust: 'tofu', used: true, allowedDecisions: ['verified', 'untrusted'] }],
     [undefined, true, { trust: 'unknown', used: false, notUsedReason: 'awaiting-decision', allowedDecisions: ['verified', 'tofu', 'untrusted'] }],
+    // A key still waiting when its contact lost the last verification keeps waiting.
+    ['held', false, { trust: 'unknown', used: false, notUsedReason: 'awaiting-decision', allowedDecisions: ['verified', 'tofu', 'untrusted'] }],
   ] as const)('a %s key of a contact that holds new keys: %s', (decision, holds, expected) => {
     expect(keyStanding(decision, holds)).toEqual(expected)
   })
@@ -115,12 +118,14 @@ describe('TrustRecordStore', () => {
       { peer: BOB, fingerprint: FP_B, decision: 'untrusted' },
     ], '2024-01-01T00:00:00.000Z')
     first.setSyncVersion(2)
+    first.adoptSets()
     await first.flush()
 
     const second = new TrustRecordStore()
     expect(await second.attach(storage)).toEqual({ found: true, readable: true })
     expect(second.decisions()).toEqual({ [BOB]: { [FP_A]: 'verified', [FP_B]: 'untrusted' } })
     expect(second.syncVersion()).toBe(2)
+    expect(second.setsAdopted()).toBe(true)
     expect(second.verifiedSets()).toEqual({ [BOB]: [FP_A] })
   })
 

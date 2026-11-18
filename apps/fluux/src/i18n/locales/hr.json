@@ -644,8 +644,8 @@
             "sendBlockedGeneric": "Poruka nije poslana. Šifriranje nije uspjelo.",
             "sendBlockedKeysDistrusted": "Poruka nije poslana. Ne vjerujete nijednom ključu ovog kontakta. Prije slanja vjerujte jednom od njih.",
             "heldKeys": {
-                "partial": "Kontakt {{name}} ste provjerili, pa njegov novi ključ ne prima poruke dok mu ne vjerujete ili ga ne provjerite.",
-                "all": "Kontakt {{name}} ste provjerili, pa njegov novi ključ ne prima poruke dok mu ne vjerujete ili ga ne provjerite. Do tada ne možete slati poruke.",
+                "partial": "Kontakt {{name}} dodao je novi ključ nakon što ste ga provjerili. Ključ ne prima poruke dok mu ne vjerujete ili ga ne provjerite.",
+                "all": "Kontakt {{name}} dodao je novi ključ nakon što ste ga provjerili. Ključ ne prima poruke dok mu ne vjerujete ili ga ne provjerite. Do tada ne možete slati poruke.",
                 "distrusted": "Ne vjerujete nijednom ključu kontakta {{name}}. Ne možete slati poruke dok ne vjerujete jednom od njih.",
                 "review": "Pregledaj ključeve"
             },
