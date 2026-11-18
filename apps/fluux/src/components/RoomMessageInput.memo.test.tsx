@@ -2,6 +2,7 @@ import { roomMessageFixture } from '@/test-utils/roomMessages'
 import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useState, type ComponentProps, type ReactElement } from 'react'
+import { flushSync } from 'react-dom'
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // Count MessageComposer renders via a spy module mock.
@@ -213,6 +214,32 @@ describe('ordinary room sends', () => {
       replyTo: undefined, attachment: attachment ? uploadedAttachment : undefined,
     }))
     expect(uploadFile).toHaveBeenCalledTimes(attachment ? 1 : 0)
+  })
+})
+
+// Typing in a joined room must not raise "Maximum update depth exceeded", however
+// quickly the keys arrive. Each key is a discrete update, as the editor's input event
+// is, and no task runs between keys, as when keys arrive back to back: work React
+// defers to an idle moment never runs. React's limit is 50 nested updates, so the
+// message is longer than that.
+describe('typing', () => {
+  const NESTED_UPDATE_LIMIT = 50
+  const MESSAGE = 'first message in the room, typed with no pause between the keys'
+
+  it('takes a long message typed with no pause between keys', () => {
+    expect(MESSAGE.length).toBeGreaterThan(NESTED_UPDATE_LIMIT)
+    roomStore.setState({ drafts: new Map() })
+    render(<RoomMessageInput {...STABLE} />)
+    const actEnvironment = (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false
+    try {
+      for (let typed = 1; typed <= MESSAGE.length; typed++) {
+        flushSync(() => capturedComposer.props!.onValueChange!(MESSAGE.slice(0, typed)))
+      }
+    } finally {
+      ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = actEnvironment
+    }
+    expect(capturedComposer.props!.value).toBe(MESSAGE)
   })
 })
 
