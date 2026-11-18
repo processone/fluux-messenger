@@ -121,6 +121,7 @@ describe('public API surface', () => {
     // Reading a node the SDK does not model means naming the node and walking
     // its payload: protocol work, and `@fluux/sdk/xmpp` is where that lives.
     expect(Object.keys(xmpp)).toContain('queryPepNode')
+    expect(Object.keys(xmpp)).toContain('publishPepNode')
   })
 
   it('does not advertise an incomplete multi-client store bundle', () => {

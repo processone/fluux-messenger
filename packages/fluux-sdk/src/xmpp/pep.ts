@@ -1,12 +1,12 @@
 /**
- * Raw PEP reads, for nodes the SDK does not model.
+ * Raw PEP reads and writes, for nodes the SDK does not model.
  *
  * @module XMPP/PEP
  */
 
 import type { XMPPClient } from '../core/XMPPClient'
-import type { PEPItem } from '../core/e2ee'
-import { queryPepNodeFromClient } from '../core/rawXmppAccess'
+import type { PEPItem, PEPPublishOptions } from '../core/e2ee'
+import { queryPepNodeFromClient, publishPepNodeFromClient } from '../core/rawXmppAccess'
 
 /**
  * Read items from a PEP node by name (XEP-0060, XEP-0163).
@@ -48,4 +48,28 @@ export async function queryPepNode(
   maxItems?: number,
 ): Promise<PEPItem[]> {
   return queryPepNodeFromClient(client, jid, node, maxItems)
+}
+
+/**
+ * Publish one item to one of the account's own PEP nodes (XEP-0060, XEP-0163).
+ *
+ * The write counterpart of {@link queryPepNode}, for a node the SDK does not
+ * model, and for code that must write before any E2EE plugin is registered.
+ * It publishes to the account's own PEP service only, never to another JID.
+ * Omit `options` to leave an existing node's configuration as it is; a
+ * `publish-options` the node does not already match is refused by the server
+ * with `precondition-not-met`.
+ *
+ * @param client - A connected client.
+ * @param node - The node's name.
+ * @param item - The item id and its payload as {@link XMLElementData}.
+ * @param options - Optional XEP-0060 publish options.
+ */
+export async function publishPepNode(
+  client: XMPPClient,
+  node: string,
+  item: PEPItem,
+  options?: PEPPublishOptions,
+): Promise<void> {
+  return publishPepNodeFromClient(client, node, item, options)
 }
