@@ -550,6 +550,8 @@ export class DemoClient extends XMPPClient {
         roomCoverage: new Map([...state.roomCoverage, ...roomCoverage]),
       }))
     }
+    // The seeded rooms are all the demo account has.
+    roomStore.getState().markBookmarksLoaded()
 
     // Set MUC service JID so BrowseRoomsModal can discover it
     this.emitSDK('admin:room-service', { mucServiceJid: this.conferenceService })

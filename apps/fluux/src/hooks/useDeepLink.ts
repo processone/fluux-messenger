@@ -8,13 +8,13 @@
  */
 import { useEffect, useRef, useCallback } from 'react'
 import { useChat, useRoom, useRoster, chatStore, roomStore, connectionStore, rosterStore, type Conversation, parseXmppUri, parseRoomMessageLink, isMucJid, getBareJid, getLocalPart } from '@fluux/sdk'
-import { useConnectionStore, useRosterStore } from '@fluux/sdk/react'
+import { useConnectionStore, useRosterStore, useRoomStore } from '@fluux/sdk/react'
 import { useNavigateToTarget } from './useNavigateToTarget'
 import { useTranslation } from 'react-i18next'
 import { useToastStore } from '@/stores/toastStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 import { useRoomMessageLink } from './useRoomMessageLink'
-import { isShortcutURL, resolveShortcutURL } from '@/utils/shortcutConversation'
+import { isRoomShortcutURL, isShortcutURL, resolveShortcutURL } from '@/utils/shortcutConversation'
 import { deferDeepLink, ensureDeepLinkRouter, setNavigationHandler, takeQueuedDeepLinks } from '@/utils/deepLinkRouter'
 import { useNavigate } from 'react-router'
 
@@ -44,6 +44,7 @@ export function useDeepLink() {
   const jid = useConnectionStore((s) => s.jid)
   const status = useConnectionStore((s) => s.status)
   const rosterReady = useRosterStore((s) => rosterLoadedFor(jid, s))
+  const bookmarksLoaded = useRoomStore((s) => s.bookmarksLoaded)
   const contactsRef = useRef(contacts)
   const jidRef = useRef(jid)
 
@@ -58,8 +59,10 @@ export function useDeepLink() {
     if (isShortcutURL(uri)) {
       const liveAccount = connectionStore.getState().jid ?? null
       // A shortcut is checked against the live account's conversations, so it
-      // waits for that account's roster (replayed below once it has loaded).
-      if (!rosterLoadedFor(liveAccount, rosterStore.getState())) {
+      // waits for that account's roster, and a room's for the bookmarks, which
+      // a cold launch loads after the roster (replayed below once loaded).
+      if (!rosterLoadedFor(liveAccount, rosterStore.getState())
+        || (isRoomShortcutURL(uri) && !roomStore.getState().bookmarksLoaded)) {
         deferDeepLink(uri)
         return
       }
@@ -188,9 +191,10 @@ export function useDeepLink() {
 
   // Links that arrived before the app was online (during the startup reconnect
   // or on the login form) are replayed once it is, and again once the
-  // account's roster has loaded, for the shortcuts that wait for it.
+  // account's roster and then its bookmarks have loaded, for the shortcuts
+  // that wait for them.
   useEffect(() => {
     if (status !== 'online') return
     for (const uri of takeQueuedDeepLinks()) handleXmppUriSafely(uri)
-  }, [status, rosterReady, handleXmppUriSafely])
+  }, [status, rosterReady, bookmarksLoaded, handleXmppUriSafely])
 }

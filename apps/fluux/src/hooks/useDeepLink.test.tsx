@@ -13,7 +13,7 @@ const mockJoinResult = vi.fn()
 const mockHasConversation = vi.fn()
 const mockOpenRoomMessageLink = vi.fn()
 vi.mock('./useRoomMessageLink', () => ({ useRoomMessageLink: () => mockOpenRoomMessageLink }))
-const shortcutState = { jid: 'testuser@example.org/phone' as string | null, rosterAccount: 'testuser@example.org', loaded: true }
+const shortcutState = { jid: 'testuser@example.org/phone' as string | null, rosterAccount: 'testuser@example.org', loaded: true, bookmarks: true }
 // Status the chat view sees; 'online' lets queued links replay.
 const connectionState = { status: 'online' }
 
@@ -54,7 +54,13 @@ vi.mock('@fluux/sdk', async importOriginal => ({
   ...await importOriginal<typeof import('@fluux/sdk')>(),
   connectionStore: { getState: () => ({ jid: shortcutState.jid }) },
   rosterStore: { getState: () => ({ accountJid: shortcutState.rosterAccount, isLoaded: shortcutState.loaded }) },
-  roomStore: { getState: () => ({ rooms: new Map([['team@example.org', {}]]) }) },
+  // Rooms arrive with the bookmarks.
+  roomStore: {
+    getState: () => ({
+      rooms: shortcutState.bookmarks ? new Map([['team@example.org', {}]]) : new Map(),
+      bookmarksLoaded: shortcutState.bookmarks,
+    }),
+  },
   // Vanilla stores (for imperative .getState() access)
   chatStore: {
     getState: () => ({
@@ -92,6 +98,7 @@ vi.mock('@fluux/sdk/react', () => ({
   useRoomStore: (selector: (state: unknown) => unknown) => {
     const state = {
       activateRoom: mockActivateRoom,
+      bookmarksLoaded: shortcutState.bookmarks,
     }
     return selector(state)
   },
@@ -151,6 +158,7 @@ describe('useDeepLink', () => {
     shortcutState.jid = 'testuser@example.org/phone'
     shortcutState.rosterAccount = 'testuser@example.org'
     shortcutState.loaded = true
+    shortcutState.bookmarks = true
     mockHasConversation.mockReturnValue(false)
     connectionState.status = 'online'
     mockGetCurrent.mockResolvedValue([])
@@ -217,6 +225,7 @@ describe('useDeepLink', () => {
       ['testuser@example.org', 'groupchat', 'team@example.org', '/rooms/team%40example.org'],
       ['old@example.org', 'chat', 'alice@example.org', '/messages'],
       ['testuser@example.org', 'chat', 'removed@example.org', '/messages'],
+      ['testuser@example.org', 'groupchat', 'removed@example.org', '/messages'],
     ])('routes shortcut %s %s %s without creating or joining', async (account, kind, id, path) => {
       mockGetCurrent.mockResolvedValue([`net.processone.fluux://shortcut?account=${account}&kind=${kind}&id=${id}`])
       renderHook(() => useDeepLink(), { wrapper: createWrapper('/contacts') })
@@ -253,6 +262,8 @@ describe('useDeepLink', () => {
       connectionState.status = 'connecting'
       shortcutState.rosterAccount = 'testuser@example.org'
       shortcutState.loaded = false
+      // A chat does not wait for the bookmarks, which load after the roster.
+      shortcutState.bookmarks = false
       setStartupLoginHandler(() => {})
       const { rerender } = renderHook(() => useDeepLink(), { wrapper: createWrapper('/messages/bob%40example.org') })
       await waitFor(() => expect(mockOnOpenUrl).toHaveBeenCalled())
@@ -268,6 +279,33 @@ describe('useDeepLink', () => {
       rerender()
       await waitFor(() => expect(currentLocation.current.pathname).toBe('/messages/alice%40example.org'))
       expect(mockActivateConversation).toHaveBeenCalledWith('alice@example.org')
+    })
+
+    test('opens a room suggestion tapped at launch once the account bookmarks load after its roster', async () => {
+      // Source: the room counterpart of FLM-379. Tapping a room's Siri suggestion
+      // on a closed app showed the conversation list: the link was checked once
+      // the roster had loaded, before the bookmarks brought the room.
+      const { routeDeepLink, setStartupLoginHandler } = await import('@/utils/deepLinkRouter')
+      connectionState.status = 'connecting'
+      shortcutState.loaded = false
+      shortcutState.bookmarks = false
+      setStartupLoginHandler(() => {})
+      const { rerender } = renderHook(() => useDeepLink(), { wrapper: createWrapper('/messages/bob%40example.org') })
+      await waitFor(() => expect(mockOnOpenUrl).toHaveBeenCalled())
+      routeDeepLink('net.processone.fluux://shortcut?account=testuser@example.org&kind=groupchat&id=team@example.org')
+
+      setStartupLoginHandler(null)
+      connectionState.status = 'online'
+      shortcutState.loaded = true
+      rerender()
+      await act(async () => {})
+      expect(currentLocation.current.pathname).toBe('/messages/bob%40example.org')
+
+      shortcutState.bookmarks = true
+      rerender()
+      await waitFor(() => expect(currentLocation.current.pathname).toBe('/rooms/team%40example.org'))
+      expect(mockActivateRoom).toHaveBeenCalledWith('team@example.org')
+      expect(mockJoinRoom).not.toHaveBeenCalled()
     })
 
     test('keeps a launch message id until the connected view handles it', async () => {

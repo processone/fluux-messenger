@@ -229,6 +229,10 @@ export class SessionLifecycleEngine {
       return
     }
 
+    // The resumed stream keeps the rooms the store already holds (see below),
+    // so a link to a room can be checked against them now.
+    stores?.room.markBookmarksLoaded()
+
     // Repopulate sidebar ordering from the durable cache. On a reload that resumes
     // via SM, the room list is rebuilt from persisted state where every non-active
     // room's messages were evicted before save, so it carries no lastMessage and
@@ -403,6 +407,11 @@ export class SessionLifecycleEngine {
 
     const { roomsToAutojoin } = await this.deps.muc.fetchBookmarks(iqTimeout)
     if (this.isSessionSuperseded(gen, 'Fresh session aborted after fetchBookmarks')) return
+
+    // Rooms arrive with the bookmarks, after the roster: until now a room
+    // missing from the store may still be on its way (a failed fetch settles
+    // it too, with the rooms the store had).
+    stores?.room.markBookmarksLoaded()
 
     stores?.room.hydratePreviewsFromCache().catch(() => {})
 

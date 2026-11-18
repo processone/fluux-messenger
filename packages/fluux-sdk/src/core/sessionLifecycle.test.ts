@@ -303,6 +303,38 @@ describe('SessionLifecycleEngine', () => {
     )
   })
 
+  // Source: a room's Siri suggestion tapped on a closed iOS app opened the
+  // conversation list: the app checked it once the roster had loaded, before
+  // the bookmarks brought the room. The app waits for this flag instead.
+  describe('bookmarksLoaded', () => {
+    beforeEach(() => {
+      stores.room.markBookmarksLoaded.mockImplementation(() => roomStore.getState().markBookmarksLoaded())
+    })
+
+    it('is set by a fresh session once its bookmark fetch has answered, not before', async () => {
+      let answer!: (value: { roomsToAutojoin: never[]; allRoomJids: string[] }) => void
+      modules.muc.fetchBookmarks.mockReturnValue(new Promise((resolve) => { answer = resolve }))
+
+      const done = engine.handleConnectionSuccess(false)
+      await vi.waitFor(() => expect(modules.muc.fetchBookmarks).toHaveBeenCalled())
+      expect(modules.roster.fetchRoster).toHaveBeenCalled()
+      expect(roomStore.getState().bookmarksLoaded).toBe(false)
+
+      answer({ roomsToAutojoin: [], allRoomJids: ['team@conference.example.com'] })
+      await done
+      expect(roomStore.getState().bookmarksLoaded).toBe(true)
+    })
+
+    it('is set by a stream resume that keeps its rooms without fetching bookmarks', async () => {
+      localStorageMock.setItem('fluux:cache-marker:me@example.com/web', '123')
+
+      await engine.handleConnectionSuccess(true, undefined, 5_000)
+
+      expect(modules.muc.fetchBookmarks).not.toHaveBeenCalled()
+      expect(roomStore.getState().bookmarksLoaded).toBe(true)
+    })
+  })
+
   describe('refreshConversationList', () => {
     it('merges the fetched list', async () => {
       modules.conversationSync.fetchConversations.mockResolvedValue([

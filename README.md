@@ -136,8 +136,8 @@ conversation list; it does not switch accounts, create chats, join rooms or
 send messages.
 
 Tapping a Siri suggestion such as “Send a message to …” on the Home Screen or
-in search opens that conversation, with the same checks. A room suggestion
-tapped while Fluux is closed opens the conversation list.
+in search opens that chat or room, with the same checks, whether Fluux was
+running or closed.
 
 The unread action returns the latest app icon badge snapshot without opening
 Fluux or querying the server. This counts unread conversations/eligible rooms
