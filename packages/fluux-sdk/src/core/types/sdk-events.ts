@@ -472,7 +472,10 @@ export interface RoomEvents {
     roomJid: string
     bookmark: {
       name: string
+      /** The nickname to join with: the bookmark's, or the account's default nickname when it has none. */
       nick: string
+      /** The `<nick>` the bookmark stores, `undefined` when it has none; see {@link Room.bookmarkNick} */
+      bookmarkNick: string | undefined
       autojoin?: boolean
       password?: string
       notifyLevel?: NotifyLevel

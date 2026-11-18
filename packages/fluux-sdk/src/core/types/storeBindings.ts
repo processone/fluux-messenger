@@ -442,7 +442,7 @@ export interface RoomBindings {
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
 
   // Bookmark actions
-  setBookmark: (roomJid: string, bookmark: { name: string; nick: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel }) => void
+  setBookmark: (roomJid: string, bookmark: { name: string; nick: string; bookmarkNick?: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel; extensions?: string[] }) => void
   removeBookmark: (roomJid: string) => void
 
   /** Whether the user has already acknowledged this room's real-JID exposure. */

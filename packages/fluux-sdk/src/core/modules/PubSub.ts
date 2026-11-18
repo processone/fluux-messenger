@@ -350,7 +350,8 @@ export class PubSub extends BaseModule {
         roomJid: parsed.jid,
         bookmark: {
           name: parsed.name,
-          nick: parsed.nick || 'user',
+          nick: parsed.nick || this.defaultMucNick(),
+          bookmarkNick: parsed.nick,
           autojoin: parsed.autojoin,
           password: parsed.password,
           notifyLevel: parsed.notifyLevel,

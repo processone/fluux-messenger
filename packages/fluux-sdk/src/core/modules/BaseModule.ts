@@ -1,5 +1,6 @@
 import { AvatarStateOwner } from '../../utils/avatarState'
 import { getBareJid } from '../jid'
+import { resolveDefaultMucNick } from '../nick'
 import type { DeferredDecryptEngine } from '../e2ee/deferredDecrypt'
 import { captureStorageScope } from '../../utils/storageScope'
 import type { Client, Element } from '@xmpp/client'
@@ -131,6 +132,17 @@ export abstract class BaseModule {
   protected getRoomWithOccupants(roomJid: string) {
     this.deps.flushRoomOccupants?.(roomJid)
     return this.deps.stores?.room.getRoom(roomJid)
+  }
+
+  /**
+   * The nickname to join a room with when its bookmark stores none: the
+   * profile username, then the account's local part (see
+   * resolveDefaultMucNick). Every source of a room's bookmark uses it, so a
+   * room Fluux is not in joins with the same nickname whichever arrives last.
+   */
+  protected defaultMucNick(): string {
+    const connection = this.deps.stores?.connection
+    return resolveDefaultMucNick(connection?.getOwnNickname?.(), connection?.getJid?.()) || 'user'
   }
 
   protected captureQuery() {
