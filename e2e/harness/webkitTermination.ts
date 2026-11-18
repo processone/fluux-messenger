@@ -22,9 +22,9 @@
  * its context without passing the reason on to the pending call; the suites' pages come from
  * the test's own context.
  *
- * Linux, where CI runs, has no such helper deadline and no unified log: there the watch is
- * not started. See "WebKit GPU helper terminations" in docs/DEVELOPER.md for what was measured
- * about why the helper misses its deadline.
+ * Linux, where CI runs, has no unified log to read, so there the watch is not started. See
+ * "WebKit GPU helper terminations" in docs/DEVELOPER.md for what was measured about why the
+ * helper misses its deadline.
  */
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { test, type Page } from '@playwright/test'

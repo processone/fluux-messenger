@@ -4,9 +4,9 @@
  * hanging until the test limit. The watch lives in e2e/harness/webkitTermination.ts and starts
  * in bootDemo, which every suite boots through.
  *
- * The test brings the termination about the way WebKit's own deadline does, by ending the GPU
- * helper three times within 30 s; WebKit then counts the exits and terminates the page itself.
- * It ends only the helper of a browser it launched for itself.
+ * The test ends the GPU helper three times within 30 s. WebKit counts these exits exactly as it
+ * counts the helpers it kills for missing their deadline, and terminates the page itself. The
+ * test ends only the helper of a browser it launched for itself.
  */
 import { execFileSync } from 'node:child_process'
 import { expect, test } from '@playwright/test'
