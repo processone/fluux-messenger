@@ -2500,6 +2500,108 @@ describe('WebOpenPGPPlugin', () => {
         expect(bob.securityUpdates[0].messageId).toBe('m-drain')
       })
 
+      it('lists a real certificate as one used identity and verifies it idempotently', async () => {
+        const { alice, bob } = await buildCrossPublishedPair()
+        await alice.plugin.probePeer('bob@example.com')
+        const reports: string[] = []
+        alice.ctx.reportPeerIdentitiesChanged = (peer) => reports.push(peer)
+
+        // The list carries the real certificate's fingerprint in the plugin's normal form.
+        const fp = alice.plugin.getPeerFingerprints('bob@example.com')[0]
+        expect(fp.toLowerCase()).toBe(bob.bundle.fingerprint.toLowerCase())
+        expect(fp).toMatch(/^[0-9A-Fa-f]{40,64}$/)
+        let list = await alice.plugin.listPeerIdentities('bob@example.com')
+        expect(list).toEqual([
+          { id: fp, fingerprint: fp, trust: 'tofu', usedForEncryption: true, allowedDecisions: ['verified'] },
+        ])
+
+        await alice.plugin.setIdentityTrust('bob@example.com', fp, 'verified')
+        await alice.plugin.setIdentityTrust('bob@example.com', fp, 'verified') // idempotent
+        expect(hostStores.verifiedPeers.isVerified('bob@example.com', fp)).toBe(true)
+        list = await alice.plugin.listPeerIdentities('bob@example.com')
+        expect(list[0]).toMatchObject({ trust: 'verified', allowedDecisions: ['tofu'] })
+
+        await alice.plugin.setIdentityTrust('bob@example.com', fp, 'tofu')
+        await alice.plugin.setIdentityTrust('bob@example.com', fp, 'tofu') // idempotent
+        expect(hostStores.verifiedPeers.isVerified('bob@example.com', fp)).toBe(false)
+        expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('tofu')
+      })
+
+      /** Generate a real key for `jid` on its own plugin instance. */
+      async function realKeyFor(jid: string, passphrase: string): Promise<KeyBundle> {
+        clearSessionPassphrase()
+        setSessionPassphrase(passphrase)
+        const plugin = new TestableWebOpenPGPPlugin(hostStores)
+        await plugin.init(makeCtxWithSharedPep(jid, new Map()).ctx)
+        return plugin.callEnsureKeyMaterial(jid)
+      }
+
+      /** Announce several keys for `jid`: one metadata entry and one data node per key. */
+      function announceKeys(shared: SharedPep, jid: string, bundles: KeyBundle[]): void {
+        for (const bundle of bundles) publishKeyToSharedPep(shared, jid, bundle)
+        shared.set(pepKey(jid, 'urn:xmpp:openpgp:0:public-keys'), [
+          {
+            id: 'current',
+            payload: {
+              name: 'public-keys-list',
+              attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+              children: bundles.map((b) => ({
+                name: 'pubkey-metadata',
+                attrs: { 'v4-fingerprint': b.fingerprint, date: '2024-01-01T00:00:00Z' },
+                children: [],
+              })),
+            },
+          },
+        ])
+      }
+
+      it('a contact with two real certificates lists both, allows no decision and refuses one', async () => {
+        const { shared, alice } = await buildCrossPublishedPair()
+        const k1 = await realKeyFor('carol@example.com', 'carol-one-pp')
+        const k2 = await realKeyFor('carol@example.com', 'carol-two-pp')
+        announceKeys(shared, 'carol@example.com', [k1, k2])
+        clearSessionPassphrase()
+        setSessionPassphrase('alice-strong-pp')
+        await alice.plugin.probePeer('carol@example.com')
+
+        const list = await alice.plugin.listPeerIdentities('carol@example.com')
+        expect(list.map((i) => i.fingerprint.toLowerCase()).sort()).toEqual(
+          [k1.fingerprint, k2.fingerprint].map((f) => f.toLowerCase()).sort(),
+        )
+        for (const i of list) expect(i).toMatchObject({ trust: 'tofu', usedForEncryption: true, allowedDecisions: [] })
+
+        hostStores.verifiedPeers.set('carol@example.com', list[0].fingerprint)
+        const again = await alice.plugin.listPeerIdentities('carol@example.com')
+        expect(again.find((i) => i.id === list[0].id)?.trust).toBe('verified')
+        // No decision is accepted for a two-key contact, even one that restates the saved state.
+        for (const decision of ['verified', 'tofu', 'untrusted'] as const) {
+          await expect(alice.plugin.setIdentityTrust('carol@example.com', list[0].id, decision)).rejects.toThrow()
+          await expect(alice.plugin.setIdentityTrust('carol@example.com', list[1].id, decision)).rejects.toThrow()
+        }
+        expect(hostStores.verifiedPeers.isVerified('carol@example.com', list[0].fingerprint)).toBe(true)
+      })
+
+      it('a real certificate published under another key\'s fingerprint is listed as not used', async () => {
+        const { shared, alice } = await buildCrossPublishedPair()
+        const good = await realKeyFor('dave@example.com', 'dave-one-pp')
+        const other = await realKeyFor('dave@example.com', 'dave-two-pp')
+        announceKeys(shared, 'dave@example.com', [good, other])
+        // The second key's data node now carries the first key's certificate.
+        const goodNode = pepKey('dave@example.com', 'urn:xmpp:openpgp:0:public-keys:' + good.fingerprint)
+        shared.set(pepKey('dave@example.com', 'urn:xmpp:openpgp:0:public-keys:' + other.fingerprint), shared.get(goodNode)!)
+        clearSessionPassphrase()
+        setSessionPassphrase('alice-strong-pp')
+        await alice.plugin.probePeer('dave@example.com')
+
+        const list = await alice.plugin.listPeerIdentities('dave@example.com')
+        const rejected = list.find((i) => i.usedForEncryption === false)
+        expect(rejected).toMatchObject({ notUsedReason: 'invalid-key', allowedDecisions: [] })
+        expect(rejected?.problem?.code).toBeTruthy()
+        expect(list.filter((i) => i.usedForEncryption)).toHaveLength(1)
+        // One key left in use: that contact is a one-key contact again.
+        expect(list.find((i) => i.usedForEncryption)?.allowedDecisions).toEqual(['verified'])
+      })
+
       it('does not stash when the signature verified on first decrypt', async () => {
         const { alice, bob } = await buildCrossPublishedPair()
 

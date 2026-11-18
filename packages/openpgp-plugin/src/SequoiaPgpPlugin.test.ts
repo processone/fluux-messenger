@@ -1828,6 +1828,82 @@ describe('SequoiaPgpPlugin', () => {
       })
     })
 
+    describe('peer identities (final PeerIdentity API)', () => {
+      async function peerWith(...keys: ReturnType<typeof validKey>[]) {
+        const built = makeContext('me@example.com')
+        const reports: string[] = []
+        built.ctx.reportPeerIdentitiesChanged = (peer) => reports.push(peer)
+        await plugin.init(built.ctx)
+        const pep = installPeerPep(built, PEER)
+        pep.announce(keys)
+        await plugin.probePeer(PEER)
+        return { pep, reports }
+      }
+
+      it('lists one used identity per active key, tofu until verified', async () => {
+        const A = validKey('KEYAAAA0001')
+        const B = validKey('KEYBBBB0002')
+        await peerWith(A, B)
+        const list = await plugin.listPeerIdentities(PEER)
+        expect(list.map((i) => i.id).sort()).toEqual([A.fingerprint, B.fingerprint].sort())
+        for (const identity of list) {
+          expect(identity).toMatchObject({ trust: 'tofu', usedForEncryption: true, allowedDecisions: [] })
+        }
+      })
+
+      it('a two-key contact allows no decision and refuses to write one', async () => {
+        const A = validKey('KEYAAAA0001')
+        const B = validKey('KEYBBBB0002')
+        await peerWith(A, B)
+        await expect(plugin.setIdentityTrust(PEER, A.fingerprint, 'verified')).rejects.toThrow()
+        expect(hostStores.verifiedPeers.isVerified(PEER, A.fingerprint)).toBe(false)
+      })
+
+      it('a one-key contact verifies and removes verification through the saved fingerprint', async () => {
+        const A = validKey('KEYAAAA0001')
+        await peerWith(A)
+        expect((await plugin.listPeerIdentities(PEER))[0]).toMatchObject({ trust: 'tofu', allowedDecisions: ['verified'] })
+
+        await plugin.setIdentityTrust(PEER, A.fingerprint, 'verified')
+        expect(hostStores.verifiedPeers.getAll()[PEER]).toBe(A.fingerprint)
+        expect((await plugin.listPeerIdentities(PEER))[0]).toMatchObject({ trust: 'verified', allowedDecisions: ['tofu'] })
+
+        await plugin.setIdentityTrust(PEER, A.fingerprint, 'tofu')
+        expect(hostStores.verifiedPeers.getAll()[PEER]).toBeUndefined()
+        await expect(plugin.setIdentityTrust(PEER, A.fingerprint, 'untrusted')).rejects.toThrow()
+        // Repeating a satisfied decision changes nothing and does not throw.
+        await plugin.setIdentityTrust(PEER, A.fingerprint, 'tofu')
+        await plugin.setIdentityTrust(PEER, A.fingerprint, 'verified')
+        await plugin.setIdentityTrust(PEER, A.fingerprint, 'verified')
+        expect(hostStores.verifiedPeers.getAll()[PEER]).toBe(A.fingerprint)
+      })
+
+      it('lists a rejected certificate as not used, with its reason', async () => {
+        const A = validKey('KEYAAAA0001')
+        const N = makeNoEncryptionBundle(fake, 'KEYNOENC0003', PEER)
+        await peerWith(A, N)
+        const list = await plugin.listPeerIdentities(PEER)
+        const rejected = list.find((i) => i.id === N.fingerprint)
+        expect(rejected).toMatchObject({
+          usedForEncryption: false,
+          notUsedReason: 'invalid-key',
+          problem: { code: 'no_encryption_subkey' },
+          allowedDecisions: [],
+        })
+        expect(list.find((i) => i.id === A.fingerprint)?.usedForEncryption).toBe(true)
+      })
+
+      it('reports a change on a new keyset, a rejection and a verification', async () => {
+        const A = validKey('KEYAAAA0001')
+        const N = makeNoEncryptionBundle(fake, 'KEYNOENC0003', PEER)
+        const { reports } = await peerWith(A, N)
+        expect(reports).toContain(PEER)
+        reports.length = 0
+        await plugin.setIdentityTrust(PEER, A.fingerprint, 'verified')
+        expect(reports).toContain(PEER)
+      })
+    })
+
     describe('encrypt fan-out (peer keyset + own announced siblings)', () => {
       /** A sibling device of OUR OWN account: a valid cert bearing our UID. */
       const ownSibling = (fp: string) => validKey(fp, 'me@example.com')

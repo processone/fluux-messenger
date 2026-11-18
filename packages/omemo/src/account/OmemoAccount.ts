@@ -52,6 +52,22 @@ function unpackSession(blob: Uint8Array): { meta: SessionMeta; ratchet: Uint8Arr
   return { meta, ratchet: blob.slice(4 + len) }
 }
 
+/**
+ * Everything session setup needs from a bundle: it is well formed, every one-time prekey
+ * carries a 32-byte public key (any of them may be selected), and the signed prekey has a valid
+ * signature by the identity key. The signature check authenticates the SPK before any X3DH; it
+ * is not a trust-policy decision. Throws when the bundle is unusable.
+ */
+function assertUsableBundle(bundle: Bundle): void {
+  assertValidBundle(bundle)
+  for (const otk of bundle.preKeys) {
+    if (otk.key.length !== 32) throw new Error(`OMEMO bundle one-time prekey must be 32 bytes, got ${otk.key.length}`)
+  }
+  if (!xeddsaVerify(bundle.ik, bundle.spk, bundle.spkSig)) {
+    throw new Error('OMEMO bundle signed-prekey signature verification failed')
+  }
+}
+
 export class OmemoAccount {
   /** Tail of the operation queue: session read/modify/write sequences run one at a time. */
   private queue: Promise<unknown> = Promise.resolve()
@@ -188,13 +204,7 @@ export class OmemoAccount {
    */
   processBundle(peer: string, rid: number, bundle: Bundle, opts?: { replace?: boolean }): Promise<boolean> {
     return this.serialize(async () => {
-      assertValidBundle(bundle)
-      // Cryptographic binding check: the signed prekey must carry a valid signature by the
-      // identity key. This authenticates the SPK before any X3DH / session establishment.
-      // (This is NOT a trust-policy decision — it verifies the bundle is internally consistent.)
-      if (!xeddsaVerify(bundle.ik, bundle.spk, bundle.spkSig)) {
-        throw new Error('OMEMO bundle signed-prekey signature verification failed')
-      }
+      assertUsableBundle(bundle)
       if (!opts?.replace && (await this.store.loadSession(peer, rid))) return false
       const pick = this.rng(4)
       const index = (((pick[0] << 24) | (pick[1] << 16) | (pick[2] << 8) | pick[3]) >>> 0) % bundle.preKeys.length
@@ -312,6 +322,26 @@ export class OmemoAccount {
     opts?: { archive?: boolean; ownJid?: string },
   ): Promise<{ content: Uint8Array; senderIdentityKey: Uint8Array }> {
     return this.serialize(() => this.decryptNow(senderJid, sid, msg, opts))
+  }
+
+  /**
+   * The identity key that backs the stored session with `peer`/`rid`, or `null` when there is
+   * none. Read-only: it never creates or changes a session.
+   */
+  async sessionPeerKey(peer: string, rid: number): Promise<Uint8Array | null> {
+    const stored = await this.store.loadSession(peer, rid)
+    if (!stored) return null
+    return this.peerKeyFromAd(Uint8Array.from(unpackSession(stored).meta.ad))
+  }
+
+  /** Whether {@link processBundle} would accept this bundle: well formed, with a valid signed-prekey signature. */
+  static isUsableBundle(bundle: Bundle): boolean {
+    try {
+      assertUsableBundle(bundle)
+      return true
+    } catch {
+      return false
+    }
   }
 
   /** The peer's Ed25519 identity key inside a session's `ad` (initiator || responder). */

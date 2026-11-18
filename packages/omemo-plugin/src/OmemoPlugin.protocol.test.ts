@@ -126,7 +126,8 @@ describe('blind trust before verification on send', () => {
 
     // Bob adds a second device afterwards.
     const bob2 = await ready('bob@x', alice.c.net)
-    expect(await alice.p.getDeviceTrust('bob@x', String(bob2.deviceId))).toBe('untrusted')
+    // A device waiting for a decision reads unknown and is not used, while the contact still reads untrusted.
+    expect(await alice.p.getDeviceTrust('bob@x', String(bob2.deviceId))).toBe('unknown')
     expect(await alice.p.getPeerTrust('bob@x')).toBe('untrusted')
 
     const enc = await send(alice, 'bob@x', 'only the verified device')
@@ -270,6 +271,29 @@ describe('verified inbound security', () => {
     const res = await bob.p.decrypt(handle, claim(bob.p, enc), {})
     expect(res.securityContext.trust).toBe('verified')
     expect(await bob.p.getDeviceTrust('alice@x', String(alice.deviceId))).toBe('verified')
+  })
+})
+
+describe('inbound message from a device waiting for a decision', () => {
+  it('reads untrusted for that message but leaves the device waiting, not refused', async () => {
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const handle = await bob.p.openConversation({ kind: 'direct', peer: 'alice@x' })
+    // Bob verified another device of Alice, so her new device must wait for a decision.
+    await setVerified(bob.c.ctx.storage, 'alice@x', 111, 'abcd')
+
+    const res = await bob.p.decrypt(handle, claim(bob.p, await send(alice, 'bob@x', 'hello')), {})
+    expect(res.securityContext.trust).toBe('untrusted')
+
+    const stored = await new PluginStorageOmemoStore(bob.c.ctx.storage).loadTrust('alice@x', alice.deviceId)
+    expect(stored?.state).toBe('undecided')
+    const device = (await bob.p.listPeerIdentities('alice@x')).find((i) => i.id === String(alice.deviceId))
+    expect(device).toMatchObject({ trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision' })
+
+    // Only the user's choice changes it.
+    await bob.p.setIdentityTrust('alice@x', String(alice.deviceId), 'tofu')
+    const approved = (await bob.p.listPeerIdentities('alice@x')).find((i) => i.id === String(alice.deviceId))
+    expect(approved).toMatchObject({ trust: 'tofu', usedForEncryption: true })
   })
 })
 

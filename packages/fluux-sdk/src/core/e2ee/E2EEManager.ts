@@ -6,17 +6,22 @@ import type {
   AccountInfo,
   ArchiveDecryptItem,
   BareJID,
+  ConversationSecurity,
   ConversationTarget,
   DecryptResult,
   E2EEPlugin,
   E2EEProtocolDescriptor,
   E2EEReconnectInfo,
   EncryptedPayload,
+  IdentityTrustDecision,
   InboundDecryptContext,
   Logger,
   PluginConfiguration,
+  PeerIdentity,
+  PeerIdentityGroup,
   PluginContext,
   SecurityContextUpdate,
+  TrustState,
   XMLElementData,
   XMPPPrimitives,
 } from './types'
@@ -120,6 +125,7 @@ export class E2EEManager {
   private pluginUnregisteredCallback: ((pluginId: string) => void) | null = null
   private peerKeysChangedCallback: ((peer: BareJID) => void) | null = null
   private keyUnlockedCallback: (() => void) | null = null
+  private readonly conversationSecurityListeners = new Set<(peer: BareJID | null) => void>()
   // PEP key-change notifications can race plugin registration: the server
   // bursts headline pushes immediately on stream open, but plugins finish
   // their async init (IndexedDB hydration, key unwrap) seconds later. We
@@ -203,13 +209,19 @@ export class E2EEManager {
       logger: this.logger,
       account: this.account,
       reportSecurityContextUpdate: (update) => this.dispatchSecurityContextUpdate(update),
-      notifyKeyUnlocked: () => this.keyUnlockedCallback?.(),
+      notifyKeyUnlocked: () => {
+        this.keyUnlockedCallback?.()
+        this.dispatchConversationSecurityChanged(null)
+      },
+      reportPeerIdentitiesChanged: (peer) => this.dispatchConversationSecurityChanged(peer),
+      reportLocalKeyStateChanged: () => this.dispatchConversationSecurityChanged(null),
     }
     await plugin.init(ctx)
     this.plugins.set(id, plugin)
     this.logger.info(`E2EE plugin registered: ${id}`)
     this.drainPendingPeerKeyChanges(id, plugin)
     this.pluginRegisteredCallback?.(id)
+    this.dispatchConversationSecurityChanged(null)
   }
 
   /**
@@ -241,6 +253,7 @@ export class E2EEManager {
     await plugin.shutdown()
     this.logger.info(`E2EE plugin unregistered: ${id}`)
     this.pluginUnregisteredCallback?.(id)
+    this.dispatchConversationSecurityChanged(null)
   }
 
   /** Descriptors for every registered plugin, sorted by securityLevel desc. */
@@ -312,8 +325,10 @@ export class E2EEManager {
   /** Force all outbound sends to this target to skip encryption entirely. Inbound decryption is unaffected. */
   setForcedPlaintext(target: ConversationTarget, forced: boolean): void {
     const key = targetKey(target)
+    if (forced === this.forcedPlaintextConversations.has(key)) return
     if (forced) this.forcedPlaintextConversations.add(key)
     else this.forcedPlaintextConversations.delete(key)
+    this.dispatchConversationSecurityChanged(target.kind === 'direct' ? target.peer : null)
   }
 
   /** Returns true if encryption has been explicitly disabled for this target. */
@@ -324,8 +339,10 @@ export class E2EEManager {
   /** Pin a conversation to a specific plugin (or clear with `null`). */
   setPinnedStrategy(target: ConversationTarget, pin: PinnedStrategy): void {
     const key = targetKey(target)
+    if ((this.pins.get(key) ?? null) === pin) return
     if (pin === null) this.pins.delete(key)
     else this.pins.set(key, pin)
+    this.dispatchConversationSecurityChanged(target.kind === 'direct' ? target.peer : null)
   }
 
   getPinnedStrategy(target: ConversationTarget): PinnedStrategy {
@@ -781,6 +798,136 @@ export class E2EEManager {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Conversation security: one answer built from the registered plugins
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Every registered plugin's identities for `peer`, one group per plugin
+   * that lists them, highest `securityLevel` first. `inUse` marks the group
+   * of the protocol a direct chat with `peer` would use. A plugin that fails
+   * or lists nothing is left out.
+   */
+  async listPeerIdentities(peer: BareJID): Promise<PeerIdentityGroup[]> {
+    const chosen = await this.selectStrategy({ kind: 'direct', peer }).catch(() => null)
+    const groups: PeerIdentityGroup[] = []
+    for (const plugin of this.sortedPlugins()) {
+      const identities = await this.pluginIdentities(plugin, peer)
+      if (!identities || identities.length === 0) continue
+      const { id, displayName } = plugin.descriptor
+      groups.push({ protocolId: id, displayName, inUse: chosen?.descriptor.id === id, identities })
+    }
+    return groups
+  }
+
+  /** The encryption state of a conversation. Group chats report `unsupported` until a plugin lists identities for them. */
+  async getConversationSecurity(target: ConversationTarget): Promise<ConversationSecurity> {
+    if (this.isForcedPlaintext(target)) return { kind: 'plaintextForced' }
+    if (target.kind !== 'direct') return { kind: 'unsupported' }
+    const peer = target.peer
+    const chosen = await this.selectStrategy(target).catch(() => null)
+    if (chosen) return this.securityFor(chosen, peer)
+    // No protocol is mutually supported. A plugin may still know keys it cannot use.
+    for (const plugin of this.sortedPlugins()) {
+      const identities = await this.pluginIdentities(plugin, peer)
+      if (!identities || identities.length === 0) continue
+      const { id, displayName } = plugin.descriptor
+      return { kind: 'unusable', protocolId: id, displayName, problems: problemsOf(identities) }
+    }
+    return { kind: 'unsupported' }
+  }
+
+  private async securityFor(plugin: E2EEPlugin, peer: BareJID): Promise<ConversationSecurity> {
+    const { id: protocolId, displayName } = plugin.descriptor
+    if (plugin.isLocked?.()) return { kind: 'locked', protocolId, displayName }
+    // Only a plugin that lists no identities falls back to its aggregate trust. A failed or
+    // empty listing is not encryption: report what the plugin could not give.
+    if (!plugin.listPeerIdentities) {
+      const trust = await plugin.getPeerTrust(peer).catch((): TrustState => 'unknown')
+      return { kind: 'encrypted', protocolId, displayName, trust, used: 1, verified: trust === 'verified' ? 1 : 0, waiting: 0 }
+    }
+    const identities = await this.pluginIdentities(plugin, peer)
+    if (identities === null) {
+      return { kind: 'unusable', protocolId, displayName, problems: [{ id: '', code: 'listing-failed', detail: '' }] }
+    }
+    if (identities.length === 0) return { kind: 'unusable', protocolId, displayName, problems: [] }
+    const used = identities.filter((i) => i.usedForEncryption)
+    const waiting = identities.filter((i) => !i.usedForEncryption && i.notUsedReason === 'awaiting-decision').length
+    if (used.length === 0) {
+      if (waiting > 0) return { kind: 'needsDecision', protocolId, displayName, waiting }
+      return { kind: 'unusable', protocolId, displayName, problems: problemsOf(identities) }
+    }
+    const verified = used.filter((i) => i.trust === 'verified').length
+    const trust: TrustState =
+      verified === used.length ? 'verified' : used.some((i) => i.trust === 'introduced') ? 'introduced' : 'tofu'
+    return {
+      kind: 'encrypted',
+      protocolId,
+      displayName,
+      trust,
+      ...(used.length === 1 && used[0].fingerprint ? { fingerprint: used[0].fingerprint } : {}),
+      used: used.length,
+      verified,
+      waiting,
+    }
+  }
+
+  /** `null` when the plugin does not list identities or fails; the failure is logged. */
+  private async pluginIdentities(plugin: E2EEPlugin, peer: BareJID): Promise<PeerIdentity[] | null> {
+    if (!plugin.listPeerIdentities) return null
+    try {
+      return await plugin.listPeerIdentities(peer)
+    } catch (err) {
+      this.logger.warn(`E2EE plugin ${plugin.descriptor.id} listPeerIdentities(${getDomain(peer)}) threw`, err)
+      return null
+    }
+  }
+
+  private sortedPlugins(): E2EEPlugin[] {
+    return [...this.plugins.values()].sort((a, b) => b.descriptor.securityLevel - a.descriptor.securityLevel)
+  }
+
+  /** Record a trust decision for one identity of `protocolId`'s plugin. */
+  async setIdentityTrust(protocolId: string, peer: BareJID, id: string, decision: IdentityTrustDecision): Promise<void> {
+    const plugin = this.plugins.get(protocolId)
+    if (!plugin?.setIdentityTrust) throw new Error(`E2EE protocol ${protocolId} does not accept trust decisions`)
+    await plugin.setIdentityTrust(peer, id, decision)
+    this.dispatchConversationSecurityChanged(peer)
+  }
+
+  /** The account's own fingerprint under `protocolId`, or `null` when there is none. */
+  async getOwnFingerprint(protocolId: string): Promise<string | null> {
+    const plugin = this.plugins.get(protocolId)
+    if (!plugin?.getOwnFingerprint) return null
+    try {
+      return (await plugin.getOwnFingerprint()) ?? null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Subscribe to conversation-security changes. The listener gets the peer
+   * whose identities changed, or `null` when every conversation may have
+   * changed (a plugin registered or left, the own key locked or unlocked).
+   */
+  onConversationSecurityChanged(cb: (peer: BareJID | null) => void): () => void {
+    this.conversationSecurityListeners.add(cb)
+    return () => {
+      this.conversationSecurityListeners.delete(cb)
+    }
+  }
+
+  private dispatchConversationSecurityChanged(peer: BareJID | null): void {
+    for (const listener of this.conversationSecurityListeners) {
+      try {
+        listener(peer)
+      } catch (err) {
+        this.logger.warn('E2EEManager: conversation security listener threw', err)
+      }
+    }
+  }
+
   /** Tear everything down — e.g. on account switch or logout. */
   async shutdown(): Promise<void> {
     const ids = [...this.plugins.keys()]
@@ -790,6 +937,7 @@ export class E2EEManager {
     this.pins.clear()
     this.capabilityCache.clear()
     this.securityContextListeners.clear()
+    this.conversationSecurityListeners.clear()
     this.forcedPlaintextConversations.clear()
   }
 }
@@ -805,4 +953,11 @@ function targetLabel(target: ConversationTarget): string {
 
 function targetKey(target: ConversationTarget): string {
   return target.kind === 'direct' ? `direct\u0000${target.peer}` : `muc\u0000${target.room}`
+}
+
+/** The identities that receive nothing, each with the reason the plugin gave. */
+function problemsOf(identities: PeerIdentity[]): { id: string; code: string; detail: string }[] {
+  return identities
+    .filter((i) => !i.usedForEncryption)
+    .map((i) => ({ id: i.id, code: i.problem?.code ?? i.notUsedReason ?? 'unknown', detail: i.problem?.detail ?? '' }))
 }
