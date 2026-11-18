@@ -9,18 +9,19 @@ const FIRST = 'emma@fluux.chat'
 const TARGET = 'ava@fluux.chat'
 const proof = (name: string) => process.env.FLUUX_DROP_PROOF ? `${process.env.FLUUX_DROP_PROOF}/${name}.png` : undefined
 
-async function boot(page: Page) {
+async function boot(page: Page, { uploads: uploadSupported = true } = {}) {
   const uploads: string[] = []
   page.on('request', (r) => { if (r.method() === 'PUT' || r.method() === 'POST') uploads.push(`${r.method()} ${r.url()}`) })
   await bootDemo(page, '/demo.html?tutorial=false')
-  await page.evaluate(() => {
+  await page.evaluate((supported) => {
     const w = window as any
     w.__demoClient.stopAnimation()
     w.__demoClient.messages.sendChatState = async () => {}
     w.__sent = []
     w.__demoClient.messages.sendMessage = async (...args: unknown[]) => { w.__sent.push(args) }
-    w.__connectionStore.getState().setHttpUploadService({ jid: 'upload.fluux.chat', maxFileSize: 10_000_000 })
-  })
+    if (supported) w.__connectionStore.getState().setHttpUploadService({ jid: 'upload.fluux.chat', maxFileSize: 10_000_000 })
+    else w.__connectionStore.getState().setHttpUploadService(null)
+  }, uploadSupported)
   await activateChat(page, FIRST)
   return uploads
 }
@@ -83,5 +84,23 @@ test('a drop on the already open conversation stages the file there', async ({ p
 
   await expect(page.getByRole('button', { name: 'Remove attachment' })).toBeVisible()
   expect(await active(page)).toBe(FIRST)
+  expect(uploads).toEqual([])
+})
+
+test('when uploads are unsupported a drop stages nothing and the draft is untouched', async ({ page }) => {
+  const uploads = await boot(page, { uploads: false })
+  await activateChat(page, TARGET)
+  await page.getByPlaceholder(/^Message /).first().fill('draft for Ava')
+  await activateChat(page, FIRST)
+
+  await dropOnRow(page, TARGET)
+
+  await expect.poll(() => active(page)).toBe(TARGET)
+  await expect(page.getByRole('button', { name: 'Remove attachment' })).toHaveCount(0)
+  await expect(page.getByText('notes.txt')).toHaveCount(0)
+  await expect(page.getByPlaceholder(/^Message /).first()).toHaveValue('draft for Ava')
+  const shot = proof('unsupported-upload-draft-kept')
+  if (shot) await page.screenshot({ path: shot, animations: 'disabled' })
+  expect(await page.evaluate(() => (window as any).__sent.length)).toBe(0)
   expect(uploads).toEqual([])
 })
