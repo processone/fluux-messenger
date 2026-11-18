@@ -210,7 +210,8 @@
             "listErrorDescription": "Níorbh fhéidir eochracha an teagmhálaí seo a léamh. Bain triail eile as.",
             "tryAgain": "Bain triail eile as",
             "needsDecisionTitle": "Ag fanacht le do chinneadh",
-            "needsDecisionDescription": "Seoltar teachtaireachtaí gan chriptiú go dtí go mbíonn muinín agat as eochair.",
+            "needsDecisionDescription": "Ní féidir teachtaireachtaí chuig an teagmhálaí seo a chriptiú go dtí go gcinneann tú faoi eochair.",
+            "receivesWhenUnlocked": "Gheobhaidh sé do theachtaireachtaí tar éis duit díghlasáil",
             "keyTrust": {
                 "verified": "Fíoraithe",
                 "introduced": "Tugtha isteach",

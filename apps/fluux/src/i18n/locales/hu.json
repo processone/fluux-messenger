@@ -210,7 +210,8 @@
             "listErrorDescription": "A partner kulcsait nem sikerült beolvasni. Próbálja újra.",
             "tryAgain": "Újrapróbálás",
             "needsDecisionTitle": "Az Ön döntésére vár",
-            "needsDecisionDescription": "Az üzenetek titkosítatlanul mennek, amíg nem bízik meg egy kulcsban.",
+            "needsDecisionDescription": "Az ehhez a partnerhez küldött üzenetek nem titkosíthatók, amíg nem dönt egy kulcsról.",
+            "receivesWhenUnlocked": "Feloldás után megkapja az üzeneteit",
             "keyTrust": {
                 "verified": "Ellenőrzött",
                 "introduced": "Bemutatott",

@@ -212,7 +212,8 @@
             "listErrorDescription": "Cheile acestui contact nu au putut fi citite. Încearcă din nou.",
             "tryAgain": "Încearcă din nou",
             "needsDecisionTitle": "Așteaptă decizia ta",
-            "needsDecisionDescription": "Mesajele se trimit necriptat până când ai încredere într-o cheie.",
+            "needsDecisionDescription": "Mesajele către acest contact nu pot fi criptate până când decizi asupra unei chei.",
+            "receivesWhenUnlocked": "Va primi mesajele tale după deblocare",
             "keyTrust": {
                 "verified": "Verificată",
                 "introduced": "Introdusă",

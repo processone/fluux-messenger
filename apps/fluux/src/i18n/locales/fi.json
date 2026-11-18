@@ -210,7 +210,8 @@
             "listErrorDescription": "Tämän yhteystiedon avaimia ei voitu lukea. Yritä uudelleen.",
             "tryAgain": "Yritä uudelleen",
             "needsDecisionTitle": "Odottaa päätöstäsi",
-            "needsDecisionDescription": "Viestit lähetetään salaamattomina, kunnes luotat johonkin avaimeen.",
+            "needsDecisionDescription": "Tälle yhteystiedolle ei voi salata viestejä, ennen kuin olet päättänyt avaimesta.",
+            "receivesWhenUnlocked": "Vastaanottaa viestisi, kun avaat lukituksen",
             "keyTrust": {
                 "verified": "Vahvistettu",
                 "introduced": "Esitelty",

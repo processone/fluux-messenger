@@ -210,7 +210,8 @@
             "listErrorDescription": "Ekki tókst að lesa lykla þessa tengiliðar. Reyndu aftur.",
             "tryAgain": "Reyna aftur",
             "needsDecisionTitle": "Bíður ákvörðunar þinnar",
-            "needsDecisionDescription": "Skilaboð eru send ódulrituð þar til þú treystir lykli.",
+            "needsDecisionDescription": "Ekki er hægt að dulrita skilaboð til þessa tengiliðar fyrr en þú hefur ákveðið með lykil.",
+            "receivesWhenUnlocked": "Fær skilaboðin þín þegar þú aflæsir",
             "keyTrust": {
                 "verified": "Staðfestur",
                 "introduced": "Kynntur",

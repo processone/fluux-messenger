@@ -21,7 +21,7 @@
  * unused); the real one is covered in packages/openpgp-plugin.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { E2EEPlugin, PeerIdentity, PluginContext } from '@fluux/sdk'
 import { E2EEManager, InMemoryStorageBackend } from '@fluux/sdk'
 import { DummyPlaintextPlugin } from '../../../../packages/fluux-sdk/src/core/e2ee/DummyPlaintextPlugin'
@@ -41,7 +41,7 @@ const PEER = 'bob@example.com'
 const A = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
 const B = 'BBBB1111CCCC2222DDDD3333EEEE4444FFFF5555'
 
-const world = vi.hoisted(() => ({ announced: [] as string[], locked: false }))
+const world = vi.hoisted(() => ({ announced: [] as string[], locked: false, listCalls: 0, failListingFrom: null as number | null }))
 const manager = vi.hoisted(() => ({ current: null as unknown }))
 
 vi.mock('@fluux/sdk', async (importOriginal) => {
@@ -94,6 +94,8 @@ class OpenPgpStandIn extends DummyPlaintextPlugin implements E2EEPlugin {
     return 'OWNFP'
   }
   async listPeerIdentities(peer: string): Promise<PeerIdentity[]> {
+    world.listCalls += 1
+    if (world.failListingFrom !== null && world.listCalls >= world.failListingFrom) throw new Error('listing failed')
     const saved = useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid[peer]
     const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
     const out: PeerIdentity[] = world.announced.map((fp) => {
@@ -186,6 +188,8 @@ describe('encryption state as people see it', () => {
     localStorage.clear()
     world.announced = []
     world.locked = false
+    world.listCalls = 0
+    world.failListingFrom = null
     useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
     usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {}, pinnedAtByJid: {} })
     useCertRejectionStore.setState({ rejectionsByJid: {} })
@@ -461,6 +465,7 @@ describe('encryption state as people see it', () => {
         "composerLock": null,
         "fingerprints": [
           "BBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555",
+          "no subkey",
         ],
         "glance": "contacts.encryption.rejectedTitle",
         "glanceColors": [
@@ -475,7 +480,7 @@ describe('encryption state as people see it', () => {
           "text-fluux-error",
         ],
         "tabButtons": [],
-        "tabText": "contacts.encryption.rejectedTitlecontacts.encryption.rejectedDescriptionOpenPGPcontacts.encryption.keyTrust.unknownBBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555contacts.encryption.receivesNoMessages: contacts.encryption.notUsedReason.invalid-keyno_encryption_subkey",
+        "tabText": "contacts.encryption.rejectedTitlecontacts.encryption.rejectedDescriptionOpenPGPcontacts.encryption.keyTrust.unknownBBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555contacts.encryption.receivesNoMessages: contacts.encryption.notUsedReason.invalid-keyno_encryption_subkeyno subkey",
       }
     `)
   })
@@ -534,7 +539,7 @@ describe('encryption state as people see it', () => {
         "tabButtons": [
           "Verify fingerprint",
         ],
-        "tabText": "chat.encryption.keyLockedchat.encryption.keyLockedTooltipOpenPGPcontacts.encryption.keyTrust.tofuAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagesVerify fingerprint",
+        "tabText": "chat.encryption.keyLockedchat.encryption.keyLockedTooltipOpenPGPcontacts.encryption.keyTrust.tofuAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesWhenUnlockedVerify fingerprint",
       }
     `)
   })
@@ -552,5 +557,21 @@ describe('encryption state as people see it', () => {
       vi.useRealTimers()
     }
     expect(screen.getByText(/New contact/)).toBeInTheDocument()
+  })
+
+  it('a listing that fails after the first read: a list error that Try again recovers, never missing rows', async () => {
+    world.announced = [A]
+    pinnedLongAgo()
+    // The manager's own read succeeds (call 1); the app's listing (call 2) fails and the manager drops the plugin.
+    world.failListingFrom = 2
+    await open()
+    const tab = screen.getByTestId('tab')
+    expect(tab.textContent).toContain('contacts.encryption.listErrorTitle')
+    expect(tab.querySelectorAll('[data-testid="identity-row"]')).toHaveLength(0)
+    world.failListingFrom = null
+    fireEvent.click(within(tab).getByRole('button', { name: 'contacts.encryption.tryAgain' }))
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)) })
+    expect(tab.querySelectorAll('[data-testid="identity-row"]')).toHaveLength(1)
+    expect(tab.textContent).not.toContain('contacts.encryption.listErrorTitle')
   })
 })

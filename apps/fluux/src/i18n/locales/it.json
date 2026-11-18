@@ -212,7 +212,8 @@
             "listErrorDescription": "Non è stato possibile leggere le chiavi di questo contatto. Riprova.",
             "tryAgain": "Riprova",
             "needsDecisionTitle": "In attesa della tua decisione",
-            "needsDecisionDescription": "I messaggi vengono inviati in chiaro finché non ti fidi di una chiave.",
+            "needsDecisionDescription": "I messaggi a questo contatto non possono essere cifrati finché non decidi su una chiave.",
+            "receivesWhenUnlocked": "Riceverà i tuoi messaggi dopo lo sblocco",
             "keyTrust": {
                 "verified": "Verificata",
                 "introduced": "Presentata",

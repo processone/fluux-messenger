@@ -212,7 +212,8 @@
             "listErrorDescription": "Die Schlüssel dieses Kontakts konnten nicht gelesen werden. Versuchen Sie es erneut.",
             "tryAgain": "Erneut versuchen",
             "needsDecisionTitle": "Wartet auf Ihre Entscheidung",
-            "needsDecisionDescription": "Nachrichten werden unverschlüsselt gesendet, bis Sie einem Schlüssel vertrauen.",
+            "needsDecisionDescription": "Nachrichten an diesen Kontakt können nicht verschlüsselt werden, bis Sie über einen Schlüssel entschieden haben.",
+            "receivesWhenUnlocked": "Erhält Ihre Nachrichten nach dem Entsperren",
             "keyTrust": {
                 "verified": "Verifiziert",
                 "introduced": "Empfohlen",

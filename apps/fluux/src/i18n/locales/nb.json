@@ -210,7 +210,8 @@
             "listErrorDescription": "Nøklene til denne kontakten kunne ikke leses. Prøv igjen.",
             "tryAgain": "Prøv igjen",
             "needsDecisionTitle": "Venter på avgjørelsen din",
-            "needsDecisionDescription": "Meldinger sendes ukryptert til du stoler på en nøkkel.",
+            "needsDecisionDescription": "Meldinger til denne kontakten kan ikke krypteres før du har bestemt deg for en nøkkel.",
+            "receivesWhenUnlocked": "Mottar meldingene dine når du låser opp",
             "keyTrust": {
                 "verified": "Verifisert",
                 "introduced": "Introdusert",

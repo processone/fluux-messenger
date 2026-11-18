@@ -104,7 +104,7 @@ export function SecurityTab({
               description={t('chat.encryption.keyLockedTooltip')}
               tone="neutral"
             />
-            {state.groups && <IdentityGroups groups={state.groups} onDecide={onDecide} />}
+            {state.groups && <IdentityGroups groups={state.groups} locked onDecide={onDecide} />}
           </>
         )}
 
@@ -173,11 +173,20 @@ export function SecurityTab({
 }
 
 /** Every method's keys for the contact, whatever the conversation's own state. */
-function IdentityGroups({ groups, onDecide }: { groups: PeerIdentityGroup[]; onDecide: SecurityTabProps['onDecide'] }) {
+function IdentityGroups({
+  groups,
+  locked = false,
+  onDecide,
+}: {
+  groups: PeerIdentityGroup[]
+  /** The own key is locked: sending needs an unlock first. */
+  locked?: boolean
+  onDecide: SecurityTabProps['onDecide']
+}) {
   return (
     <>
       {groups.map((group) => (
-        <IdentityGroup key={group.protocolId} group={group} showInUse={groups.length > 1} onDecide={onDecide} />
+        <IdentityGroup key={group.protocolId} group={group} showInUse={groups.length > 1} locked={locked} onDecide={onDecide} />
       ))}
     </>
   )
@@ -187,11 +196,12 @@ interface IdentityGroupProps {
   group: PeerIdentityGroup
   /** Mark the method in use; only useful when the contact has more than one method. */
   showInUse: boolean
+  locked: boolean
   onDecide: SecurityTabProps['onDecide']
 }
 
 /** One encryption method's keys for the contact, one row per key. */
-function IdentityGroup({ group, showInUse, onDecide }: IdentityGroupProps) {
+function IdentityGroup({ group, showInUse, locked, onDecide }: IdentityGroupProps) {
   const { t } = useTranslation()
   return (
     <section aria-label={group.displayName} className="space-y-2">
@@ -204,7 +214,7 @@ function IdentityGroup({ group, showInUse, onDecide }: IdentityGroupProps) {
         )}
       </h3>
       {group.identities.map((identity) => (
-        <IdentityRow key={identity.id} protocolId={group.protocolId} identity={identity} inUse={group.inUse} onDecide={onDecide} />
+        <IdentityRow key={identity.id} protocolId={group.protocolId} identity={identity} inUse={group.inUse} locked={locked} onDecide={onDecide} />
       ))}
     </section>
   )
@@ -214,12 +224,15 @@ function IdentityRow({
   protocolId,
   identity,
   inUse,
+  locked,
   onDecide,
 }: {
   protocolId: string
   identity: PeerIdentity
   /** False for a method the conversation would not use now. */
   inUse: boolean
+  /** The own key is locked, so no message is sent until it is unlocked. */
+  locked: boolean
   onDecide: SecurityTabProps['onDecide']
 }) {
   const { t } = useTranslation()
@@ -239,14 +252,25 @@ function IdentityRow({
       )}
       <div className="text-xs text-fluux-muted">
         {identity.usedForEncryption
-          ? t(inUse ? 'contacts.encryption.receivesMessages' : 'contacts.encryption.wouldReceiveMessages')
+          ? t(
+              locked
+                ? 'contacts.encryption.receivesWhenUnlocked'
+                : inUse
+                  ? 'contacts.encryption.receivesMessages'
+                  : 'contacts.encryption.wouldReceiveMessages',
+            )
           : `${t('contacts.encryption.receivesNoMessages')}${
               identity.notUsedReason ? `: ${t(`contacts.encryption.notUsedReason.${identity.notUsedReason}`)}` : ''
             }`}
       </div>
       {identity.problem && (
-        <div className="text-xs text-fluux-error">
-          {t(`chat.encryption.rejectionCode.${identity.problem.code}`, { defaultValue: identity.problem.code })}
+        <div className="text-xs">
+          <div className="text-fluux-error">
+            {t(`chat.encryption.rejectionCode.${identity.problem.code}`, { defaultValue: identity.problem.code })}
+          </div>
+          {identity.problem.detail && (
+            <code className="block font-mono text-fluux-muted mt-0.5 break-all">{identity.problem.detail}</code>
+          )}
         </div>
       )}
       {identity.allowedDecisions.length > 0 && (

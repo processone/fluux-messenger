@@ -210,7 +210,8 @@
             "listErrorDescription": "无法读取此联系人的密钥。请重试。",
             "tryAgain": "重试",
             "needsDecisionTitle": "等待你的决定",
-            "needsDecisionDescription": "在你信任某个密钥之前，消息将以明文发送。",
+            "needsDecisionDescription": "在你对某个密钥做出决定之前，无法对发给此联系人的消息加密。",
+            "receivesWhenUnlocked": "解锁后接收你的消息",
             "keyTrust": {
                 "verified": "已验证",
                 "introduced": "已引荐",

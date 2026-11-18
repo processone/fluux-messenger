@@ -212,7 +212,8 @@
             "listErrorDescription": "Ključev tega stika ni bilo mogoče prebrati. Poskusite znova.",
             "tryAgain": "Poskusi znova",
             "needsDecisionTitle": "Čaka na vašo odločitev",
-            "needsDecisionDescription": "Sporočila se pošiljajo nešifrirano, dokler ne zaupate ključu.",
+            "needsDecisionDescription": "Sporočil temu stiku ni mogoče šifrirati, dokler se ne odločite glede ključa.",
+            "receivesWhenUnlocked": "Prejel bo vaša sporočila po odklepu",
             "keyTrust": {
                 "verified": "Preverjen",
                 "introduced": "Predstavljen",

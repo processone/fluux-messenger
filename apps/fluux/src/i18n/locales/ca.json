@@ -212,7 +212,8 @@
             "listErrorDescription": "No s'han pogut llegir les claus d'aquest contacte. Torneu-ho a provar.",
             "tryAgain": "Torna-ho a provar",
             "needsDecisionTitle": "Esperant la vostra decisió",
-            "needsDecisionDescription": "Els missatges s'envien en text net fins que confieu en una clau.",
+            "needsDecisionDescription": "Els missatges a aquest contacte no es poden xifrar fins que decidiu sobre una clau.",
+            "receivesWhenUnlocked": "Rebrà els vostres missatges un cop desbloquegeu",
             "keyTrust": {
                 "verified": "Verificat",
                 "introduced": "Introduït",

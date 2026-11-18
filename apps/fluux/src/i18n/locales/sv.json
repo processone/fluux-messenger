@@ -210,7 +210,8 @@
             "listErrorDescription": "Kontaktens nycklar kunde inte läsas. Försök igen.",
             "tryAgain": "Försök igen",
             "needsDecisionTitle": "Väntar på ditt beslut",
-            "needsDecisionDescription": "Meddelanden skickas okrypterade tills du litar på en nyckel.",
+            "needsDecisionDescription": "Meddelanden till den här kontakten kan inte krypteras förrän du har bestämt dig för en nyckel.",
+            "receivesWhenUnlocked": "Tar emot dina meddelanden när du låser upp",
             "keyTrust": {
                 "verified": "Verifierad",
                 "introduced": "Introducerad",

@@ -210,7 +210,8 @@
             "listErrorDescription": "De sleutels van dit contact konden niet worden gelezen. Probeer het opnieuw.",
             "tryAgain": "Opnieuw proberen",
             "needsDecisionTitle": "Wacht op uw beslissing",
-            "needsDecisionDescription": "Berichten worden onversleuteld verzonden totdat u een sleutel vertrouwt.",
+            "needsDecisionDescription": "Berichten aan dit contact kunnen niet worden versleuteld totdat u over een sleutel hebt beslist.",
+            "receivesWhenUnlocked": "Ontvangt uw berichten zodra u ontgrendelt",
             "keyTrust": {
                 "verified": "Geverifieerd",
                 "introduced": "Geïntroduceerd",

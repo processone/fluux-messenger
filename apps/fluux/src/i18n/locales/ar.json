@@ -210,7 +210,8 @@
             "listErrorDescription": "تعذّرت قراءة مفاتيح جهة الاتصال هذه. حاول مرة أخرى.",
             "tryAgain": "حاول مرة أخرى",
             "needsDecisionTitle": "في انتظار قرارك",
-            "needsDecisionDescription": "تُرسل الرسائل كنص عادي إلى أن تثق بمفتاح.",
+            "needsDecisionDescription": "لا يمكن تشفير الرسائل إلى جهة الاتصال هذه إلى أن تقرر بشأن مفتاح.",
+            "receivesWhenUnlocked": "يستقبل رسائلك بعد أن تفتح القفل",
             "keyTrust": {
                 "verified": "موثّق",
                 "introduced": "مُقدَّم",

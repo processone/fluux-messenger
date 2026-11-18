@@ -210,7 +210,8 @@
             "listErrorDescription": "Kontaktens nøgler kunne ikke læses. Prøv igen.",
             "tryAgain": "Prøv igen",
             "needsDecisionTitle": "Venter på din beslutning",
-            "needsDecisionDescription": "Beskeder sendes som almindelig tekst, indtil du stoler på en nøgle.",
+            "needsDecisionDescription": "Beskeder til denne kontakt kan ikke krypteres, før du har taget stilling til en nøgle.",
+            "receivesWhenUnlocked": "Modtager dine beskeder, når du låser op",
             "keyTrust": {
                 "verified": "Verificeret",
                 "introduced": "Introduceret",

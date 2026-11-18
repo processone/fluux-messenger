@@ -212,7 +212,8 @@
             "listErrorDescription": "Não foi possível ler as chaves deste contacto. Tente novamente.",
             "tryAgain": "Tentar novamente",
             "needsDecisionTitle": "À espera da sua decisão",
-            "needsDecisionDescription": "As mensagens são enviadas sem cifra até confiar numa chave.",
+            "needsDecisionDescription": "As mensagens para este contacto não podem ser cifradas até decidir sobre uma chave.",
+            "receivesWhenUnlocked": "Receberá as suas mensagens depois de desbloquear",
             "keyTrust": {
                 "verified": "Verificada",
                 "introduced": "Apresentada",

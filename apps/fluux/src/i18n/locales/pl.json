@@ -212,7 +212,8 @@
             "listErrorDescription": "Nie udało się odczytać kluczy tego kontaktu. Spróbuj ponownie.",
             "tryAgain": "Spróbuj ponownie",
             "needsDecisionTitle": "Czeka na Twoją decyzję",
-            "needsDecisionDescription": "Wiadomości są wysyłane bez szyfrowania, dopóki nie zaufasz kluczowi.",
+            "needsDecisionDescription": "Wiadomości do tego kontaktu nie mogą być szyfrowane, dopóki nie zdecydujesz o kluczu.",
+            "receivesWhenUnlocked": "Odbierze Twoje wiadomości po odblokowaniu",
             "keyTrust": {
                 "verified": "Zweryfikowany",
                 "introduced": "Zarekomendowany",

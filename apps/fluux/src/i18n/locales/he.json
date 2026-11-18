@@ -210,7 +210,8 @@
             "listErrorDescription": "לא ניתן היה לקרוא את המפתחות של איש קשר זה. נסה שוב.",
             "tryAgain": "נסה שוב",
             "needsDecisionTitle": "ממתין להחלטתך",
-            "needsDecisionDescription": "הודעות נשלחות ללא הצפנה עד שתסמוך על מפתח.",
+            "needsDecisionDescription": "לא ניתן להצפין הודעות לאיש קשר זה עד שתחליט לגבי מפתח.",
+            "receivesWhenUnlocked": "יקבל את ההודעות שלך לאחר שתבטל את הנעילה",
             "keyTrust": {
                 "verified": "מאומת",
                 "introduced": "הוצג",

@@ -81,6 +81,8 @@ async function resolveState(manager: E2EEManager, peer: string, retry: () => voi
     case 'needsDecision': {
       // Nothing can receive messages yet, but the person can still decide on each key.
       const groups = await manager.listPeerIdentities(peer)
+      // The manager leaves out a plugin whose listing failed this time; that is a failure to retry.
+      if (!groups.some((g) => g.protocolId === security.protocolId)) return listFailed
       return { kind: 'unsupported', needsDecision: true, groups }
     }
     case 'unusable': {
@@ -94,11 +96,13 @@ async function resolveState(manager: E2EEManager, peer: string, retry: () => voi
     case 'locked': {
       const groups = await manager.listPeerIdentities(peer)
       const group = groups.find((g) => g.protocolId === security.protocolId)
+      if (!group) return listFailed
       return { kind: 'keyLocked', fingerprint: group && shownIdentity(group.identities)?.fingerprint, groups }
     }
     case 'encrypted': {
       const groups = await manager.listPeerIdentities(peer)
       const group = groups.find((g) => g.protocolId === security.protocolId)
+      if (!group) return listFailed
       const used = group?.identities.filter((i) => i.usedForEncryption) ?? []
       const shown = shownIdentity(group?.identities ?? [])
       // A decision is offered only for a contact with exactly one key in use.

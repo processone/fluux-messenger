@@ -212,7 +212,8 @@
             "listErrorDescription": "Selle kontakti võtmeid ei saanud lugeda. Proovige uuesti.",
             "tryAgain": "Proovi uuesti",
             "needsDecisionTitle": "Ootab teie otsust",
-            "needsDecisionDescription": "Sõnumid saadetakse krüptimata, kuni usaldate mõnda võtit.",
+            "needsDecisionDescription": "Sellele kontaktile ei saa sõnumeid krüptida, kuni olete võtme kohta otsustanud.",
+            "receivesWhenUnlocked": "Saab teie sõnumeid pärast lukustuse avamist",
             "keyTrust": {
                 "verified": "Kinnitatud",
                 "introduced": "Tutvustatud",

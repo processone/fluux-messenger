@@ -211,7 +211,8 @@
             "listErrorDescription": "This contact's keys could not be read. Try again.",
             "tryAgain": "Try again",
             "needsDecisionTitle": "Waiting for your decision",
-            "needsDecisionDescription": "Messages are sent in plaintext until you trust a key.",
+            "needsDecisionDescription": "Messages can't be encrypted to this contact until you decide on a key.",
+            "receivesWhenUnlocked": "Receives your messages once you unlock",
             "keyTrust": {
                 "verified": "Verified",
                 "introduced": "Introduced",

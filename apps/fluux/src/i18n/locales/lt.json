@@ -210,7 +210,8 @@
             "listErrorDescription": "Nepavyko nuskaityti šio adresato raktų. Bandykite dar kartą.",
             "tryAgain": "Bandyti dar kartą",
             "needsDecisionTitle": "Laukiama jūsų sprendimo",
-            "needsDecisionDescription": "Žinutės siunčiamos nešifruotos, kol pasitikėsite raktu.",
+            "needsDecisionDescription": "Žinučių šiam adresatui negalima šifruoti, kol nenusprendžiate dėl rakto.",
+            "receivesWhenUnlocked": "Gaus jūsų žinutes, kai atrakinsite",
             "keyTrust": {
                 "verified": "Patvirtintas",
                 "introduced": "Pristatytas",

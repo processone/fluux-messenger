@@ -211,7 +211,8 @@
             "listErrorDescription": "Les clés de ce contact n'ont pas pu être lues. Réessayez.",
             "tryAgain": "Réessayer",
             "needsDecisionTitle": "En attente de votre décision",
-            "needsDecisionDescription": "Les messages sont envoyés en clair tant que vous ne faites pas confiance à une clé.",
+            "needsDecisionDescription": "Les messages à ce contact ne peuvent pas être chiffrés tant que vous n'avez pas décidé d'une clé.",
+            "receivesWhenUnlocked": "Recevra vos messages une fois déverrouillé",
             "keyTrust": {
                 "verified": "Vérifiée",
                 "introduced": "Introduite",

@@ -210,7 +210,8 @@
             "listErrorDescription": "Ključevi ovog kontakta nisu se mogli pročitati. Pokušajte ponovno.",
             "tryAgain": "Pokušaj ponovno",
             "needsDecisionTitle": "Čeka vašu odluku",
-            "needsDecisionDescription": "Poruke se šalju nešifrirano dok ne povjerujete nekom ključu.",
+            "needsDecisionDescription": "Poruke ovom kontaktu ne mogu se šifrirati dok ne odlučite o ključu.",
+            "receivesWhenUnlocked": "Primit će vaše poruke nakon otključavanja",
             "keyTrust": {
                 "verified": "Potvrđen",
                 "introduced": "Predstavljen",

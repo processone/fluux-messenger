@@ -138,4 +138,18 @@ describe('SecurityTab key list', () => {
     fireEvent.click(screen.getByRole('button', { name: 'contacts.encryption.tryAgain' }))
     expect(retry).toHaveBeenCalledOnce()
   })
+
+  it('does not say a locked contact key receives messages before the own key is unlocked', () => {
+    renderTab({ kind: 'keyLocked', groups: [{ protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true, identities: [identity({ id: 'AAAA1111' })] }] })
+    expect(screen.queryByText('contacts.encryption.receivesMessages')).not.toBeInTheDocument()
+    expect(screen.getByText('contacts.encryption.receivesWhenUnlocked')).toBeInTheDocument()
+  })
+
+  it('shows the detail of a rejected certificate beside its reason', () => {
+    renderTab(encrypted([{
+      protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true,
+      identities: [identity({ id: 'CCCC3333', trust: 'unknown', usedForEncryption: false, notUsedReason: 'invalid-key', problem: { code: 'no_encryption_subkey', detail: 'no subkey' } })],
+    }]))
+    expect(screen.getByText('no subkey')).toBeInTheDocument()
+  })
 })

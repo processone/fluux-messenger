@@ -212,7 +212,8 @@
             "listErrorDescription": "Klíče tohoto kontaktu se nepodařilo přečíst. Zkuste to znovu.",
             "tryAgain": "Zkusit znovu",
             "needsDecisionTitle": "Čeká na vaše rozhodnutí",
-            "needsDecisionDescription": "Zprávy se odesílají nešifrovaně, dokud neuvěříte nějakému klíči.",
+            "needsDecisionDescription": "Zprávy tomuto kontaktu nelze šifrovat, dokud se o klíči nerozhodnete.",
+            "receivesWhenUnlocked": "Přijme vaše zprávy po odemknutí",
             "keyTrust": {
                 "verified": "Ověřený",
                 "introduced": "Představený",
