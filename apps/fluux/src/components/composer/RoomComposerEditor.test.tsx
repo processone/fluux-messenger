@@ -5,7 +5,7 @@
  * - replacing mentions with identical plain text keeps the string but removes the
  *   mention nodes, and the parent's references must follow.
  */
-import { act, render } from '@testing-library/react'
+import { act, render, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { MentionReference } from '@fluux/sdk'
 import { RoomComposerEditor, type RoomComposerEditorProps } from './RoomComposerEditor'
@@ -67,6 +67,19 @@ describe('RoomComposerEditor paste', () => {
     expect(onPaste).toHaveBeenCalledTimes(1)
     expect(input.value).toBe('')
     expect(onEdit).not.toHaveBeenCalled()
+  })
+
+  it('emits an input event for an edit the editor applies itself, as a textarea would', async () => {
+    // Intent: FLM-244. Lexical cancels beforeinput, so listeners that treat typing as composing hear nothing.
+    const { input } = setup('', [])
+    const heard = vi.fn()
+    document.addEventListener('input', heard, true)
+    try {
+      act(() => input.setSelectionRange(0, 0))
+      await paste(input, { text: 'hello' })
+      expect(input.value).toBe('hello')
+      await waitFor(() => expect(heard).toHaveBeenCalled())
+    } finally { document.removeEventListener('input', heard, true) }
   })
 
   it('still inserts a plain-text paste the composer does not claim', async () => {
