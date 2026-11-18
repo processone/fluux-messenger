@@ -1090,6 +1090,17 @@ export interface RoomState {
    * Stable public API. The versions are ephemeral and reset with the store.
    */
   interiorPlacementVersions: Map<string, number>
+  /**
+   * Whether `rooms` holds the account's bookmarked rooms: the session has read
+   * its bookmarks, or resumed a stream with the rooms it already had. A fresh
+   * start is online, and its roster loaded, before the bookmarks arrive, so a
+   * room missing from `rooms` until then may still be on its way.
+   *
+   * @remarks
+   * Ephemeral; it resets with the store on account switch and logout, and
+   * stays set through a reconnect, which keeps the rooms it had.
+   */
+  bookmarksLoaded: boolean
 
   // Actions
   /**
@@ -1102,6 +1113,8 @@ export interface RoomState {
   setRoomJoined: (roomJid: string, joined: boolean) => void
   /** Reset joined/isJoining for all rooms (called on fresh session after reconnect) */
   markAllRoomsNotJoined: () => void
+  /** Record that `rooms` holds the account's bookmarked rooms (see `bookmarksLoaded`). */
+  markBookmarksLoaded: () => void
   addOccupant: (roomJid: string, occupant: RoomOccupant) => void
   batchAddOccupants: (roomJid: string, occupants: RoomOccupant[]) => void
   removeOccupant: (roomJid: string, nick: string) => void
@@ -1395,7 +1408,7 @@ function createEmptyRoomState(
   acknowledgedNonAnonymousRooms: Set<string> = new Set(),
   roomCoverage: Map<string, CoverageRecord> = new Map(),
   pendingRetractions: Map<string, PendingRetraction[]> = new Map(),
-): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'messages' | 'lastArrivedMessage' | 'windowAtLiveEdge' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'interiorPlacementVersions'> {
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'messages' | 'lastArrivedMessage' | 'windowAtLiveEdge' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'interiorPlacementVersions' | 'bookmarksLoaded'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
@@ -1419,6 +1432,7 @@ function createEmptyRoomState(
     firstNewMessageMarkers: new Map(),
     firstNewMessageCounts: new Map(),
     interiorPlacementVersions: new Map(),
+    bookmarksLoaded: false,
   }
 }
 
@@ -1662,6 +1676,10 @@ export const roomStore = createStore<RoomState>()(
 
       return { rooms: newRooms, roomEntities: newEntities }
     })
+  },
+
+  markBookmarksLoaded: () => {
+    if (!get().bookmarksLoaded) set({ bookmarksLoaded: true })
   },
 
   addOccupant: (roomJid, occupant) => {

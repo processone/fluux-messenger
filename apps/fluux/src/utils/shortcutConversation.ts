@@ -27,6 +27,11 @@ export function isShortcutURL(uri: string): boolean {
   return shortcutURL(uri) !== null
 }
 
+/** Whether a link is one of the app's conversation shortcuts and names a room. */
+export function isRoomShortcutURL(uri: string): boolean {
+  return shortcutURL(uri)?.searchParams.get('kind') === 'groupchat'
+}
+
 /** Undefined leaves other schemes alone; null requests the conversation list. */
 export function resolveShortcutURL(
   uri: string,

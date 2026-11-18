@@ -2864,6 +2864,18 @@ describe('roomStore', () => {
       expect(roomStore.getState().rooms.size).toBe(0)
       expect(roomStore.getState().activeRoomJid).toBeNull()
     })
+
+    // Source: a room's Siri suggestion opened on launch waits for this flag;
+    // another account's rooms must not count as this account's bookmarks.
+    it('forgets that the bookmarks loaded on logout and on account switch', () => {
+      roomStore.getState().markBookmarksLoaded()
+      roomStore.getState().reset()
+      expect(roomStore.getState().bookmarksLoaded).toBe(false)
+
+      roomStore.getState().markBookmarksLoaded()
+      roomStore.getState().switchAccount('other@example.com')
+      expect(roomStore.getState().bookmarksLoaded).toBe(false)
+    })
   })
 
   // ==================== Occupant Tests ====================

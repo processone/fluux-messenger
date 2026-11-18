@@ -172,6 +172,7 @@ export const roomBindingMethodKeys = [
   'getRoomCoverage',
   'clearRoomCoverage',
   'markAllRoomsNotJoined',
+  'markBookmarksLoaded',
   'updateLastMessagePreview',
   'loadMessagesFromCache',
   'loadPreviewFromCache',

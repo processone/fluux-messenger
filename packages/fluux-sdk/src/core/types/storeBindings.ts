@@ -501,6 +501,12 @@ export interface RoomBindings {
   /** Reset joined/isJoining for all rooms (called on fresh session after reconnect) */
   markAllRoomsNotJoined: () => void
 
+  /**
+   * Record that the store holds the account's bookmarked rooms: the session
+   * read its bookmarks, or resumed a stream with the rooms it already had.
+   */
+  markBookmarksLoaded: () => void
+
   /** Update only the lastMessage preview without affecting message history */
   updateLastMessagePreview: (roomJid: string, lastMessage: RoomMessage) => void
 
