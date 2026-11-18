@@ -144,21 +144,26 @@ import {
   type TrustStateVerdict,
 } from './trustTypes'
 import {
+  TRUST_RECORDS_STORAGE_KEY,
   TrustRecordStore,
   canonicalFingerprint,
   keyStanding,
+  parseTrustRecords,
   planVerifiedSetsUpdate,
   type KeyDecisionChange,
   type KeyStanding,
   type TrustRecordsChange,
 } from './trustRecords'
 import {
+  DEFERRED_HOLDS_STORAGE_KEY,
   LEGACY_SEAL_CHECK_STORAGE_KEY,
   claimUnscopedLegacyTrust,
   legacyRecordsMismatch,
   legacySealCheckFor,
+  parseDeferredHolds,
   parseLegacySealCheck,
   readLegacyTrustState,
+  serializeDeferredHolds,
   serializeLegacySealCheck,
   trustRecordsFromLegacy,
   verifyLegacyTrustStateSeal,
@@ -345,9 +350,14 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * earlier values for this session, but nothing is saved, sealed or
    * synchronised, and the user's trust decisions are refused (see
    * {@link refuseUnsavedTrust}); the earlier seal is still checked, against
-   * `check`.
+   * `check`. Whether the user verified the contacts the unclaimed values
+   * name (`unresolved`) is not known yet: their keys wait for a decision as
+   * a verified contact's new keys do, so nothing is sent to them. The keys
+   * held in this session are kept apart (see {@link saveDeferredHolds}).
    */
-  private _deferredMigration: { check: PendingLegacySealCheck | null } | null = null
+  private _deferredMigration: { check: PendingLegacySealCheck | null; unresolved: ReadonlySet<string> } | null = null
+  /** Saves of the keys held while the migration waits, in order. */
+  private _deferredHoldsWrite: Promise<void> = Promise.resolve()
   private _ownKeyConflict: OwnKeyConflict | null = null
   private readonly trustViewListeners = new Set<(peers: readonly string[] | null) => void>()
 
@@ -689,7 +699,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     await this.loadTrustRecords(ctx)
     if (this.ctx !== ctx) return
     // The cached keys waiting for a decision keep their hold if the cache goes.
-    this.trustRecords.setDecisions([...this.peerKeys.keys()].flatMap((peer) => this.waitingKeys(peer)))
+    this.holdWaitingKeys([...this.peerKeys.keys()].flatMap((peer) => this.waitingKeys(peer)))
     try {
       await this.ensureIdentity()
     } catch (err) {
@@ -745,6 +755,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (this.ctx !== ctx) return
     if (!readable) ctx.logger.warn(`${this.pluginName()}: saved trust records are unreadable; starting empty`)
     if (found) {
+      // Holds a migration that stopped after saving its records left behind.
+      await this.restoreDeferredHolds(ctx)
       this._trustStateUnderCheck = copyTrustState(this.trustRecords)
       return
     }
@@ -754,10 +766,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // and no account uses them without a confirmed claim. Another account's
     // claim leaves this one its own values. A claim that could not be
     // confirmed puts the migration off to the next start: this session uses
-    // the account's own values, and saves nothing.
+    // the account's own values, saves nothing but its holds, and sends
+    // nothing to a contact the other values verified.
     if (legacy.usesUnscoped) {
       const claim = await claimUnscopedLegacyTrust(ctx.account.jid)
       if (this.ctx !== ctx) return
+      const read = legacy
       if (claim !== 'owned') legacy = readLegacyTrustState(ctx.account.jid, false)
       if (claim === 'unavailable') {
         ctx.logger.warn(
@@ -765,8 +779,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         )
         this.trustRecords.detach()
         this.trustRecords.replace(trustRecordsFromLegacy(legacy, new Date(this.now()).toISOString()))
+        this._deferredMigration = {
+          check: legacySealCheckFor(legacy),
+          unresolved: new Set([...Object.keys(read.verified), ...Object.keys(read.alerts)]),
+        }
+        await this.restoreDeferredHolds(ctx)
+        if (this.ctx !== ctx) return
         this._trustStateUnderCheck = copyTrustState(this.trustRecords)
-        this._deferredMigration = { check: legacySealCheckFor(legacy) }
         return
       }
     }
@@ -783,6 +802,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (this.ctx !== ctx) return
     const records = trustRecordsFromLegacy(legacy, new Date(this.now()).toISOString())
     this.trustRecords.replace(records)
+    await this.restoreDeferredHolds(ctx)
+    if (this.ctx !== ctx) return
     this._trustStateUnderCheck = copyTrustState(this.trustRecords)
     await this.trustRecords.flush()
     ctx.logger.info(
@@ -811,6 +832,43 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       void this.syncVerificationsFromServer()
     })
     void this.verifyTrustStateOnInit()
+  }
+
+  /**
+   * Hold again the keys held while the migration waited for the next start,
+   * where the contact's new keys wait for a decision now and the key has no
+   * decision. Once the migration is done and its saved records hold them,
+   * they are no longer kept apart.
+   */
+  private async restoreDeferredHolds(ctx: PluginContext): Promise<void> {
+    const bytes = await ctx.storage.get(DEFERRED_HOLDS_STORAGE_KEY)
+    if (!bytes || this.ctx !== ctx) return
+    const holds = parseDeferredHolds(bytes).filter(
+      (h) => this.trustRecords.decisionOf(h.peer, h.fingerprint) === undefined && this.holdsNewKeys(h.peer),
+    )
+    this.trustRecords.setDecisions(holds)
+    if (this._deferredMigration) return
+    await this.trustRecords.flush()
+    const saved = await ctx.storage.get(TRUST_RECORDS_STORAGE_KEY)
+    const records = saved ? parseTrustRecords(saved) : null
+    if (this.ctx !== ctx || !records || holds.some((h) => records.peers[h.peer]?.[h.fingerprint]?.decision !== 'held')) return
+    await ctx.storage.delete(DEFERRED_HOLDS_STORAGE_KEY)
+  }
+
+  /**
+   * Keep the keys held while the migration waits for the next start, since
+   * the records of this session are not saved (see
+   * {@link restoreDeferredHolds}).
+   */
+  private saveDeferredHolds(): void {
+    const ctx = this.ctx
+    if (!ctx || !this._deferredMigration) return
+    const bytes = serializeDeferredHolds(this.trustRecords.decisions())
+    this._deferredHoldsWrite = this._deferredHoldsWrite
+      .then(() => ctx.storage.put(DEFERRED_HOLDS_STORAGE_KEY, bytes))
+      .catch((err: unknown) => {
+        ctx.logger.warn(`${this.pluginName()}: could not keep the held keys: ${formatError(err)}`)
+      })
   }
 
   /**
@@ -1114,6 +1172,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // plugin's back.
       if (this.trustStateAccepted()) await this.sealTrustStateNow()
     }
+    // The keys held while the migration waits are kept before the account leaves.
+    if (this._deferredMigration) await this._deferredHoldsWrite
     // Forget this account's trust view; the report listener still tells the
     // manager and the app which contacts changed, then goes.
     this.trustRecords.detach()
@@ -2717,8 +2777,14 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // can be lost, and the key must still wait if its contact loses its last
     // verified key and announces it again. The trust-state check accepts a
     // hold saved before the state could be sealed (see `withoutHoldsAddedSince`).
-    this.trustRecords.setDecisions([...waitingBefore, ...this.waitingKeys(peer)])
+    this.holdWaitingKeys([...waitingBefore, ...this.waitingKeys(peer)])
     if (changed) this.notifyKeysetChanged(peer)
+  }
+
+  /** Save keys waiting for a decision as held, also while the migration waits. */
+  private holdWaitingKeys(changes: readonly KeyDecisionChange[]): void {
+    this.trustRecords.setDecisions(changes)
+    this.saveDeferredHolds()
   }
 
   /** The keys of `peer` waiting for a decision, as `held` decisions. */
@@ -2840,10 +2906,19 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   /** How each key of `peer` we know stands, including keys it no longer announces. */
   private keyStandings(peer: BareJID): Array<{ cert: CachedPeerCert; standing: KeyStanding }> {
-    const ownJid = this.ctx ? getBareJid(this.ctx.account.jid) : null
-    const holdsNewKeys = peer !== ownJid && this.trustRecords.hasVerified(peer)
+    const holdsNewKeys = this.holdsNewKeys(peer)
     return (this.peerKeys.get(peer) ?? [])
       .map((cert) => ({ cert, standing: keyStanding(this.trustRecords.decisionOf(peer, cert.fingerprint), holdsNewKeys) }))
+  }
+
+  /**
+   * Whether a key of `peer` with no decision waits for one: the contact has a
+   * verified key, or the values the migration could not claim yet may have
+   * verified it (see {@link _deferredMigration}).
+   */
+  private holdsNewKeys(peer: BareJID): boolean {
+    if (this.ctx && peer === getBareJid(this.ctx.account.jid)) return false
+    return this.trustRecords.hasVerified(peer) || this._deferredMigration?.unresolved.has(peer) === true
   }
 
   /** Active certs encrypt() sends to: those neither waiting for a decision nor refused. */

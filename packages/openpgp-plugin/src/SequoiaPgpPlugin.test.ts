@@ -2084,6 +2084,75 @@ describe('SequoiaPgpPlugin', () => {
         },
       )
 
+      // While the move of an earlier version's trust data waits for the next
+      // start, nothing in the session's records is saved: the keys it holds
+      // are kept apart, so a key the cache drops meanwhile is still held once
+      // the move runs.
+      it('keeps a key held that the cache dropped while the move of earlier trust data waited for the next start', async () => {
+        const P1 = validKey('AAAA000000000000000000000000000000000001')
+        const P2 = validKey('BBBB000000000000000000000000000000000002')
+        // An earlier version verified P1 for this account, and kept a value
+        // for every account, which needs a claim this start cannot save.
+        localStorage.setItem(`fluux-e2ee-verified-peers:me@example.com`, JSON.stringify({ [PEER]: P1.fingerprint }))
+        localStorage.setItem('fluux-e2ee-cert-rejections', JSON.stringify({
+          'dave@example.com': [{ fingerprint: 'DEAD', code: 'uid_mismatch', detail: 'x', observedAt: '2026-10-01T08:00:00.000Z' }],
+        }))
+        const first = makeContext('me@example.com')
+        const setItem = localStorage.setItem
+        localStorage.setItem = (key: string, value: string) => {
+          if (key === 'fluux-e2ee-legacy-unscoped-owner') throw new Error('quota exceeded')
+          setItem.call(localStorage, key, value)
+        }
+        try {
+          await plugin.init(first.ctx)
+        } finally {
+          localStorage.setItem = setItem
+        }
+        const firstPep = installPeerPep(first, PEER)
+        const announceFirst = async (keys: KeyBundle[]) => {
+          firstPep.announce(keys)
+          plugin.onPeerKeysChanged(PEER)
+          await flush()
+        }
+        await announceFirst([P1, P2])
+        expect((await plugin.listPeerIdentities(PEER)).find((i) => i.id === P2.fingerprint)?.notUsedReason).toBe('awaiting-decision')
+        await announceFirst([P1])
+        for (let i = 0; i < 5; i++) {
+          await announceFirst([P1, validKey(`DDDD00000000000000000000000000000000001${i}`)])
+          await announceFirst([P1])
+        }
+        const cached = (plugin as unknown as { peerKeys: Map<string, Array<{ fingerprint: string }>> }).peerKeys.get(PEER) ?? []
+        expect(cached.map((c) => c.fingerprint)).not.toContain(P2.fingerprint)
+        expect(await first.ctx.storage.get(TRUST_RECORDS_STORAGE_KEY)).toBeNull()
+        await plugin.shutdown()
+
+        // The next start moves the earlier trust data; P1 is then no longer verified.
+        const built = makeContext('me@example.com', { storage: first.ctx.storage })
+        const restarted = new SequoiaPgpPlugin({ ...desktopHost(), invoke: fake.invoke })
+        await restarted.init(built.ctx)
+        try {
+          expect(trustRecordsOf(restarted).isVerified(PEER, P1.fingerprint)).toBe(true)
+          await vi.waitFor(() => expect(getTrustStateStatus(restarted)).toBe('sealed'))
+          const bobPep = installPeerPep(built, PEER)
+          const announce = async (keys: KeyBundle[]) => {
+            bobPep.announce(keys)
+            restarted.onPeerKeysChanged(PEER)
+            await flush()
+          }
+          await announce([P1])
+          await restarted.setIdentityTrust(PEER, P1.fingerprint, 'tofu')
+          await announce([P1, P2])
+
+          expect((await restarted.listPeerIdentities(PEER)).find((i) => i.id === P2.fingerprint)).toMatchObject({
+            usedForEncryption: false, notUsedReason: 'awaiting-decision',
+          })
+          const toBob = await restarted.openConversation({ kind: 'direct', peer: PEER })
+          expect(recipientFpsFromEncrypt(await restarted.encrypt(toBob, encodeBodyAsPayload('held')))).not.toContain(P2.fingerprint)
+        } finally {
+          await restarted.shutdown()
+        }
+      })
+
       // The cache keeps five withdrawn unverified keys; a waiting key it drops
       // stays held, since its hold is kept in the trust records.
       it.each([
@@ -5512,6 +5581,56 @@ describe('SequoiaPgpPlugin', () => {
       expect(warnings).toEqual([])
       const saved = JSON.parse(new TextDecoder().decode((await built.ctx.storage.get('trust-records'))!))
       expect(Object.keys(saved.peers)).toEqual(['carol@example.com'])
+    })
+
+    // While the move waits, whether the user verified a contact the
+    // unclaimed values name is not known: its keys wait for a decision, so
+    // nothing is sent to it, as for a verified contact's new keys. Other
+    // contacts are not affected.
+    it('sends nothing to a contact the unclaimed values verified while their move waits, and holds its new key once they move', async () => {
+      const BOB_NEW_FP = 'B0B0000000000000000000000000000000000022'
+      const DAVE_FP = 'DA4E000000000000000000000000000000000014'
+      localStorage.setItem('fluux-e2ee-verified-peers', JSON.stringify({ 'bob@example.com': BOB_FP }))
+      const built = makeContext(ME)
+      const setItem = localStorage.setItem
+      localStorage.setItem = (key: string, value: string) => {
+        if (key === 'fluux-e2ee-legacy-unscoped-owner') throw new Error('quota exceeded')
+        setItem.call(localStorage, key, value)
+      }
+      try {
+        await plugin.init(built.ctx)
+      } finally {
+        localStorage.setItem = setItem
+      }
+      publishKeyAsXep0373(built, 'bob@example.com', peerKey(BOB_NEW_FP, 'bob@example.com'))
+      publishKeyAsXep0373(built, 'dave@example.com', peerKey(DAVE_FP, 'dave@example.com'))
+      await plugin.probePeer('bob@example.com')
+      await plugin.probePeer('dave@example.com')
+
+      expect((await plugin.listPeerIdentities('bob@example.com')).map((i) => [i.id, i.usedForEncryption, i.notUsedReason])).toEqual([
+        [BOB_NEW_FP, false, 'awaiting-decision'],
+      ])
+      // A contact with keys is never sent plaintext instead.
+      expect(await plugin.getPeerTrust('bob@example.com')).toBe('tofu')
+      const toBob = await plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      await expect(plugin.encrypt(toBob, encodeBodyAsPayload('to bob'))).rejects.toMatchObject({ code: 'peer-keys-awaiting-decision' })
+      const toDave = await plugin.openConversation({ kind: 'direct', peer: 'dave@example.com' })
+      expect(recipientFpsFromEncrypt(await plugin.encrypt(toDave, encodeBodyAsPayload('to dave')))).toContain(DAVE_FP)
+      await plugin.shutdown()
+
+      const next = makeContext(ME, { storage: built.ctx.storage })
+      publishKeyAsXep0373(next, 'bob@example.com', peerKey(BOB_NEW_FP, 'bob@example.com'))
+      const restarted = new SequoiaPgpPlugin({ ...desktopHost(), invoke: fake.invoke })
+      await restarted.init(next.ctx)
+      try {
+        expect(trustRecordsOf(restarted).isVerified('bob@example.com', BOB_FP)).toBe(true)
+        await restarted.probePeer('bob@example.com')
+        expect((await restarted.listPeerIdentities('bob@example.com')).find((i) => i.id === BOB_NEW_FP)?.notUsedReason).toBe(
+          'awaiting-decision',
+        )
+      } finally {
+        await restarted.shutdown()
+      }
     })
 
     // A claim that cannot be saved puts the migration off: the session uses

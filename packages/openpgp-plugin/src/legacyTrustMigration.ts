@@ -34,7 +34,7 @@
  */
 
 import { buildScopedStorageKey } from '@fluux/sdk'
-import { canonicalFingerprint, emptyTrustRecords, type TrustRecordsData } from './trustRecords'
+import { canonicalFingerprint, emptyTrustRecords, type KeyDecisionChange, type TrustRecordsData } from './trustRecords'
 import { canonicalJson, withoutHoldsAddedSince, type TrustStateReading } from './trustStateIntegrity'
 import type { CertRejection, KeyDecision, TrustStateVerdict } from './trustTypes'
 import { fingerprintsEqual } from './fingerprintCompare'
@@ -42,6 +42,43 @@ import type { DecryptFn } from './verificationSync'
 
 /** Plugin storage key of a legacy seal check that has not run yet. */
 export const LEGACY_SEAL_CHECK_STORAGE_KEY = 'legacy-seal-check'
+
+/**
+ * The keys held while the migration waits for the next start. The records of
+ * that session are not saved, and a held key must stay held once the
+ * migration is done, even if the key cache dropped it meanwhile.
+ */
+export const DEFERRED_HOLDS_STORAGE_KEY = 'deferred-holds'
+
+/** The held keys among `decisions`, as kept under {@link DEFERRED_HOLDS_STORAGE_KEY}. */
+export function serializeDeferredHolds(decisions: Record<string, Record<string, KeyDecision>>): Uint8Array {
+  const holds: Record<string, string[]> = {}
+  for (const [peer, keys] of Object.entries(decisions)) {
+    const held = Object.keys(keys).filter((fp) => keys[fp] === 'held').sort()
+    if (held.length > 0) holds[peer] = held
+  }
+  return new TextEncoder().encode(canonicalJson(holds))
+}
+
+/** The holds {@link serializeDeferredHolds} kept; what cannot be read is left out. */
+export function parseDeferredHolds(bytes: Uint8Array): KeyDecisionChange[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes))
+  } catch {
+    return []
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return []
+  const holds: KeyDecisionChange[] = []
+  for (const [peer, fingerprints] of Object.entries(parsed)) {
+    if (!Array.isArray(fingerprints)) continue
+    for (const value of fingerprints) {
+      const fingerprint = typeof value === 'string' ? canonicalFingerprint(value) : null
+      if (fingerprint) holds.push({ peer, fingerprint, decision: 'held' })
+    }
+  }
+  return holds
+}
 
 const LEGACY_KEYS = {
   verified: 'fluux-e2ee-verified-peers',

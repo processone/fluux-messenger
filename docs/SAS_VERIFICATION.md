@@ -137,6 +137,11 @@ no claim can be confirmed, because the lock is missing or the claim cannot be
 saved, nothing is moved or sealed: the session uses only the account's own
 earlier records, still checks their seal, and refuses trust decisions and
 sealing the trust state again until the upgrade runs at the next start.
+Whether you verified a contact the unclaimed records name is not known in that
+session, so its keys wait for a decision as a verified contact's new keys do,
+and nothing is sent to it. The keys that session holds are kept apart from its
+unsaved records; once the upgrade runs, each stays held if the contact turns out
+verified and the upgrade has no decision about the key.
 
 Earlier versions sealed their records too. That seal is checked against the
 earlier records as those versions checked it, once the account's key is usable.
