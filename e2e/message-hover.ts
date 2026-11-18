@@ -641,6 +641,24 @@ for (const kind of ['chat', 'room'] as const) {
   })
 }
 
+// Captain: the room composer must keep the list pinned when it grows by edits its editor cancels
+// (Shift+Enter fires beforeinput but no input event), with the pointer resting on a message.
+for (const kind of ['chat', 'room'] as const) {
+  test(`${kind}: growing the composer with Shift+Enter keeps the list pinned while hovering a message`, async ({ page }) => {
+    const { body, list } = await setupInteraction(page, kind)
+    const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
+    await input.focus()
+    await input.pressSequentially('A reply in progress')
+    await body.hover()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    for (let line = 0; line < 2; line++) {
+      await page.keyboard.press('Shift+Enter')
+      await expect(list).not.toHaveAttribute('data-message-interaction')
+      await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    }
+  })
+}
+
 // Captain FLM-245 F1/F2/F7 and G2: composing yields every hold unless a menu is open; native drags must finish.
 for (const kind of ['chat', 'room'] as const) {
   test(`${kind}: interaction hold releases composing, mouse focus and completed native drags`, async ({ page }) => {

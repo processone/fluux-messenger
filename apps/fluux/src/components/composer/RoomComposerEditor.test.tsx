@@ -69,6 +69,19 @@ describe('RoomComposerEditor paste', () => {
     expect(onEdit).not.toHaveBeenCalled()
   })
 
+  it('emits an input event for an edit the editor applies itself, as a textarea would', async () => {
+    // Intent: FLM-244. Lexical cancels beforeinput, so listeners that treat typing as composing hear nothing.
+    const { input } = setup('', [])
+    const heard = vi.fn()
+    document.addEventListener('input', heard)
+    try {
+      act(() => input.setSelectionRange(0, 0))
+      await paste(input, { text: 'hello' })
+      expect(input.value).toBe('hello')
+      expect(heard).toHaveBeenCalled()
+    } finally { document.removeEventListener('input', heard) }
+  })
+
   it('still inserts a plain-text paste the composer does not claim', async () => {
     const { input } = setup('', [])
     act(() => input.setSelectionRange(0, 0))
