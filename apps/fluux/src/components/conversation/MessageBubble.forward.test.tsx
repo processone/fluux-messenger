@@ -119,7 +119,7 @@ describe('forward on a one-to-one message', () => {
   })
 
   it('marks a message from an encrypted chat so it can only go into an encrypted chat', () => {
-    renderDirect({ securityContext: { protocol: 'openpgp', trust: 'verified' } as BaseMessage['securityContext'] })
+    renderDirect({ securityContext: { protocolId: 'openpgp', trust: 'verified' } })
     fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
     expect(modal.props?.quote?.fromEncrypted).toBe(true)
   })
@@ -141,7 +141,7 @@ describe('forward on a one-to-one message', () => {
     })
 
     it('keeps the protection flag of an encrypted copy-only message', () => {
-      renderDirect({ body: '', forwarded: { author: 'Carol', text: 'Ship it' }, securityContext: { protocol: 'openpgp', trust: 'verified' } as BaseMessage['securityContext'] })
+      renderDirect({ body: '', forwarded: { author: 'Carol', text: 'Ship it' }, securityContext: { protocolId: 'openpgp', trust: 'verified' } })
       fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
       expect(modal.props?.quote?.fromEncrypted).toBe(true)
     })
