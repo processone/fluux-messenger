@@ -18,9 +18,11 @@ import {
   loadAppliedVerificationsVersion,
   type DecryptFn,
   type EncryptFn,
+} from './verificationSync'
+import {
   type OpenPGPHostStores,
   type TrustStateStatus,
-} from '@fluux/openpgp-plugin'
+} from './hostStores'
 
 const SEAL_STORAGE_KEY_BASE = 'fluux-e2ee-trust-state-seal'
 const INIT_FLAG_KEY_BASE = 'fluux-e2ee-trust-integrity-init'

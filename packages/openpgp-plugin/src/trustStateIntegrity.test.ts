@@ -1,22 +1,17 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import { E2EEPluginError } from '@fluux/sdk'
-import { createAppHostStores } from './appHostStores'
+import type { TrustStateStatus } from './hostStores'
+import { createMockHostStores } from './testing/mockHostStores'
 import {
   clearCompromisedAndReseal,
   isTofuBlockedByCompromise,
   sealTrustState,
   verifyTrustStateSeal,
 } from './trustStateIntegrity'
-import {
-  getTrustStateStatus,
-  setTrustStateStatus,
-  useTrustStateStatusStore,
-} from '@/stores/trustStateStatusStore'
-import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
-import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 
-const stores = createAppHostStores()
+const stores = createMockHostStores()
+const getTrustStateStatus = () => stores.trustStateStatus.get()
+const setTrustStateStatus = (s: TrustStateStatus) => stores.trustStateStatus.set(s)
 const OWN_FP = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
 const OWN_PUBLIC = 'OWN-PUBLIC-ARMOR'
 const passthroughEncrypt = async (plaintext: string) => plaintext
@@ -26,14 +21,12 @@ const isKeyUnavailable = (err: unknown) =>
   err instanceof E2EEPluginError && (err.code === 'key-unrecoverable' || err.code === 'key-locked')
 
 function setPins(pins: Record<string, string>) {
-  usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: pins })
+  stores.setPins(pins)
 }
 
 beforeEach(() => {
   localStorage.clear()
-  usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
-  useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-  useKeyChangeAlertsStore.setState({ alertsByJid: {} })
+  stores.reset()
 })
 
 describe('verifyTrustStateSeal: key-unavailable classification', () => {
@@ -173,7 +166,7 @@ describe('verifyTrustStateSeal: no seal and tamper verdicts', () => {
   it('lists which part differs when the sealed state no longer matches', async () => {
     setPins({ 'peer@example.com': 'PEERFP' })
     await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
-    useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: { 'peer@example.com': 'PEERFP' } })
+    stores.setVerifiedPeers({ 'peer@example.com': 'PEERFP' })
     const res = await verifyTrustStateSeal(stores, decryptOk, OWN_PUBLIC, OWN_FP)
     expect(res).toEqual({ status: 'compromised', details: ['verified peers differ'] })
   })
@@ -185,7 +178,7 @@ describe('isTofuBlockedByCompromise and clearCompromisedAndReseal', () => {
   })
 
   beforeEach(() => {
-    useTrustStateStatusStore.getState().clear()
+    stores.trustStateStatus.set('uninitialized')
   })
 
   it('never blocks while the trust state is not compromised', () => {

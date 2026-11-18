@@ -144,7 +144,7 @@ control, and verified state is per fingerprint.
 | Verify dialog (SAS + fallback) | `apps/fluux/src/components/VerifyPeerDialog.tsx`             |
 | Verified-key storage           | `apps/fluux/src/stores/verifiedPeerKeysStore.ts`            |
 | Fingerprint normalisation      | `packages/openpgp-plugin/src/fingerprintCompare.ts`                  |
-| Trust lifting to `verified`    | `apps/fluux/src/e2ee/OpenPGPPluginBase.ts` (`isPeerVerified`) |
+| Trust lifting to `verified`    | `packages/openpgp-plugin/src/OpenPGPPluginBase.ts` (`isPeerVerified`) |
 | Cross-device sync (PEP)        | `packages/openpgp-plugin/src/verificationSync.ts`                    |
 
 ## Appendix A: planned commitment-based upgrade
