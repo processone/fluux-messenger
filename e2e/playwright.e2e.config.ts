@@ -78,6 +78,7 @@ const SUITES = [
   { name: 'harness-activate-chat', testMatch: 'harness-activate-chat.ts' },
   { name: 'harness-navigate-room', testMatch: 'harness-navigate-room.ts' },
   { name: 'harness-boot-readiness', testMatch: 'harness-boot-readiness.ts' },
+  { name: 'settings-reload', testMatch: 'settings-reload.ts' },
 ] as const
 
 /**

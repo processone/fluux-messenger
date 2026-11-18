@@ -441,7 +441,8 @@ function ChatLayoutContent() {
           navigateToAdmin(undefined, { replace: true })
           break
         case 'settings':
-          navigateToSettings(undefined, { replace: true })
+          // Reopen the saved Settings page, not the default one.
+          navigateToSettings(savedViewState.settingsCategory ?? undefined, { replace: true })
           break
       }
     }
@@ -457,9 +458,10 @@ function ChatLayoutContent() {
       activeRoomJid: activeRoomJid ?? null,
       selectedContactJid: selectedContactJid,
       showRoomOccupants,
+      settingsCategory,
     }
     saveViewState(viewState)
-  }, [status, sidebarView, activeConversationId, activeRoomJid, selectedContactJid, showRoomOccupants])
+  }, [status, sidebarView, activeConversationId, activeRoomJid, selectedContactJid, showRoomOccupants, settingsCategory])
 
   // Clear selected contact when conversation or room becomes active
   useEffect(() => {
