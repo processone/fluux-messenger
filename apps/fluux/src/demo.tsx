@@ -39,6 +39,7 @@ import App from './App'
 import i18n from './i18n'
 import './index.css'
 import { installNotificationSettingsFixture } from './demo/notificationSettingsFixture'
+import { ShellSettledProbe } from './demo/shellSettledProbe'
 import { installMobileViewport } from './utils/mobileViewport'
 
 installMobileViewport()
@@ -330,6 +331,8 @@ const renderDemo = () => ReactDOM.createRoot(document.getElementById('root')!).r
     {/* Mounted as in main.tsx so the frameless-window layout can be exercised
         here by stating the chrome (setCustomWindowChromeForTesting). */}
     <WindowControls />
+    {/* Tells the e2e boot when the shell's startup navigation is done. */}
+    <ShellSettledProbe />
   </React.StrictMode>,
 )
 
