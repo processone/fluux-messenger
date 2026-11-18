@@ -284,6 +284,56 @@ describe('SessionLifecycleEngine', () => {
     expect(modules.muc.autojoinRoom).not.toHaveBeenCalled()
   })
 
+  // Issue #37: a bookmark discovered after a resumed session (added on another
+  // client while away) passes the same real-JID exposure gate as a fresh session.
+  describe('real-JID exposure gate on bookmark autojoin', () => {
+    const bookmark = { jid: 'exposed@conference.localhost', nick: 'alice' }
+    // disco#info readings from an ejabberd room with anonymous=false / true.
+    const nonAnonymousPublic = {
+      supportsMAM: true, supportsReactions: true, supportsHats: true, isNonAnonymous: true,
+      isPrivate: false, isIrcGateway: false, supportsModeration: true, name: 'Exposed room',
+    }
+    const semiAnonymousPublic = { ...nonAnonymousPublic, isNonAnonymous: false, name: 'Safe room' }
+
+    const connect = async (session: 'fresh' | 'resumed') => {
+      if (session === 'fresh') return engine.handleConnectionSuccess(false)
+      localStorageMock.setItem('fluux:cache-marker:me@example.com/web', '123')
+      // A long disconnect refreshes bookmarks on resumption.
+      await engine.handleConnectionSuccess(true, undefined, 180_000)
+      expect(engine.isSmResumed()).toBe(true)
+    }
+
+    beforeEach(() => {
+      roomStore.getState().addRoom(createMockRoom(bookmark.jid, { joined: false, autojoin: true, nickname: bookmark.nick }))
+      modules.muc.fetchBookmarks.mockResolvedValue({ roomsToAutojoin: [bookmark], allRoomJids: [bookmark.jid] })
+    })
+
+    it.each(['fresh', 'resumed'] as const)('%s session leaves an unacknowledged non-anonymous public room unjoined', async session => {
+      modules.muc.queryRoomFeatures.mockResolvedValue(nonAnonymousPublic)
+
+      await connect(session)
+      await vi.waitFor(() => expect(stores.room.isNonAnonymousRoomAcknowledged).toHaveBeenCalledWith(bookmark.jid))
+
+      expect(modules.muc.autojoinRoom).not.toHaveBeenCalled()
+      expect(roomStore.getState().getRoom(bookmark.jid)).toMatchObject({ joined: false, isJoining: false })
+    })
+
+    it.each([
+      ['fresh', 'acknowledged non-anonymous', nonAnonymousPublic, true],
+      ['resumed', 'acknowledged non-anonymous', nonAnonymousPublic, true],
+      ['fresh', 'semi-anonymous', semiAnonymousPublic, false],
+      ['resumed', 'semi-anonymous', semiAnonymousPublic, false],
+    ] as const)('%s session autojoins a public room that is %s, with its discovered features', async (session, _kind, features, acknowledged) => {
+      modules.muc.queryRoomFeatures.mockResolvedValue(features)
+      stores.room.isNonAnonymousRoomAcknowledged.mockReturnValue(acknowledged)
+
+      await connect(session)
+      await vi.waitFor(() => expect(modules.muc.autojoinRoom).toHaveBeenCalled())
+
+      expect(modules.muc.autojoinRoom).toHaveBeenCalledWith(bookmark.jid, bookmark.nick, { password: undefined, knownFeatures: features })
+    })
+  })
+
   // Issue #1126: unattended rejoining of a password-protected room depends on
   // the bookmark's password reaching the join on connect.
   it('autojoins a bookmarked room with its stored password', async () => {

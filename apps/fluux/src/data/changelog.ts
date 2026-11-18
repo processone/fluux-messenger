@@ -53,6 +53,7 @@ export const changelog: ChangelogEntry[] = [
         'Changing your password no longer drops the server address you signed in with from your saved sign-in. The next start connects through that server again, and the login form still shows it',
         'After you change your password, Fluux reconnects and reloads with the new password. Before, a dropped connection or a page reload tried the old one and sent you back to the sign-in screen',
         'iOS: tapping a Siri suggestion to send a message to a room now opens that room when Fluux was closed too, instead of the conversation list',
+        'Rooms: when Fluux resumes your session after a reload or a long disconnection, it no longer joins on its own a room you bookmarked to autojoin elsewhere if everyone there could see your real address. As after a fresh sign-in, the room waits in your list until you join it and confirm the warning, unless you already confirmed it for that room',
       ],
     }],
   },

@@ -289,11 +289,50 @@ export class SessionLifecycleEngine {
         if (this.isSessionStale(gen)) return
         for (const room of roomsToAutojoin) {
           if (!this.deps.getStores()?.room.getRoom(room.jid)?.joined) {
-            void this.deps.muc.autojoinRoom(room.jid, room.nick, { password: room.password })
+            // Same privacy gate as a fresh session: a bookmark added on another
+            // client while we were away must not expose the real JID unasked.
+            const release = this.deps.muc.queueRoomJoin(room.jid)
+            void this.autojoinBookmark(room, gen, release, 'SM resumption aborted before autojoin')
           }
         }
       }).catch(() => {})
     }
+  }
+
+  /**
+   * Autojoin one bookmarked room behind the real-JID exposure gate (issue #37).
+   *
+   * Both session paths go through here, so a room that would expose the user's
+   * real JID (non-anonymous and not private) is autojoined only once the user has
+   * acknowledged it. Inspect via disco#info first; if it exposes the JID and isn't
+   * acknowledged, leave it bookmarked-but-not-joined so the user joins it
+   * deliberately from the UI, where the exposure warning is shown. Otherwise pass
+   * the features straight to joinRoom() so it doesn't re-run disco.
+   *
+   * `release` frees the room's queued-join claim when no join follows (stale
+   * session or privacy skip); an actual join takes the claim over itself.
+   */
+  private async autojoinBookmark(
+    room: { jid: string; nick: string; password?: string },
+    gen: number,
+    release: () => void,
+    staleCheckpoint: string
+  ): Promise<void> {
+    const features = await this.deps.muc.queryRoomFeatures(room.jid).catch(() => null)
+    if (this.isSessionSuperseded(gen, staleCheckpoint)) {
+      release()
+      return
+    }
+    const exposesRealJid = features ? (features.isNonAnonymous && !features.isPrivate) : false
+    if (exposesRealJid && !this.deps.getStores()?.room.isNonAnonymousRoomAcknowledged(room.jid)) {
+      logInfo(`Skipping autojoin of non-anonymous room ${room.jid} (real-JID exposure not acknowledged)`)
+      release()
+      return
+    }
+    await this.deps.muc.autojoinRoom(room.jid, room.nick, {
+      password: room.password,
+      knownFeatures: features,
+    })
   }
 
   /**
@@ -473,33 +512,10 @@ export class SessionLifecycleEngine {
       }
     }
 
-    // Always join autojoin bookmarks (both fresh connect and reconnect)
-    if (roomsToAutojoin.length > 0) {
-      for (const room of roomsToAutojoin) {
-        // Issue #37: don't silently autojoin a room that exposes the user's real JID
-        // (non-anonymous, non-private) unless they've already acknowledged it. Inspect
-        // via disco#info first; if it exposes the JID and isn't acknowledged, leave it
-        // bookmarked-but-not-joined so the user joins it deliberately from the UI (where
-        // the exposure warning is shown). Otherwise pass the features straight to
-        // joinRoom() so it doesn't re-run disco.
-        void (async () => {
-          const features = await this.deps.muc.queryRoomFeatures(room.jid).catch(() => null)
-          if (this.isSessionSuperseded(gen, 'Fresh session aborted before autojoin')) {
-            clearQueuedAutojoin(room.jid)
-            return
-          }
-          const exposesRealJid = features ? (features.isNonAnonymous && !features.isPrivate) : false
-          if (exposesRealJid && !this.deps.getStores()?.room.isNonAnonymousRoomAcknowledged(room.jid)) {
-            logInfo(`Skipping autojoin of non-anonymous room ${room.jid} (real-JID exposure not acknowledged)`)
-            clearQueuedAutojoin(room.jid)
-            return
-          }
-          await this.deps.muc.autojoinRoom(room.jid, room.nick, {
-            password: room.password,
-            knownFeatures: features,
-          })
-        })()
-      }
+    // Always join autojoin bookmarks (both fresh connect and reconnect), behind
+    // the real-JID exposure gate (issue #37).
+    for (const room of roomsToAutojoin) {
+      void this.autojoinBookmark(room, gen, () => clearQueuedAutojoin(room.jid), 'Fresh session aborted before autojoin')
     }
   }
 
