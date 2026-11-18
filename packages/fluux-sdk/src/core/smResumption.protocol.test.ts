@@ -2,12 +2,14 @@
 /**
  * Protocol proof for FLM-239/FLM-336: the real XMPPClient and xmpp.js talk XML over a real
  * WebSocket to a controlled XMPP server that grants (or omits) the SM `max`, drops the socket
- * and then accepts or refuses `<resume/>`. Nothing in the client is mocked except the stores.
+ * and then accepts or refuses `<resume/>`. Nothing in the client is mocked except the stores;
+ * where the order of the server's messages matters, the client's WebSocket hands them over in
+ * the order a browser does.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { parse } from 'ltx'
-import type { AddressInfo } from 'node:net'
+import type { AddressInfo, Socket } from 'node:net'
 import { XMPPClient, bindStoresForTesting } from './XMPPClient'
 import { createMockStores } from './test-utils'
 import type { SessionState, StorageAdapter } from './types'
@@ -46,6 +48,12 @@ class ControlledServer {
   rooms = new Set<string>()
   /** What each SASL 2 <authenticate/> carried and how the server answered it. */
   inlineAuths: Array<{ resumePrevid?: string; bindEnable: boolean; answered: 'resumed' | 'failed' | 'enabled' | 'bound'; session?: string }> = []
+  /** Stanzas sent to the client since the current session was enabled: the `h` its acks must report. */
+  sent = 0
+  /** Stanzas queued for the client while it was away, resent right behind `<resumed/>` in the same write. */
+  held: string[] = []
+  /** Answer the client's stanzas; when false the server still negotiates, resends and acknowledges. */
+  answering = true
   private nextId = 1
   private lastSm = ''
   private inbound = 0
@@ -62,14 +70,28 @@ class ControlledServer {
     this.sockets.add(ws)
     ws.on('close', () => this.sockets.delete(ws))
     let authed = false
-    const send = (xml: string) => ws.send(xml)
+    const send = (xml: string) => {
+      if (ws.readyState !== ws.OPEN) return // a closing socket delivers nothing more
+      if (/^<(iq|message|presence)[\s/>]/.test(xml)) this.sent++
+      ws.send(xml)
+    }
+    // One socket write carrying several frames, so they reach the client in one read.
+    const sendTogether = (frames: string[]) => {
+      const socket = (ws as unknown as { _socket: Socket })._socket
+      socket.cork()
+      frames.forEach(send)
+      process.nextTick(() => socket.uncork())
+    }
     const SASL2 = 'urn:xmpp:sasl:2'
     const BIND2 = 'urn:xmpp:bind:0'
     const ready = (smAttrs: string) => `<enabled xmlns="${SM}" ${smAttrs}${this.grant ? ` max="${this.grant}"` : ''}/>`
     ws.on('message', (data) => {
       const el = parse(data.toString())
       this.seen.push({ name: el.name, attrs: { ...el.attrs }, ns: (el.children.find(c => typeof c !== 'string') as unknown as { getNS(): string } | undefined)?.getNS() })
-      if (['iq', 'message', 'presence'].includes(el.name)) this.inbound++
+      if (['iq', 'message', 'presence'].includes(el.name)) {
+        this.inbound++
+        if (!this.answering) return
+      }
       if (el.name === 'open') {
         send(`<open xmlns="${FRAMING}" from="example.com" id="s${this.nextId++}" version="1.0" xml:lang="en"/>`)
         const mechs = this.inline
@@ -91,13 +113,14 @@ class ControlledServer {
           const ok = this.resumable && resume.attrs.previd === this.lastSm
           this.inlineAuths.push({ resumePrevid: String(resume.attrs.previd), bindEnable: false, answered: ok ? 'resumed' : 'failed', session: this.lastSm })
           if (ok) {
-            send(`<success xmlns="${SASL2}">${who}<resumed xmlns="${SM}" previd="${this.lastSm}" h="${this.inbound}"/></success>`)
+            sendTogether([`<success xmlns="${SASL2}">${who}<resumed xmlns="${SM}" previd="${this.lastSm}" h="${this.inbound}"/></success>`, ...this.held.splice(0)])
           } else {
             send(`<success xmlns="${SASL2}">${who}<failed xmlns="${SM}"/></success>`)
           }
         } else if (enable) {
           this.lastSm = `sm-${this.nextId++}`
           this.inbound = 0
+          this.sent = 0
           this.inlineAuths.push({ bindEnable: true, answered: 'enabled', session: this.lastSm })
           send(`<success xmlns="${SASL2}">${who}<bound xmlns="${BIND2}">${ready(`id="${this.lastSm}" resume="true"`)}</bound></success>`)
         } else {
@@ -107,10 +130,11 @@ class ControlledServer {
       } else if (el.name === 'enable') {
         this.lastSm = `sm-${this.nextId++}`
         this.inbound = 0
+        this.sent = 0
         send(ready(`id="${this.lastSm}" resume="true"`))
       } else if (el.name === 'resume') {
         if (this.resumable && el.attrs.previd === this.lastSm) {
-          send(`<resumed xmlns="${SM}" previd="${this.lastSm}" h="${this.inbound}"/>`)
+          sendTogether([`<resumed xmlns="${SM}" previd="${this.lastSm}" h="${this.inbound}"/>`, ...this.held.splice(0)])
         } else {
           send(`<failed xmlns="${SM}"/>`)
         }
@@ -143,6 +167,8 @@ class ControlledServer {
     })
   }
   get port() { return (this.wss.address() as AddressInfo).port }
+  /** Ask the client how many stanzas it has handled. */
+  requestAck() { for (const s of this.sockets) s.send(`<r xmlns="${SM}"/>`) }
   drop() { for (const s of this.sockets) s.close(1001) }
   /** A real restart: the process goes away, every session and room membership with it; the archive stays. */
   async restart() {
@@ -155,6 +181,37 @@ class ControlledServer {
   count(name: string) { return this.seen.filter(s => s.name === name).length }
   last(name: string) { return [...this.seen].reverse().find(s => s.name === name) }
   async close() { this.drop(); await new Promise(r => this.wss.close(r)) }
+}
+
+/**
+ * Chromium hands a page every WebSocket message of one network read in a single task, but runs the
+ * page's pending promise callbacks after each message; Node's WebSocket runs them only after the
+ * whole read. The client gets this socket so it handles a read the way it does in the app.
+ */
+class BrowserOrderWebSocket extends globalThis.WebSocket {
+  #wrapped = new Map<EventListenerOrEventListenerObject, EventListener>()
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void {
+    if (type !== 'message') return super.addEventListener(type, listener, options)
+    const pending: Event[] = []
+    const deliver = () => {
+      try {
+        if (typeof listener === 'function') listener.call(this, pending[0])
+        else listener.handleEvent(pending[0])
+      } finally {
+        // A tick queued from a promise callback runs once no promise callback is left.
+        queueMicrotask(() => process.nextTick(() => {
+          pending.shift()
+          if (pending.length > 0) deliver()
+        }))
+      }
+    }
+    const wrapped: EventListener = (event) => { if (pending.push(event) === 1) deliver() }
+    this.#wrapped.set(listener, wrapped)
+    super.addEventListener(type, wrapped, options)
+  }
+  removeEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions): void {
+    super.removeEventListener(type, (type === 'message' && this.#wrapped.get(listener)) || listener, options)
+  }
 }
 
 /** In-memory stand-in for the app's session storage: it outlives one XMPPClient, like a page reload. */
@@ -190,6 +247,7 @@ describe('stream management resumption against a controlled XMPP server', { time
     client?.cancelReconnect()
     await client?.disconnect().catch(() => {})
     await server.close()
+    vi.unstubAllGlobals()
   })
 
   it('asks for the configured duration and keeps a 24-hour grant: the socket drop is followed by <resume previd>', async () => {
@@ -287,6 +345,36 @@ describe('stream management resumption against a controlled XMPP server', { time
     expect(client.getStreamManagementState()).toMatchObject({ id: first.session, windowMs: 86_400_000 })
     expect(server.count('enable')).toBe(0)
     expect(server.count('bind')).toBe(0) // resumed: no second <bind/> was sent
+  })
+
+  // A server resends what it queued for the client right behind <resumed/>. The client must keep
+  // counting those stanzas: an ack below the server's count makes it send them again at the next resume.
+  it.each([
+    ['a traditional <resume/>', false],
+    ['an inline SASL 2', true],
+  ])('keeps the stanzas resent right after %s resumption in its acknowledged count', async (_mode, inline) => {
+    vi.stubGlobal('WebSocket', BrowserOrderWebSocket)
+    server.inline = inline
+    server.grant = '600'
+    client = new XMPPClient({ debug: false, streamManagementMaxSeconds: 600 })
+    bindStoresForTesting(client, createMockStores())
+    await client.connect({
+      jid: 'alice@example.com', password: 'secret', server: `ws://localhost:${server.port}`,
+      skipDiscovery: true, resource: 'web',
+    })
+    await until(() => client.getStreamManagementState() !== null)
+    const resumes = () => inline ? server.inlineAuths.filter(a => a.answered === 'resumed').length : server.count('resume')
+
+    server.held = [1, 2, 3].map(n =>
+      `<message xmlns="jabber:client" from="bob@example.com/phone" to="alice@example.com/web" type="chat" id="away-${n}"><body>while away ${n}</body></message>`)
+    server.answering = false // what the server sent stops changing once the queue is resent
+    server.drop()
+    await until(() => resumes() === 1 && server.held.length === 0)
+
+    const acks = server.count('a')
+    server.requestAck()
+    await until(() => server.count('a') > acks)
+    expect(Number(server.last('a')!.attrs.h)).toBe(server.sent)
   })
 
   it('after a real server restart starts a new session, catches up from the archive and rejoins the room once', async () => {
