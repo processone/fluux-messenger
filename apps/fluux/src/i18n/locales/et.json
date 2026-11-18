@@ -203,7 +203,26 @@
             "glanceEncrypted": "Krüptitud, kontrollimata",
             "glanceNotEncrypted": "Krüptimata",
             "glanceDisabled": "Krüptimine väljas",
-            "glanceLocked": "Krüptitud, lukustatud"
+            "glanceLocked": "Krüptitud, lukustatud",
+            "methodInUse": "Kasutusel",
+            "receivesMessages": "Saab teie sõnumeid",
+            "receivesNoMessages": "Ei saa teie sõnumeid",
+            "keyTrust": {
+                "verified": "Kinnitatud",
+                "introduced": "Tutvustatud",
+                "tofu": "Usaldatud, kinnitamata",
+                "unknown": "Ootab teie otsust",
+                "untrusted": "Ei usaldata"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "ootab teie otsust",
+                "distrusted": "te ei usalda seda",
+                "no-key": "kontakt ei avalda seda enam",
+                "invalid-key": "kehtetu sertifikaat",
+                "over-limit": "liiga palju seadmeid, see jäetakse vahele"
+            },
+            "trustButton": "Usalda seda võtit",
+            "distrustButton": "Ära usalda seda võtit"
         },
         "actionsMenu": "Rohkem toiminguid",
         "requestsHeading": "Taotlused"

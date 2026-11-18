@@ -201,7 +201,26 @@
             "glanceEncrypted": "Kryptert, ikke bekreftet",
             "glanceNotEncrypted": "Ikke kryptert",
             "glanceDisabled": "Kryptering av",
-            "glanceLocked": "Kryptert, låst"
+            "glanceLocked": "Kryptert, låst",
+            "methodInUse": "I bruk",
+            "receivesMessages": "Mottar meldingene dine",
+            "receivesNoMessages": "Mottar ikke meldingene dine",
+            "keyTrust": {
+                "verified": "Verifisert",
+                "introduced": "Introdusert",
+                "tofu": "Klarert, ikke verifisert",
+                "unknown": "Venter på avgjørelsen din",
+                "untrusted": "Ikke klarert"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "venter på avgjørelsen din",
+                "distrusted": "du stoler ikke på den",
+                "no-key": "kontakten publiserer den ikke lenger",
+                "invalid-key": "ugyldig sertifikat",
+                "over-limit": "for mange enheter, denne hoppes over"
+            },
+            "trustButton": "Stol på denne nøkkelen",
+            "distrustButton": "Ikke stol på denne nøkkelen"
         },
         "actionsMenu": "Flere handlinger",
         "requestsHeading": "Forespørsler"

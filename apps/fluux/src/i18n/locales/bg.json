@@ -201,7 +201,26 @@
             "glanceEncrypted": "Криптирано, непотвърдено",
             "glanceNotEncrypted": "Некриптирано",
             "glanceDisabled": "Криптирането е изключено",
-            "glanceLocked": "Криптирано, заключено"
+            "glanceLocked": "Криптирано, заключено",
+            "methodInUse": "В употреба",
+            "receivesMessages": "Получава съобщенията ви",
+            "receivesNoMessages": "Не получава съобщенията ви",
+            "keyTrust": {
+                "verified": "Потвърден",
+                "introduced": "Препоръчан",
+                "tofu": "Доверен, непотвърден",
+                "unknown": "Чака вашето решение",
+                "untrusted": "Недоверен"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "чака вашето решение",
+                "distrusted": "не му вярвате",
+                "no-key": "контактът вече не го публикува",
+                "invalid-key": "невалиден сертификат",
+                "over-limit": "твърде много устройства, това се пропуска"
+            },
+            "trustButton": "Доверяване на този ключ",
+            "distrustButton": "Недоверяване на този ключ"
         },
         "actionsMenu": "Още действия",
         "requestsHeading": "Заявки"

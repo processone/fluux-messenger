@@ -201,7 +201,26 @@
             "glanceEncrypted": "Titkosított, nem ellenőrzött",
             "glanceNotEncrypted": "Nem titkosított",
             "glanceDisabled": "Titkosítás kikapcsolva",
-            "glanceLocked": "Titkosított, zárolt"
+            "glanceLocked": "Titkosított, zárolt",
+            "methodInUse": "Használatban",
+            "receivesMessages": "Megkapja az üzeneteit",
+            "receivesNoMessages": "Nem kapja meg az üzeneteit",
+            "keyTrust": {
+                "verified": "Ellenőrzött",
+                "introduced": "Bemutatott",
+                "tofu": "Megbízott, nem ellenőrzött",
+                "unknown": "Az Ön döntésére vár",
+                "untrusted": "Nem megbízott"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "az Ön döntésére vár",
+                "distrusted": "Ön nem bízik benne",
+                "no-key": "a partner már nem teszi közzé",
+                "invalid-key": "érvénytelen tanúsítvány",
+                "over-limit": "túl sok eszköz, ez ki lesz hagyva"
+            },
+            "trustButton": "Megbízás ebben a kulcsban",
+            "distrustButton": "Nem bízom ebben a kulcsban"
         },
         "actionsMenu": "További műveletek",
         "requestsHeading": "Kérések"

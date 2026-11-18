@@ -202,7 +202,26 @@
             "glanceEncrypted": "Encrypted, not verified",
             "glanceNotEncrypted": "Not encrypted",
             "glanceDisabled": "Encryption off",
-            "glanceLocked": "Encrypted, locked"
+            "glanceLocked": "Encrypted, locked",
+            "methodInUse": "In use",
+            "receivesMessages": "Receives your messages",
+            "receivesNoMessages": "Does not receive your messages",
+            "keyTrust": {
+                "verified": "Verified",
+                "introduced": "Introduced",
+                "tofu": "Trusted, not verified",
+                "unknown": "Waiting for your decision",
+                "untrusted": "Not trusted"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "waiting for your decision",
+                "distrusted": "you don't trust it",
+                "no-key": "the contact no longer publishes it",
+                "invalid-key": "invalid certificate",
+                "over-limit": "too many devices, this one is skipped"
+            },
+            "trustButton": "Trust this key",
+            "distrustButton": "Don't trust this key"
         },
         "actionsMenu": "More actions"
     },

@@ -203,7 +203,26 @@
             "glanceEncrypted": "Zaszyfrowane, niezweryfikowane",
             "glanceNotEncrypted": "Niezaszyfrowane",
             "glanceDisabled": "Szyfrowanie wyłączone",
-            "glanceLocked": "Zaszyfrowane, zablokowane"
+            "glanceLocked": "Zaszyfrowane, zablokowane",
+            "methodInUse": "Używany",
+            "receivesMessages": "Odbiera Twoje wiadomości",
+            "receivesNoMessages": "Nie odbiera Twoich wiadomości",
+            "keyTrust": {
+                "verified": "Zweryfikowany",
+                "introduced": "Zarekomendowany",
+                "tofu": "Zaufany, niezweryfikowany",
+                "unknown": "Czeka na Twoją decyzję",
+                "untrusted": "Niezaufany"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "czeka na Twoją decyzję",
+                "distrusted": "nie ufasz mu",
+                "no-key": "kontakt już go nie publikuje",
+                "invalid-key": "nieprawidłowy certyfikat",
+                "over-limit": "zbyt wiele urządzeń, to jest pomijane"
+            },
+            "trustButton": "Ufaj temu kluczowi",
+            "distrustButton": "Nie ufaj temu kluczowi"
         },
         "actionsMenu": "Więcej akcji",
         "requestsHeading": "Prośby"

@@ -138,7 +138,7 @@ function Surfaces() {
         <SecurityGlanceCard state={state} onOpen={() => {}} />
       </div>
       <div data-testid="tab">
-        <SecurityTab state={state} onVerify={() => {}} onRequestRevoke={() => {}} onDisableEncryption={() => {}} onEnableEncryption={() => {}} />
+        <SecurityTab state={state} onDecide={() => {}} onDisableEncryption={() => {}} onEnableEncryption={() => {}} />
       </div>
     </div>
   )
@@ -238,7 +238,7 @@ describe('encryption state as people see it', () => {
           "Verify fingerprint",
           "contacts.encryption.disableForContact",
         ],
-        "tabText": "Encrypted (not verified)OpenPGP fingerprintAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555Verify fingerprintcontacts.encryption.disableForContact",
+        "tabText": "Encrypted (not verified)OpenPGPcontacts.encryption.keyTrust.tofuAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagesVerify fingerprintcontacts.encryption.disableForContact",
       }
     `)
   })
@@ -274,9 +274,10 @@ describe('encryption state as people see it', () => {
           "text-fluux-muted",
         ],
         "tabButtons": [
+          "Verify fingerprint",
           "contacts.encryption.disableForContact",
         ],
-        "tabText": "Encrypted (not verified)OpenPGP fingerprintAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.disableForContact",
+        "tabText": "Encrypted (not verified)OpenPGPcontacts.encryption.keyTrust.tofuAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagesVerify fingerprintcontacts.encryption.disableForContact",
       }
     `)
   })
@@ -316,7 +317,7 @@ describe('encryption state as people see it', () => {
           "contacts.encryption.removeVerification",
           "contacts.encryption.disableForContact",
         ],
-        "tabText": "VerifiedOpenPGP fingerprintAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.removeVerificationcontacts.encryption.disableForContact",
+        "tabText": "VerifiedOpenPGPcontacts.encryption.keyTrust.verifiedAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagescontacts.encryption.removeVerificationcontacts.encryption.disableForContact",
       }
     `)
   })
@@ -349,6 +350,7 @@ describe('encryption state as people see it', () => {
         },
         "fingerprints": [
           "AAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555",
+          "BBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555",
         ],
         "glance": "Encrypted, not verified",
         "glanceColors": [
@@ -365,7 +367,7 @@ describe('encryption state as people see it', () => {
         "tabButtons": [
           "contacts.encryption.disableForContact",
         ],
-        "tabText": "Encrypted (not verified)This contact has a new key that has not been verified.OpenPGP fingerprintAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.disableForContact",
+        "tabText": "Encrypted (not verified)This contact has a new key that has not been verified.OpenPGPcontacts.encryption.keyTrust.verifiedAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagescontacts.encryption.keyTrust.tofuBBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555contacts.encryption.receivesMessagescontacts.encryption.disableForContact",
       }
     `)
   })
@@ -388,6 +390,7 @@ describe('encryption state as people see it', () => {
         },
         "fingerprints": [
           "BBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555",
+          "AAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555",
         ],
         "glance": "Encrypted, not verified",
         "glanceColors": [
@@ -405,7 +408,7 @@ describe('encryption state as people see it', () => {
           "Verify fingerprint",
           "contacts.encryption.disableForContact",
         ],
-        "tabText": "Encrypted (not verified)This contact has a new key that has not been verified.OpenPGP fingerprintBBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555Verify fingerprintcontacts.encryption.disableForContact",
+        "tabText": "Encrypted (not verified)This contact has a new key that has not been verified.OpenPGPcontacts.encryption.keyTrust.tofuBBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555contacts.encryption.receivesMessagesVerify fingerprintcontacts.encryption.keyTrust.verifiedAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesNoMessages: contacts.encryption.notUsedReason.no-keycontacts.encryption.disableForContact",
       }
     `)
   })

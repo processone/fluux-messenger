@@ -203,7 +203,26 @@
             "glanceEncrypted": "Criptat, neverificat",
             "glanceNotEncrypted": "Necriptat",
             "glanceDisabled": "Criptare dezactivată",
-            "glanceLocked": "Criptat, blocat"
+            "glanceLocked": "Criptat, blocat",
+            "methodInUse": "În uz",
+            "receivesMessages": "Primește mesajele tale",
+            "receivesNoMessages": "Nu primește mesajele tale",
+            "keyTrust": {
+                "verified": "Verificată",
+                "introduced": "Introdusă",
+                "tofu": "De încredere, neverificată",
+                "unknown": "Așteaptă decizia ta",
+                "untrusted": "Fără încredere"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "așteaptă decizia ta",
+                "distrusted": "nu ai încredere în ea",
+                "no-key": "contactul nu o mai publică",
+                "invalid-key": "certificat invalid",
+                "over-limit": "prea multe dispozitive, acesta este omis"
+            },
+            "trustButton": "Ai încredere în această cheie",
+            "distrustButton": "Nu avea încredere în această cheie"
         },
         "actionsMenu": "Mai multe acțiuni",
         "requestsHeading": "Solicitări"

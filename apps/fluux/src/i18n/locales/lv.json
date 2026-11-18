@@ -202,7 +202,26 @@
             "glanceEncrypted": "Šifrēts, nepārbaudīts",
             "glanceNotEncrypted": "Nešifrēts",
             "glanceDisabled": "Šifrēšana izslēgta",
-            "glanceLocked": "Šifrēts, bloķēts"
+            "glanceLocked": "Šifrēts, bloķēts",
+            "methodInUse": "Lieto",
+            "receivesMessages": "Saņem jūsu ziņas",
+            "receivesNoMessages": "Nesaņem jūsu ziņas",
+            "keyTrust": {
+                "verified": "Apstiprināta",
+                "introduced": "Iepazīstināta",
+                "tofu": "Uzticama, neapstiprināta",
+                "unknown": "Gaida jūsu lēmumu",
+                "untrusted": "Neuzticama"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "gaida jūsu lēmumu",
+                "distrusted": "jūs tai neuzticaties",
+                "no-key": "kontaktpersona to vairs nepublicē",
+                "invalid-key": "nederīgs sertifikāts",
+                "over-limit": "pārāk daudz ierīču, šī tiek izlaista"
+            },
+            "trustButton": "Uzticēties šai atslēgai",
+            "distrustButton": "Neuzticēties šai atslēgai"
         },
         "actionsMenu": "Vairāk darbību",
         "requestsHeading": "Pieprasījumi"

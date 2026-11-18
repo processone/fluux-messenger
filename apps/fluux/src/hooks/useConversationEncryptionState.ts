@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useConnectionStatus, useXMPPContext } from '@fluux/sdk'
-import type { ConversationSecurity, E2EEManager, PeerIdentity, TrustState } from '@fluux/sdk'
+import type { ConversationSecurity, E2EEManager, PeerIdentity, PeerIdentityGroup, TrustState } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 
 /** Why an identity or certificate cannot receive messages, as the SDK reports it. */
@@ -49,6 +49,8 @@ export type ConversationEncryptionState =
       fingerprint?: string
       /** The key a trust decision applies to; set with `canVerify` or `canClearVerification`. */
       identityId?: string
+      /** Every method's keys for this contact, for the Security tab's list. */
+      groups?: PeerIdentityGroup[]
       trust: TrustState
       isNew?: true
       partlyVerified?: true
@@ -82,7 +84,8 @@ async function resolveState(manager: E2EEManager, peer: string): Promise<Convers
       return { kind: 'keyLocked', fingerprint: group && shownIdentity(group.identities)?.fingerprint }
     }
     case 'encrypted': {
-      const group = (await manager.listPeerIdentities(peer)).find((g) => g.protocolId === security.protocolId)
+      const groups = await manager.listPeerIdentities(peer)
+      const group = groups.find((g) => g.protocolId === security.protocolId)
       const used = group?.identities.filter((i) => i.usedForEncryption) ?? []
       const shown = shownIdentity(group?.identities ?? [])
       // A decision is offered only for a contact with exactly one key in use.
@@ -92,6 +95,7 @@ async function resolveState(manager: E2EEManager, peer: string): Promise<Convers
         protocolId: security.protocolId,
         displayName: security.displayName,
         trust: security.trust,
+        groups,
         ...((security.fingerprint ?? shown?.fingerprint) ? { fingerprint: security.fingerprint ?? shown?.fingerprint } : {}),
         ...(only ? { identityId: only.id } : {}),
         ...(security.isNew ? { isNew: true as const } : {}),

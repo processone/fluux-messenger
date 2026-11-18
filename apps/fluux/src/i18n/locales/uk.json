@@ -201,7 +201,26 @@
             "glanceEncrypted": "Зашифровано, не перевірено",
             "glanceNotEncrypted": "Не зашифровано",
             "glanceDisabled": "Шифрування вимкнено",
-            "glanceLocked": "Зашифровано, заблоковано"
+            "glanceLocked": "Зашифровано, заблоковано",
+            "methodInUse": "Використовується",
+            "receivesMessages": "Отримує ваші повідомлення",
+            "receivesNoMessages": "Не отримує ваші повідомлення",
+            "keyTrust": {
+                "verified": "Перевірений",
+                "introduced": "Рекомендований",
+                "tofu": "Довірений, не перевірений",
+                "unknown": "Очікує вашого рішення",
+                "untrusted": "Не довірений"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "очікує вашого рішення",
+                "distrusted": "ви йому не довіряєте",
+                "no-key": "контакт більше його не публікує",
+                "invalid-key": "недійсний сертифікат",
+                "over-limit": "забагато пристроїв, цей пропускається"
+            },
+            "trustButton": "Довіряти цьому ключу",
+            "distrustButton": "Не довіряти цьому ключу"
         },
         "actionsMenu": "Інші дії",
         "requestsHeading": "Запити"

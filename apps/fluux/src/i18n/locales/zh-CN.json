@@ -201,7 +201,26 @@
             "glanceEncrypted": "已加密，未验证",
             "glanceNotEncrypted": "未加密",
             "glanceDisabled": "加密已关闭",
-            "glanceLocked": "已加密，已锁定"
+            "glanceLocked": "已加密，已锁定",
+            "methodInUse": "使用中",
+            "receivesMessages": "接收你的消息",
+            "receivesNoMessages": "不接收你的消息",
+            "keyTrust": {
+                "verified": "已验证",
+                "introduced": "已引荐",
+                "tofu": "已信任，未验证",
+                "unknown": "等待你的决定",
+                "untrusted": "不信任"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "等待你的决定",
+                "distrusted": "你不信任它",
+                "no-key": "联系人不再发布它",
+                "invalid-key": "证书无效",
+                "over-limit": "设备过多，已跳过此设备"
+            },
+            "trustButton": "信任此密钥",
+            "distrustButton": "不信任此密钥"
         },
         "actionsMenu": "更多操作",
         "requestsHeading": "请求"

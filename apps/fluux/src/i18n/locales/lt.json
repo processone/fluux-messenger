@@ -201,7 +201,26 @@
             "glanceEncrypted": "Užšifruota, nepatvirtinta",
             "glanceNotEncrypted": "Neužšifruota",
             "glanceDisabled": "Šifravimas išjungtas",
-            "glanceLocked": "Užšifruota, užrakinta"
+            "glanceLocked": "Užšifruota, užrakinta",
+            "methodInUse": "Naudojamas",
+            "receivesMessages": "Gauna jūsų žinutes",
+            "receivesNoMessages": "Negauna jūsų žinučių",
+            "keyTrust": {
+                "verified": "Patvirtintas",
+                "introduced": "Pristatytas",
+                "tofu": "Patikimas, nepatvirtintas",
+                "unknown": "Laukiama jūsų sprendimo",
+                "untrusted": "Nepatikimas"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "laukiama jūsų sprendimo",
+                "distrusted": "jūs juo nepasitikite",
+                "no-key": "adresatas jo nebeskelbia",
+                "invalid-key": "netinkamas sertifikatas",
+                "over-limit": "per daug įrenginių, šis praleidžiamas"
+            },
+            "trustButton": "Pasitikėti šiuo raktu",
+            "distrustButton": "Nepasitikėti šiuo raktu"
         },
         "actionsMenu": "Daugiau veiksmų",
         "requestsHeading": "Prašymai"

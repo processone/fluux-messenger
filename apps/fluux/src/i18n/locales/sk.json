@@ -202,7 +202,26 @@
             "glanceEncrypted": "Šifrované, neoverené",
             "glanceNotEncrypted": "Nešifrované",
             "glanceDisabled": "Šifrovanie vypnuté",
-            "glanceLocked": "Šifrované, uzamknuté"
+            "glanceLocked": "Šifrované, uzamknuté",
+            "methodInUse": "Používa sa",
+            "receivesMessages": "Prijíma vaše správy",
+            "receivesNoMessages": "Neprijíma vaše správy",
+            "keyTrust": {
+                "verified": "Overený",
+                "introduced": "Predstavený",
+                "tofu": "Dôveryhodný, neoverený",
+                "unknown": "Čaká na vaše rozhodnutie",
+                "untrusted": "Nedôveryhodný"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "čaká na vaše rozhodnutie",
+                "distrusted": "nedôverujete mu",
+                "no-key": "kontakt ho už nezverejňuje",
+                "invalid-key": "neplatný certifikát",
+                "over-limit": "príliš veľa zariadení, toto sa preskočí"
+            },
+            "trustButton": "Dôverovať tomuto kľúču",
+            "distrustButton": "Nedôverovať tomuto kľúču"
         },
         "actionsMenu": "Ďalšie akcie",
         "requestsHeading": "Žiadosti"

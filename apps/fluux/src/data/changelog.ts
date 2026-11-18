@@ -19,6 +19,7 @@ export const changelog: ChangelogEntry[] = [
     sections: [{
       type: 'added',
       items: [
+        'A contact\'s Security details now list every encryption key, one row per key and grouped by method, with the method in use marked. Each row shows whether the key is verified, trusted or waiting for your decision, whether it receives your messages, and the decisions available for it',
         'Settings → Encryption now lists the OMEMO devices on your account, both OMEMO 2 and legacy, with each device\'s name and key fingerprint. You can remove a device after confirming; the other devices and their names stay as they are. Fluux does not use OMEMO itself yet, so this only reads and edits the list other apps keep on your server',
       ],
     }],

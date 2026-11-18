@@ -203,7 +203,26 @@
             "glanceEncrypted": "Cifrado, não verificado",
             "glanceNotEncrypted": "Não cifrado",
             "glanceDisabled": "Cifragem desativada",
-            "glanceLocked": "Cifrado, bloqueado"
+            "glanceLocked": "Cifrado, bloqueado",
+            "methodInUse": "Em uso",
+            "receivesMessages": "Recebe as suas mensagens",
+            "receivesNoMessages": "Não recebe as suas mensagens",
+            "keyTrust": {
+                "verified": "Verificada",
+                "introduced": "Apresentada",
+                "tofu": "Confiável, não verificada",
+                "unknown": "À espera da sua decisão",
+                "untrusted": "Não confiável"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "à espera da sua decisão",
+                "distrusted": "não confia nela",
+                "no-key": "o contacto já não a publica",
+                "invalid-key": "certificado inválido",
+                "over-limit": "demasiados dispositivos, este é ignorado"
+            },
+            "trustButton": "Confiar nesta chave",
+            "distrustButton": "Não confiar nesta chave"
         },
         "actionsMenu": "Mais ações",
         "requestsHeading": "Pedidos"

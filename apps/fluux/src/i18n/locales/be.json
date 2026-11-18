@@ -201,7 +201,26 @@
             "glanceEncrypted": "Зашыфравана, не праверана",
             "glanceNotEncrypted": "Не зашыфравана",
             "glanceDisabled": "Шыфраванне адключана",
-            "glanceLocked": "Зашыфравана, заблакавана"
+            "glanceLocked": "Зашыфравана, заблакавана",
+            "methodInUse": "Выкарыстоўваецца",
+            "receivesMessages": "Атрымлівае вашы паведамленні",
+            "receivesNoMessages": "Не атрымлівае вашы паведамленні",
+            "keyTrust": {
+                "verified": "Правераны",
+                "introduced": "Рэкамендаваны",
+                "tofu": "Давераны, не правераны",
+                "unknown": "Чакае вашага рашэння",
+                "untrusted": "Не давераны"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "чакае вашага рашэння",
+                "distrusted": "вы яму не давяраеце",
+                "no-key": "кантакт больш яго не публікуе",
+                "invalid-key": "несапраўдны сертыфікат",
+                "over-limit": "занадта шмат прылад, гэта прыстасаванне прапушчана"
+            },
+            "trustButton": "Давяраць гэтаму ключу",
+            "distrustButton": "Не давяраць гэтаму ключу"
         },
         "actionsMenu": "Іншыя дзеянні",
         "requestsHeading": "Запыты"

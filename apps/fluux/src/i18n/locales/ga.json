@@ -201,7 +201,26 @@
             "glanceEncrypted": "Criptithe, gan fíorú",
             "glanceNotEncrypted": "Gan criptiú",
             "glanceDisabled": "Criptiú as",
-            "glanceLocked": "Criptithe, faoi ghlas"
+            "glanceLocked": "Criptithe, faoi ghlas",
+            "methodInUse": "In úsáid",
+            "receivesMessages": "Faigheann sé do theachtaireachtaí",
+            "receivesNoMessages": "Ní fhaigheann sé do theachtaireachtaí",
+            "keyTrust": {
+                "verified": "Fíoraithe",
+                "introduced": "Tugtha isteach",
+                "tofu": "Iontaofa, gan fíorú",
+                "unknown": "Ag fanacht le do chinneadh",
+                "untrusted": "Neamhiontaofa"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "ag fanacht le do chinneadh",
+                "distrusted": "níl muinín agat as",
+                "no-key": "níl an teagmhálaí á fhoilsiú a thuilleadh",
+                "invalid-key": "teastas neamhbhailí",
+                "over-limit": "an iomarca feistí, scipeáiltear an ceann seo"
+            },
+            "trustButton": "Iontaoibh a bheith agat as an eochair seo",
+            "distrustButton": "Gan iontaoibh a bheith agat as an eochair seo"
         },
         "actionsMenu": "Tuilleadh gníomhartha",
         "requestsHeading": "Iarratais"

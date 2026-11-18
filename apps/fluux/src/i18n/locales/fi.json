@@ -201,7 +201,26 @@
             "glanceEncrypted": "Salattu, ei vahvistettu",
             "glanceNotEncrypted": "Ei salattu",
             "glanceDisabled": "Salaus pois käytöstä",
-            "glanceLocked": "Salattu, lukittu"
+            "glanceLocked": "Salattu, lukittu",
+            "methodInUse": "Käytössä",
+            "receivesMessages": "Vastaanottaa viestisi",
+            "receivesNoMessages": "Ei vastaanota viestejäsi",
+            "keyTrust": {
+                "verified": "Vahvistettu",
+                "introduced": "Esitelty",
+                "tofu": "Luotettu, ei vahvistettu",
+                "unknown": "Odottaa päätöstäsi",
+                "untrusted": "Ei luotettu"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "odottaa päätöstäsi",
+                "distrusted": "et luota siihen",
+                "no-key": "yhteystieto ei enää julkaise sitä",
+                "invalid-key": "virheellinen varmenne",
+                "over-limit": "liian monta laitetta, tämä ohitetaan"
+            },
+            "trustButton": "Luota tähän avaimeen",
+            "distrustButton": "Älä luota tähän avaimeen"
         },
         "actionsMenu": "Lisätoiminnot",
         "requestsHeading": "Pyynnöt"

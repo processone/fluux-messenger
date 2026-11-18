@@ -201,7 +201,26 @@
             "glanceEncrypted": "Versleuteld, niet geverifieerd",
             "glanceNotEncrypted": "Niet versleuteld",
             "glanceDisabled": "Versleuteling uit",
-            "glanceLocked": "Versleuteld, vergrendeld"
+            "glanceLocked": "Versleuteld, vergrendeld",
+            "methodInUse": "In gebruik",
+            "receivesMessages": "Ontvangt uw berichten",
+            "receivesNoMessages": "Ontvangt uw berichten niet",
+            "keyTrust": {
+                "verified": "Geverifieerd",
+                "introduced": "Geïntroduceerd",
+                "tofu": "Vertrouwd, niet geverifieerd",
+                "unknown": "Wacht op uw beslissing",
+                "untrusted": "Niet vertrouwd"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "wacht op uw beslissing",
+                "distrusted": "u vertrouwt hem niet",
+                "no-key": "het contact publiceert hem niet meer",
+                "invalid-key": "ongeldig certificaat",
+                "over-limit": "te veel apparaten, dit wordt overgeslagen"
+            },
+            "trustButton": "Deze sleutel vertrouwen",
+            "distrustButton": "Deze sleutel niet vertrouwen"
         },
         "actionsMenu": "Meer acties",
         "requestsHeading": "Verzoeken"

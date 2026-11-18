@@ -95,6 +95,7 @@ describe('useConversationEncryptionState', () => {
     expect(result.current).toEqual({
       kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', trust: 'tofu', fingerprint: 'FP1',
       identityId: '1', canVerify: true,
+      groups: [{ protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true, identities: [identity('1')] }],
     })
     expect(manager.getConversationSecurity).toHaveBeenCalledWith({ kind: 'direct', peer: PEER })
   })
@@ -112,6 +113,10 @@ describe('useConversationEncryptionState', () => {
     )
     expect(state).toEqual({
       kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', trust: 'tofu', fingerprint: 'FP1', partlyVerified: true,
+      groups: [{
+        protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true,
+        identities: [identity('1', { allowedDecisions: [] }), identity('2', { allowedDecisions: [] })],
+      }],
     })
   })
 

@@ -202,7 +202,26 @@
             "glanceEncrypted": "Κρυπτογραφημένο, μη επαληθευμένο",
             "glanceNotEncrypted": "Μη κρυπτογραφημένο",
             "glanceDisabled": "Κρυπτογράφηση απενεργοποιημένη",
-            "glanceLocked": "Κρυπτογραφημένο, κλειδωμένο"
+            "glanceLocked": "Κρυπτογραφημένο, κλειδωμένο",
+            "methodInUse": "Σε χρήση",
+            "receivesMessages": "Λαμβάνει τα μηνύματά σας",
+            "receivesNoMessages": "Δεν λαμβάνει τα μηνύματά σας",
+            "keyTrust": {
+                "verified": "Επαληθευμένο",
+                "introduced": "Συστημένο",
+                "tofu": "Έμπιστο, μη επαληθευμένο",
+                "unknown": "Αναμονή για την απόφασή σας",
+                "untrusted": "Μη έμπιστο"
+            },
+            "notUsedReason": {
+                "awaiting-decision": "αναμονή για την απόφασή σας",
+                "distrusted": "δεν το εμπιστεύεστε",
+                "no-key": "η επαφή δεν το δημοσιεύει πλέον",
+                "invalid-key": "μη έγκυρο πιστοποιητικό",
+                "over-limit": "πάρα πολλές συσκευές, αυτή παραλείπεται"
+            },
+            "trustButton": "Εμπιστοσύνη σε αυτό το κλειδί",
+            "distrustButton": "Μη εμπιστοσύνη σε αυτό το κλειδί"
         },
         "actionsMenu": "Περισσότερες ενέργειες",
         "requestsHeading": "Αιτήματα"
