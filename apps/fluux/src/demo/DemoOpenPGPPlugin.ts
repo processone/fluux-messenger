@@ -8,6 +8,8 @@ import type {
   ConversationHandle,
   EncryptedPayload,
   DecryptResult,
+  PeerIdentity,
+  IdentityTrustDecision,
 } from '@fluux/sdk'
 import type { KeyBundle, BackupProbeResult } from '@fluux/openpgp-plugin'
 
@@ -146,7 +148,25 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
   }
 
   async getPeerTrust() {
-    return 'unknown' as const
+    return this.avaVerified ? ('verified' as const) : ('tofu' as const)
+  }
+
+  /** Ava's key starts out verified, as the demo has always shown it. */
+  private avaVerified = true
+
+  async listPeerIdentities(peer: string): Promise<PeerIdentity[]> {
+    if (peer !== 'ava@fluux.chat') return []
+    return [{
+      id: DEMO_AVA_FINGERPRINT,
+      fingerprint: DEMO_AVA_FINGERPRINT,
+      trust: this.avaVerified ? 'verified' : 'tofu',
+      usedForEncryption: true,
+      allowedDecisions: this.avaVerified ? ['tofu', 'untrusted'] : ['verified', 'untrusted'],
+    }]
+  }
+
+  async setIdentityTrust(peer: string, _id: string, decision: IdentityTrustDecision) {
+    if (peer === 'ava@fluux.chat') this.avaVerified = decision === 'verified'
   }
 
   async getDeviceTrust() {
