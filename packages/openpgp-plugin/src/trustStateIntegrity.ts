@@ -105,7 +105,33 @@ export async function sealTrustState(
   await storage.put(TRUST_SEAL_WRITTEN_STORAGE_KEY, encodeText('1'))
 }
 
-/** Compare the seal with the records, or with a copy of them. */
+/**
+ * `decisions` without the holds saved since `sealed` was: keys held where it
+ * records no decision. A hold only keeps a key from receiving messages until
+ * the user decides, so a hold saved while nothing could be sealed (the check
+ * waited for the key, or the session ended first) is not a change to report.
+ * A hold that replaced a sealed decision, and a sealed hold that is gone,
+ * still differ.
+ */
+export function withoutHoldsAddedSince(
+  decisions: Record<string, Record<string, KeyDecision>>,
+  sealed: Record<string, Record<string, KeyDecision>>,
+): Record<string, Record<string, KeyDecision>> {
+  const out: Record<string, Record<string, KeyDecision>> = {}
+  for (const [peer, keys] of Object.entries(decisions)) {
+    const sealedKeys: Record<string, unknown> = Object.hasOwn(sealed, peer) ? Object(sealed[peer]) : {}
+    const kept = Object.entries(keys).filter(([fp, decision]) => decision !== 'held' || Object.hasOwn(sealedKeys, fp))
+    if (kept.length > 0) out[peer] = Object.fromEntries(kept)
+  }
+  return out
+}
+
+/**
+ * Compare the seal with the records, or with a copy of them. Holds saved
+ * since the seal was written are accepted (see {@link withoutHoldsAddedSince})
+ * and reported as `pending-seal`, so they are sealed at once and their removal
+ * cannot go unnoticed later.
+ */
 export async function verifyTrustStateSeal(
   storage: PluginStorage,
   records: TrustStateReading,
@@ -156,8 +182,11 @@ export async function verifyTrustStateSeal(
   }
 
   const details: string[] = []
-  if (canonicalJson(payload.decisions) !== canonicalJson(records.decisions())) details.push('trust decisions differ')
+  const decisions = records.decisions()
+  const sealedDecisions = withoutHoldsAddedSince(decisions, payload.decisions)
+  if (canonicalJson(payload.decisions) !== canonicalJson(sealedDecisions)) details.push('trust decisions differ')
   if (payload.syncVersion !== records.syncVersion()) details.push('verification sync version differs')
   if ((payload.setsAdopted === true) !== records.setsAdopted()) details.push('verification sync format differs')
-  return details.length > 0 ? { status: 'compromised', details } : { status: 'sealed' }
+  if (details.length > 0) return { status: 'compromised', details }
+  return canonicalJson(sealedDecisions) === canonicalJson(decisions) ? { status: 'sealed' } : { status: 'pending-seal' }
 }

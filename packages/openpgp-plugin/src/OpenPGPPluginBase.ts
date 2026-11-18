@@ -341,9 +341,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   /**
    * The migration from earlier versions waits for the next start, because
    * this account's claim on the values they stored before scoping them per
-   * account could not be saved. The records come from those values for this
-   * session, but nothing is saved, sealed or synchronised; the earlier seal
-   * is still checked, against `check`.
+   * account could not be confirmed. The records come from the account's own
+   * earlier values for this session, but nothing is saved, sealed or
+   * synchronised, and the user's trust decisions are refused (see
+   * {@link refuseUnsavedTrust}); the earlier seal is still checked, against
+   * `check`.
    */
   private _deferredMigration: { check: PendingLegacySealCheck | null } | null = null
   private _ownKeyConflict: OwnKeyConflict | null = null
@@ -686,6 +688,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // decrypt and identity listing does.
     await this.loadTrustRecords(ctx)
     if (this.ctx !== ctx) return
+    // The cached keys waiting for a decision keep their hold if the cache goes.
+    this.trustRecords.setDecisions([...this.peerKeys.keys()].flatMap((peer) => this.waitingKeys(peer)))
     try {
       await this.ensureIdentity()
     } catch (err) {
@@ -746,13 +750,15 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
     let legacy = readLegacyTrustState(ctx.account.jid)
     // Values earlier versions stored before scoping them per account belong
-    // to the first account that migrates them, as earlier loaders moved them.
-    // Another account's claim leaves this one its own values. A claim that
-    // could not be saved puts the migration off to the next start: this
-    // session uses the values as read, and saves nothing.
+    // to the first account that migrates them, as earlier loaders moved them,
+    // and no account uses them without a confirmed claim. Another account's
+    // claim leaves this one its own values. A claim that could not be
+    // confirmed puts the migration off to the next start: this session uses
+    // the account's own values, and saves nothing.
     if (legacy.usesUnscoped) {
       const claim = await claimUnscopedLegacyTrust(ctx.account.jid)
       if (this.ctx !== ctx) return
+      if (claim !== 'owned') legacy = readLegacyTrustState(ctx.account.jid, false)
       if (claim === 'unavailable') {
         ctx.logger.warn(
           `${this.pluginName()}: could not claim the trust state saved before accounts were kept apart; moving it at the next start`,
@@ -763,7 +769,6 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         this._deferredMigration = { check: legacySealCheckFor(legacy) }
         return
       }
-      if (claim === 'other-owner') legacy = readLegacyTrustState(ctx.account.jid, false)
     }
     const check = legacySealCheckFor(legacy)
     // The seal check is saved before the records: if the migration stops in
@@ -806,6 +811,18 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       void this.syncVerificationsFromServer()
     })
     void this.verifyTrustStateOnInit()
+  }
+
+  /**
+   * Refuse a decision of the user while the migration from earlier versions
+   * waits for the next start: nothing would save it, and the next start would
+   * bring back what it replaced.
+   */
+  private refuseUnsavedTrust(): void {
+    if (!this._deferredMigration) return
+    throw new Error(
+      `${this.pluginName()}: trust decisions cannot be saved until the trust data of an earlier version is moved; restart the app to try again`,
+    )
   }
 
   /**
@@ -893,12 +910,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   /**
-   * The stored trust state was just accepted: save the holds the cache kept
-   * until now (see {@link recordHolds}), and seal them with the decisions the
-   * user made while the check ran, or waited for the key.
+   * The stored trust state was just accepted: seal the decisions the user
+   * made while the check ran, or waited for the key.
    */
   private async sealDecisionsMadeDuringCheck(): Promise<void> {
-    this.recordHolds([...this.peerKeys.keys()].flatMap((peer) => this.waitingKeys(peer)))
     const underCheck = this._trustStateUnderCheck
     if (!this.trustStateAccepted() || !underCheck || sameTrustState(underCheck, this.trustRecords)) return
     await this.sealTrustStateNow()
@@ -999,6 +1014,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   /** The user accepts the current trust state after a `compromised` verdict: seal it. */
   async resealTrustState(): Promise<void> {
+    this.refuseUnsavedTrust()
     const ownPublicArmored = this.ownBundle?.publicArmored
     const ctx = this.ctx
     if (!ownPublicArmored || !ctx) return
@@ -2696,7 +2712,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const changed = !peerCertSetsEqual(this.peerKeys.get(peer) ?? [], certs)
     this.peerKeys.set(peer, certs)
     this.persistPeerKeyCache()
-    this.recordHolds([...waitingBefore, ...this.waitingKeys(peer)])
+    // A key waiting for a decision is saved as held, so its hold does not
+    // depend on this cache: the cache drops withdrawn keys past its cap and
+    // can be lost, and the key must still wait if its contact loses its last
+    // verified key and announces it again. The trust-state check accepts a
+    // hold saved before the state could be sealed (see `withoutHoldsAddedSince`).
+    this.trustRecords.setDecisions([...waitingBefore, ...this.waitingKeys(peer)])
     if (changed) this.notifyKeysetChanged(peer)
   }
 
@@ -2705,20 +2726,6 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return this.keyStandings(peer)
       .filter(({ standing }) => standing.notUsedReason === 'awaiting-decision')
       .map(({ cert }) => ({ peer, fingerprint: cert.fingerprint, decision: 'held' }))
-  }
-
-  /**
-   * Save keys waiting for a decision as `held`, so their hold does not depend
-   * on the cache of contacts' keys: it drops withdrawn keys past its cap and
-   * can be lost, and a key must still wait if its contact loses its last
-   * verified key and announces it again. Only once the stored trust state is
-   * accepted: a hold saved before, and never sealed because the session ended
-   * first, would be reported at the next start as a decision made behind the
-   * plugin's back. Until then the cache keeps them, and the acceptance saves
-   * them (see {@link sealDecisionsMadeDuringCheck}).
-   */
-  private recordHolds(changes: readonly KeyDecisionChange[]): void {
-    if (this.trustStateAccepted()) this.trustRecords.setDecisions(changes)
   }
 
   /**
@@ -3383,6 +3390,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * using the keys it already used.
    */
   async setIdentityTrust(peer: BareJID, id: string, decision: IdentityTrustDecision): Promise<void> {
+    this.refuseUnsavedTrust()
     const identities = await this.listPeerIdentities(peer)
     const identity = identities.find((i) => normalizeFingerprint(i.id) === normalizeFingerprint(id))
     if (!identity) throw new Error(`${this.pluginName()}: unknown identity for ${peer}`)

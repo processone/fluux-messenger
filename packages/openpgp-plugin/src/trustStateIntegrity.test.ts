@@ -188,6 +188,46 @@ describe('verifyTrustStateSeal: no seal and tamper verdicts', () => {
   })
 })
 
+describe('verifyTrustStateSeal: holds saved since the seal', () => {
+  // A verified contact's new key is held as soon as it is seen, also while
+  // nothing can be sealed; only a hold that restricts a key is accepted.
+  it('is pending-seal for a hold saved since the seal, and sealed once sealed again', async () => {
+    records.setDecision(PEER, PEER_FP, 'verified')
+    await seal()
+    records.setDecision(PEER, OTHER_FP, 'held')
+    expect(await verify()).toEqual({ status: 'pending-seal' })
+    await seal()
+    expect(await verify()).toEqual({ status: 'sealed' })
+  })
+
+  it.each(['verified', 'tofu', 'untrusted'] as const)('names a key %s since the seal', async (decision) => {
+    records.setDecision(PEER, PEER_FP, 'verified')
+    await seal()
+    records.setDecision(PEER, OTHER_FP, decision)
+    expect(await verify()).toEqual({ status: 'compromised', details: ['trust decisions differ'] })
+  })
+
+  it('names a hold that replaced a sealed decision', async () => {
+    records.setDecisions([
+      { peer: PEER, fingerprint: PEER_FP, decision: 'verified' },
+      { peer: PEER, fingerprint: OTHER_FP, decision: 'untrusted' },
+    ])
+    await seal()
+    records.setDecision(PEER, OTHER_FP, 'held')
+    expect(await verify()).toEqual({ status: 'compromised', details: ['trust decisions differ'] })
+  })
+
+  it('names a sealed hold that is gone', async () => {
+    records.setDecisions([
+      { peer: PEER, fingerprint: PEER_FP, decision: 'verified' },
+      { peer: PEER, fingerprint: OTHER_FP, decision: 'held' },
+    ])
+    await seal()
+    records.setDecision(PEER, OTHER_FP, null)
+    expect(await verify()).toEqual({ status: 'compromised', details: ['trust decisions differ'] })
+  })
+})
+
 describe('canonicalJson', () => {
   it('sorts keys at every depth', () => {
     expect(canonicalJson({ b: { y: 1, x: [2, { d: 1, c: 2 }] }, a: null })).toBe('{"a":null,"b":{"x":[2,{"c":2,"d":1}],"y":1}}')

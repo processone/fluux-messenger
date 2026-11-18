@@ -19,10 +19,10 @@
  *
  * Values the oldest versions stored before scoping them per account go to the
  * first account that migrates them, as those versions' loaders moved them,
- * once its claim on them is saved ({@link claimUnscopedLegacyTrust}). Windows
- * claim them one at a time. When the claim cannot be saved, the migration
- * waits for the next start; when another account holds it, an account moves
- * only its own values.
+ * once its claim on them is saved ({@link claimUnscopedLegacyTrust}), under a
+ * lock the app's windows share. No account uses them without such a claim:
+ * when another account holds it, an account moves only its own values; when
+ * no claim can be confirmed, the migration waits for the next start.
  *
  * The old seal is checked against the old data as earlier versions checked
  * it, once the account's key is usable (it may still be locked during the
@@ -35,7 +35,7 @@
 
 import { buildScopedStorageKey } from '@fluux/sdk'
 import { canonicalFingerprint, emptyTrustRecords, type TrustRecordsData } from './trustRecords'
-import { canonicalJson, type TrustStateReading } from './trustStateIntegrity'
+import { canonicalJson, withoutHoldsAddedSince, type TrustStateReading } from './trustStateIntegrity'
 import type { CertRejection, KeyDecision, TrustStateVerdict } from './trustTypes'
 import { fingerprintsEqual } from './fingerprintCompare'
 import type { DecryptFn } from './verificationSync'
@@ -234,8 +234,8 @@ export function readLegacyTrustState(accountJid: string, includeUnscoped = true)
 
 /**
  * Who holds the unscoped values: this account (`owned`), another one
- * (`other-owner`), or no one, because this account's claim could not be
- * saved (`unavailable`).
+ * (`other-owner`), or no one confirmed (`unavailable`), because the lock the
+ * app's windows share is missing or this account's claim could not be saved.
  */
 export type UnscopedLegacyClaim = 'owned' | 'other-owner' | 'unavailable'
 
@@ -245,8 +245,8 @@ export type UnscopedLegacyClaim = 'owned' | 'other-owner' | 'unavailable'
  * the migration writes anything, so a migration that stops half way still
  * finds them on its next run. Windows of this app claim them one at a time,
  * under a lock they share, so two accounts cannot both find no owner and
- * each save their own claim. Where the browser has no such lock, the claim
- * runs at once.
+ * each save their own claim. Without that lock no claim is confirmed:
+ * `unavailable`.
  */
 export async function claimUnscopedLegacyTrust(accountJid: string): Promise<UnscopedLegacyClaim> {
   const claim = (): UnscopedLegacyClaim => {
@@ -261,7 +261,7 @@ export async function claimUnscopedLegacyTrust(accountJid: string): Promise<Unsc
     }
   }
   const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
-  if (!locks) return claim()
+  if (!locks) return 'unavailable'
   try {
     return await locks.request(LEGACY_UNSCOPED_CLAIM_LOCK, claim)
   } catch {
@@ -323,11 +323,13 @@ export function trustRecordsFromLegacy(legacy: LegacyTrustState, now: string): T
  * What differs between the records and what the migration made of the data
  * the old seal covers. The old seal vouches for that data only, so the
  * records are sealed anew only while nothing differs: decisions, sync
- * version, and the set node not yet adopted.
+ * version, and the set node not yet adopted. Holds saved since the upgrade
+ * do not count ({@link withoutHoldsAddedSince}).
  */
 export function legacyRecordsMismatch(check: PendingLegacySealCheck, records: TrustStateReading): string[] {
   const details: string[] = []
-  if (canonicalJson(legacyDecisions(check.snapshot)) !== canonicalJson(records.decisions())) {
+  const upgraded = legacyDecisions(check.snapshot)
+  if (canonicalJson(upgraded) !== canonicalJson(withoutHoldsAddedSince(records.decisions(), upgraded))) {
     details.push('trust decisions differ from the upgraded trust state')
   }
   if (legacySyncVersion(check.snapshot.syncVersion) !== records.syncVersion() || records.setsAdopted()) {

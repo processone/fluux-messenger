@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ShieldAlert } from 'lucide-react'
 import { useXMPPContext } from '@fluux/sdk'
 import { useTrustStateVerdict } from '@/e2ee/openpgpTrustView'
+import { useToastStore } from '@/stores/toastStore'
 
 type RecoverablePlugin = {
   resealTrustState?: () => Promise<void>
@@ -14,17 +15,22 @@ export function TrustStateCompromisedBanner() {
   const { status, details } = useTrustStateVerdict()
   const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const addToast = useToastStore((s) => s.addToast)
 
+  // The plugin can refuse, for instance while trust data of an earlier
+  // version waits to be moved: the person is told why.
   const handleReseal = useCallback(async () => {
     const plugin = client.e2ee?.getPlugin('openpgp') as RecoverablePlugin | null
     if (!plugin?.resealTrustState) return
     setBusy(true)
     try {
       await plugin.resealTrustState()
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
-  }, [client])
+  }, [client, addToast])
 
   if (status !== 'compromised') return null
 

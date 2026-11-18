@@ -117,29 +117,17 @@ describe('readLegacyTrustState', () => {
   })
 
   describe('claiming across windows', () => {
-    /** Web Locks as a browser shares them between windows of one origin: one holder per name, the others wait in turn. */
-    function sharedLocks() {
-      const queues = new Map<string, Promise<unknown>>()
-      return {
-        request<T>(name: string, callback: (lock: { name: string; mode: 'exclusive' }) => T | Promise<T>): Promise<T> {
-          const run = (queues.get(name) ?? Promise.resolve()).then(() => callback({ name, mode: 'exclusive' }))
-          queues.set(name, run.catch(() => {}))
-          return run
-        },
-      }
-    }
+    const lockManager = navigator.locks
     const useLocks = (locks: unknown) => Object.defineProperty(navigator, 'locks', { value: locks, configurable: true })
     afterEach(() => {
-      delete (navigator as { locks?: unknown }).locks
+      useLocks(lockManager)
     })
 
     it('waits while another window claims the unscoped values, then leaves them to that account', async () => {
       saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP } }, null)
-      const locks = sharedLocks()
-      useLocks(locks)
       // Another window, signed in to another account, found no owner and is saving its claim.
       let otherWindowSaves!: () => void
-      const otherWindow = locks.request(LEGACY_UNSCOPED_CLAIM_LOCK, () => new Promise<void>((resolve) => {
+      const otherWindow = navigator.locks.request(LEGACY_UNSCOPED_CLAIM_LOCK, () => new Promise<void>((resolve) => {
         otherWindowSaves = () => {
           localStorage.setItem('fluux-e2ee-legacy-unscoped-owner', 'other@example.com')
           resolve()
@@ -156,9 +144,14 @@ describe('readLegacyTrustState', () => {
       expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBe('other@example.com')
     })
 
-    it('reports a claim it could not take the lock for as not saved', async () => {
+    // Without the lock, two windows could each find no owner and save their
+    // own claim: no claim is confirmed, and none is saved.
+    it.each([
+      ['the browser has no lock shared between windows', null],
+      ['the lock is refused', { request: () => Promise.reject(new DOMException('The operation is insecure.', 'SecurityError')) }],
+    ])('confirms no claim when %s', async (_case, locks) => {
       saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP } }, null)
-      useLocks({ request: () => Promise.reject(new DOMException('The operation is insecure.', 'SecurityError')) })
+      useLocks(locks)
 
       expect(await claimUnscopedLegacyTrust(ME)).toBe('unavailable')
       expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBeNull()

@@ -98,10 +98,12 @@ How a key with no decision stands depends on the contact (`keyStanding`):
 A held key stays held until you decide about it. Each key waiting for a
 decision is recorded as `held` when the plugin reads the contact's keys,
 including a key the contact withdraws but may announce again, so its hold does
-not depend on the cache of the contact's keys. Until the trust-state check
-accepts the stored records, the cache keeps the hold, and the acceptance
-records it: a decision saved before then would be reported at the next start
-as a change made behind the plugin's back. When the contact then loses its last verified
+not depend on the cache of the contact's keys. That includes a hold recorded
+while the trust state cannot be sealed yet, for instance while its check waits
+for your key: the check accepts a hold recorded since the last seal, for a key
+the seal has no decision about, and seals it at once. A hold that replaced a
+sealed decision, and a sealed hold that is gone, are still reported as changes
+made behind the plugin's back. When the contact then loses its last verified
 key (you refuse it, remove its verification or forget it, or another device
 removes it), the key stays held, and a later verification of another key does
 not approve it.
@@ -128,11 +130,13 @@ decisions to plugin storage:
 The earlier records are read without being changed, so an older version still
 finds them, and are never written again. Records the oldest versions kept before
 scoping them per account go to the first account that reads them, as those
-versions moved them, once that account's claim on them is saved. Windows of
-the app claim them one at a time. When another account holds the claim, an
-account moves only its own records. When the claim cannot be saved, nothing is
-moved or sealed: the session uses the earlier records as read, still checks
-their seal, and the upgrade runs again at the next start.
+versions moved them, once that account's claim on them is saved under a lock
+the app's windows share; no account uses them without such a claim. When
+another account holds the claim, an account moves only its own records. When
+no claim can be confirmed, because the lock is missing or the claim cannot be
+saved, nothing is moved or sealed: the session uses only the account's own
+earlier records, still checks their seal, and refuses trust decisions and
+sealing the trust state again until the upgrade runs at the next start.
 
 Earlier versions sealed their records too. That seal is checked against the
 earlier records as those versions checked it, once the account's key is usable.

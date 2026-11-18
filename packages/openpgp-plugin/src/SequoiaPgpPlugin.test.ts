@@ -2020,6 +2020,70 @@ describe('SequoiaPgpPlugin', () => {
         expect(list.filter((i) => i.usedForEncryption).map((i) => i.id)).not.toContain(P2.fingerprint)
       })
 
+      // A hold seen while the trust-state check waits for the key is saved at
+      // once: the cache can drop the key before the check passes, in the same
+      // session or after a restart, and the check accepts a hold saved since
+      // the seal.
+      it.each(['in the same session', 'after a restart'] as const)(
+        'keeps a key held that the cache dropped while the check waited for the key, once the check passes %s',
+        async (when) => {
+          const P1 = validKey('AAAA000000000000000000000000000000000001')
+          const P2 = validKey('BBBB000000000000000000000000000000000002')
+          const first = makeContext('me@example.com')
+          await plugin.init(first.ctx)
+          installPeerPep(first, PEER).announce([P1])
+          await plugin.probePeer(PEER)
+          await plugin.setIdentityTrust(PEER, P1.fingerprint, 'verified')
+          await vi.waitFor(async () => expect(await first.ctx.storage.get(TRUST_SEAL_STORAGE_KEY)).not.toBeNull())
+          await plugin.shutdown()
+
+          // The next start cannot read its seal yet: the check waits for the key.
+          let built = makeContext('me@example.com', { storage: first.ctx.storage })
+          let current = new SequoiaPgpPlugin({ ...desktopHost(), invoke: fake.invoke })
+          fake.failNextOwnDecryptWith('key-unrecoverable')
+          await current.init(built.ctx)
+          try {
+            await vi.waitFor(() => expect(getTrustStateStatus(current)).toBe('awaiting-key'))
+            let bobPep = installPeerPep(built, PEER)
+            const announce = async (keys: KeyBundle[]) => {
+              bobPep.announce(keys)
+              current.onPeerKeysChanged(PEER)
+              await flush()
+            }
+            await announce([P1, P2])
+            await announce([P1])
+            for (let i = 0; i < 5; i++) {
+              await announce([P1, validKey(`DDDD00000000000000000000000000000000001${i}`)])
+              await announce([P1])
+            }
+            const cached = (current as unknown as { peerKeys: Map<string, Array<{ fingerprint: string }>> }).peerKeys.get(PEER) ?? []
+            expect(cached.map((c) => c.fingerprint)).not.toContain(P2.fingerprint)
+
+            if (when === 'in the same session') {
+              await (current as unknown as { verifyTrustStateOnInit(): Promise<void> }).verifyTrustStateOnInit()
+            } else {
+              await current.shutdown()
+              built = makeContext('me@example.com', { storage: built.ctx.storage })
+              current = new SequoiaPgpPlugin({ ...desktopHost(), invoke: fake.invoke })
+              await current.init(built.ctx)
+              bobPep = installPeerPep(built, PEER)
+            }
+            await vi.waitFor(() => expect(getTrustStateStatus(current)).toBe('sealed'))
+            await announce([P1])
+            await current.setIdentityTrust(PEER, P1.fingerprint, 'tofu')
+            await announce([P1, P2])
+
+            expect((await current.listPeerIdentities(PEER)).find((i) => i.id === P2.fingerprint)).toMatchObject({
+              usedForEncryption: false, notUsedReason: 'awaiting-decision',
+            })
+            const toBob = await current.openConversation({ kind: 'direct', peer: PEER })
+            expect(recipientFpsFromEncrypt(await current.encrypt(toBob, encodeBodyAsPayload('held')))).not.toContain(P2.fingerprint)
+          } finally {
+            await current.shutdown()
+          }
+        },
+      )
+
       // The cache keeps five withdrawn unverified keys; a waiting key it drops
       // stays held, since its hold is kept in the trust records.
       it.each([
@@ -5394,7 +5458,7 @@ describe('SequoiaPgpPlugin', () => {
       expect(localStorage.getItem('fluux-e2ee-verified-peers')).toBe(JSON.stringify({ 'bob@example.com': BOB_FP }))
     })
 
-    it('still reports a changed earlier trust state while its move waits for the next start', async () => {
+    it('still reports a changed earlier trust state while its move waits for the next start, and refuses to reseal it', async () => {
       saveEarlierVersion({ ...EARLIER, verified: { 'bob@example.com': CAROL_NEW_FP } })
       // A value kept before scoping by account needs a claim, which cannot be saved.
       localStorage.setItem('fluux-e2ee-cert-rejections', JSON.stringify({
@@ -5412,7 +5476,12 @@ describe('SequoiaPgpPlugin', () => {
       } finally {
         localStorage.setItem = setItem
       }
-      expect(trustRecordsOf(plugin).rejectionsOf('dave@example.com')).toHaveLength(1)
+      // The values no claim was confirmed for are not used.
+      expect(trustRecordsOf(plugin).rejectionsOf('dave@example.com')).toEqual([])
+
+      // Resealing would vouch for records nothing saves.
+      await expect(plugin.resealTrustState()).rejects.toThrow('trust decisions cannot be saved')
+      expect(getTrustStateStatus()).toBe('compromised')
       expect(await built.ctx.storage.get(TRUST_RECORDS_STORAGE_KEY)).toBeNull()
       expect(await built.ctx.storage.get(TRUST_SEAL_STORAGE_KEY)).toBeNull()
     })
@@ -5445,8 +5514,9 @@ describe('SequoiaPgpPlugin', () => {
       expect(Object.keys(saved.peers)).toEqual(['carol@example.com'])
     })
 
-    // A claim that cannot be saved puts the migration off: the session keeps
-    // the verified contacts as read and saves nothing; the next start moves them.
+    // A claim that cannot be saved puts the migration off: the session uses
+    // only the account's own values, saves nothing and refuses trust
+    // decisions it could not keep; the next start moves the claimed values.
     it('moves the unscoped values at the next start when its claim on them cannot be saved', async () => {
       localStorage.setItem('fluux-e2ee-verified-peers', JSON.stringify({ 'bob@example.com': BOB_FP }))
       localStorage.setItem('fluux-e2ee-verifications-version', '6')
@@ -5467,9 +5537,16 @@ describe('SequoiaPgpPlugin', () => {
       }
 
       expect(warnings.some((w) => w.includes('could not claim the trust state saved before accounts were kept apart'))).toBe(true)
-      expect(trustRecordsOf(plugin).isVerified('bob@example.com', BOB_FP)).toBe(true)
+      expect(trustRecordsOf(plugin).hasVerified('bob@example.com')).toBe(false)
       expect(trustRecordsOf(plugin).isVerified('carol@example.com', CAROL_OLD_FP)).toBe(true)
-      expect(trustRecordsOf(plugin).syncVersion()).toBe(6)
+      expect(trustRecordsOf(plugin).syncVersion()).toBe(-1)
+      // Refusing carol's formerly verified key would not survive a restart: it is refused.
+      publishKeyAsXep0373(built, 'carol@example.com', peerKey(CAROL_OLD_FP, 'carol@example.com'))
+      await plugin.probePeer('carol@example.com')
+      await expect(plugin.setIdentityTrust('carol@example.com', CAROL_OLD_FP, 'untrusted')).rejects.toThrow(
+        'trust decisions cannot be saved',
+      )
+      expect(trustRecordsOf(plugin).isVerified('carol@example.com', CAROL_OLD_FP)).toBe(true)
       for (const key of [TRUST_RECORDS_STORAGE_KEY, LEGACY_SEAL_CHECK_STORAGE_KEY, TRUST_SEAL_STORAGE_KEY, TRUST_SEAL_WRITTEN_STORAGE_KEY]) {
         expect(await built.ctx.storage.get(key)).toBeNull()
       }
