@@ -197,13 +197,14 @@ confirmed fingerprint **array**.
 | peer key cache (`peerKeys`) | `Map<JID, CachedPeerCert[]>`, deduped by fingerprint and partitioned active/inactive |
 | `verifiedPeerKeysStore` | Unchanged `Record<JID, string>` |
 | `keyChangeAlertsStore` / `pinnedPrimaryFingerprintsStore` | Preserved for the later ordered migration; OX no longer uses them as a send gate |
-| `peerKeysetRevisionStore` | Session-only per-JID revision used to rerun the conversation derivation; it is not persisted |
+| `peerKeysetRevisionStore` | Session-only per-JID revision the plugin bumps when the active set changes; the manager turns it into its conversation-security event; it is not persisted |
 
 ### Reactive active-keyset surface (Stage 1)
 
 `getPeerFingerprints(jid)` exposes the active validated fingerprints. Whenever a peer cache
 refresh changes that set, the plugin increments the session-only per-JID revision; the
-conversation hook subscribes to that primitive revision and recalculates its derived status.
+manager emits its conversation-security event for that peer, and the conversation hook re-asks
+the manager for the derived status.
 The announced-set and structured-health interfaces described in the original design are deferred
 to #1452.
 
