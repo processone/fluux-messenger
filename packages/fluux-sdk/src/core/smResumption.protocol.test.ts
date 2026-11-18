@@ -4,7 +4,7 @@
  * WebSocket to a controlled XMPP server that grants (or omits) the SM `max`, drops the socket
  * and then accepts or refuses `<resume/>`. Nothing in the client is mocked except the stores;
  * where the order of the server's messages matters, the client's WebSocket hands them over in
- * the order a browser does.
+ * the order WebKit does.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { WebSocketServer, type WebSocket } from 'ws'
@@ -184,9 +184,11 @@ class ControlledServer {
 }
 
 /**
- * Chromium hands a page every WebSocket message of one network read in a single task, but runs the
- * page's pending promise callbacks after each message; Node's WebSocket runs them only after the
- * whole read. The client gets this socket so it handles a read the way it does in the app.
+ * WebKit, the engine of Safari and of the desktop app's web view on macOS, hands a page the WebSocket
+ * messages that arrive right behind <resumed/> before a zero-delay timer set at <resumed/> runs, and
+ * runs the page's pending promise callbacks after each message; Chromium runs such a timer first.
+ * Node's WebSocket runs promise callbacks only after the whole read. The client gets this socket so
+ * it handles a read the way WebKit does.
  */
 class BrowserOrderWebSocket extends globalThis.WebSocket {
   #wrapped = new Map<EventListenerOrEventListenerObject, EventListener>()
