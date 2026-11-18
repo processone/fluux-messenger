@@ -74,7 +74,7 @@ let mockEncryptionState: { kind: string; fingerprint?: string; trust?: string } 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', async (importOriginal) => ({
   // FLM-256: draft recovery keys by stable store identity, not per-render action wrappers.
-  chatStore: {},
+  chatStore: { subscribe: () => () => {}, getState: () => ({}) },
   // The list resolves row handles through the SDK's own lookup; keep the real one.
   findMessageRowIndex: (await importOriginal<typeof import('@fluux/sdk')>()).findMessageRowIndex,
   findRoomMessageLink: (await importOriginal<typeof import('@fluux/sdk')>()).findRoomMessageLink,

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { chatStore } from '@fluux/sdk'
 import { useConversationFileDropStore } from '@/stores/conversationFileDropStore'
-import { subscribeToConversationDrop } from '@/utils/tauriFileDrop'
+import { subscribeToConversationDrop, currentNativeDropSequence } from '@/utils/tauriFileDrop'
 import { readNativeDroppedFile } from '@/utils/nativeDroppedFile'
 
 /**
@@ -23,22 +23,22 @@ export function useConversationFileDrop(select: (conversationId: string) => void
   }, [])
 
   useEffect(() => {
-    // A read that finishes late is dropped when a newer drop, a navigation or
-    // this list going away came first.
-    let latest = 0
+    // A read that finishes late is dropped when a newer drop (on a row or on the
+    // chat), another conversation selection, or this list going away came first.
+    let mounted = true
     const unsubscribe = subscribeToConversationDrop((conversationId, paths) => {
-      const drop = ++latest
-      const activeAtDrop = chatStore.getState().activeConversationId
+      const drop = currentNativeDropSequence()
+      const target = chatStore.getState().activationTarget
       void readNativeDroppedFile(paths[0]).then(
         (file) => {
-          if (drop !== latest || chatStore.getState().activeConversationId !== activeAtDrop) return
+          if (!mounted || drop !== currentNativeDropSequence() || target !== chatStore.getState().activationTarget) return
           dropFile(conversationId, file)
         },
         (err) => console.error('[useConversationFileDrop] Failed to read dropped file:', err),
       )
     })
     return () => {
-      latest++
+      mounted = false
       unsubscribe()
     }
   }, [dropFile])

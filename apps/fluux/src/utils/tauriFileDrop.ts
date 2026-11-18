@@ -47,8 +47,16 @@ export function conversationAtPosition(position: { x: number; y: number } | unde
   return row?.getAttribute('data-conv-id') ?? undefined
 }
 
+let dropSequence = 0
+
+/** Counts every native drop, wherever it lands, so a reader can tell a newer one arrived. */
+export function currentNativeDropSequence(): number {
+  return dropSequence
+}
+
 /** A drop on a conversation row goes to the row; any other drop goes to the open chat. */
 export function dispatchNativeDrop(paths: string[], position?: { x: number; y: number }) {
+  dropSequence++
   const conversationId = conversationAtPosition(position)
   if (conversationId && conversationDropListeners.size > 0) {
     conversationDropListeners.forEach(listener => listener(conversationId, paths))

@@ -1178,6 +1178,21 @@ describe('chatStore', () => {
       expect(chatStore.getState().activeConversationId).toBe('alice@example.com')
     })
 
+    it('records the requested conversation as soon as an activation starts, before it opens', async () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      let resolveRead: (value: Message[]) => void = () => {}
+      vi.mocked(messageCache.getMessages).mockReturnValue(new Promise((resolve) => { resolveRead = resolve }))
+
+      const activation = chatStore.getState().activateConversation('alice@example.com')
+
+      expect(chatStore.getState().activationTarget).toBe('alice@example.com')
+      expect(chatStore.getState().activeConversationId).toBeNull()
+      resolveRead([])
+      await activation
+      void chatStore.getState().activateConversation(null)
+      expect(chatStore.getState().activationTarget).toBeNull()
+    })
+
     it('does not flag activationPending when deactivating with null', async () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().setActiveConversation('alice@example.com')

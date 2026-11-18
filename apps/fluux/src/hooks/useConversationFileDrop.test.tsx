@@ -5,11 +5,12 @@ import { useConversationFileDropStore } from '@/stores/conversationFileDropStore
 import { dispatchNativeDrop } from '@/utils/tauriFileDrop'
 import { setPlatformForTesting } from '@/platform'
 
-const h = vi.hoisted(() => ({ read: vi.fn(), active: null as string | null }))
-vi.mock('@fluux/sdk', () => ({
-  chatStore: { getState: () => ({ activeConversationId: h.active }) },
-  getStorageScopeJid: () => null,
-}))
+const h = vi.hoisted(() => ({ read: vi.fn(), chat: null as unknown as import('zustand/vanilla').StoreApi<{ activationTarget: string | null }> }))
+vi.mock('@fluux/sdk', async () => {
+  const { createStore } = await import('zustand/vanilla')
+  h.chat = createStore(() => ({ activationTarget: null as string | null }))
+  return { chatStore: h.chat, getStorageScopeJid: () => null }
+})
 vi.mock('@/utils/nativeDroppedFile', () => ({ readNativeDroppedFile: h.read }))
 
 // Intent: a drop on a sidebar conversation opens it and hands the file over, never sending it (FLM-196 option A).
@@ -87,32 +88,73 @@ describe('useConversationFileDrop', () => {
     restore()
   })
 
-  it('drops a slow read when a newer drop, a navigation or unmounting came first', async () => {
+  it('drops a slow read when a newer row drop came first', async () => {
     const restore = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
     const select = vi.fn()
-    const { unmount } = renderHook(() => useConversationFileDrop(select))
+    renderHook(() => useConversationFileDrop(select))
     const el = row()
     const slow: Array<(f: File) => void> = []
     h.read.mockImplementation(() => new Promise<File>((resolve) => slow.push(resolve)))
-    const file = (n: string) => new File(['x'], n)
 
     await drop(); await drop()
-    await act(async () => { slow[0](file('old')) })
+    await act(async () => { slow[0](new File(['x'], 'old')) })
     expect(select).not.toHaveBeenCalled()
-    await act(async () => { slow[1](file('new')) })
+    await act(async () => { slow[1](new File(['x'], 'new')) })
     expect(select).toHaveBeenCalledTimes(1)
+    el.remove()
+    restore()
+  })
 
-    select.mockClear()
+  it('drops a slow read when another conversation was requested meanwhile, even while it still loads', async () => {
+    const restore = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+    const select = vi.fn()
+    renderHook(() => useConversationFileDrop(select))
+    const el = row()
+    let finish!: (f: File) => void
+    h.read.mockImplementation(() => new Promise<File>((resolve) => { finish = resolve }))
+
     await drop()
-    h.active = 'carol@example.com'
-    await act(async () => { slow[2](file('navigated')) })
+    // The user picks C: the active conversation stays A while C loads, only the request changes
+    h.chat.setState({ activationTarget: 'carol@example.com' })
+    await act(async () => { finish(new File(['x'], 'late')) })
+
     expect(select).not.toHaveBeenCalled()
+    h.chat.setState({ activationTarget: null })
+    el.remove()
+    restore()
+  })
 
+  it('drops a slow read when a later drop landed on the chat pane', async () => {
+    const restore = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+    const select = vi.fn()
+    renderHook(() => useConversationFileDrop(select))
+    let finish!: (f: File) => void
+    h.read.mockImplementation(() => new Promise<File>((resolve) => { finish = resolve }))
+    const el = row()
     await drop()
+
+    document.elementFromPoint = vi.fn(() => document.body)
+    await drop()
+    await act(async () => { finish(new File(['x'], 'late')) })
+
+    expect(select).not.toHaveBeenCalled()
+    el.remove()
+    restore()
+  })
+
+  it('drops a slow read once the list unmounted', async () => {
+    const restore = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+    const select = vi.fn()
+    const { unmount } = renderHook(() => useConversationFileDrop(select))
+    let finish!: (f: File) => void
+    h.read.mockImplementation(() => new Promise<File>((resolve) => { finish = resolve }))
+    const el = row()
+    await drop()
+
     unmount()
-    await act(async () => { slow[3](file('unmounted')) })
+    await act(async () => { finish(new File(['x'], 'late')) })
+
     expect(select).not.toHaveBeenCalled()
-    h.active = null
     el.remove()
     restore()
   })

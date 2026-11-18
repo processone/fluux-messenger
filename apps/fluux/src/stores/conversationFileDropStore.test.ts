@@ -1,8 +1,12 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { useConversationFileDropStore, DROPPED_FILE_TTL_MS } from './conversationFileDropStore'
+import { useConversationFileDropStore } from './conversationFileDropStore'
 
-const h = vi.hoisted(() => ({ scope: null as string | null }))
-vi.mock('@fluux/sdk', () => ({ getStorageScopeJid: () => h.scope }))
+const h = vi.hoisted(() => ({ scope: null as string | null, chat: null as unknown as import('zustand/vanilla').StoreApi<{ activationTarget: string | null }> }))
+vi.mock('@fluux/sdk', async () => {
+  const { createStore } = await import('zustand/vanilla')
+  h.chat = createStore(() => ({ activationTarget: null as string | null }))
+  return { getStorageScopeJid: () => h.scope, chatStore: h.chat }
+})
 const setStorageScopeJid = (jid: string | null) => { h.scope = jid }
 
 // Intent: the chat view takes a dropped file once; a newer drop is not lost to a stale take.
@@ -21,18 +25,41 @@ describe('conversationFileDropStore', () => {
   })
 
   describe('abandoned and cross-account offers', () => {
-    beforeEach(() => vi.useFakeTimers())
-    afterEach(() => { vi.useRealTimers(); setStorageScopeJid(null) })
+    afterEach(() => { setStorageScopeJid(null); h.chat.setState({ activationTarget: null }) })
+    const offerFor = (id: string) => {
+      h.chat.setState({ activationTarget: id })
+      useConversationFileDropStore.getState().offer(id, new File([], id))
+    }
 
-    it('forgets an offer whose conversation never opened', () => {
-      useConversationFileDropStore.getState().offer('a@x', new File([], 'a'))
-      vi.advanceTimersByTime(DROPPED_FILE_TTL_MS)
+    it('abandons an offer when another conversation is selected before its own opens', () => {
+      offerFor('b@x')
+      h.chat.setState({ activationTarget: 'c@x' })
       expect(useConversationFileDropStore.getState().pending).toBeNull()
+
+      h.chat.setState({ activationTarget: 'b@x' })
+      expect(useConversationFileDropStore.getState().pending).toBeNull()
+    })
+
+    it('abandons an offer when the activation is cancelled', () => {
+      offerFor('b@x')
+      h.chat.setState({ activationTarget: null })
+      expect(useConversationFileDropStore.getState().pending).toBeNull()
+    })
+
+    it('keeps an offer through a repeated request for its own conversation and a long load', () => {
+      vi.useFakeTimers()
+      offerFor('b@x')
+      h.chat.setState({ activationTarget: null })
+      offerFor('b@x')
+      h.chat.setState({ activationTarget: 'b@x' })
+      vi.advanceTimersByTime(10 * 60_000)
+      vi.useRealTimers()
+      expect(useConversationFileDropStore.getState().pending?.conversationId).toBe('b@x')
     })
 
     it('records the account the file was dropped under', () => {
       setStorageScopeJid('me@x')
-      useConversationFileDropStore.getState().offer('a@x', new File([], 'a'))
+      offerFor('a@x')
       expect(useConversationFileDropStore.getState().pending?.account).toBe('me@x')
     })
   })
