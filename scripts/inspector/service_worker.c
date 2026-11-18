@@ -1,4 +1,5 @@
 /* FLM-366: existing-pairing-only usbmuxd/lockdown opener.
+ * Starts one of two fixed services: Web Inspector or the framed process-log relay.
  * No libimobiledevice convenience handshake, key files, logging or discovery CLI.
  * All remote input, including TLS read-ahead, spends prepaid input credit.
  * Parent owns hard per-operation deadlines and reaping; alarm bounds idle life.
@@ -263,10 +264,12 @@ int main(int argc, char **argv) {
     if (*end || fd<3 || fd>INT_MAX) return 1;
     control=(int)fd;
     alarm(121);  /* Also bound a caller that stalls before delivering config. */
-    unsigned char config[12]; char udid[129]={0},path[104]={0};
-    if (!exact(control,config,12,0)) return 1;
-    uint32_t life=be32(config), un=be32(config+4), pn=be32(config+8);
-    if (!life || life>121000 || !un || un>128 || !pn || pn>=sizeof(path) ||
+    unsigned char config[16]; char udid[129]={0},path[104]={0};
+    if (!exact(control,config,16,0)) return 1;
+    uint32_t life=be32(config), un=be32(config+4), pn=be32(config+8), kind=be32(config+12);
+    /* A code, never a caller string, selects the service: no other name can be sent. */
+    const char *service_name=kind==1 ? "com.apple.webinspector" : kind==2 ? "com.apple.os_trace_relay" : NULL;
+    if (!service_name || !life || life>121000 || !un || un>128 || !pn || pn>=sizeof(path) ||
         !exact(control,udid,un,0) || !exact(control,path,pn,0) ||
         strlen(udid)!=un || strlen(path)!=pn || path[0]!='/') return 1;
     struct itimerval timer={0};
@@ -319,7 +322,7 @@ int main(int argc, char **argv) {
     if (!session || !enable_tls(&lock,ctx,pinned)) goto done;
     plist_free(p); p=NULL; status='S';
     req=plist_new_dict();
-    plist_dict_set_item(req,"Service",plist_new_string("com.apple.webinspector"));
+    plist_dict_set_item(req,"Service",plist_new_string(service_name));
     p=lockdown(&lock,"StartService",req); uint64_t port=0;
     if (!p || !uint_value(p,"Port",&port) || !port || port>65535 ||
         !boolean(p,"EnableServiceSSL",&ssl)) goto done;

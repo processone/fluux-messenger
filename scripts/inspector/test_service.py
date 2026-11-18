@@ -25,6 +25,8 @@ import uuid
 
 from reader import CAP, Budget, Boundary, Reader, PRESENT, SAMPLER, SAMPLE, REMOVE
 from service import open_service, ServiceStream, ServiceError, START_CREDIT
+from oslog import STREAM_FLAGS, LogReader
+from test_oslog import APP, RUNNINGBOARD, WEBCONTENT, StopAfter, frame as log_frame, record as log_record, reply_frame
 
 WORKER = Path(sys.argv.pop(1)).resolve()
 SAMPLES = json.load(sys.stdin)
@@ -144,6 +146,9 @@ class DevicePeer:
     def __init__(self, mode='echo', *, fragmented=False):
         self.mode, self.fragmented = mode, fragmented
         self.plain = mode in ('plain', 'plain-backpressure')
+        self.service = 'com.apple.os_trace_relay' if mode.startswith('os-trace') else 'com.apple.webinspector'
+        self.log_request = None
+        self.flood = threading.Event()
         self.path = '/tmp/flm366-' + uuid.uuid4().hex + '.sock'
         self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.server.bind(self.path)
@@ -259,7 +264,7 @@ class DevicePeer:
                     conn = self.context.wrap_socket(conn, server_side=True)
                     p = read_plist(conn)
                     self.requests.append(p['Request'])
-                    assert p['Request'] == 'StartService' and p['Service'] == 'com.apple.webinspector'
+                    assert p['Request'] == 'StartService' and p['Service'] == self.service
                     assert set(p) == {'Request', 'Label', 'Service'}  # No escrow bag or other service.
                     if self.mode == 'service-denied':
                         send_plist(conn, {'Request': 'StartService', 'Error': PRIVATE})
@@ -278,6 +283,8 @@ class DevicePeer:
                     self.service_ready.set()
                     if self.mode.startswith('inspector'):
                         self.inspector(conn)
+                    elif self.mode.startswith('os-trace'):
+                        self.os_trace(conn)
                     elif self.mode == 'flood':
                         while True:
                             conn.sendall(b'x' * 65536)
@@ -395,6 +402,25 @@ class DevicePeer:
             elif name == '_rpc_forwardDidClose:':
                 return
 
+    def os_trace(self, conn):
+        """The relay's start request and reply, then framed records with private bodies."""
+        size = struct.unpack('>I', exact(conn, 4))[0]
+        assert 0 < size <= 65536
+        self.log_request = plistlib.loads(exact(conn, size))
+        conn.sendall(reply_frame())
+        if self.mode == 'os-trace-flood':
+            # Unlisted processes only, from when the test releases it until closed.
+            assert self.flood.wait(5)
+            for i in range(1_000_000):
+                conn.sendall(log_frame(log_record(33 + i % 7, RUNNINGBOARD, message=PRIVATE.encode())))
+        for body in (log_record(321, APP, subsystem=b'com.apple.WebKit', category=b'Process', level=0x10,
+                                message=PRIVATE.encode()),
+                     log_record(33, RUNNINGBOARD, message=PRIVATE.encode()),
+                     log_record(400, WEBCONTENT, level=0x11, message=PRIVATE.encode())):
+            conn.sendall(log_frame(body))
+        while conn.recv(65536):
+            pass
+
     def wait_closed(self):
         with self.changed:
             assert self.changed.wait_for(lambda: not self.connections, timeout=2), 'peer-not-closed'
@@ -402,6 +428,7 @@ class DevicePeer:
 
     def close(self):
         self.release.set()
+        self.flood.set()
         self.stop.set()
         self.server.close()
         self.thread.join(2)
@@ -501,6 +528,98 @@ class ServiceProof(unittest.TestCase):
             self.assertIsNotNone(stream._process.poll())
             peer.wait_closed()
             self.assertIn('_rpc_forwardDidClose:', peer.requests)
+
+    def test_log_relay_through_worker(self):
+        with DevicePeer('os-trace') as peer, tempfile.TemporaryFile('w+b', dir=WORKER.parent) as output:
+            budget = Budget()
+            stream = self.open(peer, budget, service='os-trace-relay')
+            stop = threading.Event()
+            result = LogReader(stream, budget).run(StopAfter(output, stop, 2), stop=stop, duration=3)
+            output.seek(0)
+            saved = output.read()
+            lines = [json.loads(line) for line in saved.splitlines()]
+            peer.wait_closed()
+            PROOF.append({'scenario': 'log-relay-stream', 'reader': result, 'persistedRecords': lines,
+                          'startedService': peer.service, 'request': peer.log_request,
+                          'workerReaped': stream._process.poll() is not None})
+            self.assertEqual(peer.log_request, {'Request': 'StartActivity', 'MessageFilter': 0xFFFF, 'Pid': -1,
+                                                'StreamFlags': STREAM_FLAGS})
+            self.assertEqual(peer.requests.count('StartService'), 1)
+            self.assertIn('StopSession', peer.requests)
+            self.assertEqual((result['reason'], result['emitted'], result['discarded']), ('stopped', 2, 1))
+            self.assertEqual([(line['pid'], line['process']) for line in lines],
+                             [(321, 'fluux'), (400, 'webkit-content')])
+            self.assertNotIn(PRIVATE.encode(), saved)
+            self.assertNotIn(PRIVATE, json.dumps(result))
+            self.assertIsNotNone(stream._process.poll())
+
+    def test_service_choice_is_fixed(self):
+        with DevicePeer() as peer:
+            with self.assertRaises(ValueError) as caught:
+                open_service(WORKER, UDID, Budget(), service='com.apple.afc', mux_socket=peer.path)
+            self.assertEqual(str(caught.exception), 'invalid-service')
+            # The worker refuses any other service code before it reaches usbmuxd.
+            parent, child = socket.socketpair()
+            p = subprocess.Popen([str(WORKER), str(child.fileno())], pass_fds=(child.fileno(),),
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            child.close()
+            identity, path = UDID.encode(), peer.path.encode()
+            parent.sendall(struct.pack('>IIII', 2000, len(identity), len(path), 3) + identity + path)
+            parent.settimeout(2)
+            self.assertEqual(parent.recv(16), b'')
+            parent.close()
+            stdout, stderr = p.communicate(timeout=2)
+            self.assertEqual((stdout, stderr, p.returncode), (b'', b'', 1))
+            self.assertEqual(peer.requests, [])
+        PROOF.append({'scenario': 'fixed-service', 'result': 'pass', 'otherNameRefused': True,
+                      'otherCodeRefusedBeforeUsbmuxd': True})
+
+    def test_readers_share_budget_and_stop(self):
+        def both(log_mode, budget, inspector_duration, on_sample=None):
+            stop = threading.Event()
+            results = {}
+            with DevicePeer('inspector') as inspector_peer, DevicePeer(log_mode) as log_peer, \
+                    tempfile.TemporaryFile('w+b', dir=WORKER.parent) as pages, \
+                    tempfile.TemporaryFile('w+b', dir=WORKER.parent) as logs:
+                inspector = self.open(inspector_peer, budget)
+                relay = self.open(log_peer, budget, service='os-trace-relay')
+                if on_sample:
+                    inspector_peer.on_sample = lambda: on_sample(log_peer)
+                def run(name, call):
+                    results[name] = call()
+                threads = [threading.Thread(target=run, args=('inspector', lambda: Reader(inspector, budget).run(
+                               pages, stop=stop, duration=inspector_duration))),
+                           threading.Thread(target=run, args=('logs', lambda: LogReader(relay, budget).run(
+                               logs, stop=stop, duration=20)))]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join(30)
+                    self.assertFalse(thread.is_alive())
+                inspector_peer.wait_closed()
+                log_peer.wait_closed()
+                self.assertIsNotNone(inspector._process.poll())
+                self.assertIsNotNone(relay._process.poll())
+                logs.seek(0)
+                self.assertNotIn(PRIVATE.encode(), logs.read())
+            self.assertTrue(stop.is_set())
+            return results
+        limit = 2 * 1024 * 1024
+        budget = Budget(limit)
+        # Unlisted log records flood in once sampling starts, until the shared budget is spent.
+        flood = both('os-trace-flood', budget, 20, on_sample=lambda peer: peer.flood.set())
+        reasons = {flood['inspector']['reason'], flood['logs']['reason']}
+        self.assertIn('byte-limit', reasons)
+        self.assertLessEqual(reasons, {'byte-limit', 'stopped'})
+        self.assertLessEqual(budget.input + budget.output, limit)
+        self.assertGreater(flood['logs']['discarded'], 0)
+        # The inspector's own deadline ends the attempt; the shared stop ends the log reader.
+        ended = both('os-trace', Budget(), 1.5)
+        self.assertEqual((ended['inspector']['reason'], ended['logs']['reason']), ('time-limit', 'stopped'))
+        self.assertEqual(ended['logs']['emitted'], 2)
+        self.assertLess(ended['logs']['elapsedSeconds'], ended['inspector']['elapsedSeconds'] + .5)
+        PROOF.append({'scenario': 'shared-budget-and-stop', 'limit': limit, 'spent': budget.input + budget.output,
+                      'flood': flood, 'inspectorDeadline': ended})
 
     def test_reader_deadline_cleanup(self):
         # FLM-369 E1/W4: exercise the final shrinking timeout through the real
@@ -865,7 +984,7 @@ wakeup.close(); writer.close(); bridge.close()
         p = subprocess.Popen([str(WORKER), str(child.fileno())], pass_fds=(child.fileno(),),
                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         child.close()
-        parent.sendall(struct.pack('>III', 1, 129, 1) + PRIVATE.encode())
+        parent.sendall(struct.pack('>IIII', 1, 129, 1, 1) + PRIVATE.encode())
         parent.close()
         stdout, stderr = p.communicate(timeout=2)
         self.assertEqual((stdout, stderr), (b'', b''))
@@ -881,7 +1000,7 @@ wakeup.close(); writer.close(); bridge.close()
                 self.addCleanup(stream.close)
                 stream._operation_end = time.monotonic()+1
                 identity, path = UDID.encode(), peer.path.encode()
-                parent.sendall(struct.pack('>III', 2000, len(identity), len(path))+identity+path)
+                parent.sendall(struct.pack('>IIII', 2000, len(identity), len(path), 1)+identity+path)
                 if mode == 'echo':
                     stream._response()
                     stream.send(b'authorized-bytes')
