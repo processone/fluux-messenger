@@ -19,7 +19,8 @@ export interface OwnDevice {
   /** The name its owner gave it, when it published one. */
   label?: string
   /**
-   * Its identity key in hex (32 bytes, for both protocols), as the device's own bundle publishes it.
+   * Its identity key as the plugin shows it: the 32-byte Curve25519 form in hex, for both protocols, from the
+   * device's own bundle (an OMEMO 2 Ed25519 key is converted).
    * Absent when the bundle is missing or unreadable; the device stays listed.
    */
   fingerprint?: string
@@ -142,7 +143,7 @@ async function identityFingerprint(bundle: XMLElementData, protocol: DeviceListP
     if (protocol === 'legacy') {
       if (bytes.length === 33 && bytes[0] === 0x05) bytes = bytes.slice(1)
     } else if (bytes.length === 32) {
-      // Loaded here, not at the top, so reading only a legacy list never pulls in the crypto package.
+      // Loaded here, not at the top, so reading only a legacy list never loads the crypto package.
       bytes = (await import('@fluux/omemo')).fingerprint(bytes)
     }
   } catch {

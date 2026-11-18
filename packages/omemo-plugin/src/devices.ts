@@ -1,5 +1,5 @@
 // Entry `@fluux/omemo-plugin/devices`: the account's own OMEMO device lists, readable and editable with no plugin
-// registered and without loading the OMEMO crypto.
+// registered. Reading an OMEMO 2 fingerprint loads `@fluux/omemo` lazily, for the Ed25519 to Curve25519 conversion.
 import type { XMPPClient } from '@fluux/sdk/core'
 import { queryPepNode, publishPepNode } from '@fluux/sdk/xmpp'
 import type { OwnPepAccess } from './deviceLists'
