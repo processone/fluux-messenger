@@ -19,7 +19,6 @@
 
 import type { PluginStorage } from '@fluux/sdk'
 import { fingerprintsEqual } from './fingerprintCompare'
-import type { TrustRecordStore } from './trustRecords'
 import type { KeyDecision, TrustStateVerdict } from './trustTypes'
 import type { DecryptFn, EncryptFn } from './verificationSync'
 
@@ -34,6 +33,37 @@ interface TrustStateSealPayload {
   decisions: Record<string, Record<string, KeyDecision>>
   syncVersion: number
   setsAdopted: boolean
+}
+
+/**
+ * What the seal covers, read from the records (`TrustRecordStore`) or from a
+ * copy of them taken earlier ({@link copyTrustState}).
+ */
+export interface TrustStateReading {
+  decisions(): Record<string, Record<string, KeyDecision>>
+  syncVersion(): number
+  setsAdopted(): boolean
+}
+
+/** A copy of what the seal covers, as the records hold it now. */
+export function copyTrustState(records: TrustStateReading): TrustStateReading {
+  const decisions = canonicalJson(records.decisions())
+  const syncVersion = records.syncVersion()
+  const setsAdopted = records.setsAdopted()
+  return {
+    decisions: () => JSON.parse(decisions) as Record<string, Record<string, KeyDecision>>,
+    syncVersion: () => syncVersion,
+    setsAdopted: () => setsAdopted,
+  }
+}
+
+/** Whether two readings hold the same decisions and sync state. */
+export function sameTrustState(a: TrustStateReading, b: TrustStateReading): boolean {
+  return (
+    canonicalJson(a.decisions()) === canonicalJson(b.decisions()) &&
+    a.syncVersion() === b.syncVersion() &&
+    a.setsAdopted() === b.setsAdopted()
+  )
 }
 
 /** JSON with every object's keys sorted, at every depth. */
@@ -56,10 +86,10 @@ function decodeText(bytes: Uint8Array | null): string | null {
   return bytes ? new TextDecoder().decode(bytes) : null
 }
 
-/** Seal the records as they are now. */
+/** Seal the records as they are now, or a copy of them. */
 export async function sealTrustState(
   storage: PluginStorage,
-  records: TrustRecordStore,
+  records: TrustStateReading,
   encryptFn: EncryptFn,
   ownPublicArmored: string,
 ): Promise<void> {
@@ -75,16 +105,16 @@ export async function sealTrustState(
   await storage.put(TRUST_SEAL_WRITTEN_STORAGE_KEY, encodeText('1'))
 }
 
-/** Compare the seal with the records. */
+/** Compare the seal with the records, or with a copy of them. */
 export async function verifyTrustStateSeal(
   storage: PluginStorage,
-  records: TrustRecordStore,
+  records: TrustStateReading,
   decryptFn: DecryptFn,
   ownPublicArmored: string,
   ownFingerprint: string,
   isKeyUnavailable: (err: unknown) => boolean = () => false,
 ): Promise<TrustStateVerdict> {
-  const empty = !records.hasDecisions()
+  const empty = Object.keys(records.decisions()).length === 0
   const sealArmored = decodeText(await storage.get(TRUST_SEAL_STORAGE_KEY))
 
   if (!sealArmored) {

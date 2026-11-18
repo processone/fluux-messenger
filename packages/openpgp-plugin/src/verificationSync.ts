@@ -38,7 +38,8 @@
  * older client, which may keep writing the older node, can never roll back or
  * shrink the sets. A device that has read or written the new node records
  * that in its sealed trust records and never reads the older one again, even
- * if the new node later goes missing. Until then, when the new node is absent,
+ * if the new node later goes missing: it publishes its own sets there again,
+ * an empty list included. Until then, when the new node is absent,
  * the device reads the older node (a payload without a version decodes to
  * version `0`), applies it under the same version rule, and publishes the
  * winner to the new node.

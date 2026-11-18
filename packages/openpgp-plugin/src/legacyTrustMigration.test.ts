@@ -87,6 +87,34 @@ describe('readLegacyTrustState', () => {
     expect(localStorage.getItem('fluux-e2ee-verified-peers')).toBe(JSON.stringify({ [BOB]: BOB_FP }))
   })
 
+  // The claim stands only once it is saved for this account: a failed save,
+  // or another account claiming them in another window since they were read,
+  // leaves them to the account that holds the claim.
+  it.each([
+    ['cannot be saved', (_key: string, _value: string, _save: (k: string, v: string) => void) => { throw new Error('quota exceeded') }],
+    ['is taken by another account since they were read', (key: string, _value: string, save: (k: string, v: string) => void) => save(key, 'other@example.com')],
+  ])('confirms no claim that %s, and then reads only the account\'s own values', (_case, ownerWrite) => {
+    saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP }, 'fluux-e2ee-verifications-version': '2' }, null)
+    expect(readLegacyTrustState(ME).usesUnscoped).toBe(true)
+    const setItem = localStorage.setItem
+    const save = (key: string, value: string) => setItem.call(localStorage, key, value)
+    localStorage.setItem = (key: string, value: string) =>
+      key === 'fluux-e2ee-legacy-unscoped-owner' ? ownerWrite(key, value, save) : save(key, value)
+    try {
+      expect(claimUnscopedLegacyTrust(ME)).toBe(false)
+    } finally {
+      localStorage.setItem = setItem
+    }
+    expect(readLegacyTrustState(ME, false)).toMatchObject({ verified: {}, syncVersion: -1, usesUnscoped: false })
+  })
+
+  it('confirms the claim of the first account', () => {
+    saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP } }, null)
+    expect(claimUnscopedLegacyTrust(ME)).toBe(true)
+    expect(claimUnscopedLegacyTrust(ME)).toBe(true)
+    expect(claimUnscopedLegacyTrust('other@example.com')).toBe(false)
+  })
+
   it('does not read another account\'s values', () => {
     saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP } }, 'other@example.com')
     expect(readLegacyTrustState(ME)).toMatchObject({ verified: {}, syncVersion: -1, seal: null, sealInitialized: false })
@@ -197,6 +225,12 @@ describe('the earlier seal check', () => {
   it('compares key-change alerts by contact only, as earlier versions did', async () => {
     saveState(legacySeal(state), { ...state, alerts: { [CAROL]: { ...ALERT, observedAt: '2026-10-02T08:00:00.000Z' } } })
     expect(await verdictFor()).toEqual({ status: 'sealed' })
+  })
+
+  it('is compromised when a key-change alert names another replaced key than the sealed one', async () => {
+    const changed = { [CAROL]: { ...ALERT, previousFingerprint: 'BAD0000000000000000000000000000000000041' } }
+    saveState(legacySeal(state), { ...state, alerts: changed })
+    expect(await verdictFor()).toEqual({ status: 'compromised', details: ['key-change alerts differ'] })
   })
 
   it('is compromised when the seal was removed after one was written', async () => {

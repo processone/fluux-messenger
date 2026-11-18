@@ -18,19 +18,21 @@
  * - certificate rejections and the sync version are carried over.
  *
  * Values the oldest versions stored before scoping them per account go to the
- * first account that migrates them, as those versions' loaders moved them
- * ({@link claimUnscopedLegacyTrust}).
+ * first account that migrates them, as those versions' loaders moved them,
+ * once its claim on them is saved ({@link claimUnscopedLegacyTrust}).
  *
- * The old seal is checked against the old data exactly as earlier versions
- * checked it, once the account's key is usable (it may still be locked during
- * the migration), and the records against what the migration made of that
- * data ({@link legacyRecordsMismatch}). Until then the check waits in plugin
+ * The old seal is checked against the old data as earlier versions checked
+ * it, once the account's key is usable (it may still be locked during the
+ * migration), plus one check earlier versions did not need: the keys the
+ * migration marks verified must be the sealed ones, alerts included. The
+ * records are then checked against what the migration made of that data
+ * ({@link legacyRecordsMismatch}). Until then the check waits in plugin
  * storage ({@link PendingLegacySealCheck}).
  */
 
 import { buildScopedStorageKey } from '@fluux/sdk'
-import { canonicalFingerprint, emptyTrustRecords, type TrustRecordStore, type TrustRecordsData } from './trustRecords'
-import { canonicalJson } from './trustStateIntegrity'
+import { canonicalFingerprint, emptyTrustRecords, type TrustRecordsData } from './trustRecords'
+import { canonicalJson, type TrustStateReading } from './trustStateIntegrity'
 import type { CertRejection, KeyDecision, TrustStateVerdict } from './trustTypes'
 import { fingerprintsEqual } from './fingerprintCompare'
 import type { DecryptFn } from './verificationSync'
@@ -96,8 +98,9 @@ export interface PendingLegacySealCheck {
 // Reading the old stores (read only)
 // ---------------------------------------------------------------------------
 
-/** Notes whether a read fell back to an unscoped value. */
+/** Whether a read may fall back to an unscoped value, and whether one did. */
 interface UnscopedUse {
+  allowed: boolean
   used: boolean
 }
 
@@ -105,7 +108,8 @@ interface UnscopedUse {
  * Whether `accountJid` may read the unscoped values: no account claimed them
  * yet, or this one did.
  */
-function mayReadUnscoped(accountJid: string): boolean {
+function mayReadUnscoped(accountJid: string, unscoped: UnscopedUse): boolean {
+  if (!unscoped.allowed) return false
   const owner = localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY)
   return owner === null || owner === accountJid
 }
@@ -120,7 +124,7 @@ function readScopedOrUnscoped(base: string, accountJid: string, unscoped: Unscop
   const scoped = buildScopedStorageKey(base, accountJid)
   const raw = localStorage.getItem(scoped)
   if (raw) return raw
-  if (scoped !== base && mayReadUnscoped(accountJid)) {
+  if (scoped !== base && mayReadUnscoped(accountJid, unscoped)) {
     const value = localStorage.getItem(base)
     if (value) {
       unscoped.used = true
@@ -189,7 +193,7 @@ function readRejections(accountJid: string, unscoped: UnscopedUse): Record<strin
 function readSyncVersion(accountJid: string, unscoped: UnscopedUse): number {
   const scoped = buildScopedStorageKey(LEGACY_KEYS.syncVersion, accountJid)
   let raw = localStorage.getItem(scoped)
-  if (raw === null && scoped !== LEGACY_KEYS.syncVersion && mayReadUnscoped(accountJid)) {
+  if (raw === null && scoped !== LEGACY_KEYS.syncVersion && mayReadUnscoped(accountJid, unscoped)) {
     raw = localStorage.getItem(LEGACY_KEYS.syncVersion)
     if (raw !== null) unscoped.used = true
   }
@@ -200,11 +204,12 @@ function readSyncVersion(accountJid: string, unscoped: UnscopedUse): number {
 
 /**
  * Read every piece of trust state earlier versions kept for `accountJid`.
- * They scoped each value by the signed-in account's bare JID.
+ * They scoped each value by the signed-in account's bare JID. With
+ * `includeUnscoped` false, the values they kept before that are left out.
  */
-export function readLegacyTrustState(accountJid: string): LegacyTrustState {
+export function readLegacyTrustState(accountJid: string, includeUnscoped = true): LegacyTrustState {
   try {
-    const unscoped: UnscopedUse = { used: false }
+    const unscoped: UnscopedUse = { allowed: includeUnscoped, used: false }
     return {
       verified: readFingerprintMap(LEGACY_KEYS.verified, accountJid, unscoped),
       pins: readFingerprintMap(LEGACY_KEYS.pins, accountJid, unscoped),
@@ -225,15 +230,18 @@ export function readLegacyTrustState(accountJid: string): LegacyTrustState {
  * Claim the unscoped values for `accountJid`, the first account whose
  * migration read them; no other account reads them after that. Run before
  * the migration writes anything, so a migration that stops half way still
- * finds them on its next run.
+ * finds them on its next run. True only when the claim is saved for this
+ * account: false when it could not be saved, or another account, perhaps in
+ * another window, claimed them since they were read.
  */
-export function claimUnscopedLegacyTrust(accountJid: string): void {
+export function claimUnscopedLegacyTrust(accountJid: string): boolean {
   try {
     if (localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY) === null) {
       localStorage.setItem(LEGACY_UNSCOPED_OWNER_KEY, accountJid)
     }
+    return localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY) === accountJid
   } catch {
-    // No localStorage: nothing was read from it either.
+    return false
   }
 }
 
@@ -248,18 +256,24 @@ const REJECTION_CODES: ReadonlySet<string> = new Set([
   'no_encryption_subkey',
 ])
 
-/** The decisions the old verified keys and alerts map to (see the module comment). */
-function legacyDecisions(
-  legacy: Pick<LegacySealSnapshot, 'verified' | 'alerts'>,
-): Record<string, Record<string, KeyDecision>> {
+/**
+ * The decisions the old verified keys and alerts map to (see the module
+ * comment). It also reads the decrypted old seal, so it skips what is not a
+ * fingerprint.
+ */
+function legacyDecisions(legacy: { verified?: unknown; alerts?: unknown }): Record<string, Record<string, KeyDecision>> {
   const out: Record<string, Record<string, KeyDecision>> = {}
-  const verify = (peer: string, fingerprint: string) => {
-    const fp = canonicalFingerprint(fingerprint)
+  const entries = (value: unknown) =>
+    value && typeof value === 'object' && !Array.isArray(value) ? Object.entries(value as Record<string, unknown>) : []
+  const verify = (peer: string, fingerprint: unknown) => {
+    const fp = typeof fingerprint === 'string' ? canonicalFingerprint(fingerprint) : null
     if (!fp) return
     out[peer] = { ...(out[peer] ?? {}), [fp]: 'verified' }
   }
-  for (const [peer, fp] of Object.entries(legacy.verified)) verify(peer, fp)
-  for (const [peer, alert] of Object.entries(legacy.alerts)) verify(peer, alert.previousFingerprint)
+  for (const [peer, fp] of entries(legacy.verified)) verify(peer, fp)
+  for (const [peer, alert] of entries(legacy.alerts)) {
+    verify(peer, alert && typeof alert === 'object' ? (alert as { previousFingerprint?: unknown }).previousFingerprint : null)
+  }
   return out
 }
 
@@ -287,10 +301,7 @@ export function trustRecordsFromLegacy(legacy: LegacyTrustState, now: string): T
  * records are sealed anew only while nothing differs: decisions, sync
  * version, and the set node not yet adopted.
  */
-export function legacyRecordsMismatch(
-  check: PendingLegacySealCheck,
-  records: Pick<TrustRecordStore, 'decisions' | 'syncVersion' | 'setsAdopted'>,
-): string[] {
+export function legacyRecordsMismatch(check: PendingLegacySealCheck, records: TrustStateReading): string[] {
   const details: string[] = []
   if (canonicalJson(legacyDecisions(check.snapshot)) !== canonicalJson(records.decisions())) {
     details.push('trust decisions differ from the upgraded trust state')
@@ -345,14 +356,15 @@ export function parseLegacySealCheck(bytes: Uint8Array): PendingLegacySealCheck 
 }
 
 // ---------------------------------------------------------------------------
-// The old seal check, unchanged in substance
+// The old seal check
 // ---------------------------------------------------------------------------
 
 /**
  * Earlier versions compared each part with this serialization. Its replacer
  * lists the top-level keys only, and JSON.stringify applies it at every
- * depth, so a key-change alert compares by contact only. Kept as is: the
- * check must give the verdict earlier versions would have given.
+ * depth, so a key-change alert compares by contact only. Kept as is, so a
+ * change earlier versions accepted, such as an alert's time, still passes;
+ * {@link verifyLegacyTrustStateSeal} compares the alert's key on its own.
  */
 function legacySortedStringify(obj: unknown): string {
   return JSON.stringify(obj, Object.keys(obj as Record<string, unknown>).sort())
@@ -369,9 +381,10 @@ function legacyPayloadsMatch(sealed: LegacySealSnapshot, current: LegacySealSnap
 
 /**
  * The verdict earlier versions would have given the old seal over the old
- * data: `sealed`, `uninitialized` or `pending-seal` let the migrated records
- * be sealed anew; `compromised` stands until the user reseals; `awaiting-key`
- * leaves the check for later.
+ * data, also requiring the keys the migration marks verified to be the
+ * sealed ones: `sealed`, `uninitialized` or `pending-seal` let the migrated
+ * records be sealed anew; `compromised` stands until the user reseals;
+ * `awaiting-key` leaves the check for later.
  */
 export async function verifyLegacyTrustStateSeal(
   check: PendingLegacySealCheck,
@@ -415,5 +428,10 @@ export async function verifyLegacyTrustStateSeal(
   }
 
   const details = legacyPayloadsMatch(sealed, check.snapshot)
+  // The comparison above reads an alert by contact only, but the migration
+  // keeps the key an alert replaced verified: that key must be the sealed one.
+  if (details.length === 0 && canonicalJson(legacyDecisions(sealed)) !== canonicalJson(legacyDecisions(check.snapshot))) {
+    details.push('key-change alerts differ')
+  }
   return details.length > 0 ? { status: 'compromised', details } : { status: 'sealed' }
 }

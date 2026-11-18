@@ -165,8 +165,11 @@ import {
 } from './legacyTrustMigration'
 import {
   TRUST_SEAL_WRITTEN_STORAGE_KEY,
+  copyTrustState,
+  sameTrustState,
   sealTrustState,
   verifyTrustStateSeal,
+  type TrustStateReading,
 } from './trustStateIntegrity'
 
 // ---------------------------------------------------------------------------
@@ -327,6 +330,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private _trustCheckDone = false
   /** Verified keys changed before the trust state was accepted: publish them once it is. */
   private _verifiedChangedBeforeAccepted = false
+  /**
+   * The stored trust state the trust-state check compares with the seal: a
+   * copy of the records as read at start, then as last sealed. Decisions made
+   * since, even while the check waits for the key, are not part of it: they
+   * are sealed once the check accepts the stored state.
+   */
+  private _trustStateUnderCheck: TrustStateReading | null = null
   private _ownKeyConflict: OwnKeyConflict | null = null
   private readonly trustViewListeners = new Set<(peers: readonly string[] | null) => void>()
 
@@ -720,12 +730,21 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const { found, readable } = await this.trustRecords.attach(ctx.storage)
     if (this.ctx !== ctx) return
     if (!readable) ctx.logger.warn(`${this.pluginName()}: saved trust records are unreadable; starting empty`)
-    if (found) return
-    const legacy = readLegacyTrustState(ctx.account.jid)
-    const check = legacySealCheckFor(legacy)
+    if (found) {
+      this._trustStateUnderCheck = copyTrustState(this.trustRecords)
+      return
+    }
+    let legacy = readLegacyTrustState(ctx.account.jid)
     // Values earlier versions stored before scoping them per account belong
     // to the first account that migrates them, as earlier loaders moved them.
-    if (legacy.usesUnscoped) claimUnscopedLegacyTrust(ctx.account.jid)
+    // Without a saved claim they stay for the account that has one.
+    if (legacy.usesUnscoped && !claimUnscopedLegacyTrust(ctx.account.jid)) {
+      ctx.logger.warn(
+        `${this.pluginName()}: could not claim the trust state saved before accounts were kept apart; moving this account's own only`,
+      )
+      legacy = readLegacyTrustState(ctx.account.jid, false)
+    }
+    const check = legacySealCheckFor(legacy)
     // The seal check is saved before the records: if the migration stops in
     // between, it runs again from the start next time. It stands for the
     // earlier seal, so the flag saying a seal was written goes with it:
@@ -738,6 +757,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (this.ctx !== ctx) return
     const records = trustRecordsFromLegacy(legacy, new Date(this.now()).toISOString())
     this.trustRecords.replace(records)
+    this._trustStateUnderCheck = copyTrustState(this.trustRecords)
     await this.trustRecords.flush()
     ctx.logger.info(
       `${this.pluginName()}: moved the trust decisions of ${Object.keys(records.peers).length} contact(s) into plugin storage`,
@@ -812,14 +832,18 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (!ownPublicArmored || !ctx) return false
     try {
       const jid = ctx.account.jid
+      const state = copyTrustState(this.trustRecords)
       await sealTrustState(
         ctx.storage,
-        this.trustRecords,
+        state,
         (plaintext, recipientKey) => this.encryptToRecipients(jid, [recipientKey], plaintext),
         ownPublicArmored,
       )
       await ctx.storage.delete(LEGACY_SEAL_CHECK_STORAGE_KEY)
-      if (this.ctx === ctx) this.setTrustState({ status: 'sealed' })
+      if (this.ctx === ctx) {
+        this._trustStateUnderCheck = state
+        this.setTrustState({ status: 'sealed' })
+      }
       return true
     } catch {
       // Best-effort — key may be locked between scheduling and execution
@@ -842,7 +866,18 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       return
     }
     this._trustCheckDone = true
+    await this.sealDecisionsMadeDuringCheck()
     this.syncOnceTrustAccepted()
+  }
+
+  /**
+   * The stored trust state was just accepted: seal the decisions the user
+   * made while the check ran, or waited for the key.
+   */
+  private async sealDecisionsMadeDuringCheck(): Promise<void> {
+    const underCheck = this._trustStateUnderCheck
+    if (!this.trustStateAccepted() || !underCheck || sameTrustState(underCheck, this.trustRecords)) return
+    await this.sealTrustStateNow()
   }
 
   /**
@@ -872,6 +907,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const decrypt = (ciphertext: string, senderPub: string) =>
       this.decryptWithOwnKey(jid, ciphertext, senderPub ? [senderPub] : [])
 
+    // The stored state is checked as it was read, or last sealed: decisions
+    // made since are the user's, sealed once the stored state is accepted.
+    const underCheck = this._trustStateUnderCheck ?? this.trustRecords
+
     // The seal earlier versions wrote is checked first, against the data it
     // covered, as they checked it, and the records against what the migration
     // made of that data. Only an intact earlier state is sealed anew.
@@ -884,7 +923,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         : { status: 'compromised', details: ['Saved check of the earlier trust state is unreadable'] }
       if (stale()) return false
       if (check && legacyVerdict.status !== 'awaiting-key' && legacyVerdict.status !== 'compromised') {
-        const details = legacyRecordsMismatch(check, this.trustRecords)
+        const details = legacyRecordsMismatch(check, underCheck)
         if (details.length > 0) legacyVerdict = { status: 'compromised', details }
       }
       const reason = legacyVerdict.details?.length ? ` (${legacyVerdict.details.join('; ')})` : ''
@@ -899,7 +938,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
     const verdict = await verifyTrustStateSeal(
       ctx.storage,
-      this.trustRecords,
+      underCheck,
       decrypt,
       ownPublicArmored,
       ownFingerprint,
@@ -936,15 +975,18 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (!ownPublicArmored || !ctx) return
     const jid = ctx.account.jid
     await ctx.storage.delete(LEGACY_SEAL_CHECK_STORAGE_KEY)
+    const state = copyTrustState(this.trustRecords)
     await sealTrustState(
       ctx.storage,
-      this.trustRecords,
+      state,
       (plaintext, recipientKey) => this.encryptToRecipients(jid, [recipientKey], plaintext),
       ownPublicArmored,
     )
     if (this.ctx !== ctx) return
+    this._trustStateUnderCheck = state
     this.setTrustState({ status: 'sealed' })
     this._trustCheckDone = true
+    await this.sealDecisionsMadeDuringCheck()
     this.syncOnceTrustAccepted()
   }
 
@@ -1008,6 +1050,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   async shutdown(): Promise<void> {
+    // First stop what changes the records: a publish or a sync that changed
+    // the sync version while the last seal is written would leave the seal
+    // behind the records, and the next start would report that change as
+    // made behind the plugin's back. Work in flight sees itself outdated.
+    this.ownKeyOperations++
+    if (this._publishVerificationTimeout !== null) {
+      clearTimeout(this._publishVerificationTimeout)
+      this._publishVerificationTimeout = null
+    }
+    this._trustRecordsSyncUnsub?.()
+    this._trustRecordsSyncUnsub = null
     if (this._trustStateSealTimeout !== null) {
       clearTimeout(this._trustStateSealTimeout)
       this._trustStateSealTimeout = null
@@ -1016,13 +1069,6 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // plugin's back.
       if (this.trustStateAccepted()) await this.sealTrustStateNow()
     }
-    this.ownKeyOperations++
-    if (this._publishVerificationTimeout !== null) {
-      clearTimeout(this._publishVerificationTimeout)
-      this._publishVerificationTimeout = null
-    }
-    this._trustRecordsSyncUnsub?.()
-    this._trustRecordsSyncUnsub = null
     // Forget this account's trust view; the report listener still tells the
     // manager and the app which contacts changed, then goes.
     this.trustRecords.detach()
@@ -1033,6 +1079,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this._trustState = { status: 'uninitialized' }
     this._trustCheckDone = false
     this._verifiedChangedBeforeAccepted = false
+    this._trustStateUnderCheck = null
     this.emitTrustView(null)
     this.ownBundle = null
     if (this.ctx) this.notifyKeysetChanged(this.ctx.account.jid)
@@ -1880,7 +1927,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * time, and its winner applied.
    */
   private async syncVerificationsFromServer(): Promise<void> {
-    if (!this.ownBundle || !this.ctx || !this.trustStateAccepted()) return
+    // Runs only while the subscriptions are active: not once shutdown began.
+    if (!this._trustRecordsSyncUnsub || !this.ownBundle || !this.ctx || !this.trustStateAccepted()) return
     const ctx = this.ctx
     const ownPublicArmored = this.ownBundle.publicArmored
     const ownFingerprint = this.ownBundle.fingerprint
@@ -1906,9 +1954,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         : await fetchLegacyVerifications(ctx, decrypt, ctx.account.jid, ownPublicArmored, ownFingerprint)
       if (!current()) return
       if (legacy) this.applyVerificationSnapshot(legacy)
-      // Nothing verified anywhere: nothing to migrate. The first verification
-      // publishes the set node.
-      if (!legacy && Object.keys(this.trustRecords.verifiedSets()).length === 0) return
+      // Nothing verified anywhere, and the set node never used: nothing to
+      // migrate, and the first verification publishes it. A set node used
+      // before and now missing is published again, even empty, so the older
+      // node never becomes the list other devices start from.
+      if (!legacy && !this.trustRecords.setsAdopted() && Object.keys(this.trustRecords.verifiedSets()).length === 0) return
       await this.publishVerificationSetsNow(ctx, current)
       const again = await fetchVerificationSets(ctx, decrypt, ctx.account.jid, ownPublicArmored, ownFingerprint)
       if (!current()) return
@@ -1943,10 +1993,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (this._publishVerificationTimeout !== null) {
       clearTimeout(this._publishVerificationTimeout)
     }
+    // Not once shutdown began, as for the sync above.
+    if (!this._trustRecordsSyncUnsub) return
     this._publishVerificationTimeout = setTimeout(() => {
       this._publishVerificationTimeout = null
       const ctx = this.ctx
-      if (!this.ownBundle || !ctx) return
+      if (!this.ownBundle || !ctx || !this._trustRecordsSyncUnsub) return
       void this.publishVerificationSetsNow(ctx, this.ownKeyFreshness(this.ownBundle)).catch(() => {})
     }, 500)
   }
@@ -2723,10 +2775,14 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * contacts).
    */
   private activeKeyStandings(peer: BareJID): Array<{ cert: CachedPeerCert; standing: KeyStanding }> {
+    return this.keyStandings(peer).filter((k) => k.cert.active)
+  }
+
+  /** How each key of `peer` we know stands, including keys it no longer announces. */
+  private keyStandings(peer: BareJID): Array<{ cert: CachedPeerCert; standing: KeyStanding }> {
     const ownJid = this.ctx ? getBareJid(this.ctx.account.jid) : null
     const holdsNewKeys = peer !== ownJid && this.trustRecords.hasVerified(peer)
     return (this.peerKeys.get(peer) ?? [])
-      .filter((c) => c.active)
       .map((cert) => ({ cert, standing: keyStanding(this.trustRecords.decisionOf(peer, cert.fingerprint), holdsNewKeys) }))
   }
 
@@ -2755,7 +2811,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * Record decisions about contacts' keys. A key waiting for a decision keeps
    * waiting when they leave its contact with no verified key: it is recorded
    * as `held`, so only the user's own decision about it lets it receive
-   * messages.
+   * messages. That covers a key the contact no longer announces too, so it
+   * stays held if the contact announces it again.
    */
   private recordDecisions(changes: readonly KeyDecisionChange[]): void {
     const held: KeyDecisionChange[] = []
@@ -2768,7 +2825,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         else after[fp] = change.decision
       }
       if (Object.values(after).includes('verified')) continue
-      for (const { cert, standing } of this.activeKeyStandings(peer)) {
+      for (const { cert, standing } of this.keyStandings(peer)) {
         const fp = canonicalFingerprint(cert.fingerprint)
         if (fp && standing.notUsedReason === 'awaiting-decision' && !(fp in after)) {
           held.push({ peer, fingerprint: fp, decision: 'held' })

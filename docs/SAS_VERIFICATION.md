@@ -97,8 +97,9 @@ How a key with no decision stands depends on the contact (`keyStanding`):
 
 A held key stays held until you decide about it. When the contact loses its
 last verified key (you refuse it, remove its verification or forget it, or
-another device removes it), each key still waiting is recorded as `held`, and a
-later verification of another key does not approve it.
+another device removes it), each key still waiting is recorded as `held`,
+including a key the contact withdrew but may announce again, and a later
+verification of another key does not approve it.
 
 While some keys are held, messages go to the keys that are used. When no key of
 the contact can be used, because every key is held or refused, nothing is sent:
@@ -122,13 +123,21 @@ decisions to plugin storage:
 The earlier records are read without being changed, so an older version still
 finds them, and are never written again. Records the oldest versions kept before
 scoping them per account go to the first account that reads them, as those
-versions moved them.
+versions moved them, once that account's claim on them is saved; without a
+saved claim, the account moves only its own records.
 
 Earlier versions sealed their records too. That seal is checked against the
-earlier records as those versions checked it, once the account's key is usable,
-and the new records are checked against what the upgrade made of the earlier
-ones. Until both checks pass, nothing is sealed, published or applied from the
-server; a failed check is reported for you to review and reseal.
+earlier records as those versions checked it, once the account's key is usable.
+Those versions compared a key-change alert by contact only; the upgrade also
+requires the previous key of each alert, which it keeps verified, to be the
+sealed one. The new records are then checked against what the upgrade made of
+the earlier ones. Until both checks pass, nothing is sealed, published or
+applied from the server; a failed check is reported for you to review and
+reseal.
+
+Each check compares the records as they were stored when the app started. A
+decision you make while a check runs, or waits for your key, is not part of what
+it checks: it is sealed once the check passes.
 
 ## Cross-device sync (optional)
 
@@ -156,7 +165,7 @@ Earlier versions published one fingerprint per contact to
 node does not exist yet, and never writes it. Once the device has read or
 written the `:1` node, it records that in its sealed trust records and never
 reads `:0` again, even when `:1` later goes missing: it publishes its own
-verified keys to `:1` instead. A third-party client can verify locally without
+verified keys to `:1` instead, as an empty list when it has none. A third-party client can verify locally without
 either node.
 
 ## Implementing in another client
