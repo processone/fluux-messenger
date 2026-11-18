@@ -17,7 +17,7 @@ import {
 } from '@/stores/verifiedPeerKeysStore'
 import { clearKeyChangeAlert, getKeyChangeAlert, useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { clearOwnKeyConflict, getOwnKeyConflict, recordOwnKeyConflict } from '@/stores/ownKeyConflictStore'
-import { setPinnedPrimaryFp, usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
+import { isTofuNew, setPinnedPrimaryFp, usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { clearCertRejections, getCertRejections, recordCertRejections } from '@/stores/certRejectionStore'
 import { notifyPeerKeysetChanged } from '@/stores/peerKeysetRevisionStore'
 import { getTrustStateStatus, setTrustStateStatus } from '@/stores/trustStateStatusStore'
@@ -69,6 +69,7 @@ export function createAppHostStores(): OpenPGPHostStores {
       subscribe: (listener) => subscribeToMap(
         usePinnedPrimaryFingerprintsStore.subscribe, (s) => s.pinnedFingerprintByJid, listener,
       ),
+      isNew: isTofuNew,
     },
     trustStateStatus: {
       set: setTrustStateStatus,

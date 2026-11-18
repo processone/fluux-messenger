@@ -420,6 +420,10 @@ export type ConversationSecurity =
       used: number
       verified: number
       waiting: number
+      /** Set when a verified key exists for this contact yet at least one key that receives messages is not verified. */
+      partlyVerified?: true
+      /** Set when the contact is not verified and a used key appeared recently without the user having seen it. */
+      isNew?: true
     }
 
 /** A verification flow a plugin supports. */

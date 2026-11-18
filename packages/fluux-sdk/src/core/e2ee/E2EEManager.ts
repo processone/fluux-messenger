@@ -869,6 +869,8 @@ export class E2EEManager {
       used: used.length,
       verified,
       waiting,
+      ...(verified < used.length && identities.some((i) => i.trust === 'verified') ? { partlyVerified: true as const } : {}),
+      ...(verified === 0 && used.some((i) => i.isNew) ? { isNew: true as const } : {}),
     }
   }
 

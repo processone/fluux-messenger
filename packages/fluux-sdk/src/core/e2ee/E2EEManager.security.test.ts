@@ -98,8 +98,26 @@ describe('E2EEManager.getConversationSecurity', () => {
     const sec = await manager.getConversationSecurity(target)
     expect(sec).toEqual({
       kind: 'encrypted', protocolId: 'listing', displayName: 'Listing', trust: 'tofu',
-      used: 2, verified: 1, waiting: 1,
+      used: 2, verified: 1, waiting: 1, partlyVerified: true,
     })
+  })
+
+  it('a replaced verified key (listed unused) makes the new key read partly verified', async () => {
+    const { manager, plugin } = await setup()
+    plugin.identities = [
+      identity('2'),
+      identity('1', { trust: 'verified', usedForEncryption: false, notUsedReason: 'no-key' }),
+    ]
+    expect(await manager.getConversationSecurity(target)).toMatchObject({ trust: 'tofu', used: 1, verified: 0, partlyVerified: true })
+  })
+
+  it('flags a recent unverified key as new, and never a verified contact', async () => {
+    const { manager, plugin } = await setup()
+    plugin.identities = [identity('1', { isNew: true })]
+    expect(await manager.getConversationSecurity(target)).toMatchObject({ trust: 'tofu', isNew: true })
+    expect(await manager.getConversationSecurity(target)).not.toHaveProperty('partlyVerified')
+    plugin.identities = [identity('1', { trust: 'verified', isNew: true })]
+    expect(await manager.getConversationSecurity(target)).not.toHaveProperty('isNew')
   })
 
   it('a verified contact whose keys all wait needs a decision, not encryption', async () => {
