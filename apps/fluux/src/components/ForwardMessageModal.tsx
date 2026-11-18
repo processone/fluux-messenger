@@ -2,6 +2,7 @@ import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useChatActions, useRoomActions, useRoster, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
+import { encryptionSendErrorKey } from '@/e2ee/encryptionSendError'
 import { trackSend } from '@/utils/pendingSends'
 import { composeForward, composeForwardWithCopy, type ForwardQuote } from '@/utils/forwardMessage'
 import { ContactSelector } from './ContactSelector'
@@ -9,13 +10,14 @@ import { ModalShell } from './ModalShell'
 import { TextArea } from './ui/TextInput'
 
 interface ForwardMessageModalProps {
-  link: string
+  /** The room message link; left out for a one-to-one message, which has none. */
+  link?: string
   /** The readable source text; left out when the source cannot be read. */
   quote?: ForwardQuote
   onClose: () => void
 }
 
-/** Forward a room message as a comment, an attributed quote and the room link. */
+/** Forward a message as a comment, an attributed quote and, for a room message, its link. */
 export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModalProps) {
   const { t } = useTranslation()
   const { contacts } = useRoster()
@@ -26,7 +28,7 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
   const [destination, setDestination] = useState('')
   const [comment, setComment] = useState('')
   const [sending, setSending] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
   const inFlight = useRef(false)
   const commentRef = useRef<HTMLTextAreaElement>(null)
   const pickerId = useId()
@@ -37,7 +39,9 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
       chats.set(conversation.id, conversation.name || conversation.id)
     }
   }
-  const joinedRooms = Array.from(rooms.values()).filter(item => item.joined && item.selfOccupant?.role !== 'visitor')
+  // A message read from an encrypted chat never goes to a room: rooms have no encryption.
+  const encryptedSource = !!quote?.fromEncrypted
+  const joinedRooms = encryptedSource ? [] : Array.from(rooms.values()).filter(item => item.joined && item.selfOccupant?.role !== 'visitor')
   const validDestination = destination.startsWith('room:')
     ? joinedRooms.some(item => item.jid === destination.slice(5))
     : destination.startsWith('chat:') && chats.has(destination.slice(5))
@@ -62,11 +66,12 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
     if (inFlight.current || !validDestination) return
     inFlight.current = true
     setSending(true)
-    setFailed(false)
+    setFailed(null)
     try {
       // The quote and link are marked as fallback: Fluux hides them when it can show the source.
       const jid = destination.slice(5)
       if (destination.startsWith('room:')) {
+        if (encryptedSource) throw new Error('Encrypted source cannot go to a room')
         const liveRoom = roomStore.getState().rooms.get(jid)
         if (!liveRoom?.joined || liveRoom.selfOccupant?.role === 'visitor') throw new Error('Room unavailable')
         const { body, references } = composeForward(comment, link, quote)
@@ -86,8 +91,9 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
         }
       }
       onClose()
-    } catch {
-      setFailed(true)
+    } catch (err) {
+      // Encryption refusals say why: the message stays unsent rather than going out as plaintext.
+      setFailed(encryptionSendErrorKey(err) ?? 'chat.forwardFailed')
     } finally {
       inFlight.current = false
       setSending(false)
@@ -98,7 +104,8 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
     <ModalShell title={t('chat.forwardMessageLink')} dialogLabel={t('chat.forwardMessageLink')}
       dismissable={!sending} onClose={onClose} width="max-w-md" panelClassName="max-h-[90vh] flex flex-col">
       <div className="p-4 space-y-4 overflow-y-auto">
-        <p className="text-sm text-fluux-muted">{t('chat.forwardLinkOnly')}</p>
+        <p className="text-sm text-fluux-muted">{t(link ? 'chat.forwardLinkOnly' : 'chat.forwardQuoteOnly')}</p>
+        {encryptedSource && <p className="text-sm text-fluux-muted">{t('chat.forwardEncryptedOnly')}</p>}
         <div className="text-sm text-fluux-text">
           <label htmlFor={pickerId} className="block mb-1">{t('chat.forwardDestination')}</label>
           <ContactSelector inputId={pickerId} selectedContacts={destination ? [destination.slice(5)] : []}
@@ -112,8 +119,8 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
           <TextArea ref={commentRef} value={comment} onChange={event => setComment(event.target.value)} disabled={sending} rows={3}
             className="mt-1 w-full p-2 rounded bg-fluux-bg text-fluux-text border border-fluux-hover resize-none" />
         </label>
-        <p className="text-xs text-fluux-muted break-all">{link}</p>
-        {failed && <p role="alert" className="text-sm text-fluux-error">{t('chat.forwardFailed')}</p>}
+        {link && <p className="text-xs text-fluux-muted break-all">{link}</p>}
+        {failed && <p role="alert" className="text-sm text-fluux-error">{t(failed)}</p>}
       </div>
       <div className="flex justify-end gap-2 px-4 py-3 border-t border-fluux-hover">
         <button type="button" onClick={onClose} disabled={sending}

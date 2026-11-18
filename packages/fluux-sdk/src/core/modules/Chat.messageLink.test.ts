@@ -3,7 +3,7 @@ import { xml, type Element } from '@xmpp/client'
 import { Chat } from './Chat'
 import { NS_MENTION_ALL } from '../namespaces'
 import { MAM } from './MAM'
-import { E2EEManager, InMemoryStorageBackend, parsePayloadEnvelope } from '../e2ee'
+import { E2EEManager, E2EEEncryptionRequiredError, InMemoryStorageBackend, parsePayloadEnvelope } from '../e2ee'
 import { decryptStanzaInPlace } from '../e2ee/stanzaDecrypt'
 import { DummyPlaintextPlugin } from '../e2ee/DummyPlaintextPlugin'
 import type { ModuleDependencies } from './BaseModule'
@@ -300,6 +300,24 @@ describe('shared room message references', () => {
         vi.mocked(h.deps.sendStanza).mockClear()
         await expect(h.chat.sendMessage('bob@example.org', body, { references: refs, forwarded: copy })).rejects.toThrow('key locked')
         expect(h.deps.sendStanza).not.toHaveBeenCalled()
+      } finally { await m.shutdown() }
+    })
+
+    // FLM-153 piece 3: plaintext read from an encrypted chat never leaves unencrypted.
+    it('refuses a copy from an encrypted source when the send would go out unencrypted, and sends it protected otherwise', async () => {
+      const quote = '> Bob wrote:\n> secret'
+      const direct = { from: 'bob@example.org', text: 'secret', fromEncrypted: true, fallback: { begin: 0, end: quote.length } }
+      const h = harness()
+      await expect(h.chat.sendMessage('carol@example.org', quote, { forwarded: direct })).rejects.toThrow(E2EEEncryptionRequiredError)
+      expect(h.deps.sendStanza).not.toHaveBeenCalled()
+      const m = manager()
+      await m.register(new DummyPlaintextPlugin())
+      h.deps.getE2EEManager = () => m
+      try {
+        await h.chat.sendMessage('carol@example.org', quote, { forwarded: direct })
+        const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+        expect(stanza.toString()).not.toContain('secret')
+        expect(stanza.getChild('forwarded', NSF)).toBeUndefined()
       } finally { await m.shutdown() }
     })
 

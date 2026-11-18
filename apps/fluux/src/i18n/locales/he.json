@@ -521,6 +521,8 @@
         "forwardQuotedCopy": "Quoted copy from a forwarded message",
         "forwardedCopyLabel": "Forwarded message from {{author}}",
         "forwardedCopyUnknownAuthor": "an unknown sender",
+        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
+        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
         "forwardDestination": "Chat or room",
         "forwardChoose": "Choose a chat or room",
         "forwardUnavailable": "Destination unavailable",

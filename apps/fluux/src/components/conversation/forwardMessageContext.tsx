@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { ForwardMessageModal } from '../ForwardMessageModal'
 import type { ForwardQuote } from '@/utils/forwardMessage'
 
-export interface ForwardTarget { link: string; quote?: ForwardQuote }
+export interface ForwardTarget { link?: string; quote?: ForwardQuote }
 
 const ForwardMessageContext = createContext<((target: ForwardTarget) => void) | null>(null)
 
@@ -15,7 +15,7 @@ export function ForwardMessageProvider({ conversationId, children }: { conversat
     <ForwardMessageContext.Provider value={open}>
       {children}
       {target?.conversationId === conversationId && (
-        <ForwardMessageModal key={`${conversationId}:${target.link}`} link={target.link} quote={target.quote} onClose={() => setTarget(null)} />
+        <ForwardMessageModal key={`${conversationId}:${target.link ?? target.quote?.timestamp}:${target.quote?.from ?? ''}`} link={target.link} quote={target.quote} onClose={() => setTarget(null)} />
       )}
     </ForwardMessageContext.Provider>
   )

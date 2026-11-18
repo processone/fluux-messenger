@@ -128,6 +128,11 @@ export interface ForwardedCopyInput {
   /** Original timestamp (ms since epoch). */
   timestamp?: number
   /**
+   * The source was read from an end-to-end encrypted chat. Such a copy may only leave
+   * inside encrypted protection: a send that would go out unencrypted is refused.
+   */
+  fromEncrypted?: boolean
+  /**
    * The quote and link in the sent body that stand for this copy (UTF-16 offsets in that body).
    * They go out as a XEP-0428 fallback for the copy, so a reader that shows the copy hides them.
    */

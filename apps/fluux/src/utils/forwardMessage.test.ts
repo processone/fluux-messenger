@@ -81,5 +81,18 @@ describe('forward composition with a copy', () => {
     expect(buildForwardedCopy(undefined)).toBeNull()
     expect(Array.from(buildForwardedCopy({ author: 'Bob', text: 'a'.repeat(5000), from: 'r@c/Bob' })!.text)).toHaveLength(4000)
   })
-})
 
+  // FLM-153 piece 3: a one-to-one source has no room link; its content is quoted and copied.
+  it('composes a one-to-one forward without a link, marking only the quote as the copy fallback', () => {
+    const direct = { author: 'Bob', text: 'Ship it', from: 'bob@example.org', timestamp: 5, fromEncrypted: true }
+    const plain = composeForward('Look', undefined, direct)
+    expect(plain).toEqual({ body: 'Look\n> Bob wrote:\n> Ship it', references: [] })
+    const { body, references, forwarded } = composeForwardWithCopy(' Look ', undefined, direct)!
+    expect(body).toBe(plain.body)
+    expect(references).toEqual([])
+    expect(forwarded).toEqual({ from: 'bob@example.org', text: 'Ship it', timestamp: 5, fromEncrypted: true,
+      fallback: { begin: 5, end: body.length } })
+    expect(composeForwardWithCopy('', undefined, { ...direct, fromEncrypted: undefined })!.forwarded)
+      .toEqual({ from: 'bob@example.org', text: 'Ship it', timestamp: 5, fallback: { begin: 0, end: '> Bob wrote:\n> Ship it'.length } })
+  })
+})

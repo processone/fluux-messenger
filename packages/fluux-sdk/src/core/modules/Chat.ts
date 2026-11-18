@@ -1089,6 +1089,12 @@ export class Chat extends BaseModule {
       })
     }
 
+    // Guard: a forward whose source came from an encrypted chat carries that plaintext in its
+    // body and copy; it never leaves unencrypted, whatever made the encryption step skip.
+    if (options?.forwarded?.fromEncrypted && !outgoingSecurityContext) {
+      throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+    }
+
     // Guard: an encrypted attachment's aesgcm:// OOB URL carries the AES
     // key. If stanza-level E2EE didn't move that element into the payload,
     // the key reaches the server in cleartext — abort rather than leak.

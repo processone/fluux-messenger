@@ -583,13 +583,18 @@ export const MessageBubble = memo(function MessageBubble({
   const onCopyMessageLink = messageLink ? () => { void copyToClipboard(messageLink) } : undefined
   // A source that cannot be read, such as an undecryptable one, is forwarded as a link only.
   const quotable = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
-  const onForward = messageLink && forwardMessage ? () => forwardMessage({
-    link: messageLink,
+  // A room message forwards with its link; a one-to-one message has none, so it forwards its readable
+  // content. A message read from an encrypted chat is marked so it can only go into an encrypted chat.
+  const directForward = message.type === 'chat' && quotable && !message.deliveryError
+  const onForward = forwardMessage && (messageLink || directForward) ? () => forwardMessage({
+    ...(messageLink && { link: messageLink }),
     ...(quotable && { quote: {
       author: senderName,
       text: message.body,
       ...(message.type === 'groupchat' && { from: message.from }),
+      ...(directForward && { from: getBareJid(message.from) }),
       timestamp: message.timestamp.getTime(),
+      ...(directForward && message.securityContext && { fromEncrypted: true }),
     } }),
   }) : undefined
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
@@ -598,7 +603,7 @@ export const MessageBubble = memo(function MessageBubble({
   useEffect(() => {
     if (!hasViewableReactions) setReactorEmoji(null)
   }, [hasViewableReactions])
-  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody || !!saveableAttachment || hasViewableReactions || !!messageLink)
+  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody || !!saveableAttachment || hasViewableReactions || !!messageLink || !!onForward)
 
   // Long-press (touch) → open the action menu; scrolling (touchmove) or lifting
   // before the threshold cancels it. longPressFired suppresses the click that a
