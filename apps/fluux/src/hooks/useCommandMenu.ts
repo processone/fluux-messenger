@@ -22,7 +22,7 @@ export function matchCommandMenu(
   return { isActive: matches.length > 0, matches }
 }
 
-/** The menu's selection and dismissal, and the text they were made on. */
+/** The menu's selection and dismissal, and the text they belong to. */
 interface MenuChoice {
   text: string
   selectedIndex: number
@@ -35,36 +35,36 @@ export function useCommandMenu(
   kind: CommandContextKind,
   self?: CommandSelf,
 ) {
-  // Any edit resets the selection and the dismissal. The choice carries the text it
-  // was made on, so a choice made on other text reads as the reset one, with no state
-  // update. An effect that reset it set state after every keystroke at low priority;
-  // when keys arrived back to back that update never ran, so React counted each later
-  // keystroke as a nested update and threw "Maximum update depth exceeded" past 50.
+  // Every edit resets the selection and the dismissal, including an edit back to
+  // earlier text. The reset is made while rendering the edit, React's way to adjust
+  // state when a prop changes: React re-runs this component at once and schedules
+  // nothing. An effect that reset them set state after every keystroke at low
+  // priority; when keys arrived back to back that update never ran, so React counted
+  // each later keystroke as a nested update and threw "Maximum update depth exceeded"
+  // past 50.
   const [choice, setChoice] = useState<MenuChoice>({ text, selectedIndex: 0, dismissed: false })
-  const current = choice.text === text ? choice : { text, selectedIndex: 0, dismissed: false }
+  if (choice.text !== text) setChoice({ text, selectedIndex: 0, dismissed: false })
 
   const { isActive, matches } = useMemo(
     () => matchCommandMenu(text, cursor, kind, self),
     [text, cursor, kind, self],
   )
 
-  const active = isActive && !current.dismissed
+  const active = isActive && !choice.dismissed
 
   return {
     state: {
       isActive: active,
       matches,
-      selectedIndex: Math.min(current.selectedIndex, Math.max(0, matches.length - 1)),
+      selectedIndex: Math.min(choice.selectedIndex, Math.max(0, matches.length - 1)),
     },
     moveSelection: (dir: 'up' | 'down') =>
       setChoice((c) => {
-        const i = c.text === text ? c.selectedIndex : 0
         const n = matches.length
-        const next = n === 0 ? 0 : dir === 'down' ? (i + 1) % n : (i - 1 + n) % n
-        return { text, selectedIndex: next, dismissed: c.text === text && c.dismissed }
+        if (n === 0) return { ...c, selectedIndex: 0 }
+        return { ...c, selectedIndex: dir === 'down' ? (c.selectedIndex + 1) % n : (c.selectedIndex - 1 + n) % n }
       }),
-    dismiss: () =>
-      setChoice((c) => ({ text, selectedIndex: c.text === text ? c.selectedIndex : 0, dismissed: true })),
-    reset: () => setChoice({ text, selectedIndex: 0, dismissed: false }),
+    dismiss: () => setChoice((c) => ({ ...c, dismissed: true })),
+    reset: () => setChoice((c) => ({ ...c, selectedIndex: 0, dismissed: false })),
   }
 }
