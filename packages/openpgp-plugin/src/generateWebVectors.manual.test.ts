@@ -9,12 +9,12 @@
  * fixture files with fresh keys on every run. Run explicitly when you
  * need to update the vectors:
  *
- *   npx vitest run src/e2ee/generateWebVectors.manual.test.ts
+ *   cd packages/openpgp-plugin && npx vitest run src/generateWebVectors.manual.test.ts
  *
  * Then run the Rust consumer:
  *   cd apps/fluux/src-tauri && cargo test consume_web_golden_vectors -- --ignored --nocapture
  */
-import { createAppHostStores } from './appHostStores'
+import { createMockHostStores } from './testing/mockHostStores'
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -26,9 +26,11 @@ import {
   type XMPPPrimitives,
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
-import { clearSessionPassphrase, setSessionPassphrase } from '@fluux/openpgp-plugin'
+import { clearSessionPassphrase, setSessionPassphrase } from './index'
 
-const FIXTURES_DIR = resolve(__dirname, '../../../../packages/openpgp-plugin/src/fixtures')
+const hostStores = createMockHostStores()
+
+const FIXTURES_DIR = resolve(__dirname, './fixtures')
 const BACKUP_PASSPHRASE = 'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW'
 
 class TestablePlugin extends WebOpenPGPPlugin {
@@ -73,14 +75,7 @@ function makeCtx(accountJid: string) {
 
 beforeEach(async () => {
   localStorage.clear()
-  const verifiedStore = await import('@/stores/verifiedPeerKeysStore')
-  const alertsStore = await import('@/stores/keyChangeAlertsStore')
-  const pinStore = await import('@/stores/pinnedPrimaryFingerprintsStore')
-  const ownConflictStore = await import('@/stores/ownKeyConflictStore')
-  verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-  alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-  pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
-  ownConflictStore.useOwnKeyConflictStore.setState({ conflict: null })
+  hostStores.reset()
   clearSessionPassphrase()
 })
 
@@ -91,7 +86,7 @@ afterEach(() => {
 describe('generate web golden vectors for Sequoia consumption', () => {
   it('writes fixture files', async () => {
     // Alice
-    const alice = new TestablePlugin(createAppHostStores())
+    const alice = new TestablePlugin(hostStores)
     const { ctx: aliceCtx } = makeCtx('alice@example.com')
     setSessionPassphrase('alice-pp')
     await alice.init(aliceCtx)
@@ -99,7 +94,7 @@ describe('generate web golden vectors for Sequoia consumption', () => {
 
     // Bob
     clearSessionPassphrase()
-    const bob = new TestablePlugin(createAppHostStores())
+    const bob = new TestablePlugin(hostStores)
     const { ctx: bobCtx } = makeCtx('bob@example.com')
     setSessionPassphrase('bob-pp')
     await bob.init(bobCtx)

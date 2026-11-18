@@ -146,6 +146,7 @@ control, and verified state is per fingerprint.
 | Fingerprint normalisation      | `packages/openpgp-plugin/src/fingerprintCompare.ts`                  |
 | Trust lifting to `verified`    | `packages/openpgp-plugin/src/OpenPGPPluginBase.ts` (`isPeerVerified`) |
 | Cross-device sync (PEP)        | `packages/openpgp-plugin/src/verificationSync.ts`                    |
+| Web plugin (openpgp.js), loaded on demand | `packages/openpgp-plugin/src/WebOpenPGPPlugin.ts` (entry `@fluux/openpgp-plugin/web`) |
 
 ## Appendix A: planned commitment-based upgrade
 

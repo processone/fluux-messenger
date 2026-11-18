@@ -24,7 +24,7 @@
 
 import type { PrivateKey } from 'openpgp'
 import { E2EEPluginError, isE2EEPluginError } from '@fluux/sdk'
-import { OpenPGPPluginBase } from '@fluux/openpgp-plugin'
+import { OpenPGPPluginBase } from './OpenPGPPluginBase'
 import {
   accountUserId,
   keyExportFilename,
@@ -42,7 +42,7 @@ import {
   type KeyBundle,
   type OpenPGPHostStores,
   type RestoreResult,
-} from '@fluux/openpgp-plugin'
+} from './index'
 
 const PRIVATE_KEY_STORAGE_KEY = 'private-key'
 

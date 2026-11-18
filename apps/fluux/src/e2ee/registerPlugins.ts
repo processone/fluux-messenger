@@ -86,7 +86,7 @@ async function registerPluginsOnManager(
       client.setE2EEStorageBackend(backend)
       phase = 'load-web-plugin'
       progress('started')
-      const { WebOpenPGPPlugin } = await import('./WebOpenPGPPlugin')
+      const { WebOpenPGPPlugin } = await import('@fluux/openpgp-plugin/web')
       if (!isCurrent()) return
       phase = 'initialize-web'
       progress('started')

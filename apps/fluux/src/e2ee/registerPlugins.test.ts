@@ -31,12 +31,12 @@ vi.mock('./IndexedDBStorageBackend', () => ({
   }),
 }))
 import { IndexedDBStorageBackend } from './IndexedDBStorageBackend'
-vi.mock('./WebOpenPGPPlugin', () => ({
+vi.mock('@fluux/openpgp-plugin/web', () => ({
   WebOpenPGPPlugin: vi.fn(function WebOpenPGPPluginMock() {
     return { web: true }
   }),
 }))
-import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
+import { WebOpenPGPPlugin } from '@fluux/openpgp-plugin/web'
 
 type Logger = ReturnType<NonNullable<XMPPClient['e2ee']>['getDiagnosticLogger']>
 
