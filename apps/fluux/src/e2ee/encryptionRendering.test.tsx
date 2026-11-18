@@ -5,7 +5,12 @@
  * Intent (FLM-268, piece 2): the app reads trust through the SDK alone and
  * nothing visible changes. These cases were written on the version that read
  * the OpenPGP plugin and its stores directly, and pass unchanged on the version
- * that reads the SDK's identity API. They drive the hook from the same inputs
+ * that reads the SDK's identity API. The composer lock, header and glance
+ * assertions are that unchanged baseline. The Security tab's `tabText`,
+ * `tabButtons` and `fingerprints` were deliberately revised in piece 3
+ * (FLM-274), which replaces the single fingerprint with one row per key, each
+ * with its trust tag, whether it receives messages and its decisions.
+ * They drive the hook from the same inputs
  * both read: the app's OpenPGP stores and an OpenPGP plugin registered with a
  * real E2EEManager, so they hold the data side fixed and compare only what is
  * rendered.
