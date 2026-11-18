@@ -234,6 +234,30 @@ export class OmemoPlugin implements E2EEPlugin {
     return identity.notUsedReason === 'awaiting-decision' || identity.notUsedReason === 'distrusted'
   }
 
+  /**
+   * Mark a device not used when a send could not reach it, mirroring ensureSessions and
+   * authorizeSend without creating a session: an existing session must be backed by a key the
+   * send check accepts, otherwise a bundle must be fetchable and valid.
+   */
+  private async applyReachability(identity: PeerIdentity, peer: string, deviceId: number, lookup: BundleLookup): Promise<void> {
+    const acc = await this.ensureAccount()
+    const sessionKey = await acc.sessionPeerKey(peer, deviceId)
+    let key: Uint8Array | null = sessionKey
+    let reason: 'no-key' | 'invalid-key' = 'no-key'
+    if (!key) {
+      try {
+        const bundle = await lookup(deviceId)
+        if (bundle && OmemoAccount.isUsableBundle(bundle)) key = bundle.ik
+        else if (bundle) reason = 'invalid-key'
+      } catch {
+        key = null
+      }
+    }
+    if (key && (await this.trustForKey(peer, deviceId, key)) !== 'untrusted') return
+    identity.usedForEncryption = false
+    identity.notUsedReason = key ? 'invalid-key' : reason
+  }
+
   async listPeerIdentities(peer: BareJID): Promise<PeerIdentity[]> {
     const ids = await fetchDeviceList(this.ctx.xmpp, peer)
     const out: PeerIdentity[] = []
@@ -250,6 +274,8 @@ export class OmemoPlugin implements E2EEPlugin {
       if (index >= DEVICE_CAP && identity.usedForEncryption) {
         identity.usedForEncryption = false
         identity.notUsedReason = 'over-limit'
+      } else if (identity.usedForEncryption) {
+        await this.applyReachability(identity, peer, id, lookup)
       }
       out.push(identity)
     }

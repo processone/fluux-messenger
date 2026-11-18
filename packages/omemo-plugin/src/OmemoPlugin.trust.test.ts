@@ -327,16 +327,43 @@ describe('OmemoPlugin identities: first contact, reachability and decisions', ()
     expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).toBe('unknown')
   })
 
-  it('devices past the 50-device cap are listed as not used', async () => {
-    const { bob, pa, bobDeviceId } = await twoParty()
-    const { publishDeviceList: publish } = await import('./pep')
-    const ids = [bobDeviceId, ...Array.from({ length: 50 }, (_, i) => 900000 + i)]
-    await publish(bob.ctx.xmpp, ids)
+  it('devices past the 50-device cap are listed not used with the over-limit reason', async () => {
+    const { alice, bob, pa, bobDeviceId } = await twoParty()
+    const bundle = (await fetchBundle(alice.ctx.xmpp, 'bob@x', bobDeviceId))!
+    // 51 devices, every one with a usable published bundle: only the cap can exclude the last.
+    const extra = Array.from({ length: 50 }, (_, i) => 900000 + i)
+    for (const id of extra) await publishBundle(bob.ctx.xmpp, id, bundle)
+    await publishDeviceList(bob.ctx.xmpp, [bobDeviceId, ...extra])
     const list = await pa.listPeerIdentities('bob@x')
     expect(list).toHaveLength(51)
-    expect(list[0].usedForEncryption).toBe(true)
-    expect(list[50]).toMatchObject({ id: '900049', usedForEncryption: false })
-    expect(list[50].notUsedReason).toBeDefined()
+    expect(list[49]).toMatchObject({ usedForEncryption: true })
+    expect(list[50]).toMatchObject({ id: '900049', usedForEncryption: false, notUsedReason: 'over-limit' })
+  })
+
+  it('a device whose bundle has an invalid signed-prekey signature is not used', async () => {
+    const { alice, bob, pa, bobDeviceId } = await twoParty()
+    const bundle = (await fetchBundle(alice.ctx.xmpp, 'bob@x', bobDeviceId))!
+    await publishBundle(bob.ctx.xmpp, bobDeviceId, { ...bundle, spkSig: new Uint8Array(64) })
+    expect((await pa.listPeerIdentities('bob@x'))[0]).toMatchObject({
+      usedForEncryption: false,
+      notUsedReason: 'invalid-key',
+    })
+  })
+
+  it('a device with an established session is used, and not used once its record holds another key', async () => {
+    const { alice, pa, bobDeviceId } = await twoParty()
+    const { xml } = await import('@xmpp/client')
+    const { serializePayloadEnvelope } = await import('@fluux/sdk')
+    const handle = await pa.openConversation({ kind: 'direct', peer: 'bob@x' })
+    await pa.encrypt(handle, new TextEncoder().encode(serializePayloadEnvelope([xml('body', {}, 'hi')])))
+    expect((await pa.listPeerIdentities('bob@x'))[0]).toMatchObject({ usedForEncryption: true })
+
+    // The session was built with one key; the device's record now binds another.
+    const other = await OmemoAccount.create(new PluginStorageOmemoStore(memStorage()), (n) => crypto.getRandomValues(new Uint8Array(n)))
+    const otherKey = (await other.publishableBundleAsync()).ik
+    const store = new PluginStorageOmemoStore(alice.ctx.storage)
+    await store.saveTrust('bob@x', bobDeviceId, { state: 'trusted', identityKey: otherKey })
+    expect((await pa.listPeerIdentities('bob@x'))[0]).toMatchObject({ usedForEncryption: false })
   })
 
   it('a refused device can be approved again with tofu, and a waiting one refused', async () => {

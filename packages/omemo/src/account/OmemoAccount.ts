@@ -314,6 +314,26 @@ export class OmemoAccount {
     return this.serialize(() => this.decryptNow(senderJid, sid, msg, opts))
   }
 
+  /**
+   * The identity key that backs the stored session with `peer`/`rid`, or `null` when there is
+   * none. Read-only: it never creates or changes a session.
+   */
+  async sessionPeerKey(peer: string, rid: number): Promise<Uint8Array | null> {
+    const stored = await this.store.loadSession(peer, rid)
+    if (!stored) return null
+    return this.peerKeyFromAd(Uint8Array.from(unpackSession(stored).meta.ad))
+  }
+
+  /** Whether {@link processBundle} would accept this bundle: well formed, with a valid signed-prekey signature. */
+  static isUsableBundle(bundle: Bundle): boolean {
+    try {
+      assertValidBundle(bundle)
+      return xeddsaVerify(bundle.ik, bundle.spk, bundle.spkSig)
+    } catch {
+      return false
+    }
+  }
+
   /** The peer's Ed25519 identity key inside a session's `ad` (initiator || responder). */
   private peerKeyFromAd(ad: Uint8Array): Uint8Array {
     const first = ad.slice(0, 32)

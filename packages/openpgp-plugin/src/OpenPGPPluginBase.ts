@@ -2898,10 +2898,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * Only the decisions {@link listPeerIdentities} allows are applied.
    */
   async setIdentityTrust(peer: BareJID, id: string, decision: IdentityTrustDecision): Promise<void> {
-    const identity = (await this.listPeerIdentities(peer)).find((i) => normalizeFingerprint(i.id) === normalizeFingerprint(id))
+    const identities = await this.listPeerIdentities(peer)
+    const identity = identities.find((i) => normalizeFingerprint(i.id) === normalizeFingerprint(id))
     if (!identity) throw new Error(`${this.pluginName()}: unknown identity for ${peer}`)
-    // Idempotent: a decision the identity already satisfies changes nothing.
-    if ((decision === 'verified' && identity.trust === 'verified') || (decision === 'tofu' && identity.trust === 'tofu')) return
+    // Idempotent for a one-key contact: a decision the key already satisfies changes nothing.
+    // A contact with several keys allows no decision at all.
+    const oneKey = identities.filter((i) => i.usedForEncryption).length === 1
+    if (oneKey && ((decision === 'verified' && identity.trust === 'verified') || (decision === 'tofu' && identity.trust === 'tofu'))) return
     if (!identity.allowedDecisions.includes(decision)) {
       throw new Error(`${this.pluginName()}: decision ${decision} is not allowed for this identity`)
     }
