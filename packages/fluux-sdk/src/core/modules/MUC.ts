@@ -6,7 +6,7 @@ import { MUCVoice } from './MUCVoice'
 import type { RoomVoiceRequest } from '../types/events'
 import type { MAM } from './MAM'
 import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
-import { stripNickWhitespace, resolveDefaultMucNick } from '../nick'
+import { stripNickWhitespace } from '../nick'
 import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
 import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
@@ -2106,12 +2106,9 @@ export class MUC extends BaseModule {
       const items = response.getChild('pubsub', NS_PUBSUB)?.getChild('items')
       if (!items) return { roomsToAutojoin, allRoomJids }
 
-      // Fallback nick for bookmarks that carry no explicit <nick>: prefer the
-      // profile username (XEP-0172), then the bare-JID local part. Resolved once
-      // — it's the same for every bookmark in this fetch.
-      const ownNickname = this.deps.stores?.connection.getOwnNickname?.()
-      const ownJid = this.deps.stores?.connection.getJid?.()
-      const defaultNick = resolveDefaultMucNick(ownNickname, ownJid) || 'user'
+      // Fallback nick for bookmarks that carry no explicit <nick>. Resolved
+      // once — it's the same for every bookmark in this fetch.
+      const defaultNick = this.defaultMucNick()
 
       for (const item of items.getChildren('item')) {
         const parsed = parseBookmarkItem(item)
@@ -2393,9 +2390,11 @@ export class MUC extends BaseModule {
       roomJid,
       bookmark: {
         name,
-        // Joins with the caller's nickname when the bookmark stores none. The
-        // store applies it only to a room Fluux is neither in nor joining.
-        nick: nick ?? options.nick,
+        // Joins with the account's default nickname when the bookmark stores
+        // none, as a refresh or the server's notification of this publish
+        // would. The store applies it only to a room Fluux is neither in nor
+        // joining.
+        nick: nick ?? this.defaultMucNick(),
         bookmarkNick: nick,
         autojoin,
         password: password || undefined,

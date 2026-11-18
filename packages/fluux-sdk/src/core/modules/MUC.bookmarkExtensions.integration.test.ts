@@ -82,11 +82,14 @@ describe('bookmark extensions Fluux does not own', () => {
   let connection: object
   /** The account Fluux is signed in to. */
   let currentJid: string
+  /** The account's profile name (XEP-0172), when it has one. */
+  let ownNickname: string | null
 
   beforeEach(() => {
     roomStore.setState(roomStore.getInitialState(), true)
     connection = {}
     currentJid = OWN_JID
+    ownNickname = null
 
     const handlers = new Map<string, (payload: unknown) => void>()
     const source = {
@@ -101,7 +104,7 @@ describe('bookmark extensions Fluux does not own', () => {
     const deps = {
       stores: {
         get room() { return roomStore.getState() },
-        connection: { getOwnNickname: () => null, getJid: () => OWN_JID },
+        connection: { getOwnNickname: () => ownNickname, getJid: () => OWN_JID },
       },
       presence: createMockPresenceReader(),
       sendIQ,
@@ -444,14 +447,28 @@ describe('bookmark extensions Fluux does not own', () => {
         expect(published().fluuxNotify).toEqual(['none'])
       })
 
-      it('publishes no nickname when the other app removed it, and Fluux keeps joining with its own', async () => {
+      // Without a nickname in the bookmark, a room Fluux is not in joins with
+      // the account's default one, the profile name here, as after a refresh.
+      it('publishes no nickname when the other app removed it, and joins with the account nickname', async () => {
+        ownNickname = 'Tester Profile'
         serverItem = fetchResult('', fullItem({ ...RENAMED, nick: null }))
         const room = shown()
         await muc.setBookmark(ROOM, { name: room.name, nick: room.nickname, autojoin: !room.autojoin })
 
         expect(sentKinds()).toEqual(['read', 'publish'])
         expect(publishedConference()?.getChild('nick', NS_BOOKMARKS)).toBeUndefined()
-        expect(shown()).toMatchObject({ nickname: 'tester', bookmarkNick: undefined })
+        expect(shown()).toMatchObject({ joined: false, nickname: 'Tester Profile', bookmarkNick: undefined })
+      })
+
+      it('keeps joining with the account nickname when the server notifies Fluux of that save', async () => {
+        ownNickname = 'Tester Profile'
+        serverItem = fetchResult('', fullItem({ ...RENAMED, nick: null }))
+        const room = shown()
+        await muc.setBookmark(ROOM, { name: room.name, nick: room.nickname, autojoin: !room.autojoin })
+        // The server's notification of the publish, after its answer.
+        pubsub.handle(pepEvent(`<item id="${ROOM}">${publishedConference()!.toString()}</item>`))
+
+        expect(shown()).toMatchObject({ joined: false, nickname: 'Tester Profile', bookmarkNick: undefined, autojoin: false })
       })
 
       it('keeps the nickname removed through a save queued behind the one that read it', async () => {

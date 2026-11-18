@@ -8,10 +8,11 @@ import { logWarn } from './logger'
 /**
  * A parsed XEP-0402 `<conference>` bookmark item.
  *
- * `nick` is left raw (possibly `undefined`) so callers can apply their own
- * default — `fetchBookmarks` resolves it via `resolveDefaultMucNick` (profile
- * username, then bare-JID local part) so an autojoin bookmark that omits
- * `<nick>` still rejoins under a sensible nick.
+ * `nick` is left raw (possibly `undefined`): a bookmark without one stores
+ * none. To join, `fetchBookmarks`, a save and the PEP notification handler
+ * fall back to the account's default nickname (BaseModule.defaultMucNick:
+ * profile username, then bare-JID local part), so an autojoin bookmark that
+ * omits `<nick>` still rejoins under a sensible nick.
  */
 export interface ParsedBookmark {
   jid: string
