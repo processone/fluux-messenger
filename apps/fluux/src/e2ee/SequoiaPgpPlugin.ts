@@ -15,7 +15,6 @@
  */
 
 import { E2EEPluginError } from '@fluux/sdk'
-import { platform } from '@/platform'
 import { OpenPGPPluginBase } from './OpenPGPPluginBase'
 import {
   accountUserId,
@@ -26,6 +25,7 @@ import {
   type DecryptOutput,
   type KeyBundle,
   type KeychainRetryAvailability,
+  type OpenPGPFileIO,
   type OpenPGPHostStores,
 } from '@fluux/openpgp-plugin'
 
@@ -38,6 +38,14 @@ export type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promi
 export interface SequoiaPgpPluginOptions {
   /** The host's trust and status state. */
   stores: OpenPGPHostStores
+  /** Native save and open dialogs for key-file export and import. */
+  fileIO: OpenPGPFileIO
+  /**
+   * True on the macOS desktop app, where key-material commands wait on the
+   * Keychain and a restore keeps a pending marker (see
+   * {@link SequoiaPgpPlugin.backupImportSelected}). False on other desktops and iOS.
+   */
+  macosDesktop: boolean
   /** Tauri command dispatcher. Tests pass a mock; app code passes the real one. */
   invoke: InvokeFn
   /** Bounds on native calls, in milliseconds. Defaults to {@link NATIVE_CALL_TIMEOUTS_MS}. */
@@ -90,10 +98,9 @@ class NativeCallTimeoutError extends Error {
 }
 
 /** Rejects with {@link NativeCallTimeoutError} when `invoke` has not settled within the bound; a late outcome is dropped. */
-function boundedInvoke(invoke: InvokeFn, timeouts: NativeCallTimeouts): InvokeFn {
+function boundedInvoke(invoke: InvokeFn, timeouts: NativeCallTimeouts, macosDesktop: boolean): InvokeFn {
   return <T>(cmd: string, args?: Record<string, unknown>) => {
-    const macosForget = cmd === 'openpgp_forget_account'
-      && platform().shell === 'desktop' && platform().os === 'macos'
+    const macosForget = cmd === 'openpgp_forget_account' && macosDesktop
     const ms = KEY_MATERIAL_COMMANDS.has(cmd) || macosForget ? timeouts.keyMaterialMs : timeouts.routineMs
     let timer: ReturnType<typeof setTimeout> | undefined
     const expiry = new Promise<never>((_, reject) => {
@@ -121,10 +128,14 @@ export function resetUncertainImportsForTesting(): void {
 
 export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   private readonly invoke: InvokeFn
+  private readonly fileIO: OpenPGPFileIO
+  private readonly macosDesktop: boolean
 
   constructor(options: SequoiaPgpPluginOptions) {
     super(options.stores)
-    this.invoke = boundedInvoke(options.invoke, { ...NATIVE_CALL_TIMEOUTS_MS, ...options.timeouts })
+    this.fileIO = options.fileIO
+    this.macosDesktop = options.macosDesktop
+    this.invoke = boundedInvoke(options.invoke, { ...NATIVE_CALL_TIMEOUTS_MS, ...options.timeouts }, options.macosDesktop)
   }
 
   protected pluginName(): string {
@@ -247,8 +258,7 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     // Session storage survives a WebView reload, but not a new application
     // window. This marker contains no key material and must be retained before
     // dispatch: an unavailable browser store must fail before a native write.
-    const session = platform().shell === 'desktop' && platform().os === 'macos'
-      && typeof window !== 'undefined' ? window.sessionStorage : null
+    const session = this.macosDesktop && typeof window !== 'undefined' ? window.sessionStorage : null
     const marker = `${PENDING_IMPORT_PREFIX}${accountJid}`
     if (uncertainImports.has(accountJid) || session?.getItem(marker)) {
       throw new E2EEPluginError('permanent', 'restore-outcome-uncertain', '')
@@ -269,8 +279,7 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
         backupMessage,
         passphrase,
         selectedFingerprint,
-        ...(recovery && platform().shell === 'desktop' && platform().os === 'macos'
-          ? { withoutMigration: true } : {}),
+        ...(recovery && this.macosDesktop ? { withoutMigration: true } : {}),
       })
       clearGuard()
       return result
@@ -287,7 +296,7 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     const accountJid = this.ctx?.account.jid
     if (!accountJid) return false
     if (uncertainImports.has(accountJid)) return true
-    if (platform().shell !== 'desktop' || platform().os !== 'macos' || typeof window === 'undefined') return false
+    if (!this.macosDesktop || typeof window === 'undefined') return false
     try {
       return window.sessionStorage.getItem(`${PENDING_IMPORT_PREFIX}${accountJid}`) !== null
     } catch {
@@ -309,7 +318,7 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   }
 
   // ---------------------------------------------------------------------------
-  // Platform-specific file I/O (Tauri native dialogs)
+  // File I/O (native dialogs supplied by the host)
   // ---------------------------------------------------------------------------
 
   async exportKeyToFile(passphrase: string): Promise<boolean> {
@@ -327,28 +336,11 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     } catch (err) {
       throw this.toPluginError('exportKeyToFile', err)
     }
-    const { save } = await import('@tauri-apps/plugin-dialog')
-    const filePath = await save({
-      defaultPath: keyExportFilename(ctx.account.jid),
-      filters: [{ name: 'OpenPGP Armor', extensions: ['asc', 'pgp', 'gpg'] }],
-    })
-    if (!filePath) return false
-    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
-    await writeTextFile(filePath, armoredMessage)
-    return true
+    return this.fileIO.saveFile(keyExportFilename(ctx.account.jid), armoredMessage)
   }
 
   async pickKeyFile(): Promise<string | null> {
-    const { open } = await import('@tauri-apps/plugin-dialog')
-    const result = await open({
-      multiple: false,
-      filters: [{ name: 'OpenPGP Armor', extensions: ['asc', 'pgp', 'gpg'] }],
-    })
-    if (!result) return null
-    const filePath = typeof result === 'string' ? result : result[0]
-    if (!filePath) return null
-    const { readTextFile } = await import('@tauri-apps/plugin-fs')
-    return readTextFile(filePath)
+    return this.fileIO.pickFile()
   }
 
   // ---------------------------------------------------------------------------

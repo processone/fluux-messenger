@@ -6,6 +6,7 @@
  * and unlocks the same key without generating or restoring one. Native IPC is
  * injected; the key is the real Sequoia-generated fixture. The owning Rust
  * suites prove the native reads (macos_secrets.rs, openpgp.rs). */
+import { createAppDesktopHost } from './appDesktopHost'
 import { createAppHostStores } from './appHostStores'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -93,7 +94,7 @@ async function setup({ initError = REFUSAL, refused = true, backup = 'absent' as
       subscribePEP: () => ({ unsubscribe: () => {} }),
     },
   }
-  const plugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), invoke, timeouts: retryLimitMs ? { keyMaterialMs: retryLimitMs } : undefined }); plugins.push(plugin)
+  const plugin = new SequoiaPgpPlugin({ stores: createAppHostStores(), ...createAppDesktopHost(), invoke, timeouts: retryLimitMs ? { keyMaterialMs: retryLimitMs } : undefined }); plugins.push(plugin)
   await plugin.init(ctx)
   return { plugin, ctx, calls, publications, alice, answer: (...next: Answer[]) => answers.push(...next),
     setPause: (value?: () => Promise<void>) => { pause = value },
