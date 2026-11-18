@@ -85,6 +85,11 @@ describe('buildNotifyGroup', () => {
     expect(setRoomNotifyLevel).toHaveBeenCalledWith('room@conf.example.com', 'none', false)
   })
 
+  it('offers no saved All messages row in a joined room with no bookmark', () => {
+    const { g } = group({ isBookmarked: false })
+    expect(g.items.map((i) => i.key)).toEqual(['off', 'mentions', 'all-session'])
+  })
+
   it('clears a saved level when Mentions only or a session All messages replaces it', () => {
     const saved = group({ notifyOffPersistent: true })
     choose(saved.g, 'mentions')
