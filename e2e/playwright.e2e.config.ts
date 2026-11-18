@@ -191,6 +191,14 @@ export default defineConfig({
       testMatch: 'anomaly-smoke.ts',
       use: { ...devices['Desktop Chrome'] },
     },
+    // WebKit only: it checks the harness's fast failure when macOS WebKit terminates a page
+    // after its GPU helper exits three times (e2e/harness/webkitTermination.ts). Elsewhere the
+    // test skips itself.
+    {
+      name: 'gpu-termination-webkit',
+      testMatch: 'webkit-gpu-termination.ts',
+      use: { ...devices['Desktop Safari'], ...WEBKIT_TRACE },
+    },
   ],
 
   webServer: {

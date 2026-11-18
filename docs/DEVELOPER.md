@@ -200,6 +200,49 @@ their DOM snapshots, actions, console and network. For the same reason, avoid vi
 recording on long macOS WebKit runs: it captures the window the same way. A `--trace` flag
 on the command line is safe: it changes only the mode and keeps screenshots off.
 
+#### WebKit GPU helper terminations
+
+On macOS, Playwright's WebKit draws pages through a separate GPU helper process. WebKit
+gives the helper 3 seconds to answer after it launches, and again whenever a new page asks
+it for a connection; a helper that misses the deadline is killed as unresponsive and
+relaunched. When the helper exits three times within 30 seconds, killed or crashed, WebKit
+terminates every page of the browser with the reason `GPUProcessCrashedTooManyTimes` and
+does not reload them. Playwright reports no crash for this, so a test would wait on a page
+that no longer exists until its 180-second limit.
+
+`e2e/harness/webkitTermination.ts` turns that wait into an immediate failure. `bootDemo`
+and `reloadDemo` start the watch for each WebKit page on macOS before it navigates: one
+reader per test worker follows the browser's own lines in the macOS unified log, and the
+boot waits until that reader receives lines. When the worker's browser terminates its pages
+for this reason, the watch closes them with a message that names the reason and lists the
+helper exits the browser logged. The pending Playwright call fails with that message, which
+is also printed in the test's output and kept as the test's `webkit-page-terminated`
+annotation. A reader whose log process ends is replaced at the next boot or reload; if the
+log cannot be read at all, the run prints one warning and continues without the fast
+failure. Linux, where CI runs, does not start the watch. The `gpu-termination-webkit` project
+ends its own browser's GPU helper three times, once after the demo booted and once during the
+boot, and checks that the failure arrives within seconds:
+
+```bash
+npm run test:e2e -- --project=gpu-termination-webkit
+```
+
+What was measured about the missed deadline, on an Apple silicon Mac running several WebKit
+workers:
+
+- A new GPU helper answers its first connection about 250 ms after launch. Five browsers
+  starting together with the load average above 100 still answered within 300 ms, so
+  startup work and processor load alone do not explain a miss.
+- The one unresponsive kill found in the system log hit a helper that had already served
+  earlier tests in the same browser. It went silent for about 4.5 seconds right after a new
+  page asked it for a connection, while the previous page's web process was being torn
+  down; the browser's own main thread had stalled for 6 seconds just before. macOS gave the
+  helper the user-interactive role and logged no memory-pressure or thermal event in that
+  window.
+- So a miss is a stall of a running helper under load, not slow startup, and one kill is
+  survived: only three within 30 seconds terminate the page. The log does not show where the
+  helper was blocked; a `spindump` of the helper taken during a stall would.
+
 Every Playwright config under `e2e/`, and `npm run build:e2e`, first compares
 `node_modules` with `package-lock.json` (`scripts/check-install-lock.mjs`). When an
 installed version, a package the lockfile lists or no longer lists, or a workspace link
