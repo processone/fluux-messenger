@@ -16,8 +16,9 @@ import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { setPlatformForTesting } from '@/platform'
 setPlatformForTesting({ shell: 'desktop', os: 'macos' })
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
-import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
-vi.mock('./SequoiaPgpPlugin', () => ({
+import { SequoiaPgpPlugin } from '@fluux/openpgp-plugin'
+vi.mock('@fluux/openpgp-plugin', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@fluux/openpgp-plugin')>()),
   SequoiaPgpPlugin: vi.fn(function SequoiaPgpPluginMock() {
     return {}
   }),

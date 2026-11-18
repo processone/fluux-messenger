@@ -8,7 +8,8 @@ import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useE2EEPluginRegistration } from './useE2EEPluginRegistration'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
-vi.mock('@/e2ee/SequoiaPgpPlugin', () => ({
+vi.mock('@fluux/openpgp-plugin', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@fluux/openpgp-plugin')>()),
   SequoiaPgpPlugin: class {},
 }))
 

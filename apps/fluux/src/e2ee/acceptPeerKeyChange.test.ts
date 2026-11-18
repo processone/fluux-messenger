@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createAppDesktopHost } from './appDesktopHost'
 import { createAppHostStores } from './appHostStores'
-import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
+import { SequoiaPgpPlugin } from '@fluux/openpgp-plugin'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'

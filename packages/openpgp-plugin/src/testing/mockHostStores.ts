@@ -19,6 +19,10 @@ export interface MockHostStores extends OpenPGPHostStores {
   setVerifiedPeers(map: Record<string, string>): void
   setPins(map: Record<string, string>): void
   setKeyChangeAlerts(map: Record<string, KeyChangeAlert>): void
+  /** Details given with the latest trust-state status, if any. */
+  trustStateDetails(): string[] | undefined
+  /** How many times `peerKeysets.notifyChanged` ran for a peer. */
+  peerKeysetNotifications(jid: string): number
   /** Reset every group to empty. */
   reset(): void
 }
@@ -48,6 +52,8 @@ export function createMockHostStores(): MockHostStores {
   let rejections: Record<string, CertRejection[]> = {}
   let conflict: OwnKeyConflict | null = null
   let status: TrustStateStatus = 'uninitialized'
+  let details: string[] | undefined
+  let notified: Record<string, number> = {}
 
   const norm = (fp: string) => fp.replace(/\s+/g, '').toLowerCase()
   const withKey = <T,>(map: Readonly<Record<string, T>>, jid: string, value: T) => ({ ...map, [jid]: value })
@@ -89,16 +95,18 @@ export function createMockHostStores(): MockHostStores {
       subscribe: (l) => pins.subscribe(l),
     },
     trustStateStatus: {
-      set: (s) => { status = s },
+      set: (s, d) => { status = s; details = d },
       get: () => status,
     },
-    peerKeysets: { notifyChanged: () => {} },
+    peerKeysets: { notifyChanged: (jid) => { notified = { ...notified, [jid]: (notified[jid] ?? 0) + 1 } } },
+    trustStateDetails: () => details,
+    peerKeysetNotifications: (jid) => notified[jid] ?? 0,
     setVerifiedPeers: (m) => verified.replace(m),
     setPins: (m) => pins.replace(m),
     setKeyChangeAlerts: (m) => alerts.replace(m),
     reset: () => {
       verified.replace({}); pins.replace({}); alerts.replace({})
-      rejections = {}; conflict = null; status = 'uninitialized'
+      rejections = {}; conflict = null; status = 'uninitialized'; details = undefined; notified = {}
     },
   }
 }

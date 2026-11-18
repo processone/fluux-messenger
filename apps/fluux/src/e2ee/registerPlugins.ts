@@ -15,10 +15,9 @@ import type { XMPPClient } from '@fluux/sdk/core'
 import { platform } from '@/platform'
 import { isOpenpgpEnabled, useEncryptionSettingsStore } from '../stores/encryptionSettingsStore'
 import { useConversationPlaintextOverrideStore } from '../stores/conversationPlaintextOverrideStore'
-import { classifyBoundaryError, OPENPGP_DESCRIPTOR } from '@fluux/openpgp-plugin'
+import { classifyBoundaryError, OPENPGP_DESCRIPTOR, SequoiaPgpPlugin } from '@fluux/openpgp-plugin'
 import { createAppDesktopHost } from './appDesktopHost'
 import { createAppHostStores } from './appHostStores'
-import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 
 /**
  * Plugin ids {@link registerE2EEPlugins} can register, declared to the SDK up
