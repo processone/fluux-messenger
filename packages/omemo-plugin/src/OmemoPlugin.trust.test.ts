@@ -350,6 +350,17 @@ describe('OmemoPlugin identities: first contact, reachability and decisions', ()
     })
   })
 
+  it('a device whose one-time prekeys carry no key material is not used', async () => {
+    const { alice, bob, pa, bobDeviceId } = await twoParty()
+    const bundle = (await fetchBundle(alice.ctx.xmpp, 'bob@x', bobDeviceId))!
+    const emptied = bundle.preKeys.map((k) => ({ ...k, key: new Uint8Array(0) }))
+    await publishBundle(bob.ctx.xmpp, bobDeviceId, { ...bundle, preKeys: emptied })
+    expect((await pa.listPeerIdentities('bob@x'))[0]).toMatchObject({
+      usedForEncryption: false,
+      notUsedReason: 'invalid-key',
+    })
+  })
+
   it('a device with an established session is used, and not used once its record holds another key', async () => {
     const { alice, pa, bobDeviceId } = await twoParty()
     const { xml } = await import('@xmpp/client')
