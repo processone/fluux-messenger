@@ -196,8 +196,8 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
           appliedReferences.current = referencesKey(refs)
           handlers.onEdit(text, refs)
           handlers.onChange({ target: input })
-          // Lexical cancels beforeinput for line breaks, deletes and multi-character
-          // insertions, so the browser fires no input event. Emit it as a textarea
+          // Lexical handles line breaks (in keydown, in Chromium) and cancels beforeinput
+          // for deletes and multi-character insertions, so the browser fires no input event. Emit it as a textarea
           // would, for the listeners that treat typing as composing (the message
           // list's hover hold, which otherwise keeps the list off the bottom).
           root.dispatchEvent(new Event('input', { bubbles: true }))

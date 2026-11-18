@@ -642,7 +642,7 @@ for (const kind of ['chat', 'room'] as const) {
 }
 
 // Captain: the room composer must keep the list pinned when it grows by edits its editor cancels
-// (Shift+Enter fires beforeinput but no input event), with the pointer resting on a message.
+// (Shift+Enter fires no input event), with the pointer resting on a message.
 for (const kind of ['chat', 'room'] as const) {
   test(`${kind}: growing the composer with Shift+Enter keeps the list pinned while hovering a message`, async ({ page }) => {
     const { body, list } = await setupInteraction(page, kind)
