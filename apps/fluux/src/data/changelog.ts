@@ -56,6 +56,7 @@ export const changelog: ChangelogEntry[] = [
         'Rooms: when Fluux resumes your session after a reload or a long disconnection, it no longer joins on its own a room you bookmarked to autojoin elsewhere if everyone there could see your real address. As after a fresh sign-in, the room waits in your list until you join it and confirm the warning, unless you already confirmed it for that room',
         'iOS: an xmpp: link or a widget row that opens Fluux while it is closed is no longer ignored. Fluux now acts on it once it has started, as it already did when Fluux was running',
         'Scrolling to the latest message right after opening a conversation or room now ends at the bottom. Before, it could stop a little short, with the last line of the latest message hidden',
+        'OpenPGP: when another of your devices updates your verified contacts while this device is still saving a verification, the server can no longer later hand this device an older list of verified contacts, which could bring back a verification you had removed',
       ],
     }],
   },
