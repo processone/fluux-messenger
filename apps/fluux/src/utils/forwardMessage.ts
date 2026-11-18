@@ -11,18 +11,21 @@ export interface ForwardQuote {
   timestamp?: number
   /** The source was read from an end-to-end encrypted chat; it may only go into an encrypted chat. */
   fromEncrypted?: boolean
+  /** The source message's type, kept on the copy. */
+  type?: 'chat' | 'groupchat'
 }
 
 const MAX_COPY_CHARACTERS = 4000
 
 /** The structured copy of the source; null when it cannot be built (no author address or no text). */
-export function buildForwardedCopy(quote?: ForwardQuote): { from: string; text: string; timestamp?: number } | null {
+export function buildForwardedCopy(quote?: ForwardQuote): { from: string; text: string; timestamp?: number; type?: 'chat' | 'groupchat' } | null {
   const text = quote?.text.trim()
   if (!quote?.from || !text) return null
   return {
     from: quote.from,
     text: Array.from(text).slice(0, MAX_COPY_CHARACTERS).join(''),
     ...(quote.timestamp !== undefined && { timestamp: quote.timestamp }),
+    ...(quote.type && { type: quote.type }),
   }
 }
 
@@ -77,7 +80,7 @@ export function composeForward(comment: string, link: string | undefined, quote?
 export function composeForwardWithCopy(comment: string, link: string | undefined, quote?: ForwardQuote): {
   body: string
   references: DataReference[]
-  forwarded: { from: string; text: string; timestamp?: number; fromEncrypted?: boolean; fallback: { begin: number; end: number } }
+  forwarded: { from: string; text: string; timestamp?: number; type?: 'chat' | 'groupchat'; fromEncrypted?: boolean; fallback: { begin: number; end: number } }
 } | null {
   const copy = buildForwardedCopy(quote)
   if (!copy) return null

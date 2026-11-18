@@ -272,6 +272,8 @@ export interface ForwardedCopy {
    * this message is refused unless it is encrypted again; never set on a received copy.
    */
   fromEncrypted?: true
+  /** The type of the source message the copy names (`chat` for a private message, `groupchat` for a room one); a retry sends the same. */
+  type?: 'chat' | 'groupchat'
   /**
    * The text of the message body that only stands in for the copy (a quote of it), as a
    * XEP-0428 fallback for the copy. A reader that shows the copy hides it; any other reader

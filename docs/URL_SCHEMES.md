@@ -113,11 +113,12 @@ inside the encrypted payload; the outer body keeps only the generic encryption
 notice, and a failed encryption never falls back to plaintext. A failed send that
 is retried keeps the marker. Cancelling sends nothing; a send failure keeps the
 picker and comment available. Forward is unavailable for whispers, unconfirmed
-messages and messages without a room archive id, just like Copy message link.
+messages and, for a room message, messages without a room archive id, just like Copy message link.
 A message read from an encrypted chat can be forwarded only into an encrypted
 chat: rooms are not offered for it, and a send, retry or edit that would go out
-unencrypted is refused before anything is sent. A retracted, undecryptable or
-failed message has no Forward. A message that holds a structured copy, beside a comment or alone, forwards its displayed comment and the copied text under its claimed author as one readable quote, with no nested copy.
+unencrypted is refused before anything is sent. A retracted or failed one-to-one
+message, or an undecryptable one, has no Forward; an undecryptable room message still
+offers the link only. A message that holds a structured copy, beside a comment or alone, forwards its displayed comment and the copied text under its claimed author as one readable quote, with no nested copy.
 
 **Structured copy (XEP-0297).** A forward to a one-to-one chat is one stanza for every
 reader: the same comment, quote and link as the quoted form above, plus a standalone
@@ -131,7 +132,7 @@ encrypted keeps it visible, and a marker outside the body is ignored. The stored
 copies but ignores XEP-0428 would show the quote and the copy together. Every room gets
 the quoted form alone. The
 copy holds a `<delay/>` with the original time and a `<message from=...>` whose
-only child is the plain body; `from` is the room occupant address for a room message (the inner message type is `groupchat`) and the bare address for a one-to-one message (type `chat`). The text is
+only child is the plain body; `from` is the room occupant address for a room message and the sender's address for a one-to-one message; the inner message `type` is the source message's own (`groupchat` or `chat`), kept for a retry. The text is
 the sender's claim, not verified history. A receiver reads only that plain body,
 the sender and the time, bounded to 4000 characters, with control and
 bidirectional-override characters removed; nested forwards and every other

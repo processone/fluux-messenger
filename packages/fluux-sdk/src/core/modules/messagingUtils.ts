@@ -428,7 +428,8 @@ export function parseForwardedCopy(messageEl: Element): ForwardedCopy | undefine
   const stamp = forwarded?.getChild('delay', NS_DELAY)?.attrs.stamp
   const time = typeof stamp === 'string' ? new Date(stamp).getTime() : NaN
   const address = boundedPlainText(from, MAX_FORWARDED_ADDRESS_CODE_POINTS)
-  return { author, ...(address && address === from && { from: address }), text, ...(Number.isFinite(time) && { timestamp: time }) }
+  const innerType = inner.attrs.type === 'chat' || inner.attrs.type === 'groupchat' ? inner.attrs.type : undefined
+  return { author, ...(address && address === from && { from: address }), text, ...(innerType && { type: innerType }), ...(Number.isFinite(time) && { timestamp: time }) }
 }
 
 /**

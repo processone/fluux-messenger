@@ -272,7 +272,7 @@ describe('shared room message references', () => {
       expect(forwarded.getChild('delay', 'urn:xmpp:delay')!.attrs.stamp).toBe('2026-11-17T09:30:00.000Z')
       expect(forwarded.getChild('message')!.attrs.from).toBe(`${room}/Bob`)
       expect(forwarded.getChild('message')!.getChildText('body')).toBe('Ship it 🚀')
-      expect(parseMessageContent({ messageEl: stanza, body }).forwarded).toEqual({ author: 'Bob', from: `${room}/Bob`, text: 'Ship it 🚀', timestamp: copy.timestamp })
+      expect(parseMessageContent({ messageEl: stanza, body }).forwarded).toEqual({ author: 'Bob', from: `${room}/Bob`, text: 'Ship it 🚀', timestamp: copy.timestamp, type: 'groupchat' })
       const event = vi.mocked(h.deps.emitSDK).mock.calls.find(([name]) => name === 'chat:message')
       expect(event?.[1]).toMatchObject({ message: { forwarded: { author: 'Bob', text: 'Ship it 🚀' } } })
     })
@@ -348,12 +348,16 @@ describe('shared room message references', () => {
         } finally { await m.shutdown() }
       })
 
-      it('labels a one-to-one source as a chat message and a room source as a groupchat message', async () => {
+      it('sends the source message type it was given, and a retry keeps it, even for a sender with a resource', async () => {
         const h = harness()
-        await h.chat.sendMessage('carol@example.org', 'x', { forwarded: { from: 'bob@example.org', text: 'hi' } })
-        await h.chat.sendMessage('carol@example.org', 'x', { forwarded: { from: `${room}/Bob`, text: 'hi' } })
+        await h.chat.sendMessage('carol@example.org', 'x', { forwarded: { from: 'bob@example.org/phone', text: 'hi', type: 'chat' } })
+        await h.chat.sendMessage('carol@example.org', 'x', { forwarded: { from: `${room}/Bob`, text: 'hi', type: 'groupchat' } })
+        await h.chat.resendMessage('carol@example.org', 'x', 'm1', undefined, undefined,
+          { author: 'bob@example.org/phone', from: 'bob@example.org/phone', text: 'hi', type: 'chat' })
         const types = vi.mocked(h.deps.sendStanza).mock.calls.map(([stanza]) => stanza.getChild('forwarded', NSF)!.getChild('message')!.attrs.type)
-        expect(types).toEqual(['chat', 'groupchat'])
+        expect(types).toEqual(['chat', 'groupchat', 'chat'])
+        const stored = vi.mocked(h.deps.emitSDK).mock.calls.find(([name]) => name === 'chat:message')?.[1] as { message: { forwarded: { type: string } } }
+        expect(stored.message.forwarded.type).toBe('chat')
       })
 
       it('refuses a retry that would go out unencrypted, and sends it encrypted when encryption is back', async () => {
@@ -368,6 +372,22 @@ describe('shared room message references', () => {
           await h.chat.resendMessage('carol@example.org', quote, 'm1', undefined, undefined, stored)
           expect(vi.mocked(h.deps.sendStanza).mock.calls[0][0].toString()).not.toContain('secret')
         } finally { await m.shutdown() }
+      })
+
+      it('refuses an edit of a restored own forward that was decrypted, though it lost the flag', async () => {
+        const h = harness()
+        const restored = { id: 'm1', originId: 'm1', body: `Look\n${quote}`, from: 'alice@example.org', securityContext: { protocol: 'openpgp' }, forwarded: { author: 'bob@example.org', text: 'secret' } }
+        h.stores.chat.getMessage = vi.fn(() => restored) as unknown as typeof h.stores.chat.getMessage
+        await expect(h.chat.sendCorrection('carol@example.org', 'm1', 'Look again')).rejects.toThrow(E2EEEncryptionRequiredError)
+        expect(h.deps.sendStanza).not.toHaveBeenCalled()
+      })
+
+      it('refuses an edit opened on a row that has left the resident window, using the row it was opened on', async () => {
+        const h = harness()
+        h.stores.chat.getMessage = vi.fn(() => undefined) as unknown as typeof h.stores.chat.getMessage
+        const opened = { id: 'm1', stanzaId: undefined, originId: 'm1', forwarded: { author: 'bob@example.org', text: 'secret', fromEncrypted: true } }
+        await expect(h.chat.sendCorrection('carol@example.org', opened as never, 'Look again')).rejects.toThrow(E2EEEncryptionRequiredError)
+        expect(h.deps.sendStanza).not.toHaveBeenCalled()
       })
 
       it('refuses an edit of the comment that would go out unencrypted', async () => {

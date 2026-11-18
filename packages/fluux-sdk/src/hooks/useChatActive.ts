@@ -227,7 +227,13 @@ export function useChatActive() {
       // Clear the error before resending
       chatStore.getState().updateMessage(conversationId, messageId, { deliveryError: undefined })
 
-      await client.messages.resendMessage(conversationId, message.body, messageId, message.attachment, message.references, message.forwarded)
+      try {
+        await client.messages.resendMessage(conversationId, message.body, messageId, message.attachment, message.references, message.forwarded)
+      } catch (err) {
+        // A refused retry (such as an encrypted forward with no encryption) sent nothing: it stays failed.
+        chatStore.getState().updateMessage(conversationId, messageId, { deliveryError: message.deliveryError })
+        throw err
+      }
     },
     [client]
   )

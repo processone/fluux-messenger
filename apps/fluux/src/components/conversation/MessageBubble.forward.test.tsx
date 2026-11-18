@@ -115,7 +115,7 @@ describe('forward on a one-to-one message', () => {
     renderDirect({ from: 'alice@example.com/phone' })
     fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
     expect(modal.props?.link).toBeUndefined()
-    expect(modal.props?.quote).toEqual({ author: 'Alice', text: 'Ship it', from: 'alice@example.com', timestamp: Date.parse('2026-05-01T10:00:00Z') })
+    expect(modal.props?.quote).toEqual({ author: 'Alice', text: 'Ship it', from: 'alice@example.com', type: 'chat', timestamp: Date.parse('2026-05-01T10:00:00Z') })
   })
 
   it('marks a message from an encrypted chat so it can only go into an encrypted chat', () => {

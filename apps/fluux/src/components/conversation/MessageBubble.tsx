@@ -596,6 +596,7 @@ export const MessageBubble = memo(function MessageBubble({
       text: forwardText,
       ...(message.type === 'groupchat' && { from: message.from }),
       ...(directForward && { from: getBareJid(message.from) }),
+      type: message.type,
       timestamp: message.timestamp.getTime(),
       ...(directForward && message.securityContext && { fromEncrypted: true }),
     } }),
