@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useTauriFileDrop } from './useTauriFileDrop'
-import { getMimeType, getFilename } from '@/utils/fileUtils'
+import { readNativeDroppedFile } from '@/utils/nativeDroppedFile'
 
 interface UseDragAndDropOptions {
   /** Callback when a file is dropped (receives File object) - can be sync or async */
@@ -77,15 +77,7 @@ export function useDragAndDrop({
     if (!isUploadSupported) return
 
     try {
-      // Dynamic import to avoid loading Tauri API in browser
-      const { readFile } = await import('@tauri-apps/plugin-fs')
-      const path = paths[0] // Single file for now
-      const filename = getFilename(path)
-      const contents = await readFile(path)
-      const mimeType = getMimeType(filename)
-
-      // Create File object from contents
-      const file = new File([contents], filename, { type: mimeType })
+      const file = await readNativeDroppedFile(paths[0]) // Single file for now
       if (rejectDrop()) return
       await policy.current.onFileDrop(file)
     } catch (err) {

@@ -421,6 +421,8 @@ interface ChatState {
   // it becomes active. Lets the UI hold a neutral loading surface during the async
   // gap instead of flashing the "nothing selected" empty state on tab switch.
   activationPending: boolean
+  /** The conversation the newest activateConversation call asked for, set when it starts (null when it asked for none). */
+  activationTarget: string | null
   // Archived conversation IDs - hidden from main list but reappear on new activity
   archivedConversations: Set<string>
   // Typing indicators: conversationId -> Set of JIDs currently typing (ephemeral, not persisted)
@@ -1480,7 +1482,7 @@ function stampLegacyArchiveMoments(
   }
 }
 
-function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'windowAtLiveEdge' | 'lastArrivedMessage' | 'interiorPlacementVersions'> {
+function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'activationTarget' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'windowAtLiveEdge' | 'lastArrivedMessage' | 'interiorPlacementVersions'> {
   return {
     conversationEntities: new Map(),
     conversationMeta: new Map(),
@@ -1488,6 +1490,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
     messages: new Map(),
     activeConversationId: null,
     activationPending: false,
+    activationTarget: null,
     archivedConversations: new Set(),
     typingStates: new Map(),
     activeAnimation: null,
@@ -1691,6 +1694,7 @@ export const chatStore = createStore<ChatState>()(
 
       activateConversation: async (id) => {
         const token = ++activationToken
+        set({ activationTarget: id })
         if (id) {
           // Signal the hydration window so the UI can hold a neutral surface
           // instead of flashing the empty state while the cache read is in flight.

@@ -22,6 +22,7 @@ import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { usePendingAttachment } from '@/hooks/usePendingAttachment'
 import { useConversationEncryptionState, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { useConversationFileDropStore } from '@/stores/conversationFileDropStore'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { EasterEggAnimation } from './easter-eggs/EasterEggAnimation'
 import { ConversationColumn, ConversationTail } from './conversation/ConversationColumn'
@@ -268,6 +269,20 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     clearPendingAttachment()
     clearSelection()
   }, [activeConversation?.id, clearSelection, clearPendingAttachment])
+
+  // A file dropped on this conversation's sidebar row. It is staged here, after
+  // the clear above, because switching conversations clears the attachment.
+  // Declared after that effect so a switch and its drop settle in order.
+  const droppedOnConversation = useConversationFileDropStore((s) => s.pending)
+  useEffect(() => {
+    if (!droppedOnConversation || droppedOnConversation.conversationId !== activeConversation?.id) return
+    useConversationFileDropStore.getState().take(droppedOnConversation)
+    // A file dropped under another account is discarded, never staged for this one
+    if (!isSupported || droppedOnConversation.account !== getStorageScopeJid()) return
+    // The same staging as a drop on the chat: previews only, uploads on Send
+    stageAttachment(droppedOnConversation.file)
+    setTimeout(() => composerHandleRef.current?.focus(), 0)
+  }, [droppedOnConversation, activeConversation?.id, isSupported, stageAttachment])
 
   // XEP-0313: Message history is now auto-fetched by the SDK (useChat hook)
   // - Cache is loaded immediately when conversation becomes active

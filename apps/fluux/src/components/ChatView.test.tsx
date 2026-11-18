@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // the virtualized render is covered by MessageList.virtualized.test.tsx + unit tests.
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
+import { useConversationFileDropStore } from '@/stores/conversationFileDropStore'
 import { ChatView } from './ChatView'
 import { messageRowId } from './conversation/messageRowIdentity'
 import type { Message, Contact, Conversation, FileAttachment } from '@fluux/sdk'
@@ -42,6 +43,7 @@ const createContact = (overrides: Partial<Contact> = {}): Contact => ({
 
 // Mock state
 let mockActiveConversation: Conversation | null = null
+let mockScope: string | null = null
 let mockActiveMessages: Message[] = []
 let mockTypingUsers: string[] = []
 let mockContacts: Contact[] = []
@@ -72,7 +74,7 @@ let mockEncryptionState: { kind: string; fingerprint?: string; trust?: string } 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', async (importOriginal) => ({
   // FLM-256: draft recovery keys by stable store identity, not per-render action wrappers.
-  chatStore: {},
+  chatStore: { subscribe: () => () => {}, getState: () => ({}) },
   // The list resolves row handles through the SDK's own lookup; keep the real one.
   findMessageRowIndex: (await importOriginal<typeof import('@fluux/sdk')>()).findMessageRowIndex,
   findRoomMessageLink: (await importOriginal<typeof import('@fluux/sdk')>()).findRoomMessageLink,
@@ -86,7 +88,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   // Viewport-evidence generation plumbing. A fixed
   // scope + generation is enough for these render tests — none of them
   // exercise the SDK's real activation path, so the generation never moves.
-  getStorageScopeJid: () => null,
+  getStorageScopeJid: () => mockScope,
   currentViewportGeneration: () => 1,
   reportViewport: vi.fn(),
   useChat: () => ({
@@ -860,6 +862,59 @@ describe('ChatView', () => {
       expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
       expect(mockUploadFile).not.toHaveBeenCalled()
       expect(mockSendMessage).not.toHaveBeenCalled()
+    })
+
+    describe('file dropped on its sidebar row', () => {
+      beforeEach(() => useConversationFileDropStore.setState({ pending: null }))
+
+      it('stages a file offered to the open conversation without uploading or sending it', () => {
+        const file = createPrivateFile()
+        render(<ChatView />)
+
+        act(() => useConversationFileDropStore.getState().offer('alice@example.com', file))
+
+        expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
+        expect(useConversationFileDropStore.getState().pending).toBeNull()
+        expect(mockUploadFile).not.toHaveBeenCalled()
+        expect(mockSendMessage).not.toHaveBeenCalled()
+      })
+
+      it('stages a file offered before the conversation opened, after the switch cleared the composer', () => {
+        const file = createPrivateFile()
+        mockActiveConversation = { id: 'bob@example.com', name: 'Bob', type: 'chat', unreadCount: 0 }
+        const { rerender } = render(<ChatView />)
+        useConversationFileDropStore.getState().offer('alice@example.com', file)
+        expect(screen.queryByTestId('pending-attachment')).not.toBeInTheDocument()
+
+        mockActiveConversation = { id: 'alice@example.com', name: 'Alice Smith', type: 'chat', unreadCount: 0 }
+        rerender(<ChatView />)
+
+        expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
+        expect(mockUploadFile).not.toHaveBeenCalled()
+        expect(mockSendMessage).not.toHaveBeenCalled()
+      })
+
+      it('discards a file dropped under another account', () => {
+        render(<ChatView />)
+        mockScope = 'first@example.com'
+        useConversationFileDropStore.getState().offer('alice@example.com', createPrivateFile())
+        mockScope = 'second@example.com'
+
+        act(() => useConversationFileDropStore.setState({ pending: { ...useConversationFileDropStore.getState().pending! } }))
+
+        expect(screen.queryByTestId('pending-attachment')).not.toBeInTheDocument()
+        expect(useConversationFileDropStore.getState().pending).toBeNull()
+        mockScope = null
+      })
+
+      it('leaves a file offered to another conversation alone', () => {
+        render(<ChatView />)
+
+        act(() => useConversationFileDropStore.getState().offer('bob@example.com', createPrivateFile()))
+
+        expect(screen.queryByTestId('pending-attachment')).not.toBeInTheDocument()
+        expect(useConversationFileDropStore.getState().pending?.conversationId).toBe('bob@example.com')
+      })
     })
 
     it('removes a staged file without uploading it on the next send', async () => {

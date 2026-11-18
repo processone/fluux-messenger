@@ -67,6 +67,7 @@ const SUITES = [
   { name: 'message-code-wrap', testMatch: 'message-code-wrap.ts' },
   { name: 'composer', testMatch: ['composer-geometry.ts', 'composer-transition.ts'] },
   { name: 'composer-send', testMatch: 'composer-send.ts' },
+  { name: 'file-drop-conversation', testMatch: 'file-drop-conversation.ts' },
   { name: 'toast-placement', testMatch: 'toast-placement.ts' },
   { name: 'popover', testMatch: 'popover-geometry.ts' },
   { name: 'history-loading', testMatch: 'history-loading.ts' },
