@@ -22,6 +22,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, fireEvent } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
+import { appliedWrite } from './scrollWriteTestDoubles'
 
 // Peak-concurrency tracker injected via the mocked monitor. begin() bumps the active count and
 // records the high-water mark; end() releases. The fix must keep the peak at 1.
@@ -81,6 +82,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
       scrollToOffsetCalls.push(offset)
       const el = args.scrollRef.current
       if (el) el.scrollTop = offset
+      return appliedWrite(el?.scrollTop)
     },
     // jsdom has no smooth-scroll animation, so an animated scroll lands immediately.
     beginAnimatedScrollToOffset: (offset: number) => {
@@ -89,8 +91,9 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
     },
     scrollToIndex: (index: number, opts?: { align?: string }) => {
       const el = args.scrollRef.current
-      if (!el) return
+      if (!el) return appliedWrite()
       el.scrollTop = opts?.align === 'end' ? el.scrollHeight : index * 40
+      return appliedWrite(el.scrollTop)
     },
   }),
 }))

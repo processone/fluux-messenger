@@ -185,19 +185,23 @@ export class LiveEdgeBrowserAdapter {
       forceRepaint()
     }
 
+    /**
+     * Returns whether a released iOS fling holds the write until it ends; the list keeps moving with
+     * the fling meanwhile.
+     */
     const writeVirtualizedPin = (owner: ScrollWriteOwner): boolean => {
       const scroller = options.getScroller()
       const virtualizer = options.getVirtualizer()
       if (!scroller || !virtualizer || virtualizer.itemCount === 0) return false
       const before = scroller.scrollTop
       const started = now()
-      virtualizer.scrollToIndex(virtualizer.itemCount - 1, { align: 'end', owner })
+      const write = virtualizer.scrollToIndex(virtualizer.itemCount - 1, { align: 'end', owner })
       options.recordProgrammaticWrite(options.getActiveConversationId())
       run.addMs('scroll', now() - started)
       const moved = scroller.scrollTop !== before
       wroteAny ||= moved
       repaintCoalesced(moved)
-      return moved
+      return write.outcome().status === 'queued'
     }
 
     const flushOwedRepaint = () => {
@@ -265,7 +269,7 @@ export class LiveEdgeBrowserAdapter {
             burst.note(now())
           }
           flushTailLayout()
-          writeVirtualizedPin(lease.owner)
+          const held = writeVirtualizedPin(lease.owner)
           lastHeight = scroller.scrollHeight
           ports.rememberBottomIntent()
           options.log?.('PIN start', {
@@ -273,7 +277,9 @@ export class LiveEdgeBrowserAdapter {
             generation: request.generation,
             itemCount: virtualizer.itemCount,
             distFromBottom: distanceFromBottom(scroller),
+            held,
           })
+          if (held) return { kind: 'held' }
           return {
             kind: 'positioned',
             scrollTop: scroller.scrollTop,
@@ -288,16 +294,20 @@ export class LiveEdgeBrowserAdapter {
         const distance = distanceFromBottom(scroller)
         const needsWrite =
           height !== lastHeight || distance > BOTTOM_PIN_TOLERANCE
+        let held = false
         if (needsWrite) {
+          const heightChanged = height !== lastHeight
+          lastHeight = height
+          held = writeVirtualizedPin(lease.owner)
           options.log?.('PIN re-assert', {
             generation: request.generation,
             distFromBottom: distance,
-            heightChanged: height !== lastHeight,
+            heightChanged,
+            held,
           })
-          lastHeight = height
-          writeVirtualizedPin(lease.owner)
         }
         run.frame(needsWrite)
+        if (held) return { kind: 'held' }
         return {
           kind: 'positioned',
           scrollTop: scroller.scrollTop,

@@ -37,6 +37,8 @@ import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render } from '@testing-library/react'
 import { MessageList } from './MessageList'
+import { appliedWrite } from './scrollWriteTestDoubles'
+import { getScrollShadowSnapshot, resetScrollShadowDiagnostics } from './scrollPositionShadow'
 import type { BaseMessage } from '@fluux/sdk'
 
 const virt = vi.hoisted(() => ({ ready: false }))
@@ -63,12 +65,16 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
     },
     ensureMessageMounted: vi.fn(() => Promise.resolve()),
     measureElement: () => {},
-    scrollToOffset: (offset: number) => { const el = args.scrollRef.current; if (el) el.scrollTop = offset },
+    scrollToOffset: (offset: number) => {
+      const el = args.scrollRef.current; if (el) el.scrollTop = offset
+      return appliedWrite(el?.scrollTop)
+    },
     beginAnimatedScrollToOffset: (offset: number) => { const el = args.scrollRef.current; if (el) el.scrollTop = offset },
     scrollToIndex: (index: number, opts?: { align?: string }) => {
-      const el = args.scrollRef.current; if (!el) return
+      const el = args.scrollRef.current; if (!el) return appliedWrite()
       if (opts?.align === 'end') el.scrollTop = el.scrollHeight
       else el.scrollTop = index * 40
+      return appliedWrite(el.scrollTop)
     },
   }),
 }))
@@ -113,8 +119,15 @@ describe('MessageList — unread divider outside the resident window', () => {
     virt.ready = false
     geo.scrollHeight = 500
     geo.clientHeight = 500
+    resetScrollShadowDiagnostics()
   })
-  afterEach(() => { globalThis.requestAnimationFrame = realRaf; localStorage.clear() })
+  afterEach(() => {
+    globalThis.requestAnimationFrame = realRaf
+    localStorage.clear()
+    // The controller turns an exception inside a frame into an unavailable result, so a broken
+    // harness would still reach the live edge through the best-effort fallback.
+    expect(getScrollShadowSnapshot().instrumentationErrors).toEqual([])
+  })
 
   const props = { renderMessage: (m: BaseMessage) => <div>{m.body}</div>, onScrollToTop: vi.fn(), isHistoryComplete: false }
 

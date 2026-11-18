@@ -20,6 +20,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
+import { appliedWrite } from './scrollWriteTestDoubles'
 
 const scrollToEndCalls = { count: 0 }
 
@@ -42,13 +43,17 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
     getIndexForMessageId: (id: string) => { const i = args.items.findIndex((it) => it.key === id); return i >= 0 ? i : null },
     ensureMessageMounted: vi.fn(() => Promise.resolve()),
     measureElement: () => {},
-    scrollToOffset: (offset: number) => { const el = args.scrollRef.current; if (el) el.scrollTop = offset },
+    scrollToOffset: (offset: number) => {
+      const el = args.scrollRef.current; if (el) el.scrollTop = offset
+      return appliedWrite(el?.scrollTop)
+    },
     // jsdom has no smooth-scroll animation, so an animated scroll lands immediately.
     beginAnimatedScrollToOffset: (offset: number) => { const el = args.scrollRef.current; if (el) el.scrollTop = offset },
     scrollToIndex: (_index: number, opts?: { align?: string }) => {
-      const el = args.scrollRef.current; if (!el) return
+      const el = args.scrollRef.current; if (!el) return appliedWrite()
       if (opts?.align === 'end') { scrollToEndCalls.count += 1; el.scrollTop = el.scrollHeight }
       else el.scrollTop = _index * 40
+      return appliedWrite(el.scrollTop)
     },
   }),
 }))

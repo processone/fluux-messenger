@@ -747,6 +747,42 @@ describe('positioning controller live-edge ownership', () => {
     expect(harness.complete).toHaveBeenCalledWith(request, 'best-effort')
   })
 
+  // FLM-255: with a scrollbar that takes space, the iOS library cannot end a released fling at
+  // return-to-latest's first write and holds every write until the fling ends: 75 frames after the
+  // first one in a WebKit replay. The loop's own 60 frames ran out first, and its held write was
+  // refused. The fling, not the loop, decides when a held write lands.
+  it('lands return-to-latest after a fling that holds its write past its frames', () => {
+    const harness = liveEdgeHarness()
+    harness.setFrameResult({ kind: 'held' })
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = controller.beginLiveEdgeNavigation({
+      conversationId,
+      navigationFacts: { unreadMarkerNeedsVisit: false, unreadMarkerAlign: 'start' },
+      executor: harness.executor,
+    })
+    for (let frame = 0; frame < 75; frame += 1) harness.runFrame()
+    expect(harness.complete).not.toHaveBeenCalled()
+
+    harness.setFrameResult({ kind: 'positioned', scrollTop: 9232, atLiveEdge: true, wrote: false, reassert: true })
+    while (harness.callbacks.length) harness.runFrame()
+    expect(harness.complete).toHaveBeenCalledWith(request, 'settled')
+  })
+
+  it('still ends return-to-latest whose write stays held', () => {
+    const harness = liveEdgeHarness()
+    harness.setFrameResult({ kind: 'held' })
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = controller.beginLiveEdgeNavigation({
+      conversationId,
+      navigationFacts: { unreadMarkerNeedsVisit: false, unreadMarkerAlign: 'start' },
+      executor: harness.executor,
+    })
+    for (let frame = 0; frame < 10_000 && harness.callbacks.length; frame += 1) harness.runFrame()
+    expect(harness.complete).toHaveBeenCalledWith(request, 'best-effort')
+  })
+
   it('restarts a content stimulus under the same generation and drops the stale frame', () => {
     const first = liveEdgeHarness()
     const second = liveEdgeHarness()
@@ -3119,6 +3155,34 @@ describe('positioning controller explicit-target ownership', () => {
       'best-effort',
       true,
     )
+  })
+
+  // FLM-255: with a scrollbar that takes space, the iOS library holds a jump's write until the
+  // released fling ends: 70 frames after the jump's first frame in a WebKit replay. The jump read
+  // the fling's slowing position as its own landing and settled there, or ran out of its 30 frames,
+  // and its held write was refused. A held frame lands nothing and does not spend the jump's frames.
+  it('lands a message jump after a fling that holds its write past its frames', () => {
+    const harness = targetHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    harness.setFrameResult({ kind: 'held' })
+    controller.beginExplicitTarget({ conversationId, messageId: 'target-a', executor: harness.executor })
+    for (let frame = 0; frame < 71; frame += 1) harness.runFrame()
+    expect(harness.complete).not.toHaveBeenCalled()
+
+    harness.setFrameResult({ kind: 'positioned', scrollTop: 1825, wrote: true })
+    while (harness.callbacks.length) harness.runFrame()
+    expect(harness.complete).toHaveBeenCalledWith(expect.any(Object), 'settled', true)
+  })
+
+  it('still ends a message jump whose write stays held', () => {
+    const harness = targetHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    harness.setFrameResult({ kind: 'held' })
+    controller.beginExplicitTarget({ conversationId, messageId: 'target-a', executor: harness.executor })
+    for (let frame = 0; frame < 10_000 && harness.callbacks.length; frame += 1) harness.runFrame()
+    expect(harness.complete).toHaveBeenCalledWith(expect.any(Object), 'best-effort', true)
   })
 
   it('reports user takeover and invalidates the queued target frame', () => {

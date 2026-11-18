@@ -250,6 +250,12 @@ around its target. Return-to-latest's first step to an unread divider below the 
 jump-to-last-read pill's visit, are reader navigation too, including the divider loop's own check for
 movement away from its landing, and so is the handover to the live edge when the divider cannot be
 shown or lands there; the divider placed on entering a conversation is not.
+When the list's scrollbar takes space, as the list's own scrollbar style gives it in desktop WebKit
+and Chromium views, the library cannot end the fling at the navigation's first write and holds every
+write until the fling ends. A live-edge, message-jump or unread-divider frame whose write the fling
+still holds is no landing: the loop neither settles on the fling's position nor spends its own
+frames while it waits, up to a bound well past a fling's momentum, so the held write lands once the
+fling ends.
 The shared viewport observer requires both the current positioning lease and the virtualizer's
 actual pending-fling state; it applies the same attribution to native events and measurement/frame
 observations. New input still takes over, and a new finger ends the old fling. Settled maintenance,

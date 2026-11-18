@@ -170,6 +170,11 @@ export type LiveEdgeCompletion =
 
 export type LiveEdgeFrameResult =
   | { kind: 'unavailable' }
+  /**
+   * The frame wrote, and a released iOS fling holds that write until the fling ends: the list is
+   * still where the fling carries it, so nothing landed.
+   */
+  | { kind: 'held' }
   | {
       kind: 'positioned'
       scrollTop: number
@@ -269,6 +274,11 @@ export type ExplicitTargetCompletion =
 export type ExplicitTargetFrameResult =
   | { kind: 'waiting' }
   | { kind: 'unavailable' }
+  /**
+   * The frame wrote, and a released iOS fling holds that write until the fling ends: the list is
+   * still where the fling carries it, so nothing landed.
+   */
+  | { kind: 'held' }
   | {
       kind: 'positioned'
       scrollTop: number
@@ -375,6 +385,8 @@ interface ExplicitTargetExecutionState {
   stableFrames: number
   landedTarget: number | null
   applied: boolean
+  /** Held frames that may still give their frame back to {@link framesLeft}. */
+  heldFramesLeft: number
 }
 
 interface ResidentTopExecutionState {
@@ -403,6 +415,8 @@ interface LiveEdgeExecutionState {
   framesLeft: number
   stableFrames: number
   completed: boolean
+  /** Held frames that may still give their frame back to {@link framesLeft}. */
+  heldFramesLeft: number
 }
 
 interface AnchorPreservationExecutionState {
@@ -472,6 +486,22 @@ function advanceDriftConvergence(
   execution.stableFrames = moved ? 0 : execution.stableFrames + 1
   execution.landedTarget = scrollTop
   return { moved, settles: execution.stableFrames >= stableFramesToSettle }
+}
+
+/** The two fields a navigation loop's wait for a held write owns. */
+interface HeldWriteWaitState {
+  framesLeft: number
+  heldFramesLeft: number
+}
+
+/**
+ * One frame whose write a released iOS fling holds. The list is where the fling carries it, not
+ * where the frame wrote, so the frame lands nothing. The fling, not the loop, decides when the write
+ * lands: the frame gives itself back to the reassert budget while {@link HELD_WRITE_FRAMES} lasts,
+ * so a fling that outlasts the loop's own frames does not end the navigation before it lands.
+ */
+function waitForHeldWrite(execution: HeldWriteWaitState): void {
+  if (execution.heldFramesLeft-- > 0) execution.framesLeft++
 }
 
 /** What a run exposes to the step that mints its lease. */
@@ -605,11 +635,12 @@ const UNREAD_MARKER_STABLE_FRAMES = 8
 const UNREAD_MARKER_DRIFT_PX = 16
 const UNREAD_MARKER_TAKEOVER_DRIFT_PX = 300
 /**
- * How long the unread loop waits for a released fling to let its held write land without spending
- * its reassert frames: about ten seconds at 60 Hz, well past a fling's momentum. Past it, held
- * frames spend the reassert budget again, so the loop still ends.
+ * How long a navigation loop (live edge, message jump, unread divider) waits for a released fling to
+ * let its held write land without spending its reassert frames: about ten seconds at 60 Hz, well
+ * past a fling's momentum. Past it, held frames spend the reassert budget again, so the loop still
+ * ends.
  */
-const UNREAD_MARKER_HELD_FRAMES = 600
+const HELD_WRITE_FRAMES = 600
 // Preserved from the former hook-local pinVirtualizedBottom loop.
 const LIVE_EDGE_REASSERT_FRAMES = 60
 const LIVE_EDGE_STABLE_FRAMES = 8
@@ -1105,6 +1136,7 @@ export class PositioningController {
           execution.abortController = null
           execution.lastRecenterVersion = null
           execution.framesLeft = LIVE_EDGE_REASSERT_FRAMES
+          execution.heldFramesLeft = HELD_WRITE_FRAMES
           execution.stableFrames = 0
           execution.completed = false
         }
@@ -2073,7 +2105,7 @@ export class PositioningController {
       landedContentHeight: null,
       resolved: false,
       resolvedAtLiveEdge: false,
-      heldFramesLeft: UNREAD_MARKER_HELD_FRAMES,
+      heldFramesLeft: HELD_WRITE_FRAMES,
     }
     this.unreadExecution = execution
 
@@ -2139,6 +2171,7 @@ export class PositioningController {
       framesLeft: LIVE_EDGE_REASSERT_FRAMES,
       stableFrames: 0,
       completed: false,
+      heldFramesLeft: HELD_WRITE_FRAMES,
     }
   }
 
@@ -2213,6 +2246,7 @@ export class PositioningController {
   private startLiveEdgeLoop(execution: LiveEdgeExecutionState): void {
     if (!this.isLiveEdgeExecutionCurrent(execution) || execution.loop) return
     execution.framesLeft = LIVE_EDGE_REASSERT_FRAMES
+    execution.heldFramesLeft = HELD_WRITE_FRAMES
     execution.stableFrames = 0
     execution.completed = false
     const lease = this.beginLiveEdgeOperation(execution)
@@ -2227,7 +2261,8 @@ export class PositioningController {
     }
     lease.markApplied()
     if (!lease.isCurrent()) return
-    if (!initial.reassert) {
+    // A held first write lands once the fling ends: the frame loop waits for it.
+    if (initial.kind === 'positioned' && !initial.reassert) {
       this.settleLiveEdge(execution, lease, 'settled')
       return
     }
@@ -2256,6 +2291,14 @@ export class PositioningController {
     if (!lease.isCurrent()) return
     if (result.kind === 'unavailable') {
       this.settleLiveEdge(execution, lease, 'best-effort')
+      return
+    }
+    // The list is not at the edge yet, so the frame is not stable either.
+    if (result.kind === 'held') {
+      waitForHeldWrite(execution)
+      execution.stableFrames = 0
+      this.recordLiveEdgeFrame(execution, false)
+      this.scheduleLiveEdgeFrame(execution, lease)
       return
     }
     if (!result.reassert) {
@@ -2969,6 +3012,7 @@ export class PositioningController {
       stableFrames: 0,
       landedTarget: null,
       applied: false,
+      heldFramesLeft: HELD_WRITE_FRAMES,
     }
   }
 
@@ -3081,6 +3125,7 @@ export class PositioningController {
       return
     }
     execution.framesLeft = EXPLICIT_TARGET_REASSERT_FRAMES
+    execution.heldFramesLeft = HELD_WRITE_FRAMES
     execution.stableFrames = 0
     execution.landedTarget = null
     execution.applied = false
@@ -3144,6 +3189,16 @@ export class PositioningController {
     if (!lease.isCurrent()) return
 
     if (result.kind === 'waiting') {
+      this.recordExplicitTargetFrame(execution, false)
+      this.scheduleExplicitTargetFrame(execution, lease)
+      return
+    }
+    // The jump wrote, so it is applied as far as its completion goes, but nothing landed: near its
+    // end a fling moves less than the settling drift on each frame, and counting those frames would
+    // settle the jump on the fling's position before its write lands.
+    if (result.kind === 'held') {
+      execution.applied = true
+      waitForHeldWrite(execution)
       this.recordExplicitTargetFrame(execution, false)
       this.scheduleExplicitTargetFrame(execution, lease)
       return
@@ -3350,13 +3405,11 @@ export class PositioningController {
     )
     if (!lease.isCurrent()) return
 
-    // A held frame's list is where the released fling carries it, not where the frame wrote: no
-    // landing, so the frame waits like one whose divider is not ready. Near its end a fling moves
-    // less than the settling drift on each frame, and counting those frames would settle the visit
-    // there before its write lands. The fling, not the loop, decides when the write lands, so the
-    // wait gives its frames back to the reassert budget.
+    // A held frame waits like one whose divider is not ready. Near its end a fling moves less than
+    // the settling drift on each frame, and counting those frames would settle the visit there
+    // before its write lands.
     if (result.kind === 'waiting' || result.kind === 'held') {
-      if (result.kind === 'held' && execution.heldFramesLeft-- > 0) execution.framesLeft++
+      if (result.kind === 'held') waitForHeldWrite(execution)
       this.recordUnreadMarkerFrame(execution, false)
       if (scheduleNextFrame) this.scheduleUnreadMarkerFrame(execution, lease)
       return
