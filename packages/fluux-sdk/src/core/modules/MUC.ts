@@ -159,6 +159,14 @@ interface SavedBookmarkFields {
 }
 
 /**
+ * Cancel a bookmark write whose account or connection changed since it was
+ * asked for (see MUC.queueBookmarkWrite).
+ */
+function assertBookmarkWriteCurrent(isCurrent: () => boolean): void {
+  if (!isCurrent()) throw new DOMException('Bookmark write cancelled: the account or connection changed', 'AbortError')
+}
+
+/**
  * Awaitable outcome of an in-flight nick change (XEP-0045 §7.6), returned by
  * {@link MUC.changeNick}. Distinct from {@link JoinDeferred} because a *failed*
  * nick change (e.g. the new nick is taken) leaves the occupant still in the room
@@ -253,7 +261,7 @@ export class MUC extends BaseModule {
    * room therefore starts once the previous one has finished, whatever its
    * outcome.
    */
-  private bookmarkWrites = new Map<string, Promise<void>>()
+  private bookmarkWrites = new Map<string, Promise<unknown>>()
 
   /**
    * Room presence, voice data forms, and correlated message errors.
@@ -1998,7 +2006,12 @@ export class MUC extends BaseModule {
     if (!saved || !room) return
     // Only the level changes: the password and other fields are those the
     // bookmark has when this save's turn comes.
-    await this.updateBookmark(roomJid, { notifyLevel: level })
+    const published = await this.updateBookmark(roomJid, { notifyLevel: level })
+    // A removal queued before this save won: it cleared the saved choice, and
+    // without a bookmark the choice lasts for the session.
+    if (!published && this.deps.stores?.room.getRoom(roomJid)) {
+      this.deps.emitSDK('room:updated', { roomJid, updates: notifyLevelUpdates(level, false) })
+    }
   }
 
   /**
@@ -2177,30 +2190,44 @@ export class MUC extends BaseModule {
     roomJid: string,
     options: { name: string; nick: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel; notifyAll?: boolean }
   ): Promise<void> {
-    return this.queueBookmarkWrite(roomJid, () => this.publishBookmark(roomJid, options))
+    return this.queueBookmarkWrite(roomJid, (isCurrent) => this.publishBookmark(roomJid, options, isCurrent))
   }
 
   /**
    * Save the room's existing bookmark with `changes` over the name, nickname
    * and autojoin it has when this write's turn comes (see bookmarkWrites), so
    * a save Fluux makes on its own keeps a change queued before it. Publishes
-   * nothing if the room is no longer bookmarked by then.
+   * nothing if the room is no longer bookmarked by then, and resolves to
+   * whether it published.
    */
-  private updateBookmark(roomJid: string, changes: Partial<BookmarkSaveOptions>): Promise<void> {
-    return this.queueBookmarkWrite(roomJid, async () => {
+  private updateBookmark(roomJid: string, changes: Partial<BookmarkSaveOptions>): Promise<boolean> {
+    return this.queueBookmarkWrite(roomJid, async (isCurrent) => {
       const room = this.deps.stores?.room.getRoom(roomJid)
-      if (!room?.isBookmarked) return
-      await this.publishBookmark(roomJid, { name: room.name, nick: room.nickname, autojoin: room.autojoin, ...changes })
+      if (!room?.isBookmarked) return false
+      await this.publishBookmark(roomJid, { name: room.name, nick: room.nickname, autojoin: room.autojoin, ...changes }, isCurrent)
+      return true
     })
   }
 
   /**
    * Run `write` once the room's previous bookmark write has finished, or at
    * once when there is none (see bookmarkWrites).
+   *
+   * The write belongs to the account and connection current when it was asked
+   * for (captureQuery). It is cancelled with an `AbortError`, sending nothing,
+   * if they changed before its turn: run on another account's connection, it
+   * would publish this room's details, password included, into that account,
+   * or remove that account's bookmark. `write` receives the same check for the
+   * points where it resumes after a request.
    */
-  private queueBookmarkWrite(roomJid: string, write: () => Promise<void>): Promise<void> {
+  private queueBookmarkWrite<T>(roomJid: string, write: (isCurrent: () => boolean) => Promise<T>): Promise<T> {
+    const { isCurrent } = this.captureQuery()
+    const run = async (): Promise<T> => {
+      assertBookmarkWriteCurrent(isCurrent)
+      return write(isCurrent)
+    }
     const previous = this.bookmarkWrites.get(roomJid)
-    const current = previous ? previous.then(write, write) : write()
+    const current = previous ? previous.then(run, run) : run()
     this.bookmarkWrites.set(roomJid, current)
     const forget = () => {
       if (this.bookmarkWrites.get(roomJid) === current) this.bookmarkWrites.delete(roomJid)
@@ -2209,7 +2236,7 @@ export class MUC extends BaseModule {
     return current
   }
 
-  private async publishBookmark(roomJid: string, options: BookmarkSaveOptions): Promise<void> {
+  private async publishBookmark(roomJid: string, options: BookmarkSaveOptions, isCurrent: () => boolean): Promise<void> {
     // A bookmark publish REPLACES the stored item, so an unrelated write (renaming
     // the bookmark, toggling autojoin) would drop what the caller leaves out: the
     // room password, ours or one another client stored (issue #1126; pass an
@@ -2223,6 +2250,7 @@ export class MUC extends BaseModule {
     const saved: SavedBookmarkFields = room?.bookmarkExtensions !== undefined && this.isBookmarkConfirmed(roomJid)
       ? { password: room.password, notifyLevel: savedNotifyLevel(room), extensions: room.bookmarkExtensions }
       : await this.readSavedBookmarkFields(roomJid)
+    assertBookmarkWriteCurrent(isCurrent)
 
     const password = options.password ?? saved.password
     const notifyLevel: NotifyLevel = options.notifyLevel
@@ -2261,6 +2289,7 @@ export class MUC extends BaseModule {
     )
 
     await this.deps.sendIQ(iq)
+    assertBookmarkWriteCurrent(isCurrent)
     this.confirmBookmark(roomJid, connection)
 
     // SDK event only - binding calls store.setBookmark
@@ -2363,7 +2392,7 @@ export class MUC extends BaseModule {
   async removeBookmark(roomJid: string): Promise<void> {
     // After any save of the room in progress, so that save cannot publish the
     // bookmark again once it is removed (see bookmarkWrites).
-    return this.queueBookmarkWrite(roomJid, async () => {
+    return this.queueBookmarkWrite(roomJid, async (isCurrent) => {
       const iq = xml(
         'iq',
         { type: 'set', id: `bookmark_remove_${generateUUID()}` },
@@ -2375,6 +2404,7 @@ export class MUC extends BaseModule {
       )
 
       await this.deps.sendIQ(iq)
+      assertBookmarkWriteCurrent(isCurrent)
 
       // SDK event only - binding calls store.removeBookmark
       this.deps.emitSDK('room:bookmark-removed', { roomJid })

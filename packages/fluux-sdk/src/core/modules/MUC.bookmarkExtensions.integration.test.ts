@@ -13,6 +13,7 @@ import type { StorageAdapter } from '../types/storage'
 import { NS_BOOKMARKS, NS_FLUUX } from '../namespaces'
 import type { SDKEvents } from '../types/sdk-events'
 import { parseBookmarkItem } from '../bookmarkItem'
+import { resolveNotifyLevel } from '../notifyLevel'
 
 // XEP-0402 §3.4: clients MUST preserve any XML elements they do not understand
 // within a bookmark's <extensions/>. A publish replaces the stored item, so
@@ -73,10 +74,13 @@ describe('bookmark extensions Fluux does not own', () => {
   let serverItem: Element
   /** The connection Fluux is on; each connection attempt has its own. */
   let connection: object
+  /** The account Fluux is signed in to. */
+  let currentJid: string
 
   beforeEach(() => {
     roomStore.setState(roomStore.getInitialState(), true)
     connection = {}
+    currentJid = OWN_JID
 
     const handlers = new Map<string, (payload: unknown) => void>()
     const source = {
@@ -98,7 +102,7 @@ describe('bookmark extensions Fluux does not own', () => {
       sendStanza: vi.fn(),
       emit: vi.fn(),
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => handlers.get(event)?.(payload),
-      getCurrentJid: () => OWN_JID,
+      getCurrentJid: () => currentJid,
       getXmpp: () => connection,
     } as unknown as ModuleDependencies
     muc = new MUC(deps, { forceCatchUpAllRooms: vi.fn() } as unknown as MAM)
@@ -385,10 +389,15 @@ describe('bookmark extensions Fluux does not own', () => {
       let stored: string | null
       /** Reads of the stored bookmark the test has not answered yet, oldest first. */
       let unansweredReads: Array<{ answer: () => void; fail: () => void }>
+      /** When set, the server holds its answer to a removal until the test lets it through. */
+      let holdRemovals: boolean
+      let unansweredRemovals: Array<() => void>
 
       beforeEach(async () => {
         stored = fullItem(NEWER)
         unansweredReads = []
+        holdRemovals = false
+        unansweredRemovals = []
         sendIQ.mockImplementation((iq: Element) => {
           if (isAllItemsRead(iq)) return Promise.reject(new Error('timeout'))
           if (isItemRead(iq)) {
@@ -406,7 +415,12 @@ describe('bookmark extensions Fluux does not own', () => {
           const request = iq.getChild('pubsub')
           const item = request?.getChild('publish')?.getChild('item')
           if (item) stored = item.toString()
-          if (request?.getChild('retract')) stored = null
+          if (request?.getChild('retract')) {
+            stored = null
+            if (holdRemovals) {
+              return new Promise((resolve) => { unansweredRemovals.push(() => resolve(parse('<iq type="result"/>'))) })
+            }
+          }
           return Promise.resolve(parse('<iq type="result"/>'))
         })
         // The refresh on this connection fails.
@@ -498,6 +512,93 @@ describe('bookmark extensions Fluux does not own', () => {
         await expect(next).resolves.toBeUndefined()
         expect(sentKinds()).toEqual(['refresh', 'read', 'read', 'publish'])
         expect(storedBookmark()).toMatchObject({ autojoin: true, notifyLevel: 'none', password: 'new-secret' })
+      })
+
+      it('keeps Off for the session when a removal queued before it wins', async () => {
+        roomStore.getState().setRoomJoined(ROOM, true)
+        holdRemovals = true
+        const remove = muc.removeBookmark(ROOM)
+        // Chosen while the removal waits for its answer: the room still shows as bookmarked.
+        const off = muc.setRoomNotifyLevel(ROOM, 'none', true)
+        await settleTurn()
+        unansweredRemovals.shift()!()
+
+        await expect(Promise.all([remove, off])).resolves.toBeDefined()
+        expect(stored).toBeNull()
+        expect(sentKinds()).toEqual(['refresh', 'remove'])
+        const room = roomStore.getState().getRoom(ROOM)
+        expect(room?.isBookmarked).toBe(false)
+        expect(resolveNotifyLevel(room)).toBe('none')
+        expect(room).toMatchObject({ notifyOff: true })
+        expect(room?.notifyOffPersistent).toBeFalsy()
+      })
+
+      it('does not save a learned password into a bookmark a queued removal took away', async () => {
+        holdRemovals = true
+        const remove = muc.removeBookmark(ROOM)
+        await muc.joinRoom(ROOM, 'tester', { password: 'learned' })
+        muc.handle(selfPresence())
+        // The join learned the password, so Fluux queued its save.
+        expect(roomStore.getState().getRoom(ROOM)?.password).toBe('learned')
+        unansweredRemovals.shift()!()
+        await remove
+        await settleTurn()
+
+        expect(stored).toBeNull()
+        expect(sentKinds()).toEqual(['refresh', 'remove'])
+      })
+    })
+
+    // A bookmark request can stay unanswered past a disconnection: the writes
+    // queued behind it belong to the account that asked for them, never to
+    // the one signed in when their turn comes.
+    describe('when another account signs in while a bookmark request is unanswered', () => {
+      let unansweredReads: Array<{ answer: () => void; fail: () => void }>
+
+      beforeEach(async () => {
+        unansweredReads = []
+        sendIQ.mockImplementation((iq: Element) => {
+          if (isAllItemsRead(iq)) return Promise.reject(new Error('timeout'))
+          if (isItemRead(iq)) {
+            const answer = serverItem
+            return new Promise((resolve, reject) => {
+              unansweredReads.push({ answer: () => resolve(answer), fail: () => reject(new Error('timeout')) })
+            })
+          }
+          return Promise.resolve(parse('<iq type="result"/>'))
+        })
+        await muc.fetchBookmarks()
+      })
+
+      /** Disconnect, then sign in to another account with its own connection. */
+      const switchAccount = () => {
+        connection = {}
+        currentJid = 'someone-else@localhost/fluux'
+      }
+
+      it.each([
+        ['fails', 'fail'],
+        ['answers', 'answer'],
+      ] as const)('sends nothing to the new account when the old request then %s', async (_, outcome) => {
+        const toggle = muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
+        const typedPassword = muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: true, password: 'typed-secret' })
+        const remove = muc.removeBookmark(ROOM)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(unansweredReads).toHaveLength(1)
+        const before = roomStore.getState().getRoom(ROOM)
+
+        switchAccount()
+        sendIQ.mockClear()
+        unansweredReads.shift()![outcome]()
+        const results = await Promise.allSettled([toggle, typedPassword, remove])
+
+        // Nothing reaches the new account's connection, and its store is untouched.
+        expect(sentKinds()).toEqual([])
+        expect(roomStore.getState().getRoom(ROOM)).toBe(before)
+        expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected', 'rejected'])
+        const reasons = results.map((r) => (r as PromiseRejectedResult).reason as Error)
+        expect(reasons.slice(1).map((e) => e.name)).toEqual(['AbortError', 'AbortError'])
+        expect(reasons[0]!.name).toBe(outcome === 'fail' ? 'Error' : 'AbortError')
       })
     })
   })
