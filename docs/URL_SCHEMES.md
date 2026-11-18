@@ -246,7 +246,10 @@ on what is on screen:
 Both cold-start (double-clicking a link with the app closed) and the
 running-instance case (clicking a link while the app runs) are covered. The
 login form reads the launch link before it consults the keychain, so a link
-that opened the app wins over a saved account.
+that opened the app wins over a saved account. On iOS, a link that launches the
+closed app arrives with the window scene's connection options;
+`SceneLaunch.swift` in the push plugin hands it to the deep link plugin the
+same way as a link opened while the app runs.
 
 ## Web: query-string parameters
 
