@@ -3,15 +3,22 @@ import Intents
 import ObjectiveC
 import UIKit
 
-/// Opens the conversation of a tapped Siri suggestion ("Send a message to …").
+/// Hands Fluux what launched or reopened its scene: a link, or a tapped Siri
+/// suggestion ("Send a message to …").
 ///
-/// iOS hands the donated `INSendMessageIntent` to the scene delegate: in the
+/// The host's `TaoSceneDelegate` passes links to the app only through
+/// `scene(_:openURLContexts:)`, which UIKit calls while the app runs. A link
+/// that launches the closed app arrives instead in the connection options,
+/// which the delegate ignores, so this forwards them to that same method.
+///
+/// iOS hands a donated `INSendMessageIntent` to the scene delegate: in the
 /// connection options on a cold launch, through `scene(_:continue:)` otherwise.
-/// The host's `TaoSceneDelegate` keeps only web links from both, so this adds
-/// the suggestion as the app's own shortcut link, which the WebView validates
-/// and routes like a tap on a Shortcuts conversation.
-enum SuggestionLaunch {
+/// The delegate keeps only web links from both, so this adds the suggestion as
+/// the app's own shortcut link, which the WebView validates and routes like a
+/// tap on a Shortcuts conversation.
+enum SceneLaunch {
     private static var installed = false
+    private static let openURLContexts = NSSelectorFromString("scene:openURLContexts:")
 
     /// Must run before UIKit connects the first scene.
     static func install() {
@@ -27,6 +34,7 @@ enum SuggestionLaunch {
         let original = class_getInstanceMethod(cls, selector).map { unsafeBitCast(method_getImplementation($0), to: Connect.self) }
         let block: @convention(block) (AnyObject, UIScene, UISceneSession, UIScene.ConnectionOptions) -> Void = { this, scene, session, options in
             original?(this, selector, scene, session, options)
+            open(options.urlContexts, from: this, in: scene)
             options.userActivities.forEach { open($0) }
         }
         replace(cls, selector, imp_implementationWithBlock(block), "v@:@@@")
@@ -47,6 +55,16 @@ enum SuggestionLaunch {
         if !class_addMethod(cls, selector, implementation, types), let method = class_getInstanceMethod(cls, selector) {
             method_setImplementation(method, implementation)
         }
+    }
+
+    /// Delivers launch links the way UIKit delivers links to the running app, so the
+    /// deep link plugin keeps them as the launch URL the WebView reads once it loads.
+    /// Calling the delegate itself keeps an `xmpp:` link in Fluux: asking the system
+    /// to open it could hand it to another installed XMPP app.
+    private static func open(_ contexts: Set<UIOpenURLContext>, from delegate: AnyObject, in scene: UIScene) {
+        guard !contexts.isEmpty, let method = class_getInstanceMethod(object_getClass(delegate), openURLContexts) else { return }
+        typealias OpenURLContexts = @convention(c) (AnyObject, Selector, UIScene, NSSet) -> Void
+        unsafeBitCast(method_getImplementation(method), to: OpenURLContexts.self)(delegate, openURLContexts, scene, contexts as NSSet)
     }
 
     /// UIKit hands the link to the scene once it is in the foreground, including during a cold launch.

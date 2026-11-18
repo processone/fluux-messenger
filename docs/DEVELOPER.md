@@ -1161,10 +1161,17 @@ removal revokes that mirror through the existing push-session cleanup. The
 WebView revalidates account ownership and destination existence against live
 stores before navigation. The unread action reads `NotificationBadge.json`.
 
+A link that launches the closed app (an `xmpp:` link, a widget row's
+`shortcut` link) reaches the scene delegate in the connection options. Tao's
+scene delegate hands links to the app only from `scene(_:openURLContexts:)`,
+which UIKit calls while the app runs, so `SceneLaunch.swift` in the push plugin
+forwards the connection options' links to that same method; the deep link
+plugin then keeps them as the launch URL the WebView reads.
+
 A tapped Siri suggestion reaches the scene delegate as the donated
 `INSendMessageIntent` activity: in the connection options on a cold launch, in
-`scene(_:continue:)` otherwise. Tao's scene delegate keeps only web links, so
-`SuggestionLaunch.swift` in the push plugin turns the suggestion's conversation
+`scene(_:continue:)` otherwise. Tao's scene delegate keeps only web links from
+activities, so `SceneLaunch.swift` also turns the suggestion's conversation
 into the same `shortcut` link the open action uses. A cold launch is online
 before the account's roster has loaded, so `useDeepLink` holds a `shortcut`
 link in the deep link router's queue until it has, then checks it. A room
@@ -1178,8 +1185,9 @@ On a signed test build, manual device verification must additionally confirm:
 
 1. Both actions appear in Shortcuts and Spotlight on iOS 16 or later; English
    and French Siri phrases resolve and the destination picker lists current chats/rooms.
-2. Open a chat and a room from cold and warm app states. Repeat a saved action
-   after logout, account removal/switch, and destination deletion; it must not
+2. Open a chat and a room from cold and warm app states, through the open
+   action, a widget row and an `xmpp:` link. Repeat a saved action after
+   logout, account removal/switch, and destination deletion; it must not
    open the old account's destination.
 3. Tap a Siri suggestion “Send a message to …” for a chat and for a room from
    cold and warm app states; it opens that chat or room.

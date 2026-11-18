@@ -54,6 +54,7 @@ export const changelog: ChangelogEntry[] = [
         'After you change your password, Fluux reconnects and reloads with the new password. Before, a dropped connection or a page reload tried the old one and sent you back to the sign-in screen',
         'iOS: tapping a Siri suggestion to send a message to a room now opens that room when Fluux was closed too, instead of the conversation list',
         'Rooms: when Fluux resumes your session after a reload or a long disconnection, it no longer joins on its own a room you bookmarked to autojoin elsewhere if everyone there could see your real address. As after a fresh sign-in, the room waits in your list until you join it and confirm the warning, unless you already confirmed it for that room',
+        'iOS: an xmpp: link or a widget row that opens Fluux while it is closed is no longer ignored. Fluux now acts on it once it has started, as it already did when Fluux was running',
       ],
     }],
   },
