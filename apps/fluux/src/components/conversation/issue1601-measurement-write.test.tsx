@@ -206,39 +206,82 @@ it.each([false, true])('#1601 R2: a rebased write that the spacer clamps is reco
 // window mounted six rows above. They measured in one batch, before the spacer grew, so every
 // correction after the first was clamped at the old bottom. Each one used to start again from that
 // clamped position, dropping what the previous one was owed and leaving the reader 82 px short.
+// Rows 7 to 20 have the sizes that run gave them; row 10 is at its 84 px estimate, which that run
+// measured at 126 px.
 const entryRace = {
   clientHeight: 740, scrollHeight: 1418,
-  estimates: [52, 44, 50, 50, 78, 50, 50],
+  estimates: [52, 44, 50, 50, 78, 50, 50, 68, 72, 72, 84, 120, 72, 72, 72, 72, 72, 72, 72, 74, 8],
   measured: [[0, 48], [2, 72], [3, 72], [4, 98], [5, 72], [6, 72]],
 } as const
+const oldBottom = entryRace.scrollHeight - entryRace.clientHeight
+const entryEstimate = (index: number) => entryRace.estimates[index] ?? 50
+
+// The reader at the old bottom after the batch: `owed` is what its clamped corrections still owe.
+function afterEntryBatch(estimate: (index: number) => number = entryEstimate) {
+  const { clientHeight, scrollHeight, estimates, measured } = entryRace
+  const h = harness({ count: estimates.length, clientHeight, scrollHeight, estimate })
+  act(() => h.hook.result.current.scrollToOffset(oldBottom))
+  for (const [index, height] of measured) h.measure(index, height)
+  const owed = measured.reduce((sum, [index, height]) => sum + height - estimate(index), 0)
+  const growSpacer = (by: number) => {
+    h.dims.scrollHeight += by
+    act(() => h.hook.result.current.refreshEstimates?.(true))
+    act(() => { h.scroller.dispatchEvent(new Event('scroll')) })
+  }
+  const distanceFromBottom = () => h.dims.scrollHeight - h.scroller.scrollTop - clientHeight
+  return { ...h, owed, growSpacer, distanceFromBottom }
+}
 
 it('keeps every clamped correction when rows above the reader grow before the spacer does', () => {
-  const { clientHeight, scrollHeight, estimates, measured } = entryRace
-  const estimate = (index: number) => estimates[index] ?? 50
-  const { scroller, dims, hook, measure } = harness({ count: 21, clientHeight, scrollHeight, estimate })
-  act(() => hook.result.current.scrollToOffset(scrollHeight - clientHeight))
-  for (const [index, height] of measured) measure(index, height)
-  expect(scroller.scrollTop, 'the corrections wait at the old bottom until the spacer grows').toBe(scrollHeight - clientHeight)
-  dims.scrollHeight = scrollHeight + measured.reduce((sum, [index, height]) => sum + height - estimate(index), 0)
+  const { scroller, owed, growSpacer, distanceFromBottom } = afterEntryBatch()
+  expect(scroller.scrollTop, 'the corrections wait at the old bottom until the spacer grows').toBe(oldBottom)
+  growSpacer(owed)
+  expect(distanceFromBottom(), 'the reader is back at the live edge').toBe(0)
+})
+
+// The batch moved row 10 down to start at 690 px, below the old bottom and above the 782 px the
+// reader is owed. Its first measurement is a row above the reader, as the owed position counts.
+it('judges a row the clamped growth moved below the old bottom against the owed position', () => {
+  const { measure, owed, growSpacer, distanceFromBottom } = afterEntryBatch()
+  measure(10, 126)
+  growSpacer(owed + 126 - entryEstimate(10))
+  expect(distanceFromBottom(), 'the reader is back at the live edge').toBe(0)
+})
+
+// An estimate refresh keeps the row at the owed position in place, so a changed estimate between
+// the old bottom and that position (row 10's, refreshed to the size it measures) moves the reader.
+it('keeps the row at the owed position in place through an estimate refresh', () => {
+  let refreshed = false
+  const estimate = (index: number) => index === 10 && refreshed ? 126 : entryEstimate(index)
+  const { hook, owed, growSpacer, distanceFromBottom } = afterEntryBatch(estimate)
+  hook.result.current.getTotalSize() // the list's last render laid the rows out at the old estimates
+  refreshed = true
   act(() => hook.result.current.refreshEstimates?.(true))
-  act(() => { scroller.dispatchEvent(new Event('scroll')) })
-  expect(dims.scrollHeight - scroller.scrollTop - clientHeight, 'the reader is back at the live edge').toBe(0)
+  growSpacer(owed + 126 - entryEstimate(10))
+  expect(distanceFromBottom(), 'the reader is back at the live edge').toBe(0)
 })
 
 // Intent: #1601 still holds while a clamped correction is owed: a reader who moved away from the
-// clamped position keeps their place, and the next correction starts from where they are.
+// clamped position keeps their place, and the next correction is judged from where they are.
+it('judges a later row against the reader once the reader has moved off the clamped position', () => {
+  const { scroller, measure } = afterEntryBatch()
+  const readerTop = oldBottom - 100
+  scroller.scrollTop = readerTop
+  measure(10, 126) // row 10 starts at 690 px, below this reader
+  expect(scroller.scrollTop).toBe(readerTop)
+})
+
 it('starts the next correction from the reader, not the clamped target, once the reader has moved', () => {
-  const { clientHeight, scrollHeight, estimates } = entryRace
-  const estimate = (index: number) => estimates[index] ?? 50
-  const { scroller, hook, measure } = harness({ count: 21, clientHeight, scrollHeight, estimate })
-  act(() => hook.result.current.scrollToOffset(scrollHeight - clientHeight))
+  const { clientHeight, scrollHeight } = entryRace
+  const { scroller, hook, measure } = harness({ count: 21, clientHeight, scrollHeight, estimate: entryEstimate })
+  act(() => hook.result.current.scrollToOffset(oldBottom))
   measure(2, 72)
-  const readerTop = scrollHeight - clientHeight - 100
+  const readerTop = oldBottom - 100
   act(() => hook.result.current.setScrollWriteObserver?.(write => {
     if (write.phase === 'before' && write.source === 'measurement') scroller.scrollTop = readerTop
   }))
   measure(3, 72)
-  expect(scroller.scrollTop).toBe(readerTop + 72 - estimate(3))
+  expect(scroller.scrollTop).toBe(readerTop + 72 - entryEstimate(3))
 })
 
 it('#1601 R3: a destination cancelled while the observer looks is not written', () => {

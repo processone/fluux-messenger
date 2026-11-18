@@ -159,16 +159,27 @@ function retargetLibraryWrite(instance: object, layoutOffset: number, delta: num
 type ClampedWrite = { target: number; maxAtWrite: number }
 
 /**
- * The library's clamped-write record as it stands before the next compensation replaces it. A
- * write past the element's max is clamped until the spacer grows, and virtual-core keeps the
- * meant position to retry once it has. The next compensation overwrites that record with its own
- * just before it writes, so it is taken here, before the library resizes the row. The record is
- * private: a library that renames it leaves each compensation on the live position, as before.
+ * The library's clamped-write record as it stands now. A write past the element's max is clamped
+ * until the spacer grows, and virtual-core keeps the meant position to retry once it has. The next
+ * compensation overwrites that record with its own just before it writes, so a writer takes it
+ * before the library resizes the row. The record is private: a library that renames it leaves
+ * each correction on the element's position, as before.
  */
 function clampedWrite(instance: object): ClampedWrite | null {
   const pending = (instance as { _clampedAdjustment?: ClampedWrite | null })._clampedAdjustment
   return pending && typeof pending.target === 'number' && typeof pending.maxAtWrite === 'number'
     ? { target: pending.target, maxAtWrite: pending.maxAtWrite } : null
+}
+
+/**
+ * Where the reader is, in layout coordinates, from the element's position there. While the element
+ * still sits at the max an earlier compensation was clamped to, nobody has moved it since, and the
+ * reader is where that write meant to put it. A correction is approved, anchored and written from
+ * there: from the clamped position, the clamped part is lost, and a row it moved below the clamped
+ * position goes uncorrected. The 1.5 px is the library's own test for whether a read-back is that clamp.
+ */
+function readerOffset(layoutOffset: number, owed: ClampedWrite | null): number {
+  return owed && Math.abs(layoutOffset - owed.maxAtWrite) < 1.5 ? owed.target : layoutOffset
 }
 
 function settleWrite(record: WriteRecord, outcome: ScrollWriteOutcome): ScrollWriteOutcome {
@@ -273,9 +284,12 @@ export function useTanstackMessageVirtualizer({
     // anchor absent from the current rows compensates nothing until the holder lets go.
     const anchorIndex = heldAnchorIndex()
     if (heldAnchorRef.current !== null) return anchorIndex !== undefined && item.index < anchorIndex
-    const offset = instance.scrollOffset ?? 0
-    // Mirror virtual-core's default fold/direction rule except for backward shrink; review this
-    // override when upgrading the library. The lazy layout can still carry an earlier size.
+    // The library replaces its clamped-write record only after this approval: it is still the
+    // earlier write's here.
+    const offset = readerOffset(instance.scrollOffset ?? 0, clampedWrite(instance))
+    // Mirror virtual-core's default fold/direction rule except for backward shrink, and judged at
+    // the reader's owed position; review this override when upgrading the library. The lazy layout
+    // can still carry an earlier size.
     const end = item.start + (instance.itemSizeCache.get(item.key) ?? item.size)
     return instance.itemSizeCache.has(item.key)
       ? end <= offset && (delta < 0 || instance.scrollDirection !== 'backward')
@@ -480,14 +494,12 @@ export function useTanstackMessageVirtualizer({
       // erases the movement (#1601), and an adjustment approved for a row that is no longer above
       // the reader is wrong. So the adjustment is judged against the reader's live position and
       // added to it, and the library's write bookkeeping is pointed at what is actually written.
-      // An estimate refresh measured its shift at that live position just before asking.
       // An earlier compensation the browser clamped, at a position the reader has not left since,
-      // is still owed: this one adds to the position that one meant, or the clamped part is lost.
-      // The 1.5 px is the library's own test for whether a read-back is that clamp.
+      // is still owed: this one adds to the position that one meant (see readerOffset). An estimate
+      // refresh measured its shift at that same position just before asking.
       const live = scroller?.scrollTop ?? offset
       const hold = (instance as unknown as { _holdOffset?: number })._holdOffset ?? 0
-      const owed = correction?.owed
-      const base = owed && Math.abs(live + hold - owed.maxAtWrite) < 1.5 ? owed.target : live + hold
+      const base = readerOffset(live + hold, correction?.owed ?? null)
       const sameRows = instance.scrollElement === scroller && itemKeyRef.current?.items === rows
       const anchorIndex = heldAnchorIndex()
       const above = correction?.kind === 'estimates' ? sameRows
@@ -669,8 +681,9 @@ export function useTanstackMessageVirtualizer({
   }, [reportElementPosition, retireHeld, scrollRef, virtualizer])
 
   // The row an estimate refresh keeps where the reader sees it: the held anchor, or the row at the
-  // reader's live offset. None while the caller owns the pixels, or while a smooth or written command
-  // is landing, which virtual-core's own resize correction also leaves alone.
+  // reader's live offset, owed clamped compensation included (see readerOffset). None while the
+  // caller owns the pixels, or while a smooth or written command is landing, which virtual-core's
+  // own resize correction also leaves alone.
   const readEstimateAnchor = () => {
     const lib = virtualizer as unknown as CorrectionInternals
     const scroller = virtualizer.scrollElement
@@ -679,7 +692,9 @@ export function useTanstackMessageVirtualizer({
       || lib._awaitingCommandReadBack?.()) return null
     virtualizer.getTotalSize()
     const index = heldAnchorRef.current !== null ? heldAnchorIndex()
-      : virtualizer.getVirtualItemForOffset(scroller.scrollTop + (lib._holdOffset ?? 0))?.index
+      : virtualizer.getVirtualItemForOffset(
+        readerOffset(scroller.scrollTop + (lib._holdOffset ?? 0), clampedWrite(virtualizer)),
+      )?.index
     const item = index === undefined ? undefined : virtualizer.measurementsCache[index]
     return item ? { index: item.index, key: item.key, start: item.start } : null
   }

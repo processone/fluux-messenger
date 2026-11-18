@@ -808,9 +808,11 @@ measurement adjustment, the adapter observes shared viewport geometry and synchr
 offset with the actual scroller. This keeps above-viewport compensation relative to the reader's
 current position even when native scroll delivery is delayed. A compensation the browser clamped
 because the spacer has not grown yet is part of that position while the element still sits at the
-max the write stopped at: the next compensation adds to the position the clamped one meant, so
-several rows measuring above the reader before the spacer grows keep the reader where it was, at the
-live edge included. Once the reader moves off that max, the next one starts from the reader again.
+max the write stopped at. Which resized rows are above the reader, the row an estimate refresh keeps
+in place, and where the next compensation starts are all taken at the position the clamped one
+meant, so several rows measuring above the reader before the spacer grows keep the reader where it
+was, at the live edge included, and a row that growth moved below the clamped position still counts
+as above the reader. Once the reader moves off that max, all three use the reader's position again.
 Regression coverage is in `issue1601-measurement-write.test.tsx`. Measurement writes and immediate
 offset/index writes publish their landed offset to the virtual window before paint. A reconciliation
 write is refused when its preceding observation detects user movement. At explicit-target settlement, the
