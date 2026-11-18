@@ -52,7 +52,9 @@ import type {
   InboundDecryptContext,
   PEPItem,
   PEPPublishOptions,
+  PeerIdentity,
   PeerSupport,
+  IdentityTrustDecision,
   PluginContext,
   SecurityContext,
   TrustState,
@@ -454,7 +456,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Keychain retry account changed')
       this.ownBundle = unlocked
       this._keyRecoveryReason = null
-      this.stores.peerKeysets.notifyChanged(ctx.account.jid)
+      this.notifyKeysetChanged(ctx.account.jid)
       // What a normal start does with an unlocked key. Publication stays best
       // effort, and stops once a log out or another key outdates it.
       const current = () => this.ctx === ctx && this.ownBundle === unlocked
@@ -686,6 +688,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       this.stores.pinnedPrimaryFingerprints.subscribe(() => this.scheduleTrustStateSeal()),
       this.stores.verifiedPeers.subscribe(() => this.scheduleTrustStateSeal()),
       this.stores.keyChangeAlerts.subscribe(() => this.scheduleTrustStateSeal()),
+      this.stores.verifiedPeers.subscribe((next, prev) => this.reportChangedPeers(next, prev)),
+      this.stores.pinnedPrimaryFingerprints.subscribe((next, prev) => this.reportChangedPeers(next, prev)),
     ]
 
     void this.verifyTrustStateOnInit()
@@ -777,7 +781,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this._trustStoreUnsubs.forEach((u) => u())
     this._trustStoreUnsubs = []
     this.ownBundle = null
-    if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
+    if (this.ctx) this.notifyKeysetChanged(this.ctx.account.jid)
     this.peerKeys.clear()
     this.clearKeysetSessionState()
     this.pendingVerifications.clear()
@@ -844,7 +848,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         clearPeerKeyCache(accountJid)
       }
       this.ownBundle = null
-      if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
+      if (this.ctx) this.notifyKeysetChanged(this.ctx.account.jid)
       this.peerKeys.clear()
       this.clearKeysetSessionState()
     })
@@ -870,7 +874,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       throw this.toPluginError('ensureIdentity', err)
     }
     this.ownBundle = bundle
-    if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
+    if (this.ctx) this.notifyKeysetChanged(this.ctx.account.jid)
     // A usable identity is established — clear any prior recovery flag so a
     // successful restore/import/replace lifts the host's recovery routing.
     this._keyRecoveryReason = null
@@ -951,7 +955,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         )
       }
       this.ownBundle = bundle
-      if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
+      if (this.ctx) this.notifyKeysetChanged(this.ctx.account.jid)
 
       try {
         await this.publishOwnPublicKeyData(bundle)
@@ -1057,7 +1061,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
       await this.forgetAccount(ctx.account.jid).catch(() => {})
       this.ownBundle = null
-      if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
+      if (this.ctx) this.notifyKeysetChanged(this.ctx.account.jid)
 
       this._allowSilentRegenerate = true
       let bundle: KeyBundle
@@ -1067,7 +1071,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         this._allowSilentRegenerate = false
       }
       this.ownBundle = bundle
-      if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
+      if (this.ctx) this.notifyKeysetChanged(this.ctx.account.jid)
 
       try {
         await this.publishOwnPublicKeyData(bundle)
@@ -1501,7 +1505,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
       this.ownBundle = bundle
       this._keyRecoveryReason = null
-      if (this.ctx) this.stores.peerKeysets.notifyChanged(this.ctx.account.jid)
+      if (this.ctx) this.notifyKeysetChanged(this.ctx.account.jid)
 
       // Direct server restores already read their source. File and generic
       // picker installs must check the server, without publishing a backup.
@@ -2306,7 +2310,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const changed = !peerCertSetsEqual(this.peerKeys.get(peer) ?? [], certs)
     this.peerKeys.set(peer, certs)
     this.persistPeerKeyCache()
-    if (changed) this.stores.peerKeysets.notifyChanged(peer)
+    if (changed) this.notifyKeysetChanged(peer)
   }
 
   /**
@@ -2363,6 +2367,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     else this.keysetIncomplete.delete(peer)
     if (health.rejections.length > 0) this.stores.certRejections.record(peer, health.rejections)
     else this.stores.certRejections.clear(peer)
+    this.reportIdentitiesChanged(peer)
   }
 
   /**
@@ -2382,6 +2387,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     for (const r of prior) byFingerprint.set(normalizeFingerprint(r.fingerprint), r)
     for (const r of observed) byFingerprint.set(normalizeFingerprint(r.fingerprint), r)
     this.stores.certRejections.record(peer, [...byFingerprint.values()])
+    this.reportIdentitiesChanged(peer)
   }
 
   private persistPeerKeyCache(): void {
@@ -2838,6 +2844,68 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   // ---------------------------------------------------------------------------
   // Accessors (called by UI layer)
   // ---------------------------------------------------------------------------
+
+  /** Tell the app a peer's keyset changed, and the manager that its identities did. */
+  private notifyKeysetChanged(jid: BareJID): void {
+    this.stores.peerKeysets.notifyChanged(jid)
+    this.ctx?.reportPeerIdentitiesChanged?.(jid)
+  }
+
+  /** The manager hears of a changed trust decision, rejection or pin as well as a changed keyset. */
+  private reportIdentitiesChanged(jid: BareJID): void {
+    this.ctx?.reportPeerIdentitiesChanged?.(jid)
+  }
+
+  /** Report each peer whose entry differs between two store maps. */
+  private reportChangedPeers(next: Readonly<Record<string, string>>, prev: Readonly<Record<string, string>>): void {
+    for (const jid of new Set([...Object.keys(next), ...Object.keys(prev)])) {
+      if (next[jid] !== prev[jid]) this.reportIdentitiesChanged(jid)
+    }
+  }
+
+  /**
+   * One identity per active announced key, then each rejected certificate as
+   * an unused one. Trust is `verified` when the key equals the contact's saved
+   * verified fingerprint, else `tofu`; every active key stays used. The store
+   * holds one fingerprint per contact, so Verify and Remove verification are
+   * allowed only for a contact with exactly one key.
+   */
+  async listPeerIdentities(peer: BareJID): Promise<PeerIdentity[]> {
+    const active = this.getPeerFingerprints(peer)
+    const out: PeerIdentity[] = active.map((fp) => {
+      const verified = this.stores.verifiedPeers.isVerified(peer, fp)
+      const allowedDecisions: IdentityTrustDecision[] = active.length === 1 ? [verified ? 'tofu' : 'verified'] : []
+      return { id: fp, fingerprint: fp, trust: verified ? 'verified' : 'tofu', usedForEncryption: true, allowedDecisions }
+    })
+    for (const rejection of this.stores.certRejections.get(peer)) {
+      if (active.some((fp) => normalizeFingerprint(fp) === normalizeFingerprint(rejection.fingerprint))) continue
+      out.push({
+        id: rejection.fingerprint,
+        fingerprint: rejection.fingerprint,
+        trust: 'unknown',
+        usedForEncryption: false,
+        notUsedReason: 'invalid-key',
+        problem: { code: rejection.code, detail: rejection.detail },
+        allowedDecisions: [],
+      })
+    }
+    return out
+  }
+
+  /**
+   * Writes the same record as the app's Verify and Remove verification:
+   * `verified` saves the key's fingerprint for the contact, `tofu` clears it.
+   * Only the decisions {@link listPeerIdentities} allows are applied.
+   */
+  async setIdentityTrust(peer: BareJID, id: string, decision: IdentityTrustDecision): Promise<void> {
+    const identity = (await this.listPeerIdentities(peer)).find((i) => normalizeFingerprint(i.id) === normalizeFingerprint(id))
+    if (!identity) throw new Error(`${this.pluginName()}: unknown identity for ${peer}`)
+    if (!identity.allowedDecisions.includes(decision)) {
+      throw new Error(`${this.pluginName()}: decision ${decision} is not allowed for this identity`)
+    }
+    if (decision === 'verified') this.stores.verifiedPeers.set(peer, identity.fingerprint)
+    else this.stores.verifiedPeers.clear(peer)
+  }
 
   getOwnFingerprint(): string | null {
     return this.ownBundle?.fingerprint ?? null

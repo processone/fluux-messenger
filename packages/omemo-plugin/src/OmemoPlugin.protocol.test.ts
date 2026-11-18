@@ -126,7 +126,8 @@ describe('blind trust before verification on send', () => {
 
     // Bob adds a second device afterwards.
     const bob2 = await ready('bob@x', alice.c.net)
-    expect(await alice.p.getDeviceTrust('bob@x', String(bob2.deviceId))).toBe('untrusted')
+    // A device waiting for a decision reads unknown and is not used, while the contact still reads untrusted.
+    expect(await alice.p.getDeviceTrust('bob@x', String(bob2.deviceId))).toBe('unknown')
     expect(await alice.p.getPeerTrust('bob@x')).toBe('untrusted')
 
     const enc = await send(alice, 'bob@x', 'only the verified device')

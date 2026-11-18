@@ -12,6 +12,7 @@ import type {
   E2EEProtocolDescriptor,
   PluginContext,
   IdentityInfo,
+  IdentityTrustDecision,
   PeerIdentity,
   PeerSupport,
   BareJID,
@@ -194,16 +195,39 @@ export class OmemoPlugin implements E2EEPlugin {
     }
     const fpHex = ik ? hex(fingerprint(ik)) : ''
     let trust: TrustState
+    let waiting = false
     if (fpHex && (await isVerified(this.ctx.storage, peer, deviceId, fpHex))) {
       trust = 'verified'
     } else {
       const state = (existing?.state as BtbvState | undefined) ?? 'undecided'
       // BTBV: once any of the peer's devices is verified, a device we have not
-      // decided on is untrusted rather than blind-trusted — outbound included.
-      if (state === 'undecided' && (await hasAnyVerified(this.ctx.storage, peer))) trust = 'untrusted'
-      else trust = fpHex ? toTrustState(state) : 'unknown'
+      // decided on waits for a decision: it reads unknown and receives nothing.
+      if (state === 'undecided' && (await hasAnyVerified(this.ctx.storage, peer))) {
+        trust = 'unknown'
+        waiting = true
+      } else trust = fpHex ? toTrustState(state) : 'unknown'
     }
-    return { id: String(deviceId), fingerprint: fpHex, trust }
+    const identity: PeerIdentity = { id: String(deviceId), fingerprint: fpHex, trust, usedForEncryption: true, allowedDecisions: [] }
+    if (waiting) {
+      identity.usedForEncryption = false
+      identity.notUsedReason = 'awaiting-decision'
+    } else if (trust === 'untrusted') {
+      identity.usedForEncryption = false
+      identity.notUsedReason = 'distrusted'
+    }
+    if (fpHex) {
+      identity.allowedDecisions = (['verified', 'tofu', 'untrusted'] as const).filter((d) => {
+        if (d === 'untrusted') return trust !== 'untrusted'
+        if (d === 'verified') return trust !== 'verified'
+        return trust !== 'tofu' // tofu: approves a waiting or refused device, or removes a verification
+      })
+    }
+    return identity
+  }
+
+  /** A device that receives nothing because the user has not decided on it or refused it. */
+  private isBlocked(identity: PeerIdentity): boolean {
+    return identity.notUsedReason === 'awaiting-decision' || identity.notUsedReason === 'distrusted'
   }
 
   async listPeerIdentities(peer: BareJID): Promise<PeerIdentity[]> {
@@ -223,7 +247,7 @@ export class OmemoPlugin implements E2EEPlugin {
    * verdict and drops any verified marker (never leaves the two stores
    * disagreeing about the same device).
    */
-  async setIdentityTrust(peer: BareJID, id: string, decision: 'verified' | 'untrusted'): Promise<void> {
+  async setIdentityTrust(peer: BareJID, id: string, decision: IdentityTrustDecision): Promise<void> {
     const deviceId = Number(id)
     const store = new PluginStorageOmemoStore(this.ctx.storage)
     const existing = await store.loadTrust(peer, deviceId)
@@ -246,6 +270,12 @@ export class OmemoPlugin implements E2EEPlugin {
       if (existing && existing.state === 'untrusted') {
         await store.saveTrust(peer, deviceId, { ...existing, state: 'undecided' })
       }
+    } else if (decision === 'tofu') {
+      // tofu: accept without verifying. Approves a waiting or refused device and
+      // removes a verification, bound to the key we hold; nothing to bind without one.
+      if (!ik) return
+      await store.saveTrust(peer, deviceId, { state: 'trusted', identityKey: ik })
+      await clearVerified(this.ctx.storage, peer, deviceId)
     } else {
       // untrusted: persist the library verdict (bound to the key when we have
       // it) and drop any verified marker.
@@ -265,8 +295,10 @@ export class OmemoPlugin implements E2EEPlugin {
     let sawTofu = false
     const lookup = bundleSource(this.ctx.xmpp, peer)
     for (const id of ids) {
-      const { trust } = await this.resolvePeerIdentity(peer, id, lookup)
-      if (trust === 'untrusted') sawUntrusted = true
+      const identity = await this.resolvePeerIdentity(peer, id, lookup)
+      const { trust } = identity
+      // A device waiting for a decision still dominates, as an untrusted one does.
+      if (this.isBlocked(identity)) sawUntrusted = true
       else if (trust === 'verified') sawVerified = true
       else if (trust === 'tofu') sawTofu = true
     }
@@ -371,8 +403,7 @@ export class OmemoPlugin implements E2EEPlugin {
     const ownBundles = bundleSource(this.ctx.xmpp, this.ctx.account.jid)
     const trustedPeerDevs: number[] = []
     for (const rid of peerDevs) {
-      const { trust } = await this.resolvePeerIdentity(peer, rid, peerBundles)
-      if (trust !== 'untrusted') trustedPeerDevs.push(rid)
+      if (!this.isBlocked(await this.resolvePeerIdentity(peer, rid, peerBundles))) trustedPeerDevs.push(rid)
     }
     if (trustedPeerDevs.length === 0) {
       throw new Error(`OMEMO: peer ${peer} has no usable OMEMO devices`)
@@ -395,7 +426,7 @@ export class OmemoPlugin implements E2EEPlugin {
     // authorize each device again against the identity that actually backs its session.
     const reachablePeerDevs: number[] = []
     for (const rid of await this.reachableDevices(peer, trustedPeerDevs)) {
-      if ((await this.resolvePeerIdentity(peer, rid, peerBundles)).trust !== 'untrusted') reachablePeerDevs.push(rid)
+      if (!this.isBlocked(await this.resolvePeerIdentity(peer, rid, peerBundles))) reachablePeerDevs.push(rid)
     }
     const reachableOwnDevs = await this.reachableDevices(this.ctx.account.jid, ownDevs)
 
@@ -660,7 +691,7 @@ export class OmemoPlugin implements E2EEPlugin {
         await acc.processBundle(peer, rid, bundle, { replace: true })
         // A replacement bundle with a different identity key drops the device to untrusted:
         // never wrap a key for it.
-        if ((await this.resolvePeerIdentity(peer, rid, lookup)).trust === 'untrusted') continue
+        if (this.isBlocked(await this.resolvePeerIdentity(peer, rid, lookup))) continue
         fresh.push(rid)
       } catch {
         /* skip devices with missing, malformed or unusable bundles */

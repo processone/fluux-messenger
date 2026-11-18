@@ -23,12 +23,14 @@
  */
 
 import type { PrivateKey } from 'openpgp'
-import { E2EEPluginError, isE2EEPluginError } from '@fluux/sdk'
+import { E2EEPluginError, isE2EEPluginError, type PluginContext } from '@fluux/sdk'
 import { OpenPGPPluginBase } from './OpenPGPPluginBase'
 import {
   accountUserId,
   keyExportFilename,
   clearSessionPassphrase,
+  isKeyLocked,
+  subscribeKeyLockState,
   getSessionPassphrase,
   setSessionPassphrase,
   USE_V6_KEYS,
@@ -650,7 +652,22 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
   // Lifecycle overrides
   // ---------------------------------------------------------------------------
 
+  /** True while no session passphrase is set, so the own key cannot be used. */
+  isLocked(): boolean {
+    return isKeyLocked()
+  }
+
+  private unsubscribeKeyLockState: (() => void) | null = null
+
+  async init(ctx: PluginContext): Promise<void> {
+    this.unsubscribeKeyLockState?.()
+    this.unsubscribeKeyLockState = subscribeKeyLockState(() => ctx.reportLocalKeyStateChanged?.())
+    await super.init(ctx)
+  }
+
   async shutdown(): Promise<void> {
+    this.unsubscribeKeyLockState?.()
+    this.unsubscribeKeyLockState = null
     this.ownPrivateKey = null
     await super.shutdown()
   }

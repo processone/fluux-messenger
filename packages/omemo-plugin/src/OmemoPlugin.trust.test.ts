@@ -49,7 +49,7 @@ describe('OmemoPlugin.listPeerIdentities', () => {
     const list = await pa.listPeerIdentities('bob@x')
     expect(list).toHaveLength(1)
     const bundle = await fetchBundle(alice.ctx.xmpp, 'bob@x', bobDeviceId)
-    expect(list[0]).toEqual({
+    expect(list[0]).toMatchObject({
       id: String(bobDeviceId),
       fingerprint: hex(fingerprint(bundle!.ik)),
       trust: 'unknown', // no trust record yet, not verified
@@ -67,7 +67,7 @@ describe('OmemoPlugin.listPeerIdentities', () => {
     const { seedPeer } = await import('./testing/MockPluginContext')
     seedPeer(alice.net, 'ghost@x', devicesNode(), elementToData(deviceListToXml([777])))
     const list = await pa.listPeerIdentities('ghost@x')
-    expect(list).toEqual([{ id: '777', fingerprint: '', trust: 'unknown' }])
+    expect(list).toEqual([{ id: '777', fingerprint: '', trust: 'unknown', usedForEncryption: true, allowedDecisions: [] }])
   })
 
   it('reflects a stored blind-trusted (tofu) device', async () => {
@@ -89,12 +89,12 @@ describe('OmemoPlugin.listPeerIdentities', () => {
     // Marker bound to a fingerprint that does NOT match the device's real key.
     await setVerified(alice.ctx.storage, 'bob@x', bobDeviceId, 'deadbeef')
     let list = await pa.listPeerIdentities('bob@x')
-    expect(list[0]).toEqual({ id: String(bobDeviceId), fingerprint: realFp, trust: 'tofu' })
+    expect(list[0]).toMatchObject({ id: String(bobDeviceId), fingerprint: realFp, trust: 'tofu' })
 
     // Re-bind the marker to the REAL fingerprint — now it wins over library trust.
     await setVerified(alice.ctx.storage, 'bob@x', bobDeviceId, realFp)
     list = await pa.listPeerIdentities('bob@x')
-    expect(list[0]).toEqual({ id: String(bobDeviceId), fingerprint: realFp, trust: 'verified' })
+    expect(list[0]).toMatchObject({ id: String(bobDeviceId), fingerprint: realFp, trust: 'verified' })
   })
 
   it('resolves 2 devices independently: one verified (store), one tofu (library trust)', async () => {
@@ -120,12 +120,12 @@ describe('OmemoPlugin.listPeerIdentities', () => {
 
     const list = await pa.listPeerIdentities('bob@x')
     expect(list).toHaveLength(2)
-    expect(list.find((e) => e.id === String(device1))).toEqual({
+    expect(list.find((e) => e.id === String(device1))).toMatchObject({
       id: String(device1),
       fingerprint: fp1,
       trust: 'verified',
     })
-    expect(list.find((e) => e.id === String(device2))).toEqual({
+    expect(list.find((e) => e.id === String(device2))).toMatchObject({
       id: String(device2),
       fingerprint: fp2,
       trust: 'tofu',
@@ -270,5 +270,45 @@ describe('OmemoPlugin BTBV wiring', () => {
     })
 
     expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).not.toBe('verified')
+  })
+})
+
+describe('OmemoPlugin identities under the final PeerIdentity API', () => {
+  it('an undecided device of a verified contact reads unknown, is not used, and can be approved with tofu', async () => {
+    const { bob, pa, bobDeviceId: device1 } = await twoParty()
+    const acc2 = await OmemoAccount.create(new PluginStorageOmemoStore(memStorage()), (n) =>
+      crypto.getRandomValues(new Uint8Array(n)),
+    )
+    const device2 = acc2.publishableDeviceId()
+    await publishBundle(bob.ctx.xmpp, device2, await acc2.publishableBundleAsync())
+    await publishDeviceList(bob.ctx.xmpp, [device1, device2])
+    await pa.setIdentityTrust('bob@x', String(device1), 'verified')
+
+    let list = await pa.listPeerIdentities('bob@x')
+    expect(list.find((i) => i.id === String(device1))).toMatchObject({ trust: 'verified', usedForEncryption: true })
+    expect(list.find((i) => i.id === String(device2))).toMatchObject({
+      trust: 'unknown',
+      usedForEncryption: false,
+      notUsedReason: 'awaiting-decision',
+      allowedDecisions: ['verified', 'tofu', 'untrusted'],
+    })
+
+    await pa.setIdentityTrust('bob@x', String(device2), 'tofu')
+    list = await pa.listPeerIdentities('bob@x')
+    expect(list.find((i) => i.id === String(device2))).toMatchObject({ trust: 'tofu', usedForEncryption: true })
+  })
+
+  it('tofu removes a verification and untrusted marks the device as refused, not used', async () => {
+    const { pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'tofu')
+    expect((await pa.listPeerIdentities('bob@x'))[0]).toMatchObject({ trust: 'tofu', usedForEncryption: true })
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'untrusted')
+    expect((await pa.listPeerIdentities('bob@x'))[0]).toMatchObject({
+      trust: 'untrusted',
+      usedForEncryption: false,
+      notUsedReason: 'distrusted',
+      allowedDecisions: ['verified', 'tofu'],
+    })
   })
 })
