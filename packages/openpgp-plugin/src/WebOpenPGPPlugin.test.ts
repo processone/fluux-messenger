@@ -2500,6 +2500,33 @@ describe('WebOpenPGPPlugin', () => {
         expect(bob.securityUpdates[0].messageId).toBe('m-drain')
       })
 
+      it('lists a real certificate as one used identity and verifies it idempotently', async () => {
+        const { alice, bob } = await buildCrossPublishedPair()
+        await alice.plugin.probePeer('bob@example.com')
+        const reports: string[] = []
+        alice.ctx.reportPeerIdentitiesChanged = (peer) => reports.push(peer)
+
+        // The list carries the real certificate's fingerprint in the plugin's normal form.
+        const fp = alice.plugin.getPeerFingerprints('bob@example.com')[0]
+        expect(fp.toLowerCase()).toBe(bob.bundle.fingerprint.toLowerCase())
+        expect(fp).toMatch(/^[0-9A-Fa-f]{40,64}$/)
+        let list = await alice.plugin.listPeerIdentities('bob@example.com')
+        expect(list).toEqual([
+          { id: fp, fingerprint: fp, trust: 'tofu', usedForEncryption: true, allowedDecisions: ['verified'] },
+        ])
+
+        await alice.plugin.setIdentityTrust('bob@example.com', fp, 'verified')
+        await alice.plugin.setIdentityTrust('bob@example.com', fp, 'verified') // idempotent
+        expect(hostStores.verifiedPeers.isVerified('bob@example.com', fp)).toBe(true)
+        list = await alice.plugin.listPeerIdentities('bob@example.com')
+        expect(list[0]).toMatchObject({ trust: 'verified', allowedDecisions: ['tofu'] })
+
+        await alice.plugin.setIdentityTrust('bob@example.com', fp, 'tofu')
+        await alice.plugin.setIdentityTrust('bob@example.com', fp, 'tofu') // idempotent
+        expect(hostStores.verifiedPeers.isVerified('bob@example.com', fp)).toBe(false)
+        expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('tofu')
+      })
+
       it('does not stash when the signature verified on first decrypt', async () => {
         const { alice, bob } = await buildCrossPublishedPair()
 

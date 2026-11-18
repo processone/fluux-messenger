@@ -374,7 +374,7 @@ export interface PeerIdentity {
 }
 
 /** Why an identity receives no messages. */
-export type IdentityNotUsedReason = 'awaiting-decision' | 'distrusted' | 'no-key' | 'invalid-key'
+export type IdentityNotUsedReason = 'awaiting-decision' | 'distrusted' | 'no-key' | 'invalid-key' | 'over-limit'
 
 /**
  * An explicit trust decision for one identity.

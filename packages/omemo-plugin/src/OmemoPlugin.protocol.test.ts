@@ -274,6 +274,29 @@ describe('verified inbound security', () => {
   })
 })
 
+describe('inbound message from a device waiting for a decision', () => {
+  it('reads untrusted for that message but leaves the device waiting, not refused', async () => {
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const handle = await bob.p.openConversation({ kind: 'direct', peer: 'alice@x' })
+    // Bob verified another device of Alice, so her new device must wait for a decision.
+    await setVerified(bob.c.ctx.storage, 'alice@x', 111, 'abcd')
+
+    const res = await bob.p.decrypt(handle, claim(bob.p, await send(alice, 'bob@x', 'hello')), {})
+    expect(res.securityContext.trust).toBe('untrusted')
+
+    const stored = await new PluginStorageOmemoStore(bob.c.ctx.storage).loadTrust('alice@x', alice.deviceId)
+    expect(stored?.state).toBe('undecided')
+    const device = (await bob.p.listPeerIdentities('alice@x')).find((i) => i.id === String(alice.deviceId))
+    expect(device).toMatchObject({ trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision' })
+
+    // Only the user's choice changes it.
+    await bob.p.setIdentityTrust('alice@x', String(alice.deviceId), 'tofu')
+    const approved = (await bob.p.listPeerIdentities('alice@x')).find((i) => i.id === String(alice.deviceId))
+    expect(approved).toMatchObject({ trust: 'tofu', usedForEncryption: true })
+  })
+})
+
 describe('own-account initialisation', () => {
   it('creates one identity when several calls race on first use', async () => {
     const c = createMockPluginContext('alice@x')

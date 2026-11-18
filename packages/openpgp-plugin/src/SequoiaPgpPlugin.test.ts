@@ -1871,6 +1871,11 @@ describe('SequoiaPgpPlugin', () => {
         await plugin.setIdentityTrust(PEER, A.fingerprint, 'tofu')
         expect(hostStores.verifiedPeers.getAll()[PEER]).toBeUndefined()
         await expect(plugin.setIdentityTrust(PEER, A.fingerprint, 'untrusted')).rejects.toThrow()
+        // Repeating a satisfied decision changes nothing and does not throw.
+        await plugin.setIdentityTrust(PEER, A.fingerprint, 'tofu')
+        await plugin.setIdentityTrust(PEER, A.fingerprint, 'verified')
+        await plugin.setIdentityTrust(PEER, A.fingerprint, 'verified')
+        expect(hostStores.verifiedPeers.getAll()[PEER]).toBe(A.fingerprint)
       })
 
       it('lists a rejected certificate as not used, with its reason', async () => {

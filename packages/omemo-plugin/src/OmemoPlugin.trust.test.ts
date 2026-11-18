@@ -52,7 +52,7 @@ describe('OmemoPlugin.listPeerIdentities', () => {
     expect(list[0]).toMatchObject({
       id: String(bobDeviceId),
       fingerprint: hex(fingerprint(bundle!.ik)),
-      trust: 'unknown', // no trust record yet, not verified
+      trust: 'tofu', // first contact: blind-trusted, not verified
     })
   })
 
@@ -67,7 +67,7 @@ describe('OmemoPlugin.listPeerIdentities', () => {
     const { seedPeer } = await import('./testing/MockPluginContext')
     seedPeer(alice.net, 'ghost@x', devicesNode(), elementToData(deviceListToXml([777])))
     const list = await pa.listPeerIdentities('ghost@x')
-    expect(list).toEqual([{ id: '777', fingerprint: '', trust: 'unknown', usedForEncryption: true, allowedDecisions: [] }])
+    expect(list).toEqual([{ id: '777', fingerprint: '', trust: 'unknown', usedForEncryption: false, notUsedReason: 'no-key', allowedDecisions: [] }])
   })
 
   it('reflects a stored blind-trusted (tofu) device', async () => {
@@ -310,5 +310,41 @@ describe('OmemoPlugin identities under the final PeerIdentity API', () => {
       notUsedReason: 'distrusted',
       allowedDecisions: ['verified', 'tofu'],
     })
+  })
+})
+
+describe('OmemoPlugin identities: first contact, reachability and decisions', () => {
+  it('first contact is blind-trusted: an undecided device of a never-verified contact reads tofu and is used', async () => {
+    const { pa, bobDeviceId } = await twoParty()
+    expect((await pa.listPeerIdentities('bob@x'))[0]).toMatchObject({
+      id: String(bobDeviceId),
+      trust: 'tofu',
+      usedForEncryption: true,
+      allowedDecisions: ['verified', 'untrusted'],
+    })
+    // The aggregate and per-device readings the send checks rely on are unchanged.
+    expect(await pa.getPeerTrust('bob@x')).toBe('unknown')
+    expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).toBe('unknown')
+  })
+
+  it('devices past the 50-device cap are listed as not used', async () => {
+    const { bob, pa, bobDeviceId } = await twoParty()
+    const { publishDeviceList: publish } = await import('./pep')
+    const ids = [bobDeviceId, ...Array.from({ length: 50 }, (_, i) => 900000 + i)]
+    await publish(bob.ctx.xmpp, ids)
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list).toHaveLength(51)
+    expect(list[0].usedForEncryption).toBe(true)
+    expect(list[50]).toMatchObject({ id: '900049', usedForEncryption: false })
+    expect(list[50].notUsedReason).toBeDefined()
+  })
+
+  it('a refused device can be approved again with tofu, and a waiting one refused', async () => {
+    const { pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'untrusted')
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'tofu')
+    expect((await pa.listPeerIdentities('bob@x'))[0]).toMatchObject({ trust: 'tofu', usedForEncryption: true })
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'tofu')
+    expect((await pa.listPeerIdentities('bob@x'))[0]).toMatchObject({ trust: 'tofu', usedForEncryption: true })
   })
 })

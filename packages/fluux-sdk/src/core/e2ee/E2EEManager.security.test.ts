@@ -27,7 +27,11 @@ function identity(id: string, over: Partial<PeerIdentity> = {}): PeerIdentity {
 
 /** A plugin that lists the identities it is given and supports the peer when `supported`. */
 class ListingPlugin extends DummyPlaintextPlugin {
-  override readonly descriptor = { ...new DummyPlaintextPlugin().descriptor, id: 'listing', displayName: 'Listing', securityLevel: 50 }
+  constructor(id = 'listing', level = 50) {
+    super()
+    this.descriptor = { ...new DummyPlaintextPlugin().descriptor, id, displayName: id === 'listing' ? 'Listing' : id, securityLevel: level }
+  }
+  override readonly descriptor: DummyPlaintextPlugin['descriptor']
   identities: PeerIdentity[] = []
   supported = true
   locked = false
@@ -136,6 +140,73 @@ describe('E2EEManager.getConversationSecurity', () => {
     vi.spyOn(dummy, 'getPeerTrust').mockResolvedValue('verified' as TrustState)
     const { manager } = await setup(dummy)
     expect(await manager.getConversationSecurity(target)).toMatchObject({ kind: 'encrypted', trust: 'verified', verified: 1 })
+  })
+})
+
+describe('E2EEManager.getConversationSecurity with failing or empty listings', () => {
+  it('an empty listing from a supporting plugin is unusable, not encrypted', async () => {
+    const { manager } = await setup()
+    expect(await manager.getConversationSecurity(target)).toMatchObject({ kind: 'unusable', problems: [] })
+  })
+
+  it('a failed listing is unusable and says so, instead of reusing aggregate trust', async () => {
+    const { manager, plugin } = await setup()
+    plugin.listPeerIdentities = async () => {
+      throw new Error('boom')
+    }
+    vi.spyOn(plugin, 'getPeerTrust').mockResolvedValue('verified')
+    expect(await manager.getConversationSecurity(target)).toMatchObject({
+      kind: 'unusable',
+      problems: [{ code: 'listing-failed' }],
+    })
+  })
+})
+
+describe('E2EEManager with two registered methods', () => {
+  async function two() {
+    const manager = new E2EEManager({ storage: new InMemoryStorageBackend(), xmpp: xmpp(), account: { jid: 'me@example.com' } })
+    const high = new ListingPlugin('high', 80)
+    const low = new ListingPlugin('low', 30)
+    high.identities = [identity('h1', { trust: 'verified' })]
+    low.identities = [identity('l1')]
+    await manager.register(low)
+    await manager.register(high)
+    return { manager, high, low }
+  }
+
+  it('groups identities by method, highest rank first, and marks the ranked one in use', async () => {
+    const { manager } = await two()
+    const groups = await manager.listPeerIdentities(PEER)
+    expect(groups.map((g) => [g.protocolId, g.inUse])).toEqual([['high', true], ['low', false]])
+    expect(await manager.getConversationSecurity(target)).toMatchObject({ kind: 'encrypted', protocolId: 'high', trust: 'verified' })
+  })
+
+  it('a pin moves the in-use mark and the conversation state, and signals the change', async () => {
+    const { manager } = await two()
+    const seen: (string | null)[] = []
+    manager.onConversationSecurityChanged((p) => seen.push(p))
+    manager.setPinnedStrategy(target, 'low')
+    manager.setPinnedStrategy(target, 'low') // no change, no signal
+    expect(seen).toEqual([PEER])
+    expect((await manager.listPeerIdentities(PEER)).map((g) => [g.protocolId, g.inUse])).toEqual([['high', false], ['low', true]])
+    expect(await manager.getConversationSecurity(target)).toMatchObject({ protocolId: 'low', trust: 'tofu' })
+  })
+
+  it('forced plaintext wins over both methods and signals once per change', async () => {
+    const { manager } = await two()
+    const seen: (string | null)[] = []
+    manager.onConversationSecurityChanged((p) => seen.push(p))
+    manager.setForcedPlaintext(target, true)
+    manager.setForcedPlaintext(target, true)
+    expect(await manager.getConversationSecurity(target)).toEqual({ kind: 'plaintextForced' })
+    manager.setForcedPlaintext(target, false)
+    expect(seen).toEqual([PEER, PEER])
+  })
+
+  it('when the ranked method has nothing usable the pinned fallback is not chosen silently', async () => {
+    const { manager, high } = await two()
+    high.identities = [identity('h1', { usedForEncryption: false, notUsedReason: 'awaiting-decision', trust: 'unknown' })]
+    expect(await manager.getConversationSecurity(target)).toMatchObject({ kind: 'needsDecision', protocolId: 'high' })
   })
 })
 

@@ -325,8 +325,10 @@ export class E2EEManager {
   /** Force all outbound sends to this target to skip encryption entirely. Inbound decryption is unaffected. */
   setForcedPlaintext(target: ConversationTarget, forced: boolean): void {
     const key = targetKey(target)
+    if (forced === this.forcedPlaintextConversations.has(key)) return
     if (forced) this.forcedPlaintextConversations.add(key)
     else this.forcedPlaintextConversations.delete(key)
+    this.dispatchConversationSecurityChanged(target.kind === 'direct' ? target.peer : null)
   }
 
   /** Returns true if encryption has been explicitly disabled for this target. */
@@ -337,8 +339,10 @@ export class E2EEManager {
   /** Pin a conversation to a specific plugin (or clear with `null`). */
   setPinnedStrategy(target: ConversationTarget, pin: PinnedStrategy): void {
     const key = targetKey(target)
+    if ((this.pins.get(key) ?? null) === pin) return
     if (pin === null) this.pins.delete(key)
     else this.pins.set(key, pin)
+    this.dispatchConversationSecurityChanged(target.kind === 'direct' ? target.peer : null)
   }
 
   getPinnedStrategy(target: ConversationTarget): PinnedStrategy {
@@ -836,12 +840,17 @@ export class E2EEManager {
   private async securityFor(plugin: E2EEPlugin, peer: BareJID): Promise<ConversationSecurity> {
     const { id: protocolId, displayName } = plugin.descriptor
     if (plugin.isLocked?.()) return { kind: 'locked', protocolId, displayName }
-    const identities = await this.pluginIdentities(plugin, peer)
-    if (identities === null || identities.length === 0) {
-      // The plugin does not list identities: fall back to its aggregate trust.
+    // Only a plugin that lists no identities falls back to its aggregate trust. A failed or
+    // empty listing is not encryption: report what the plugin could not give.
+    if (!plugin.listPeerIdentities) {
       const trust = await plugin.getPeerTrust(peer).catch((): TrustState => 'unknown')
       return { kind: 'encrypted', protocolId, displayName, trust, used: 1, verified: trust === 'verified' ? 1 : 0, waiting: 0 }
     }
+    const identities = await this.pluginIdentities(plugin, peer)
+    if (identities === null) {
+      return { kind: 'unusable', protocolId, displayName, problems: [{ id: '', code: 'listing-failed', detail: '' }] }
+    }
+    if (identities.length === 0) return { kind: 'unusable', protocolId, displayName, problems: [] }
     const used = identities.filter((i) => i.usedForEncryption)
     const waiting = identities.filter((i) => !i.usedForEncryption && i.notUsedReason === 'awaiting-decision').length
     if (used.length === 0) {

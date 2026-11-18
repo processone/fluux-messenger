@@ -214,6 +214,10 @@ export class OmemoPlugin implements E2EEPlugin {
     } else if (trust === 'untrusted') {
       identity.usedForEncryption = false
       identity.notUsedReason = 'distrusted'
+    } else if (!fpHex) {
+      // No key we can fetch: no session can be built, so nothing is encrypted to it.
+      identity.usedForEncryption = false
+      identity.notUsedReason = 'no-key'
     }
     if (fpHex) {
       identity.allowedDecisions = (['verified', 'tofu', 'untrusted'] as const).filter((d) => {
@@ -234,7 +238,21 @@ export class OmemoPlugin implements E2EEPlugin {
     const ids = await fetchDeviceList(this.ctx.xmpp, peer)
     const out: PeerIdentity[] = []
     const lookup = bundleSource(this.ctx.xmpp, peer)
-    for (const id of ids) out.push(await this.resolvePeerIdentity(peer, id, lookup))
+    for (const [index, id] of ids.entries()) {
+      const identity = await this.resolvePeerIdentity(peer, id, lookup)
+      // First contact is blind-trusted: a usable device nobody has decided on reads tofu here.
+      // getDeviceTrust, getPeerTrust and the send checks keep their own reading.
+      if (identity.trust === 'unknown' && identity.fingerprint && identity.usedForEncryption) {
+        identity.trust = 'tofu'
+        identity.allowedDecisions = identity.allowedDecisions.filter((d) => d !== 'tofu')
+      }
+      // encrypt and repairSession address only the first DEVICE_CAP devices.
+      if (index >= DEVICE_CAP && identity.usedForEncryption) {
+        identity.usedForEncryption = false
+        identity.notUsedReason = 'over-limit'
+      }
+      out.push(identity)
+    }
     return out
   }
 
@@ -542,11 +560,15 @@ export class OmemoPlugin implements E2EEPlugin {
     }
     const peerHasVerified = await this.peerHasVerifiedDevice(store, senderJid)
     const resolved = resolveInboundTrust(peerHasVerified, (existing?.state as BtbvState | undefined) ?? null)
-    if (!existing || existing.state !== resolved.store || existing.identityKey.length === 0) {
+    // Receiving a message never refuses a device. A device the user has not decided on, whose
+    // contact has a verified device, keeps waiting: this message reads untrusted, but only an
+    // explicit refusal stores `untrusted`. Sending still skips it (see resolvePeerIdentity).
+    const arrival: BtbvState = resolved.store === 'untrusted' && (existing?.state ?? 'undecided') === 'undecided' ? 'undecided' : resolved.store
+    if (!existing || existing.state !== arrival || existing.identityKey.length === 0) {
       // Promote in place (or record a first-seen device, which an archive decrypt does not
       // bind), keeping the bound key. resolveInboundTrust preserves any explicit prior
       // decision, so this never downgrades an existing verdict.
-      await store.saveTrust(senderJid, sid, { state: resolved.store, identityKey })
+      await store.saveTrust(senderJid, sid, { state: arrival, identityKey })
     }
     return { protocolId: this.descriptor.id, trust: toSecurityTrust(resolved.surfaced) }
   }

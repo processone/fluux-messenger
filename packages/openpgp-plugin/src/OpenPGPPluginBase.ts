@@ -2900,6 +2900,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   async setIdentityTrust(peer: BareJID, id: string, decision: IdentityTrustDecision): Promise<void> {
     const identity = (await this.listPeerIdentities(peer)).find((i) => normalizeFingerprint(i.id) === normalizeFingerprint(id))
     if (!identity) throw new Error(`${this.pluginName()}: unknown identity for ${peer}`)
+    // Idempotent: a decision the identity already satisfies changes nothing.
+    if ((decision === 'verified' && identity.trust === 'verified') || (decision === 'tofu' && identity.trust === 'tofu')) return
     if (!identity.allowedDecisions.includes(decision)) {
       throw new Error(`${this.pluginName()}: decision ${decision} is not allowed for this identity`)
     }
