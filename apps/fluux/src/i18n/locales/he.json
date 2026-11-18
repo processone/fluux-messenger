@@ -205,6 +205,12 @@
             "methodInUse": "בשימוש",
             "receivesMessages": "מקבל את ההודעות שלך",
             "receivesNoMessages": "לא מקבל את ההודעות שלך",
+            "wouldReceiveMessages": "יקבל בשיטה זו",
+            "listErrorTitle": "לא ניתן לטעון את המפתחות",
+            "listErrorDescription": "לא ניתן היה לקרוא את המפתחות של איש קשר זה. נסה שוב.",
+            "tryAgain": "נסה שוב",
+            "needsDecisionTitle": "ממתין להחלטתך",
+            "needsDecisionDescription": "הודעות נשלחות ללא הצפנה עד שתסמוך על מפתח.",
             "keyTrust": {
                 "verified": "מאומת",
                 "introduced": "הוצג",

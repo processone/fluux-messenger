@@ -205,6 +205,12 @@
             "methodInUse": "Används",
             "receivesMessages": "Tar emot dina meddelanden",
             "receivesNoMessages": "Tar inte emot dina meddelanden",
+            "wouldReceiveMessages": "Skulle ta emot med den här metoden",
+            "listErrorTitle": "Nycklarna kunde inte läsas in",
+            "listErrorDescription": "Kontaktens nycklar kunde inte läsas. Försök igen.",
+            "tryAgain": "Försök igen",
+            "needsDecisionTitle": "Väntar på ditt beslut",
+            "needsDecisionDescription": "Meddelanden skickas okrypterade tills du litar på en nyckel.",
             "keyTrust": {
                 "verified": "Verifierad",
                 "introduced": "Introducerad",

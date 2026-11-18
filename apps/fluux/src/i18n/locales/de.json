@@ -207,6 +207,12 @@
             "methodInUse": "In Verwendung",
             "receivesMessages": "Erhält Ihre Nachrichten",
             "receivesNoMessages": "Erhält Ihre Nachrichten nicht",
+            "wouldReceiveMessages": "Würde mit dieser Methode empfangen",
+            "listErrorTitle": "Schlüssel konnten nicht geladen werden",
+            "listErrorDescription": "Die Schlüssel dieses Kontakts konnten nicht gelesen werden. Versuchen Sie es erneut.",
+            "tryAgain": "Erneut versuchen",
+            "needsDecisionTitle": "Wartet auf Ihre Entscheidung",
+            "needsDecisionDescription": "Nachrichten werden unverschlüsselt gesendet, bis Sie einem Schlüssel vertrauen.",
             "keyTrust": {
                 "verified": "Verifiziert",
                 "introduced": "Empfohlen",

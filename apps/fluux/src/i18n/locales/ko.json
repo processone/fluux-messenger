@@ -206,6 +206,12 @@
             "methodInUse": "사용 중",
             "receivesMessages": "내 메시지를 받음",
             "receivesNoMessages": "내 메시지를 받지 않음",
+            "wouldReceiveMessages": "이 방식이면 받음",
+            "listErrorTitle": "키를 불러오지 못했습니다",
+            "listErrorDescription": "이 연락처의 키를 읽을 수 없습니다. 다시 시도하세요.",
+            "tryAgain": "다시 시도",
+            "needsDecisionTitle": "결정을 기다리는 중",
+            "needsDecisionDescription": "키를 신뢰하기 전까지 메시지는 암호화되지 않은 채 전송됩니다.",
             "keyTrust": {
                 "verified": "확인됨",
                 "introduced": "소개됨",

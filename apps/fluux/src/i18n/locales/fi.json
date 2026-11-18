@@ -205,6 +205,12 @@
             "methodInUse": "Käytössä",
             "receivesMessages": "Vastaanottaa viestisi",
             "receivesNoMessages": "Ei vastaanota viestejäsi",
+            "wouldReceiveMessages": "Vastaanottaisi tällä tavalla",
+            "listErrorTitle": "Avaimia ei voitu ladata",
+            "listErrorDescription": "Tämän yhteystiedon avaimia ei voitu lukea. Yritä uudelleen.",
+            "tryAgain": "Yritä uudelleen",
+            "needsDecisionTitle": "Odottaa päätöstäsi",
+            "needsDecisionDescription": "Viestit lähetetään salaamattomina, kunnes luotat johonkin avaimeen.",
             "keyTrust": {
                 "verified": "Vahvistettu",
                 "introduced": "Esitelty",

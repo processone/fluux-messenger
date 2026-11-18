@@ -205,6 +205,12 @@
             "methodInUse": "I brug",
             "receivesMessages": "Modtager dine beskeder",
             "receivesNoMessages": "Modtager ikke dine beskeder",
+            "wouldReceiveMessages": "Ville modtage med denne metode",
+            "listErrorTitle": "Nøglerne kunne ikke indlæses",
+            "listErrorDescription": "Kontaktens nøgler kunne ikke læses. Prøv igen.",
+            "tryAgain": "Prøv igen",
+            "needsDecisionTitle": "Venter på din beslutning",
+            "needsDecisionDescription": "Beskeder sendes som almindelig tekst, indtil du stoler på en nøgle.",
             "keyTrust": {
                 "verified": "Verificeret",
                 "introduced": "Introduceret",

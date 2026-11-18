@@ -47,28 +47,65 @@ export function SecurityTab({
               description={t('contacts.encryption.rejectedDescription')}
               tone="danger"
             />
-            <div className="space-y-2">
-              {state.reasons.map((r, i) => (
-                <div key={i} className="rounded-lg bg-fluux-bg/40 px-3 py-2">
-                  <div className="text-xs font-medium text-fluux-text">
-                    {t(`chat.encryption.rejectionCode.${r.code}`)}
+            {state.groups && state.groups.length > 0 ? (
+              <IdentityGroups groups={state.groups} onDecide={onDecide} />
+            ) : (
+              <div className="space-y-2">
+                {state.reasons.map((r, i) => (
+                  <div key={i} className="rounded-lg bg-fluux-bg/40 px-3 py-2">
+                    <div className="text-xs font-medium text-fluux-text">
+                      {t(`chat.encryption.rejectionCode.${r.code}`)}
+                    </div>
+                    <code className="block text-xs font-mono text-fluux-muted mt-0.5 break-all">
+                      {r.detail}
+                    </code>
                   </div>
-                  <code className="block text-xs font-mono text-fluux-muted mt-0.5 break-all">
-                    {r.detail}
-                  </code>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 
-        {state.kind === 'unsupported' && (
-          <ExplanationPanel
-            icon={<ShieldOff className="size-5 text-fluux-muted flex-shrink-0" />}
-            title={t('contacts.encryption.notAvailableTitle')}
-            description={t('contacts.encryption.notAvailableDescription')}
-            tone="neutral"
-          />
+        {state.kind === 'unsupported' && state.listError && (
+          <>
+            <ExplanationPanel
+              icon={<ShieldAlert className={`size-5 ${trustVisual('keyChanged').colorClass} flex-shrink-0`} />}
+              title={t('contacts.encryption.listErrorTitle')}
+              description={t('contacts.encryption.listErrorDescription')}
+              tone="warning"
+            />
+            <button
+              type="button"
+              onClick={state.listError.retry}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-border rounded-lg transition-colors text-sm min-h-[44px]"
+            >
+              {t('contacts.encryption.tryAgain')}
+            </button>
+          </>
+        )}
+
+        {state.kind === 'unsupported' && !state.listError && (
+          <>
+            <ExplanationPanel
+              icon={<ShieldOff className="size-5 text-fluux-muted flex-shrink-0" />}
+              title={state.needsDecision ? t('contacts.encryption.needsDecisionTitle') : t('contacts.encryption.notAvailableTitle')}
+              description={state.needsDecision ? t('contacts.encryption.needsDecisionDescription') : t('contacts.encryption.notAvailableDescription')}
+              tone="neutral"
+            />
+            {state.groups && <IdentityGroups groups={state.groups} onDecide={onDecide} />}
+          </>
+        )}
+
+        {state.kind === 'keyLocked' && (
+          <>
+            <ExplanationPanel
+              icon={<ShieldAlert className="size-5 text-fluux-muted flex-shrink-0" />}
+              title={t('chat.encryption.keyLocked')}
+              description={t('chat.encryption.keyLockedTooltip')}
+              tone="neutral"
+            />
+            {state.groups && <IdentityGroups groups={state.groups} onDecide={onDecide} />}
+          </>
         )}
 
         {state.kind === 'plaintextForced' && (
@@ -118,14 +155,7 @@ export function SecurityTab({
               tone={state.trust === 'verified' ? 'success' : 'neutral'}
             />
 
-            {(state.groups ?? []).map((group) => (
-              <IdentityGroup
-                key={group.protocolId}
-                group={group}
-                showInUse={(state.groups?.length ?? 0) > 1}
-                onDecide={onDecide}
-              />
-            ))}
+            <IdentityGroups groups={state.groups ?? []} onDecide={onDecide} />
 
             <button
               type="button"
@@ -139,6 +169,17 @@ export function SecurityTab({
         )}
       </div>
     </div>
+  )
+}
+
+/** Every method's keys for the contact, whatever the conversation's own state. */
+function IdentityGroups({ groups, onDecide }: { groups: PeerIdentityGroup[]; onDecide: SecurityTabProps['onDecide'] }) {
+  return (
+    <>
+      {groups.map((group) => (
+        <IdentityGroup key={group.protocolId} group={group} showInUse={groups.length > 1} onDecide={onDecide} />
+      ))}
+    </>
   )
 }
 
@@ -163,7 +204,7 @@ function IdentityGroup({ group, showInUse, onDecide }: IdentityGroupProps) {
         )}
       </h3>
       {group.identities.map((identity) => (
-        <IdentityRow key={identity.id} protocolId={group.protocolId} identity={identity} onDecide={onDecide} />
+        <IdentityRow key={identity.id} protocolId={group.protocolId} identity={identity} inUse={group.inUse} onDecide={onDecide} />
       ))}
     </section>
   )
@@ -172,10 +213,13 @@ function IdentityGroup({ group, showInUse, onDecide }: IdentityGroupProps) {
 function IdentityRow({
   protocolId,
   identity,
+  inUse,
   onDecide,
 }: {
   protocolId: string
   identity: PeerIdentity
+  /** False for a method the conversation would not use now. */
+  inUse: boolean
   onDecide: SecurityTabProps['onDecide']
 }) {
   const { t } = useTranslation()
@@ -195,7 +239,7 @@ function IdentityRow({
       )}
       <div className="text-xs text-fluux-muted">
         {identity.usedForEncryption
-          ? t('contacts.encryption.receivesMessages')
+          ? t(inUse ? 'contacts.encryption.receivesMessages' : 'contacts.encryption.wouldReceiveMessages')
           : `${t('contacts.encryption.receivesNoMessages')}${
               identity.notUsedReason ? `: ${t(`contacts.encryption.notUsedReason.${identity.notUsedReason}`)}` : ''
             }`}

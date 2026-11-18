@@ -205,6 +205,12 @@
             "methodInUse": "Используется",
             "receivesMessages": "Получает ваши сообщения",
             "receivesNoMessages": "Не получает ваши сообщения",
+            "wouldReceiveMessages": "Получал бы при этом методе",
+            "listErrorTitle": "Не удалось загрузить ключи",
+            "listErrorDescription": "Не удалось прочитать ключи этого контакта. Повторите попытку.",
+            "tryAgain": "Повторить",
+            "needsDecisionTitle": "Ждёт вашего решения",
+            "needsDecisionDescription": "Сообщения отправляются без шифрования, пока вы не доверитесь ключу.",
             "keyTrust": {
                 "verified": "Проверен",
                 "introduced": "Рекомендован",

@@ -207,6 +207,12 @@
             "methodInUse": "Używany",
             "receivesMessages": "Odbiera Twoje wiadomości",
             "receivesNoMessages": "Nie odbiera Twoich wiadomości",
+            "wouldReceiveMessages": "Odbierałby tą metodą",
+            "listErrorTitle": "Nie udało się wczytać kluczy",
+            "listErrorDescription": "Nie udało się odczytać kluczy tego kontaktu. Spróbuj ponownie.",
+            "tryAgain": "Spróbuj ponownie",
+            "needsDecisionTitle": "Czeka na Twoją decyzję",
+            "needsDecisionDescription": "Wiadomości są wysyłane bez szyfrowania, dopóki nie zaufasz kluczowi.",
             "keyTrust": {
                 "verified": "Zweryfikowany",
                 "introduced": "Zarekomendowany",

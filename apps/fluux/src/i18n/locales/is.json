@@ -205,6 +205,12 @@
             "methodInUse": "Í notkun",
             "receivesMessages": "Fær skilaboðin þín",
             "receivesNoMessages": "Fær ekki skilaboðin þín",
+            "wouldReceiveMessages": "Myndi fá með þessari aðferð",
+            "listErrorTitle": "Ekki tókst að hlaða lyklunum",
+            "listErrorDescription": "Ekki tókst að lesa lykla þessa tengiliðar. Reyndu aftur.",
+            "tryAgain": "Reyna aftur",
+            "needsDecisionTitle": "Bíður ákvörðunar þinnar",
+            "needsDecisionDescription": "Skilaboð eru send ódulrituð þar til þú treystir lykli.",
             "keyTrust": {
                 "verified": "Staðfestur",
                 "introduced": "Kynntur",

@@ -205,6 +205,12 @@
             "methodInUse": "I bruk",
             "receivesMessages": "Mottar meldingene dine",
             "receivesNoMessages": "Mottar ikke meldingene dine",
+            "wouldReceiveMessages": "Ville mottatt med denne metoden",
+            "listErrorTitle": "Nøklene kunne ikke lastes",
+            "listErrorDescription": "Nøklene til denne kontakten kunne ikke leses. Prøv igjen.",
+            "tryAgain": "Prøv igjen",
+            "needsDecisionTitle": "Venter på avgjørelsen din",
+            "needsDecisionDescription": "Meldinger sendes ukryptert til du stoler på en nøkkel.",
             "keyTrust": {
                 "verified": "Verifisert",
                 "introduced": "Introdusert",

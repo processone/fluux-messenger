@@ -460,7 +460,7 @@ describe('encryption state as people see it', () => {
       {
         "composerLock": null,
         "fingerprints": [
-          "no subkey",
+          "BBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555",
         ],
         "glance": "contacts.encryption.rejectedTitle",
         "glanceColors": [
@@ -475,7 +475,7 @@ describe('encryption state as people see it', () => {
           "text-fluux-error",
         ],
         "tabButtons": [],
-        "tabText": "contacts.encryption.rejectedTitlecontacts.encryption.rejectedDescriptionchat.encryption.rejectionCode.no_encryption_subkeyno subkey",
+        "tabText": "contacts.encryption.rejectedTitlecontacts.encryption.rejectedDescriptionOpenPGPcontacts.encryption.keyTrust.unknownBBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555contacts.encryption.receivesNoMessages: contacts.encryption.notUsedReason.invalid-keyno_encryption_subkey",
       }
     `)
   })
@@ -516,7 +516,9 @@ describe('encryption state as people see it', () => {
     expect(seen()).toMatchInlineSnapshot(`
       {
         "composerLock": null,
-        "fingerprints": [],
+        "fingerprints": [
+          "AAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555",
+        ],
         "glance": "Encrypted, locked",
         "glanceColors": [
           "text-fluux-muted",
@@ -529,8 +531,10 @@ describe('encryption state as people see it', () => {
         "headerColors": [
           "text-fluux-muted",
         ],
-        "tabButtons": [],
-        "tabText": "",
+        "tabButtons": [
+          "Verify fingerprint",
+        ],
+        "tabText": "chat.encryption.keyLockedchat.encryption.keyLockedTooltipOpenPGPcontacts.encryption.keyTrust.tofuAAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555contacts.encryption.receivesMessagesVerify fingerprint",
       }
     `)
   })

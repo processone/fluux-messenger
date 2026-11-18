@@ -207,6 +207,12 @@
             "methodInUse": "En uso",
             "receivesMessages": "Recibe tus mensajes",
             "receivesNoMessages": "No recibe tus mensajes",
+            "wouldReceiveMessages": "Recibiría con este método",
+            "listErrorTitle": "No se pudieron cargar las claves",
+            "listErrorDescription": "No se pudieron leer las claves de este contacto. Inténtalo de nuevo.",
+            "tryAgain": "Reintentar",
+            "needsDecisionTitle": "Esperando tu decisión",
+            "needsDecisionDescription": "Los mensajes se envían en texto sin cifrar hasta que confíes en una clave.",
             "keyTrust": {
                 "verified": "Verificada",
                 "introduced": "Presentada",

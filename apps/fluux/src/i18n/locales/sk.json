@@ -206,6 +206,12 @@
             "methodInUse": "Používa sa",
             "receivesMessages": "Prijíma vaše správy",
             "receivesNoMessages": "Neprijíma vaše správy",
+            "wouldReceiveMessages": "Prijímal by touto metódou",
+            "listErrorTitle": "Kľúče sa nepodarilo načítať",
+            "listErrorDescription": "Kľúče tohto kontaktu sa nepodarilo prečítať. Skúste to znova.",
+            "tryAgain": "Skúsiť znova",
+            "needsDecisionTitle": "Čaká na vaše rozhodnutie",
+            "needsDecisionDescription": "Správy sa odosielajú nešifrovane, kým neuveríte nejakému kľúču.",
             "keyTrust": {
                 "verified": "Overený",
                 "introduced": "Predstavený",

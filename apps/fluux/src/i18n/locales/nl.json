@@ -205,6 +205,12 @@
             "methodInUse": "In gebruik",
             "receivesMessages": "Ontvangt uw berichten",
             "receivesNoMessages": "Ontvangt uw berichten niet",
+            "wouldReceiveMessages": "Zou ontvangen met deze methode",
+            "listErrorTitle": "De sleutels konden niet worden geladen",
+            "listErrorDescription": "De sleutels van dit contact konden niet worden gelezen. Probeer het opnieuw.",
+            "tryAgain": "Opnieuw proberen",
+            "needsDecisionTitle": "Wacht op uw beslissing",
+            "needsDecisionDescription": "Berichten worden onversleuteld verzonden totdat u een sleutel vertrouwt.",
             "keyTrust": {
                 "verified": "Geverifieerd",
                 "introduced": "Geïntroduceerd",

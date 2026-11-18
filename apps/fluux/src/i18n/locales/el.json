@@ -206,6 +206,12 @@
             "methodInUse": "Σε χρήση",
             "receivesMessages": "Λαμβάνει τα μηνύματά σας",
             "receivesNoMessages": "Δεν λαμβάνει τα μηνύματά σας",
+            "wouldReceiveMessages": "Θα λάμβανε με αυτή τη μέθοδο",
+            "listErrorTitle": "Δεν ήταν δυνατή η φόρτωση των κλειδιών",
+            "listErrorDescription": "Τα κλειδιά αυτής της επαφής δεν μπόρεσαν να διαβαστούν. Δοκιμάστε ξανά.",
+            "tryAgain": "Δοκιμή ξανά",
+            "needsDecisionTitle": "Αναμονή για την απόφασή σας",
+            "needsDecisionDescription": "Τα μηνύματα στέλνονται χωρίς κρυπτογράφηση μέχρι να εμπιστευτείτε ένα κλειδί.",
             "keyTrust": {
                 "verified": "Επαληθευμένο",
                 "introduced": "Συστημένο",

@@ -207,6 +207,12 @@
             "methodInUse": "Používá se",
             "receivesMessages": "Přijímá vaše zprávy",
             "receivesNoMessages": "Nepřijímá vaše zprávy",
+            "wouldReceiveMessages": "Přijímal by touto metodou",
+            "listErrorTitle": "Klíče se nepodařilo načíst",
+            "listErrorDescription": "Klíče tohoto kontaktu se nepodařilo přečíst. Zkuste to znovu.",
+            "tryAgain": "Zkusit znovu",
+            "needsDecisionTitle": "Čeká na vaše rozhodnutí",
+            "needsDecisionDescription": "Zprávy se odesílají nešifrovaně, dokud neuvěříte nějakému klíči.",
             "keyTrust": {
                 "verified": "Ověřený",
                 "introduced": "Představený",

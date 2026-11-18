@@ -93,4 +93,49 @@ describe('SecurityTab key list', () => {
     for (const row of rows) expect(within(row).queryByRole('button')).not.toBeInTheDocument()
     expect(within(rows[2]).getByText('contacts.encryption.receivesNoMessages: contacts.encryption.notUsedReason.invalid-key')).toBeInTheDocument()
   })
+
+  it('qualifies a usable key of a method not in use as one that would receive', () => {
+    renderTab(encrypted([
+      { protocolId: 'omemo', displayName: 'OMEMO', inUse: true, identities: [identity({ id: '1' })] },
+      { protocolId: 'openpgp', displayName: 'OpenPGP', inUse: false, identities: [identity({ id: 'AAAA1111' })] },
+    ]))
+    const rows = screen.getAllByTestId('identity-row')
+    expect(within(rows[0]).getByText('contacts.encryption.receivesMessages')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('contacts.encryption.wouldReceiveMessages')).toBeInTheDocument()
+  })
+
+  it('lists the keys of a rejected contact, with the decisions the SDK allows', () => {
+    renderTab({
+      kind: 'rejected', reasons: [{ id: 'C', code: 'uid_mismatch', detail: 'x' }],
+      groups: [{ protocolId: 'openpgp', displayName: 'OpenPGP', inUse: false, identities: [
+        identity({ id: 'CCCC3333', trust: 'unknown', usedForEncryption: false, notUsedReason: 'invalid-key', problem: { code: 'uid_mismatch', detail: 'x' } }),
+      ] }],
+    })
+    expect(screen.getByText('contacts.encryption.rejectedTitle')).toBeInTheDocument()
+    expect(screen.getAllByTestId('identity-row')).toHaveLength(1)
+  })
+
+  it('lists the keys of a locked contact', () => {
+    renderTab({ kind: 'keyLocked', groups: [{ protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true, identities: [identity({ id: 'AAAA1111' })] }] })
+    expect(screen.getByText('chat.encryption.keyLocked')).toBeInTheDocument()
+    expect(screen.getAllByTestId('identity-row')).toHaveLength(1)
+  })
+
+  it('offers a decision on each key of a contact waiting for one', () => {
+    const onDecide = vi.fn()
+    const key = identity({ id: 'AAAA1111', trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision', allowedDecisions: ['tofu'] })
+    renderTab({ kind: 'unsupported', needsDecision: true, groups: [{ protocolId: 'omemo', displayName: 'OMEMO', inUse: true, identities: [key] }] }, onDecide)
+    expect(screen.getByText('contacts.encryption.needsDecisionTitle')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'contacts.encryption.trustButton' }))
+    expect(onDecide).toHaveBeenCalledWith('omemo', key, 'tofu')
+  })
+
+  it('shows a list error with Try again that calls the retry', () => {
+    const retry = vi.fn()
+    renderTab({ kind: 'unsupported', listError: { retry } })
+    expect(screen.getByText('contacts.encryption.listErrorTitle')).toBeInTheDocument()
+    expect(screen.queryByText('contacts.encryption.notAvailableTitle')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'contacts.encryption.tryAgain' }))
+    expect(retry).toHaveBeenCalledOnce()
+  })
 })

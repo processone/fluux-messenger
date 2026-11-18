@@ -205,6 +205,12 @@
             "methodInUse": "В употреба",
             "receivesMessages": "Получава съобщенията ви",
             "receivesNoMessages": "Не получава съобщенията ви",
+            "wouldReceiveMessages": "Би получавал с този метод",
+            "listErrorTitle": "Ключовете не можаха да се заредят",
+            "listErrorDescription": "Ключовете на този контакт не можаха да бъдат прочетени. Опитайте отново.",
+            "tryAgain": "Опитайте отново",
+            "needsDecisionTitle": "Чака вашето решение",
+            "needsDecisionDescription": "Съобщенията се изпращат некриптирани, докато не се доверите на ключ.",
             "keyTrust": {
                 "verified": "Потвърден",
                 "introduced": "Препоръчан",

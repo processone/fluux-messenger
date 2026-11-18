@@ -205,6 +205,12 @@
             "methodInUse": "Használatban",
             "receivesMessages": "Megkapja az üzeneteit",
             "receivesNoMessages": "Nem kapja meg az üzeneteit",
+            "wouldReceiveMessages": "Ezzel a módszerrel megkapná",
+            "listErrorTitle": "A kulcsok nem tölthetők be",
+            "listErrorDescription": "A partner kulcsait nem sikerült beolvasni. Próbálja újra.",
+            "tryAgain": "Újrapróbálás",
+            "needsDecisionTitle": "Az Ön döntésére vár",
+            "needsDecisionDescription": "Az üzenetek titkosítatlanul mennek, amíg nem bízik meg egy kulcsban.",
             "keyTrust": {
                 "verified": "Ellenőrzött",
                 "introduced": "Bemutatott",

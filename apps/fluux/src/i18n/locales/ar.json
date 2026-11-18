@@ -205,6 +205,12 @@
             "methodInUse": "قيد الاستخدام",
             "receivesMessages": "يستقبل رسائلك",
             "receivesNoMessages": "لا يستقبل رسائلك",
+            "wouldReceiveMessages": "سيستقبل بهذه الطريقة",
+            "listErrorTitle": "تعذّر تحميل المفاتيح",
+            "listErrorDescription": "تعذّرت قراءة مفاتيح جهة الاتصال هذه. حاول مرة أخرى.",
+            "tryAgain": "حاول مرة أخرى",
+            "needsDecisionTitle": "في انتظار قرارك",
+            "needsDecisionDescription": "تُرسل الرسائل كنص عادي إلى أن تثق بمفتاح.",
             "keyTrust": {
                 "verified": "موثّق",
                 "introduced": "مُقدَّم",

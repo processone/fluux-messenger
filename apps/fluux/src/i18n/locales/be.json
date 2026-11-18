@@ -205,6 +205,12 @@
             "methodInUse": "Выкарыстоўваецца",
             "receivesMessages": "Атрымлівае вашы паведамленні",
             "receivesNoMessages": "Не атрымлівае вашы паведамленні",
+            "wouldReceiveMessages": "Атрымліваў бы пры гэтым метадзе",
+            "listErrorTitle": "Не ўдалося загрузіць ключы",
+            "listErrorDescription": "Не ўдалося прачытаць ключы гэтага кантакта. Паўтарыце спробу.",
+            "tryAgain": "Паўтарыць",
+            "needsDecisionTitle": "Чакае вашага рашэння",
+            "needsDecisionDescription": "Паведамленні адпраўляюцца без шыфравання, пакуль вы не давярэце ключу.",
             "keyTrust": {
                 "verified": "Правераны",
                 "introduced": "Рэкамендаваны",

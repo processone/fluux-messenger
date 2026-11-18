@@ -207,6 +207,12 @@
             "methodInUse": "Kasutusel",
             "receivesMessages": "Saab teie sõnumeid",
             "receivesNoMessages": "Ei saa teie sõnumeid",
+            "wouldReceiveMessages": "Saaks selle meetodiga",
+            "listErrorTitle": "Võtmeid ei saanud laadida",
+            "listErrorDescription": "Selle kontakti võtmeid ei saanud lugeda. Proovige uuesti.",
+            "tryAgain": "Proovi uuesti",
+            "needsDecisionTitle": "Ootab teie otsust",
+            "needsDecisionDescription": "Sõnumid saadetakse krüptimata, kuni usaldate mõnda võtit.",
             "keyTrust": {
                 "verified": "Kinnitatud",
                 "introduced": "Tutvustatud",

@@ -206,6 +206,12 @@
             "methodInUse": "Utilisée",
             "receivesMessages": "Reçoit vos messages",
             "receivesNoMessages": "Ne reçoit pas vos messages",
+            "wouldReceiveMessages": "Recevrait avec cette méthode",
+            "listErrorTitle": "Impossible de charger les clés",
+            "listErrorDescription": "Les clés de ce contact n'ont pas pu être lues. Réessayez.",
+            "tryAgain": "Réessayer",
+            "needsDecisionTitle": "En attente de votre décision",
+            "needsDecisionDescription": "Les messages sont envoyés en clair tant que vous ne faites pas confiance à une clé.",
             "keyTrust": {
                 "verified": "Vérifiée",
                 "introduced": "Introduite",

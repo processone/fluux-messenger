@@ -205,6 +205,12 @@
             "methodInUse": "In úsáid",
             "receivesMessages": "Faigheann sé do theachtaireachtaí",
             "receivesNoMessages": "Ní fhaigheann sé do theachtaireachtaí",
+            "wouldReceiveMessages": "Gheobhadh sé leis an modh seo",
+            "listErrorTitle": "Níorbh fhéidir na heochracha a luchtú",
+            "listErrorDescription": "Níorbh fhéidir eochracha an teagmhálaí seo a léamh. Bain triail eile as.",
+            "tryAgain": "Bain triail eile as",
+            "needsDecisionTitle": "Ag fanacht le do chinneadh",
+            "needsDecisionDescription": "Seoltar teachtaireachtaí gan chriptiú go dtí go mbíonn muinín agat as eochair.",
             "keyTrust": {
                 "verified": "Fíoraithe",
                 "introduced": "Tugtha isteach",

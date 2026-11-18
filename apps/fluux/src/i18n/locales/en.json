@@ -206,6 +206,12 @@
             "methodInUse": "In use",
             "receivesMessages": "Receives your messages",
             "receivesNoMessages": "Does not receive your messages",
+            "wouldReceiveMessages": "Would receive with this method",
+            "listErrorTitle": "Couldn't load the keys",
+            "listErrorDescription": "This contact's keys could not be read. Try again.",
+            "tryAgain": "Try again",
+            "needsDecisionTitle": "Waiting for your decision",
+            "needsDecisionDescription": "Messages are sent in plaintext until you trust a key.",
             "keyTrust": {
                 "verified": "Verified",
                 "introduced": "Introduced",

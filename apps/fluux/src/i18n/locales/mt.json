@@ -207,6 +207,12 @@
             "methodInUse": "Qed jintuża",
             "receivesMessages": "Jirċievi l-messaġġi tiegħek",
             "receivesNoMessages": "Ma jirċievix il-messaġġi tiegħek",
+            "wouldReceiveMessages": "Kien jirċievi b'dan il-metodu",
+            "listErrorTitle": "Iċ-ċwievet ma setgħux jitgħabbew",
+            "listErrorDescription": "Iċ-ċwievet ta' dan il-kuntatt ma setgħux jinqraw. Erġa' pprova.",
+            "tryAgain": "Erġa' pprova",
+            "needsDecisionTitle": "Jistenna d-deċiżjoni tiegħek",
+            "needsDecisionDescription": "Il-messaġġi jintbagħtu mhux ikkriptati sakemm tafda ċavetta.",
             "keyTrust": {
                 "verified": "Ivverifikat",
                 "introduced": "Introdott",

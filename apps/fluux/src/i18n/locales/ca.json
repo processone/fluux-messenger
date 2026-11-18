@@ -207,6 +207,12 @@
             "methodInUse": "En ús",
             "receivesMessages": "Rep els vostres missatges",
             "receivesNoMessages": "No rep els vostres missatges",
+            "wouldReceiveMessages": "Rebria amb aquest mètode",
+            "listErrorTitle": "No s'han pogut carregar les claus",
+            "listErrorDescription": "No s'han pogut llegir les claus d'aquest contacte. Torneu-ho a provar.",
+            "tryAgain": "Torna-ho a provar",
+            "needsDecisionTitle": "Esperant la vostra decisió",
+            "needsDecisionDescription": "Els missatges s'envien en text net fins que confieu en una clau.",
             "keyTrust": {
                 "verified": "Verificat",
                 "introduced": "Introduït",

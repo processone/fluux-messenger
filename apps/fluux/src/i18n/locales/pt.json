@@ -207,6 +207,12 @@
             "methodInUse": "Em uso",
             "receivesMessages": "Recebe as suas mensagens",
             "receivesNoMessages": "Não recebe as suas mensagens",
+            "wouldReceiveMessages": "Receberia com este método",
+            "listErrorTitle": "Não foi possível carregar as chaves",
+            "listErrorDescription": "Não foi possível ler as chaves deste contacto. Tente novamente.",
+            "tryAgain": "Tentar novamente",
+            "needsDecisionTitle": "À espera da sua decisão",
+            "needsDecisionDescription": "As mensagens são enviadas sem cifra até confiar numa chave.",
             "keyTrust": {
                 "verified": "Verificada",
                 "introduced": "Apresentada",

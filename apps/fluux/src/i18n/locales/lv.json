@@ -206,6 +206,12 @@
             "methodInUse": "Lieto",
             "receivesMessages": "Saņem jūsu ziņas",
             "receivesNoMessages": "Nesaņem jūsu ziņas",
+            "wouldReceiveMessages": "Saņemtu ar šo metodi",
+            "listErrorTitle": "Neizdevās ielādēt atslēgas",
+            "listErrorDescription": "Neizdevās nolasīt šīs kontaktpersonas atslēgas. Mēģiniet vēlreiz.",
+            "tryAgain": "Mēģināt vēlreiz",
+            "needsDecisionTitle": "Gaida jūsu lēmumu",
+            "needsDecisionDescription": "Ziņas tiek sūtītas nešifrētas, kamēr neuzticaties kādai atslēgai.",
             "keyTrust": {
                 "verified": "Apstiprināta",
                 "introduced": "Iepazīstināta",

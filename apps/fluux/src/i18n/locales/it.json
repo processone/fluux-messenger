@@ -207,6 +207,12 @@
             "methodInUse": "In uso",
             "receivesMessages": "Riceve i tuoi messaggi",
             "receivesNoMessages": "Non riceve i tuoi messaggi",
+            "wouldReceiveMessages": "Riceverebbe con questo metodo",
+            "listErrorTitle": "Impossibile caricare le chiavi",
+            "listErrorDescription": "Non è stato possibile leggere le chiavi di questo contatto. Riprova.",
+            "tryAgain": "Riprova",
+            "needsDecisionTitle": "In attesa della tua decisione",
+            "needsDecisionDescription": "I messaggi vengono inviati in chiaro finché non ti fidi di una chiave.",
             "keyTrust": {
                 "verified": "Verificata",
                 "introduced": "Presentata",

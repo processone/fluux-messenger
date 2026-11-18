@@ -207,6 +207,12 @@
             "methodInUse": "În uz",
             "receivesMessages": "Primește mesajele tale",
             "receivesNoMessages": "Nu primește mesajele tale",
+            "wouldReceiveMessages": "Ar primi cu această metodă",
+            "listErrorTitle": "Cheile nu au putut fi încărcate",
+            "listErrorDescription": "Cheile acestui contact nu au putut fi citite. Încearcă din nou.",
+            "tryAgain": "Încearcă din nou",
+            "needsDecisionTitle": "Așteaptă decizia ta",
+            "needsDecisionDescription": "Mesajele se trimit necriptat până când ai încredere într-o cheie.",
             "keyTrust": {
                 "verified": "Verificată",
                 "introduced": "Introdusă",
