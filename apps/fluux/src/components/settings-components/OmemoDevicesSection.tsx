@@ -126,6 +126,16 @@ export function OmemoDevicesSection() {
     </div>
   )
 
+  const retryButton = (
+    <button
+      type="button"
+      onClick={() => void load()}
+      className="px-3 py-1.5 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
+    >
+      {t('settings.encryption.omemoDevices.retry')}
+    </button>
+  )
+
   let body
   if (!online) {
     body = <p className="text-xs text-fluux-muted">{t('settings.encryption.omemoDevices.offline')}</p>
@@ -135,17 +145,18 @@ export function OmemoDevicesSection() {
     body = (
       <div className="space-y-2">
         <p className="text-xs text-fluux-error">{t('settings.encryption.omemoDevices.loadFailed')}</p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="px-3 py-1.5 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
-        >
-          {t('settings.encryption.omemoDevices.retry')}
-        </button>
+        {retryButton}
       </div>
     )
   } else {
-    body = <div className="space-y-4">{PROTOCOLS.map((p) => renderList(p, state.lists[p]))}</div>
+    // readOwnDeviceLists reports a read failure per list, so a retry is offered for any list that failed.
+    const unreadable = PROTOCOLS.some((p) => !state.lists[p].ok)
+    body = (
+      <div className="space-y-4">
+        {PROTOCOLS.map((p) => renderList(p, state.lists[p]))}
+        {unreadable && retryButton}
+      </div>
+    )
   }
 
   return (
@@ -163,9 +174,8 @@ export function OmemoDevicesSection() {
           message={t('settings.encryption.omemoDevices.removeMessage', { name: deviceName(pending.device) })}
           confirmLabel={t('settings.encryption.omemoDevices.removeAction')}
           onConfirm={() => void confirmRemove()}
-          onCancel={() => {
-            if (!removing) setPending(null)
-          }}
+          busy={removing}
+          onCancel={() => setPending(null)}
         />
       )}
     </>

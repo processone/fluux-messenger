@@ -70,11 +70,44 @@ describe('OmemoDevicesSection', () => {
     expect(within(screen.getByTestId('omemo-list-omemo2')).getByText('Phone')).toBeTruthy()
   })
 
-  it('offers a retry when nothing could be read', async () => {
+  it('offers a retry when a list could not be read, and reads again', async () => {
+    // The real helper reports a failed read per list; it does not reject.
+    const failed = { ok: false as const, error: new Error('timeout') }
+    readOwnDeviceLists.mockResolvedValueOnce({ omemo2: failed, legacy: failed })
+    render(<OmemoDevicesSection />)
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.encryption.omemoDevices.retry' }))
+    expect(await screen.findByText('Phone')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'settings.encryption.omemoDevices.retry' })).toBeNull()
+  })
+
+  it('keeps the readable list and still offers a retry when only one list failed', async () => {
+    readOwnDeviceLists.mockResolvedValue({ ...lists(), legacy: { ok: false, error: new Error('boom') } })
+    render(<OmemoDevicesSection />)
+    expect(await screen.findByText('Phone')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'settings.encryption.omemoDevices.retry' })).toBeTruthy()
+  })
+
+  it('offers a retry when the read itself rejects', async () => {
     readOwnDeviceLists.mockRejectedValueOnce(new Error('offline'))
     render(<OmemoDevicesSection />)
     fireEvent.click(await screen.findByRole('button', { name: 'settings.encryption.omemoDevices.retry' }))
     expect(await screen.findByText('Phone')).toBeTruthy()
+  })
+
+  it('cannot be dismissed while the removal is running', async () => {
+    let finish!: (r: { removed: number[]; missing: number[] }) => void
+    removeOwnDevices.mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    render(<OmemoDevicesSection />)
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.encryption.omemoDevices.removeDevice|name=Phone' }))
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.omemoDevices.removeAction' }))
+    await waitFor(() => expect(removeOwnDevices).toHaveBeenCalled())
+    const cancel = screen.getByRole('button', { name: 'common.cancel' }) as HTMLButtonElement
+    expect(cancel.disabled).toBe(true)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.click(document.querySelector('[data-modal] > button') as HTMLElement)
+    expect(screen.getByText('settings.encryption.omemoDevices.removeTitle')).toBeTruthy()
+    finish({ removed: [111], missing: [] })
+    await waitFor(() => expect(screen.queryByText('settings.encryption.omemoDevices.removeTitle')).toBeNull())
   })
 
   it('reads nothing while disconnected', () => {

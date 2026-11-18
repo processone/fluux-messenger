@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.19.0',
+    date: 'Unreleased',
+    sections: [{
+      type: 'added',
+      items: [
+        'Settings → Encryption now lists the OMEMO devices on your account, both OMEMO 2 and legacy, with each device\'s name and key fingerprint. You can remove a device after confirming; the other devices and their names stay as they are. Fluux does not use OMEMO itself yet, so this only reads and edits the list other apps keep on your server',
+      ],
+    }],
+  },
+  {
     version: '0.18.3',
     date: '2026-11-16',
     sections: [{

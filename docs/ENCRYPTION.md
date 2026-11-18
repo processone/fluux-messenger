@@ -184,7 +184,7 @@ Not currently. Encryption is enabled per account. If your contact's client suppo
 If you had published a backup, restore it: open Settings → Encryption and enter the backup code. If you had not, generate a new key and your old encrypted messages will no longer be readable.
 
 **Will this work with OMEMO?**
-Not yet. Fluux's encryption engine is built as a plugin layer so OMEMO can be added alongside OpenPGP in the future, but at the moment the only supported protocol is XEP-0373.
+Not yet for messages. Fluux's encryption engine is built as a plugin layer so OMEMO can be added alongside OpenPGP in the future, but at the moment the only supported protocol is XEP-0373. What you can do today is review your account's OMEMO devices: Settings → Encryption lists the devices that other apps registered on your account, for both OMEMO 2 and legacy OMEMO, and lets you remove one after confirming. Fluux is not one of those devices, saves no OMEMO key and does not encrypt with OMEMO.
 
 ## Reference
 
