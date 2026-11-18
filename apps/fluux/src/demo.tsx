@@ -21,6 +21,7 @@ import { DemoOpenPGPPlugin, DEMO_AVA_FINGERPRINT } from './demo/DemoOpenPGPPlugi
 import { ThemeProvider } from './providers/ThemeProvider'
 import { useThemeStore } from './stores/themeStore'
 import { useSettingsStore } from './stores/settingsStore'
+import { useToastStore } from './stores/toastStore'
 import { useArrivalJumpStore } from './stores/arrivalJumpStore'
 import { useEncryptionSettingsStore } from './stores/encryptionSettingsStore'
 import { useVerifiedPeerKeysStore } from './stores/verifiedPeerKeysStore'
@@ -189,6 +190,7 @@ setSessionPassphrase('demo')
 ;(window as any).__chatStore = chatStore
 ;(window as any).__connectionStore = connectionStore
 ;(window as any).__arrivalJumpStore = useArrivalJumpStore
+;(window as any).__toastStore = useToastStore
 ;(window as unknown as { __cacheMigrationStore: typeof cacheMigrationStore }).__cacheMigrationStore = cacheMigrationStore
 ;(window as any).__themeStore = useThemeStore
 ;(window as any).__settingsStore = useSettingsStore
