@@ -177,6 +177,18 @@ describe('useConversationEncryptionState', () => {
     expect(manager.getConversationSecurity).toHaveBeenCalledTimes(2)
   })
 
+  it.each([
+    ['encrypted', encrypted(), { kind: 'encrypted', trust: 'tofu', fingerprint: 'FP1' }],
+    ['locked', { kind: 'locked', protocolId: 'openpgp', displayName: 'OpenPGP' } as ConversationSecurity, { kind: 'keyLocked' }],
+  ])('keeps a %s conversation as it is when its keys cannot be listed, and offers a retry', async (_name, security, expected) => {
+    const { manager } = fakeManager(security)
+    manager.listPeerIdentities.mockResolvedValue([])
+    wire({ manager })
+    const hook = renderHook(() => useConversationEncryptionState(PEER, 'chat'))
+    await waitFor(() => expect(hook.result.current.kind).not.toBe('checking'))
+    expect(hook.result.current).toMatchObject({ ...expected, listError: { retry: expect.any(Function) } })
+  })
+
   it('reports keys the SDK could not read as a list error, not as a rejected certificate', async () => {
     const state = await stateFor({ kind: 'unusable', protocolId: 'openpgp', displayName: 'OpenPGP', problems: [{ id: '', code: 'listing-failed', detail: '' }] })
     expect(state).toMatchObject({ kind: 'unsupported', listError: { retry: expect.any(Function) } })

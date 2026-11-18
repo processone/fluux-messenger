@@ -54,6 +54,8 @@ export type ConversationEncryptionState =
       identityId?: string
       /** Every method's keys for this contact, for the Security tab's list. */
       groups?: PeerIdentityGroup[]
+      /** The keys could not be listed this time; the conversation is encrypted all the same. */
+      listError?: { retry: () => void }
       trust: TrustState
       isNew?: true
       partlyVerified?: true
@@ -63,7 +65,7 @@ export type ConversationEncryptionState =
   | { kind: 'blocked'; pinnedFingerprint: string; advertisedFingerprint: string }
   | { kind: 'unsupported'; groups?: PeerIdentityGroup[]; needsDecision?: true; listError?: { retry: () => void } }
   | { kind: 'rejected'; reasons: EncryptionProblem[]; groups?: PeerIdentityGroup[] }
-  | { kind: 'keyLocked'; fingerprint?: string; groups?: PeerIdentityGroup[] }
+  | { kind: 'keyLocked'; fingerprint?: string; groups?: PeerIdentityGroup[]; listError?: { retry: () => void } }
 
 /** The identity to show for a conversation: the one in use, or the first of several in use. */
 function shownIdentity(identities: PeerIdentity[]): PeerIdentity | undefined {
@@ -94,15 +96,21 @@ async function resolveState(manager: E2EEManager, peer: string, retry: () => voi
       return { kind: 'rejected', reasons: security.problems, ...(groups.length > 0 ? { groups } : {}) }
     }
     case 'locked': {
-      const groups = await manager.listPeerIdentities(peer)
+      // The conversation is locked whatever the listing says; a missing group only adds a list error.
+      const groups = await manager.listPeerIdentities(peer).catch((): PeerIdentityGroup[] => [])
       const group = groups.find((g) => g.protocolId === security.protocolId)
-      if (!group) return listFailed
-      return { kind: 'keyLocked', fingerprint: group && shownIdentity(group.identities)?.fingerprint, groups }
+      return {
+        kind: 'keyLocked',
+        fingerprint: group && shownIdentity(group.identities)?.fingerprint,
+        groups,
+        ...(group ? {} : { listError: { retry } }),
+      }
     }
     case 'encrypted': {
-      const groups = await manager.listPeerIdentities(peer)
+      // The manager already said messages are encrypted. A listing that fails now must not
+      // downgrade that: the state stays encrypted and carries a list error to retry.
+      const groups = await manager.listPeerIdentities(peer).catch((): PeerIdentityGroup[] => [])
       const group = groups.find((g) => g.protocolId === security.protocolId)
-      if (!group) return listFailed
       const used = group?.identities.filter((i) => i.usedForEncryption) ?? []
       const shown = shownIdentity(group?.identities ?? [])
       // A decision is offered only for a contact with exactly one key in use.
@@ -113,6 +121,7 @@ async function resolveState(manager: E2EEManager, peer: string, retry: () => voi
         displayName: security.displayName,
         trust: security.trust,
         groups,
+        ...(group ? {} : { listError: { retry } }),
         ...((security.fingerprint ?? shown?.fingerprint) ? { fingerprint: security.fingerprint ?? shown?.fingerprint } : {}),
         ...(only ? { identityId: only.id } : {}),
         ...(security.isNew ? { isNew: true as const } : {}),

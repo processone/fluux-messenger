@@ -152,4 +152,21 @@ describe('SecurityTab key list', () => {
     }]))
     expect(screen.getByText('no subkey')).toBeInTheDocument()
   })
+
+  it('says only the method in use receives once unlocked; an unused method keeps its wording', () => {
+    renderTab({ kind: 'keyLocked', groups: [
+      { protocolId: 'omemo', displayName: 'OMEMO', inUse: true, identities: [identity({ id: '1' })] },
+      { protocolId: 'openpgp', displayName: 'OpenPGP', inUse: false, identities: [identity({ id: 'AAAA1111' })] },
+    ] })
+    const rows = screen.getAllByTestId('identity-row')
+    expect(within(rows[0]).getByText('contacts.encryption.receivesWhenUnlocked')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('contacts.encryption.wouldReceiveMessages')).toBeInTheDocument()
+  })
+
+  it('shows the list error beside an encrypted conversation and retries', () => {
+    const retry = vi.fn()
+    renderTab({ kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', trust: 'tofu', groups: [], listError: { retry } })
+    fireEvent.click(screen.getByRole('button', { name: 'contacts.encryption.tryAgain' }))
+    expect(retry).toHaveBeenCalledOnce()
+  })
 })

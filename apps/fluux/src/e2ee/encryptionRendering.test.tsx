@@ -567,11 +567,24 @@ describe('encryption state as people see it', () => {
     await open()
     const tab = screen.getByTestId('tab')
     expect(tab.textContent).toContain('contacts.encryption.listErrorTitle')
+    // The conversation stays encrypted: the composer keeps its lock and sends, uploads included, stay encrypted.
+    expect(seen().composerLock?.label).toBe('chat.encryption.openpgpTooltip')
     expect(tab.querySelectorAll('[data-testid="identity-row"]')).toHaveLength(0)
     world.failListingFrom = null
     fireEvent.click(within(tab).getByRole('button', { name: 'contacts.encryption.tryAgain' }))
     await act(async () => { await new Promise((r) => setTimeout(r, 30)) })
     expect(tab.querySelectorAll('[data-testid="identity-row"]')).toHaveLength(1)
     expect(tab.textContent).not.toContain('contacts.encryption.listErrorTitle')
+  })
+
+  it('a listing that fails while the own key is locked: still locked, with a list error to retry', async () => {
+    world.announced = [A]
+    world.locked = true
+    // A locked plugin lists nothing for the manager's own read, so the app's listing is call 1.
+    world.failListingFrom = 1
+    await open()
+    expect(screen.getByTestId('tab').textContent).toContain('contacts.encryption.listErrorTitle')
+    // The header keeps its unlock affordance, so a send still asks to unlock and uploads nothing.
+    expect(seen().headerButtons.length).toBeGreaterThan(0)
   })
 })

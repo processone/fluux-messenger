@@ -66,23 +66,7 @@ export function SecurityTab({
           </>
         )}
 
-        {state.kind === 'unsupported' && state.listError && (
-          <>
-            <ExplanationPanel
-              icon={<ShieldAlert className={`size-5 ${trustVisual('keyChanged').colorClass} flex-shrink-0`} />}
-              title={t('contacts.encryption.listErrorTitle')}
-              description={t('contacts.encryption.listErrorDescription')}
-              tone="warning"
-            />
-            <button
-              type="button"
-              onClick={state.listError.retry}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-border rounded-lg transition-colors text-sm min-h-[44px]"
-            >
-              {t('contacts.encryption.tryAgain')}
-            </button>
-          </>
-        )}
+        {state.kind === 'unsupported' && state.listError && <ListError retry={state.listError.retry} />}
 
         {state.kind === 'unsupported' && !state.listError && (
           <>
@@ -104,6 +88,7 @@ export function SecurityTab({
               description={t('chat.encryption.keyLockedTooltip')}
               tone="neutral"
             />
+            {state.listError && <ListError retry={state.listError.retry} />}
             {state.groups && <IdentityGroups groups={state.groups} locked onDecide={onDecide} />}
           </>
         )}
@@ -155,6 +140,7 @@ export function SecurityTab({
               tone={state.trust === 'verified' ? 'success' : 'neutral'}
             />
 
+            {state.listError && <ListError retry={state.listError.retry} />}
             <IdentityGroups groups={state.groups ?? []} onDecide={onDecide} />
 
             <button
@@ -169,6 +155,28 @@ export function SecurityTab({
         )}
       </div>
     </div>
+  )
+}
+
+/** The keys could not be read; nothing is wrong with the conversation's encryption itself. */
+function ListError({ retry }: { retry: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <ExplanationPanel
+        icon={<ShieldAlert className={`size-5 ${trustVisual('keyChanged').colorClass} flex-shrink-0`} />}
+        title={t('contacts.encryption.listErrorTitle')}
+        description={t('contacts.encryption.listErrorDescription')}
+        tone="warning"
+      />
+      <button
+        type="button"
+        onClick={retry}
+        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-border rounded-lg transition-colors text-sm min-h-[44px]"
+      >
+        {t('contacts.encryption.tryAgain')}
+      </button>
+    </>
   )
 }
 
@@ -253,11 +261,11 @@ function IdentityRow({
       <div className="text-xs text-fluux-muted">
         {identity.usedForEncryption
           ? t(
-              locked
-                ? 'contacts.encryption.receivesWhenUnlocked'
-                : inUse
-                  ? 'contacts.encryption.receivesMessages'
-                  : 'contacts.encryption.wouldReceiveMessages',
+              !inUse
+                ? 'contacts.encryption.wouldReceiveMessages'
+                : locked
+                  ? 'contacts.encryption.receivesWhenUnlocked'
+                  : 'contacts.encryption.receivesMessages',
             )
           : `${t('contacts.encryption.receivesNoMessages')}${
               identity.notUsedReason ? `: ${t(`contacts.encryption.notUsedReason.${identity.notUsedReason}`)}` : ''
