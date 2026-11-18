@@ -724,13 +724,18 @@ export class PositioningController {
   }
 
   /**
-   * The reader's own navigation has not landed yet: a message jump, return-to-latest or Home.
-   * Visibility maintenance of a settled target and follow-live maintenance are not navigation.
+   * The reader's own navigation has not landed yet: a message jump, return-to-latest or Home,
+   * including the load each starts first and return-to-latest's visit to the unread divider.
+   * Visibility maintenance of a settled target, follow-live maintenance and the divider placed on
+   * entering a conversation are not navigation.
    */
   hasPendingNavigation(conversationId: string): boolean {
     const target = this.explicitTargetExecution
     if (target !== null && target.purpose === 'navigation' &&
       target.request.conversationId === conversationId && this.isExplicitTargetExecutionCurrent(target)) return true
+    const unread = this.unreadExecution
+    if (unread !== null && unread.request.source.kind === 'user-navigation' &&
+      unread.request.conversationId === conversationId && this.isUnreadExecutionCurrent(unread)) return true
     const liveEdge = this.liveEdgeExecution
     if (liveEdge !== null && liveEdge.purpose === 'navigation' &&
       liveEdge.request.conversationId === conversationId && this.isLiveEdgeExecutionCurrent(liveEdge)) return true
@@ -3422,10 +3427,13 @@ export class PositioningController {
     execution.abortController?.abort()
     this.reportUnreadCompletion(execution, reason)
 
+    // Return-to-latest's divider visit hands its navigation over: the live edge is still the place
+    // the reader asked for.
     if (!this.acceptLiveEdgeRequest(
       execution.request.conversationId,
       { kind: 'fallback', reason },
       execution.executor.liveEdge,
+      execution.request.source.kind === 'user-navigation' ? 'navigation' : 'maintenance',
     )) this.cancelUnreadExecution()
   }
 

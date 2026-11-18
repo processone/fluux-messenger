@@ -2706,6 +2706,45 @@ describe('positioning controller unread-marker ownership', () => {
     expect(pill.callbacks).toHaveLength(1)
   })
 
+  // Return-to-latest's divider visit owns a released fling's leftover movement like the
+  // return-to-latest it stands for, through its handover to the live edge until that first settles.
+  // The divider placed on entering a conversation, and its handover, are not the reader's navigation.
+  it.each(['entry', 'return-to-latest'] as const)('reports pending navigation only for the reader\'s divider visit (%s)', visit => {
+    const harness = unreadHarness({ kind: 'available', index: 12, mounted: false, placement: 'viable' })
+    const executor: UnreadMarkerExecutor = {
+      ...harness.executor,
+      liveEdge: {
+        ...harness.executor.liveEdge,
+        beginLoop: () => ({ schedule: callback => harness.callbacks.push(callback), recordFrame: () => {}, finish: () => {} }),
+        positionFrame: () => ({ kind: 'positioned', scrollTop: 1000, atLiveEdge: true, wrote: false, reassert: true }),
+      },
+    }
+    const controller = new PositioningController()
+    if (visit === 'entry') {
+      controller.beginUnreadMarkerEntry({ conversationId, entryFacts: unreadFacts(), executor })
+    } else {
+      observeLiveEntry(controller)
+      controller.beginUnreadMarkerNavigation({
+        conversationId,
+        navigationFacts: { firstUnreadMessageId: 'first-unread', unreadMarkerNeedsVisit: true, unreadMarkerAlign: 'start' },
+        executor,
+      })
+    }
+    const navigation = visit === 'return-to-latest'
+    expect(controller.hasPendingNavigation(conversationId)).toBe(navigation)
+    expect(controller.hasPendingNavigation('another-room')).toBe(false)
+
+    harness.setFrameResult({ kind: 'unavailable' })
+    harness.runFrame()
+    expect(controller.snapshot().active?.request.source).toEqual({ kind: 'fallback', reason: 'unread-marker-unavailable' })
+    expect(harness.callbacks.length, 'the live-edge handover owns the pixels').toBeGreaterThan(0)
+    expect(controller.hasPendingNavigation(conversationId)).toBe(navigation)
+
+    while (harness.callbacks.length) harness.runFrame()
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+    expect(controller.hasPendingNavigation(conversationId)).toBe(false)
+  })
+
   it('promotes an executor-declared near-top target without issuing another marker frame', () => {
     const harness = unreadHarness({
       kind: 'available',

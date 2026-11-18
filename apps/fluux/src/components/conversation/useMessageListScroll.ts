@@ -563,9 +563,10 @@ export function useMessageListScroll({
     })) virtualizerRef.current?.cancelPendingScroll?.()
   }
   // Accepting a new message jump, return-to-latest or Home retires the old input, but its released
-  // fling can still move the DOM before the held write runs. Attribute only that known tail to the
-  // current navigation; a new contact, input packet, settled target, follow-live re-pin, or missing
-  // gesture state retains the reader veto.
+  // fling can still move the DOM before the held write runs, or while the navigation first loads
+  // newer messages, the slice around its target or visits the unread divider. Attribute only that
+  // known tail to the current navigation; a new contact, input packet, settled target, follow-live
+  // re-pin, or missing gesture state retains the reader veto.
   const navigationOwnsFling = (id: string): boolean => {
     return positioningControllerRef.current?.hasPendingNavigation(id) === true &&
       virtualizerRef.current?.hasPendingFling?.() === true
