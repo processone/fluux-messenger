@@ -13,6 +13,7 @@
  * "the nav never came"; the staged waits below report WHERE it stopped.
  */
 import type { ConsoleMessage, Page } from '@playwright/test'
+import { watchForWebKitTermination, webkitTerminationOf } from './webkitTermination'
 
 /**
  * Total budget for getting from `goto` to a mounted app shell — unchanged from the single
@@ -128,6 +129,9 @@ async function describeStall(
 
 /** Navigate to a demo URL and return once it is mounted and fully seeded. */
 export async function bootDemo(page: Page, url: string): Promise<void> {
+  // Every suite boots through here, so this is where a page starts being watched for the
+  // macOS WebKit termination that would otherwise leave it hanging until the test limit.
+  watchForWebKitTermination(page)
   const diagnostics = attachDiagnostics(page)
   const deadline = Date.now() + MOUNT_BUDGET_MS
 
@@ -147,6 +151,7 @@ export async function bootDemo(page: Page, url: string): Promise<void> {
  * after the reload is a slow boot, not a regression (FLM-304's keychain retry journey).
  */
 export async function reloadDemo(page: Page): Promise<void> {
+  watchForWebKitTermination(page)
   const diagnostics = attachDiagnostics(page)
   const deadline = Date.now() + MOUNT_BUDGET_MS
   await page.reload({ waitUntil: 'domcontentloaded', timeout: remainingUntil(deadline) })
@@ -163,7 +168,10 @@ async function waitForMount(page: Page, diagnostics: BootDiagnostics, deadline: 
   for (const stage of MOUNT_STAGES) {
     try {
       await page.waitForFunction(stage.probe, undefined, { timeout: remainingUntil(deadline), polling: 250 })
-    } catch {
+    } catch (error) {
+      // WebKit stopped the page: its reason is the whole story, and the liveness probe would
+      // only misreport the closed page as a blocked main thread.
+      if (webkitTerminationOf(page)) throw error
       throw new Error(await describeStall(page, stage, diagnostics, MOUNT_BUDGET_MS - remainingUntil(deadline)))
     }
   }
