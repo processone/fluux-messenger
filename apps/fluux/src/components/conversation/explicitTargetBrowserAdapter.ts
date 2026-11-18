@@ -187,6 +187,7 @@ export class ExplicitTargetBrowserAdapter {
     if (element) virtualizer?.retainMessage?.(rowId ?? null)
 
     let wrote = true
+    let held = false
     if (placement === 'keep-visible') {
       if (!element) return { kind: 'unavailable' }
       const viewportTop = scroller.getBoundingClientRect().top + scroller.clientTop
@@ -206,7 +207,10 @@ export class ExplicitTargetBrowserAdapter {
       }
       wrote = scroller.scrollTop !== before
     } else if (index !== null && virtualizer) {
-      virtualizer.scrollToIndex(index, { align: 'center', owner: lease.owner })
+      // A released iOS fling holds the jump's write until it ends, and the list keeps moving with
+      // the fling meanwhile.
+      const write = virtualizer.scrollToIndex(index, { align: 'center', owner: lease.owner })
+      held = write.outcome().status === 'queued'
     } else {
       element?.scrollIntoView({ block: 'center' })
     }
@@ -224,7 +228,8 @@ export class ExplicitTargetBrowserAdapter {
       index,
       scrollTop,
       distanceFromBottom,
+      held,
     })
-    return { kind: 'positioned', scrollTop, wrote }
+    return held ? { kind: 'held' } : { kind: 'positioned', scrollTop, wrote }
   }
 }

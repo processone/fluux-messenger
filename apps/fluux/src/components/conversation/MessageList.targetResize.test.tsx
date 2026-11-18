@@ -7,6 +7,7 @@ import { getActiveMessageListController, setActiveMessageListController } from '
 import { getScrollShadowSnapshot, resetScrollShadowDiagnostics } from './scrollPositionShadow'
 import { TARGET_HIGHLIGHT_MS } from './explicitTargetBrowserAdapter'
 import { scrollStateManager } from '@/utils/scrollStateManager'
+import { appliedWrite } from './scrollWriteTestDoubles'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
@@ -31,13 +32,17 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
     getOffsetForMessageId: (id: string) => id === 'msg-19' ? 920 : 0,
     ensureMessageMounted: async () => {},
     measureElement: () => {},
-    scrollToOffset: (top: number) => { if (args.scrollRef.current) args.scrollRef.current.scrollTop = top },
+    scrollToOffset: (top: number) => {
+      if (args.scrollRef.current) args.scrollRef.current.scrollTop = top
+      return appliedWrite(args.scrollRef.current?.scrollTop)
+    },
     beginAnimatedScrollToOffset: (top: number) => { if (args.scrollRef.current) args.scrollRef.current.scrollTop = top },
     scrollToIndex: (_index: number, options?: { align?: string }) => {
       const scroller = args.scrollRef.current
       if (scroller) scroller.scrollTop = options?.align === 'end'
         ? scroller.scrollHeight - scroller.clientHeight
         : 960 - scroller.clientHeight / 2
+      return appliedWrite(scroller?.scrollTop)
     },
   }),
 }))

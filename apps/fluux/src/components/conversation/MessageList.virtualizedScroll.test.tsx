@@ -25,6 +25,7 @@ import { scrollStateManager } from '@/utils/scrollStateManager'
 import { scrollToMessage } from './messageGrouping'
 import { PositioningController } from './positioningController'
 import { getActiveMessageListController } from './activeMessageListController'
+import { appliedWrite } from './scrollWriteTestDoubles'
 
 const ensureMessageMounted = vi.fn((_id: string) => Promise.resolve())
 const getOffsetForMessageId = vi.fn((_id: string): number | null => 0)
@@ -97,6 +98,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
       scrollToOffsetCalls.push(offset)
       const el = args.scrollRef.current
       if (el) el.scrollTop = offset
+      return appliedWrite(el?.scrollTop)
     },
     // jsdom has no smooth-scroll animation, so an animated scroll lands immediately. Recorded
     // separately from scrollToOffset so tests can tell an animated command from a re-window write.
@@ -115,7 +117,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
       const mountedKey = args.items[_index]?.key
       if (mountedKey) windowedOutKeys.delete(mountedKey)
       const el = args.scrollRef.current
-      if (!el) return
+      if (!el) return appliedWrite()
       if (opts?.align === 'end') {
         el.scrollTop = el.scrollHeight  // simulate scroll-to-bottom
       } else {
@@ -123,6 +125,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
           ? scrollToIndexStartOffsets.shift()!
           : _index * 40
       }
+      return appliedWrite(el.scrollTop)
     },
   }),
 }))

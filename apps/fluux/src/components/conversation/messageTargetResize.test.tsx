@@ -550,6 +550,32 @@ describe('return-to-latest, End and message jumps through a released fling while
   const NEWER_SLICE = 600
   const latestAfterSlice = 9878 + NEWER_SLICE - 646
 
+  // FLM-255: with a scrollbar that takes space, as the list's own scrollbar style gives it in a
+  // desktop WebKit or Chromium view, the iOS library cannot end a released fling at a navigation's
+  // first write, and holds every write until the fling ends. Return-to-latest's frames (60) and a
+  // jump's (30) ran out first, or the jump read the fling's slowing position as its own landing, and
+  // the held write was refused once the navigation had ended. Positions read on each frame of a
+  // WebKit replay with that scrollbar, from the navigation's first frame to the end of the fling:
+  // End from a slid window, after the newer messages arrived; a quote jump, after the slice around
+  // its target arrived.
+  const replayedLiveEdgeFling = [
+    3703, 3680, 3658, 3637, 3617, 3598, 3580, 3563, 3547, 3532, 3517, 3503, 3490, 3477, 3465, 3454,
+    3443, 3433, 3423, 3414, 3405, 3397, 3389, 3381, 3374, 3367, 3360, 3354, 3348, 3342, 3336, 3331,
+    3326, 3321, 3316, 3312, 3308, 3304, 3300, 3296, 3292, 3289, 3286, 3283, 3280, 3277, 3274, 3271,
+    3268, 3266, 3264, 3262, 3260, 3258, 3256, 3254, 3252, 3250, 3248, 3246, 3244, 3242, 3241, 3240,
+    3239, 3238, 3237, 3236, 3235, 3234, 3233, 3232, 3231, 3230, 3229, 3228,
+  ]
+  const replayedJumpFling = [
+    2479, 2461, 2443, 2426, 2410, 2395, 2381, 2367, 2354, 2342, 2330, 2319, 2308, 2298, 2288, 2279,
+    2270, 2262, 2254, 2246, 2239, 2232, 2225, 2219, 2213, 2207, 2202, 2197, 2192, 2187, 2182, 2178,
+    2174, 2170, 2166, 2162, 2159, 2156, 2153, 2150, 2147, 2144, 2141, 2138, 2136, 2134, 2132, 2130,
+    2128, 2126, 2124, 2122, 2120, 2118, 2116, 2114, 2112, 2110, 2109, 2108, 2107, 2106, 2105, 2104,
+    2103, 2102, 2101, 2100, 2099, 2098, 2097,
+  ]
+  // The same movement, from where the fixture's fling is at the navigation's first frame.
+  const replayFrom = (replayed: readonly number[], top: number) =>
+    replayed.map(replayedTop => top - (replayed[0] - replayedTop))
+
   // F1: in a slid window, the press only asks for the newer slice; the fling keeps moving while it
   // loads, and a 'frame' sample is first read by the live-edge loop once the slice has arrived.
   it.each(each(['frame', 'measurement', 'native'] as const))(
@@ -623,6 +649,20 @@ describe('return-to-latest, End and message jumps through a released fling while
       flingMoves(scope, 4439, observation)
       await arrive()
       runFrame()
+      const dropped = [...scope.droppedHeldWrites]
+      scope.releaseFling()
+      settle()
+      expect({ dropped, top: scope.scroller.scrollTop }).toEqual({ dropped: [], top: centered(scope) })
+    })
+
+    it('lands on the target after a fling that holds its write past the jump\'s frames', async () => {
+      const scope = readerAt(4469, true)
+      scope.holdWritesDuringFling()
+      const arrive = jumpTarget(scope)
+      flingMoves(scope, 4439, observation)
+      await arrive()
+      runFrame()
+      for (const top of replayFrom(replayedJumpFling, 4439).slice(1)) flingMoves(scope, top, observation)
       const dropped = [...scope.droppedHeldWrites]
       scope.releaseFling()
       settle()
@@ -753,6 +793,56 @@ describe('return-to-latest, End and message jumps through a released fling while
       flingMoves(scope, latest - 300, test.observation)
       settle()
       expect(scope.scroller.scrollTop).toBe(latest - 300)
+    },
+  )
+
+  it.each(each(['frame', 'native'] as const))(
+    '$navigation lands on the latest message after a fling that holds its write past the loop\'s frames (sample: $observation)',
+    test => {
+      const scope = readerAt(4469, true)
+      scope.holdWritesDuringFling()
+      navigate(scope, test.navigation)
+      flingMoves(scope, 4439, test.observation)
+      scope.loadNewerSlice(NEWER_SLICE)
+      for (const top of replayFrom(replayedLiveEdgeFling, 4439).slice(1)) flingMoves(scope, top, test.observation)
+      const dropped = [...scope.droppedHeldWrites]
+      scope.releaseFling()
+      settle()
+      expect({ dropped, top: scope.scroller.scrollTop }).toEqual({ dropped: [], top: latestAfterSlice })
+    },
+  )
+
+  // Past the loop's former 60 frames, the reader's new input still ends the held navigation.
+  it.each(each(['frame', 'native'] as const))(
+    'keeps a new wheel input late in a fling that holds $navigation\'s write as the reader\'s (sample: $observation)',
+    test => {
+      const scope = readerAt(4469, true)
+      scope.holdWritesDuringFling()
+      navigate(scope, test.navigation)
+      flingMoves(scope, 4439, test.observation)
+      scope.loadNewerSlice(NEWER_SLICE)
+      const tops = replayFrom(replayedLiveEdgeFling, 4439).slice(1)
+      for (const top of tops.slice(0, 65)) flingMoves(scope, top, test.observation)
+      scope.wheel(-20)
+      flingMoves(scope, tops[65], test.observation)
+      scope.releaseFling()
+      settle()
+      expect(scope.scroller.scrollTop).toBe(tops[65])
+      expect(scope.writes).toEqual([])
+    },
+  )
+
+  it.each(each(['frame', 'native'] as const))(
+    '$navigation lands on the latest message when the divider visit hands over to the live edge during a fling that holds its write past the loop\'s frames (sample: $observation)',
+    test => {
+      const scope = dividerReaderAt(4469, newestRowTop)
+      scope.holdWritesDuringFling()
+      pressThenLoseDivider(scope, test.navigation)
+      for (const top of replayFrom(replayedLiveEdgeFling, 4469).slice(1)) flingMoves(scope, top, test.observation)
+      const dropped = [...scope.droppedHeldWrites]
+      scope.releaseFling()
+      settle()
+      expect({ dropped, top: scope.scroller.scrollTop }).toEqual({ dropped: [], top: latest })
     },
   )
 })
