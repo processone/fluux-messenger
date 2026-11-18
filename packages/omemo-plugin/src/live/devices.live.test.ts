@@ -25,9 +25,10 @@ interface Raw {
 interface RawClient { iqCaller: Raw; start(): Promise<unknown>; stop(): Promise<unknown> }
 const PUBSUB = 'http://jabber.org/protocol/pubsub'
 
+let clientCount = 0
 async function rawClient(user: string, resource: string): Promise<RawClient> {
   const { client } = (await import('@xmpp/client')) as unknown as { client(o: object): RawClient }
-  const c = client({ service: WS, domain: 'localhost', username: user, password: `pw-${user}-1`, resource })
+  const c = client({ service: WS, domain: 'localhost', username: user, password: `pw-${user}-1`, resource: `${resource}${++clientCount}` })
   await c.start()
   return c
 }
@@ -76,14 +77,80 @@ async function seedAccount(c: RawClient, opts: { omit?: Set<string>; legacyGarbl
   }
 }
 
-async function sdkClient(user: string): Promise<XMPPClient> {
-  const client = new XMPPClient()
-  await client.connect({ jid: `${user}@localhost/sdk`, password: `pw-${user}-1`, server: WS!, skipDiscovery: true })
-  return client
+/**
+ * A WebSocket pass-through between the SDK client and the server, so the run can observe and shape the wire:
+ * it counts the pubsub publishes the client sends, can answer chosen node reads with a service error, and can
+ * move a prefix declaration from the payload up onto its `<item>` (a valid form this server never produces itself).
+ * Uses `ws`, the WebSocket library @xmpp/client already depends on.
+ */
+interface Wire {
+  url: string
+  /** Nodes of every publish the client sent, in order. */
+  publishes: string[]
+  /** Read requests for these nodes get a service-unavailable error instead of reaching the server. */
+  failReads: Set<string>
+  /** Reads answered with the payload's prefix declaration moved onto its `<item>`. */
+  hoisted: number
+  /** The last server frame that mentioned a device list, for the record. */
+  sample?: string
+  close(): Promise<void>
+}
+const proxies: Wire[] = []
+
+async function startWire(opts: { hoistPrefix?: boolean } = {}): Promise<Wire> {
+  type Sock = { send(d: string): void; on(e: string, cb: (d: Buffer) => void): void; close(): void; once(e: string, cb: () => void): void; readyState: number }
+  const ws = (await import('ws')) as unknown as {
+    WebSocketServer: new (o: object) => { address(): { port: number }; on(e: string, cb: (s: Sock) => void): void; close(): void; once(e: string, cb: () => void): void }
+    WebSocket: new (url: string, protocols: string) => Sock
+  }
+  const wire: Wire = { url: '', publishes: [], failReads: new Set(), hoisted: 0, close: async () => undefined }
+  const server = new ws.WebSocketServer({ host: '127.0.0.1', port: 0, handleProtocols: () => 'xmpp' })
+  await new Promise<void>((resolve) => server.once('listening', resolve))
+  wire.url = `ws://127.0.0.1:${server.address().port}/ws`
+  server.on('connection', (client) => {
+    const upstream = new ws.WebSocket(WS!, 'xmpp')
+    const pending: string[] = []
+    upstream.once('open', () => pending.splice(0).forEach((m) => upstream.send(m)))
+    client.on('message', (data) => {
+      const text = data.toString()
+      for (const m of text.matchAll(/<publish\s[^>]*node=["']([^"']+)["']/g)) wire.publishes.push(m[1])
+      const read = text.match(/^<iq[^>]*\bid=["']([^"']+)["'][^>]*>.*<items\s[^>]*node=["']([^"']+)["']/s)
+      if (read && wire.failReads.has(read[2]) && /type=["']get["']/.test(text)) {
+        client.send(`<iq xmlns="jabber:client" type="error" id="${read[1]}"><error type="wait"><service-unavailable xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error></iq>`)
+        return
+      }
+      if (upstream.readyState === 1) upstream.send(text)
+      else pending.push(text)
+    })
+    upstream.on('message', (data) => {
+      let text = data.toString()
+      if (opts.hoistPrefix) {
+        text = text.replace(/<item([^>]*)><(\w+):devices xmlns:\2=(['"])urn:xmpp:omemo:2\3/g, (_m, attrs: string, prefix: string, quote: string) => {
+          wire.hoisted++
+          return `<item${attrs} xmlns:${prefix}=${quote}urn:xmpp:omemo:2${quote}><${prefix}:devices`
+        })
+      }
+      if (/devices/.test(text)) wire.sample = text
+      client.send(text)
+    })
+    client.on('close', () => upstream.close())
+    upstream.on('close', () => client.close())
+  })
+  wire.close = async () => { server.close() }
+  proxies.push(wire)
+  return wire
 }
 
+async function sdkClient(user: string, wire?: Wire): Promise<XMPPClient> {
+  const client = new XMPPClient()
+  await client.connect({ jid: `${user}@localhost/sdk${++clientCount}`, password: `pw-${user}-1`, server: wire?.url ?? WS!, skipDiscovery: true })
+  return client
+}
+const publishesTo = (wire: Wire, ...nodes: string[]): number => wire.publishes.filter((n) => nodes.includes(n)).length
+
 const log: Record<string, unknown> = {}
-afterAll(() => {
+afterAll(async () => {
+  await Promise.all(proxies.map((p) => p.close()))
   if (EVIDENCE) {
     mkdirSync(EVIDENCE, { recursive: true })
     writeFileSync(`${EVIDENCE}/omemo-live-observations.json`, JSON.stringify(log, null, 2))
@@ -120,6 +187,17 @@ describe.runIf(WS)('OMEMO own device lists on a real server', () => {
     log.noPluginAfterRead = noPlugin && !alice.e2ee?.hasPlugins()
     expect(log.noPluginAfterRead).toBe(true)
     await alice.disconnect()
+
+    // The server refuses the legacy list read with a service error (not item-not-found): that list reports an
+    // error and is not read as empty, and the OMEMO 2 list is still read in full.
+    const refusing = await startWire()
+    refusing.failReads.add(NS_LEGACY_DEVICELIST)
+    const alice2 = await sdkClient('alice', refusing)
+    const partial = await readOwnDeviceLists(pepAccessFor(alice2), 'alice@localhost')
+    log.legacyListRefused = { omemo2Devices: partial.omemo2.ok ? partial.omemo2.devices.length : 'error', legacy: partial.legacy.ok ? 'ok' : partial.legacy.error.message }
+    expect(partial.legacy.ok).toBe(false)
+    expect(partial.omemo2.ok && partial.omemo2.devices.length).toBe(omemo2Ids.length)
+    await alice2.disconnect()
     await seeder.stop()
   }, 60000)
 
@@ -137,6 +215,18 @@ describe.runIf(WS)('OMEMO own device lists on a real server', () => {
     const without = [...lists.omemo2.devices, ...lists.legacy.devices].filter((d) => d.fingerprint === undefined).map((d) => d.id)
     expect(sorted(without)).toEqual(sorted([Number(noOmemo2), Number(noLegacy), legacyIds[1]]))
     await carol.disconnect()
+
+    // Every bundle read refused by the server with a service error: all devices stay listed, none has a fingerprint.
+    const refusing = await startWire()
+    for (const node of [NS_BUNDLES, ...legacyIds.map((id) => `${NS_LEGACY_BUNDLES_PREFIX}${id}`)]) refusing.failReads.add(node)
+    const carol2 = await sdkClient('carol', refusing)
+    const refused = await readOwnDeviceLists(pepAccessFor(carol2), 'carol@localhost')
+    if (!refused.omemo2.ok || !refused.legacy.ok) throw new Error('lists should read')
+    log.bundlesRefused = refused
+    expect(refused.omemo2.devices).toHaveLength(omemo2Ids.length)
+    expect(refused.legacy.devices).toHaveLength(legacyIds.length)
+    expect([...refused.omemo2.devices, ...refused.legacy.devices].some((d) => d.fingerprint !== undefined)).toBe(false)
+    await carol2.disconnect()
     await seeder.stop()
   }, 60000)
 
@@ -148,7 +238,8 @@ describe.runIf(WS)('OMEMO own device lists on a real server', () => {
     const withForeign = fixture.omemo2.devices.replace(/<\/ns0:devices>$/, `<device xmlns='urn:example:other' id='${target}'/></ns0:devices>`)
     await seed(seeder, NS_DEVICES, item('current', withForeign))
     const before = { omemo2: await stored(seeder, NS_DEVICES), legacy: await stored(seeder, NS_LEGACY_DEVICELIST) }
-    const alice = await sdkClient('alice')
+    const wire = await startWire()
+    const alice = await sdkClient('alice', wire)
     const pep = pepAccessFor(alice)
     const r1 = await removeOwnDevices(pep, 'alice@localhost', 'omemo2', [target, 424242])
     const r2 = await removeOwnDevices(pep, 'alice@localhost', 'legacy', [legacyIds[0]])
@@ -165,10 +256,14 @@ describe.runIf(WS)('OMEMO own device lists on a real server', () => {
     expect(now.some((e) => isRemoved(e, target))).toBe(false)
     expect(entries(after.legacy)).toEqual(entries(before.legacy).filter((e) => !isRemoved(e, legacyIds[0])))
     expect(r1.removed).toEqual([target])
-    // A removal with no matching id publishes nothing: the stored item is untouched.
+    // Two removals changed something and each published exactly once; nothing else was published.
+    expect(wire.publishes).toEqual([NS_DEVICES, NS_LEGACY_DEVICELIST])
+    // A removal with no matching id sends no publish at all.
     const r3 = await removeOwnDevices(pep, 'alice@localhost', 'legacy', [999])
     expect(r3).toEqual({ removed: [], missing: [999] })
+    expect(wire.publishes).toEqual([NS_DEVICES, NS_LEGACY_DEVICELIST])
     expect(await stored(seeder, NS_LEGACY_DEVICELIST)).toEqual(after.legacy)
+    log.removalPublishes = [...wire.publishes]
     log.noPluginAfterRemove = !alice.e2ee?.hasPlugins()
     expect(log.noPluginAfterRemove).toBe(true)
     // The bundles were not touched by any of this, and no device was added.
@@ -182,14 +277,19 @@ describe.runIf(WS)('OMEMO own device lists on a real server', () => {
     await wipe(seeder)
     await seed(seeder, NS_DEVICES, item('current', fixture.omemo2.devices))
     const before = await stored(seeder, NS_DEVICES)
-    const bob = await sdkClient('bob')
+    const wire = await startWire()
+    const bob = await sdkClient('bob', wire)
     const plugin = new OmemoPlugin()
     await bob.e2ee!.register(plugin)
     const id = await plugin.ensureIdentity()
     const afterFirst = await stored(seeder, NS_DEVICES)
+    const listPublishesFirst = publishesTo(wire, NS_DEVICES)
     await plugin.ensureIdentity()
     const afterSecond = await stored(seeder, NS_DEVICES)
-    log.writer = { before, afterFirst, afterSecond }
+    // The repeat refreshes our bundle if it changed, but sends no device-list publish.
+    log.writer = { before, afterFirst, afterSecond, listPublishesFirst, listPublishesAfterRepeat: publishesTo(wire, NS_DEVICES), allPublishes: [...wire.publishes] }
+    expect(listPublishesFirst).toBe(1)
+    expect(publishesTo(wire, NS_DEVICES)).toBe(1)
     const was = collect(parse(before[0]), 'device')
     const now = collect(parse(afterFirst[0]), 'device')
     expect(now.slice(0, was.length)).toEqual(was)
@@ -205,32 +305,54 @@ describe.runIf(WS)('OMEMO own device lists on a real server', () => {
     const wrongStored = await stored(seeder, NS_DEVICES)
     await expect(plugin.ensureIdentity()).rejects.toThrow(/unexpected/)
     expect(await stored(seeder, NS_DEVICES)).toEqual(wrongStored)
+    expect(publishesTo(wire, NS_DEVICES)).toBe(1) // the refused list was not written to
     await bob.disconnect()
     await seeder.stop()
   }, 90000)
 
+  it('inherited-namespaces: a prefix declared on the item reads, removes and stays bound', async () => {
+    // This server keeps a prefix only on the payload, so the wire form with the declaration on the <item> is made
+    // by a pass-through that moves it up: valid XML, the prefix bound above the payload, as another server may send.
+    const seeder = await rawClient('dave', 'seed')
+    await wipe(seeder)
+    await seed(seeder, NS_DEVICES, `<item id='current'><o:devices xmlns:o='urn:xmpp:omemo:2'><o:device id='1' label='A'/><o:device id='2' label='B'/><o:device id='3'/></o:devices></item>`)
+    const wire = await startWire({ hoistPrefix: true })
+    const dave = await sdkClient('dave', wire)
+    const pep = pepAccessFor(dave)
+    const read = await readOwnDeviceLists(pep, 'dave@localhost')
+    log.inheritedHoisted = { count: wire.hoisted, serverFrame: wire.sample }
+    expect(wire.hoisted).toBeGreaterThan(0)
+    expect(read.omemo2).toEqual({ ok: true, devices: [{ id: 1, label: 'A' }, { id: 2, label: 'B' }, { id: 3 }] })
+    expect(await removeOwnDevices(pep, 'dave@localhost', 'omemo2', [1])).toEqual({ removed: [1], missing: [] })
+    expect(wire.publishes).toEqual([NS_DEVICES])
+    const after = await stored(seeder, NS_DEVICES)
+    log.inheritedAfter = { raw: after, full: lastResponse[NS_DEVICES] }
+    // Read straight from the server: the remaining entries are OMEMO 2 devices, their prefix bound by the republished payload.
+    const root = parse(after[0]).children.find((c) => typeof c !== 'string') as { getNS(): string; getChildren(n: string): { getNS(): string; attrs: Record<string, string> }[]; name: string }
+    expect(root.name).toBe('o:devices')
+    expect(root.getNS()).toBe('urn:xmpp:omemo:2')
+    const kept = (root as unknown as { children: unknown[] }).children.filter((c): c is { name: string; getNS(): string; attrs: Record<string, string> } => typeof c !== 'string' && (c as { name: string }).name === 'o:device')
+    expect(kept.map((d) => d.attrs.id)).toEqual(['2', '3'])
+    expect(kept.every((d) => d.getNS() === 'urn:xmpp:omemo:2')).toBe(true)
+    await dave.disconnect()
+    await seeder.stop()
+  }, 60000)
+
   it('inherited-namespaces: a prefix the server dropped is an error, never a guess or a rewrite', async () => {
     // A prefix declared on the <item> is dropped by this server (it keeps only the item id), so the payload comes
-    // back with an unbound prefix. The SDK's copy of declarations in scope is proven with xmpp.js elements in
-    // PubSub.pep.test.ts; what this server can show is that such a list is refused and left as stored.
+    // back with an unbound prefix and is refused.
     const seeder = await rawClient('dave', 'seed')
     await wipe(seeder)
     await seed(seeder, NS_DEVICES, `<item id='current' xmlns:o='urn:xmpp:omemo:2'><o:devices><o:device id='1' label='A'/><o:device id='2' label='B'/></o:devices></item>`)
     const raw = await stored(seeder, NS_DEVICES)
     log.inheritedFullResponse = lastResponse[NS_DEVICES]
-    const dave = await sdkClient('dave')
+    const wire = await startWire()
+    const dave = await sdkClient('dave', wire)
     const pep = pepAccessFor(dave)
-    const read = await readOwnDeviceLists(pep, 'dave@localhost')
-    expect(read.omemo2.ok).toBe(false)
+    expect((await readOwnDeviceLists(pep, 'dave@localhost')).omemo2.ok).toBe(false)
     await expect(removeOwnDevices(pep, 'dave@localhost', 'omemo2', [1])).rejects.toThrow(/unexpected/)
+    expect(wire.publishes).toEqual([])
     expect(await stored(seeder, NS_DEVICES)).toEqual(raw)
-    // A prefix declared on the payload itself, which this server keeps, reads and edits normally.
-    await seed(seeder, NS_DEVICES, `<item id='current'><o:devices xmlns:o='urn:xmpp:omemo:2'><o:device id='1' label='A'/><o:device id='2' label='B'/></o:devices></item>`)
-    log.selfContainedStored = await stored(seeder, NS_DEVICES)
-    expect((await readOwnDeviceLists(pep, 'dave@localhost')).omemo2).toEqual({ ok: true, devices: [{ id: 1, label: 'A' }, { id: 2, label: 'B' }] })
-    await removeOwnDevices(pep, 'dave@localhost', 'omemo2', [1])
-    log.selfContainedAfter = await stored(seeder, NS_DEVICES)
-    expect((await readOwnDeviceLists(pep, 'dave@localhost')).omemo2).toEqual({ ok: true, devices: [{ id: 2, label: 'B' }] })
     await dave.disconnect()
     await seeder.stop()
   }, 60000)

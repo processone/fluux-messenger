@@ -1,0 +1,29 @@
+# Disposable ejabberd for devices.live.test.ts: loopback only, WebSocket on 45281, internal accounts.
+#   ejabberdctl register alice localhost pw-alice-1   (likewise bob, carol, dave)
+hosts: [localhost]
+loglevel: warning
+listen:
+  - port: 45281
+    ip: "127.0.0.1"
+    module: ejabberd_http
+    request_handlers:
+      "/ws": ejabberd_http_ws
+acl:
+  local: {user_regexp: ""}
+access_rules:
+  local: [allow: local]
+  c2s: [allow]
+  announce: [deny: all]
+  configure: [deny: all]
+  muc_create: [deny: all]
+  pubsub_createnode: [allow: local]
+  trusted_network: [allow: all]
+auth_method: internal
+modules:
+  mod_disco: {}
+  mod_roster: {}
+  mod_caps: {}
+  mod_stream_mgmt: {}
+  mod_pubsub:
+    access_createnode: pubsub_createnode
+    plugins: [flat, pep]
