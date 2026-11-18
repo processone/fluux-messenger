@@ -111,6 +111,17 @@ describe('E2EEManager.getConversationSecurity', () => {
     expect(await manager.getConversationSecurity(target)).toMatchObject({ trust: 'tofu', used: 1, verified: 0, partlyVerified: true })
   })
 
+  it('a recent key replacing a verified one reads partly verified, not new', async () => {
+    const { manager, plugin } = await setup()
+    plugin.identities = [
+      identity('2', { isNew: true }),
+      identity('1', { trust: 'verified', usedForEncryption: false, notUsedReason: 'no-key' }),
+    ]
+    const sec = await manager.getConversationSecurity(target)
+    expect(sec).toMatchObject({ partlyVerified: true })
+    expect(sec).not.toHaveProperty('isNew')
+  })
+
   it('flags a recent unverified key as new, and never a verified contact', async () => {
     const { manager, plugin } = await setup()
     plugin.identities = [identity('1', { isNew: true })]

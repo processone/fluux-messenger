@@ -2902,13 +2902,21 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
     for (const rejection of this.stores.certRejections.get(peer)) {
       if (active.some((fp) => normalizeFingerprint(fp) === normalizeFingerprint(rejection.fingerprint))) continue
+      // One identity per key: a rejected certificate that is also the saved verified key keeps
+      // its verification and gains the rejection's reason and detail.
+      const same = out.findIndex((i) => normalizeFingerprint(i.id) === normalizeFingerprint(rejection.fingerprint))
+      const problem = { code: rejection.code, detail: rejection.detail }
+      if (same >= 0) {
+        out[same] = { ...out[same], notUsedReason: 'invalid-key', problem }
+        continue
+      }
       out.push({
         id: rejection.fingerprint,
         fingerprint: rejection.fingerprint,
         trust: 'unknown',
         usedForEncryption: false,
         notUsedReason: 'invalid-key',
-        problem: { code: rejection.code, detail: rejection.detail },
+        problem,
         allowedDecisions: [],
       })
     }

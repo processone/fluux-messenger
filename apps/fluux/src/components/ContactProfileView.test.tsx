@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Contact } from '@fluux/sdk'
 import { ContactProfileView } from './ContactProfileView'
+import { useToastStore } from '@/stores/toastStore'
 
 const e2ee = vi.hoisted(() => ({
   setIdentityTrust: vi.fn(async () => {}),
@@ -106,8 +107,14 @@ describe('ContactProfileView', () => {
     await waitFor(() => expect(e2ee.setIdentityTrust).toHaveBeenCalledWith('openpgp', contact.jid, 'ABCD1234', 'tofu'))
   })
 
-  it('reads the own fingerprint of the protocol in use from the SDK', async () => {
+  it('shows a failed trust decision to the person instead of dropping it', async () => {
+    e2ee.setIdentityTrust.mockRejectedValueOnce(new Error('keys changed'))
     render(<ContactProfileView {...props} />)
-    await waitFor(() => expect(e2ee.getOwnFingerprint).toHaveBeenCalledWith('openpgp'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verified and encrypted' }))
+    fireEvent.click(screen.getByRole('button', { name: /removeVerification|Remove verification/ }))
+    fireEvent.click(screen.getAllByRole('button', { name: /removeVerification|Remove verification/ }).at(-1)!)
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.some((t) => t.type === 'error' && t.message === 'keys changed')).toBe(true),
+    )
   })
 })

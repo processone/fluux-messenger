@@ -23,6 +23,7 @@ import { DummyPlaintextPlugin } from '../../../../packages/fluux-sdk/src/core/e2
 import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { ChatHeader } from '@/components/ChatHeader'
 import { MessageComposer } from '@/components/MessageComposer'
+import { SecurityGlanceCard } from '@/components/contact-profile/cards/SecurityGlanceCard'
 import { SecurityTab } from '@/components/contact-profile/tabs/SecurityTab'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { usePinnedPrimaryFingerprintsStore, isTofuNew } from '@/stores/pinnedPrimaryFingerprintsStore'
@@ -133,6 +134,9 @@ function Surfaces() {
       <div data-testid="composer">
         <MessageComposer placeholder="Type a message" onSend={vi.fn().mockResolvedValue(true)} encryptionState={state} />
       </div>
+      <div data-testid="glance">
+        <SecurityGlanceCard state={state} onOpen={() => {}} />
+      </div>
       <div data-testid="tab">
         <SecurityTab state={state} onVerify={() => {}} onRequestRevoke={() => {}} onDisableEncryption={() => {}} onEnableEncryption={() => {}} />
       </div>
@@ -146,8 +150,17 @@ function seen() {
   const tab = screen.getByTestId('tab')
   return {
     composerLock: lock
-      ? { label: lock.getAttribute('aria-label'), icon: [...lock.querySelectorAll('svg')].map((s) => s.getAttribute('class')?.match(/lucide-[\w-]+/)?.[0]) }
+      ? {
+          label: lock.getAttribute('aria-label'),
+          icon: [...lock.querySelectorAll('svg')].map((s) => s.getAttribute('class')?.match(/lucide-[\w-]+/)?.[0]),
+          color: [...lock.querySelectorAll('svg')].map((s) => s.getAttribute('class')?.match(/text-fluux-[\w-]+/)?.[0]),
+        }
       : null,
+    headerColors: [...screen.getByTestId('header').querySelectorAll('button[aria-label]')]
+      .filter((b) => /encryption|verifyPeer/i.test(b.getAttribute('aria-label')!))
+      .map((b) => b.className.match(/text-fluux-[\w-]+/)?.[0]),
+    glance: screen.getByTestId('glance').textContent,
+    glanceColors: [...screen.getByTestId('glance').querySelectorAll('[class*="text-fluux-"]')].map((e) => e.getAttribute('class')?.match(/text-fluux-[\w-]+/)?.[0]),
     headerButtons: [...screen.getByTestId('header').querySelectorAll('button[aria-label]')]
       .map((b) => b.getAttribute('aria-label')!)
       .filter((l) => /encryption|verifyPeer/i.test(l)),
@@ -198,6 +211,9 @@ describe('encryption state as people see it', () => {
     expect(seen()).toMatchInlineSnapshot(`
       {
         "composerLock": {
+          "color": [
+            "text-fluux-muted",
+          ],
           "icon": [
             "lucide-shield",
           ],
@@ -206,8 +222,17 @@ describe('encryption state as people see it', () => {
         "fingerprints": [
           "AAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555",
         ],
+        "glance": "Encrypted, not verified",
+        "glanceColors": [
+          "text-fluux-muted",
+          "text-fluux-text",
+          "text-fluux-muted",
+        ],
         "headerButtons": [
           "chat.verifyPeer.chipAriaLabel",
+        ],
+        "headerColors": [
+          "text-fluux-muted",
         ],
         "tabButtons": [
           "Verify fingerprint",
@@ -225,6 +250,9 @@ describe('encryption state as people see it', () => {
     expect(seen()).toMatchInlineSnapshot(`
       {
         "composerLock": {
+          "color": [
+            "text-fluux-muted",
+          ],
           "icon": [
             "lucide-shield",
           ],
@@ -233,8 +261,17 @@ describe('encryption state as people see it', () => {
         "fingerprints": [
           "AAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555",
         ],
+        "glance": "Encrypted, not verified",
+        "glanceColors": [
+          "text-fluux-muted",
+          "text-fluux-text",
+          "text-fluux-muted",
+        ],
         "headerButtons": [
           "chat.verifyPeer.chipAriaLabel",
+        ],
+        "headerColors": [
+          "text-fluux-muted",
         ],
         "tabButtons": [
           "contacts.encryption.disableForContact",
@@ -252,6 +289,9 @@ describe('encryption state as people see it', () => {
     expect(seen()).toMatchInlineSnapshot(`
       {
         "composerLock": {
+          "color": [
+            "text-fluux-encryption",
+          ],
           "icon": [
             "lucide-shield-check",
           ],
@@ -260,8 +300,17 @@ describe('encryption state as people see it', () => {
         "fingerprints": [
           "AAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555",
         ],
+        "glance": "Verified and encrypted",
+        "glanceColors": [
+          "text-fluux-encryption",
+          "text-fluux-text",
+          "text-fluux-muted",
+        ],
         "headerButtons": [
           "chat.encryption.encryptedTo",
+        ],
+        "headerColors": [
+          "text-fluux-encryption",
         ],
         "tabButtons": [
           "contacts.encryption.removeVerification",
@@ -290,6 +339,9 @@ describe('encryption state as people see it', () => {
     expect(seen()).toMatchInlineSnapshot(`
       {
         "composerLock": {
+          "color": [
+            "text-fluux-muted",
+          ],
           "icon": [
             "lucide-shield",
           ],
@@ -298,8 +350,17 @@ describe('encryption state as people see it', () => {
         "fingerprints": [
           "AAAA 1111 BBBB 2222 CCCC 3333 DDDD 4444 EEEE 5555",
         ],
+        "glance": "Encrypted, not verified",
+        "glanceColors": [
+          "text-fluux-muted",
+          "text-fluux-text",
+          "text-fluux-muted",
+        ],
         "headerButtons": [
           "chat.verifyPeer.chipAriaLabel",
+        ],
+        "headerColors": [
+          "text-fluux-muted",
         ],
         "tabButtons": [
           "contacts.encryption.disableForContact",
@@ -317,6 +378,9 @@ describe('encryption state as people see it', () => {
     expect(seen()).toMatchInlineSnapshot(`
       {
         "composerLock": {
+          "color": [
+            "text-fluux-muted",
+          ],
           "icon": [
             "lucide-shield",
           ],
@@ -325,8 +389,17 @@ describe('encryption state as people see it', () => {
         "fingerprints": [
           "BBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555",
         ],
+        "glance": "Encrypted, not verified",
+        "glanceColors": [
+          "text-fluux-muted",
+          "text-fluux-text",
+          "text-fluux-muted",
+        ],
         "headerButtons": [
           "chat.verifyPeer.chipAriaLabel",
+        ],
+        "headerColors": [
+          "text-fluux-muted",
         ],
         "tabButtons": [
           "Verify fingerprint",
@@ -335,6 +408,15 @@ describe('encryption state as people see it', () => {
         "tabText": "Encrypted (not verified)This contact has a new key that has not been verified.OpenPGP fingerprintBBBB 1111 CCCC 2222 DDDD 3333 EEEE 4444 FFFF 5555Verify fingerprintcontacts.encryption.disableForContact",
       }
     `)
+  })
+
+  it('a recently met contact whose verified key was replaced still offers Verify', async () => {
+    world.announced = [B]
+    usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: { [PEER]: B }, pinnedAtByJid: { [PEER]: new Date().toISOString() } })
+    useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: { [PEER]: A } })
+    await open()
+    expect(seen().tabButtons).toContain('Verify fingerprint')
+    expect(seen().composerLock?.label).toBe('This contact has a new key that has not been verified.')
   })
 
   it('a never-verified contact with two keys: plain gray shield', async () => {
@@ -372,8 +454,17 @@ describe('encryption state as people see it', () => {
         "fingerprints": [
           "no subkey",
         ],
+        "glance": "contacts.encryption.rejectedTitle",
+        "glanceColors": [
+          "text-fluux-error",
+          "text-fluux-text",
+          "text-fluux-muted",
+        ],
         "headerButtons": [
           "chat.encryption.rejected",
+        ],
+        "headerColors": [
+          "text-fluux-error",
         ],
         "tabButtons": [],
         "tabText": "contacts.encryption.rejectedTitlecontacts.encryption.rejectedDescriptionchat.encryption.rejectionCode.no_encryption_subkeyno subkey",
@@ -390,8 +481,17 @@ describe('encryption state as people see it', () => {
       {
         "composerLock": null,
         "fingerprints": [],
+        "glance": "Encryption off",
+        "glanceColors": [
+          "text-fluux-muted",
+          "text-fluux-text",
+          "text-fluux-muted",
+        ],
         "headerButtons": [
           "chat.encryption.plaintextForced",
+        ],
+        "headerColors": [
+          "text-fluux-muted",
         ],
         "tabButtons": [
           "chat.encryption.enableEncryption",
@@ -409,8 +509,17 @@ describe('encryption state as people see it', () => {
       {
         "composerLock": null,
         "fingerprints": [],
+        "glance": "Encrypted, locked",
+        "glanceColors": [
+          "text-fluux-muted",
+          "text-fluux-text",
+          "text-fluux-muted",
+        ],
         "headerButtons": [
           "chat.encryption.keyLocked",
+        ],
+        "headerColors": [
+          "text-fluux-muted",
         ],
         "tabButtons": [],
         "tabText": "",

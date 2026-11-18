@@ -34,10 +34,10 @@ export function trustVisual(state: TrustVisualState): TrustVisual {
     case 'verified':
       return { colorClass: 'text-fluux-encryption', tone: 'verified' }
     case 'decryptFailed':
-    case 'untrusted':
     case 'keyChanged':
       return { colorClass: 'text-fluux-yellow', tone: 'warning' }
     case 'rejected':
+    case 'untrusted':
       return { colorClass: 'text-fluux-error', tone: 'danger' }
     case 'trusted':
     case 'tofu':
