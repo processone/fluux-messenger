@@ -28,6 +28,7 @@ export const changelog: ChangelogEntry[] = [
         'When Fluux could not refresh your bookmarks after reconnecting, changing a room\'s bookmark, autojoin or notification setting no longer brings back an older room password, notification setting or another XMPP app\'s settings',
         'When changing a room\'s Auto-join or removing its bookmark from the rooms list fails, Fluux now shows an error. Before, nothing told you that the change did not go through',
         'Reloading Fluux while a Settings page such as Encryption is open now keeps that page open instead of switching to Profile',
+        'After a page reload or a reconnection, your server no longer sends again what Fluux had already received, and servers that limit how much they keep waiting for confirmation no longer disconnect Fluux during a long session',
       ],
     }],
   },
