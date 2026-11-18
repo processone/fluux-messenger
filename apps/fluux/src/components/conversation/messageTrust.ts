@@ -1,6 +1,8 @@
 import type { MessageSecurityContext } from '@fluux/sdk'
 import { fingerprintsEqual } from '@fluux/openpgp-plugin'
 
+const OPENPGP_PROTOCOL_ID = 'openpgp'
+
 /**
  * Resolve the trust level to DISPLAY for a message's E2EE lock, given the
  * peer's out-of-band-verified fingerprint (or `undefined` if the peer was
@@ -30,6 +32,10 @@ import { fingerprintsEqual } from '@fluux/openpgp-plugin'
  * `tofu` — the "unverified peer" lock. For own messages we therefore trust the
  * baked value verbatim.
  *
+
+ * The live check applies to OpenPGP messages only; a message from any other
+ * protocol shows the trust its plugin baked, whoever is verified under OpenPGP.
+ *
  * @param securityContext - the message's baked security context, if encrypted
  * @param verifiedFingerprint - the fingerprint the user verified for this peer
  * @param isOwn - whether this is the user's own outgoing message
@@ -42,6 +48,10 @@ export function resolveDisplayTrust(
 ): MessageSecurityContext['trust'] | undefined {
   if (!securityContext) return undefined
   if (isOwn) return securityContext.trust
+  // The live check below is OpenPGP's: the verified fingerprint is an OpenPGP
+  // fingerprint and the message's signing fingerprint is an OpenPGP one. Another
+  // protocol's message (OMEMO carries no fingerprint) keeps the trust its plugin baked.
+  if (securityContext.protocolId !== OPENPGP_PROTOCOL_ID) return securityContext.trust
   const baked = securityContext.trust
   if (baked === 'tofu' || baked === 'verified') {
     // Legacy fallback: messages decrypted before the signing fingerprint was

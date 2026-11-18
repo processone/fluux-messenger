@@ -96,4 +96,24 @@ describe('resolveDisplayTrust', () => {
       expect(resolveDisplayTrust(undefined, undefined, true)).toBeUndefined()
     })
   })
+
+  // FLM-268: the live check belongs to OpenPGP. A verified OpenPGP contact must
+  // not lend a verified lock to a message from another protocol.
+  describe('messages from another protocol', () => {
+    it('keeps the baked trust of an OMEMO message while the contact is OpenPGP-verified', () => {
+      expect(resolveDisplayTrust(ctx({ protocolId: 'omemo:2', trust: 'tofu' }), FP_A)).toBe('tofu')
+    })
+
+    it('keeps the baked trust of an OMEMO message that carries no fingerprint (legacy fallback is OpenPGP only)', () => {
+      expect(resolveDisplayTrust(ctx({ protocolId: 'omemo:2', trust: 'tofu', fingerprint: undefined }), FP_A)).toBe('tofu')
+    })
+
+    it('does not downgrade an OMEMO message its plugin verified', () => {
+      expect(resolveDisplayTrust(ctx({ protocolId: 'omemo:2', trust: 'verified' }), undefined)).toBe('verified')
+    })
+
+    it('still follows the live check for an OpenPGP message', () => {
+      expect(resolveDisplayTrust(ctx({ protocolId: 'openpgp', trust: 'tofu', fingerprint: FP_A }), FP_A)).toBe('verified')
+    })
+  })
 })
