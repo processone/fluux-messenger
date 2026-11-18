@@ -222,6 +222,17 @@ export interface RoomEntity {
   /** Room password, from the bookmark or a successful join. Re-sent automatically
    *  by joinRoom() so a password-protected room rejoins without re-prompting. */
   password?: string
+  /**
+   * The children of the bookmark's `<extensions>` element that Fluux does not
+   * own, serialized as XML, such as another client's settings for the room.
+   * `client.rooms.setBookmark()` publishes them again unchanged: XEP-0402 requires
+   * clients to preserve elements they do not understand, and a publish
+   * replaces the whole stored bookmark. Empty when the bookmark has none;
+   * `undefined` until Fluux has read the bookmark (for example a room restored
+   * from a snapshot an older version wrote), and then `setBookmark()` reads it
+   * from the server before publishing.
+   */
+  bookmarkExtensions?: string[]
 
   // Quick Chat (transient room)
   /** True for temporary rooms that auto-destroy when empty */

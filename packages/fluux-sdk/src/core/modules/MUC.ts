@@ -10,7 +10,7 @@ import { stripNickWhitespace, resolveDefaultMucNick } from '../nick'
 import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
 import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
-import { parseBookmarkItem } from '../bookmarkItem'
+import { buildForeignExtensions, parseBookmarkItem } from '../bookmarkItem'
 import { notifyLevelUpdates, savedNotifyLevel, type NotifyLevel } from '../notifyLevel'
 import { createOriginIdElement } from './messagingUtils'
 import { PRESENCE_PRIORITY } from '../config'
@@ -2017,7 +2017,7 @@ export class MUC extends BaseModule {
       for (const item of items.getChildren('item')) {
         const parsed = parseBookmarkItem(item)
         if (!parsed) continue
-        const { jid, name, autojoin, nick, password, notifyLevel } = parsed
+        const { jid, name, autojoin, nick, password, notifyLevel, extensions } = parsed
 
         allRoomJids.push(jid)
         const resolvedNick = nick || defaultNick
@@ -2029,7 +2029,7 @@ export class MUC extends BaseModule {
           // that races with fetchBookmarks during fresh session reconnect.
           this.deps.emitSDK('room:bookmark', {
             roomJid: jid,
-            bookmark: { name, nick: resolvedNick, autojoin, password, notifyLevel },
+            bookmark: { name, nick: resolvedNick, autojoin, password, notifyLevel, extensions },
           })
         } else {
           const room: Room = {
@@ -2042,6 +2042,7 @@ export class MUC extends BaseModule {
             password,
             notifyAllPersistent: notifyLevel === 'all',
             notifyOffPersistent: notifyLevel === 'none',
+            bookmarkExtensions: extensions,
             occupants: new Map(),
             unreadCount: 0,
             mentionsCount: 0,
@@ -2072,6 +2073,12 @@ export class MUC extends BaseModule {
    *
    * Saves a room bookmark to the user's PEP storage. The bookmark
    * persists across sessions and can be used for auto-joining.
+   *
+   * The children of the bookmark's `<extensions>` element that Fluux does not
+   * own (another client's settings, for example) are published again
+   * unchanged, as XEP-0402 requires. When the room has not read its bookmark
+   * yet, it is read from the server first, and the save rejects without
+   * publishing if that read fails.
    *
    * @param roomJid - The room JID to bookmark
    * @param options - Bookmark settings
@@ -2118,19 +2125,25 @@ export class MUC extends BaseModule {
     const notifyLevel: NotifyLevel = options.notifyLevel
       ?? (options.notifyAll === undefined ? savedNotifyLevel(this.deps.stores?.room.getRoom(roomJid)) : options.notifyAll ? 'all' : 'mentions')
 
+    // And for the <extensions> children Fluux does not own: XEP-0402 requires
+    // a publish to keep them, and leaving one out deletes it from the server.
+    // A room that has not read its bookmark yet reads it now.
+    const extensions = this.deps.stores?.room.getRoom(roomJid)?.bookmarkExtensions
+      ?? await this.readBookmarkExtensions(roomJid)
+
     // Build conference element children
     const confChildren: Element[] = [xml('nick', {}, options.nick)]
     if (password) {
       confChildren.push(xml('password', {}, password))
     }
 
+    const extensionChildren = buildForeignExtensions(extensions)
     // Mentions only is the default and is stored as no element at all
     if (notifyLevel !== 'mentions') {
-      confChildren.push(
-        xml('extensions', {},
-          xml('notify', { xmlns: NS_FLUUX }, notifyLevel)
-        )
-      )
+      extensionChildren.unshift(xml('notify', { xmlns: NS_FLUUX }, notifyLevel))
+    }
+    if (extensionChildren.length > 0) {
+      confChildren.push(xml('extensions', {}, ...extensionChildren))
     }
 
     const iq = xml(
@@ -2160,8 +2173,40 @@ export class MUC extends BaseModule {
         autojoin: options.autojoin,
         password: password || undefined,
         notifyLevel,
+        extensions,
       },
     })
+  }
+
+  /**
+   * Read the `<extensions>` children Fluux does not own from the room's stored
+   * bookmark, for a save whose room has not read them: a room restored from a
+   * snapshot an older Fluux wrote, a save made before the bookmark refresh
+   * answered, or a room not bookmarked yet. Rejects when the server does not
+   * answer, so the publish that follows cannot delete what it did not see.
+   */
+  private async readBookmarkExtensions(roomJid: string): Promise<string[]> {
+    const iq = xml('iq', { type: 'get', id: `bookmark_get_${generateUUID()}` },
+      xml('pubsub', { xmlns: NS_PUBSUB },
+        xml('items', { node: NS_BOOKMARKS },
+          xml('item', { id: roomJid })
+        )
+      )
+    )
+
+    let response: Element
+    try {
+      response = await this.deps.sendIQ(iq)
+    } catch (err) {
+      // No bookmark stored under that id, or no bookmarks node at all.
+      if (hasErrorCondition(err, 'item-not-found')) return []
+      throw err
+    }
+
+    const items = response.getChild('pubsub', NS_PUBSUB)?.getChild('items')
+    if (!items) throw new Error(`Bookmark read for ${roomJid} returned no items`)
+    const item = items.getChildren('item').find((i) => i.attrs.id === roomJid)
+    return (item && parseBookmarkItem(item)?.extensions) || []
   }
 
   /**

@@ -713,7 +713,7 @@ function roomTimelineConfig(): timeline.TimelineConfig<RoomMessage> {
 const ROOM_ENTITY_FIELDS = Object.keys({
   jid: true, name: true, nickname: true, joined: true, isJoining: true,
   subject: true, avatar: true, avatarHash: true, avatarFromPresence: true,
-  isBookmarked: true, autojoin: true, password: true, isQuickChat: true,
+  isBookmarked: true, autojoin: true, password: true, bookmarkExtensions: true, isQuickChat: true,
   supportsMAM: true, supportsReactions: true, supportsHats: true,
   supportsModeration: true, isIrcGateway: true, isNonAnonymous: true,
   isPrivate: true, muted: true,
@@ -1262,7 +1262,7 @@ export interface RoomState {
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
 
   // Bookmark actions
-  setBookmark: (roomJid: string, bookmark: { name: string; nick: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel }) => void
+  setBookmark: (roomJid: string, bookmark: { name: string; nick: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel; extensions?: string[] }) => void
   removeBookmark: (roomJid: string) => void
 
   // Non-anonymous room acknowledgement (issue #37)
@@ -1456,6 +1456,7 @@ export const roomStore = createStore<RoomState>()(
         isBookmarked: room.isBookmarked,
         autojoin: room.autojoin,
         password: room.password,
+        bookmarkExtensions: room.bookmarkExtensions,
         isQuickChat: room.isQuickChat,
         supportsMAM: room.supportsMAM,
         supportsReactions: room.supportsReactions,
@@ -3160,6 +3161,7 @@ export const roomStore = createStore<RoomState>()(
           isBookmarked: true,
           autojoin: bookmark.autojoin,
           password: bookmark.password,
+          bookmarkExtensions: bookmark.extensions,
           notifyAllPersistent: bookmark.notifyLevel === 'all',
           notifyOffPersistent: bookmark.notifyLevel === 'none',
         }
@@ -3175,6 +3177,7 @@ export const roomStore = createStore<RoomState>()(
             isBookmarked: true,
             autojoin: bookmark.autojoin,
             password: bookmark.password,
+            bookmarkExtensions: bookmark.extensions,
           })
         }
 
@@ -3203,6 +3206,7 @@ export const roomStore = createStore<RoomState>()(
           isBookmarked: true,
           autojoin: bookmark.autojoin,
           password: bookmark.password,
+          bookmarkExtensions: bookmark.extensions,
           notifyAllPersistent: bookmark.notifyLevel === 'all',
           notifyOffPersistent: bookmark.notifyLevel === 'none',
           occupants: new Map(),
@@ -3223,6 +3227,7 @@ export const roomStore = createStore<RoomState>()(
           isBookmarked: true,
           autojoin: bookmark.autojoin,
           password: bookmark.password,
+          bookmarkExtensions: bookmark.extensions,
         })
 
         // Create metadata
@@ -3260,6 +3265,8 @@ export const roomStore = createStore<RoomState>()(
             isBookmarked: false,
             autojoin: undefined,
             password: undefined,
+            // The bookmark is gone, so nothing of another client's is left to keep
+            bookmarkExtensions: [],
             notifyAllPersistent: undefined,
             notifyOffPersistent: undefined,
           })
@@ -3272,6 +3279,7 @@ export const roomStore = createStore<RoomState>()(
               isBookmarked: false,
               autojoin: undefined,
               password: undefined,
+              bookmarkExtensions: [],
             })
           }
 
