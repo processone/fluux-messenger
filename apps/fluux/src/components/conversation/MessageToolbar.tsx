@@ -325,7 +325,7 @@ export const MessageToolbar = memo(function MessageToolbar({
         </Tooltip>
       )}
 
-      {/* Forward shares a link, never a copy of the room message. */}
+      {/* Forward shares the room message link; a one-to-one message has none, so it shares its content. */}
       <Tooltip content={t(onForward ? 'chat.forwardMessageLink' : 'chat.forwardMessage')} position="top" disabled={showReactionPicker || showMoreMenu}>
         <button
           type="button"

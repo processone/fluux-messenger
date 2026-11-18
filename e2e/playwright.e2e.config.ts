@@ -53,6 +53,7 @@ const SUITES = [
   { name: 'archiving', testMatch: 'archiving-preferences.ts' },
   { name: 'message-updates', testMatch: 'message-updates.ts' },
   { name: 'message-links', testMatch: 'message-links.ts' },
+  { name: 'forward-direct', testMatch: 'forward-direct.ts' },
   { name: 'mobile-members', testMatch: 'mobile-members.ts' },
   { name: 'command-palette', testMatch: 'command-palette.ts' },
   { name: 'scroll-reading-width', testMatch: 'scroll-reading-width.ts' },
