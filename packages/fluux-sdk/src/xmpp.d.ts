@@ -113,7 +113,9 @@ declare module '@xmpp/client' {
     removeListener<K extends keyof ClientEventMap>(event: K, handler: ClientEventMap[K]): void
     /**
      * Register ahead of xmpp.js's own middleware. Used to strip `<sm/>` from
-     * `<stream:features>` when SM was already negotiated inline via SASL2.
+     * `<stream:features>` when SM was already negotiated inline via SASL2, and
+     * to count stanzas the middleware consumes before stream management
+     * (`patchSmInboundCount`).
      */
     prependListener<K extends keyof ClientEventMap>(event: K, handler: ClientEventMap[K]): void
     start(): Promise<void>

@@ -2,7 +2,7 @@
  * Stream Management monkey-patches for xmpp.js
  *
  * These patches are applied at runtime to the xmpp.js client instance created
- * in Connection.createXmppClient(). They address two issues:
+ * in Connection.createXmppClient(). They address three issues:
  *
  * 1. **SM ack debouncing** (patchSmAckDebounce):
  *    xmpp.js sends an immediate <a h='N'/> for every <r/> from the server.
@@ -40,6 +40,25 @@
  *    'ack' and 'fail' events. failQueue() uses `while (shift())` and needs
  *    to exit eventually, so `allowEmptySentinel` flips on the first
  *    synthetic 'fail' emit and the next empty shift returns `undefined`.
+ *
+ * 3. **SM inbound count of consumed stanzas** (patchSmInboundCount):
+ *    XEP-0198's inbound counter `h` must count every stanza received. In
+ *    @xmpp/client 0.14.0 the iq caller is registered before the stream-
+ *    management middleware that counts, and it ends the middleware chain
+ *    when an `<iq type="result|error"/>` answers one of our own requests
+ *    (the iq callee does the same when it rejects a malformed query). Those
+ *    stanzas never reach the counter, so every `<a h/>` and `<resume h/>`
+ *    reports too few, and on each resume the server resends stanzas the
+ *    client already handled. The gap also keeps growing in the server's
+ *    unacknowledged queue over a session. Upstream main registers the
+ *    plugins in the same order.
+ *
+ *    Mechanics: an 'element' listener ahead of the middleware reads
+ *    sm.inbound and one after it compares. The middleware counts
+ *    synchronously during the same 'element' event, so a stanza that leaves
+ *    the counter unchanged was consumed before it and is counted here, once.
+ *    If a later xmpp.js counts these stanzas itself, the counter has already
+ *    moved and the patch adds nothing.
  *
  * @module
  */
@@ -191,6 +210,34 @@ export function patchSmAckQueue(sm: StreamManagement): void {
     }
     return originalEmit(event, ...args)
   }
+}
+
+/** Stanza element names XEP-0198 counts, as xmpp.js's own counter checks them. */
+const COUNTED_STANZAS = new Set(['iq', 'message', 'presence'])
+
+/**
+ * Count, in sm.inbound, the stanzas xmpp.js consumes before its stream-management
+ * middleware sees them: replies to our own iq requests, and malformed queries the
+ * iq callee answers itself. See the module documentation (patch 3).
+ *
+ * Guard: only patches real xmpp.js clients — test mocks (which lack outbound_q)
+ * are left untouched.
+ */
+export function patchSmInboundCount(xmppClient: Client): void {
+  const sm = xmppClient.streamManagement
+  if (!Array.isArray(sm?.outbound_q) || typeof xmppClient.prependListener !== 'function') return
+
+  // Counter value seen just before the middleware ran, per stanza element.
+  const inboundBefore = new WeakMap<Element, number>()
+  xmppClient.prependListener('element', (element: Element) => {
+    if (COUNTED_STANZAS.has(element.name)) inboundBefore.set(element, sm.inbound)
+  })
+  xmppClient.on('element', (element: Element) => {
+    const before = inboundBefore.get(element)
+    if (before === undefined) return
+    inboundBefore.delete(element)
+    if (sm.inbound === before) sm.inbound += 1
+  })
 }
 
 /**
