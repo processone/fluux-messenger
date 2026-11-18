@@ -148,6 +148,16 @@ interface BookmarkSaveOptions {
 }
 
 /**
+ * The bookmark fields a caller of MUC.setBookmark must give, as a bookmark
+ * holds them. `nick` is absent for a stored bookmark that has none.
+ */
+interface BookmarkDetails {
+  name: string
+  nick?: string
+  autojoin: boolean
+}
+
+/**
  * What a bookmark save carries over when its caller leaves it out: a publish
  * replaces the whole stored item (see MUC.setBookmark).
  */
@@ -156,6 +166,23 @@ interface SavedBookmarkFields {
   notifyLevel: NotifyLevel
   /** The `<extensions>` children Fluux does not own, serialized. */
   extensions: string[]
+  /**
+   * The bookmark's name, nickname and autojoin, which a save keeps where its
+   * caller left them unchanged (see MUC.setBookmark). Absent when no bookmark
+   * is stored.
+   */
+  details?: BookmarkDetails
+}
+
+/**
+ * The value a save publishes for one of the fields its caller must give:
+ * `given` when the caller changed it from `startedFrom`, Fluux's copy of the
+ * field when the save was asked for; otherwise `latest`, the bookmark's value
+ * when the save's turn came, so a change made meanwhile or elsewhere is kept.
+ * `given` too when either is unknown.
+ */
+function latestUnlessChanged<T>(given: T, startedFrom: T | undefined, latest: T | undefined): T {
+  return startedFrom !== undefined && latest !== undefined && given === startedFrom ? latest : given
 }
 
 /**
@@ -2155,6 +2182,14 @@ export class MUC extends BaseModule {
    * Saves and removals of one room's bookmark run one after another, in the
    * order they are called, so each keeps the change made before it.
    *
+   * For a room Fluux holds as bookmarked, a name, nickname or autojoin equal
+   * to Fluux's copy when the save is asked for counts as left unchanged: the
+   * save publishes the bookmark's value when its turn comes instead, from the
+   * stored bookmark read above or from Fluux's confirmed copy. A rename or
+   * nickname another client stored while Fluux's copy was older, or one a save
+   * queued before this one published, is therefore kept. A field the caller
+   * changed is published as given.
+   *
    * @param roomJid - The room JID to bookmark
    * @param options - Bookmark settings
    * @param options.name - Display name for the room
@@ -2190,7 +2225,9 @@ export class MUC extends BaseModule {
     roomJid: string,
     options: { name: string; nick: string; autojoin?: boolean; password?: string; notifyLevel?: NotifyLevel; notifyAll?: boolean }
   ): Promise<void> {
-    return this.queueBookmarkWrite(roomJid, (isCurrent) => this.publishBookmark(roomJid, options, isCurrent))
+    // What the caller saw, to tell the fields it changed from those it repeats.
+    const startedFrom = this.heldBookmarkDetails(roomJid)
+    return this.queueBookmarkWrite(roomJid, (isCurrent) => this.publishBookmark(roomJid, options, startedFrom, isCurrent))
   }
 
   /**
@@ -2204,9 +2241,21 @@ export class MUC extends BaseModule {
     return this.queueBookmarkWrite(roomJid, async (isCurrent) => {
       const room = this.deps.stores?.room.getRoom(roomJid)
       if (!room?.isBookmarked) return false
-      await this.publishBookmark(roomJid, { name: room.name, nick: room.nickname, autojoin: room.autojoin, ...changes }, isCurrent)
+      await this.publishBookmark(
+        roomJid,
+        { name: room.name, nick: room.nickname, autojoin: room.autojoin, ...changes },
+        this.heldBookmarkDetails(roomJid),
+        isCurrent,
+      )
       return true
     })
+  }
+
+  /** The name, nickname and autojoin of the room's bookmark as Fluux holds it, if it holds one. */
+  private heldBookmarkDetails(roomJid: string): BookmarkDetails | undefined {
+    const room = this.deps.stores?.room.getRoom(roomJid)
+    if (!room?.isBookmarked) return undefined
+    return { name: room.name, nick: room.nickname, autojoin: !!room.autojoin }
   }
 
   /**
@@ -2236,7 +2285,17 @@ export class MUC extends BaseModule {
     return current
   }
 
-  private async publishBookmark(roomJid: string, options: BookmarkSaveOptions, isCurrent: () => boolean): Promise<void> {
+  /**
+   * @param startedFrom - The bookmark's name, nickname and autojoin as Fluux
+   *   held them when the save was asked for; a field of `options` equal to it
+   *   is one the caller left unchanged (see setBookmark).
+   */
+  private async publishBookmark(
+    roomJid: string,
+    options: BookmarkSaveOptions,
+    startedFrom: BookmarkDetails | undefined,
+    isCurrent: () => boolean,
+  ): Promise<void> {
     // A bookmark publish REPLACES the stored item, so an unrelated write (renaming
     // the bookmark, toggling autojoin) would drop what the caller leaves out: the
     // room password, ours or one another client stored (issue #1126; pass an
@@ -2248,7 +2307,12 @@ export class MUC extends BaseModule {
     const connection = this.currentConnection()
     const room = this.deps.stores?.room.getRoom(roomJid)
     const saved: SavedBookmarkFields = room?.bookmarkExtensions !== undefined && this.isBookmarkConfirmed(roomJid)
-      ? { password: room.password, notifyLevel: savedNotifyLevel(room), extensions: room.bookmarkExtensions }
+      ? {
+          password: room.password,
+          notifyLevel: savedNotifyLevel(room),
+          extensions: room.bookmarkExtensions,
+          details: this.heldBookmarkDetails(roomJid),
+        }
       : await this.readSavedBookmarkFields(roomJid)
     assertBookmarkWriteCurrent(isCurrent)
 
@@ -2256,9 +2320,17 @@ export class MUC extends BaseModule {
     const notifyLevel: NotifyLevel = options.notifyLevel
       ?? (options.notifyAll === undefined ? saved.notifyLevel : options.notifyAll ? 'all' : 'mentions')
     const extensions = saved.extensions
+    // The caller gives the name, nickname and autojoin as it sees them. One it
+    // did not change keeps the bookmark's value now: from a copy older than the
+    // stored one (a refresh that failed), or from before a save queued ahead of
+    // this one published, it would undo a rename or nickname made since.
+    const latest = saved.details
+    const name = latestUnlessChanged(options.name, startedFrom?.name, latest?.name)
+    const nick = latestUnlessChanged(options.nick, startedFrom?.nick, latest?.nick)
+    const autojoin = latestUnlessChanged(!!options.autojoin, startedFrom?.autojoin, latest?.autojoin)
 
     // Build conference element children
-    const confChildren: Element[] = [xml('nick', {}, options.nick)]
+    const confChildren: Element[] = [xml('nick', {}, nick)]
     if (password) {
       confChildren.push(xml('password', {}, password))
     }
@@ -2280,8 +2352,8 @@ export class MUC extends BaseModule {
           xml('item', { id: roomJid },
             xml('conference', {
               xmlns: NS_BOOKMARKS,
-              name: options.name,
-              autojoin: options.autojoin ? 'true' : 'false',
+              name,
+              autojoin: autojoin ? 'true' : 'false',
             }, ...confChildren)
           )
         )
@@ -2296,9 +2368,9 @@ export class MUC extends BaseModule {
     this.deps.emitSDK('room:bookmark', {
       roomJid,
       bookmark: {
-        name: options.name,
-        nick: options.nick,
-        autojoin: options.autojoin,
+        name,
+        nick,
+        autojoin,
         password: password || undefined,
         notifyLevel,
         extensions,
@@ -2334,8 +2406,9 @@ export class MUC extends BaseModule {
 
   /**
    * Read what a save carries over from the room's stored bookmark: the
-   * password, the notification level and the `<extensions>` children Fluux
-   * does not own. Used when the current connection has not confirmed Fluux's
+   * password, the notification level, the `<extensions>` children Fluux
+   * does not own, and the name, nickname and autojoin a caller may have left
+   * unchanged. Used when the current connection has not confirmed Fluux's
    * copy (see confirmedBookmarks). A room with no stored bookmark keeps the
    * password and level Fluux knows, with no extensions. Rejects when the
    * server does not answer, so the publish that follows cannot replace what it
@@ -2369,7 +2442,12 @@ export class MUC extends BaseModule {
     const item = items.getChildren('item').find((i) => i.attrs.id === roomJid)
     const stored = item ? parseBookmarkItem(item) : null
     if (!stored) return notStored()
-    return { password: stored.password, notifyLevel: stored.notifyLevel, extensions: stored.extensions }
+    return {
+      password: stored.password,
+      notifyLevel: stored.notifyLevel,
+      extensions: stored.extensions,
+      details: { name: stored.name, nick: stored.nick, autojoin: stored.autojoin },
+    }
   }
 
   /**

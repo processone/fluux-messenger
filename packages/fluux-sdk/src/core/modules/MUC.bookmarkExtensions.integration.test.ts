@@ -53,8 +53,10 @@ const pepEvent = (itemsContent: string) => parse(
 ) as unknown as Element
 
 /** A stored bookmark with a password and Fluux's own level beside the other extensions. */
-const fullItem = ({ extensions, password, notify }: { extensions: string; password?: string; notify?: string }) =>
-  `<item id="${ROOM}"><conference xmlns="${NS_BOOKMARKS}" name="Team" autojoin="true"><nick>tester</nick>` +
+const fullItem = ({ extensions, password, notify, name = 'Team', nick = 'tester', autojoin = true }: {
+  extensions: string; password?: string; notify?: string; name?: string; nick?: string; autojoin?: boolean
+}) =>
+  `<item id="${ROOM}"><conference xmlns="${NS_BOOKMARKS}" name="${name}" autojoin="${autojoin}"><nick>${nick}</nick>` +
   (password ? `<password>${password}</password>` : '') +
   `<extensions>${notify ? `<notify xmlns="${NS_FLUUX}">${notify}</notify>` : ''}${extensions}</extensions></conference></item>`
 
@@ -63,6 +65,8 @@ const OLDER = { extensions: CLIENT_STATE, password: 'old-secret' }
 /** What another app stored afterwards, while Fluux was away. */
 const NEWER_STATE = '<state xmlns="http://myclient.example/bookmark/state" minimized="false"/>'
 const NEWER = { extensions: NEWER_STATE, password: 'new-secret', notify: 'all' }
+/** The same, after another app also renamed the bookmark and changed its nickname. */
+const RENAMED = { ...NEWER, name: 'Team renamed elsewhere', nick: 'nick-set-elsewhere' }
 
 const isItemRead = (iq: Element) => !!iq.getChild('pubsub')?.getChild('items')
 const isAllItemsRead = (iq: Element) => isItemRead(iq) && !iq.getChild('pubsub')?.getChild('items')?.getChild('item')
@@ -379,6 +383,78 @@ describe('bookmark extensions Fluux does not own', () => {
       await muc.setBookmark(ROOM, { name: 'Team', nick: 'tester', autojoin: false })
 
       expect(sentKinds()).toEqual(['read', 'publish'])
+    })
+
+    // The sidebar's Auto-join toggle and the Edit bookmark dialog give the
+    // room's name and nickname as Fluux shows them. After a failed refresh
+    // that copy can be older than the stored bookmark: before the fix, the
+    // save published it and undid a rename or nickname set in another app.
+    describe('when another app renamed the bookmark or changed its nickname', () => {
+      beforeEach(async () => {
+        serverItem = fetchResult('', fullItem(RENAMED))
+        failReads(isAllItemsRead)
+        await muc.fetchBookmarks()
+        expect(roomStore.getState().getRoom(ROOM)).toMatchObject({ name: 'Team', nickname: 'tester', autojoin: true })
+        sendIQ.mockClear()
+      })
+
+      /** Fluux's copy of the room, which the sidebar and the dialog show. */
+      const shown = () => roomStore.getState().getRoom(ROOM)!
+
+      it('keeps them when Auto-join is toggled from the sidebar', async () => {
+        const room = shown()
+        // What the sidebar's Auto-join toggle sends.
+        await muc.setBookmark(ROOM, { name: room.name, nick: room.nickname, autojoin: !room.autojoin })
+
+        expect(sentKinds()).toEqual(['read', 'publish'])
+        expect(publishedConference()?.attrs).toMatchObject({ name: 'Team renamed elsewhere', autojoin: 'false' })
+        expect(publishedConference()?.getChildText('nick')).toBe('nick-set-elsewhere')
+        expect(shown()).toMatchObject({ name: 'Team renamed elsewhere', nickname: 'nick-set-elsewhere', autojoin: false })
+      })
+
+      it('keeps them, and the stored autojoin, when the dialog saves a nickname typed in it', async () => {
+        // Another app also turned autojoin off; the dialog still shows it on.
+        serverItem = fetchResult('', fullItem({ ...RENAMED, autojoin: false }))
+        const room = shown()
+        // What the Edit bookmark dialog sends when only the nickname was typed.
+        await muc.setBookmark(ROOM, { name: room.name, nick: 'typed-in-dialog', autojoin: room.autojoin })
+
+        expect(sentKinds()).toEqual(['read', 'publish'])
+        expect(publishedConference()?.attrs).toMatchObject({ name: 'Team renamed elsewhere', autojoin: 'false' })
+        expect(publishedConference()?.getChildText('nick')).toBe('typed-in-dialog')
+        expect(shown()).toMatchObject({ name: 'Team renamed elsewhere', nickname: 'typed-in-dialog', autojoin: false })
+      })
+
+      it('keeps them when the dialog saves with only Auto-join changed', async () => {
+        const room = shown()
+        await muc.setBookmark(ROOM, { name: room.name, nick: room.nickname, autojoin: false })
+
+        expect(publishedConference()?.attrs).toMatchObject({ name: 'Team renamed elsewhere', autojoin: 'false' })
+        expect(publishedConference()?.getChildText('nick')).toBe('nick-set-elsewhere')
+      })
+
+      it('keeps them when the notification level changes', async () => {
+        await muc.setRoomNotifyLevel(ROOM, 'none', true)
+
+        expect(sentKinds()).toEqual(['read', 'publish'])
+        expect(publishedConference()?.attrs).toMatchObject({ name: 'Team renamed elsewhere', autojoin: 'true' })
+        expect(publishedConference()?.getChildText('nick')).toBe('nick-set-elsewhere')
+        expect(published().fluuxNotify).toEqual(['none'])
+      })
+
+      it('keeps them in a toggle asked for before a save queued ahead of it read them', async () => {
+        const room = shown()
+        const off = muc.setRoomNotifyLevel(ROOM, 'none', true)
+        // Asked for while Fluux still shows the older name and nickname.
+        const toggle = muc.setBookmark(ROOM, { name: room.name, nick: room.nickname, autojoin: !room.autojoin })
+        await Promise.all([off, toggle])
+
+        // The toggle trusts the copy the first save stored, without a read of its own.
+        expect(sentKinds()).toEqual(['read', 'publish', 'publish'])
+        expect(publishedConference()?.attrs).toMatchObject({ name: 'Team renamed elsewhere', autojoin: 'false' })
+        expect(publishedConference()?.getChildText('nick')).toBe('nick-set-elsewhere')
+        expect(published().fluuxNotify).toEqual(['none'])
+      })
     })
 
     // Two saves of the room started while the first read of the stored
