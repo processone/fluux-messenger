@@ -1,10 +1,11 @@
 """Framed process-log reader invariants on local socket peers; NOT iPhone proof.
 
 Record bytes follow the layout libimobiledevice (src/ostrace.c, tools/idevicesyslog.c)
-and pymobiledevice3 (services/os_trace.py) read from com.apple.os_trace_relay: a
-type byte and length around a 129-byte header, then the process path, image path,
-message, subsystem and category, each ending in NUL. The peer stands in for the
-relay; test_service.py drives the same reader through the actual worker.
+and pymobiledevice3 (services/os_trace.py) read from com.apple.os_trace_relay, as
+corrected by an iPhone's records: a type byte and length around a 129-byte header,
+then the process path, image path, message, subsystem and category, each ending in
+NUL. The peer stands in for the relay; test_service.py drives the same reader
+through the actual worker.
 """
 import json
 import os
@@ -27,13 +28,17 @@ WEBKIT = b"/System/Library/Frameworks/WebKit.framework"
 WEBCONTENT = WEBKIT + b"/XPCServices/com.apple.WebKit.WebContent.xpc/com.apple.WebKit.WebContent"
 NETWORKING = WEBKIT + b"/XPCServices/com.apple.WebKit.Networking.xpc/com.apple.WebKit.Networking"
 XPCPROXY = b"/usr/libexec/xpcproxy"
+KERNEL = b"/kernel"
 RUNNINGBOARD = b"/usr/libexec/runningboardd"
 SPRINGBOARD = b"/System/Library/CoreServices/SpringBoard.app/SpringBoard"
 WEBKIT_IMAGE = WEBKIT + b"/WebKit"
 SECONDS, MICROS = 1795040128, 123456
-# The full header as both references describe it, packed field by field so the
+# The full header as libimobiledevice describes it, packed field by field so the
 # reader's own skip-layout is not used to build its input.
 LAYOUT = struct.Struct("<BIIIQ16sHQQQIBB6sQII16sHIIHHHHI")
+# An iPhone sets the 16 bits after the subsystem size (0x6808 was seen); the bits
+# after the category size are set here too, so neither size can be read as 32 bits.
+AFTER_SIZES = (0x6808, 0x0102)
 OK = {"Status": "RequestSuccessful"}
 FIELDS = {"elapsedMs", "timeUs", "pid", "level", "process", "subsystem", "category"}
 
@@ -48,7 +53,7 @@ def record(pid, path, *, message=PRIVATE.encode(), image=WEBKIT_IMAGE, subsystem
     header = LAYOUT.pack(marker, kind, LAYOUT.size if header_size is None else header_size, pid,
                          pid if procid is None else procid, b"\x11" * 16, n[0], 0, 0, SECONDS, micros,
                          0, level, bytes(6), 0x2F4C8B60D1, 0x1A2B, 0, b"\x22" * 16, n[1], n[2], 0x3C10,
-                         n[3], 0, n[4], 0, 0)
+                         n[3], AFTER_SIZES[0], n[4], AFTER_SIZES[1], 0)
     return header + b"".join(parts) + trailing
 
 
@@ -161,6 +166,10 @@ class LogReaderProof(unittest.TestCase):
     def test_listed_processes_keep_only_metadata(self):
         frames = [frame(body) for body in [
             record(33, RUNNINGBOARD, subsystem=b"com.apple.runningboard", category=b"process"),
+            # The kernel logs as PID 0; an iPhone sets a category size with no
+            # subsystem and sends no category bytes.
+            record(0, KERNEL),
+            record(33, RUNNINGBOARD, message=b"", sizes=[len(RUNNINGBOARD) + 1, len(WEBKIT_IMAGE) + 1, 0, 0, 28]),
             record(400, XPCPROXY),
             record(91, SPRINGBOARD, kind=0x0600),
             record(321, APP, subsystem=b"com.apple.WebKit", category=b"Process", level=0x10),
@@ -179,7 +188,7 @@ class LogReaderProof(unittest.TestCase):
         self.assertTrue(relay.closed_by_reader)
         self.assertEqual((result["reason"], result["phase"]), ("stopped", "streaming"))
         self.assertEqual({k: result[k] for k in ("records", "emitted", "discarded", "unknownTypes", "trailingRecords")},
-                         {"records": 8, "emitted": 5, "discarded": 2, "unknownTypes": 1, "trailingRecords": 1})
+                         {"records": 10, "emitted": 5, "discarded": 4, "unknownTypes": 1, "trailingRecords": 1})
         self.assertEqual(result["pids"], {"fluux": [321], "webkit-content": [400], "webkit-networking": [401]})
         self.assertEqual([(l["pid"], l["process"], l["level"], l["subsystem"], l["category"]) for l in lines], [
             (321, "fluux", "error", "webkit", "Process"),
@@ -217,7 +226,7 @@ class LogReaderProof(unittest.TestCase):
         unlisted = [frame(record(321, APP)), frame(record(321, RUNNINGBOARD)), frame(record(321, APP))]
         cases = {
             "procid-differs": ([frame(record(321, APP, procid=322))], 0, "parse_record", None),
-            "zero-pid": ([frame(record(0, APP))], 0, "parse_record", None),
+            "listed-zero-pid": ([frame(record(0, APP))], 0, "parse_record", None),
             "listed-label-changes": ([frame(record(321, APP)), frame(record(321, WEBCONTENT))], 1, "_attribute", None),
             "listed-to-unlisted": (unlisted, 1, "_attribute", None),
             "restricted-listed-to-unlisted": (unlisted, 1, "_attribute", 321),

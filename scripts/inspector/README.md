@@ -434,6 +434,13 @@ and pymobiledevice3's `services/os_trace.py`.
    path, message, subsystem and category. Its size must lie between the header
    size and 16 KiB.
 
+The subsystem and category sizes are 16-bit fields, each followed by 16 bits that
+an iPhone sets to other values. libimobiledevice names those `unk14` and `unk15`;
+pymobiledevice3 reads each size together with them as one 32-bit number, which on
+a real phone gives sizes far beyond the record. A record without a subsystem
+carries no category bytes, even when its category size is set, so the reader then
+ignores that size; pymobiledevice3 likewise reads both or neither.
+
 The header is unpacked only for its marker, record type, header size, PID,
 process identifier, time, level and region sizes; the UUIDs, thread and activity
 identifiers, mach time and image offset between them are skipped and never read.
@@ -466,8 +473,10 @@ the output and the result.
 
 ### PID attribution
 
-A record's PID must be positive and equal its header's process identifier, or the
-capture stops with `pid-boundary`. One PID keeps one listed label for the whole
+A record's PID must equal its header's process identifier and fit in 31 bits, or
+the capture stops with `pid-boundary`. PID 0 is the kernel, which logs throughout
+an all-process stream: its records are dropped as unlisted, and a listed process
+with PID 0 stops with `pid-boundary`. One PID keeps one listed label for the whole
 capture: a listed PID whose later record names another listed process, or an
 unlisted one, stops with `pid-boundary`.
 A PID first seen in an unlisted process and later in a listed one is accepted,
@@ -485,6 +494,11 @@ to the PIDs it held.
 - The deadline is at most 120 seconds. The reader shares the caller's stop event,
   sets it on every exit, then shuts down and closes the stream. Closing the
   connection ends the relay's stream; nothing is left to remove on the phone.
+- On an iPhone the all-process stream carried from about 150 KB to 1.9 MB per
+  second, often mostly kernel records. The opener and the reader both charge it,
+  so a five-MiB budget lasted between about 1.3 and 9 seconds. A PID-restricted
+  stream carries only that process's records, with no kernel records, so a
+  capture longer than a few seconds should restrict the relay to Fluux's PID.
 - A partial frame ends reading: the next read stops with `protocol-boundary`
   instead of resynchronizing on remote bytes.
 - The output must be an empty private regular file (mode 0600), or the reader
@@ -505,7 +519,9 @@ image name. It checks that only listed processes and the seven fields above are
 written, and that the canary reaches neither the output nor the result. It also
 covers a PID-restricted session, PID attribution failures, malformed headers,
 regions and frames, a partial frame, a disconnect, unsafe outputs, the shared stop
-event, the deadline, the PID cap, a budget-exhausting flood and an interrupt.
+event, the deadline and its 120-second cap, a budget-exhausting flood and an
+interrupt. Its records set the 16 bits after each size, as an iPhone does, and
+include kernel records and a category size without a subsystem.
 `test_service.py` runs the reader through the actual worker and disposable
 lockdown peer, checks that an unknown service code exits without contacting
 usbmuxd, and runs the inspector reader and log reader on one budget and stop
@@ -513,5 +529,6 @@ event: a log flood exhausts the budget and stops the inspector, and the
 inspector's deadline stops the logs.
 
 The peer stands in for the iPhone's relay. The header layout and record types
-follow the references above, not an observed device; a live run on the iPhone,
-with its own consent, qualifies them.
+follow the references above as corrected by diagnostic sessions on an iPhone,
+which kept only counts and numeric header fields; a live run on the iPhone, with
+its own consent, qualifies them.

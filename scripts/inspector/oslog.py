@@ -33,7 +33,9 @@ REPLY_MAX = 4096
 RECORD_MAX = 16 * 1024
 # Only the fields named here are unpacked; the UUIDs, activity identifiers, mach
 # time, thread and image offset between them are skipped ("x") and never read.
-HEADER = struct.Struct("<BIIIQ16xH16xQIxB6x8x8x16xHI4xII4x")
+# The subsystem and category sizes are 16-bit, each followed by 16 bits an iPhone
+# sets to other values (libimobiledevice's unk14 and unk15).
+HEADER = struct.Struct("<BIIIQ16xH16xQIxB6x8x8x16xHI4xH2xH2x4x")
 RECORD_MARKER = 2
 RECORD_TYPES = frozenset({2, 8})
 MAX_PIDS = 1024
@@ -97,10 +99,15 @@ def parse_record(body):
         return None
     if header_size != HEADER.size or path_n < 2 or seconds > 0xFFFFFFFF or micros >= 1_000_000:
         raise Boundary("record-boundary")
+    if not subsystem_n:
+        # An iPhone sends no category bytes without a subsystem, even when the
+        # category size is set; pymobiledevice3 likewise reads both or neither.
+        category_n = 0
     end = HEADER.size + path_n + image_n + message_n + subsystem_n + category_n
     if end > len(body):
         raise Boundary("record-boundary")
-    if not 0 < pid <= 0x7FFFFFFF or procid != pid:
+    # PID 0 is the kernel, which logs throughout an all-process stream.
+    if pid > 0x7FFFFFFF or procid != pid:
         raise Boundary("pid-boundary")
     offset = HEADER.size
     path = _string(body, offset, path_n, interior=True)
@@ -112,9 +119,13 @@ def parse_record(body):
     subsystem = _string(body, offset, subsystem_n, interior=True)
     offset += subsystem_n
     category = _string(body, offset, category_n, interior=True)
+    label = process_label(path)
+    if not pid and label is not None:
+        # The kernel is never a listed process.
+        raise Boundary("pid-boundary")
     subsystem_label = None if subsystem is None else SUBSYSTEMS.get(subsystem, "other")
     category_label = None if category is None else CATEGORIES.get(subsystem_label, {}).get(category, "other")
-    return (pid, process_label(path), seconds, micros, LEVELS.get(level, "other"),
+    return (pid, label, seconds, micros, LEVELS.get(level, "other"),
             subsystem_label, category_label, len(body) - end)
 
 
