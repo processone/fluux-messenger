@@ -1,5 +1,6 @@
 import { createStore } from 'zustand/vanilla'
 import { savedMessageKeys } from '../utils/savedMessageKeys'
+import { buildScopedStorageKey } from '../utils/storageScope'
 import type { SavedMessage, SavedPendingOp } from '../core/types/saved'
 
 /**
@@ -20,6 +21,8 @@ export interface SavedState {
   loaded: boolean
   /** The node's effective item limit, when known. */
   limit: number | undefined
+  /** The queue stored for this account has been merged in. */
+  hydrated: boolean
   /** The server refused to store the last entry (counts up so a view can react once per refusal). */
   refusals: number
 
@@ -37,10 +40,36 @@ export interface SavedState {
   setLimit: (limit: number | undefined) => void
   /** The server definitively refused this operation: undo a refused save, note the refusal. */
   refuse: (id: string, op: SavedPendingOp) => void
+  /** Merge the queue stored by an earlier session of this account (local operations win). */
+  hydratePending: () => void
   reset: () => void
 }
 
-const initial = { entries: {}, pending: {}, loaded: false, limit: undefined, refusals: 0 }
+const PENDING_KEY = 'fluux-saved-pending'
+
+/** What survives a reload: the unsent operations and the entries still to publish. */
+interface StoredQueue { pending: Record<string, SavedPendingOp>; entries: Record<string, SavedMessage> }
+
+function readQueue(): StoredQueue | null {
+  try {
+    const raw = localStorage.getItem(buildScopedStorageKey(PENDING_KEY))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as StoredQueue
+    return parsed && typeof parsed.pending === 'object' && parsed.pending ? { pending: parsed.pending, entries: parsed.entries ?? {} } : null
+  } catch { return null }
+}
+
+function writeQueue(state: Pick<SavedState, 'pending' | 'entries'>): void {
+  try {
+    const key = buildScopedStorageKey(PENDING_KEY)
+    if (Object.keys(state.pending).length === 0) { localStorage.removeItem(key); return }
+    const entries: Record<string, SavedMessage> = {}
+    for (const [id, op] of Object.entries(state.pending)) if (op === 'publish' && state.entries[id]) entries[id] = state.entries[id]
+    localStorage.setItem(key, JSON.stringify({ pending: state.pending, entries } satisfies StoredQueue))
+  } catch { /* storage unavailable: the queue stays in memory only */ }
+}
+
+const initial = { entries: {}, pending: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false }
 
 /** Is this message already saved (by any of its identities)? */
 export function findSavedEntry(entries: Record<string, SavedMessage>, probe: Pick<SavedMessage, 'conversationJid' | 'stanzaId' | 'stanzaIdBy' | 'originId' | 'messageId'>): SavedMessage | undefined {
@@ -72,6 +101,7 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
   ...initial,
 
   save: (entry) => {
+    get().hydratePending()
     const state = get()
     const existing = findSavedEntry(state.entries, entry)
     if (existing) return true
@@ -81,6 +111,7 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
   },
 
   remove: (id) => {
+    get().hydratePending()
     const { entries, pending } = get()
     if (!entries[id]) return
     const next = { ...entries }
@@ -89,6 +120,7 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
   },
 
   markDeleted: (id) => {
+    get().hydratePending()
     const { entries, pending } = get()
     const entry = entries[id]
     if (!entry || (!entry.text && !entry.encrypted)) return
@@ -129,6 +161,22 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
 
   setLimit: (limit) => set({ limit }),
 
+  hydratePending: () => {
+    if (get().hydrated) return
+    const stored = readQueue()
+    const { entries, pending } = get()
+    if (!stored) { set({ hydrated: true }); return }
+    const nextEntries = { ...entries }
+    const nextPending = { ...pending }
+    for (const [id, op] of Object.entries(stored.pending)) {
+      if (nextPending[id] !== undefined) continue
+      nextPending[id] = op
+      if (op === 'retract') delete nextEntries[id]
+      else if (stored.entries[id]) nextEntries[id] = stored.entries[id]
+    }
+    set({ entries: nextEntries, pending: nextPending, hydrated: true })
+  },
+
   refuse: (id, op) => {
     const { entries, pending, refusals } = get()
     if (pending[id] !== op) return
@@ -145,3 +193,8 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
 
   reset: () => set({ ...initial }),
 }))
+
+// Keep the unsent queue on disk, so a save or removal made offline survives a reload.
+savedStore.subscribe((state, previous) => {
+  if (state.hydrated && (state.pending !== previous.pending || (state.hydrated && !previous.hydrated))) writeQueue(state)
+})

@@ -89,7 +89,7 @@ Fluux builds the copy with the same function Forward uses and reads it with a re
 - **Save:** publish the item. **Remove:** retract it.
 - **Fetch:** `<items node="urn:xmpp:fluux:saved-messages:0"/>` on the own account. Only an answered fetch (items, or `item-not-found`) replaces the local list; a refused or unanswered fetch leaves it as it is.
 - **Notify:** other online clients receive the item or retract through `+notify` and apply it without reloading.
-- **Offline:** a save or removal made while disconnected is shown at once and sent on reconnect.
+- **Offline:** a save or removal made while disconnected is shown at once, kept on the device across a reload, and sent on reconnect.
 - **Duplicates:** entries naming the same message (one saved before the archive id was known, one after) are shown once; the weaker one is retracted.
 - **Deleted originals:** when the client learns the original was retracted or moderated, the row shows "Message deleted" and the client republishes the item without its body.
 

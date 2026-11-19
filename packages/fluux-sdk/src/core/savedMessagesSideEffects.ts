@@ -73,10 +73,9 @@ export function setupSavedMessagesSideEffects(
 
   async function refresh(): Promise<void> {
     const jid = getBareJid(connectionStore.getState().jid ?? '')
-    if (jid && account !== jid) {
-      savedStore.getState().reset()
-      account = jid
-    }
+    if (jid && account && account !== jid) savedStore.getState().reset()
+    if (jid) account = jid
+    savedStore.getState().hydratePending()
     const result = await client.internal.savedMessages.fetchAll()
     if (result.status === 'ok') savedStore.getState().reconcileFetch(result.items)
     else if (result.status === 'absent') savedStore.getState().reconcileFetch([])

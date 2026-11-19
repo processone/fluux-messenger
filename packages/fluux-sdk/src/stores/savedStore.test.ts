@@ -9,7 +9,7 @@ const entry = (id: string, extra: Partial<SavedMessage> = {}): SavedMessage => (
 const s = () => savedStore.getState()
 
 describe('savedStore', () => {
-  beforeEach(() => s().reset())
+  beforeEach(() => { localStorage.clear(); s().reset() })
 
   it('shows a save at once and keeps it pending until the server takes it', () => {
     expect(s().save(entry('a'))).toBe(true)
@@ -77,5 +77,44 @@ describe('savedStore', () => {
     s().refuse('a', 'publish')
     expect(s().entries.a).toBeUndefined()
     expect(s().refusals).toBe(1)
+  })
+
+  describe('queue kept across a reload', () => {
+    const reload = () => { // a new session: memory is empty, storage stays
+      const stored = { ...localStorage }
+      s().reset()
+      for (const [k, v] of Object.entries(stored)) localStorage.setItem(k, v)
+    }
+    beforeEach(() => localStorage.clear())
+
+    it('brings back an offline save and an offline removal', () => {
+      s().reconcileFetch([entry('old')])
+      s().save(entry('a'))
+      s().remove('old')
+      reload()
+      s().hydratePending()
+      expect(s().pending).toEqual({ a: 'publish', old: 'retract' })
+      expect(s().entries.a?.text).toBe('text a')
+      expect(s().entries.old).toBeUndefined()
+    })
+
+    it('forgets the queue once the server has taken it', () => {
+      s().save(entry('a'))
+      s().settle('a', 'publish')
+      reload()
+      s().hydratePending()
+      expect(s().pending).toEqual({})
+      expect(Object.keys(localStorage).filter(k => k.includes('fluux-saved-pending'))).toEqual([])
+    })
+
+    it('does not overwrite the stored queue before it was read', () => {
+      s().reconcileFetch([entry('b')])
+      s().save(entry('a'))
+      reload()
+      s().reconcileFetch([entry('b')])
+      s().remove('b') // acts before an explicit hydrate
+      s().hydratePending()
+      expect(s().pending).toMatchObject({ a: 'publish', b: 'retract' })
+    })
   })
 })
