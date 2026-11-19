@@ -169,4 +169,42 @@ test.describe('message right-click menu', () => {
     expect(afterTab.inMenu).toBe(true)
     expect(`${afterTab.tag}:${afterTab.label}`).not.toBe(`${before.tag}:${before.label}`)
   })
+
+  test('a right-click on a link offers that link first, with a single Copy link', async ({ page }) => {
+    await setup(page, [{ id: 'lnk-a', from: 'peer', body: 'Docs are at https://example.org/guide today' }])
+    const link = row(page, 'lnk-a').getByRole('link', { name: /example\.org\/guide/ })
+    await expect(link).toBeVisible()
+    const box = (await link.boundingBox())!
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' })
+    await expect(menu(page)).toBeVisible()
+    const labels = await menu(page).getByRole('button').evaluateAll(els => els.map(e => e.getAttribute('aria-label') ?? e.textContent?.trim()))
+    const iCopy = labels.indexOf('Copy link')
+    const iOpen = labels.indexOf('Open in browser')
+    expect(iCopy).toBeGreaterThan(3)
+    expect(iOpen).toBe(iCopy + 1)
+    expect(labels.filter(l => l === 'Copy link')).toHaveLength(1)
+    expect(labels.indexOf('Copy text')).toBeGreaterThan(iOpen)
+  })
+
+  test('a live arrival while the pointer menu is open does not dismiss it', async ({ page }) => {
+    await setup(page, [{ id: 'arr-a', from: 'peer', body: 'Hold target message' }])
+    const body = row(page, 'arr-a')
+    await expect(body).toBeVisible()
+    const box = (await body.getByText('Hold target message').boundingBox())!
+    await page.mouse.click(box.x + 30, box.y + box.height / 2, { button: 'right' })
+    await expect(menu(page)).toBeVisible()
+    const m = (await menu(page).boundingBox())!
+    await page.mouse.move(m.x + m.width / 2, m.y + m.height / 2)
+    await page.evaluate((peer) => {
+      const scope = window as unknown as { __demoClient: DemoClient }
+      scope.__demoClient.emitSDK('chat:message', { message: {
+        type: 'chat', id: 'arr-new', conversationId: peer, from: peer, body: 'A new live message',
+        stanzaId: undefined, originId: undefined, timestamp: new Date(Date.now() + 5000), isOutgoing: false,
+      }, isLiveArrival: true })
+    }, PEER)
+    await expect(row(page, 'arr-new')).toBeAttached()
+    await page.waitForTimeout(1500)
+    await expect(menu(page)).toBeVisible()
+    await expect(menu(page).getByRole('button', { name: 'Reply' })).toBeVisible()
+  })
 })
