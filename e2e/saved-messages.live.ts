@@ -1295,3 +1295,47 @@ test('a deletion whose redaction the server refuses still shows as deleted, and 
   await emptyNode(reader)
   await one.context.close(); await bob.stop(); await reader.stop()
 })
+
+test('a saved message whose archive lookup goes unanswered says the lookup failed, and Try again then reaches the answer of the archive', async ({ browser }) => {
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const text = `Archive silent ${stamp}`
+  const field = (name: string, value: string) => xml('field', { var: name }, xml('value', {}, value))
+  const options = xml('publish-options', {}, xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+    xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options')),
+    field('pubsub#persist_items', 'true'), field('pubsub#access_model', 'whitelist'), field('pubsub#max_items', '256'), field('pubsub#send_last_published_item', 'never')))
+  // An item for a message the archive has never held (the other device saved it, then it disappeared).
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('publish', { node: NODE },
+    xml('item', { id: `silent${stamp}` }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
+      xml('delay', { xmlns: 'urn:xmpp:delay', stamp: new Date(Date.now() - 3_600_000).toISOString() }),
+      xml('message', { xmlns: 'jabber:client', from: 'bob@localhost/x', to: 'alice@localhost', type: 'chat', id: `silent-${stamp}` }, xml('body', {}, text), xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', id: `1700000000000000${stamp.length}`, by: 'alice@localhost' })))))), options)))
+  const one = await connect(browser)
+  let silent = true
+  let swallowed = 0
+  await one.page.routeWebSocket(/\/ws$/, ws => {
+    const server = ws.connectToServer()
+    ws.onMessage(message => {
+      const frame = typeof message === 'string' ? message : message.toString()
+      if (silent && /^<iq\b/.test(frame) && frame.includes('urn:xmpp:mam:2')) { swallowed++; return }
+      server.send(message)
+    })
+    server.onMessage(message => ws.send(message))
+  })
+  await one.page.reload()
+  await openSaved(one)
+  await expect(savedRow(one, text)).toBeVisible()
+  await savedRow(one, text).click()
+  // The row's own status, not the opener's toast, which carries the same words.
+  await expect(savedRow(one, text).getByRole('status')).toContainText(/Could not load/i, { timeout: 60_000 })
+  expect(swallowed).toBeGreaterThan(0)
+  await expect(savedRow(one, text).getByRole('status')).not.toContainText(/no longer available/i) // an unanswered lookup never claims the message is gone
+  await shot(one.page, 'archive-lookup-unanswered')
+  // The archive answers again: Try again reaches its answer.
+  silent = false
+  await savedRow(one, text).getByRole('button', { name: /Try again/i }).click()
+  await expect(savedRow(one, text).getByRole('status')).toContainText(/no longer available/i, { timeout: 30_000 })
+  await expect(one.page).toHaveURL(/\/saved/)
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
