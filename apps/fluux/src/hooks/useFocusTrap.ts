@@ -83,11 +83,14 @@ export function useFocusTrap<T extends HTMLElement>(
       }
     }
 
-    // Capture phase: a widget inside the trap (the emoji picker) may stop Tab before it bubbles.
-    container.addEventListener('keydown', handleKeyDown, true)
+    // Shadow-aware menus host widgets (the emoji picker) that may stop Tab
+    // before it bubbles, so they listen in the capture phase. Other traps keep
+    // the bubble phase so a nested inner trap wraps before its outer trap.
+    const capture = includeShadowRoots
+    container.addEventListener('keydown', handleKeyDown, capture)
 
     return () => {
-      container.removeEventListener('keydown', handleKeyDown, true)
+      container.removeEventListener('keydown', handleKeyDown, capture)
       if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true })
     }
   }, [containerRef, initialFocusRef, active, includeShadowRoots])
