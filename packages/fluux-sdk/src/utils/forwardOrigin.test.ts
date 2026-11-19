@@ -124,6 +124,13 @@ describe('findForwardedOrigin', () => {
     expect(queries.every(([name, q]) => name !== 'conversationId' && q !== undefined && q !== null)).toBe(true)
   })
 
+  it('does not treat the stanza id of a row without a verified pair as its own-archive id', async () => {
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'legacy', stanzaId: 'S1', body: 'other text' }))
+    expect(await findForwardedOrigin(copy({ id: 'zz', stanzaId: 'S1', stanzaIdBy: 'me@example.org', timestamp: undefined }), 'me@example.org', ['memberbot@xmpp.org'])).toBeNull()
+    // The sender id and time/text fallback still find it.
+    expect(await findForwardedOrigin(copy({ id: 'legacy', stanzaId: 'S1', stanzaIdBy: 'me@example.org' }), 'me@example.org', ['memberbot@xmpp.org'])).toMatchObject({ row: { id: 'legacy' } })
+  })
+
   it('rejects two rows sharing a client id and text when no archive id tells them apart', async () => {
     await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'dup', stanzaId: 'a-1' }))
     await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'dup', stanzaId: 'a-2' }))

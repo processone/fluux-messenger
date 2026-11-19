@@ -1907,7 +1907,7 @@ export type ForwardedIdReference =
 /**
  * The conversation's rows a carried id names, in that id's own namespace only. A sender id is a
  * client id (any alias a merged row absorbed) or an origin id, never an archive id; an own-archive
- * id is the row's authoritative own-archive pair, or, for a row that records none, its stanza id.
+ * id is the row's verified own-archive pair, never its possibly foreign stanza id.
  * The caller decides between several rows.
  */
 export async function getMessagesByForwardedId(
@@ -1923,11 +1923,8 @@ export async function getMessagesByForwardedId(
         ...await findChatRowsForTier(store, conversationId, 'originId', reference.id),
         ...await findChatRowsForTier(store, conversationId, 'fallback', reference.id),
       ].map(row => [row.cacheKey, row])).values()]
-    : [...new Map([
-        ...(await store.index('ownArchive').getAll([conversationId, reference.id])).filter(row => row.ownArchiveBy === reference.by),
-        // A row that records no own-archive pair keeps its stanza id as that pair.
-        ...(await findChatRowsForTier(store, conversationId, 'stanzaId', reference.id)).filter(row => !row.ownArchiveId),
-      ].map(row => [row.cacheKey, row])).values()]
+    // Only a verified pair: a row that records no own-archive pair never claims an archive id.
+    : (await store.index('ownArchive').getAll([conversationId, reference.id])).filter(row => row.ownArchiveBy === reference.by)
   scope.assertCurrent()
   return rows.map(deserializeMessage)
 }
