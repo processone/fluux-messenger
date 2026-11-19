@@ -1,3 +1,4 @@
+import { useKeyboardScrollClaim } from '../../hooks/useKeyboardScrollClaim'
 import { useEffect, useRef } from 'react'
 import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useTranslation } from 'react-i18next'
@@ -15,13 +16,15 @@ interface CommandMenuProps {
 export function CommandMenu({ matches, selectedIndex, onSelect, onDismiss }: CommandMenuProps) {
   const { t } = useTranslation()
   const selectedRef = useRef<HTMLButtonElement>(null)
+  const claimKeyboardScroll = useKeyboardScrollClaim()
   const menuRef = useRef<HTMLDivElement>(null)
   useFloatingLayerBounds(menuRef, matches.length > 0)
 
   // Keep the keyboard-highlighted item visible as selection moves past the popover edges.
   useEffect(() => {
+    claimKeyboardScroll(selectedRef.current)
     selectedRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [selectedIndex])
+  }, [selectedIndex, claimKeyboardScroll])
 
   // Dismiss on a pointer press anywhere outside the popover. A press on the
   // composer's own textarea moves the caret, which already closes the menu via

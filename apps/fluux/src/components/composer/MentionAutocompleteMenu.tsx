@@ -1,3 +1,4 @@
+import { useKeyboardScrollClaim } from '../../hooks/useKeyboardScrollClaim'
 import { useEffect, useRef } from 'react'
 import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useTranslation } from 'react-i18next'
@@ -26,13 +27,15 @@ export function MentionAutocompleteMenu({
 }: MentionAutocompleteMenuProps) {
   const { t } = useTranslation()
   const selectedRef = useRef<HTMLButtonElement>(null)
+  const claimKeyboardScroll = useKeyboardScrollClaim()
   const menuRef = useRef<HTMLDivElement>(null)
   useFloatingLayerBounds(menuRef, matches.length > 0)
 
   // Keep the keyboard-highlighted item visible as selection moves past the popover edges.
   useEffect(() => {
+    claimKeyboardScroll(selectedRef.current)
     selectedRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [selectedIndex])
+  }, [selectedIndex, claimKeyboardScroll])
 
   if (matches.length === 0) return null
 

@@ -1,3 +1,4 @@
+import { markUserScrollIntent } from '../utils/scrollbarReveal'
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
@@ -559,12 +560,14 @@ function CommandPaletteContent({
         e.preventDefault()
         e.stopPropagation() // Prevent global shortcuts from firing
         setIsKeyboardNav(true) // Enter keyboard navigation mode
+        markUserScrollIntent(listRef.current)
         updateSelectedIndex((i) => Math.min(i + 1, flatItems.length - 1))
         break
       case 'ArrowUp':
         e.preventDefault()
         e.stopPropagation() // Prevent global shortcuts from firing
         setIsKeyboardNav(true) // Enter keyboard navigation mode
+        markUserScrollIntent(listRef.current)
         updateSelectedIndex((i) => Math.max(i - 1, 0))
         break
       case 'Enter': {
