@@ -160,8 +160,9 @@ test.describe('message right-click menu', () => {
       const m = document.querySelector('[role="menu"]')
       return { tag: a?.tagName ?? '', label: a?.getAttribute('aria-label') ?? '', inMenu: !!m && !!a && m.contains(a.getRootNode() instanceof ShadowRoot ? (a.getRootNode() as ShadowRoot).host : a), menu: !!m }
     })
+    // emoji-mart focuses its search field asynchronously after it renders; wait for that instead of reading focus at once.
+    await expect.poll(async () => (await composedActive()).tag, { timeout: 10_000 }).toBe('INPUT')
     const before = await composedActive()
-    expect(before.tag).toBe('INPUT')
     await page.keyboard.press('Tab')
     const afterTab = await composedActive()
     expect(afterTab.menu).toBe(true)
