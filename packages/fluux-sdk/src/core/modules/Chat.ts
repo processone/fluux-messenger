@@ -258,7 +258,7 @@ export class Chat extends BaseModule {
     if (carbonSent || carbonReceived) {
       const outerFrom = stanza.attrs.from as string | undefined
       const ownBare = getBareJid(this.deps.getCurrentJid() ?? '').toLowerCase()
-      if (outerFrom && (!ownBare || outerFrom.toLowerCase() !== ownBare)) {
+      if (outerFrom && outerFrom.toLowerCase() !== ownBare) {
         return { handled: true }
       }
       const forwarded = (carbonSent || carbonReceived)!.getChild('forwarded', NS_FORWARD)

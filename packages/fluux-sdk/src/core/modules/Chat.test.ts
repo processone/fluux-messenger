@@ -424,9 +424,10 @@ describe('XMPPClient Message', () => {
 
     it('does not unwrap a carbon found inside a carbon', async () => {
       await connectClient()
-      // A genuine outer carbon whose forwarded message is itself a carbon wrapper.
+      // A genuine outer carbon whose forwarded message is itself a carbon wrapper
+      // with no sender, so only the nesting guard (not the sender check) stops it.
       const nested = {
-        name: 'message', attrs: { from: 'mallory@evil.example', to: 'user@example.com', type: 'chat', id: 'outer' },
+        name: 'message', attrs: { to: 'user@example.com', type: 'chat', id: 'outer' },
         children: [
           { name: 'received', attrs: { xmlns: 'urn:xmpp:carbons:2' }, children: [
             { name: 'forwarded', attrs: { xmlns: 'urn:xmpp:forward:0' }, children: [
