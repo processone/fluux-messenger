@@ -57,7 +57,7 @@ test.describe('touch message actions', () => {
       const rows = page.locator('[data-message-id]').filter({
         has: page.locator(`[data-msg-chrome="${header ? 'header' : 'cont'}"]`),
       })
-      const own = page.locator('[data-msg-own]')
+      const own = page.locator('[data-msg-outgoing]')
       const row = (outgoing ? rows.filter({ has: own }) : rows.filter({ hasNot: own })).last()
       const content = row.locator('[data-msg-chrome]')
       await content.scrollIntoViewIfNeeded()

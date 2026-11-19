@@ -35,7 +35,6 @@ import { LiveEdgeGrowthContext, type RunKeepingLiveEdge } from './liveEdgeGrowth
 import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
 import { formatUnreadCount } from '@/utils/formatUnreadCount'
 import { MessageWidthProvider } from './messageWidthContext'
-import { OwnGroupWidthProvider } from './messageGroupWidth'
 import { isFeatureEnabled } from '@/utils/featureFlags'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
@@ -925,7 +924,6 @@ export function MessageList<T extends BaseMessage>({
     <MessageInteractionContext.Provider value={interaction.context}>
     <MessageTargetProvider value={requestMessageTarget}>
     <MessageWidthProvider containerRef={scrollContainerRef}>
-    <OwnGroupWidthProvider>
     <div className="relative flex-1 flex flex-col min-h-0">
       {/* Scrollable message container - always mounted to preserve scroll position */}
       <div
@@ -1131,7 +1129,6 @@ export function MessageList<T extends BaseMessage>({
       </div>
       <MessageSelectionBar count={selectionCount} onCopy={copySelected} onClear={clearSelection} />
     </div>
-    </OwnGroupWidthProvider>
     </MessageWidthProvider>
     </MessageTargetProvider>
     </MessageInteractionContext.Provider>

@@ -1608,60 +1608,6 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 0.5rem;
 }
 
-/* Own-message tint — a quiet luminous wash on outgoing messages (Aurora).
-   No edge bar: a leading-edge bar reads as "quoted reply" elsewhere, so the
-   tint carries the distinction on its own. Decorative; the own-name color
-   (--fluux-text-self) carries identity, so this isn't contrast-bound. Tint
-   kept subtle so body text AA holds. */
-.message-own-tint {
-  background: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.08);
-  padding-inline: 0.5rem;
-  margin-inline: -0.5rem;
-  /* Render a run of consecutive own messages as one continuous surface. At an
-     interior group junction both rows are tightened to 1px (message-own-cont-*
-     below), so `padding-block`/`margin-block` are set to 1px/-1px: the negative
-     margin cancels that 1px row padding so adjacent tints abut flush (no seam,
-     no overlap that would darken the translucent wash). The resulting gap
-     between two grouped messages is 2px — tight enough to read as one block
-     rather than a blank line. At the group's outer top/bottom the row keeps its
-     normal py-0.5, so the tint sits a hair inside the separation gap there. */
-  padding-block: 0.0625rem;
-  margin-block: -0.0625rem;
-}
-
-/* Tighten only the INTERIOR junctions of an own-message group so the run reads
-   as one block: a continuation row pulls up toward the message above it, and a
-   row followed by a continuation pulls down toward the message below. The
-   group's first-row top (message-group-start separation) and last-row bottom
-   are left untouched. Single-class selectors override Tailwind's py-0.5 (which
-   lives in @layer utilities). */
-.message-own-cont-top { padding-top: 0.0625rem; }
-.message-own-cont-bottom { padding-bottom: 0.0625rem; }
-
-/* Corner rounding is carried only at the group edges so interior rows stay
-   square and the run reads as a single panel. A solo own message gets both
-   (full radius); the default isGroupEnd=true keeps standalone bubbles rounded. */
-.message-own-tint-start {
-  border-top-left-radius: var(--fluux-radius-m);
-  border-top-right-radius: var(--fluux-radius-m);
-}
-.message-own-tint-end {
-  border-bottom-left-radius: var(--fluux-radius-m);
-  border-bottom-right-radius: var(--fluux-radius-m);
-  /* Extend the group's outer bottom edge down through the row's group-end
-     padding so the emphasis meets the bottom of the hover-row highlight instead
-     of floating a few px above it. padding-bottom paints the wash lower; the
-     matching negative margin-bottom cancels it so the row height (and the
-     virtualizer's measurements) are untouched. Mirror .message-group-end's
-     values exactly, including the compact-density override below. */
-  padding-bottom: 6px;
-  margin-bottom: -6px;
-}
-[data-density="compact"] .message-own-tint-end {
-  padding-bottom: 3px;
-  margin-bottom: -3px;
-}
-
 /* Persistent highlight for search context view */
 .message-highlight-persistent {
   background-color: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.25);
