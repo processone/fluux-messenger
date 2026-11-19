@@ -840,21 +840,49 @@ test('a message really decrypted on this device is saved without its text, and a
 
   // The app itself reads the node again: a reconnect makes it fetch the saved items (counted on its own socket), and the
   // fetched copy must neither show nor write back anything readable.
+  // No push of the node reaches the page from here on, and a second item is stored meanwhile: only a fetch can bring it in.
+  let dropPushes = true
+  await one.page.routeWebSocket(/\/ws$/, ws => {
+    const server = ws.connectToServer()
+    ws.onMessage(message => server.send(message))
+    server.onMessage(message => {
+      const frame = typeof message === 'string' ? message : message.toString()
+      if (dropPushes && /^<message\b/.test(frame) && frame.includes('<event') && frame.includes(NODE)) return
+      ws.send(message)
+    })
+  })
+  const fetchedOnly = `Only a fetch brings this ${stamp}`
+  // A reconnect first, so that the page's socket is the one this route covers.
+  const firstFetches = one.frames.filter(f => f.includes(`<items node="${NODE}"`)).length
+  kick('alice')
+  await expect.poll(() => one.frames.filter(f => f.includes(`<items node="${NODE}"`)).length, { timeout: 60_000 }).toBeGreaterThan(firstFetches)
+  await reader.stop().catch(() => {})
+  const reader2 = await script('alice')
+  await reader2.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('publish', { node: NODE },
+    xml('item', { id: `fetched-only-${stamp}` }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
+      xml('message', { xmlns: 'jabber:client', from: 'bob@localhost', to: 'alice@localhost', type: 'chat', id: `fo-${stamp}` }, xml('body', {}, fetchedOnly)))))))))
   const fetchesBefore = one.frames.filter(f => f.includes(`<items node="${NODE}"`)).length
   const answersBefore = one.received.length
+  await openSaved(one)
+  await expect(savedRow(one, fetchedOnly)).toHaveCount(0) // not known to the page yet
   kick('alice') // ends the reader's session too
   await expect.poll(() => one.frames.filter(f => f.includes(`<items node="${NODE}"`)).length, { timeout: 60_000 }).toBeGreaterThan(fetchesBefore)
-  // The server's successful answer to that read reaches the page, and carries the encrypted copy.
-  await expect.poll(() => one.received.slice(answersBefore).some(f => isItemsResult(f) && /encrypted=["']true["']/.test(f)), { timeout: 60_000 }).toBe(true)
+  // The server's successful answer to that read reaches the page, and carries the encrypted copy and the new item.
+  await expect.poll(() => one.received.slice(answersBefore).some(f => isItemsResult(f) && /encrypted=["']true["']/.test(f) && f.includes(fetchedOnly)), { timeout: 60_000 }).toBe(true)
   expect(one.received.slice(answersBefore).filter(isItemsResult).every(f => !f.includes('Really encrypted') && !f.includes('Edited and encrypted'))).toBe(true)
-  await reader.stop().catch(() => {})
+  // The answer was applied: the item that only it carried is now listed, beside the encrypted one.
+  await expect(savedRow(one, fetchedOnly)).toBeVisible({ timeout: 30_000 })
+  expect(await one.page.getByTestId('saved-row').count()).toBe(2)
+  dropPushes = false
+  await reader2.stop().catch(() => {})
   const again = await script('alice')
-  await openSaved(one)
-  await expect(one.page.getByTestId('saved-row').first()).toBeVisible({ timeout: 30_000 }) // the fetched item reconciled into the list
   await new Promise(resolve => setTimeout(resolve, 3000))
   const after = await again.items()
-  expect(after.length).toBe(1)
-  for (const raw of after) { expect(raw).toContain('encrypted="true"'); expect(raw).not.toContain('<body'); expect(raw).not.toContain('Edited and encrypted'); expect(raw).not.toContain('Really encrypted') }
+  expect(after.length).toBe(2)
+  const encryptedItems = after.filter(raw => raw.includes('encrypted="true"'))
+  expect(encryptedItems).toHaveLength(1)
+  for (const raw of after) { expect(raw).not.toContain('Edited and encrypted'); expect(raw).not.toContain('Really encrypted') }
+  expect(encryptedItems[0]).not.toContain('<body')
   await shot(one.page, 'decrypted-saved-row')
   await emptyNode(again)
   await one.context.close(); await bobApp.context.close(); await again.stop()
@@ -1328,12 +1356,15 @@ test('a deletion whose redaction the server refuses still shows as deleted, and 
   let refused = 0
   let holdFetch = false
   let heldFetches = 0
+  let heldArchive = 0
+  let holdArchive = false
   await one.page.routeWebSocket(/\/ws$/, ws => {
     const server = ws.connectToServer()
     ws.onMessage(message => {
       const frame = typeof message === 'string' ? message : message.toString()
       const iq = /^<iq\b[^>]*\bid="([^"]+)"/.exec(frame)?.[1]
       if (holdFetch && iq && frame.includes(`<items node="${NODE}"`)) { heldFetches++; return }
+      if (holdArchive && iq && frame.includes('urn:xmpp:mam:')) { heldArchive++; return } // no archive replay may deliver the deletion either
       if (refuse && iq && frame.includes(`<publish node="${NODE}"`)) {
         refused++
         ws.send(`<iq xmlns="jabber:client" type="error" id="${iq}"><error type="auth"><forbidden xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error></iq>`)
@@ -1377,12 +1408,13 @@ test('a deletion whose redaction the server refuses still shows as deleted, and 
   })
   expect(await ledger()).toHaveLength(0) // prerequisite: the durable ledger holds nothing about this deletion
   const clearedAt = Date.now()
+  const receivedBefore = one.received.length
   holdFetch = true
+  holdArchive = true // no archive replay may deliver the deletion: only the cache can
   await one.page.reload()
   await expect.poll(() => heldFetches, { timeout: 45_000 }).toBeGreaterThan(0)
-  // The deletion is known again before the saved node answers: the ledger was rebuilt from the cache, not kept from before.
-  await expect.poll(async () => (await ledger()).length, { timeout: 30_000 }).toBeGreaterThan(0)
-  expect((await ledger()).every(r => r.notedAt >= clearedAt)).toBe(true)
+  expect(await ledger()).toHaveLength(0) // still nothing in the ledger while the stale copy is outstanding
+  expect(one.received.slice(receivedBefore).filter(f => /^<message\b/.test(f) && /retract|moderat/i.test(f))).toHaveLength(0) // and no retraction was replayed to the page
   expect((await reader.items())[0]).toContain(text) // while the server still holds the old copy, about to be fetched
   holdFetch = false
   kick('alice') // the next connection reads the node and receives the unredacted copy
@@ -1390,6 +1422,9 @@ test('a deletion whose redaction the server refuses still shows as deleted, and 
   const again = await script('alice')
   await openSaved(one)
   await expect(savedRow(one, 'Message deleted')).toBeVisible({ timeout: 60_000 })
+  expect(await ledger()).toHaveLength(0) // the deletion was applied from the cache alone, with the ledger and the archive both silent
+  expect(heldArchive).toBeGreaterThanOrEqual(0)
+  holdArchive = false
   await expect(savedRow(one, text)).toHaveCount(0) // the fetched old copy does not bring its text back
   await expect.poll(async () => (await again.items())[0] ?? '', { timeout: 30_000 }).toContain('deleted="true"')
   expect((await again.items())[0]).not.toContain(text)
@@ -1620,4 +1655,198 @@ test('a save still being acknowledged when it is removed again is removed from t
   expect(await pendingQueue(one)).not.toContain(text.slice(0, 12))
   await emptyNode(reader)
   await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('a save acknowledged after it was removed again still counts at a full node when the removal is refused, so a competing save is not sent', async ({ browser }) => {
+  test.setTimeout(300_000)
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser)
+  const first = `Creates the node ${stamp}`
+  await bob.say('alice', first)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: first })).toBeVisible()
+  await saveMessage(one, first)
+  await nodeHolds(reader, 1)
+  const form = await reader.c.iqCaller.request(xml('iq', { type: 'get' }, xml('pubsub', { xmlns: `${PUBSUB}#owner` }, xml('configure', { node: NODE }))))
+  const limit = Number.parseInt(String(form.toString().match(/pubsub#max_items[^]*?<value>([^<]*)<\/value>/)?.[1]), 10)
+  expect(limit).toBeGreaterThan(2)
+  const seed = (id: string) => xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('publish', { node: NODE },
+    xml('item', { id }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
+      xml('message', { xmlns: 'jabber:client', from: 'bob@localhost', to: 'alice@localhost', type: 'chat', id: `seed-${id}` }, xml('body', {}, `seed ${id}`))))))))
+  for (let i = 0; i < limit - 2; i++) await reader.c.iqCaller.request(seed(`seed${String(i).padStart(3, '0')}`))
+  expect((await reader.items()).length).toBe(limit - 1) // one place left
+
+  let heldId: string | undefined
+  let held: string | undefined
+  let sendToPage: ((m: string) => void) | undefined
+  let refusedRetracts = 0
+  await one.page.routeWebSocket(/\/ws$/, ws => {
+    const server = ws.connectToServer()
+    sendToPage = m => ws.send(m)
+    ws.onMessage(message => {
+      const frame = typeof message === 'string' ? message : message.toString()
+      const id = /^<iq\b[^>]*\bid="([^"]+)"/.exec(frame)?.[1]
+      if (id && frame.includes(`<publish node="${NODE}"`)) heldId ??= id
+      if (id && frame.includes(`<retract node="${NODE}"`)) {
+        refusedRetracts++
+        ws.send(`<iq xmlns="jabber:client" type="error" id="${id}"><error type="auth"><forbidden xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error></iq>`)
+        return
+      }
+      server.send(message)
+    })
+    server.onMessage(message => {
+      const frame = typeof message === 'string' ? message : message.toString()
+      if (heldId && held === undefined && /^<iq\b/.test(frame) && (frame.includes(`id='${heldId}'`) || frame.includes(`id="${heldId}"`))) { held = frame; return }
+      ws.send(message)
+    })
+  })
+  await one.page.reload()
+  const second = `Fills the last place ${stamp}`
+  await bob.say('alice', second)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: second })).toBeVisible({ timeout: 45_000 })
+  await saveMessage(one, second)
+  await expect.poll(() => held, { timeout: 20_000 }).toBeDefined()
+  await nodeHolds(reader, limit) // stored, the page has not heard so yet
+  await openSaved(one)
+  await expect(savedRow(one, second)).toBeVisible()
+  await savedRow(one, second).getByRole('button', { name: 'Remove from saved' }).click()
+
+  sendToPage!(held!) // the acknowledgement arrives after the removal was asked for; the removal is then refused
+  await expect.poll(() => refusedRetracts, { timeout: 20_000 }).toBeGreaterThan(0)
+  await one.page.waitForTimeout(2000)
+  // The node is full, whatever the page shows: a competing save is not sent and nothing is pushed out.
+  const third = `Competes for no place ${stamp}`
+  await bob.say('alice', third)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: third })).toBeVisible({ timeout: 30_000 })
+  const sentBefore = one.frames.length
+  await saveMessage(one, third)
+  await one.page.waitForTimeout(4000)
+  expect(one.frames.slice(sentBefore).filter(f => f.includes(`<publish node="${NODE}"`))).toHaveLength(0)
+  await shot(one.page, 'superseded-publish-full-node')
+  const items = await reader.items()
+  expect(items.length).toBe(limit)
+  expect(items.some(item => item.includes(third))).toBe(false)
+  expect(items.some(item => item.includes(first))).toBe(true)
+  expect(items.some(item => item.includes('seed seed000'))).toBe(true)
+  expect(items.some(item => item.includes(second))).toBe(true)
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('a saved-node answer that arrives only after another account has signed in shows nothing of the first account', async ({ browser }) => {
+  test.setTimeout(240_000)
+  const bob = await script('bob')
+  let reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser)
+  const text = `Answered too late ${stamp}`
+  await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
+  await saveMessage(one, text)
+  await nodeHolds(reader, 1)
+
+  // From now on the page's reads of the node are answered by the server, but the answer is held back.
+  let hold = false
+  let held: string | undefined
+  let sendToPage: ((m: string) => void) | undefined
+  await one.page.routeWebSocket(/\/ws$/, ws => {
+    const server = ws.connectToServer()
+    sendToPage = m => ws.send(m)
+    ws.onMessage(message => server.send(message))
+    server.onMessage(message => {
+      const frame = typeof message === 'string' ? message : message.toString()
+      if (hold && held === undefined && isItemsResult(frame)) { held = frame; return }
+      ws.send(message)
+    })
+  })
+  await reader.stop().catch(() => {})
+  kick('alice') // the page reconnects under the route, with no answer held yet
+  await expect.poll(() => one.received.filter(isItemsResult).length, { timeout: 60_000 }).toBeGreaterThan(0)
+  hold = true
+  kick('alice') // and reconnects once more: this time the read of the node is answered to nobody
+  await expect.poll(() => held, { timeout: 60_000 }).toBeDefined()
+  expect(held).toContain(text.slice(0, 12)) // it carries the first account's saved message
+
+  await logoutOf(one, true)
+  hold = false
+  await loginAs(one, 'bob')
+  await openSaved(one)
+  await expect(one.page.getByTestId('saved-row')).toHaveCount(0)
+  const sentBefore = one.frames.length
+  sendToPage!(held!) // the late answer reaches the page now
+  await one.page.waitForTimeout(5000)
+  await expect(one.page.getByTestId('saved-row')).toHaveCount(0)
+  await expect(one.page.getByText(text)).toHaveCount(0)
+  expect(await one.page.evaluate(() => JSON.stringify(Object.entries(localStorage).filter(([key]) => key.includes('fluux-saved'))))).not.toContain(text.slice(0, 12))
+  expect(one.frames.slice(sentBefore).filter(f => f.includes(`<publish node="${NODE}"`))).toHaveLength(0)
+  await shot(one.page, 'late-answer-after-switch')
+  reader = await script('alice')
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('a saved room message opened but not yet joined is not continued once another account has signed in and joins that room', async ({ browser }) => {
+  test.setTimeout(240_000)
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const room = `account${stamp}@conference.localhost`
+  const text = `Said before the switch ${stamp}`
+  const BOOKMARKS = 'urn:xmpp:bookmarks:1'
+  const field = (name: string, value: string) => xml('field', { var: name }, xml('value', {}, value))
+  const options = xml('publish-options', {}, xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+    xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options')),
+    field('pubsub#persist_items', 'true'), field('pubsub#access_model', 'whitelist'), field('pubsub#max_items', 'max'), field('pubsub#send_last_published_item', 'never')))
+  const bookmark = () => reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
+    xml('publish', { node: BOOKMARKS }, xml('item', { id: room }, xml('conference', { xmlns: BOOKMARKS, name: 'Switch room', autojoin: 'true' }, xml('nick', {}, 'alice')))), options)))
+  const unbookmark = () => reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
+    xml('retract', { node: BOOKMARKS, notify: 'true' }, xml('item', { id: room })))))
+  await bob.c.send(xml('presence', { to: `${room}/bob` }, xml('x', { xmlns: 'http://jabber.org/protocol/muc' })))
+  await new Promise(resolve => setTimeout(resolve, 1500))
+  await bob.c.send(xml('message', { to: room, type: 'groupchat', id: randomUUID() }, xml('body', {}, text)))
+  await bookmark()
+  const one = await connect(browser)
+  await one.page.getByRole('button', { name: 'Rooms' }).first().click()
+  await one.page.getByRole('complementary').getByText('Switch room', { exact: true }).first().click()
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible({ timeout: 30_000 })
+  await saveMessage(one, text)
+  await nodeHolds(reader, 1)
+  await unbookmark()
+
+  const two = await connect(browser)
+  await openSaved(two)
+  await expect(savedRow(two, text)).toBeVisible()
+  await savedRow(two, text).click()
+  await expect(two.page).toHaveURL(/\/rooms\//)
+  await expect(two.page.getByRole('button', { name: 'Join room to participate' })).toBeVisible()
+  const roomUrl = two.page.url()
+
+  // The account changes while the open waits for a join; the other account then reaches that same room and joins it.
+  await two.page.getByRole('button', { name: 'Messages' }).first().click() // the account bar's menu is reached from a list view
+  // The other account knows this room but has not joined it.
+  await bob.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
+    xml('publish', { node: BOOKMARKS }, xml('item', { id: room }, xml('conference', { xmlns: BOOKMARKS, name: 'Switch room', autojoin: 'false' }, xml('nick', {}, 'bob')))), options)))
+  await logoutOf(two, true)
+  await loginAs(two, 'bob')
+  await watchTransient(two.page) // from before the join to the end
+  await two.page.getByRole('button', { name: 'Rooms' }).first().click()
+  await two.page.getByRole('complementary').getByText('Switch room', { exact: true }).first().click()
+  await expect(two.page.getByRole('button', { name: 'Join room to participate' })).toBeVisible({ timeout: 30_000 })
+  await two.page.getByRole('button', { name: 'Join room to participate' }).click()
+  const join = two.page.getByRole('button', { name: /^Join$/ })
+  if (await join.isVisible({ timeout: 3000 }).catch(() => false)) await join.click()
+  await expect(two.page.locator('[data-message-body]').filter({ hasText: text }).first()).toBeVisible({ timeout: 30_000 })
+  await two.page.waitForTimeout(6000)
+  const seen = await transient(two.page)
+  expect(seen.filter(entry => entry.startsWith('highlight'))).toHaveLength(0) // the abandoned open of the first account never resumed
+  await expect(two.page.locator('.message-highlight')).toHaveCount(0)
+  await shot(two.page, 'room-open-after-account-change')
+  await bob.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('retract', { node: BOOKMARKS, notify: 'true' }, xml('item', { id: room }))))).catch(() => {})
+  await emptyNode(reader)
+  await one.context.close(); await two.context.close(); await bob.stop(); await reader.stop()
 })
