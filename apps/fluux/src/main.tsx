@@ -29,6 +29,7 @@ import { platform } from './platform'
 import { streamManagementMaxSeconds } from './platform/capabilities'
 import { detectWindowChrome } from './platform/windowChrome'
 import { installMobileViewport } from './utils/mobileViewport'
+import { installScrollbarReveal } from './utils/scrollbarReveal'
 import { installKeychainFastTokens } from './utils/keychainFastTokenStorage'
 
 
@@ -43,6 +44,7 @@ import { installKeychainFastTokens } from './utils/keychainFastTokenStorage'
 if (platform().shell === 'desktop') document.documentElement.dataset.tauri = 'true'
 void detectWindowChrome()
 installMobileViewport()
+installScrollbarReveal()
 startBadgeDiagnostics()
 
 // Enable native TCP/TLS proxy in Tauri unless explicitly disabled
