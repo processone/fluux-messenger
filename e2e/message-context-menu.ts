@@ -15,7 +15,7 @@ const shot = async (page: Page, name: string, engine: string) => {
   await page.screenshot({ path: join(SHOTS, `${engine}-${name}.png`) })
 }
 
-async function setup(page: Page, bodies: { id: string; from: string; body: string; attachment?: Record<string, unknown> }[]) {
+async function setup(page: Page, bodies: { id: string; from: string; body: string; attachment?: Record<string, unknown>; linkPreview?: Record<string, unknown> }[]) {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
   await bootDemo(page, '/demo.html?tutorial=false')
   await page.evaluate(() => (window as unknown as { __demoClient: DemoClient }).__demoClient.stopAnimation())
@@ -28,6 +28,7 @@ async function setup(page: Page, bodies: { id: string; from: string; body: strin
         type: 'chat', id: m.id, conversationId: peer, from: m.from === 'me' ? 'you@fluux.chat' : peer, body: m.body,
         stanzaId: undefined, originId: undefined, timestamp: new Date(t++), isOutgoing: m.from === 'me',
         ...(m.attachment && { attachment: m.attachment }),
+        ...(m.linkPreview && { linkPreview: m.linkPreview }),
       }, isLiveArrival: true })
     }
   }, { bodies, peer: PEER })
@@ -239,7 +240,33 @@ test.describe('message right-click menu', () => {
     await expect(menu(page)).toBeVisible()
     const labels = await menu(page).getByRole('button').evaluateAll(els => els.map(e => e.getAttribute('aria-label') ?? e.textContent?.trim()))
     expect(labels.slice(0, 4)).toEqual(['React with 👍', 'React with ❤️', 'React with 😂', 'More reactions'])
-    expect(labels).toContain('Copy image URL')
-    expect(labels.indexOf('Copy image URL')).toBe(4 + (labels.includes('Save image') ? 1 : 0))
+    expect(labels.slice(4, 7)).toEqual(['Save image', 'Copy image URL', 'Open in browser'])
+  })
+
+  test('a right-click on a link-preview thumbnail beside an attachment offers no image actions', async ({ page }) => {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+    await setup(page, [{
+      id: 'thumb-a', from: 'peer', body: 'Look https://example.org/story',
+      attachment: { url: png, name: 'pixel.png', mediaType: 'image/png', width: 240, height: 160 },
+      linkPreview: { url: 'https://example.org/story', title: 'A story', description: 'Preview text', image: png },
+    }])
+    const message = page.locator('[data-message-id="thumb-a"]')
+    const attachment = message.locator('[data-context-image] img').first()
+    await expect(attachment).toBeVisible()
+    // The preview's image is shown only after the viewer approves it.
+    const show = message.getByRole('button', { name: /show/i })
+    if (await show.count()) await show.first().click()
+    const thumb = message.locator('a[href="https://example.org/story"] img')
+    await expect(thumb).toBeVisible()
+    await expect.poll(() => attachment.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true)
+    let last = ''
+    await expect.poll(async () => { const now = JSON.stringify(await thumb.boundingBox()); const same = now === last; last = now; await page.waitForTimeout(250); return same }).toBe(true)
+    await thumb.click({ button: 'right' })
+    await expect(menu(page)).toBeVisible()
+    const labels = await menu(page).getByRole('button').evaluateAll(els => els.map(e => e.getAttribute('aria-label') ?? e.textContent?.trim()))
+    // The thumbnail is a link target, so the link group shows; the attachment's image group does not.
+    expect(labels.slice(4, 6)).toEqual(['Copy link', 'Open in browser'])
+    expect(labels).not.toContain('Save image')
+    expect(labels).not.toContain('Copy image URL')
   })
 })
