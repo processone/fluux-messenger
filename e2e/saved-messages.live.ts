@@ -1564,11 +1564,16 @@ test('a full node whose removal goes unanswered stays full: a competing save is 
   expect((await reader.items()).length).toBe(limit)
 
   const swallowedAt: number[] = []
+  let refuseRemovals = false // the removal is first left unanswered, then refused
   await one.page.routeWebSocket(/\/ws$/, ws => {
     const server = ws.connectToServer()
     ws.onMessage(message => {
       const frame = typeof message === 'string' ? message : message.toString()
-      if (/^<iq\b/.test(frame) && frame.includes(`<retract node="${NODE}"`)) { swallowedAt.push(Date.now()); return }
+      if (/^<iq\b/.test(frame) && frame.includes(`<retract node="${NODE}"`)) {
+        const id = /\bid="([^"]+)"/.exec(frame)?.[1]
+        if (refuseRemovals && id) { ws.send(`<iq xmlns="jabber:client" type="error" id="${id}"><error type="auth"><forbidden xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error></iq>`); return }
+        swallowedAt.push(Date.now()); return
+      }
       server.send(message)
     })
     server.onMessage(message => ws.send(message))
@@ -1593,8 +1598,15 @@ test('a full node whose removal goes unanswered stays full: a competing save is 
   // Past the request deadline, with the removal sent again and still unanswered, still nothing goes out.
   await expect.poll(() => swallowedAt.length, { timeout: 90_000 }).toBeGreaterThan(1)
   expect(swallowedAt[swallowedAt.length - 1] - swallowedAt[0]).toBeGreaterThanOrEqual(29_000)
-  await one.page.waitForTimeout(2000)
+  // While the removal is unanswered the competing save waits behind it: queued, not sent.
+  expect(await pendingQueue(one)).toContain(text.slice(0, 12))
   expect(noPublish()).toHaveLength(0)
+  // Once the removal is refused, the node is known to be full still, and the waiting save is decided: refused as full.
+  refuseRemovals = true
+  kick('alice') // the reconnect reads the node again and sends what is waiting: the removal first, then the save
+  await expect(one.page.getByText(/Your server refused to store this message/).first()).toBeVisible({ timeout: 120_000 }) // the refusal of the waiting save, made when it was sent for
+  expect(noPublish()).toHaveLength(0)
+  await expect.poll(() => pendingQueue(one), { timeout: 20_000 }).not.toContain(text.slice(0, 12)) // decided, not still waiting
   const items = await reader.items()
   expect(items.length).toBe(limit)
   expect(items.some(item => item.includes(text))).toBe(false)
@@ -1682,6 +1694,7 @@ test('a save acknowledged after it was removed again still counts at a full node
   let held: string | undefined
   let sendToPage: ((m: string) => void) | undefined
   let swallowedRetracts = 0
+  let refuseRemovals = false // the removal is first left unanswered, then refused
   let dropPushes = true // the node's own change notifications must not tell the page what the acknowledgement alone is meant to
   await one.page.routeWebSocket(/\/ws$/, ws => {
     const server = ws.connectToServer()
@@ -1691,6 +1704,7 @@ test('a save acknowledged after it was removed again still counts at a full node
       const id = /^<iq\b[^>]*\bid="([^"]+)"/.exec(frame)?.[1]
       if (id && frame.includes(`<publish node="${NODE}"`)) heldId ??= id
       if (id && frame.includes(`<retract node="${NODE}"`)) {
+        if (refuseRemovals) { ws.send(`<iq xmlns="jabber:client" type="error" id="${id}"><error type="auth"><forbidden xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error></iq>`); return }
         swallowedRetracts++ // unanswered: the row stays removed here, so no visible-list guard can stand in for the count of the server
         return
       }
@@ -1726,9 +1740,16 @@ test('a save acknowledged after it was removed again still counts at a full node
   await expect(one.page.locator('[data-message-body]').filter({ hasText: third })).toBeVisible({ timeout: 30_000 })
   const sentBefore = one.frames.length
   await saveMessage(one, third)
-  await one.page.waitForTimeout(4000)
+  // The save waits behind the unanswered removal (removals go first, one at a time): queued, not sent.
+  expect(await pendingQueue(one)).toContain(third.slice(0, 12))
   expect(one.frames.slice(sentBefore).filter(f => f.includes(`<publish node="${NODE}"`))).toHaveLength(0)
-  await expect(savedRow(one, second)).toHaveCount(0) // the row was never restored, so no other guard saw a full list
+  // Once the removal is refused the row is back and the node is known to be full: the waiting save is decided: refused by this device without being sent.
+  refuseRemovals = true
+  kick('alice') // the reconnect reads the node again and sends what is waiting: the removal first, then the save
+  await expect(one.page.getByText(/Your server refused to store this message/).first()).toBeVisible({ timeout: 120_000 }) // the refusal of the waiting save, made when it was sent for
+  expect(swallowedRetracts).toBeGreaterThan(0)
+  expect(one.frames.slice(sentBefore).filter(f => f.includes(`<publish node="${NODE}"`))).toHaveLength(0)
+  await expect.poll(() => pendingQueue(one), { timeout: 20_000 }).not.toContain(third.slice(0, 12)) // decided, not still waiting
   await shot(one.page, 'superseded-publish-full-node')
   const items = await reader.items()
   expect(items.length).toBe(limit)
@@ -1777,22 +1798,45 @@ test('a saved-node answer delivered to the first account own read after the acco
   await expect.poll(() => held, { timeout: 60_000 }).toBeDefined()
   expect(held).toContain(text.slice(0, 12)) // it carries the first account's saved message
 
-  // Sign out and clear local data while that read is still unanswered; the connection is not ended until the answer is given.
+  // The answer is given to the read of the first account (on its own connection) while the reads of the local cache that
+  // the app then makes are held back: the app has accepted the answer and is partway through handling it when the account is cleared.
   hold = false
-  await one.page.evaluate(() => { // the page's end of the connection is not closed until told, so the answer can still reach it after the cleanup
-    const w = window as unknown as { __deferClose: boolean; __deferred: Array<[WebSocket, unknown[]]> }
-    w.__deferClose = true; w.__deferred = []
-    const close = WebSocket.prototype.close
-    WebSocket.prototype.close = function (this: WebSocket, ...args: unknown[]) { if (w.__deferClose) { w.__deferred.push([this, args]); return } return (close as (...a: unknown[]) => void).apply(this, args) } as typeof WebSocket.prototype.close
+  await one.page.evaluate(() => {
+    const w = window as unknown as { __idbHold: boolean; __idbQueue: Array<() => void> }
+    w.__idbHold = false; w.__idbQueue = []
+    const held = new WeakSet<object>()
+    for (const proto of [IDBObjectStore.prototype, IDBIndex.prototype] as Array<Record<string, (...a: unknown[]) => unknown>>) {
+      for (const method of ['get', 'getAll', 'getAllKeys', 'count']) {
+        const original = proto[method]
+        proto[method] = function (this: unknown, ...args: unknown[]) { const request = original.apply(this, args) as object; if (w.__idbHold) held.add(request); return request }
+      }
+    }
+    const add = IDBRequest.prototype.addEventListener
+    IDBRequest.prototype.addEventListener = function (this: IDBRequest, type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) {
+      if (type === 'success' && held.has(this)) {
+        const call = (event: Event) => (typeof listener === 'function' ? listener.call(this, event) : listener.handleEvent(event))
+        return add.call(this, type, (event: Event) => { if (w.__idbHold) w.__idbQueue.push(() => call(event)); else call(event) }, options)
+      }
+      return add.call(this, type, listener, options)
+    } as typeof IDBRequest.prototype.addEventListener
+    w.__idbHold = true
   })
+  sendHeld!(held!)
+  await expect.poll(() => one.page.evaluate(() => (window as unknown as { __idbQueue: unknown[] }).__idbQueue.length), { timeout: 20_000 }).toBeGreaterThan(0) // the handling of the answer reached the cache and waits there
+  const waiting = await one.page.evaluate(() => (window as unknown as { __idbQueue: unknown[] }).__idbQueue.length)
   await logoutOf(one, true)
   expect(await savedKeys(one)).toHaveLength(0)
-  const answered = one.received.length
-  sendHeld!(held!) // the answer now reaches the read of the account that was just cleared, on its own connection
-  await expect.poll(() => one.received.length, { timeout: 10_000 }).toBeGreaterThan(answered)
+  // The held cache reads now complete: the handling of the first account's answer resumes after its cleanup.
+  const resumed = await one.page.evaluate(() => {
+    const w = window as unknown as { __idbHold: boolean; __idbQueue: Array<() => void> }
+    w.__idbHold = false
+    const queue = w.__idbQueue.splice(0)
+    for (const resume of queue) resume()
+    return queue.length
+  })
+  expect(resumed).toBeGreaterThanOrEqual(waiting)
   await one.page.waitForTimeout(3000)
   expect(await savedKeys(one)).toHaveLength(0) // nothing came back into the cleared storage
-  await one.page.evaluate(() => { const w = window as unknown as { __deferClose: boolean; __deferred: Array<[WebSocket, unknown[]]> }; w.__deferClose = false; for (const [socket, args] of w.__deferred) socket.close(...(args as [number?, string?])) })
   await loginAs(one, 'bob')
   await openSaved(one)
   await expect(one.page.getByTestId('saved-row')).toHaveCount(0)
