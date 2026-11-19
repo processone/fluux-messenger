@@ -3716,7 +3716,8 @@ export class MAM extends BaseModule {
     if (!chat) return { kind: 'unknown' }
     const matches = (message: Message) => {
       // A known archive identity or sender that disagrees settles it: a shared client or origin id is only a hint.
-      const archiveIds = [message.stanzaId, message.ownArchiveId].filter(Boolean)
+      // The saved id names the account's own archive entry: when the message knows that one, a foreign alias must not stand in for it.
+      const archiveIds = (message.ownArchiveId ? [message.ownArchiveId] : [message.stanzaId]).filter(Boolean)
       if (ref.stanzaId && archiveIds.length > 0 && !archiveIds.includes(ref.stanzaId)) return false
       if (ref.originId && message.originId && message.originId !== ref.originId) return false
       if (ref.from && getBareJid(message.from) !== getBareJid(ref.from)) return false

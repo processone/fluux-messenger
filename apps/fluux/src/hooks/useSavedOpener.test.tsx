@@ -108,14 +108,14 @@ describe('useSavedOpener', () => {
   it('opens a room entry with an archive id through the room link', async () => {
     const { result } = renderHook(() => useSavedOpener())
     await act(() => result.current.open(roomEntry({ stanzaId: 'rs1', stanzaIdBy: ROOM })))
-    expect(openRoomLink).toHaveBeenCalledWith({ roomJid: ROOM, stanzaId: 'rs1' }, expect.any(Function))
+    expect(openRoomLink).toHaveBeenCalledWith({ roomJid: ROOM, stanzaId: 'rs1' }, expect.any(Function), expect.any(Function))
   })
 
   it('opens a room entry without an archive id from the cached copy, even when it was evicted from memory', async () => {
     findLatestCopy.mockResolvedValue({ id: 'rm1', stanzaId: 'cached-sid', roomJid: ROOM })
     const { result } = renderHook(() => useSavedOpener())
     await act(() => result.current.open(roomEntry()))
-    expect(openRoomLink).toHaveBeenCalledWith({ roomJid: ROOM, stanzaId: 'cached-sid' }, expect.any(Function))
+    expect(openRoomLink).toHaveBeenCalledWith({ roomJid: ROOM, stanzaId: 'cached-sid' }, expect.any(Function), expect.any(Function))
   })
 
   it('looks a room entry without an archive id up by its time when no copy is cached, and says unknown on an incomplete answer', async () => {
@@ -127,5 +127,24 @@ describe('useSavedOpener', () => {
     fetchContextAround.mockResolvedValue({ messages: [], complete: true })
     await act(() => result.current.open(roomEntry()))
     expect(result.current.problems).toEqual({ r: 'absent' })
+  })
+
+  it('registers a room the list no longer holds before opening its cached copy that has no archive id', async () => {
+    roomStore.getState().reset()
+    findLatestCopy.mockResolvedValue({ id: 'rm1', roomJid: ROOM, nick: 'Alice' })
+    const { result } = renderHook(() => useSavedOpener())
+    await act(() => result.current.open(roomEntry()))
+    expect(roomStore.getState().rooms.get(ROOM)).toBeDefined()
+    expect(navigateToRoom).toHaveBeenCalledWith(ROOM, expect.anything())
+  })
+
+  it('tells the room link a newer open took over, so its late success never navigates', async () => {
+    locateChat.mockResolvedValue({ kind: 'found', message: { id: 'real' } })
+    const { result } = renderHook(() => useSavedOpener())
+    await act(() => result.current.open(roomEntry({ stanzaId: 'rs1', stanzaIdBy: ROOM })))
+    const owns = openRoomLink.mock.calls[0][2] as () => boolean
+    expect(owns()).toBe(true)
+    await act(() => result.current.open(chatEntry()))
+    expect(owns()).toBe(false)
   })
 })

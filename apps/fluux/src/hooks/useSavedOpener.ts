@@ -18,6 +18,14 @@ export type SavedOpenProblem = 'absent' | 'failed'
  */
 const JOIN_WAIT_MS = 30_000
 
+/** A room the list no longer holds (its history may still be cached) is added again, as a room link does, so it can be shown and joined. */
+function registerRoom(roomJid: string, account: string): void {
+  const rooms = roomStore.getState()
+  if (rooms.rooms.get(roomJid)) return
+  rooms.addRoom({ jid: roomJid, name: getLocalPart(roomJid), nickname: getLocalPart(account),
+    joined: false, isBookmarked: false, occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() })
+}
+
 /** Resolves true once the room is joined, false if `abandoned()` turns true or the wait times out. */
 function waitForJoin(roomJid: string, abandoned: () => boolean): Promise<boolean> {
   return new Promise((resolve) => {
@@ -85,15 +93,11 @@ export function useSavedOpener() {
           const cached = await findLatestCopy(entry, own) as RoomMessage | undefined
           if (stale()) return
           if (cached?.stanzaId) stanzaId = cached.stanzaId
-          else if (cached) { navigateToRoom(entry.conversationJid, messageRowRef(cached)); return }
+          else if (cached) { registerRoom(entry.conversationJid, account); navigateToRoom(entry.conversationJid, messageRowRef(cached)); return }
           else if (entry.sentAt === undefined) { failWithToast('unknown'); return }
           else {
             // The room's archive can be asked only once the room is joined: bring it in the way a room link does.
-            const rooms = roomStore.getState()
-            if (!rooms.rooms.get(entry.conversationJid)) {
-              rooms.addRoom({ jid: entry.conversationJid, name: getLocalPart(entry.conversationJid), nickname: getLocalPart(account),
-                joined: false, isBookmarked: false, occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() })
-            }
+            registerRoom(entry.conversationJid, account)
             if (!roomStore.getState().rooms.get(entry.conversationJid)?.joined) {
               navigateToRoom(entry.conversationJid)
               if (!await waitForJoin(entry.conversationJid, stale)) { failWithToast('unknown'); return }
@@ -107,7 +111,7 @@ export function useSavedOpener() {
           }
         }
         if (stale()) return
-        openRoomLink({ roomJid: entry.conversationJid, stanzaId }, (kind) => { if (!stale()) fail(kind) })
+        openRoomLink({ roomJid: entry.conversationJid, stanzaId }, (kind) => { if (!stale()) fail(kind) }, () => !stale())
         return
       }
       const result = await client.messages.locateChatMessage(entry.conversationJid, {

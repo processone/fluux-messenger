@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createMockClient } from './sideEffects.testHelpers'
 import { setupSavedMessagesSideEffects } from './savedMessagesSideEffects'
-import { savedStore, redactSavedCopy } from '../stores/savedStore'
+import { savedStore, redactSavedCopy, clearSavedLocalData } from '../stores/savedStore'
 import { connectionStore } from '../stores/connectionStore'
 import type { SavedMessage } from './types/saved'
 
@@ -83,11 +83,11 @@ describe('saved messages sync side effect', () => {
     stop()
   })
 
-  it('applies notifications from other clients', () => {
+  it('applies notifications from other clients, in the order they arrived', async () => {
     const { client, stop } = setup()
     client._emitSDK('saved:synced', { upserts: [entry('n')], removedIds: [] })
-    expect(savedStore.getState().entries.n).toBeDefined()
     client._emitSDK('saved:synced', { upserts: [], removedIds: ['n'] })
+    await flushPromises()
     expect(savedStore.getState().entries.n).toBeUndefined()
     stop()
   })
@@ -251,6 +251,71 @@ describe('saved messages sync side effect', () => {
     savedStore.getState().markDeleted('a')
     await flushPromises()
     expect(savedStore.getState().entries.a).toMatchObject({ deleted: true, text: '' })
+    stop()
+  })
+
+  it('counts a publish the server took even when a newer removal superseded it and then timed out', async () => {
+    const { client, node, stop } = setup()
+    node.fetchMaxItems.mockResolvedValue(2)
+    node.fetchAll.mockResolvedValue({ status: 'ok', items: [entry('b')] })
+    client._emit('online')
+    await flushPromises()
+    let release!: () => void
+    node.publish.mockImplementationOnce(() => new Promise<void>((r) => { release = r }))
+    savedStore.getState().save(entry('a'))
+    await flushPromises()
+    node.retract.mockRejectedValue(new Error('timeout')) // no answer
+    savedStore.getState().remove('a')
+    release()
+    await flushPromises()
+    expect(savedStore.getState().remote.a).toBe(true)
+    savedStore.getState().save(entry('c'))
+    await flushPromises()
+    expect(savedStore.getState().entries.c).toBeUndefined() // the node holds b and a: full
+    stop()
+  })
+
+  it('sends nothing further to a new node whose limit cannot be read', async () => {
+    const { client, node, stop } = setup()
+    node.fetchAll.mockResolvedValue({ status: 'absent' })
+    node.fetchMaxItems.mockRejectedValue(new Error('timeout'))
+    client._emit('online')
+    await flushPromises()
+    savedStore.getState().save(entry('a'))
+    savedStore.getState().save(entry('b'))
+    await flushPromises()
+    expect(node.publish).toHaveBeenCalledTimes(1)
+    expect(savedStore.getState().pending.b).toBe('publish')
+    stop()
+  })
+
+  it('keeps tracking for an overlapping read when the first one lands', async () => {
+    const { client, node, stop } = setup()
+    const answers: Array<(value: unknown) => void> = []
+    node.fetchAll.mockImplementation(() => new Promise((r) => { answers.push(r) }))
+    client._emit('online')
+    client._emit('online')
+    await flushPromises()
+    client._emitSDK('saved:synced', { upserts: [], removedIds: ['a'] })
+    await flushPromises()
+    answers[0]({ status: 'ok', items: [] })
+    await flushPromises()
+    answers[1]({ status: 'ok', items: [entry('a')] })
+    await flushPromises()
+    expect(savedStore.getState().entries.a).toBeUndefined()
+    stop()
+  })
+
+  it('does not restore a list that was fetched before the person cleared local data', async () => {
+    const { client, node, stop } = setup()
+    let answer!: (value: unknown) => void
+    node.fetchAll.mockImplementationOnce(() => new Promise((r) => { answer = r }))
+    client._emit('online')
+    await flushPromises()
+    clearSavedLocalData(null, true)
+    answer({ status: 'ok', items: [entry('a')] })
+    await flushPromises()
+    expect(savedStore.getState().entries).toEqual({})
     stop()
   })
 })

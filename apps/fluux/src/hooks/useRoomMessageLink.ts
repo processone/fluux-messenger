@@ -10,7 +10,7 @@ export function useRoomMessageLink() {
   const { navigateToRoom } = useNavigateToTarget()
   const { t } = useTranslation()
   const addToast = useToastStore(state => state.addToast)
-  const pending = useRef<(RoomMessageLink & { account: string; running: boolean; onFailure?: (kind: 'absent' | 'unknown') => void }) | null>(null)
+  const pending = useRef<(RoomMessageLink & { account: string; running: boolean; onFailure?: (kind: 'absent' | 'unknown') => void; owns?: () => boolean }) | null>(null)
   const mounted = useRef(false)
   const bridges = useRef(new Map<string, Promise<void>>())
   const live = useRef({ client, navigateToRoom, t, addToast })
@@ -20,9 +20,9 @@ export function useRoomMessageLink() {
     const target = pending.current
     if (!target || target.running || !roomStore.getState().rooms.get(target.roomJid)?.joined) return
     const account = () => getBareJid(connectionStore.getState().jid ?? '')
-    if (account() !== target.account) { pending.current = null; return }
+    if (account() !== target.account || target.owns?.() === false) { pending.current = null; return }
     target.running = true
-    const current = () => mounted.current && pending.current === target && account() === target.account
+    const current = () => mounted.current && pending.current === target && account() === target.account && target.owns?.() !== false
     const bridgeKey = JSON.stringify([target.account, target.roomJid])
     try {
       // An earlier archive link may still be filling this room. Position the
@@ -81,10 +81,10 @@ export function useRoomMessageLink() {
     return () => { mounted.current = false; unsubscribeRoom(); unsubscribeAccount() }
   }, [resolve])
 
-  return useCallback((link: RoomMessageLink, onFailure?: (kind: 'absent' | 'unknown') => void) => {
+  return useCallback((link: RoomMessageLink, onFailure?: (kind: 'absent' | 'unknown') => void, owns?: () => boolean) => {
     const account = getBareJid(connectionStore.getState().jid ?? '')
     if (!account) return
-    pending.current = { ...link, account, running: false, onFailure }
+    pending.current = { ...link, account, running: false, onFailure, owns }
     const rooms = roomStore.getState()
     let room = rooms.rooms.get(link.roomJid)
     if (!room) {

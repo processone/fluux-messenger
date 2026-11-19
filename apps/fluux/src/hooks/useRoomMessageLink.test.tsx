@@ -45,6 +45,18 @@ describe('room message link navigation', () => {
     expect(bridge).not.toHaveBeenCalled()
   })
 
+  it('drops a link its owner no longer wants, so a late success never navigates', async () => {
+    let owned = true
+    const { result } = renderHook(useRoomMessageLink)
+    act(() => result.current(link, undefined, () => owned))
+    navigate.mockClear()
+    owned = false
+    act(() => roomStore.getState().addRoom({ ...roomStore.getState().rooms.get(link.roomJid)!, joined: true }))
+    await Promise.resolve()
+    expect(locate).not.toHaveBeenCalled()
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
   // A conservative gap can survive a completed bridge. Local targets must not
   // repeat that archive walk on later opens; only fresh archive context needs it.
   it.each(['resident', 'cache', 'archive'] as const)('bridges only archive-fetched targets when a gap remains: %s', async source => {

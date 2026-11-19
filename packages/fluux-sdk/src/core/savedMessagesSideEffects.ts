@@ -16,6 +16,8 @@ import type { SideEffectHost } from './sideEffectHost'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { connectionStore } from '../stores/connectionStore'
 import { savedStore } from '../stores/savedStore'
+import { noteCachedDeletions } from '../utils/savedLatestCopy'
+import type { SavedMessage } from './types/saved'
 import { getBareJid } from './jid'
 import { isItemNotFoundError } from '../hooks/shared/mamCursor'
 import { logInfo, logWarn } from './logger'
@@ -62,35 +64,51 @@ export function setupSavedMessagesSideEffects(
         // full node silently evicts the oldest saved message.
         if (!current() || !state().loaded) return
         // Removals first: they free the room new saves need.
+        // A node that exists but whose limit is unknown (the read failed): try again before adding anything to it.
+        if (state().limit === undefined && serverCount() > 0) {
+          const limit = await client.internal.savedMessages.fetchMaxItems().catch(() => undefined)
+          if (mine !== epoch) return
+          state().setLimit(limit)
+        }
         const queue = Object.entries(state().pending).sort(([, a], [, b]) => Number(b === 'retract') - Number(a === 'retract'))
+        let created = false
         for (const [id, op] of queue) {
           if (!current()) return
+          if (state().pending[id] !== op) continue // settled, replaced or wiped meanwhile
           const revision = state().revisions[id]
           try {
             if (op === 'publish') {
               const entry = state().entries[id]
               if (!entry) { state().settle(id, op, revision); continue }
               const { limit } = state()
-              if (limit !== undefined && !state().remote[id] && serverCount() >= limit) {
-                state().refuse(id, op, revision)
-                continue
+              if (!state().remote[id]) {
+                if (limit !== undefined && serverCount() >= limit) {
+                  state().refuse(id, op, revision)
+                  continue
+                }
+                // Limit unknown: only the first item of a node that does not exist yet may go (it creates the node);
+                // anything else waits until the limit can be read.
+                if (limit === undefined && (created || serverCount() > 0)) continue
               }
               await client.internal.savedMessages.publish(entry)
+              created = true
             } else {
               await client.internal.savedMessages.retract(id)
             }
             if (mine !== epoch) return
+            // The server took it, whatever this device has queued since: membership counts it either way.
+            state().confirm(id, op)
             state().settle(id, op, revision)
             // The first publish creates the node, and only then can its limit be read: later saves wait for it.
             if (op === 'publish' && state().limit === undefined) {
-              const limit = await client.internal.savedMessages.fetchMaxItems()
+              const limit = await client.internal.savedMessages.fetchMaxItems().catch(() => undefined)
               if (mine !== epoch) return
               state().setLimit(limit)
             }
           } catch (error) {
             if (mine !== epoch) return
             if (!isDefinitiveRejection(error)) continue // silence: the operation stays pending
-            if (op === 'retract' && isItemNotFoundError(error)) state().settle(id, op, revision) // already gone
+            if (op === 'retract' && isItemNotFoundError(error)) { state().confirm(id, op); state().settle(id, op, revision) } // already gone
             else {
               logWarn(`SavedMessages: server refused a ${op}: ${String(error)}`)
               state().refuse(id, op, revision)
@@ -100,7 +118,7 @@ export function setupSavedMessagesSideEffects(
         }
       } while (flushAgain)
       if (mine === epoch && state().limit === undefined) {
-        const limit = await client.internal.savedMessages.fetchMaxItems()
+        const limit = await client.internal.savedMessages.fetchMaxItems().catch(() => undefined)
         if (mine === epoch) state().setLimit(limit)
       }
     } finally {
@@ -114,19 +132,26 @@ export function setupSavedMessagesSideEffects(
     if (jid) account = jid
     state().hydratePending()
     const mine = epoch
-    // Changes that arrive while the fetch is in flight are newer than its answer.
-    state().beginFetch()
+    // Changes that arrive while this read is in flight are newer than its answer; the read owns its own record of them.
+    const read = state().beginFetch()
     refreshing = true
     try {
       const result = await client.internal.savedMessages.fetchAll()
-      if (mine !== epoch) return
-      const limit = await client.internal.savedMessages.fetchMaxItems()
-      if (mine !== epoch) return
-      // The limit is set before the list lands: landing it triggers a flush that must see it.
-      state().setLimit(limit ?? state().limit)
+      if (mine !== epoch || !state().fetchCurrent(read)) return
+      const limit = await client.internal.savedMessages.fetchMaxItems().catch(() => undefined)
+      if (mine !== epoch || !state().fetchCurrent(read)) return
       if (result.status === 'ok' || result.status === 'absent') {
-        state().reconcileFetch(result.status === 'ok' ? result.items : [])
-      } else logInfo(`SavedMessages: fetch ${result.status}; keeping the current list`)
+        const items = result.status === 'ok' ? result.items : []
+        // What the cache already knows is deleted loses its text, whatever the retraction ledger still holds.
+        await noteCachedDeletions([...items, ...Object.values(state().entries)], connectionStore.getState().jid ?? '').catch(() => {})
+        if (mine !== epoch || !state().fetchCurrent(read)) return
+        // The limit is set before the list lands: landing it triggers a flush that must see it.
+        state().setLimit(limit ?? state().limit)
+        state().reconcileFetch(items, read)
+      } else {
+        state().setLimit(limit ?? state().limit)
+        logInfo(`SavedMessages: fetch ${result.status}; keeping the current list`)
+      }
     } finally {
       refreshing = false
     }
@@ -138,9 +163,17 @@ export function setupSavedMessagesSideEffects(
   const unsubscribeResumed = client.internal.on('resumed', () => {
     void (state().loaded && !refreshing ? flush() : refresh()).catch(() => {})
   })
+  // Notifications apply in arrival order, after what the cache knows of deletions has been learned.
+  let notifications: Promise<void> = Promise.resolve()
   const unsubscribeNotify = client.subscribe('saved:synced', (update) => {
-    state().applyNotify(update)
-    void flush().catch(() => {})
+    const mine = epoch
+    notifications = notifications.then(async () => {
+      const upserts: SavedMessage[] = update.upserts
+      await noteCachedDeletions(upserts, connectionStore.getState().jid ?? '').catch(() => {})
+      if (mine !== epoch) return
+      state().applyNotify(update)
+      await flush()
+    }).catch(() => {})
   })
   // Another account signing in must never see or send the previous account's list.
   const unsubscribeAccount = connectionStore.subscribe((next) => {

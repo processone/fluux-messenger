@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { savedStore, findSavedEntry, clearSavedLocalData } from './savedStore'
+import { setStorageScopeJid } from '../utils/storageScope'
 import { noteRetractedIdentity, roomRetractionAliases, _clearRetractedIdentitiesForTesting } from '../utils/retractedIdentities'
 import type { SavedMessage } from '../core/types/saved'
 
@@ -187,3 +188,30 @@ describe('clearSavedLocalData', () => {
     expect(Object.keys(localStorage).filter((k) => k.startsWith('fluux-saved-pending'))).toEqual([])
   })
 })
+
+describe('a removal recovered after a reload', () => {
+  beforeEach(() => { localStorage.clear(); s().reset(); _clearRetractedIdentitiesForTesting() })
+
+  it('keeps the server copy so a refused retract brings the row back without another read', () => {
+    savedStore.setState({ pending: { a: 'retract' }, hydrated: true, revisions: { a: 1 } })
+    s().reconcileFetch([entry('a')])
+    expect(s().entries.a).toBeUndefined()
+    s().refuse('a', 'retract', 1)
+    expect(s().entries.a?.text).toBe('text a')
+  })
+})
+
+describe('clearing another account', () => {
+  beforeEach(() => { localStorage.clear(); s().reset() })
+
+  it('leaves the connected account\'s list and queue alone', () => {
+    setStorageScopeJid('romeo@montague.example')
+    s().save(entry('a'))
+    localStorage.setItem('fluux-saved-pending:other@example.com', '{"pending":{},"entries":{}}')
+    clearSavedLocalData('other@example.com', false)
+    setStorageScopeJid(null)
+    expect(s().entries.a).toBeDefined()
+    expect(localStorage.getItem('fluux-saved-pending:other@example.com')).toBeNull()
+  })
+})
+

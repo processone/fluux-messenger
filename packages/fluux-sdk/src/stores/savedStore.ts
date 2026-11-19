@@ -44,8 +44,13 @@ export interface SavedState {
   markDeleted: (id: string) => void
   /** Replace the list with an answered fetch, keeping pending operations and every id changed since {@link beginFetch}. */
   /** A fresh read of the node begins: its list is unknown until it lands, and changes from now on outrank its answer. */
-  beginFetch: () => void
-  reconcileFetch: (entries: SavedMessage[]) => void
+  beginFetch: () => SavedFetch
+  /** Land a read. A read that a reset or a newer owner outlived is dropped (returns false). */
+  reconcileFetch: (entries: SavedMessage[], fetch?: SavedFetch) => boolean
+  /** Is this read still the one the store is waiting for? */
+  fetchCurrent: (fetch: SavedFetch) => boolean
+  /** The server took (or lost) this item, whatever this device has queued since. */
+  confirm: (id: string, op: SavedPendingOp) => void
   /** Apply a `+notify` event, leaving ids with a pending local operation alone. */
   applyNotify: (update: { upserts: SavedMessage[]; removedIds: string[] }) => void
   /** The server took (or no longer needs) the operation for this id. */
@@ -109,9 +114,10 @@ function dedupe(entries: Record<string, SavedMessage>): { entries: Record<string
   return { entries: kept, weaker }
 }
 
-/** Ids changed since the current fetch began; null when none is in flight. */
-let changedDuringFetch: Set<string> | null = null
-const track = (id: string) => { changedDuringFetch?.add(id) }
+/** One in-flight read of the node: the ids changed since it began. Each read owns its own set. */
+export type SavedFetch = Set<string>
+const fetches = new Set<SavedFetch>()
+const track = (id: string) => { for (const fetch of fetches) fetch.add(id) }
 
 /**
  * Whether the original of this entry was retracted or moderated, as the durable
@@ -166,13 +172,16 @@ export function redactSavedCopy(probe: SavedIdentity): void {
  * local data: one account's, or every account's.
  */
 export function clearSavedLocalData(jid: string | null, allAccounts: boolean): void {
-  savedStore.getState().reset()
+  // The list in memory belongs to the connected account: another account's wipe leaves it alone.
+  const current = getStorageScopeJid()
+  if (allAccounts || !jid || !current || getBareJid(jid) === getBareJid(current)) savedStore.getState().reset()
   try {
     if (allAccounts) {
       for (const key of Object.keys(localStorage)) if (key === PENDING_KEY || key.startsWith(`${PENDING_KEY}:`)) localStorage.removeItem(key)
+    } else if (jid) {
+      localStorage.removeItem(buildScopedStorageKey(PENDING_KEY, jid))
     } else {
-      localStorage.removeItem(buildScopedStorageKey(PENDING_KEY, jid ?? undefined))
-      localStorage.removeItem(buildScopedStorageKey(PENDING_KEY))
+      localStorage.removeItem(PENDING_KEY) // a queue kept before accounts were told apart
     }
   } catch { /* storage unavailable */ }
 }
@@ -211,20 +220,45 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
   },
 
   beginFetch: () => {
-    changedDuringFetch = new Set()
+    const fetch: SavedFetch = new Set()
+    fetches.add(fetch)
     set({ loaded: false })
+    return fetch
   },
 
-  reconcileFetch: (fetchedRaw) => {
-    const keepCurrent = changedDuringFetch ?? new Set<string>()
-    changedDuringFetch = null
+  fetchCurrent: (fetch) => fetches.has(fetch),
+
+  confirm: (id, op) => {
+    const { remote, removed } = get()
+    const nextRemote = { ...remote }
+    const nextRemoved = { ...removed }
+    if (op === 'publish') nextRemote[id] = true
+    else { delete nextRemote[id]; delete nextRemoved[id] }
+    track(id)
+    set({ remote: nextRemote, removed: nextRemoved })
+  },
+
+  reconcileFetch: (fetchedRaw, fetch) => {
+    if (fetch && !fetches.has(fetch)) return false
+    const keepCurrent = fetch ?? new Set<string>()
+    if (fetch) fetches.delete(fetch)
     const { entries, pending, remote } = get()
-    const { entries: fetched, cleared } = redactRetracted(fetchedRaw)
+    const { entries: fetched, cleared: clearedFetched } = redactRetracted(fetchedRaw)
+    const cleared = [...clearedFetched]
     const merged: Record<string, SavedMessage> = {}
-    for (const entry of fetched) if (pending[entry.id] !== 'retract' && !keepCurrent.has(entry.id)) merged[entry.id] = entry
+    const removedNow: Record<string, SavedMessage> = {}
+    for (const entry of fetched) {
+      // A removal this device queued: keep the server's copy to bring back if the server refuses it.
+      if (pending[entry.id] === 'retract') { if (!get().removed[entry.id]) removedNow[entry.id] = entry }
+      else if (!keepCurrent.has(entry.id)) merged[entry.id] = entry
+    }
     for (const id of keepCurrent) if (entries[id]) merged[id] = entries[id]
     for (const [id, op] of Object.entries(pending)) {
-      if (op === 'publish' && entries[id]) merged[id] = entries[id]
+      if (op !== 'publish' || !entries[id]) continue
+      // A queued copy (one restored after a reload, say) of an original since deleted loses its text too.
+      const [copy] = redactRetracted([entries[id]]).entries
+      if (copy.deleted && !entries[id].deleted) cleared.push(id)
+      merged[id] = copy
     }
     const { entries: unique, weaker } = dedupe(merged)
     const nextPending = { ...pending }
@@ -234,7 +268,8 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     const nextRemote: Record<string, true> = {}
     for (const entry of fetchedRaw) if (!keepCurrent.has(entry.id)) nextRemote[entry.id] = true
     for (const id of keepCurrent) if (remote[id]) nextRemote[id] = true
-    set({ entries: unique, pending: nextPending, remote: nextRemote, loaded: true, revisions: cleared.reduce(bump, get().revisions) })
+    set({ entries: unique, pending: nextPending, remote: nextRemote, loaded: true, revisions: cleared.reduce(bump, get().revisions), removed: { ...get().removed, ...removedNow } })
+    return true
   },
 
   applyNotify: ({ upserts: upsertsRaw, removedIds }) => {
@@ -252,16 +287,14 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
   },
 
   settle: (id, op, revision) => {
-    const { pending, revisions, remote, removed } = get()
+    const { pending, revisions, removed } = get()
     if (pending[id] !== op || (revision !== undefined && revisions[id] !== revision)) return
     const next = { ...pending }
     delete next[id]
-    const nextRemote = { ...remote }
     const nextRemoved = { ...removed }
-    if (op === 'publish') nextRemote[id] = true
-    else { delete nextRemote[id]; delete nextRemoved[id] }
+    if (op === 'retract') delete nextRemoved[id]
     track(id)
-    set({ pending: next, remote: nextRemote, removed: nextRemoved })
+    set({ pending: next, removed: nextRemoved })
   },
 
   setLimit: (limit) => set({ limit }),
@@ -307,7 +340,7 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     }
   },
 
-  reset: () => { changedDuringFetch = null; set({ ...initial }) },
+  reset: () => { fetches.clear(); set({ ...initial }) },
 }))
 
 // Keep the unsent queue on disk, so a save or removal made offline survives a reload.

@@ -56,4 +56,10 @@ describe('locateChatMessage identity', () => {
     ;(mam as unknown as Record<string, unknown>).fetchContext = vi.fn(async () => ({ messages: [], complete: false }))
     expect((await mam.locateChatMessage(CHAT, { sentAt: 500, from: CHAT })).kind).toBe('unknown')
   })
+
+  it('does not take a foreign archive alias for the account archive id', async () => {
+    const { mam } = setup({ cached: message({ stanzaId: 'wanted', ownArchiveId: 'other', ownArchiveBy: 'romeo@montague.example' }) })
+    const result = await mam.locateChatMessage(CHAT, { stanzaId: 'wanted', from: CHAT })
+    expect(result.kind).not.toBe('found')
+  })
 })
