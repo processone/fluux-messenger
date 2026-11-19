@@ -566,7 +566,13 @@ class ServiceProof(unittest.TestCase):
             identity, path = UDID.encode(), peer.path.encode()
             parent.sendall(struct.pack('>IIII', 2000, len(identity), len(path), 3) + identity + path)
             parent.settimeout(2)
-            self.assertEqual(parent.recv(16), b'')
+            try:
+                reply = parent.recv(16)
+            except ConnectionResetError:
+                # The worker exits with the identity and path unread; Linux then reports
+                # the close as a reset, after any bytes it sent, where macOS reports EOF.
+                reply = b''
+            self.assertEqual(reply, b'')
             parent.close()
             stdout, stderr = p.communicate(timeout=2)
             self.assertEqual((stdout, stderr, p.returncode), (b'', b'', 1))
