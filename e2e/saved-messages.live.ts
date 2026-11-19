@@ -132,6 +132,13 @@ async function emptyNode(peer: Awaited<ReturnType<typeof script>>) {
   await peer.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: `${PUBSUB}#owner` }, xml('delete', { node: NODE })))).catch(() => {})
 }
 
+/** The `<saved/>` wrapper of a raw stored item, parsed back into a stanza element. */
+async function parseSavedChildren(rawItem: string) {
+  // @ts-expect-error ltx (the parser under @xmpp/xml) ships no type declarations.
+  const { parse } = await import('ltx') as unknown as { parse: (text: string) => { getChild(name: string): unknown } }
+  return [parse(rawItem.replace(/^<item\b/, `<item xmlns="${PUBSUB}"`)).getChild('saved')]
+}
+
 test.describe.configure({ mode: 'serial' })
 test.beforeAll(() => befriend())
 // Sessions left waiting for resumption by an earlier test would also receive (and miss) notifications: start from none.
@@ -619,6 +626,107 @@ test('a client that was offline catches up on a save and a removal made elsewher
   await expect(savedRow(two, kept)).toBeVisible({ timeout: 30_000 })
   await expect(savedRow(two, gone)).toHaveCount(0)
   await shot(two.page, 'offline-client-caught-up')
+  await emptyNode(reader)
+  await one.context.close(); await two.context.close(); await bob.stop(); await reader.stop()
+})
+
+// Transport injection, not a server refusal: the page's own socket is routed and the removal request is answered with
+// the error a server gives a stranger, without being forwarded. It proves how the app treats a refused removal, not that the server refuses one.
+test('a removal the server refuses brings the row back and leaves the node untouched, then succeeds once allowed', async ({ browser }) => {
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser)
+  const text = `Refused removal ${stamp}`
+  await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
+  await saveMessage(one, text)
+  await nodeHolds(reader, 1)
+  await openSaved(one)
+  await expect(savedRow(one, text)).toBeVisible()
+
+  // Reload under a routed socket that answers a removal of the saved node with `forbidden`.
+  let refuse = true
+  let refused = 0
+  await one.page.routeWebSocket(/\/ws$/, ws => {
+    const server = ws.connectToServer()
+    ws.onMessage(message => {
+      const frame = typeof message === 'string' ? message : message.toString()
+      const id = /^<iq\b[^>]*\bid="([^"]+)"/.exec(frame)?.[1]
+      if (refuse && id && frame.includes(`<retract node="${NODE}"`)) {
+        refused++
+        ws.send(`<iq xmlns="jabber:client" type="error" id="${id}"><error type="auth"><forbidden xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error></iq>`)
+        return
+      }
+      server.send(message)
+    })
+    server.onMessage(message => ws.send(message))
+  })
+  await one.page.reload()
+  await openSaved(one)
+  await expect(savedRow(one, text)).toBeVisible({ timeout: 45_000 })
+  await savedRow(one, text).getByRole('button', { name: 'Remove from saved' }).click()
+  await expect.poll(() => refused, { timeout: 20_000 }).toBeGreaterThan(0)
+  await expect(savedRow(one, text)).toBeVisible({ timeout: 20_000 }) // restored, not silently gone
+  expect((await reader.items()).length).toBe(1)
+  await shot(one.page, 'removal-refused')
+
+  // Allowed again: the same removal now goes through.
+  refuse = false
+  await savedRow(one, text).getByRole('button', { name: 'Remove from saved' }).click()
+  await expect(savedRow(one, text)).toHaveCount(0)
+  await nodeHolds(reader, 0)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('a saved room message without an archive id opens in a room this device never joined', async ({ browser }) => {
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const room = `noid${stamp}@conference.localhost`
+  const text = `Said without an id ${stamp}`
+  const BOOKMARKS = 'urn:xmpp:bookmarks:1'
+  const field = (name: string, value: string) => xml('field', { var: name }, xml('value', {}, value))
+  const options = (max: string) => xml('publish-options', {}, xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+    xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options')),
+    field('pubsub#persist_items', 'true'), field('pubsub#access_model', 'whitelist'), field('pubsub#max_items', max), field('pubsub#send_last_published_item', 'never')))
+  await bob.c.send(xml('presence', { to: `${room}/bob` }, xml('x', { xmlns: 'http://jabber.org/protocol/muc' })))
+  await new Promise(resolve => setTimeout(resolve, 1500))
+  await bob.c.send(xml('message', { to: room, type: 'groupchat', id: randomUUID() }, xml('body', {}, text)))
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
+    xml('publish', { node: BOOKMARKS }, xml('item', { id: room }, xml('conference', { xmlns: BOOKMARKS, name: 'No id room', autojoin: 'true' }, xml('nick', {}, 'alice')))), options('max'))))
+
+  const one = await connect(browser)
+  await one.page.getByRole('button', { name: 'Rooms' }).first().click()
+  await one.page.getByRole('complementary').getByText('No id room', { exact: true }).first().click()
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible({ timeout: 30_000 })
+  await saveMessage(one, text)
+  const [saved] = await nodeHolds(reader, 1)
+  expect(saved).toContain('<stanza-id')
+
+  // The stored copy loses its archive id (as an entry saved before the room's archive id was known would), and the room is no longer listed.
+  const itemId = /<item id="([^"]+)"/.exec(saved)![1]
+  const stripped = saved.replace(/<stanza-id\b[^>]*\/>/g, '')
+  expect(stripped).not.toContain('<stanza-id')
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
+    xml('publish', { node: NODE }, xml('item', { id: itemId }, ...(await parseSavedChildren(stripped)))), options('256'))))
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
+    xml('retract', { node: BOOKMARKS, notify: 'true' }, xml('item', { id: room })))))
+  const [rewritten] = await reader.items()
+  expect(rewritten).toContain(text)
+  expect(rewritten).not.toContain('<stanza-id') // the node now really holds an entry without an archive id
+
+  const two = await connect(browser)
+  await openSaved(two)
+  await expect(savedRow(two, text)).toBeVisible()
+  await savedRow(two, text).click()
+  await expect(two.page).toHaveURL(/\/rooms\//)
+  await two.page.getByRole('button', { name: 'Join room to participate' }).click()
+  const join = two.page.getByRole('button', { name: /^Join$/ })
+  if (await join.isVisible({ timeout: 3000 }).catch(() => false)) await join.click()
+  await expect(two.page.locator('.message-highlight').filter({ hasText: text })).toBeInViewport({ timeout: 30_000 })
+  await shot(two.page, 'room-without-archive-id')
   await emptyNode(reader)
   await one.context.close(); await two.context.close(); await bob.stop(); await reader.stop()
 })
