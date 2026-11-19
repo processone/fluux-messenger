@@ -120,9 +120,13 @@ async function openChatWith(client: Client, peer: string) {
 
 async function saveMessage(client: Client, text: string) {
   const row = client.page.locator('[data-message-body]').filter({ hasText: text }).last()
-  await row.scrollIntoViewIfNeeded()
-  await row.hover()
-  await row.getByRole('button', { name: 'More options', exact: true }).click()
+  // The list can re-render under the pointer while history settles: reach the open menu again until it holds.
+  await expect(async () => {
+    await row.scrollIntoViewIfNeeded({ timeout: 5000 })
+    await row.hover({ timeout: 5000 })
+    await row.getByRole('button', { name: 'More options', exact: true }).click({ timeout: 5000 })
+    await expect(row.getByRole('button', { name: 'Save message', exact: true })).toBeVisible({ timeout: 2000 })
+  }).toPass({ timeout: 30_000 })
   await row.getByRole('button', { name: 'Save message', exact: true }).click()
 }
 
@@ -1113,7 +1117,7 @@ test('logging out with local data cleared removes a save still waiting on this d
   await expect.poll(() => pendingQueue(one), { timeout: 10_000 }).toContain(text.slice(0, 12))
 
   // Log out (the server still unreachable, so the waiting save cannot slip out first), asking for the local data to be cleared.
-  await one.page.getByRole('button', { name: 'alice', exact: true }).locator('xpath=following::button[2]').click() // the options button beside the status
+  await one.page.locator('button.p-2:has(svg[class*="vertical"])').first().click() // the options button of the account bar, the first of its kind in the page
   await one.page.getByRole('button', { name: 'Log out', exact: true }).click()
   const clear = one.page.getByRole('checkbox', { name: /Clear local data/ })
   if (!(await clear.isChecked())) await clear.check()
