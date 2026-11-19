@@ -21,10 +21,11 @@ import type { ModuleDependencies } from '../../../../../packages/fluux-sdk/src/c
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }))
-vi.mock('date-fns', () => ({ format: vi.fn(() => '14:30') }))
+vi.mock('date-fns', async importOriginal => ({ ...(await importOriginal<typeof import('date-fns')>()), format: vi.fn(() => '14:30') }))
+vi.mock('@/hooks/useNavigateToTarget', () => ({ useNavigateToTarget: () => ({ navigateToConversation: vi.fn() }) }))
 // Without a copy the room link shows its own preview, which needs a live connection this test does not have.
 vi.mock('./RoomMessageLinkPreview', () => ({ RoomMessageLinkPreview: () => null }))
-vi.mock('../Avatar', () => ({ Avatar: () => <div data-testid="avatar" /> }))
+vi.mock('../Avatar', () => ({ Avatar: () => <div data-testid="avatar" />, getConsistentTextColor: () => 'rgb(1,2,3)' }))
 vi.mock('@/stores/settingsStore', () => ({
   useSettingsStore: (selector: (s: { densityMode: string }) => unknown) => selector({ densityMode: 'comfortable' }),
 }))

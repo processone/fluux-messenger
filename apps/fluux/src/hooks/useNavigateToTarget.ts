@@ -52,7 +52,7 @@ export function useNavigateToTarget() {
    * Optionally scrolls to a specific message.
    * Dismisses this conversation's notification.
    */
-  const navigateToConversation = (conversationId: string, messageId?: string) => {
+  const navigateToConversation = (conversationId: string, messageId?: string | MessageRowRef) => {
     if (messageId) {
       setChatTargetMessageIdRef.current(messageId)
     }

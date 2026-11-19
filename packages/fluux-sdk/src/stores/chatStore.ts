@@ -447,7 +447,7 @@ interface ChatState {
   // shared/pendingRetractions.ts.
   pendingRetractions: Map<string, PendingRetraction[]>
   // Target message to scroll to after navigation (ephemeral, not persisted)
-  targetMessageId: string | null
+  targetMessageId: string | MessageRowRef | null
   // Session-only new-message divider per conversation (jid -> messageId). Derived
   // at activation from the read pointer; never persisted (absent from serializeState).
   firstNewMessageMarkers: Map<string, MessageRowRef>
@@ -713,7 +713,7 @@ interface ChatState {
    * at the live edge, including when {@link loadMessagesFromCache} preserves a parked window.
    */
   recenterToLatest: (conversationId: string) => Promise<void>
-  setTargetMessageId: (id: string | null) => void
+  setTargetMessageId: (id: string | MessageRowRef | null) => void
   switchAccount: (jid: string | null) => void
   reset: () => void
 }

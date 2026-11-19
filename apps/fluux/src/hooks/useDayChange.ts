@@ -12,12 +12,14 @@ import {
  * "Yesterday") so the label is re-evaluated when the day rolls over instead of
  * staying frozen at whatever it was when the component last rendered.
  *
- * Returns nothing on purpose: the value is not useful to the caller, the
- * subscription is. The selector returns a primitive, so the component re-renders at
+ * Returns the current local day key (yyyy-MM-dd). Most callers only need the
+ * subscription; a component whose label is derived from the current day should
+ * use the key in that derivation, so a compiler-memoized render cannot reuse a
+ * label computed on an earlier day. The selector returns a primitive, so the component re-renders at
  * most once per day and never on unrelated store churn.
  */
-export function useDayChange(): void {
-  useCurrentDayStore((s) => s.dayKey)
+export function useDayChange(): string {
+  return useCurrentDayStore((s) => s.dayKey)
 }
 
 /**

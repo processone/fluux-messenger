@@ -277,6 +277,19 @@ describe('shared room message references', () => {
       expect(event?.[1]).toMatchObject({ message: { forwarded: { author: 'Bob', text: 'Ship it 🚀' } } })
     })
 
+    it('carries the original ids on the inner message, and the stored copy keeps them', async () => {
+      const h = harness()
+      const ids = { id: 'orig-1', stanzaId: '1234', stanzaIdBy: room }
+      await h.chat.sendMessage('bob@example.org', body, { references: refs, forwarded: { ...copy, ...ids } })
+      const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+      const inner = stanza.getChild('forwarded', NSF)!.getChild('message')!
+      expect(inner.attrs.id).toBe('orig-1')
+      expect(inner.getChild('stanza-id', 'urn:xmpp:sid:0')!.attrs).toMatchObject({ id: '1234', by: room })
+      expect(parseMessageContent({ messageEl: stanza, body }).forwarded).toMatchObject(ids)
+      const event = vi.mocked(h.deps.emitSDK).mock.calls.find(([name]) => name === 'chat:message')
+      expect(event?.[1]).toMatchObject({ message: { forwarded: ids } })
+    })
+
     it('refuses a copy for a room, which gets the quoted fallback instead', async () => {
       const h = harness()
       h.stores.room.getRoom = vi.fn(jid => jid === room ? { jid: room, nickname: 'Alice', joined: true } : undefined) as typeof h.stores.room.getRoom

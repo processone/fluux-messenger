@@ -764,7 +764,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   /** The canonical unread count fed to every numeric surface
    *  MessageList renders (divider, floating pill, FAB badge) via the shared formatUnreadCount. */
   unreadCount?: number
-  targetMessageId?: string | null
+  targetMessageId?: string | MessageRowRef | null
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
   onMessageSeen?: (messageId: string) => void

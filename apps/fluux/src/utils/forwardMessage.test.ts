@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildForwardedCopy, forwardableText, composeForwardWithCopy, forwardedCopyFallbackRange, composeForward, forwardFallbackRange, withoutForwardFallback } from './forwardMessage'
+import { forwardSourceIds, buildForwardedCopy, forwardableText, composeForwardWithCopy, forwardedCopyFallbackRange, composeForward, forwardFallbackRange, withoutForwardFallback } from './forwardMessage'
 
 const link = 'xmpp:design@conference.fluux.chat?join;msg=1731490000123456'
 
@@ -100,5 +100,23 @@ describe('forward composition with a copy', () => {
     expect(forwardableText(' Look ', { author: 'Carol', text: 'Ship it' })).toBe('Look\nCarol wrote:\nShip it')
     expect(forwardableText('', { author: 'Carol', text: 'Ship it' })).toBe('Carol wrote:\nShip it')
     expect(forwardableText('Look')).toBe('Look')
+  })
+})
+
+// Captain's choice on FLM-332: the copy carries the original's ids for an exact match later.
+describe('ids of the original in a forward', () => {
+  it('names the sender id and, only where the archive is known, the archive that assigned the archive id', () => {
+    expect(forwardSourceIds({ id: 'c1', originId: 'o1', stanzaId: 's1', type: 'groupchat' }, 'r@c.example.org'))
+      .toEqual({ id: 'o1', stanzaId: 's1', stanzaIdBy: 'r@c.example.org' })
+    // A direct message carries its authoritative own-archive pair, never a foreign stanza id beside it.
+    expect(forwardSourceIds({ id: 'c1', stanzaId: 'foreign', ownArchiveId: 'own-9', ownArchiveBy: 'me@example.org', type: 'chat' }))
+      .toEqual({ id: 'c1', stanzaId: 'own-9', stanzaIdBy: 'me@example.org' })
+    expect(forwardSourceIds({ id: 'c1', stanzaId: 'foreign', type: 'chat' })).toEqual({ id: 'c1' })
+  })
+
+  it('keeps them on the structured copy and leaves an unarchived source with its id only', () => {
+    const quote = { author: 'Bob', text: 'Ship it', from: 'bob@example.org', type: 'chat' as const, id: 'c1', stanzaId: 's1', stanzaIdBy: 'me@example.org' }
+    expect(composeForwardWithCopy('', undefined, quote)!.forwarded).toMatchObject({ id: 'c1', stanzaId: 's1', stanzaIdBy: 'me@example.org' })
+    expect(buildForwardedCopy({ ...quote, stanzaIdBy: undefined })).toEqual({ from: 'bob@example.org', text: 'Ship it', type: 'chat', id: 'c1' })
   })
 })

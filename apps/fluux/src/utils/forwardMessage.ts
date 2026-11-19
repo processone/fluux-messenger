@@ -13,12 +13,29 @@ export interface ForwardQuote {
   fromEncrypted?: boolean
   /** The source message's type, kept on the copy. */
   type?: 'chat' | 'groupchat'
+  /** The source's own ids, carried in the copy so a reader can find the original again. */
+  id?: string
+  stanzaId?: string
+  stanzaIdBy?: string
+}
+
+/**
+ * The ids of a source message the copy should carry: its sender-assigned id, and its archive id
+ * only when the archive is known. A room's own id is the room's; a direct message's is its
+ * authoritative own-archive pair, never a stanza id another archive may have stamped.
+ */
+export function forwardSourceIds(message: { id: string; originId?: string; stanzaId?: string; ownArchiveId?: string; ownArchiveBy?: string; type: 'chat' | 'groupchat' }, roomJid?: string): Pick<ForwardQuote, 'id' | 'stanzaId' | 'stanzaIdBy'> {
+  const id = message.originId ?? message.id
+  const archive = message.type === 'groupchat'
+    ? (message.stanzaId && roomJid ? { stanzaId: message.stanzaId, stanzaIdBy: roomJid } : undefined)
+    : (message.ownArchiveId && message.ownArchiveBy ? { stanzaId: message.ownArchiveId, stanzaIdBy: message.ownArchiveBy } : undefined)
+  return { ...(id && { id }), ...archive }
 }
 
 const MAX_COPY_CHARACTERS = 4000
 
 /** The structured copy of the source; null when it cannot be built (no author address or no text). */
-export function buildForwardedCopy(quote?: ForwardQuote): { from: string; text: string; timestamp?: number; type?: 'chat' | 'groupchat' } | null {
+export function buildForwardedCopy(quote?: ForwardQuote): { from: string; text: string; timestamp?: number; type?: 'chat' | 'groupchat'; id?: string; stanzaId?: string; stanzaIdBy?: string } | null {
   const text = quote?.text.trim()
   if (!quote?.from || !text) return null
   return {
@@ -26,6 +43,8 @@ export function buildForwardedCopy(quote?: ForwardQuote): { from: string; text: 
     text: Array.from(text).slice(0, MAX_COPY_CHARACTERS).join(''),
     ...(quote.timestamp !== undefined && { timestamp: quote.timestamp }),
     ...(quote.type && { type: quote.type }),
+    ...(quote.id && { id: quote.id }),
+    ...(quote.stanzaId && quote.stanzaIdBy && { stanzaId: quote.stanzaId, stanzaIdBy: quote.stanzaIdBy }),
   }
 }
 
@@ -80,7 +99,7 @@ export function composeForward(comment: string, link: string | undefined, quote?
 export function composeForwardWithCopy(comment: string, link: string | undefined, quote?: ForwardQuote): {
   body: string
   references: DataReference[]
-  forwarded: { from: string; text: string; timestamp?: number; type?: 'chat' | 'groupchat'; fromEncrypted?: boolean; fallback: { begin: number; end: number } }
+  forwarded: { from: string; text: string; timestamp?: number; type?: 'chat' | 'groupchat'; id?: string; stanzaId?: string; stanzaIdBy?: string; fromEncrypted?: boolean; fallback: { begin: number; end: number } }
 } | null {
   const copy = buildForwardedCopy(quote)
   if (!copy) return null

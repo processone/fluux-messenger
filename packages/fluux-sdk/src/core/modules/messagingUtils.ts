@@ -410,8 +410,10 @@ function boundedPlainText(value: string, limit: number): string {
 
 /**
  * XEP-0297: the one structured copy a message carries beside its own body. Bounded and
- * non-recursive: only the forwarded message's plain body, sender and original time are read.
- * A nested forward, receipts, routing addresses and every other extension are ignored, and the
+ * non-recursive: only the forwarded message's plain body, sender, original time and the
+ * original's ids (the inner `id` and an XEP-0359 `<stanza-id/>` with its `by`) are read. The ids
+ * are a claim used only to find the original in local history. A nested forward, receipts,
+ * routing addresses and every other extension are ignored, and the
  * inner message is never routed as a message of its own. Attribution to the sender of the
  * outer message stays separate: the author here is only the forwarder's claim.
  */
@@ -431,7 +433,14 @@ export function parseForwardedCopy(messageEl: Element): ForwardedCopy | undefine
   const stamp = forwarded?.getChild('delay', NS_DELAY)?.attrs.stamp
   const time = typeof stamp === 'string' ? new Date(stamp).getTime() : NaN
   const address = boundedPlainText(from, MAX_FORWARDED_ADDRESS_CODE_POINTS)
-  return { author, ...(address && address === from && { from: address }), text, ...(innerType && { type: innerType }), ...(Number.isFinite(time) && { timestamp: time }) }
+  // The original's ids are a claim for matching local history only, never an identity of this message.
+  const bounded = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= MAX_FORWARDED_ADDRESS_CODE_POINTS && value === boundedPlainText(value, MAX_FORWARDED_ADDRESS_CODE_POINTS) ? value : undefined
+  const sid = inner.getChildren('stanza-id').find((el: Element) => el.attrs?.xmlns === NS_STANZA_ID)
+  const id = bounded(inner.attrs.id)
+  const stanzaId = bounded(sid?.attrs.id)
+  const stanzaIdBy = stanzaId ? bounded(sid?.attrs.by) : undefined
+  return { author, ...(address && address === from && { from: address }), text,
+    ...(id && { id }), ...(stanzaId && stanzaIdBy && { stanzaId, stanzaIdBy }), ...(innerType && { type: innerType }), ...(Number.isFinite(time) && { timestamp: time }) }
 }
 
 /**
