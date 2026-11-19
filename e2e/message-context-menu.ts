@@ -178,12 +178,10 @@ test.describe('message right-click menu', () => {
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' })
     await expect(menu(page)).toBeVisible()
     const labels = await menu(page).getByRole('button').evaluateAll(els => els.map(e => e.getAttribute('aria-label') ?? e.textContent?.trim()))
-    const iCopy = labels.indexOf('Copy link')
-    const iOpen = labels.indexOf('Open in browser')
-    expect(iCopy).toBeGreaterThan(3)
-    expect(iOpen).toBe(iCopy + 1)
+    // The link group follows the four reaction controls immediately, and the general Copy link row is suppressed.
+    expect(labels.slice(0, 6)).toEqual(['React with 👍', 'React with ❤️', 'React with 😂', 'More reactions', 'Copy link', 'Open in browser'])
     expect(labels.filter(l => l === 'Copy link')).toHaveLength(1)
-    expect(labels.indexOf('Copy text')).toBeGreaterThan(iOpen)
+    expect(labels.indexOf('Copy text')).toBeGreaterThan(5)
   })
 
   test('a live arrival while the pointer menu is open does not dismiss it', async ({ page }) => {
