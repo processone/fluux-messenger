@@ -31,6 +31,7 @@ import {
   Users,
   Server,
   Search,
+  Bookmark,
   CircleArrowUp,
 } from 'lucide-react'
 import { performLogout } from '@/utils/performLogout'
@@ -51,6 +52,7 @@ import {
   ContactList,
   RoomsList,
   SearchView,
+  SavedView,
   UserMenu,
   MessagesHeaderActions,
   ContactsHeaderActions,
@@ -268,6 +270,14 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
           pathPrefix="/search"
           onNavigate={onViewChange}
         />
+        {/* Saved messages */}
+        <IconRailNavLink
+          icon={Bookmark}
+          label={t('sidebar.saved')}
+          view="saved"
+          pathPrefix="/saved"
+          onNavigate={onViewChange}
+        />
         <div className="flex-1" />
         {/* Update available — user-triggered (web reload / desktop update modal) */}
         {updateAvailable && (
@@ -321,6 +331,7 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
                 : sidebarView === 'contacts' ? t('sidebar.contacts')
                 : sidebarView === 'admin' ? t('sidebar.admin')
                 : sidebarView === 'settings' ? t('sidebar.settings')
+                : sidebarView === 'saved' ? t('saved.title')
                 : t('sidebar.search')}</h1>
             </ConnectionStepSlot>
           </div>
@@ -376,6 +387,8 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
                 />
               ) : sidebarView === 'search' ? (
                 <SearchView />
+              ) : sidebarView === 'saved' ? (
+                <SavedView />
               ) : sidebarView === 'settings' ? (
                 <SettingsSidebar
                   activeCategory={(settingsCategory as SettingsCategory) || DEFAULT_SETTINGS_CATEGORY}

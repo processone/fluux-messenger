@@ -77,7 +77,8 @@
         "viewProfile": "Ver perfil",
         "resizeHint": "Arrastra para redimensionar, doble clic para restablecer",
         "dismiss": "Descartar",
-        "search": "Buscar"
+        "search": "Buscar",
+        "saved": "Guardados"
     },
     "newMessage": {
         "title": "Nuevo mensaje",
@@ -734,7 +735,9 @@
         "loadAudio": "Cargar audio",
         "loadFilePreview": "Cargar vista previa",
         "showLinkImage": "Mostrar imagen",
-        "emojiSuggestions": "Sugerencias de emojis"
+        "emojiSuggestions": "Sugerencias de emojis",
+        "saveMessage": "Guardar mensaje",
+        "removeFromSaved": "Quitar de guardados"
     },
     "dates": {
         "today": "Hoy",
@@ -1382,6 +1385,10 @@
         "search": {
             "title": "Resultados de búsqueda",
             "description": "Seleccione un resultado en la barra lateral para ver la conversación."
+        },
+        "saved": {
+            "title": "Mensajes guardados",
+            "description": "Selecciona un mensaje guardado en la barra lateral para abrirlo en su conversación."
         }
     },
     "avatar": {
@@ -1767,5 +1774,17 @@
         "edit": "{{nickname}} (editado): {{text}}",
         "retraction": "{{nickname}} ha eliminado un mensaje",
         "messages": "{{nickname}}: {{count}} mensajes nuevos"
+    },
+    "saved": {
+        "title": "Mensajes guardados",
+        "marker": "Guardado",
+        "empty": "No hay mensajes guardados",
+        "emptyHint": "Abre el menú Más de un mensaje y elige Guardar mensaje para conservarlo aquí.",
+        "remove": "Quitar de guardados",
+        "encrypted": "Mensaje cifrado",
+        "deleted": "Mensaje eliminado",
+        "tryAgain": "Reintentar",
+        "full": "Los mensajes guardados están llenos ({{count}}). Quita uno para guardar otro.",
+        "refused": "Tu servidor rechazó almacenar este mensaje."
     }
 }

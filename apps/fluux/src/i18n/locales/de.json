@@ -77,7 +77,8 @@
         "viewProfile": "Profil anzeigen",
         "resizeHint": "Ziehen zum Ändern der Größe, Doppelklick zum Zurücksetzen",
         "dismiss": "Verwerfen",
-        "search": "Suche"
+        "search": "Suche",
+        "saved": "Gespeichert"
     },
     "newMessage": {
         "title": "Neue Nachricht",
@@ -732,7 +733,9 @@
         "loadAudio": "Audio laden",
         "loadFilePreview": "Vorschau laden",
         "showLinkImage": "Bild anzeigen",
-        "emojiSuggestions": "Emoji-Vorschläge"
+        "emojiSuggestions": "Emoji-Vorschläge",
+        "saveMessage": "Nachricht speichern",
+        "removeFromSaved": "Aus Gespeicherten entfernen"
     },
     "dates": {
         "today": "Heute",
@@ -1380,6 +1383,10 @@
         "search": {
             "title": "Suchergebnisse",
             "description": "Wählen Sie ein Ergebnis in der Seitenleiste aus, um die Unterhaltung anzuzeigen."
+        },
+        "saved": {
+            "title": "Gespeicherte Nachrichten",
+            "description": "Wählen Sie in der Seitenleiste eine gespeicherte Nachricht aus, um sie in ihrer Unterhaltung zu öffnen."
         }
     },
     "avatar": {
@@ -1765,5 +1772,17 @@
         "edit": "{{nickname}} (bearbeitet): {{text}}",
         "retraction": "{{nickname}} hat eine Nachricht gelöscht",
         "messages": "{{nickname}}: {{count}} neue Nachrichten"
+    },
+    "saved": {
+        "title": "Gespeicherte Nachrichten",
+        "marker": "Gespeichert",
+        "empty": "Keine gespeicherten Nachrichten",
+        "emptyHint": "Öffnen Sie das Menü „Mehr“ einer Nachricht und wählen Sie „Nachricht speichern“, um sie hier aufzubewahren.",
+        "remove": "Aus Gespeicherten entfernen",
+        "encrypted": "Verschlüsselte Nachricht",
+        "deleted": "Nachricht gelöscht",
+        "tryAgain": "Erneut versuchen",
+        "full": "Die gespeicherten Nachrichten sind voll ({{count}}). Entfernen Sie eine, um eine weitere zu speichern.",
+        "refused": "Ihr Server hat die Speicherung dieser Nachricht abgelehnt."
     }
 }

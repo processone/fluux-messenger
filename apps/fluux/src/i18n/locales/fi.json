@@ -77,7 +77,8 @@
         "viewProfile": "Näytä profiili",
         "resizeHint": "Vedä muuttaaksesi kokoa, kaksoisnapsauta nollataksesi",
         "dismiss": "Hylkää",
-        "search": "Haku"
+        "search": "Haku",
+        "saved": "Saved"
     },
     "newMessage": {
         "title": "Uusi viesti",
@@ -730,7 +731,9 @@
         "loadAudio": "Lataa ääni",
         "loadFilePreview": "Lataa esikatselu",
         "showLinkImage": "Näytä kuva",
-        "emojiSuggestions": "Emoji-ehdotukset"
+        "emojiSuggestions": "Emoji-ehdotukset",
+        "saveMessage": "Save message",
+        "removeFromSaved": "Remove from saved"
     },
     "dates": {
         "today": "Tänään",
@@ -1378,6 +1381,10 @@
         "search": {
             "title": "Hakutulokset",
             "description": "Valitse tulos sivupalkista nähdäksesi keskustelun."
+        },
+        "saved": {
+            "title": "Saved messages",
+            "description": "Select a saved message in the sidebar to open it in its conversation."
         }
     },
     "avatar": {
@@ -1763,5 +1770,17 @@
         "edit": "{{nickname}} (muokattu): {{text}}",
         "retraction": "{{nickname}} poisti viestin",
         "messages": "{{nickname}}: {{count}} uutta viestiä"
+    },
+    "saved": {
+        "title": "Saved messages",
+        "marker": "Saved",
+        "empty": "No saved messages",
+        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
+        "remove": "Remove from saved",
+        "encrypted": "Encrypted message",
+        "deleted": "Message deleted",
+        "tryAgain": "Try again",
+        "full": "Saved messages are full ({{count}}). Remove one to save another.",
+        "refused": "Your server refused to store this message."
     }
 }

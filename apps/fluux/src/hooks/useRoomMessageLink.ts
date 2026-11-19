@@ -10,7 +10,7 @@ export function useRoomMessageLink() {
   const { navigateToRoom } = useNavigateToTarget()
   const { t } = useTranslation()
   const addToast = useToastStore(state => state.addToast)
-  const pending = useRef<(RoomMessageLink & { account: string; running: boolean }) | null>(null)
+  const pending = useRef<(RoomMessageLink & { account: string; running: boolean; onFailure?: (kind: 'absent' | 'unknown') => void }) | null>(null)
   const mounted = useRef(false)
   const bridges = useRef(new Map<string, Promise<void>>())
   const live = useRef({ client, navigateToRoom, t, addToast })
@@ -51,6 +51,7 @@ export function useRoomMessageLink() {
         if (!current()) return
         pending.current = null
         live.current.navigateToRoom(target.roomJid)
+        target.onFailure?.(result.kind)
         live.current.addToast('error', result.kind === 'absent'
           ? live.current.t('chat.linkedMessageUnavailable', 'This message is no longer available')
           : live.current.t('chat.linkedMessageLoadFailed', 'Could not load this message'))
@@ -60,6 +61,7 @@ export function useRoomMessageLink() {
       pending.current = null
       roomStore.getState().setTargetMessageId(null)
       live.current.navigateToRoom(target.roomJid)
+      target.onFailure?.('unknown')
       live.current.addToast('error', live.current.t('chat.linkedMessageLoadFailed', 'Could not load this message'))
       console.warn('Could not resolve room message link', error)
     }
@@ -79,10 +81,10 @@ export function useRoomMessageLink() {
     return () => { mounted.current = false; unsubscribeRoom(); unsubscribeAccount() }
   }, [resolve])
 
-  return useCallback((link: RoomMessageLink) => {
+  return useCallback((link: RoomMessageLink, onFailure?: (kind: 'absent' | 'unknown') => void) => {
     const account = getBareJid(connectionStore.getState().jid ?? '')
     if (!account) return
-    pending.current = { ...link, account, running: false }
+    pending.current = { ...link, account, running: false, onFailure }
     const rooms = roomStore.getState()
     let room = rooms.rooms.get(link.roomJid)
     if (!room) {

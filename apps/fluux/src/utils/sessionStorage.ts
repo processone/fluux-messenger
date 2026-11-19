@@ -112,7 +112,7 @@ interface ProfileData {
  * View state for restoring UI on page reload.
  */
 export interface ViewStateData {
-  sidebarView: 'messages' | 'rooms' | 'contacts' | 'admin' | 'settings' | 'search'
+  sidebarView: 'messages' | 'rooms' | 'contacts' | 'admin' | 'settings' | 'search' | 'saved'
   activeConversationId: string | null
   activeRoomJid: string | null
   selectedContactJid: string | null

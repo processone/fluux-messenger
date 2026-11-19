@@ -67,6 +67,8 @@ export interface RouteActions {
   navigateToSettings: (category?: string, options?: SettingsNavigateOptions) => void
   /** Navigate to search view */
   navigateToSearch: (options?: NavigateOptions) => void
+  /** Navigate to the saved messages view */
+  navigateToSaved: (options?: NavigateOptions) => void
   /** Deterministic "go up" within current tab (detail → list, or list → messages) */
   navigateUp: () => void
 }
@@ -90,6 +92,9 @@ function parseRoute(pathname: string): SidebarView {
   }
   if (pathname.startsWith('/search')) {
     return 'search'
+  }
+  if (pathname.startsWith('/saved')) {
+    return 'saved'
   }
 
   // Default to messages
@@ -260,6 +265,11 @@ export function useRouteSync(): RouteState & RouteActions {
     void navigate('/search', opts)
   }, [navigate])
 
+  const navigateToSaved = useCallback((options?: NavigateOptions) => {
+    const opts = options?.replace ? { replace: true } : undefined
+    void navigate('/saved', opts)
+  }, [navigate])
+
   // Deterministic "go up" - navigates from detail to list within current tab.
   // Uses replace to keep the history stack clean.
   const navigateUp = useCallback(() => {
@@ -291,6 +301,7 @@ export function useRouteSync(): RouteState & RouteActions {
     navigateToAdmin,
     navigateToSettings,
     navigateToSearch,
+    navigateToSaved,
     navigateUp,
   }
 }

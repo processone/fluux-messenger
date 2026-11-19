@@ -77,7 +77,8 @@
         "viewProfile": "Skoða prófíl",
         "resizeHint": "Dragðu til að breyta stærð, tvísmelltu til að endurstilla",
         "dismiss": "Hafna",
-        "search": "Leita"
+        "search": "Leita",
+        "saved": "Saved"
     },
     "newMessage": {
         "title": "Ný skilaboð",
@@ -730,7 +731,9 @@
         "loadAudio": "Hlaða hljóð",
         "loadFilePreview": "Hlaða forskoðun",
         "showLinkImage": "Sýna mynd",
-        "emojiSuggestions": "Emoji-tillögur"
+        "emojiSuggestions": "Emoji-tillögur",
+        "saveMessage": "Save message",
+        "removeFromSaved": "Remove from saved"
     },
     "dates": {
         "today": "Í dag",
@@ -1378,6 +1381,10 @@
         "search": {
             "title": "Leitarniðurstöður",
             "description": "Veldu niðurstöðu á hliðarstikunni til að skoða samtalið."
+        },
+        "saved": {
+            "title": "Saved messages",
+            "description": "Select a saved message in the sidebar to open it in its conversation."
         }
     },
     "avatar": {
@@ -1763,5 +1770,17 @@
         "edit": "{{nickname}} (breytt): {{text}}",
         "retraction": "{{nickname}} eyddi skilaboðum",
         "messages": "{{nickname}}: {{count}} ný skilaboð"
+    },
+    "saved": {
+        "title": "Saved messages",
+        "marker": "Saved",
+        "empty": "No saved messages",
+        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
+        "remove": "Remove from saved",
+        "encrypted": "Encrypted message",
+        "deleted": "Message deleted",
+        "tryAgain": "Try again",
+        "full": "Saved messages are full ({{count}}). Remove one to save another.",
+        "refused": "Your server refused to store this message."
     }
 }

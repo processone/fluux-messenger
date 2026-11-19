@@ -77,7 +77,8 @@
         "viewProfile": "查看个人资料",
         "resizeHint": "拖动即可调整大小，双击即可重置",
         "dismiss": "关闭",
-        "search": "搜索"
+        "search": "搜索",
+        "saved": "Saved"
     },
     "newMessage": {
         "title": "新消息",
@@ -730,7 +731,9 @@
         "loadAudio": "加载音频",
         "loadFilePreview": "加载预览",
         "showLinkImage": "显示图片",
-        "emojiSuggestions": "表情符号建议"
+        "emojiSuggestions": "表情符号建议",
+        "saveMessage": "Save message",
+        "removeFromSaved": "Remove from saved"
     },
     "dates": {
         "today": "今天",
@@ -1378,6 +1381,10 @@
         "search": {
             "title": "搜索结果",
             "description": "从侧边栏选择一个结果即可查看对话。"
+        },
+        "saved": {
+            "title": "Saved messages",
+            "description": "Select a saved message in the sidebar to open it in its conversation."
         }
     },
     "avatar": {
@@ -1763,5 +1770,17 @@
         "edit": "{{nickname}}（编辑）：{{text}}",
         "retraction": "{{nickname}}删除了一条消息",
         "messages": "{{nickname}}：{{count}}条新消息"
+    },
+    "saved": {
+        "title": "Saved messages",
+        "marker": "Saved",
+        "empty": "No saved messages",
+        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
+        "remove": "Remove from saved",
+        "encrypted": "Encrypted message",
+        "deleted": "Message deleted",
+        "tryAgain": "Try again",
+        "full": "Saved messages are full ({{count}}). Remove one to save another.",
+        "refused": "Your server refused to store this message."
     }
 }

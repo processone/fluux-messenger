@@ -77,7 +77,8 @@
         "viewProfile": "Voir le profil",
         "resizeHint": "Glisser pour redimensionner, double-clic pour réinitialiser",
         "dismiss": "Ignorer",
-        "search": "Recherche"
+        "search": "Recherche",
+        "saved": "Enregistrés"
     },
     "newMessage": {
         "title": "Nouveau message",
@@ -733,7 +734,9 @@
         "loadAudio": "Charger l'audio",
         "loadFilePreview": "Charger l'aperçu",
         "showLinkImage": "Afficher l'image",
-        "emojiSuggestions": "Suggestions d'emoji"
+        "emojiSuggestions": "Suggestions d'emoji",
+        "saveMessage": "Enregistrer le message",
+        "removeFromSaved": "Retirer des enregistrés"
     },
     "dates": {
         "today": "Aujourd'hui",
@@ -1381,6 +1384,10 @@
         "search": {
             "title": "Recherche",
             "description": "Sélectionnez un résultat dans la barre latérale pour afficher la conversation."
+        },
+        "saved": {
+            "title": "Messages enregistrés",
+            "description": "Sélectionnez un message enregistré dans la barre latérale pour l’ouvrir dans sa conversation."
         }
     },
     "avatar": {
@@ -1766,5 +1773,17 @@
         "edit": "{{nickname}} (edit) : {{text}}",
         "retraction": "{{nickname}} a supprimé un message",
         "messages": "{{nickname}} : {{count}} nouveaux messages"
+    },
+    "saved": {
+        "title": "Messages enregistrés",
+        "marker": "Enregistré",
+        "empty": "Aucun message enregistré",
+        "emptyHint": "Ouvrez le menu Plus d’un message et choisissez Enregistrer le message pour le garder ici.",
+        "remove": "Retirer des enregistrés",
+        "encrypted": "Message chiffré",
+        "deleted": "Message supprimé",
+        "tryAgain": "Réessayer",
+        "full": "La liste des messages enregistrés est pleine ({{count}}). Retirez-en un pour en enregistrer un autre.",
+        "refused": "Votre serveur a refusé de stocker ce message."
     }
 }

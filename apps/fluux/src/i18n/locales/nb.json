@@ -77,7 +77,8 @@
         "viewProfile": "Vis profil",
         "resizeHint": "Dra for å endre størrelse, dobbeltklikk for å tilbakestille",
         "dismiss": "Avvis",
-        "search": "Søk"
+        "search": "Søk",
+        "saved": "Saved"
     },
     "newMessage": {
         "title": "Ny melding",
@@ -730,7 +731,9 @@
         "loadAudio": "Last inn lyd",
         "loadFilePreview": "Last inn forhåndsvisning",
         "showLinkImage": "Vis bilde",
-        "emojiSuggestions": "Emoji-forslag"
+        "emojiSuggestions": "Emoji-forslag",
+        "saveMessage": "Save message",
+        "removeFromSaved": "Remove from saved"
     },
     "dates": {
         "today": "I dag",
@@ -1378,6 +1381,10 @@
         "search": {
             "title": "Søkeresultater",
             "description": "Velg et resultat i sidefeltet for å vise samtalen."
+        },
+        "saved": {
+            "title": "Saved messages",
+            "description": "Select a saved message in the sidebar to open it in its conversation."
         }
     },
     "avatar": {
@@ -1763,5 +1770,17 @@
         "edit": "{{nickname}} (redigert): {{text}}",
         "retraction": "{{nickname}} slettet en melding",
         "messages": "{{nickname}}: {{count}} nye meldinger"
+    },
+    "saved": {
+        "title": "Saved messages",
+        "marker": "Saved",
+        "empty": "No saved messages",
+        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
+        "remove": "Remove from saved",
+        "encrypted": "Encrypted message",
+        "deleted": "Message deleted",
+        "tryAgain": "Try again",
+        "full": "Saved messages are full ({{count}}). Remove one to save another.",
+        "refused": "Your server refused to store this message."
     }
 }
