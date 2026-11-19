@@ -211,6 +211,8 @@
             "tryAgain": "Újrapróbálás",
             "needsDecisionTitle": "Az Ön döntésére vár",
             "needsDecisionDescription": "Az ehhez a partnerhez küldött üzenetek nem titkosíthatók, amíg nem dönt egy kulcsról.",
+            "distrustedTitle": "Nincs megbízható kulcs",
+            "distrustedDescription": "Ennek a partnernek nem küldhető üzenet, amíg meg nem bízik az egyik kulcsában.",
             "receivesWhenUnlocked": "Feloldás után megkapja az üzeneteit",
             "keyTrust": {
                 "verified": "Ellenőrzött",
@@ -638,6 +640,13 @@
             "sendBlockedKeyLocked": "Az üzenet nem lett elküldve. Oldja fel a titkosítási kulcsát az üzenet elküldéséhez.",
             "sendBlockedKeyConflict": "Az üzenet nem lett elküldve. Küldés előtt oldja fel a titkosítási kulcsa ütközését.",
             "sendBlockedGeneric": "Az üzenet nem lett elküldve. A titkosítás sikertelen volt.",
+            "sendBlockedKeysDistrusted": "Az üzenet nem lett elküldve. A partner egyik kulcsában sem bízik meg. Küldés előtt bízzon meg az egyikben.",
+            "heldKeys": {
+                "partial": "{{name}} új kulcsot adott hozzá, miután Ön ellenőrizte. A kulcs nem kap üzeneteket, amíg meg nem bízik benne, vagy nem ellenőrzi.",
+                "all": "{{name}} új kulcsot adott hozzá, miután Ön ellenőrizte. A kulcs nem kap üzeneteket, amíg meg nem bízik benne, vagy nem ellenőrzi. Addig nem küldhet üzenetet.",
+                "distrusted": "Nem bízik meg {{name}} egyik kulcsában sem. Nem küldhet üzenetet, amíg meg nem bízik az egyikben.",
+                "review": "Kulcsok áttekintése"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Titkosítás zárolva",
@@ -704,15 +713,6 @@
             "alreadyVerifiedBanner": "Ez a kulcs már ellenőrizve van. Újra ellenőrizheti, ha kétségei vannak.",
             "confirmSuccess": "Ujjlenyomat ellenőrizve",
             "revokeAction": "Ellenőrzés eltávolítása"
-        },
-        "keyChangeBanner": {
-            "title": "{{name}} titkosítási kulcsa megváltozott",
-            "body": "Úgy tűnik, ez a partner lecserélte a titkosítási kulcsát. Ellenőrizheti az új ujjlenyomatot a teljes bizalom visszaállításához, vagy elfogadhatja ellenőrzés nélkül az alapszintű bizalommal való folytatáshoz.",
-            "reVerify": "Újraellenőrzés",
-            "encryptionBlocked": "A titkosítás szünetel ebben a beszélgetésben, amíg meg nem oldja a változást.",
-            "acceptWithoutVerifying": "Elfogadás ellenőrzés nélkül",
-            "acceptedWithoutVerifying": "Új kulcs elfogadva. A partner nincs ellenőrizve",
-            "acceptFailed": "Nem sikerült elfogadni az új kulcsot. Próbálja újra"
         },
         "offlinePlaceholder": "Offline. Az újracsatlakozás után tudsz üzenetet küldeni.",
         "loadImage": "Kép betöltése",
@@ -1080,7 +1080,7 @@
             "rotatePluginUnavailable": "Az OpenPGP modul nem érhető el",
             "trustStateCompromised": {
                 "title": "A bizalmi állapot integritás-ellenőrzése sikertelen",
-                "description": "A helyi bizalmi adatokat esetleg megváltoztatták. A csendes kulcs-újrarögzítés le van tiltva a kulcscsere megakadályozása érdekében.",
+                "description": "A helyi bizalmi adatokat esetleg megváltoztatták. Folytatás előtt ellenőrizze a partnerei kulcsait.",
                 "reestablishButton": "Újraellenőrzés és folytatás"
             },
             "ownKeyConflict": {

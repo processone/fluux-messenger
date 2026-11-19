@@ -2,7 +2,8 @@ import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ShieldAlert } from 'lucide-react'
 import { useXMPPContext } from '@fluux/sdk'
-import { useTrustStateStatusStore } from '@/stores/trustStateStatusStore'
+import { useTrustStateVerdict } from '@/e2ee/openpgpTrustView'
+import { useToastStore } from '@/stores/toastStore'
 
 type RecoverablePlugin = {
   resealTrustState?: () => Promise<void>
@@ -11,21 +12,25 @@ type RecoverablePlugin = {
 export function TrustStateCompromisedBanner() {
   const { t } = useTranslation()
   const { client } = useXMPPContext()
-  const status = useTrustStateStatusStore((s) => s.status)
-  const details = useTrustStateStatusStore((s) => s.mismatchDetails)
+  const { status, details } = useTrustStateVerdict()
   const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const addToast = useToastStore((s) => s.addToast)
 
+  // The plugin can refuse, for instance while trust data of an earlier
+  // version waits to be moved: the person is told why.
   const handleReseal = useCallback(async () => {
     const plugin = client.e2ee?.getPlugin('openpgp') as RecoverablePlugin | null
     if (!plugin?.resealTrustState) return
     setBusy(true)
     try {
       await plugin.resealTrustState()
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
-  }, [client])
+  }, [client, addToast])
 
   if (status !== 'compromised') return null
 
@@ -40,7 +45,7 @@ export function TrustStateCompromisedBanner() {
           <p className="text-xs text-fluux-error">
             {t(
               'settings.encryption.trustStateCompromised.description',
-              'Local trust data may have been tampered with. Silent key re-pinning is blocked to prevent key substitution.',
+              "Local trust data may have been tampered with. Check your contacts' keys before you continue.",
             )}
           </p>
 

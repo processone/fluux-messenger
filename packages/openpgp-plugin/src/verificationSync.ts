@@ -1,10 +1,10 @@
 /**
- * Cross-device synchronisation of peer verification records.
+ * Cross-device synchronisation of peer verifications.
  *
- * Publishes the local `verifiedPeerKeysStore` map to a private PEP node
- * (`urn:xmpp:fluux:verifications:0`, `accessModel='whitelist'`) sign+encrypted
+ * Publishes every contact's verified keys to a private PEP node
+ * (`urn:xmpp:fluux:verifications:1`, `accessModel='whitelist'`) sign+encrypted
  * to the user's own OpenPGP key. Other devices of the same account receive a
- * PEP headline, fetch the node, decrypt it, and reconcile their store.
+ * PEP headline, fetch the node, decrypt it, and reconcile their records.
  *
  * Crypto is abstracted behind {@link EncryptFn}/{@link DecryptFn} so this
  * module works with both the Sequoia/Tauri backend and the openpgp.js web
@@ -19,24 +19,35 @@
  *  - **Freshness — a monotonic version.** A signature proves authorship but
  *    NOT freshness: a server can replay an older genuine snapshot. Each
  *    publish carries a strictly increasing `version`; a snapshot is applied
- *    only when newer than the highest already applied
- *    ({@link loadAppliedVerificationsVersion}), so a replayed (older-or-equal)
- *    node is a no-op, closing the trust-rollback path.
+ *    only when newer than the highest already applied, so a replayed
+ *    (older-or-equal) node is a no-op, closing the trust-rollback path.
  *
  * Sync strategy: **versioned snapshot, last-writer-wins**. An applied snapshot
- * *replaces* local state — additions, fingerprint changes, AND removals all
- * propagate. A revocation of the last verification publishes an empty (but
- * signed + versioned) snapshot rather than skipping the publish, so the entry
- * cannot resurface on resync. The trade-off is that two concurrent
- * verifications made offline on different devices collapse to the later
- * publisher's snapshot (the other is lost and must be re-done) — a fail-safe
- * direction (under-trust → re-verify), never resurrection of a revoked key.
+ * *replaces* the verified keys: additions AND removals propagate. A
+ * revocation of the last verification publishes an empty (but signed +
+ * versioned) snapshot rather than skipping the publish, so the entry cannot
+ * resurface on resync. Two concurrent verifications made offline on different
+ * devices collapse to the later publisher's snapshot (the other is lost and
+ * must be re-done) — a fail-safe direction (under-trust → re-verify), never
+ * resurrection of a revoked key.
+ *
+ * # The set format and the older node
+ *
+ * Earlier versions published one verified fingerprint per contact to
+ * `urn:xmpp:fluux:verifications:0`. The set format lives on a new node so an
+ * older client, which may keep writing the older node, can never roll back or
+ * shrink the sets. A device that has read or written the new node records
+ * that in its sealed trust records and never reads the older one again, even
+ * if the new node later goes missing: it publishes its own sets there again,
+ * an empty list included. Until then, when the new node is absent,
+ * the device reads the older node (a payload without a version decodes to
+ * version `0`), applies it under the same version rule, and publishes the
+ * winner to the new node.
  */
 
 import type { PluginContext, XMLElementData } from '@fluux/sdk'
-import { buildScopedStorageKey } from '@fluux/sdk'
 // The PEP node id is a raw protocol name, so it comes from the escape hatch.
-import { NS_FLUUX_VERIFICATIONS } from '@fluux/sdk/xmpp'
+import { NS_FLUUX_VERIFICATIONS, NS_FLUUX_VERIFICATION_SETS } from '@fluux/sdk/xmpp'
 import { fingerprintsEqual } from './fingerprintCompare'
 
 /** Encrypt `plaintext` to `recipientPublicArmored`. Returns armored ciphertext. */
@@ -63,50 +74,44 @@ export type DecryptFn = (
   signaturePresent: boolean
 }>
 
-/** PEP node id for verification sync — the canonical value lives in the SDK. */
-export const VERIFICATIONS_NODE = NS_FLUUX_VERIFICATIONS
-const VERIFICATIONS_XMLNS = VERIFICATIONS_NODE
+/** The older node: one verified fingerprint per contact. Read only to migrate. */
+export const LEGACY_VERIFICATIONS_NODE = NS_FLUUX_VERIFICATIONS
+/** The node holding every verified key of each contact. */
+export const VERIFICATION_SETS_NODE = NS_FLUUX_VERIFICATION_SETS
 
-/** localStorage base key holding the highest snapshot version applied/published. */
-const VERSION_STORAGE_KEY_BASE = 'fluux-e2ee-verifications-version'
-
-interface VerificationPayload {
-  v: 2
-  ts: number
+/** Every verified fingerprint of each contact, with the snapshot's version. */
+export interface VerificationSetsSnapshot {
+  sets: Record<string, string[]>
   version: number
-  verifications: Record<string, string>
 }
 
-/** Outcome of reconciling a fetched snapshot against local state. */
-export interface VerificationUpdatePlan {
-  /** Whether the snapshot is newer and should be applied. */
-  apply: boolean
-  /** Entries to write locally (new peers or changed fingerprints). */
-  toSet: Array<{ jid: string; fingerprint: string }>
-  /** JIDs to drop locally (absent from the newer snapshot). */
-  toClear: string[]
-  /** Version now in effect (the remote's when applied, else the prior one). */
+/** What a read of the set node found. */
+export type VerificationSetsRead =
+  | { kind: 'absent' }
+  | { kind: 'unreadable' }
+  | ({ kind: 'snapshot' } & VerificationSetsSnapshot)
+
+interface VerificationSetsPayload {
+  v: 1
+  ts: number
   version: number
+  verified: Record<string, string[]>
 }
 
 // ---------------------------------------------------------------------------
 // PEP item builder / parser (mirrors parseSecretKeyBackupItem pattern)
 // ---------------------------------------------------------------------------
 
-function buildVerificationsPayload(base64Ciphertext: string): XMLElementData {
+function buildVerificationsPayload(xmlns: string, base64Ciphertext: string): XMLElementData {
   return {
     name: 'verifications-data',
-    attrs: { xmlns: VERIFICATIONS_XMLNS },
+    attrs: { xmlns },
     children: [{ name: 'data', attrs: {}, children: [base64Ciphertext] }],
   }
 }
 
-function parseVerificationsItem(payload: XMLElementData): string | null {
-  if (
-    payload.name !== 'verifications-data' ||
-    payload.attrs?.xmlns !== VERIFICATIONS_XMLNS
-  )
-    return null
+function parseVerificationsItem(xmlns: string, payload: XMLElementData): string | null {
+  if (payload.name !== 'verifications-data' || payload.attrs?.xmlns !== xmlns) return null
   for (const child of payload.children) {
     if (typeof child === 'string') continue
     if (child.name !== 'data') continue
@@ -130,42 +135,48 @@ function b64Decode(encoded: string): string {
   return Buffer.from(encoded, 'base64').toString('utf-8')
 }
 
-// ---------------------------------------------------------------------------
-// Applied-version persistence
-// ---------------------------------------------------------------------------
-
 /**
- * Highest snapshot version this device has applied (from a remote fetch) or
- * reserved for its own publish. `-1` means "nothing applied yet", so a legacy
- * v1 node (which decodes to version `0`) is still picked up exactly once on
- * first sync.
+ * `item-not-found` is the IQ error condition for a node never created; every
+ * other failure leaves the question open. The IQ caller surfaces the condition
+ * in the error message.
  */
-export function loadAppliedVerificationsVersion(): number {
-  try {
-    const scopedKey = buildScopedStorageKey(VERSION_STORAGE_KEY_BASE)
-    let raw = localStorage.getItem(scopedKey)
-    if (raw === null && scopedKey !== VERSION_STORAGE_KEY_BASE) {
-      const legacy = localStorage.getItem(VERSION_STORAGE_KEY_BASE)
-      if (legacy !== null) {
-        localStorage.setItem(scopedKey, legacy)
-        localStorage.removeItem(VERSION_STORAGE_KEY_BASE)
-        raw = legacy
-      }
-    }
-    if (raw === null) return -1
-    const n = Number.parseInt(raw, 10)
-    return Number.isFinite(n) ? n : -1
-  } catch {
-    return -1
-  }
+function isItemNotFoundError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err)
+  return message.includes('item-not-found')
 }
 
-export function saveAppliedVerificationsVersion(version: number): void {
+/**
+ * Decrypt a fetched item and keep it only when our own primary key signed it.
+ * A malicious server can encrypt an arbitrary payload to the user's public
+ * key, but it cannot sign as the user, so any unsigned, wrong-signed, or
+ * foreign-signed payload is discarded. `null` when it is unusable.
+ */
+async function decryptOwnSigned(
+  xmlns: string,
+  item: { payload: XMLElementData },
+  decryptFn: DecryptFn,
+  ownPublicArmored: string,
+  ownFingerprint: string,
+): Promise<unknown> {
+  const base64Ciphertext = parseVerificationsItem(xmlns, item.payload)
+  if (!base64Ciphertext) return null
+  let decrypted: Awaited<ReturnType<DecryptFn>>
   try {
-    localStorage.setItem(buildScopedStorageKey(VERSION_STORAGE_KEY_BASE), String(version))
+    decrypted = await decryptFn(b64Decode(base64Ciphertext), ownPublicArmored)
   } catch {
-    // Best-effort, mirroring verifiedPeerKeysStore: a failed persist still
-    // leaves in-memory state consistent for the rest of the session.
+    return null
+  }
+  if (
+    !decrypted.signatureVerified ||
+    !decrypted.signerFingerprint ||
+    !fingerprintsEqual(decrypted.signerFingerprint, ownFingerprint)
+  ) {
+    return null
+  }
+  try {
+    return JSON.parse(decrypted.plaintext) as unknown
+  } catch {
+    return null
   }
 }
 
@@ -174,139 +185,100 @@ export function saveAppliedVerificationsVersion(version: number): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Encrypt `verifications` to own key and publish to the private PEP node.
+ * Encrypt every contact's verified keys to our own key and publish them to
+ * the set node.
  *
  * Always publishes — including an empty map — so a revocation of the last
  * verification overwrites the server node instead of leaving a stale one
  * behind. `version` must be strictly greater than any previously published
  * version for the monotonic replay gate on the receiving side to work.
  */
-export async function publishVerificationsToServer(
+export async function publishVerificationSets(
   ctx: PluginContext,
   encryptFn: EncryptFn,
   ownPublicArmored: string,
-  verifications: Record<string, string>,
+  sets: Record<string, string[]>,
   version: number,
 ): Promise<void> {
   const json = JSON.stringify({
-    v: 2,
+    v: 1,
     ts: Date.now(),
     version,
-    verifications,
-  } satisfies VerificationPayload)
+    verified: sets,
+  } satisfies VerificationSetsPayload)
 
   const armored = await encryptFn(json, ownPublicArmored)
 
   await ctx.xmpp.publishPEP(
-    VERIFICATIONS_NODE,
-    { id: 'current', payload: buildVerificationsPayload(b64Encode(armored)) },
+    VERIFICATION_SETS_NODE,
+    { id: 'current', payload: buildVerificationsPayload(VERIFICATION_SETS_NODE, b64Encode(armored)) },
     { accessModel: 'whitelist', maxItems: 1, persistItems: true },
   )
 }
 
 /**
- * Fetch the private PEP node, decrypt it, and return the verification map
- * together with its `version`. A legacy v1 payload (no `version` field)
- * decodes to version `0`.
- *
- * Downgrade protection: the decrypted payload is only trusted when it carries
- * a signature that verifies against the account's *own primary key*
- * (`ownFingerprint`). A malicious server can encrypt an arbitrary map to the
- * user's public key (it is, after all, public), but it cannot forge a
- * signature from the user's secret key — so any unsigned, wrong-signed, or
- * foreign-signed payload is discarded.
- *
- * Returns `null` when the node is absent, decryption fails, the signature
- * check does not pass, or the payload is malformed.
+ * Read the set node. `absent` only when the server says it holds nothing
+ * there; a failed read or a payload that is not ours is `unreadable`, so the
+ * caller never mistakes it for a node to migrate.
  */
-export async function fetchVerificationsFromServer(
+export async function fetchVerificationSets(
   ctx: PluginContext,
   decryptFn: DecryptFn,
   ownJid: string,
   ownPublicArmored: string,
   ownFingerprint: string,
-): Promise<{ verifications: Record<string, string>; version: number } | null> {
+): Promise<VerificationSetsRead> {
   let items: { id: string; payload: XMLElementData }[]
   try {
-    items = await ctx.xmpp.queryPEP(ownJid, VERIFICATIONS_NODE)
+    items = await ctx.xmpp.queryPEP(ownJid, VERIFICATION_SETS_NODE)
+  } catch (err) {
+    return isItemNotFoundError(err) ? { kind: 'absent' } : { kind: 'unreadable' }
+  }
+  if (items.length === 0) return { kind: 'absent' }
+  const payload = await decryptOwnSigned(VERIFICATION_SETS_NODE, items[0], decryptFn, ownPublicArmored, ownFingerprint)
+  if (!payload || typeof payload !== 'object') return { kind: 'unreadable' }
+  const obj = payload as Record<string, unknown>
+  if (obj.v !== 1 || typeof obj.version !== 'number' || !Number.isInteger(obj.version)) return { kind: 'unreadable' }
+  if (!obj.verified || typeof obj.verified !== 'object' || Array.isArray(obj.verified)) return { kind: 'unreadable' }
+  // Defensive: only keep string → array of non-empty strings.
+  const sets: Record<string, string[]> = {}
+  for (const [jid, list] of Object.entries(obj.verified as Record<string, unknown>)) {
+    if (!Array.isArray(list)) continue
+    const fps = list.filter((fp): fp is string => typeof fp === 'string' && fp.length > 0)
+    if (fps.length > 0) sets[jid] = fps
+  }
+  return { kind: 'snapshot', sets, version: obj.version }
+}
+
+/**
+ * Read the older node, one verified fingerprint per contact, as a set
+ * snapshot. A payload without a version decodes to version `0`. `null` when
+ * the node is absent, unreadable or not signed by our own key.
+ */
+export async function fetchLegacyVerifications(
+  ctx: PluginContext,
+  decryptFn: DecryptFn,
+  ownJid: string,
+  ownPublicArmored: string,
+  ownFingerprint: string,
+): Promise<VerificationSetsSnapshot | null> {
+  let items: { id: string; payload: XMLElementData }[]
+  try {
+    items = await ctx.xmpp.queryPEP(ownJid, LEGACY_VERIFICATIONS_NODE)
   } catch {
     return null
   }
   if (items.length === 0) return null
-
-  const base64Ciphertext = parseVerificationsItem(items[0].payload)
-  if (!base64Ciphertext) return null
-
-  const armored = b64Decode(base64Ciphertext)
-
-  let decrypted: Awaited<ReturnType<DecryptFn>>
-  try {
-    decrypted = await decryptFn(armored, ownPublicArmored)
-  } catch {
-    return null
+  const payload = await decryptOwnSigned(LEGACY_VERIFICATIONS_NODE, items[0], decryptFn, ownPublicArmored, ownFingerprint)
+  if (!payload || typeof payload !== 'object') return null
+  const obj = payload as Record<string, unknown>
+  if (obj.v !== 1 && obj.v !== 2) return null
+  if (typeof obj.verifications !== 'object' || obj.verifications === null) return null
+  const version =
+    obj.v === 2 && typeof obj.version === 'number' && Number.isFinite(obj.version) ? obj.version : 0
+  const sets: Record<string, string[]> = {}
+  for (const [k, val] of Object.entries(obj.verifications as Record<string, unknown>)) {
+    if (typeof val === 'string' && val.length > 0) sets[k] = [val]
   }
-
-  // Downgrade protection: only a payload signed by our own primary key is
-  // trusted. Reject unsigned, unverified, or foreign-signed maps — these can
-  // only originate from a tampering server, not from one of our devices.
-  if (
-    !decrypted.signatureVerified ||
-    !decrypted.signerFingerprint ||
-    !fingerprintsEqual(decrypted.signerFingerprint, ownFingerprint)
-  ) {
-    return null
-  }
-
-  try {
-    const payload = JSON.parse(decrypted.plaintext) as unknown
-    if (!payload || typeof payload !== 'object') return null
-    const obj = payload as Record<string, unknown>
-    if (obj.v !== 1 && obj.v !== 2) return null
-    if (typeof obj.verifications !== 'object' || obj.verifications === null) return null
-
-    const version =
-      obj.v === 2 && typeof obj.version === 'number' && Number.isFinite(obj.version)
-        ? obj.version
-        : 0
-
-    // Defensive: only keep string→string entries.
-    const out: Record<string, string> = {}
-    for (const [k, val] of Object.entries(obj.verifications as Record<string, unknown>)) {
-      if (typeof k === 'string' && typeof val === 'string' && val.length > 0) out[k] = val
-    }
-    return { verifications: out, version }
-  } catch {
-    return null
-  }
-}
-
-/**
- * Reconcile a fetched `remote` snapshot against `local` state.
- *
- * The snapshot is applied only when it is strictly newer than
- * `lastAppliedVersion` (replay/rollback defense). When applied, the remote
- * snapshot is authoritative: entries whose fingerprint differs are set,
- * and local JIDs absent from the snapshot are cleared — so revocations and
- * fingerprint changes converge across devices.
- */
-export function planVerificationUpdate(
-  remote: { verifications: Record<string, string>; version: number },
-  local: Record<string, string>,
-  lastAppliedVersion: number,
-): VerificationUpdatePlan {
-  if (remote.version <= lastAppliedVersion) {
-    return { apply: false, toSet: [], toClear: [], version: lastAppliedVersion }
-  }
-
-  const toSet: Array<{ jid: string; fingerprint: string }> = []
-  for (const [jid, fingerprint] of Object.entries(remote.verifications)) {
-    if (local[jid] !== fingerprint) toSet.push({ jid, fingerprint })
-  }
-
-  const toClear: string[] = []
-  for (const jid of Object.keys(local)) {
-    if (!(jid in remote.verifications)) toClear.push(jid)
-  }
-
-  return { apply: true, toSet, toClear, version: remote.version }
+  return { sets, version }
 }

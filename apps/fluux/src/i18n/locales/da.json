@@ -211,6 +211,8 @@
             "tryAgain": "Prøv igen",
             "needsDecisionTitle": "Venter på din beslutning",
             "needsDecisionDescription": "Beskeder til denne kontakt kan ikke krypteres, før du har taget stilling til en nøgle.",
+            "distrustedTitle": "Ingen betroede nøgler",
+            "distrustedDescription": "Der kan ikke sendes beskeder til denne kontakt, før du stoler på en af dens nøgler.",
             "receivesWhenUnlocked": "Modtager dine beskeder, når du låser op",
             "keyTrust": {
                 "verified": "Verificeret",
@@ -638,6 +640,13 @@
             "sendBlockedKeyLocked": "Beskeden blev ikke sendt. Lås din krypteringsnøgle op for at sende denne besked.",
             "sendBlockedKeyConflict": "Beskeden blev ikke sendt. Løs konflikten med din krypteringsnøgle, før du sender.",
             "sendBlockedGeneric": "Beskeden blev ikke sendt. Kryptering mislykkedes.",
+            "sendBlockedKeysDistrusted": "Beskeden blev ikke sendt. Du stoler ikke på nogen af denne kontakts nøgler. Stol på en af dem, før du sender.",
+            "heldKeys": {
+                "partial": "{{name}} har tilføjet en ny nøgle, efter du bekræftede kontakten. Den modtager ingen beskeder, før du stoler på den eller bekræfter den.",
+                "all": "{{name}} har tilføjet en ny nøgle, efter du bekræftede kontakten. Den modtager ingen beskeder, før du stoler på den eller bekræfter den. Indtil da kan du ikke sende beskeder.",
+                "distrusted": "Du stoler ikke på nogen af nøglerne til {{name}}. Du kan ikke sende beskeder, før du stoler på en af dem.",
+                "review": "Gennemgå nøgler"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Kryptering låst",
@@ -704,15 +713,6 @@
             "alreadyVerifiedBanner": "Denne nøgle er allerede verificeret. Du kan verificere igen, hvis du er i tvil.",
             "confirmSuccess": "Fingeraftryk verificeret",
             "revokeAction": "Fjern verificering"
-        },
-        "keyChangeBanner": {
-            "title": "{{name}}s krypteringsnøgle er ændret",
-            "body": "Det ser ud til, at denne kontakt har roteret sin krypteringsnøgle. Du kan verificere det nye fingeraftryk for at gendanne fuld tillid, eller acceptere det uden verificering for at fortsætte med basistillid.",
-            "reVerify": "Verificer igen",
-            "encryptionBlocked": "Kryptering er sat på pause for denne samtale, indtil du løser ændringen.",
-            "acceptWithoutVerifying": "Accepter uden verificering",
-            "acceptedWithoutVerifying": "Ny nøgle accepteret. Kontakten er ikke verificeret",
-            "acceptFailed": "Kunne ikke acceptere den nye nøgle. Prøv igen"
         },
         "offlinePlaceholder": "Offline. Du kan sende, så snart forbindelsen er genoprettet.",
         "loadImage": "Indlæs billede",
@@ -1080,7 +1080,7 @@
             "rotatePluginUnavailable": "OpenPGP-modul ikke tilgængeligt",
             "trustStateCompromised": {
                 "title": "Integritetskontrol af tillidstilstand mislykkedes",
-                "description": "Lokale tillidsdata kan være blevet manipuleret. Stille gen-fastgørelse af nøgle er blokeret for at forhindre nøgleudskiftning.",
+                "description": "Lokale tillidsdata kan være blevet manipuleret. Kontrollér dine kontakters nøgler, før du fortsætter.",
                 "reestablishButton": "Genverificer og fortsæt"
             },
             "ownKeyConflict": {

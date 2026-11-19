@@ -17,7 +17,7 @@ import { isOpenpgpEnabled, useEncryptionSettingsStore } from '../stores/encrypti
 import { useConversationPlaintextOverrideStore } from '../stores/conversationPlaintextOverrideStore'
 import { classifyBoundaryError, OPENPGP_DESCRIPTOR, SequoiaPgpPlugin } from '@fluux/openpgp-plugin'
 import { createAppDesktopHost } from './appDesktopHost'
-import { createAppHostStores } from './appHostStores'
+import { setOpenPGPTrustView, type OpenPGPTrustView } from './openpgpTrustView'
 
 /**
  * Plugin ids {@link registerE2EEPlugins} can register, declared to the SDK up
@@ -69,7 +69,12 @@ async function registerPluginsOnManager(
       // keychain; no user passphrase needed for day-to-day use.
       const { invoke } = await import('@tauri-apps/api/core')
       if (!isCurrent()) return
-      const plugin = new SequoiaPgpPlugin({ invoke, stores: createAppHostStores(), ...createAppDesktopHost() })
+      // The plugin keeps its trust decisions in its own storage; give it one
+      // that survives a restart. The key itself stays in the keychain.
+      const { LocalStorageStorageBackend } = await import('./LocalStorageStorageBackend')
+      if (!isCurrent()) return
+      client.setE2EEStorageBackend(new LocalStorageStorageBackend(manager.getAccountJid()), OPENPGP_DESCRIPTOR.id)
+      const plugin = new SequoiaPgpPlugin({ invoke, ...createAppDesktopHost() })
       phase = 'initialize-native'
       progress('started')
       await manager.register(plugin)
@@ -90,10 +95,14 @@ async function registerPluginsOnManager(
       if (!isCurrent()) return
       phase = 'initialize-web'
       progress('started')
-      await manager.register(new WebOpenPGPPlugin(createAppHostStores()))
+      await manager.register(new WebOpenPGPPlugin())
     }
 
     if (!isCurrent()) return
+
+    // The app reads trust decisions, the verdict and the own-key conflict from the plugin.
+    const registered = manager.getPlugin(OPENPGP_DESCRIPTOR.id) as unknown as OpenPGPTrustView | undefined
+    if (registered) setOpenPGPTrustView(registered, manager)
 
     // Signal React that the plugin is ready so probe effects re-run reliably.
     useEncryptionSettingsStore.getState().notifyPluginRegistered()
@@ -123,6 +132,7 @@ export async function unregisterE2EEPlugins(client: XMPPClient): Promise<void> {
   const manager = client.e2ee
   if (!manager) return
   if (!manager.getPlugin('openpgp')) return
+  setOpenPGPTrustView(null)
   try {
     await manager.unregister('openpgp')
   } catch (err) {

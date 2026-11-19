@@ -1,26 +1,22 @@
 /**
- * The desktop plugin from @fluux/openpgp-plugin on the app's own host: the real
- * zustand stores (through createAppHostStores) and the real file adapter
- * (createAppFileIO) over in-memory Tauri dialog and filesystem plugins. The
- * package's suite runs the same journeys on an in-memory host; these two cases
- * keep the app's side of that seam covered: a key file saved and read through
- * the app adapter, and trust-state recovery against state that lives in the
- * stores, not in the plugin.
+ * The desktop plugin from @fluux/openpgp-plugin on the app's own host: the
+ * storage the app gives it on desktop (LocalStorageStorageBackend) and the real
+ * file adapter (createAppFileIO) over in-memory Tauri dialog and filesystem
+ * plugins. The package's suite runs the same journeys on an in-memory host;
+ * these two cases keep the app's side of that seam covered: a key file saved
+ * and read through the app adapter, and trust-state recovery against trust
+ * records that outlive the plugin, in the app's storage.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PluginContext } from '@fluux/sdk'
-import { SequoiaPgpPlugin } from '@fluux/openpgp-plugin'
+import { createPluginStorage, type PluginContext } from '@fluux/sdk'
+import { SequoiaPgpPlugin, type TrustRecordStore } from '@fluux/openpgp-plugin'
 import {
   encodeOpenPgpArmorForXep0373,
   makeContext,
   makeFakeRust,
 } from '@fluux/openpgp-plugin/testing/sequoiaTestKit'
 import { createAppFileIO } from './appDesktopHost'
-import { createAppHostStores } from './appHostStores'
-import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
-import { useTrustStateStatusStore } from '@/stores/trustStateStatusStore'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
-import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
+import { LocalStorageStorageBackend } from './LocalStorageStorageBackend'
 
 vi.setConfig({ testTimeout: 30_000 })
 
@@ -38,18 +34,17 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
 
 function appPlugin(invoke: ReturnType<typeof makeFakeRust>['invoke']) {
-  return new SequoiaPgpPlugin({ stores: createAppHostStores(), macosDesktop: false, fileIO: createAppFileIO(), invoke })
+  return new SequoiaPgpPlugin({ macosDesktop: false, fileIO: createAppFileIO(), invoke })
 }
 
 beforeEach(() => {
   localStorage.clear()
   tauriDisk.files.clear()
   tauriDisk.picked = null
-  useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-  useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-  usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {}, pinnedAtByJid: {} })
-  useTrustStateStatusStore.getState().clear()
 })
+
+/** The plugin's storage as the app builds it on desktop. */
+const appStorage = () => createPluginStorage(new LocalStorageStorageBackend('me@example.com'), 'e2ee/openpgp')
 
 describe('SequoiaPgpPlugin on the app host', () => {
   it('imports a key exported through the app file adapter and keeps its fingerprint', async () => {
@@ -75,21 +70,22 @@ describe('SequoiaPgpPlugin on the app host', () => {
     expect(device.getOwnFingerprint()).toBe(originalFingerprint)
   })
 
-  it('re-verifies the trust state after recovery (awaiting-key -> sealed) on the real stores', async () => {
-    // The second plugin finds the first one's seal and pins in the stores, so
-    // this case needs state that outlives a plugin instance.
+  it('re-verifies the trust state after recovery (awaiting-key -> sealed) on the app storage', async () => {
+    // The second plugin finds the first one's seal and trust records in the
+    // app's storage, so this case needs state that outlives a plugin instance.
     const fake = makeFakeRust()
     const plugin = appPlugin(fake.invoke)
-    await plugin.init(makeContext('me@example.com').ctx)
-    usePinnedPrimaryFingerprintsStore.getState().setPinned('peer@example.com', 'PEERFP000000')
+    await plugin.init(makeContext('me@example.com', { storage: appStorage() }).ctx)
+    ;(plugin as unknown as { trustRecords: TrustRecordStore }).trustRecords
+      .setDecision('peer@example.com', 'BEE4000000000000000000000000000000000030', 'tofu')
     await (plugin as unknown as { verifyTrustStateOnInit(): Promise<void> }).verifyTrustStateOnInit()
     await plugin.backupSecretKey('shared-pp')
     const backup = await plugin.fetchSecretKeyBackup()
     expect(backup).toBeTruthy()
-    expect(useTrustStateStatusStore.getState().status).toBe('sealed')
+    expect(plugin.getTrustState().status).toBe('sealed')
 
     const pluginB = appPlugin(fake.invoke)
-    const { ctx: ctxB } = makeContext('me@example.com')
+    const { ctx: ctxB } = makeContext('me@example.com', { storage: appStorage() })
     ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
       id: 'current',
       payload: {
@@ -99,12 +95,13 @@ describe('SequoiaPgpPlugin on the app host', () => {
       },
     })
     await pluginB.init(ctxB)
+    await vi.waitFor(() => expect(pluginB.getTrustState().status).toBe('sealed'))
     fake.failNextOwnDecryptWith('key-unrecoverable')
     await (pluginB as unknown as { verifyTrustStateOnInit(): Promise<void> }).verifyTrustStateOnInit()
-    expect(useTrustStateStatusStore.getState().status).toBe('awaiting-key')
+    expect(pluginB.getTrustState().status).toBe('awaiting-key')
 
     await pluginB.restoreSecretKey('shared-pp')
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(useTrustStateStatusStore.getState().status).toBe('sealed')
+    await vi.waitFor(() => expect(pluginB.getTrustState().status).toBe('sealed'))
+    expect(pluginB.getKeyDecisions('peer@example.com')).toEqual({ BEE4000000000000000000000000000000000030: 'tofu' })
   })
 })

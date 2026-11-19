@@ -211,6 +211,8 @@
             "tryAgain": "Försök igen",
             "needsDecisionTitle": "Väntar på ditt beslut",
             "needsDecisionDescription": "Meddelanden till den här kontakten kan inte krypteras förrän du har bestämt dig för en nyckel.",
+            "distrustedTitle": "Inga betrodda nycklar",
+            "distrustedDescription": "Meddelanden kan inte skickas till den här kontakten förrän du litar på en av dess nycklar.",
             "receivesWhenUnlocked": "Tar emot dina meddelanden när du låser upp",
             "keyTrust": {
                 "verified": "Verifierad",
@@ -638,6 +640,13 @@
             "sendBlockedKeyLocked": "Meddelandet skickades inte. Lås upp din krypteringsnyckel för att skicka det här meddelandet.",
             "sendBlockedKeyConflict": "Meddelandet skickades inte. Lös konflikten med din krypteringsnyckel innan du skickar.",
             "sendBlockedGeneric": "Meddelandet skickades inte. Krypteringen misslyckades.",
+            "sendBlockedKeysDistrusted": "Meddelandet skickades inte. Du litar inte på någon av den här kontaktens nycklar. Lita på en av dem innan du skickar.",
+            "heldKeys": {
+                "partial": "{{name}} har lagt till en ny nyckel efter att du verifierade kontakten. Den tar inte emot några meddelanden förrän du litar på den eller verifierar den.",
+                "all": "{{name}} har lagt till en ny nyckel efter att du verifierade kontakten. Den tar inte emot några meddelanden förrän du litar på den eller verifierar den. Fram till dess kan du inte skicka meddelanden.",
+                "distrusted": "Du litar inte på någon av nycklarna för {{name}}. Du kan inte skicka meddelanden förrän du litar på en av dem.",
+                "review": "Granska nycklar"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Kryptering låst",
@@ -704,15 +713,6 @@
             "alreadyVerifiedBanner": "Denna nyckel har redan verifierats. Du kan reverifiera om du har tvivel.",
             "confirmSuccess": "Fingeravtryck verifierat",
             "revokeAction": "Ta bort verifiering"
-        },
-        "keyChangeBanner": {
-            "title": "{{name}}s krypteringsnyckel har ändrats",
-            "body": "Det verkar som att denna kontakt har roterat sin krypteringsnyckel. Du kan verifiera det nya fingeravtrycket för att återställa fullt förtroende, eller acceptera det utan verifiering för att fortsätta med grundläggande förtroende.",
-            "reVerify": "Verifiera igen",
-            "encryptionBlocked": "Kryptering är pausad för den här konversationen tills du löser ändringen.",
-            "acceptWithoutVerifying": "Acceptera utan verifiering",
-            "acceptedWithoutVerifying": "Ny nyckel accepterad. Motparten är overifierad",
-            "acceptFailed": "Kunde inte acceptera den nya nyckeln. Försök igen"
         },
         "offlinePlaceholder": "Offline. Du kan skicka så fort anslutningen är återupprättad.",
         "loadImage": "Läs in bild",
@@ -1080,7 +1080,7 @@
             "rotatePluginUnavailable": "OpenPGP-modul ej tillgänglig",
             "trustStateCompromised": {
                 "title": "Integritetskontroll av förtroendetillstånd misslyckades",
-                "description": "Lokala förtroendedata kan ha manipulerats. Tyst omfästning av nyckel är blockerad för att förhindra nyckelsubstitution.",
+                "description": "Lokala förtroendedata kan ha manipulerats. Kontrollera dina kontakters nycklar innan du fortsätter.",
                 "reestablishButton": "Verifiera igen och fortsätt"
             },
             "ownKeyConflict": {

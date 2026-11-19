@@ -5,7 +5,7 @@ import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
 import { platform } from '@/platform'
 import { useFileUpload } from '@/hooks/useFileUpload'
 import { usePendingAttachment } from '@/hooks/usePendingAttachment'
-import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { encryptionSendBlock, useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { nativeShareInbox, deliverShare, resolveShareDestination, type ShareInbox as InboxAPI, type SharedItem } from '@/utils/shareInbox'
@@ -90,7 +90,8 @@ function SharedItemDialog({ item, api, onRemoved }: {
     try { await stageShared(item, api); setLoaded(true) } catch { setError(true) }
   }, [api, item, stageShared])
   useEffect(() => { void load() }, [load])
-  const blocked = ['checking', 'blocked', 'rejected', 'keyLocked'].includes(encryption.kind)
+  // A contact whose keys all wait for a decision would otherwise receive the file unencrypted.
+  const blocked = ['checking', 'blocked', 'rejected', 'keyLocked'].includes(encryption.kind) || encryptionSendBlock(encryption) !== null
   const remove = async () => { await api.remove(item.id); await onRemoved() }
   const cancel = () => {
     if (busyRef.current) return

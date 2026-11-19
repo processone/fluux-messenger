@@ -1,7 +1,8 @@
 /**
  * Vitest setup: in-memory localStorage and sessionStorage, equivalent to the
  * localStorage mock in apps/fluux/src/test-setup.ts, so the moved tests see
- * the same storage behaviour in the package as in the app.
+ * the same storage behaviour in the package as in the app; and the Web Locks
+ * every platform the app runs on has, which happy-dom lacks.
  */
 import { vi } from 'vitest'
 
@@ -32,4 +33,24 @@ for (const name of ['localStorage', 'sessionStorage'] as const) {
   } else {
     Object.defineProperty(window, name, { value: mock, configurable: true })
   }
+}
+
+/**
+ * Web Locks as a browser shares them between windows of one origin: one
+ * holder per name, the others wait in turn. A test stands in for another
+ * window by requesting the same lock.
+ */
+function createLockManager() {
+  const queues = new Map<string, Promise<unknown>>()
+  return {
+    request<T>(name: string, callback: (lock: { name: string; mode: 'exclusive' }) => T | Promise<T>): Promise<T> {
+      const run = (queues.get(name) ?? Promise.resolve()).then(() => callback({ name, mode: 'exclusive' }))
+      queues.set(name, run.catch(() => {}))
+      return run
+    },
+  }
+}
+
+if (typeof navigator !== 'undefined') {
+  Object.defineProperty(navigator, 'locks', { value: createLockManager(), configurable: true })
 }

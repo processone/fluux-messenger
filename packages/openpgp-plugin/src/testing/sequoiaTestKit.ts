@@ -15,6 +15,7 @@ import {
   type EncryptedPayload,
   type PEPItem,
   type PluginContext,
+  type PluginStorage,
   type SecurityContextUpdate,
   type XMLElementData,
   type XMPPPrimitives,
@@ -212,7 +213,7 @@ export function makeFakeRust() {
       case 'openpgp_ensure_key': {
         const jid = args!.accountJid as string
         if (accounts.has(jid)) return accounts.get(jid) as T
-        const fp = `FP${String(nextFingerprint++).padStart(6, '0')}`
+        const fp = `${'F'.repeat(34)}${String(nextFingerprint++).padStart(6, '0')}`
         const userId = args!.userId as string
         const bundle: KeyBundle = {
           fingerprint: fp,
@@ -400,7 +401,7 @@ export function makeFakeRust() {
         const message = args!.backupMessage as string
         const passphrase = args!.passphrase as string
         const decodedMessage = readOpenPgpArmorPayloadForTest(message)
-        const match = decodedMessage.match(/BACKUP:(FP\d+):([^\n]+)/)
+        const match = decodedMessage.match(/BACKUP:([0-9A-Z]+):([^\n]+)/)
         if (!match) throw new Error('malformed backup')
         const [, fp, encodedPass] = match
         const embeddedPass = decodeURIComponent(escape(atob(encodedPass)))
@@ -421,7 +422,7 @@ export function makeFakeRust() {
         const message = args!.backupMessage as string
         const passphrase = args!.passphrase as string
         const decodedMessage = readOpenPgpArmorPayloadForTest(message)
-        const match = decodedMessage.match(/BACKUP:(FP\d+(?:,FP\d+)*):([^\n]+)/)
+        const match = decodedMessage.match(/BACKUP:([0-9A-Z]+(?:,[0-9A-Z]+)*):([^\n]+)/)
         if (!match) throw new Error('malformed backup')
         const [, fpList, encodedPass] = match
         const embeddedPass = decodeURIComponent(escape(atob(encodedPass)))
@@ -442,7 +443,7 @@ export function makeFakeRust() {
         const passphrase = args!.passphrase as string
         const selectedFp = args!.selectedFingerprint as string
         const decodedMessage = readOpenPgpArmorPayloadForTest(message)
-        const match = decodedMessage.match(/BACKUP:(FP\d+(?:,FP\d+)*):([^\n]+)/)
+        const match = decodedMessage.match(/BACKUP:([0-9A-Z]+(?:,[0-9A-Z]+)*):([^\n]+)/)
         if (!match) throw new Error('malformed backup')
         const [, fpList, encodedPass] = match
         const embeddedPass = decodeURIComponent(escape(atob(encodedPass)))
@@ -482,7 +483,7 @@ export function makeFakeRust() {
    * {@link armoredForFingerprint} so a peer probe can fetch its data node.
    */
   const generateCert = (uid: string): string => {
-    const fp = `FP${String(nextFingerprint++).padStart(6, '0')}`
+    const fp = `${'F'.repeat(34)}${String(nextFingerprint++).padStart(6, '0')}`
     generatedCerts.set(fp, makeArmored(fp, uid, 'public'))
     return fp
   }
@@ -791,8 +792,12 @@ export function advertisedFingerprintsIn(
  * Mock-XMPP factory. The returned `peerPublish(peer, node, item)` stores
  * a PEPItem under a specific (jid, node) pair, letting tests simulate the
  * XEP-0373 two-node scheme (metadata node + per-fingerprint data node).
+ *
+ * Each context gets its own plugin storage, as a separate device would. Pass
+ * `storage` to start a second plugin on the same device, which reads what the
+ * first one saved.
  */
-export function makeContext(accountJid: string): {
+export function makeContext(accountJid: string, options: { storage?: PluginStorage } = {}): {
   ctx: PluginContext
   published: Array<{
     node: string
@@ -868,7 +873,7 @@ export function makeContext(accountJid: string): {
     subscribePEP: () => ({ unsubscribe: () => {} }),
   }
   const ctx: PluginContext = {
-    storage: createPluginStorage(new InMemoryStorageBackend(), 'openpgp-test'),
+    storage: options.storage ?? createPluginStorage(new InMemoryStorageBackend(), 'openpgp-test'),
     xmpp,
     logger: { debug: () => {}, info: () => {}, warn: (message) => warnings.push(message), error: () => {} },
     account: { jid: accountJid },

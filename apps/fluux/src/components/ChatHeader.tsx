@@ -292,15 +292,17 @@ function EncryptionIcon({
   }
 
   if (state.kind === 'rejected') {
+    // Every key refused by the person, rather than certificates that failed validation.
+    const distrusted = state.distrusted === true
     return (
       <div ref={containerRef} className="relative">
-        <Tooltip content={t('chat.encryption.rejectedTooltip')} position="bottom" disabled={open}>
+        <Tooltip content={t(distrusted ? 'contacts.encryption.distrustedTitle' : 'chat.encryption.rejectedTooltip')} position="bottom" disabled={open}>
           <button
             ref={menu.triggerRef}
             type="button"
             onClick={() => setOpen((v) => !v)}
             className={`${btnClass} ${trustVisual('rejected').colorClass} cursor-pointer`}
-            aria-label={t('chat.encryption.rejected')}
+            aria-label={t(distrusted ? 'contacts.encryption.distrustedTitle' : 'chat.encryption.rejected')}
             aria-expanded={open}
           >
             <ShieldX className="size-4" />
@@ -312,22 +314,26 @@ function EncryptionIcon({
             style={{ left: menu.position.x, top: menu.position.y }}
             className="fixed w-72 max-w-[calc(100vw-1rem)] rounded-lg fluux-popover z-50 py-2 px-3 overflow-hidden">
             <div className="text-sm font-medium text-fluux-error mb-1.5">
-              {t('chat.encryption.rejectedTitle')}
+              {t(distrusted ? 'contacts.encryption.distrustedTitle' : 'chat.encryption.rejectedTitle')}
             </div>
-            <ul className="space-y-1.5">
-              {state.reasons.map((r, i) => (
-                <li key={i} className="text-xs text-fluux-muted">
-                  <span className="font-medium text-fluux-text">
-                    {t(`chat.encryption.rejectionCode.${r.code}`)}
-                  </span>
-                  {r.detail && (
-                    <span className="block text-xs text-fluux-muted mt-0.5 font-mono break-all">
-                      {r.detail}
+            {distrusted ? (
+              <p className="text-xs text-fluux-muted">{t('contacts.encryption.distrustedDescription')}</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {state.reasons.map((r, i) => (
+                  <li key={i} className="text-xs text-fluux-muted">
+                    <span className="font-medium text-fluux-text">
+                      {t(`chat.encryption.rejectionCode.${r.code}`)}
                     </span>
-                  )}
-                </li>
-              ))}
-            </ul>
+                    {r.detail && (
+                      <span className="block text-xs text-fluux-muted mt-0.5 font-mono break-all">
+                        {r.detail}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </div>

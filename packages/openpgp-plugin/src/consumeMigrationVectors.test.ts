@@ -21,7 +21,6 @@
  *                 (a) the passphrase field masked the 9x4 code and (b)
  *                 readPrivateKeys() choked on the leading public block.
  */
-import { createMockHostStores } from './testing/mockHostStores'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -35,7 +34,6 @@ import {
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase } from './index'
 
-const hostStores = createMockHostStores()
 
 // Importing these fixtures runs real openpgp.js key work, so the tests are
 // CPU-bound and inflate several-fold under the contention of a full
@@ -145,7 +143,6 @@ function makeCtx(accountJid: string) {
 
 beforeEach(async () => {
   localStorage.clear()
-  hostStores.reset()
   clearSessionPassphrase()
 })
 
@@ -153,7 +150,7 @@ describe('migration backup import (other tools → Fluux)', () => {
   for (const [name, makeVector] of Object.entries(VECTOR_SPECS)) {
     it(`imports a ${name} backup and recovers a usable secret key`, async () => {
       const { backup, passphrase, fingerprint } = await makeVector()
-      const plugin = new TestablePlugin(hostStores)
+      const plugin = new TestablePlugin()
       const ctx = makeCtx('migrant@example.com')
       await plugin.init(ctx) // locked — fine for import
 
@@ -186,7 +183,7 @@ describe('migration backup import (other tools → Fluux)', () => {
 
     it(`rejects a ${name} backup with the wrong passphrase`, async () => {
       const { backup } = await makeVector()
-      const plugin = new TestablePlugin(hostStores)
+      const plugin = new TestablePlugin()
       const ctx = makeCtx('migrant@example.com')
       await plugin.init(ctx)
 

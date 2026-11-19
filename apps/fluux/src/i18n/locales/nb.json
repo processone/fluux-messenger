@@ -211,6 +211,8 @@
             "tryAgain": "Prøv igjen",
             "needsDecisionTitle": "Venter på avgjørelsen din",
             "needsDecisionDescription": "Meldinger til denne kontakten kan ikke krypteres før du har bestemt deg for en nøkkel.",
+            "distrustedTitle": "Ingen klarerte nøkler",
+            "distrustedDescription": "Meldinger kan ikke sendes til denne kontakten før du stoler på én av nøklene.",
             "receivesWhenUnlocked": "Mottar meldingene dine når du låser opp",
             "keyTrust": {
                 "verified": "Verifisert",
@@ -638,6 +640,13 @@
             "sendBlockedKeyLocked": "Meldingen ble ikke sendt. Lås opp krypteringsnøkkelen din for å sende denne meldingen.",
             "sendBlockedKeyConflict": "Meldingen ble ikke sendt. Løs konflikten med krypteringsnøkkelen din før du sender.",
             "sendBlockedGeneric": "Meldingen ble ikke sendt. Kryptering mislyktes.",
+            "sendBlockedKeysDistrusted": "Meldingen ble ikke sendt. Du stoler ikke på noen av nøklene til denne kontakten. Stol på én av dem før du sender.",
+            "heldKeys": {
+                "partial": "{{name}} har lagt til en ny nøkkel etter at du bekreftet kontakten. Den mottar ingen meldinger før du stoler på den eller bekrefter den.",
+                "all": "{{name}} har lagt til en ny nøkkel etter at du bekreftet kontakten. Den mottar ingen meldinger før du stoler på den eller bekrefter den. Til da kan du ikke sende meldinger.",
+                "distrusted": "Du stoler ikke på noen av nøklene til {{name}}. Du kan ikke sende meldinger før du stoler på én av dem.",
+                "review": "Gjennomgå nøkler"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Kryptering låst",
@@ -704,15 +713,6 @@
             "alreadyVerifiedBanner": "Denne nøkkelen er allerede verifisert. Du kan verifisere på nytt hvis du er i tvil.",
             "confirmSuccess": "Fingeravtrykk verifisert",
             "revokeAction": "Fjern bekreftelse"
-        },
-        "keyChangeBanner": {
-            "title": "{{name}}s krypteringsnøkkel har endret seg",
-            "body": "Det ser ut til at denne kontakten har rotert krypteringsnøkkelen sin. Du kan verifisere det nye fingeravtrykket for å gjenopprette full tillit, eller godta det uten å verifisere for å fortsette med grunnleggende tillit.",
-            "reVerify": "Verifiser på nytt",
-            "encryptionBlocked": "Kryptering er satt på pause for denne samtalen til du løser endringen.",
-            "acceptWithoutVerifying": "Godta uten å verifisere",
-            "acceptedWithoutVerifying": "Ny nøkkel godtatt. Motparten er ikke verifisert",
-            "acceptFailed": "Kunne ikke godta den nye nøkkelen. Prøv igjen"
         },
         "offlinePlaceholder": "Frakoblet. Du kan sende så snart tilkoblingen er gjenopprettet.",
         "loadImage": "Last inn bilde",
@@ -1080,7 +1080,7 @@
             "rotatePluginUnavailable": "OpenPGP-modul ikke tilgjengelig",
             "trustStateCompromised": {
                 "title": "Integritetssjekk av tillitstilstand mislyktes",
-                "description": "Lokale tillitsdata kan ha blitt manipulert. Stille gjen-festing av nøkkel er blokkert for å forhindre nøkkelbytte.",
+                "description": "Lokale tillitsdata kan ha blitt manipulert. Kontroller nøklene til kontaktene dine før du fortsetter.",
                 "reestablishButton": "Verifiser på nytt og fortsett"
             },
             "ownKeyConflict": {

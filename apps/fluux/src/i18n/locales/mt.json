@@ -213,6 +213,8 @@
             "tryAgain": "Erġa' pprova",
             "needsDecisionTitle": "Jistenna d-deċiżjoni tiegħek",
             "needsDecisionDescription": "Il-messaġġi lil dan il-kuntatt ma jistgħux jiġu kkriptati sakemm tiddeċiedi dwar ċavetta.",
+            "distrustedTitle": "L-ebda ċavetta fdata",
+            "distrustedDescription": "Ma jistgħux jintbagħtu messaġġi lil dan il-kuntatt sakemm tafda waħda miċ-ċwievet tiegħu.",
             "receivesWhenUnlocked": "Se jirċievi l-messaġġi tiegħek wara li tneħħi l-lock",
             "keyTrust": {
                 "verified": "Ivverifikat",
@@ -646,6 +648,13 @@
             "sendBlockedKeyLocked": "Il-messaġġ ma ntbagħatx. Iftaħ iċ-ċavetta tal-encryption tiegħek biex tibgħat dan il-messaġġ.",
             "sendBlockedKeyConflict": "Il-messaġġ ma ntbagħatx. Solvi l-kunflitt taċ-ċavetta tal-encryption tiegħek qabel ma tibgħat.",
             "sendBlockedGeneric": "Il-messaġġ ma ntbagħatx. L-encryption falla.",
+            "sendBlockedKeysDistrusted": "Il-messaġġ ma ntbagħatx. Ma tafda l-ebda ċavetta ta' dan il-kuntatt. Afda waħda minnhom qabel ma tibgħat.",
+            "heldKeys": {
+                "partial": "{{name}} żied ċavetta ġdida wara li vverifikajtu. Ma tirċievi l-ebda messaġġ sakemm tafdaha jew tivverifikaha.",
+                "all": "{{name}} żied ċavetta ġdida wara li vverifikajtu. Ma tirċievi l-ebda messaġġ sakemm tafdaha jew tivverifikaha. Sa dakinhar ma tistax tibgħat messaġġi.",
+                "distrusted": "Ma tafda l-ebda ċavetta ta' {{name}}. Ma tistax tibgħat messaġġi sakemm tafda waħda minnhom.",
+                "review": "Irrevedi ċ-ċwievet"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "L-encryption huwa msakkar",
@@ -712,15 +721,6 @@
             "alreadyVerifiedBanner": "Din il-ċavetta diġà ġiet ivverifikata. Tista' riverifika jekk għandek xi dubji.",
             "confirmSuccess": "Marka tas-saba' verifikata",
             "revokeAction": "Neħħi l-verifika"
-        },
-        "keyChangeBanner": {
-            "title": "Iċ-ċavetta tal-kriptaġġ ta' {{name}} inbidlet",
-            "body": "Jidher li dan il-kuntatt biddel iċ-ċavetta tal-kriptaġġ tiegħu. Tista' tivverifika l-marka tas-saba' il-ġdida biex terġa' tistabbilixxi l-fiduċja sħiħa, jew taċċettaha mingħajr ma tivverifika biex tkompli b'fiduċja bażika.",
-            "reVerify": "Erġa' vverifika",
-            "encryptionBlocked": "Il-kriptaġġ huwa sospiż għal din il-konversazzjoni sakemm tissolva l-bidla.",
-            "acceptWithoutVerifying": "Aċċetta mingħajr verifika",
-            "acceptedWithoutVerifying": "Iċ-ċavetta l-ġdida ġiet aċċettata. Il-parti l-oħra mhix ivverifikata",
-            "acceptFailed": "Ma stajtx taċċetta ċ-ċavetta l-ġdida. Erġa' pprova"
         },
         "offlinePlaceholder": "Offline. Tkun tista' tibgħat hekk kif terġa' tikkonnettja.",
         "loadImage": "Itgħabba l-immaġni",
@@ -1088,7 +1088,7 @@
             "rotatePluginUnavailable": "Il-modulu OpenPGP mhux disponibbli",
             "trustStateCompromised": {
                 "title": "Il-verifika tal-integrità tal-istat ta' fiduċja falliet",
-                "description": "Id-data lokali ta' fiduċja setgħet ġiet manipolata. Ir-ripinning silenzjuż taċ-ċavetta huwa mblukkat biex jipprevjeni s-sostituzzjoni taċ-ċavetti.",
+                "description": "Id-data lokali ta' fiduċja setgħet ġiet manipolata. Iċċekkja ċ-ċwievet tal-kuntatti tiegħek qabel ma tkompli.",
                 "reestablishButton": "Erġa' ivverifika u kompli"
             },
             "ownKeyConflict": {

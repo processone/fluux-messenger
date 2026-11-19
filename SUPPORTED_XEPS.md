@@ -161,7 +161,8 @@ Reaction-based polls for MUC rooms, built on top of XEP-0444 (Message Reactions)
 | `urn:xmpp:fluux:appearance:0`        | Theme and appearance settings sync across devices                                                                  |
 | `urn:xmpp:fluux:conversations:0`     | Conversation list sync (active and archived 1:1 conversations) with debounced publishing and merge-on-reconnect    |
 | `urn:xmpp:fluux:ignored-users:0`     | Per-room ignored users list, stored as one PEP item per room                                                       |
-| `urn:xmpp:fluux:verifications:0`     | Cross-device sync of peer-verification records; private PEP node (`accessModel=whitelist`), encrypted to own key   |
+| `urn:xmpp:fluux:verifications:1`     | Cross-device sync of every verified key of each contact; private PEP node (`accessModel=whitelist`), signed and encrypted to own key |
+| `urn:xmpp:fluux:verifications:0`     | Earlier one-key-per-contact verification node; read once to migrate when the `:1` node is absent, never written    |
 
 ### Other
 

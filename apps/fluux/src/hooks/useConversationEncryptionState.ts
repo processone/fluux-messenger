@@ -25,17 +25,22 @@ export interface EncryptionProblem {
  *                   `isNew` marks a contact met recently and not verified;
  *                   `partlyVerified` a contact with a verified key whose
  *                   messages also go to a key that is not verified.
+ *                   `waiting` counts the keys that receive nothing until the
+ *                   user approves them (a verified contact's new keys).
  *                   `canVerify` and `canClearVerification` say whether the
  *                   protocol accepts that decision for this contact now.
  * - `blocked`       — retired: no protocol produces it any more. Kept for the
  *                     surfaces that still draw it.
  * - `unsupported`   — no registered protocol can encrypt to this contact.
  *                     Composer falls back to plaintext. `needsDecision` marks a
- *                     contact whose keys all wait for the user's decision;
+ *                     contact whose keys all wait for the user's decision:
+ *                     nothing can be sent then (see {@link encryptionSendBlock});
  *                     `listError` marks keys that could not be read, with a way
  *                     to ask again. `groups` lists the keys known meanwhile.
  * - `rejected`      — keys exist but none can receive messages; `reasons`
  *                     carries one entry per problem so the UI can explain.
+ *                     `distrusted` marks a contact whose usable keys the user
+ *                     all refused: nothing can be sent then.
  * - `plaintextForced` — user has explicitly disabled encryption for
  *                     this conversation.
  * - `keyLocked`     — encryption would be used, but the local private key is
@@ -59,13 +64,26 @@ export type ConversationEncryptionState =
       trust: TrustState
       isNew?: true
       partlyVerified?: true
+      /** How many keys receive nothing until the user approves them. */
+      waiting?: number
       canVerify?: true
       canClearVerification?: true
     }
   | { kind: 'blocked'; pinnedFingerprint: string; advertisedFingerprint: string }
   | { kind: 'unsupported'; groups?: PeerIdentityGroup[]; needsDecision?: true; listError?: { retry: () => void } }
-  | { kind: 'rejected'; reasons: EncryptionProblem[]; groups?: PeerIdentityGroup[] }
+  | { kind: 'rejected'; reasons: EncryptionProblem[]; groups?: PeerIdentityGroup[]; distrusted?: true }
   | { kind: 'keyLocked'; fingerprint?: string; groups?: PeerIdentityGroup[]; listError?: { retry: () => void } }
+
+/**
+ * Why nothing can be sent to this contact now, if so: every key waits for the
+ * user's decision, or the user refused every key. The SDK then refuses to
+ * encrypt and never sends plaintext, so a send must not start, nor an upload.
+ */
+export function encryptionSendBlock(state: ConversationEncryptionState): 'awaiting-decision' | 'distrusted' | null {
+  if (state.kind === 'unsupported' && state.needsDecision) return 'awaiting-decision'
+  if (state.kind === 'rejected' && state.distrusted) return 'distrusted'
+  return null
+}
 
 /** The identity to show for a conversation: the one in use, or the first of several in use. */
 function shownIdentity(identities: PeerIdentity[]): PeerIdentity | undefined {
@@ -97,7 +115,14 @@ async function resolveState(manager: E2EEManager, peer: string, retry: () => voi
       if (security.problems.length === 0) return { kind: 'unsupported' }
       // The reasons are known already; the rows are a bonus if the listing fails.
       const groups = await manager.listPeerIdentities(peer).catch(() => [])
-      return { kind: 'rejected', reasons: security.problems, ...(groups.length > 0 ? { groups } : {}) }
+      return {
+        kind: 'rejected',
+        reasons: security.problems,
+        ...(groups.length > 0 ? { groups } : {}),
+        // Keys the user refused are still the contact's keys: the protocol stays chosen
+        // and refuses to send, so the conversation never falls back to plaintext.
+        ...(security.problems.some((p) => p.code === 'distrusted') ? { distrusted: true as const } : {}),
+      }
     }
     case 'locked': {
       // The conversation is locked whatever the listing says; a missing group only adds a list error.
@@ -130,6 +155,7 @@ async function resolveState(manager: E2EEManager, peer: string, retry: () => voi
         ...(only ? { identityId: only.id } : {}),
         ...(security.isNew ? { isNew: true as const } : {}),
         ...(security.partlyVerified ? { partlyVerified: true as const } : {}),
+        ...(security.waiting > 0 ? { waiting: security.waiting } : {}),
         ...(only?.allowedDecisions.includes('verified') ? { canVerify: true as const } : {}),
         ...(only?.allowedDecisions.includes('tofu') && only.trust === 'verified' ? { canClearVerification: true as const } : {}),
       }

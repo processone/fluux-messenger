@@ -7,7 +7,7 @@ import { sharedPhoto } from '@/utils/nativePhoto'
 import { ShareInbox } from './ShareInbox'
 import type { ShareInbox as InboxAPI } from '@/utils/shareInbox'
 
-const mocks = vi.hoisted(() => ({ send: vi.fn(), upload: vi.fn(), toChat: vi.fn(), toRoom: vi.fn(), account: 'me@example.com', rosterLoaded: true }))
+const mocks = vi.hoisted(() => ({ send: vi.fn(), upload: vi.fn(), toChat: vi.fn(), toRoom: vi.fn(), account: 'me@example.com', rosterLoaded: true, encryption: { kind: 'disabled' } as Record<string, unknown> }))
 vi.mock('@fluux/sdk', () => ({
   getStorageScopeJid: () => mocks.account,
   useConnectionStatus: () => ({ jid: mocks.account, isConnected: true }),
@@ -21,7 +21,10 @@ vi.mock('@fluux/sdk/react', () => ({ useRoomStore: (select: (s: unknown) => unkn
 vi.mock('@/platform/ios/shareSuggestions', () => ({ donateIOSConversation: vi.fn() }))
 vi.mock('@/hooks/useFileUpload', () => ({ useFileUpload: () => ({ isSupported: true, uploadFile: mocks.upload }) }))
 vi.mock('@/hooks/useNavigateToTarget', () => ({ useNavigateToTarget: () => ({ navigateToConversation: mocks.toChat, navigateToRoom: mocks.toRoom }) }))
-vi.mock('@/hooks/useConversationEncryptionState', () => ({ useConversationEncryptionState: () => ({ kind: 'disabled' }) }))
+vi.mock('@/hooks/useConversationEncryptionState', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/useConversationEncryptionState')>()),
+  useConversationEncryptionState: () => mocks.encryption,
+}))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('./ModalShell', () => ({ ModalShell: ({ children, onClose }: { children: ReactNode; onClose: () => void }) => <div role="dialog"><button type="button" onClick={onClose}>Close</button>{children}</div> }))
 vi.mock('./ContactSelector', () => ({ ContactSelector: ({ onPick }: { onPick: (jid: string) => void }) => <button type="button" onClick={() => onPick('friend@example.com')}>Friend</button> }))
@@ -42,9 +45,22 @@ beforeEach(() => {
   mocks.toRoom.mockReset()
   mocks.account = 'me@example.com'
   mocks.rosterLoaded = true
+  mocks.encryption = { kind: 'disabled' }
   rooms = new Map()
 })
 describe('imported shares', () => {
+  // Issue #1452: a contact whose keys all wait for a decision would otherwise receive the file unencrypted.
+  it('offers no Send to a contact whose keys all wait for a decision, so nothing is uploaded', async () => {
+    mocks.encryption = { kind: 'unsupported', needsDecision: true }
+    const api = inbox()
+    vi.mocked(api.file).mockResolvedValue(new File(['x'], 'test.pdf'))
+    render(<ShareInbox api={api} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Friend' }))
+    const send = await screen.findByRole('button', { name: 'Send https://fluux.io' })
+    expect(send).toBeDisabled()
+    expect(mocks.upload).not.toHaveBeenCalled()
+  })
+
   it('uploads and publicly sends an imported file to the selected room', async () => {
     rooms.set('room@example.com', { jid: 'room@example.com', name: 'Room', joined: true })
     const api = inbox()

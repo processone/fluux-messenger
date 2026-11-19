@@ -211,6 +211,8 @@
             "tryAgain": "נסה שוב",
             "needsDecisionTitle": "ממתין להחלטתך",
             "needsDecisionDescription": "לא ניתן להצפין הודעות לאיש קשר זה עד שתחליט לגבי מפתח.",
+            "distrustedTitle": "אין מפתחות מהימנים",
+            "distrustedDescription": "לא ניתן לשלוח הודעות לאיש קשר זה עד שתסמוך על אחד מהמפתחות שלו.",
             "receivesWhenUnlocked": "יקבל את ההודעות שלך לאחר שתבטל את הנעילה",
             "keyTrust": {
                 "verified": "מאומת",
@@ -640,6 +642,13 @@
             "sendBlockedKeyLocked": "ההודעה לא נשלחה. שחרר את נעילת מפתח ההצפנה שלך כדי לשלוח הודעה זו.",
             "sendBlockedKeyConflict": "ההודעה לא נשלחה. פתור את התנגשות מפתח ההצפנה שלך לפני השליחה.",
             "sendBlockedGeneric": "ההודעה לא נשלחה. ההצפנה נכשלה.",
+            "sendBlockedKeysDistrusted": "ההודעה לא נשלחה. אינך סומך על אף מפתח של איש קשר זה. סמוך על אחד מהם לפני השליחה.",
+            "heldKeys": {
+                "partial": "{{name}} הוסיף מפתח חדש אחרי שאימתת אותו. המפתח לא מקבל הודעות עד שתסמוך עליו או תאמת אותו.",
+                "all": "{{name}} הוסיף מפתח חדש אחרי שאימתת אותו. המפתח לא מקבל הודעות עד שתסמוך עליו או תאמת אותו. עד אז לא ניתן לשלוח הודעות.",
+                "distrusted": "אינך סומך על אף אחד מהמפתחות של {{name}}. לא ניתן לשלוח הודעות עד שתסמוך על אחד מהם.",
+                "review": "סקירת מפתחות"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "ההצפנה נעולה",
@@ -706,15 +715,6 @@
             "alreadyVerifiedBanner": "מפתח זה כבר אומת. ניתן לאמת מחדש אם יש לך ספקות.",
             "confirmSuccess": "טביעת אצבע אומתה",
             "revokeAction": "הסר אימות"
-        },
-        "keyChangeBanner": {
-            "title": "מפתח ההצפנה של {{name}} השתנה",
-            "body": "נראה שאיש קשר זה החליף את מפתח ההצפנה שלו. באפשרותך לאמת את טביעת האצבע החדשה כדי לשחזר אמון מלא, או לקבל אותה ללא אימות כדי להמשיך עם אמון בסיסי.",
-            "reVerify": "אמת מחדש",
-            "encryptionBlocked": "ההצפנה מושהית בשיחה זו עד שתטפל בשינוי.",
-            "acceptWithoutVerifying": "קבל ללא אימות",
-            "acceptedWithoutVerifying": "המפתח החדש התקבל. העמית לא אומת",
-            "acceptFailed": "לא ניתן לקבל את המפתח החדש. נסה שוב"
         },
         "offlinePlaceholder": "לא מקוון. אפשר יהיה לשלוח מיד עם החיבור מחדש.",
         "loadImage": "טען תמונה",
@@ -1082,7 +1082,7 @@
             "rotatePluginUnavailable": "מודול OpenPGP אינו זמין",
             "trustStateCompromised": {
                 "title": "בדיקת שלמות מצב האמון נכשלה",
-                "description": "ייתכן שנתוני האמון המקומיים זויפו. הצמדה מחדש שקטה של מפתח חסומה כדי למנוע החלפת מפתחות.",
+                "description": "ייתכן שנתוני האמון המקומיים זויפו. בדוק את המפתחות של אנשי הקשר שלך לפני שתמשיך.",
                 "reestablishButton": "אמת מחדש והמשך"
             },
             "ownKeyConflict": {

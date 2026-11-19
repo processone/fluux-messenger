@@ -212,6 +212,8 @@
             "tryAgain": "Réessayer",
             "needsDecisionTitle": "En attente de votre décision",
             "needsDecisionDescription": "Les messages à ce contact ne peuvent pas être chiffrés tant que vous n'avez pas décidé d'une clé.",
+            "distrustedTitle": "Aucune clé de confiance",
+            "distrustedDescription": "Les messages à ce contact ne peuvent pas être envoyés tant que vous ne faites pas confiance à l'une de ses clés.",
             "receivesWhenUnlocked": "Recevra vos messages une fois déverrouillé",
             "keyTrust": {
                 "verified": "Vérifiée",
@@ -667,6 +669,13 @@
             "sendBlockedKeyLocked": "Message non envoyé. Déverrouillez votre clé de chiffrement pour envoyer ce message.",
             "sendBlockedKeyConflict": "Message non envoyé. Résolvez le conflit de votre clé de chiffrement avant d'envoyer.",
             "sendBlockedGeneric": "Message non envoyé. Le chiffrement a échoué.",
+            "sendBlockedKeysDistrusted": "Message non envoyé. Vous ne faites confiance à aucune clé de ce contact. Faites confiance à l'une d'elles avant d'envoyer.",
+            "heldKeys": {
+                "partial": "{{name}} a ajouté une nouvelle clé après que vous l'avez vérifié. Elle ne reçoit aucun message tant que vous ne lui faites pas confiance ou ne la vérifiez pas.",
+                "all": "{{name}} a ajouté une nouvelle clé après que vous l'avez vérifié. Elle ne reçoit aucun message tant que vous ne lui faites pas confiance ou ne la vérifiez pas. Vous ne pouvez pas envoyer de message d'ici là.",
+                "distrusted": "Vous ne faites confiance à aucune clé de {{name}}. Vous ne pouvez pas envoyer de message tant que vous ne faites pas confiance à l'une d'elles.",
+                "review": "Examiner les clés"
+            },
             "tooltip": {
                 "header": "Chiffré",
                 "protocol": {
@@ -707,15 +716,6 @@
             "alreadyVerifiedBanner": "Cette clé a déjà été vérifiée. Vous pouvez re-vérifier si vous avez un doute.",
             "confirmSuccess": "Empreinte vérifiée",
             "revokeAction": "Retirer la vérification"
-        },
-        "keyChangeBanner": {
-            "title": "La clé de chiffrement de {{name}} a changé",
-            "body": "Ce contact semble avoir renouvelé sa clé de chiffrement. Vous pouvez vérifier la nouvelle empreinte pour restaurer la confiance totale, ou l'accepter sans vérifier pour continuer avec une confiance de base.",
-            "reVerify": "Vérifier et accepter",
-            "encryptionBlocked": "Le chiffrement est suspendu pour cette conversation jusqu'à ce que vous résolviez le changement.",
-            "acceptWithoutVerifying": "Accepter sans vérifier",
-            "acceptedWithoutVerifying": "Nouvelle clé acceptée. Correspondant non vérifié",
-            "acceptFailed": "Impossible d'accepter la nouvelle clé. Réessayez"
         },
         "offlinePlaceholder": "Hors ligne. Vous pourrez envoyer dès la reconnexion.",
         "loadImage": "Charger l'image",
@@ -1115,7 +1115,7 @@
             "rotatePluginUnavailable": "Le module OpenPGP n'est pas disponible",
             "trustStateCompromised": {
                 "title": "La vérification d'intégrité de l'état de confiance a échoué",
-                "description": "Les données de confiance locales ont peut-être été falsifiées. Le réépinglage silencieux de la clé est bloqué pour empêcher la substitution de clés.",
+                "description": "Les données de confiance locales ont peut-être été falsifiées. Vérifiez les clés de vos contacts avant de continuer.",
                 "reestablishButton": "Revérifier et continuer"
             },
             "ownKeyConflict": {

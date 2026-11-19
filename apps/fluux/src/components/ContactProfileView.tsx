@@ -8,6 +8,7 @@ import { getTranslatedStatusText } from '@/utils/statusText'
 import { useWindowDrag } from '@/hooks'
 import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useToastStore } from '@/stores/toastStore'
+import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { ConfirmDialog } from './ConfirmDialog'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
@@ -125,6 +126,15 @@ export function ContactProfileView({
     setPepNickname(null)
     setDetails(null)
   }, [contact.jid, contact.name])
+
+  // A conversation's held-keys notice asked to review this contact's keys.
+  const securityRequested = useContactSecurityRequestStore((s) => s.jid === contact.jid)
+  const clearSecurityRequest = useContactSecurityRequestStore((s) => s.clearContactSecurityRequest)
+  useEffect(() => {
+    if (!securityRequested) return
+    setSecurityOpen(true)
+    clearSecurityRequest()
+  }, [securityRequested, clearSecurityRequest])
 
   // PEP nickname fetch
   useEffect(() => {

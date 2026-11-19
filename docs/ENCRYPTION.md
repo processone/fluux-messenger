@@ -39,7 +39,7 @@ Once encryption is on for both sides, you don't have to think about it:
 - If the contact has not published a key (they are on a client that doesn't support OX, or haven't turned it on), the lock is not shown and messages are sent using the server's transport encryption only.
 - Encrypted messages include a small plain-text fallback body for clients that don't understand OX, so those clients at least see a hint that an encrypted message was sent.
 
-If a contact you previously verified announces another active key, Fluux keeps messages encrypted to every active key but shows the calm unverified shield and explains that the new key has not been verified. This does not block sending; compare the fingerprint again if you need to establish trust in the updated keyset.
+If a contact you verified announces a new key, Fluux does not use it until you decide. Messages keep going only to the keys you already trust, and the conversation explains that the new key receives nothing until you trust or verify it. **Review keys** opens the contact's Security details. If every key the contact announces is new, Fluux sends them nothing until you decide; it never falls back to unencrypted messages. A contact you never verified keeps the simpler rule: their new keys are used right away.
 
 ## Trusting a contact's key
 
@@ -51,7 +51,17 @@ To be certain, **verify** the fingerprint:
 2. Compare it to the fingerprint Fluux shows for them.
 3. If they match, the key is verified.
 
-Verifying only has to be done once per contact per key.
+Each key is decided on its own. A contact's Security details list every key they announce, with what you decided for it and whether it receives your messages. For each key you can:
+
+- **Verify** it after comparing its fingerprint.
+- **Trust** it without verifying, so it receives your messages.
+- **Refuse** it, so it receives nothing. If you refuse every key of a contact, Fluux sends them nothing.
+
+Once you verify any key of a contact, Fluux holds each new key they announce until you decide about it, as described above. A held key stays held even if the contact later has no verified key left, for example after you refuse or unverify the key you had verified: only your own decision about the held key lets it receive messages.
+
+Your verifications reach your other devices through your server, signed and encrypted to your own key, so the server cannot read or forge them. A decision to trust or refuse a key without verifying it stays on the device where you made it.
+
+Upgrading from an earlier version keeps your verified contacts verified. If an earlier version had flagged a contact's key change, the key you had verified stays verified and the newer key waits for your decision.
 
 ## Using encryption on several devices
 

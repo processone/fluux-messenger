@@ -213,6 +213,8 @@
             "tryAgain": "Riprova",
             "needsDecisionTitle": "In attesa della tua decisione",
             "needsDecisionDescription": "I messaggi a questo contatto non possono essere cifrati finché non decidi su una chiave.",
+            "distrustedTitle": "Nessuna chiave fidata",
+            "distrustedDescription": "Non è possibile inviare messaggi a questo contatto finché non ti fidi di una delle sue chiavi.",
             "receivesWhenUnlocked": "Riceverà i tuoi messaggi dopo lo sblocco",
             "keyTrust": {
                 "verified": "Verificata",
@@ -642,6 +644,13 @@
             "sendBlockedKeyLocked": "Messaggio non inviato. Sblocca la tua chiave di cifratura per inviare questo messaggio.",
             "sendBlockedKeyConflict": "Messaggio non inviato. Risolvi il conflitto della tua chiave di cifratura prima di inviare.",
             "sendBlockedGeneric": "Messaggio non inviato. Cifratura non riuscita.",
+            "sendBlockedKeysDistrusted": "Messaggio non inviato. Non ti fidi di nessuna chiave di questo contatto. Fidati di una di esse prima di inviare.",
+            "heldKeys": {
+                "partial": "{{name}} ha aggiunto una nuova chiave dopo che l'hai verificato. Non riceve messaggi finché non ti fidi di essa o non la verifichi.",
+                "all": "{{name}} ha aggiunto una nuova chiave dopo che l'hai verificato. Non riceve messaggi finché non ti fidi di essa o non la verifichi. Fino ad allora non puoi inviare messaggi.",
+                "distrusted": "Non ti fidi di nessuna chiave di {{name}}. Non puoi inviare messaggi finché non ti fidi di una di esse.",
+                "review": "Rivedi le chiavi"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Cifratura bloccata",
@@ -708,15 +717,6 @@
             "alreadyVerifiedBanner": "Questa chiave è già stata verificata. Puoi riverificarla se hai dubbi.",
             "confirmSuccess": "Impronta verificata",
             "revokeAction": "Rimuovi verifica"
-        },
-        "keyChangeBanner": {
-            "title": "La chiave di cifratura di {{name}} è cambiata",
-            "body": "Questo contatto sembra aver ruotato la propria chiave di cifratura. Puoi verificare la nuova impronta per ripristinare la piena fiducia, oppure accettarla senza verificare per continuare con fiducia di base.",
-            "reVerify": "Verifica di nuovo",
-            "encryptionBlocked": "La cifratura è sospesa per questa conversazione finché non risolvi la modifica.",
-            "acceptWithoutVerifying": "Accetta senza verificare",
-            "acceptedWithoutVerifying": "Nuova chiave accettata. Il contatto non è verificato",
-            "acceptFailed": "Impossibile accettare la nuova chiave. Riprova"
         },
         "offlinePlaceholder": "Offline. Potrai inviare non appena ti riconnetti.",
         "loadImage": "Carica immagine",
@@ -1084,7 +1084,7 @@
             "rotatePluginUnavailable": "Modulo OpenPGP non disponibile",
             "trustStateCompromised": {
                 "title": "Verifica dell'integrità dello stato di fiducia non riuscita",
-                "description": "I dati di fiducia locali potrebbero essere stati manomessi. Il ri-pinning silenzioso della chiave è bloccato per prevenire la sostituzione delle chiavi.",
+                "description": "I dati di fiducia locali potrebbero essere stati manomessi. Controlla le chiavi dei tuoi contatti prima di continuare.",
                 "reestablishButton": "Riverifica e continua"
             },
             "ownKeyConflict": {

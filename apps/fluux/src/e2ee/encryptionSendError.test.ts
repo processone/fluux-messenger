@@ -8,9 +8,14 @@ describe('encryptionSendErrorKey', () => {
     expect(encryptionSendErrorKey(err)).toBe('chat.encryption.sendBlockedEncryptionRequired')
   })
 
-  it('maps pin-mismatch to the key-changed message', () => {
-    expect(encryptionSendErrorKey(new E2EEPluginError('permanent', 'pin-mismatch', 'changed')))
+  it('maps a contact whose keys all wait for a decision to the key-changed message', () => {
+    expect(encryptionSendErrorKey(new E2EEPluginError('permanent', 'peer-keys-awaiting-decision', 'waiting')))
       .toBe('chat.encryption.sendBlockedKeyChanged')
+  })
+
+  it('maps a contact whose keys were all refused to the refused-keys message', () => {
+    expect(encryptionSendErrorKey(new E2EEPluginError('permanent', 'peer-keys-distrusted', 'refused')))
+      .toBe('chat.encryption.sendBlockedKeysDistrusted')
   })
 
   it('maps key-locked to the unlock message', () => {

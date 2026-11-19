@@ -57,6 +57,12 @@ describe('caps (XEP-0115)', () => {
       expect(CLIENT_FEATURES).toContain('urn:xmpp:fluux:verifications:0+notify')
     })
 
+    it('should include the Fluux verified key sets cross-device sync +notify', () => {
+      // The successor node holds every verified key of each contact; without
+      // its +notify the server will not push its updates to this device.
+      expect(CLIENT_FEATURES).toContain('urn:xmpp:fluux:verifications:1+notify')
+    })
+
     it('includes the MDS +notify feature so the server pushes read-position updates', () => {
       expect(CLIENT_FEATURES).toContain(NS_MDS_NOTIFY)
       // feature appears in the (sorted) XEP-0115 verification string

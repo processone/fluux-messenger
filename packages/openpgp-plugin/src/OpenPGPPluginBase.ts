@@ -75,12 +75,12 @@ import {
   writeBackedUpFingerprint,
 } from './backupMarker'
 import {
-  VERIFICATIONS_NODE,
-  fetchVerificationsFromServer,
-  loadAppliedVerificationsVersion,
-  planVerificationUpdate,
-  publishVerificationsToServer,
-  saveAppliedVerificationsVersion,
+  LEGACY_VERIFICATIONS_NODE,
+  VERIFICATION_SETS_NODE,
+  fetchLegacyVerifications,
+  fetchVerificationSets,
+  publishVerificationSets,
+  type VerificationSetsSnapshot,
 } from './verificationSync'
 import {
   fingerprintsEqual,
@@ -139,13 +139,43 @@ import {
 } from './types'
 import {
   type CertRejection,
-  type OpenPGPHostStores,
+  type KeyDecision,
   type OwnKeyConflict,
-} from './hostStores'
+  type TrustStateVerdict,
+} from './trustTypes'
 import {
+  TRUST_RECORDS_STORAGE_KEY,
+  TrustRecordStore,
+  canonicalFingerprint,
+  keyStanding,
+  parseTrustRecords,
+  planVerifiedSetsUpdate,
+  type KeyDecisionChange,
+  type KeyStanding,
+  type TrustRecordsChange,
+} from './trustRecords'
+import {
+  DEFERRED_HOLDS_STORAGE_KEY,
+  LEGACY_SEAL_CHECK_STORAGE_KEY,
+  claimUnscopedLegacyTrust,
+  legacyRecordsMismatch,
+  legacySealCheckFor,
+  parseDeferredHolds,
+  parseLegacySealCheck,
+  readLegacyTrustState,
+  serializeDeferredHolds,
+  serializeLegacySealCheck,
+  trustRecordsFromLegacy,
+  verifyLegacyTrustStateSeal,
+  type PendingLegacySealCheck,
+} from './legacyTrustMigration'
+import {
+  TRUST_SEAL_WRITTEN_STORAGE_KEY,
+  copyTrustState,
+  sameTrustState,
   sealTrustState,
   verifyTrustStateSeal,
-  clearCompromisedAndReseal,
+  type TrustStateReading,
 } from './trustStateIntegrity'
 
 // ---------------------------------------------------------------------------
@@ -290,12 +320,48 @@ function assertCurrent(current: OwnKeyFreshness | undefined): void {
 export abstract class OpenPGPPluginBase implements E2EEPlugin {
   readonly descriptor = OPENPGP_DESCRIPTOR
 
-  /** The host's trust and status state; the plugin touches no other store. */
-  protected readonly stores: OpenPGPHostStores
+  /**
+   * The user's decision about each key of each contact, and rejected
+   * certificates, kept in the plugin's own storage (see `trustRecords.ts`).
+   */
+  protected readonly trustRecords = new TrustRecordStore()
 
-  protected constructor(stores: OpenPGPHostStores) {
-    this.stores = stores
-  }
+  // Session state the app shows: the trust-state verdict and a conflict
+  // between our key and the one the server publishes. Listeners of
+  // `subscribeTrustView` hear of their changes.
+  private _trustState: TrustStateVerdict = { status: 'uninitialized' }
+  /** Counts trust-state checks; only the newest gives a verdict. */
+  private _trustCheckRun = 0
+  /** A trust-state check gave a verdict this session (see {@link trustStateAccepted}). */
+  private _trustCheckDone = false
+  /** Verified keys changed before the trust state was accepted: publish them once it is. */
+  private _verifiedChangedBeforeAccepted = false
+  /**
+   * The stored trust state the trust-state check compares with the seal: a
+   * copy of the records as read at start, then as last sealed. Decisions made
+   * since, even while the check waits for the key, are not part of it: they
+   * are sealed once the check accepts the stored state.
+   */
+  private _trustStateUnderCheck: TrustStateReading | null = null
+  /**
+   * The migration from earlier versions waits for the next start, because
+   * this account's claim on the values they stored before scoping them per
+   * account could not be confirmed. The records come from the account's own
+   * earlier values for this session, but nothing is saved, sealed or
+   * synchronised, and the user's trust decisions are refused (see
+   * {@link refuseUnsavedTrust}); the earlier seal is still checked, against
+   * `check`. Whether the user verified the contacts the unclaimed values
+   * name (`unresolved`) is not known yet: their keys wait for a decision as
+   * a verified contact's new keys do, so nothing is sent to them. The keys
+   * held in this session are kept apart (see {@link saveDeferredHolds}).
+   */
+  private _deferredMigration: { check: PendingLegacySealCheck | null; unresolved: ReadonlySet<string> } | null = null
+  /** Saves of the keys held while the migration waits, in order. */
+  private _deferredHoldsWrite: Promise<void> = Promise.resolve()
+  private _ownKeyConflict: OwnKeyConflict | null = null
+  private readonly trustViewListeners = new Set<(peers: readonly string[] | null) => void>()
+
+  protected constructor() {}
 
   protected ctx: PluginContext | null = null
   protected ownBundle: KeyBundle | null = null
@@ -344,8 +410,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   protected now: () => number = () => Date.now()
 
-  private _verificationStoreUnsub: (() => void) | null = null
-  private _trustStoreUnsubs: Array<() => void> = []
+  private _trustRecordsReportUnsub: (() => void) | null = null
+  private _trustRecordsSyncUnsub: (() => void) | null = null
   private _trustStateSealTimeout: ReturnType<typeof setTimeout> | null = null
   private _syncingFromRemoteCount = 0
   private _publishVerificationTimeout: ReturnType<typeof setTimeout> | null = null
@@ -628,6 +694,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     for (const [jid, certs] of cached) {
       this.peerKeys.set(jid, certs)
     }
+    // Trust decisions come before anything that reads them: every encrypt,
+    // decrypt and identity listing does.
+    await this.loadTrustRecords(ctx)
+    if (this.ctx !== ctx) return
+    // The cached keys waiting for a decision keep their hold if the cache goes.
+    this.holdWaitingKeys([...this.peerKeys.keys()].flatMap((peer) => this.waitingKeys(peer)))
     try {
       await this.ensureIdentity()
     } catch (err) {
@@ -664,35 +736,176 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   /**
-   * Set up PEP and store subscriptions after the key has been successfully
-   * loaded. Called from {@link init} on normal startup, and from
+   * Read the trust records from the plugin's storage. The first time, there
+   * are none yet: migrate what earlier versions kept in the app's stores
+   * (see `legacyTrustMigration.ts`). The records' presence marks the
+   * migration done; the old values stay where they were.
+   */
+  private async loadTrustRecords(ctx: PluginContext): Promise<void> {
+    this._deferredMigration = null
+    this._trustRecordsReportUnsub?.()
+    this._trustRecordsReportUnsub = this.trustRecords.subscribe((change) => {
+      for (const peer of change.peers) this.reportIdentitiesChanged(peer)
+      this.emitTrustView(change.peers)
+    })
+    this.trustRecords.onPersistError = (err) => {
+      ctx.logger.warn(`${this.pluginName()}: could not save trust records: ${formatError(err)}`)
+    }
+    const { found, readable } = await this.trustRecords.attach(ctx.storage)
+    if (this.ctx !== ctx) return
+    if (!readable) ctx.logger.warn(`${this.pluginName()}: saved trust records are unreadable; starting empty`)
+    if (found) {
+      // Holds a migration that stopped after saving its records left behind.
+      await this.restoreDeferredHolds(ctx)
+      this._trustStateUnderCheck = copyTrustState(this.trustRecords)
+      return
+    }
+    let legacy = readLegacyTrustState(ctx.account.jid)
+    // Values earlier versions stored before scoping them per account belong
+    // to the first account that migrates them, as earlier loaders moved them,
+    // and no account uses them without a confirmed claim. Another account's
+    // claim leaves this one its own values. A claim that could not be
+    // confirmed puts the migration off to the next start: this session uses
+    // the account's own values, saves nothing but its holds, and sends
+    // nothing to a contact the other values verified.
+    if (legacy.usesUnscoped) {
+      const claim = await claimUnscopedLegacyTrust(ctx.account.jid)
+      if (this.ctx !== ctx) return
+      const read = legacy
+      if (claim !== 'owned') legacy = readLegacyTrustState(ctx.account.jid, false)
+      if (claim === 'unavailable') {
+        ctx.logger.warn(
+          `${this.pluginName()}: could not claim the trust state saved before accounts were kept apart; moving it at the next start`,
+        )
+        this.trustRecords.detach()
+        this.trustRecords.replace(trustRecordsFromLegacy(legacy, new Date(this.now()).toISOString()))
+        this._deferredMigration = {
+          check: legacySealCheckFor(legacy),
+          unresolved: new Set([...Object.keys(read.verified), ...Object.keys(read.alerts)]),
+        }
+        await this.restoreDeferredHolds(ctx)
+        if (this.ctx !== ctx) return
+        this._trustStateUnderCheck = copyTrustState(this.trustRecords)
+        return
+      }
+    }
+    const check = legacySealCheckFor(legacy)
+    // The seal check is saved before the records: if the migration stops in
+    // between, it runs again from the start next time. It stands for the
+    // earlier seal, so the flag saying a seal was written goes with it:
+    // records found later without the check or a seal are reported, not
+    // sealed anew.
+    if (check) {
+      await ctx.storage.put(LEGACY_SEAL_CHECK_STORAGE_KEY, serializeLegacySealCheck(check))
+      await ctx.storage.put(TRUST_SEAL_WRITTEN_STORAGE_KEY, new TextEncoder().encode('1'))
+    }
+    if (this.ctx !== ctx) return
+    const records = trustRecordsFromLegacy(legacy, new Date(this.now()).toISOString())
+    this.trustRecords.replace(records)
+    await this.restoreDeferredHolds(ctx)
+    if (this.ctx !== ctx) return
+    this._trustStateUnderCheck = copyTrustState(this.trustRecords)
+    await this.trustRecords.flush()
+    ctx.logger.info(
+      `${this.pluginName()}: moved the trust decisions of ${Object.keys(records.peers).length} contact(s) into plugin storage`,
+    )
+  }
+
+  /**
+   * Set up PEP and trust-record subscriptions after the key has been
+   * successfully loaded. Called from {@link init} on normal startup, and from
    * {@link WebOpenPGPPlugin.unlock} after the user supplies a passphrase.
    * Guards against double-activation.
    */
   protected activateSubscriptions(): void {
-    if (this._verificationStoreUnsub) return
+    if (this._trustRecordsSyncUnsub) return
     const ctx = this.requireCtx()
-    void this.syncVerificationsFromServer()
-    ctx.xmpp.subscribePEP(ctx.account.jid, VERIFICATIONS_NODE, () => {
+    this._trustRecordsSyncUnsub = this.trustRecords.subscribe((change) => this.onTrustRecordsChanged(change))
+    // The first sync runs once the trust-state check accepts the stored state
+    // (see `verifyTrustStateOnInit`).
+    ctx.xmpp.subscribePEP(ctx.account.jid, VERIFICATION_SETS_NODE, () => {
       void this.syncVerificationsFromServer()
     })
-    this._verificationStoreUnsub = this.stores.verifiedPeers.subscribe(
-      (next) => {
-        if (this._syncingFromRemoteCount === 0) {
-          this.scheduleVerificationsPublish(next)
-        }
-      },
-    )
-
-    this._trustStoreUnsubs = [
-      this.stores.pinnedPrimaryFingerprints.subscribe(() => this.scheduleTrustStateSeal()),
-      this.stores.verifiedPeers.subscribe(() => this.scheduleTrustStateSeal()),
-      this.stores.keyChangeAlerts.subscribe(() => this.scheduleTrustStateSeal()),
-      this.stores.verifiedPeers.subscribe((next, prev) => this.reportChangedPeers(next, prev)),
-      this.stores.pinnedPrimaryFingerprints.subscribe((next, prev) => this.reportChangedPeers(next, prev)),
-    ]
-
+    // An older client of this account may still publish the older node; while
+    // the set node is absent, its update starts the migration to the set node.
+    ctx.xmpp.subscribePEP(ctx.account.jid, LEGACY_VERIFICATIONS_NODE, () => {
+      void this.syncVerificationsFromServer()
+    })
     void this.verifyTrustStateOnInit()
+  }
+
+  /**
+   * Hold again the keys held while the migration waited for the next start,
+   * where the contact's new keys wait for a decision now and the key has no
+   * decision. Once the migration is done and its saved records hold them,
+   * they are no longer kept apart.
+   */
+  private async restoreDeferredHolds(ctx: PluginContext): Promise<void> {
+    const bytes = await ctx.storage.get(DEFERRED_HOLDS_STORAGE_KEY)
+    if (!bytes || this.ctx !== ctx) return
+    const holds = parseDeferredHolds(bytes).filter(
+      (h) => this.trustRecords.decisionOf(h.peer, h.fingerprint) === undefined && this.holdsNewKeys(h.peer),
+    )
+    this.trustRecords.setDecisions(holds)
+    if (this._deferredMigration) return
+    await this.trustRecords.flush()
+    const saved = await ctx.storage.get(TRUST_RECORDS_STORAGE_KEY)
+    const records = saved ? parseTrustRecords(saved) : null
+    if (this.ctx !== ctx || !records || holds.some((h) => records.peers[h.peer]?.[h.fingerprint]?.decision !== 'held')) return
+    await ctx.storage.delete(DEFERRED_HOLDS_STORAGE_KEY)
+  }
+
+  /**
+   * Keep the keys held while the migration waits for the next start, since
+   * the records of this session are not saved (see
+   * {@link restoreDeferredHolds}).
+   */
+  private saveDeferredHolds(): void {
+    const ctx = this.ctx
+    if (!ctx || !this._deferredMigration) return
+    const bytes = serializeDeferredHolds(this.trustRecords.decisions())
+    this._deferredHoldsWrite = this._deferredHoldsWrite
+      .then(() => ctx.storage.put(DEFERRED_HOLDS_STORAGE_KEY, bytes))
+      .catch((err: unknown) => {
+        ctx.logger.warn(`${this.pluginName()}: could not keep the held keys: ${formatError(err)}`)
+      })
+  }
+
+  /**
+   * Refuse a decision of the user while the migration from earlier versions
+   * waits for the next start: nothing would save it, and the next start would
+   * bring back what it replaced.
+   */
+  private refuseUnsavedTrust(): void {
+    if (!this._deferredMigration) return
+    throw new Error(
+      `${this.pluginName()}: trust decisions cannot be saved until the trust data of an earlier version is moved; restart the app to try again`,
+    )
+  }
+
+  /**
+   * Whether the stored trust state may be sealed and synchronised: a check
+   * this session found it sealed, or found nothing to check. Until then, and
+   * while it is `compromised` or waits for the key, nothing is sealed,
+   * published or applied from the server: a seal would vouch for records the
+   * check did not accept, and clear the warning without the user's word.
+   * Nor while the migration waits for the next start: nothing is stored yet.
+   */
+  private trustStateAccepted(): boolean {
+    const status = this._trustState.status
+    return this._trustCheckDone && !this._deferredMigration && (status === 'sealed' || status === 'uninitialized')
+  }
+
+  /** Seal a changed decision or sync version, and publish changed verified keys. */
+  private onTrustRecordsChanged(change: TrustRecordsChange): void {
+    if (change.loaded) return
+    const publish = change.verified && this._syncingFromRemoteCount === 0
+    if (!this.trustStateAccepted()) {
+      if (publish) this._verifiedChangedBeforeAccepted = true
+      return
+    }
+    if (change.decisions || change.syncVersion) this.scheduleTrustStateSeal()
+    if (publish) this.scheduleVerificationsPublish()
   }
 
   private scheduleTrustStateSeal(): void {
@@ -700,46 +913,148 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (this._trustStateSealTimeout !== null) clearTimeout(this._trustStateSealTimeout)
     this._trustStateSealTimeout = setTimeout(() => {
       this._trustStateSealTimeout = null
-      if (!this.ctx) return
+      if (!this.ctx || !this.trustStateAccepted()) return
       void this.sealTrustStateNow()
     }, 500)
   }
 
-  private async sealTrustStateNow(): Promise<void> {
+  /**
+   * Seal the records as they are now. The new seal replaces the earlier
+   * versions' seal, so its pending check goes. Best-effort: false when the
+   * seal was not written.
+   */
+  private async sealTrustStateNow(): Promise<boolean> {
     const ownPublicArmored = this.ownBundle?.publicArmored
-    if (!ownPublicArmored || !this.ctx) return
+    const ctx = this.ctx
+    if (!ownPublicArmored || !ctx) return false
     try {
-      const jid = this.ctx.account.jid
+      const jid = ctx.account.jid
+      const state = copyTrustState(this.trustRecords)
       await sealTrustState(
-        this.stores,
+        ctx.storage,
+        state,
         (plaintext, recipientKey) => this.encryptToRecipients(jid, [recipientKey], plaintext),
         ownPublicArmored,
       )
-      this.stores.trustStateStatus.set('sealed')
+      await ctx.storage.delete(LEGACY_SEAL_CHECK_STORAGE_KEY)
+      if (this.ctx === ctx) {
+        this._trustStateUnderCheck = state
+        this.setTrustState({ status: 'sealed' })
+      }
+      return true
     } catch {
       // Best-effort — key may be locked between scheduling and execution
+      return false
     }
   }
 
+  /**
+   * Check the stored trust state, then, once it is accepted, bring the
+   * verifications in line with this account's other devices.
+   */
   protected async verifyTrustStateOnInit(): Promise<void> {
+    const ctx = this.ctx
+    try {
+      if (!(await this.checkTrustStateSeals())) return
+    } catch (err) {
+      // Storage failed: no verdict this time. The next unlock or key
+      // recovery checks again.
+      ctx?.logger.warn(`${this.pluginName()}: trust-state check failed: ${formatError(err)}`)
+      return
+    }
+    this._trustCheckDone = true
+    await this.sealDecisionsMadeDuringCheck()
+    this.syncOnceTrustAccepted()
+  }
+
+  /**
+   * The stored trust state was just accepted: seal the decisions the user
+   * made while the check ran, or waited for the key.
+   */
+  private async sealDecisionsMadeDuringCheck(): Promise<void> {
+    const underCheck = this._trustStateUnderCheck
+    if (!this.trustStateAccepted() || !underCheck || sameTrustState(underCheck, this.trustRecords)) return
+    await this.sealTrustStateNow()
+  }
+
+  /**
+   * The trust state was just accepted: read what this account's other
+   * devices published, then publish verified keys changed while it was not.
+   */
+  private syncOnceTrustAccepted(): void {
+    if (!this._trustRecordsSyncUnsub || !this.trustStateAccepted()) return
+    void this.syncVerificationsFromServer().then(() => {
+      if (!this._verifiedChangedBeforeAccepted || !this.trustStateAccepted()) return
+      this._verifiedChangedBeforeAccepted = false
+      this.scheduleVerificationsPublish()
+    })
+  }
+
+  /** Give the stored trust state a verdict; false when a newer check, or none, decides. */
+  private async checkTrustStateSeals(): Promise<boolean> {
     const ownPublicArmored = this.ownBundle?.publicArmored
     const ownFingerprint = this.ownBundle?.fingerprint
-    if (!ownPublicArmored || !ownFingerprint || !this.ctx) return
-    const jid = this.ctx.account.jid
-    const { status, details } = await verifyTrustStateSeal(
-      this.stores,
-      (ciphertext, senderPub) => this.decryptWithOwnKey(jid, ciphertext, senderPub ? [senderPub] : []),
+    const ctx = this.ctx
+    if (!ownPublicArmored || !ownFingerprint || !ctx) return false
+    // A check started later (after an unlock or a recovery) decides; an older
+    // one still running gives no verdict, so it cannot overwrite a newer one.
+    const run = ++this._trustCheckRun
+    const stale = () => this.ctx !== ctx || run !== this._trustCheckRun
+    const jid = ctx.account.jid
+    const decrypt = (ciphertext: string, senderPub: string) =>
+      this.decryptWithOwnKey(jid, ciphertext, senderPub ? [senderPub] : [])
+
+    // The stored state is checked as it was read, or last sealed: decisions
+    // made since are the user's, sealed once the stored state is accepted.
+    const underCheck = this._trustStateUnderCheck ?? this.trustRecords
+
+    // The seal earlier versions wrote is checked first, against the data it
+    // covered, as they checked it, and the records against what the migration
+    // made of that data. Only an intact earlier state is sealed anew.
+    // A migration put off to the next start saved nothing: its check is the
+    // one it read this session, and no state is sealed or synchronised.
+    const deferred = this._deferredMigration
+    const legacyBytes = deferred ? null : await ctx.storage.get(LEGACY_SEAL_CHECK_STORAGE_KEY)
+    if (stale()) return false
+    if (legacyBytes || deferred?.check) {
+      const check = legacyBytes ? parseLegacySealCheck(legacyBytes) : (deferred?.check ?? null)
+      let legacyVerdict: TrustStateVerdict = check
+        ? await verifyLegacyTrustStateSeal(check, decrypt, ownPublicArmored, ownFingerprint, isSecretKeyUnavailableError)
+        : { status: 'compromised', details: ['Saved check of the earlier trust state is unreadable'] }
+      if (stale()) return false
+      if (check && legacyVerdict.status !== 'awaiting-key' && legacyVerdict.status !== 'compromised') {
+        const details = legacyRecordsMismatch(check, underCheck)
+        if (details.length > 0) legacyVerdict = { status: 'compromised', details }
+      }
+      const reason = legacyVerdict.details?.length ? ` (${legacyVerdict.details.join('; ')})` : ''
+      ctx.logger.info(`Earlier trust-state verdict: ${legacyVerdict.status}${reason}`)
+      if (legacyVerdict.status === 'awaiting-key' || legacyVerdict.status === 'compromised') {
+        this.setTrustState(legacyVerdict)
+        return true
+      }
+      if (deferred) return false
+      await this.sealTrustStateNow()
+      return !stale()
+    }
+    if (deferred) return false
+
+    const verdict = await verifyTrustStateSeal(
+      ctx.storage,
+      underCheck,
+      decrypt,
       ownPublicArmored,
       ownFingerprint,
       isSecretKeyUnavailableError,
     )
-    const reason = details && details.length ? ` (${details.join('; ')})` : ''
-    this.ctx.logger.info(`Trust-state verdict: ${status}${reason}`)
-    if (status === 'pending-seal') {
+    if (stale()) return false
+    const reason = verdict.details?.length ? ` (${verdict.details.join('; ')})` : ''
+    ctx.logger.info(`Trust-state verdict: ${verdict.status}${reason}`)
+    if (verdict.status === 'pending-seal') {
       await this.sealTrustStateNow()
-      return
+      return !stale()
     }
-    this.stores.trustStateStatus.set(status, details)
+    this.setTrustState(verdict)
+    return true
   }
 
   /**
@@ -755,31 +1070,123 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     void this.verifyTrustStateOnInit()
   }
 
+  /** The user accepts the current trust state after a `compromised` verdict: seal it. */
   async resealTrustState(): Promise<void> {
+    this.refuseUnsavedTrust()
     const ownPublicArmored = this.ownBundle?.publicArmored
-    if (!ownPublicArmored || !this.ctx) return
-    const jid = this.ctx.account.jid
-    await clearCompromisedAndReseal(
-      this.stores,
+    const ctx = this.ctx
+    if (!ownPublicArmored || !ctx) return
+    const jid = ctx.account.jid
+    await ctx.storage.delete(LEGACY_SEAL_CHECK_STORAGE_KEY)
+    const state = copyTrustState(this.trustRecords)
+    await sealTrustState(
+      ctx.storage,
+      state,
       (plaintext, recipientKey) => this.encryptToRecipients(jid, [recipientKey], plaintext),
       ownPublicArmored,
     )
+    if (this.ctx !== ctx) return
+    this._trustStateUnderCheck = state
+    this.setTrustState({ status: 'sealed' })
+    this._trustCheckDone = true
+    await this.sealDecisionsMadeDuringCheck()
+    this.syncOnceTrustAccepted()
+  }
+
+  // ---------------------------------------------------------------------------
+  // Trust view for the app: verdict, own-key conflict and per-key decisions
+  // ---------------------------------------------------------------------------
+
+  /** The trust-state verdict for this session. The same object until it changes. */
+  getTrustState(): TrustStateVerdict {
+    return this._trustState
+  }
+
+  /** The conflict between our key and the one the server publishes, if any. */
+  getOwnKeyConflict(): OwnKeyConflict | null {
+    return this._ownKeyConflict
+  }
+
+  /**
+   * The user's decision about each key of `peer`, keyed by upper-case
+   * fingerprint. The same object until one of them changes.
+   */
+  getKeyDecisions(peer: BareJID): Readonly<Record<string, KeyDecision>> {
+    return this.trustRecords.decisionsView(peer)
+  }
+
+  /**
+   * Hear of a change in the trust view: the listener gets the contacts whose
+   * key decisions changed, or `null` when the verdict or the own-key conflict
+   * changed. It runs synchronously inside the change.
+   */
+  subscribeTrustView(listener: (peers: readonly string[] | null) => void): () => void {
+    this.trustViewListeners.add(listener)
+    return () => {
+      this.trustViewListeners.delete(listener)
+    }
+  }
+
+  private emitTrustView(peers: readonly string[] | null): void {
+    for (const listener of [...this.trustViewListeners]) {
+      try {
+        listener(peers)
+      } catch {
+        // A listener's failure must not stop the others.
+      }
+    }
+  }
+
+  private setTrustState(verdict: TrustStateVerdict): void {
+    const same =
+      verdict.status === this._trustState.status &&
+      JSON.stringify(verdict.details ?? []) === JSON.stringify(this._trustState.details ?? [])
+    if (same) return
+    this._trustState = verdict
+    this.emitTrustView(null)
+  }
+
+  private setOwnKeyConflict(conflict: OwnKeyConflict | null): void {
+    if (JSON.stringify(conflict) === JSON.stringify(this._ownKeyConflict)) return
+    this._ownKeyConflict = conflict
+    this.emitTrustView(null)
   }
 
   async shutdown(): Promise<void> {
+    // First stop what changes the records: a publish or a sync that changed
+    // the sync version while the last seal is written would leave the seal
+    // behind the records, and the next start would report that change as
+    // made behind the plugin's back. Work in flight sees itself outdated.
     this.ownKeyOperations++
     if (this._publishVerificationTimeout !== null) {
       clearTimeout(this._publishVerificationTimeout)
       this._publishVerificationTimeout = null
     }
+    this._trustRecordsSyncUnsub?.()
+    this._trustRecordsSyncUnsub = null
     if (this._trustStateSealTimeout !== null) {
       clearTimeout(this._trustStateSealTimeout)
       this._trustStateSealTimeout = null
+      // A change still waiting for its seal is sealed before the account
+      // leaves: the next start would otherwise report it as made behind the
+      // plugin's back.
+      if (this.trustStateAccepted()) await this.sealTrustStateNow()
     }
-    this._verificationStoreUnsub?.()
-    this._verificationStoreUnsub = null
-    this._trustStoreUnsubs.forEach((u) => u())
-    this._trustStoreUnsubs = []
+    // The keys held while the migration waits are kept before the account leaves.
+    if (this._deferredMigration) await this._deferredHoldsWrite
+    // Forget this account's trust view; the report listener still tells the
+    // manager and the app which contacts changed, then goes.
+    this.trustRecords.detach()
+    this.trustRecords.onPersistError = null
+    this._trustRecordsReportUnsub?.()
+    this._trustRecordsReportUnsub = null
+    this._ownKeyConflict = null
+    this._trustState = { status: 'uninitialized' }
+    this._trustCheckDone = false
+    this._verifiedChangedBeforeAccepted = false
+    this._trustStateUnderCheck = null
+    this._deferredMigration = null
+    this.emitTrustView(null)
     this.ownBundle = null
     if (this.ctx) this.notifyKeysetChanged(this.ctx.account.jid)
     this.peerKeys.clear()
@@ -818,7 +1225,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // A locked or undecided identity is published by the unlock or recovery path.
     if (!this.ctx || !bundle) return
     await this.publishOwnIdentity(bundle)
-    if (this._verificationStoreUnsub) await this.syncVerificationsFromServer()
+    if (this._trustRecordsSyncUnsub) await this.syncVerificationsFromServer()
   }
 
   /** Drop all session-scoped keyset freshness/health state. */
@@ -902,7 +1309,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (verdict === 'outdated') return
     if (verdict === 'conflict') {
       ctx.logger.warn(
-        `${this.pluginName()}: own key conflict detected (${this.stores.ownKeyConflict.get()?.kind}); ` +
+        `${this.pluginName()}: own key conflict detected (${this._ownKeyConflict?.kind}); ` +
           `encryption blocked until resolved`,
       )
       return
@@ -1084,7 +1491,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         )
       }
 
-      this.stores.ownKeyConflict.clear()
+      this.setOwnKeyConflict(null)
 
       // The replacement identity is usable now; the retired [E] subkey is kept
       // locally so history stays decryptable. Re-run deferred decrypts so any
@@ -1587,7 +1994,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return this.ownKeyOperation(async () => {
       await this.publishOwnPublicKeyData(bundle)
       await this.publishOwnPublicKeyMetadata(bundle)
-      this.stores.ownKeyConflict.clear()
+      this.setOwnKeyConflict(null)
     })
   }
 
@@ -1606,10 +2013,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         sorted[0].fingerprint,
         { fromServer: true },
       )
-      this.stores.ownKeyConflict.clear()
+      this.setOwnKeyConflict(null)
       return info
     }
-    this.stores.ownKeyConflict.clear()
+    this.setOwnKeyConflict(null)
     return result
   }
 
@@ -1617,74 +2024,120 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   // Cross-device verification sync
   // ---------------------------------------------------------------------------
 
+  /**
+   * Bring the verified keys in line with what this account's other devices
+   * published (see `verificationSync.ts`). The set node wins whenever it
+   * exists. When it is absent, the older node is read, applied under the
+   * same version rule, and the result is published to the set node; the set
+   * node is then read again, in case another device migrated at the same
+   * time, and its winner applied.
+   */
   private async syncVerificationsFromServer(): Promise<void> {
-    if (!this.ownBundle || !this.ctx) return
-    this._syncingFromRemoteCount++
+    // Runs only while the subscriptions are active: not once shutdown began.
+    if (!this._trustRecordsSyncUnsub || !this.ownBundle || !this.ctx || !this.trustStateAccepted()) return
     const ctx = this.ctx
     const ownPublicArmored = this.ownBundle.publicArmored
     const ownFingerprint = this.ownBundle.fingerprint
     const current = this.ownKeyFreshness(this.ownBundle)
+    const decrypt = (ciphertext: string, senderKey: string) =>
+      this.decryptWithOwnKey(ctx.account.jid, ciphertext, senderKey ? [senderKey] : [])
     try {
-      const remote = await fetchVerificationsFromServer(
-        ctx,
-        (ciphertext, senderKey) =>
-          this.decryptWithOwnKey(ctx.account.jid, ciphertext, senderKey ? [senderKey] : []),
-        ctx.account.jid,
-        ownPublicArmored,
-        ownFingerprint,
-      )
+      const read = await fetchVerificationSets(ctx, decrypt, ctx.account.jid, ownPublicArmored, ownFingerprint)
       // A list read before a log out or a change of our key is not applied:
-      // the stores now belong to that change, or to the next account. The
+      // the records now belong to that change, or to the next account. The
       // next sync applies the list again.
-      if (!remote || !current()) return
-      const local = this.stores.verifiedPeers.getAll()
-      const plan = planVerificationUpdate(remote, local, loadAppliedVerificationsVersion())
-      if (!plan.apply) return
-      for (const { jid, fingerprint } of plan.toSet) this.stores.verifiedPeers.set(jid, fingerprint)
-      for (const jid of plan.toClear) this.stores.verifiedPeers.clear(jid)
-      saveAppliedVerificationsVersion(plan.version)
-      this.scheduleTrustStateSeal()
+      if (!current()) return
+      if (read.kind === 'unreadable') return
+      if (read.kind === 'snapshot') {
+        this.trustRecords.adoptSets()
+        this.applyVerificationSnapshot(read)
+        return
+      }
+      // Once the set node was read or written here, the older node is never
+      // read again: an older client may still publish a higher version there.
+      const legacy = this.trustRecords.setsAdopted()
+        ? null
+        : await fetchLegacyVerifications(ctx, decrypt, ctx.account.jid, ownPublicArmored, ownFingerprint)
+      if (!current()) return
+      if (legacy) this.applyVerificationSnapshot(legacy)
+      // Nothing verified anywhere, and the set node never used: nothing to
+      // migrate, and the first verification publishes it. A set node used
+      // before and now missing is published again, even empty, so the older
+      // node never becomes the list other devices start from.
+      if (!legacy && !this.trustRecords.setsAdopted() && Object.keys(this.trustRecords.verifiedSets()).length === 0) return
+      await this.publishVerificationSetsNow(ctx, current)
+      const again = await fetchVerificationSets(ctx, decrypt, ctx.account.jid, ownPublicArmored, ownFingerprint)
+      if (!current()) return
+      if (again.kind === 'snapshot') this.applyVerificationSnapshot(again)
     } catch {
-      // Non-blocking — local store is always the source of truth.
+      // Non-blocking — local records are always the source of truth.
+    }
+  }
+
+  /**
+   * Apply a snapshot newer than every version applied or published here; an
+   * older or equal one is a replay and changes nothing. A contact verified for
+   * the first time keeps using the keys it already used (see
+   * {@link approveUnrecordedActiveKeys}).
+   */
+  private applyVerificationSnapshot(remote: VerificationSetsSnapshot): void {
+    if (remote.version <= this.trustRecords.syncVersion()) return
+    const before = new Set(Object.keys(this.trustRecords.verifiedSets()))
+    this._syncingFromRemoteCount++
+    try {
+      this.recordDecisions(planVerifiedSetsUpdate(remote.sets, this.trustRecords.verifiedSets()))
+      for (const peer of Object.keys(remote.sets)) {
+        if (!before.has(peer)) this.approveUnrecordedActiveKeys(peer)
+      }
+      this.trustRecords.setSyncVersion(remote.version)
     } finally {
       this._syncingFromRemoteCount--
     }
   }
 
-  private scheduleVerificationsPublish(verifications: Record<string, string>): void {
+  private scheduleVerificationsPublish(): void {
     if (this._publishVerificationTimeout !== null) {
       clearTimeout(this._publishVerificationTimeout)
     }
+    // Not once shutdown began, as for the sync above.
+    if (!this._trustRecordsSyncUnsub) return
     this._publishVerificationTimeout = setTimeout(() => {
       this._publishVerificationTimeout = null
-      if (!this.ownBundle || !this.ctx) return
       const ctx = this.ctx
-      const ownPublicArmored = this.ownBundle.publicArmored
-      // Reserve the next version above the highest we've applied/published.
-      // Real versions start at 1; 0 is reserved for legacy (v1) snapshots.
-      const nextVersion = Math.max(loadAppliedVerificationsVersion(), 0) + 1
-      // Save the reservation before publishing, never after. A newer list from
-      // another device can be applied while this publish is in flight; saving
-      // when the publish resolves would lower the stored version back to this
-      // one, and the server could then replay the older signed lists in
-      // between. A version a failed publish leaves unused is a harmless gap.
-      // The trust-state seal records this version: the store change that
-      // scheduled this publish also scheduled a seal, with the same delay and
-      // after it, so that seal runs after this save.
-      saveAppliedVerificationsVersion(nextVersion)
-      void publishVerificationsToServer(
-        ctx,
-        (plaintext, recipientKey) =>
-          this.encryptToRecipients(ctx.account.jid, [recipientKey], plaintext),
-        ownPublicArmored,
-        verifications,
-        nextVersion,
-      )
-        .then(() => {
-          this.scheduleTrustStateSeal()
-        })
-        .catch(() => {})
+      if (!this.ownBundle || !ctx || !this._trustRecordsSyncUnsub) return
+      void this.publishVerificationSetsNow(ctx, this.ownKeyFreshness(this.ownBundle)).catch(() => {})
     }, 500)
+  }
+
+  /**
+   * Publish the verified keys as they are now, under the next version.
+   *
+   * The version is reserved and saved before publishing, never after. A newer
+   * list from another device can be applied while this publish is in flight;
+   * saving when the publish resolves would lower the stored version back to
+   * this one, and the server could then replay the older signed lists in
+   * between. A version a failed publish leaves unused is a harmless gap. Real
+   * versions start at 1; 0 is the older node's unversioned payload.
+   */
+  private async publishVerificationSetsNow(ctx: PluginContext, current: OwnKeyFreshness): Promise<void> {
+    const ownPublicArmored = this.ownBundle?.publicArmored
+    if (!ownPublicArmored || !current()) return
+    if (!this.trustStateAccepted()) {
+      this._verifiedChangedBeforeAccepted = true
+      return
+    }
+    const nextVersion = Math.max(this.trustRecords.syncVersion(), 0) + 1
+    this.trustRecords.setSyncVersion(nextVersion)
+    await this.trustRecords.flush()
+    if (!current()) return
+    await publishVerificationSets(
+      ctx,
+      (plaintext, recipientKey) => this.encryptToRecipients(ctx.account.jid, [recipientKey], plaintext),
+      ownPublicArmored,
+      this.trustRecords.verifiedSets(),
+      nextVersion,
+    )
+    if (current()) this.trustRecords.adoptSets()
   }
 
   // ---------------------------------------------------------------------------
@@ -1769,10 +2222,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const settle = (conflict: OwnKeyConflict | null): OwnKeyCheckVerdict => {
       if (!current()) return 'outdated'
       if (!conflict) {
-        this.stores.ownKeyConflict.clear()
+        this.setOwnKeyConflict(null)
         return 'consistent'
       }
-      this.stores.ownKeyConflict.record(conflict)
+      this.setOwnKeyConflict(conflict)
       return 'conflict'
     }
 
@@ -2164,7 +2617,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       ...retainedReannounced,
     ])
     next = markDepartedInactive(next, stillAnnounced, nowIso)
-    next = capUnverifiedInactive(next, (fp) => this.stores.verifiedPeers.isVerified(peer, fp), UNVERIFIED_INACTIVE_CAP)
+    next = capUnverifiedInactive(next, (fp) => this.trustRecords.isVerified(peer, fp), UNVERIFIED_INACTIVE_CAP)
     if (!this.isLatestPeerRefresh(peer, generation)) return this.cachedPeerSupport(peer)
     this.setPeerCerts(peer, next)
     this.recordKeysetHealth(peer, { incomplete: false, rejections })
@@ -2315,10 +2768,30 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   private setPeerCerts(peer: BareJID, certs: CachedPeerCert[]): void {
+    const waitingBefore = this.waitingKeys(peer)
     const changed = !peerCertSetsEqual(this.peerKeys.get(peer) ?? [], certs)
     this.peerKeys.set(peer, certs)
     this.persistPeerKeyCache()
+    // A key waiting for a decision is saved as held, so its hold does not
+    // depend on this cache: the cache drops withdrawn keys past its cap and
+    // can be lost, and the key must still wait if its contact loses its last
+    // verified key and announces it again. The trust-state check accepts a
+    // hold saved before the state could be sealed (see `withoutHoldsAddedSince`).
+    this.holdWaitingKeys([...waitingBefore, ...this.waitingKeys(peer)])
     if (changed) this.notifyKeysetChanged(peer)
+  }
+
+  /** Save keys waiting for a decision as held, also while the migration waits. */
+  private holdWaitingKeys(changes: readonly KeyDecisionChange[]): void {
+    this.trustRecords.setDecisions(changes)
+    this.saveDeferredHolds()
+  }
+
+  /** The keys of `peer` waiting for a decision, as `held` decisions. */
+  private waitingKeys(peer: BareJID): KeyDecisionChange[] {
+    return this.keyStandings(peer)
+      .filter(({ standing }) => standing.notUsedReason === 'awaiting-decision')
+      .map(({ cert }) => ({ peer, fingerprint: cert.fingerprint, decision: 'held' }))
   }
 
   /**
@@ -2362,10 +2835,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   /**
    * Record a peer's definitive keyset health from a definitive refresh:
-   * `incomplete` reconciles the `keysetIncomplete` set; `rejections` are mirrored
-   * to the persisted cert-rejection store the app shield reads (`incomplete` and
-   * `rejections` are independent and can coexist). The in-memory `getKeysetHealth`
-   * accessor for the reactive shield lands with Stage 2.
+   * `incomplete` reconciles the `keysetIncomplete` set; `rejections` replace the
+   * contact's saved certificate rejections, which its identity listing shows
+   * (`incomplete` and `rejections` are independent and can coexist).
    */
   private recordKeysetHealth(
     peer: BareJID,
@@ -2373,9 +2845,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   ): void {
     if (health.incomplete) this.keysetIncomplete.add(peer)
     else this.keysetIncomplete.delete(peer)
-    if (health.rejections.length > 0) this.stores.certRejections.record(peer, health.rejections)
-    else this.stores.certRejections.clear(peer)
-    this.reportIdentitiesChanged(peer)
+    // The records report the contact when its rejections change.
+    this.trustRecords.setRejections(peer, health.rejections)
   }
 
   /**
@@ -2389,13 +2860,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * definitive path, which HAS seen the whole keyset.)
    */
   private mergeKeysetRejections(peer: BareJID, observed: CertRejection[]): void {
-    const prior = this.stores.certRejections.get(peer)
+    const prior = this.trustRecords.rejectionsOf(peer)
     if (prior.length === 0 && observed.length === 0) return
     const byFingerprint = new Map<string, CertRejection>()
     for (const r of prior) byFingerprint.set(normalizeFingerprint(r.fingerprint), r)
     for (const r of observed) byFingerprint.set(normalizeFingerprint(r.fingerprint), r)
-    this.stores.certRejections.record(peer, [...byFingerprint.values()])
-    this.reportIdentitiesChanged(peer)
+    this.trustRecords.setRejections(peer, [...byFingerprint.values()])
   }
 
   private persistPeerKeyCache(): void {
@@ -2421,7 +2891,83 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * {@link ensureFreshKeyset} populates it before the first send.
    */
   private getOwnAnnouncedPublics(): string[] {
-    return this.getActivePeerPublics(getBareJid(this.requireCtx().account.jid))
+    return this.getUsedPeerPublics(getBareJid(this.requireCtx().account.jid))
+  }
+
+  /**
+   * How each active key of `peer` stands: verified, approved, used without a
+   * decision, waiting for one, or refused. A verified contact's keys without a
+   * decision wait; our own account's never do, as before (#1452 covers
+   * contacts).
+   */
+  private activeKeyStandings(peer: BareJID): Array<{ cert: CachedPeerCert; standing: KeyStanding }> {
+    return this.keyStandings(peer).filter((k) => k.cert.active)
+  }
+
+  /** How each key of `peer` we know stands, including keys it no longer announces. */
+  private keyStandings(peer: BareJID): Array<{ cert: CachedPeerCert; standing: KeyStanding }> {
+    const holdsNewKeys = this.holdsNewKeys(peer)
+    return (this.peerKeys.get(peer) ?? [])
+      .map((cert) => ({ cert, standing: keyStanding(this.trustRecords.decisionOf(peer, cert.fingerprint), holdsNewKeys) }))
+  }
+
+  /**
+   * Whether a key of `peer` with no decision waits for one: the contact has a
+   * verified key, or the values the migration could not claim yet may have
+   * verified it (see {@link _deferredMigration}).
+   */
+  private holdsNewKeys(peer: BareJID): boolean {
+    if (this.ctx && peer === getBareJid(this.ctx.account.jid)) return false
+    return this.trustRecords.hasVerified(peer) || this._deferredMigration?.unresolved.has(peer) === true
+  }
+
+  /** Active certs encrypt() sends to: those neither waiting for a decision nor refused. */
+  private getUsedPeerPublics(peer: BareJID): string[] {
+    return this.activeKeyStandings(peer)
+      .filter((k) => k.standing.used)
+      .map((k) => k.cert.publicArmored)
+  }
+
+  /**
+   * A contact verified for the first time keeps using the keys it already
+   * used: each active key without a decision is recorded as approved, so only
+   * keys that appear later wait for a decision.
+   */
+  private approveUnrecordedActiveKeys(peer: BareJID): void {
+    const ownJid = this.ctx ? getBareJid(this.ctx.account.jid) : null
+    if (peer === ownJid) return
+    const changes = (this.peerKeys.get(peer) ?? [])
+      .filter((c) => c.active && this.trustRecords.decisionOf(peer, c.fingerprint) === undefined)
+      .map((c) => ({ peer, fingerprint: c.fingerprint, decision: 'tofu' as const }))
+    this.trustRecords.setDecisions(changes)
+  }
+
+  /**
+   * Record decisions about contacts' keys. A key waiting for a decision keeps
+   * waiting when they leave its contact with no verified key: it is recorded
+   * as `held`, so only the user's own decision about it lets it receive
+   * messages. That covers a key the contact no longer announces too, so it
+   * stays held if the contact announces it again.
+   */
+  private recordDecisions(changes: readonly KeyDecisionChange[]): void {
+    const held: KeyDecisionChange[] = []
+    for (const peer of new Set(changes.map((c) => c.peer))) {
+      const after: Record<string, KeyDecision> = { ...this.trustRecords.decisionsView(peer) }
+      for (const change of changes) {
+        const fp = change.peer === peer ? canonicalFingerprint(change.fingerprint) : null
+        if (!fp) continue
+        if (change.decision === null) delete after[fp]
+        else after[fp] = change.decision
+      }
+      if (Object.values(after).includes('verified')) continue
+      for (const { cert, standing } of this.keyStandings(peer)) {
+        const fp = canonicalFingerprint(cert.fingerprint)
+        if (fp && standing.notUsedReason === 'awaiting-decision' && !(fp in after)) {
+          held.push({ peer, fingerprint: fp, decision: 'held' })
+        }
+      }
+    }
+    this.trustRecords.setDecisions([...changes, ...held])
   }
 
   /** Active (still-announced) validated fingerprints for a peer. */
@@ -2457,34 +3003,6 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return this.isCurrentPeerKeysetFresh(jid) ? 'ok' : 'incomplete'
   }
 
-  async acceptPeerKeyChange(peer: BareJID, asVerified: boolean): Promise<void> {
-    const alert = this.stores.keyChangeAlerts.get(peer)
-    if (!alert) return
-    const targetFp = alert.currentFingerprint
-    const previousFp = alert.previousFingerprint
-
-    this.stores.verifiedPeers.clear(peer)
-    this.stores.pinnedPrimaryFingerprints.set(peer, targetFp)
-
-    const result = await this.refetchAndCachePeerKey(peer)
-
-    if (!result.supported) {
-      this.stores.pinnedPrimaryFingerprints.set(peer, previousFp)
-      throw new Error(`acceptPeerKeyChange: failed to fetch new key for ${peer}; pin rolled back`)
-    }
-
-    const postFetchAlert = this.stores.keyChangeAlerts.get(peer)
-    if (!postFetchAlert || postFetchAlert.previousFingerprint !== targetFp) {
-      this.stores.keyChangeAlerts.clear(peer)
-    }
-
-    if (asVerified) {
-      if (this.getPeerFingerprints(peer).some((fp) => fp === targetFp)) {
-        this.stores.verifiedPeers.set(peer, targetFp)
-      }
-    }
-  }
-
   // ---------------------------------------------------------------------------
   // E2EEPlugin interface — conversation & encrypt/decrypt
   // ---------------------------------------------------------------------------
@@ -2502,11 +3020,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   async encrypt(handle: ConversationHandle, plaintext: Uint8Array): Promise<EncryptedPayload> {
     const ctx = this.requireCtx()
-    if (this.stores.ownKeyConflict.get()) {
+    if (this._ownKeyConflict) {
       throw new E2EEPluginError(
         'permanent',
         'own-key-conflict',
-        `${this.pluginName()}: own key conflict (${this.stores.ownKeyConflict.get()!.kind}) must be resolved before encrypting`,
+        `${this.pluginName()}: own key conflict (${this._ownKeyConflict.kind}) must be resolved before encrypting`,
       )
     }
     const peer = extractPeer(handle)
@@ -2525,13 +3043,26 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         `${this.pluginName()}: ${peer}'s announced keyset is not fresh/complete — will retry`,
       )
     }
-    // Fan out to EVERY active (still-announced) validated peer cert (#1059).
-    const peerPublics = this.getActivePeerPublics(peer)
-    if (peerPublics.length === 0) {
+    // Fan out to every active (still-announced) validated peer cert the user
+    // has not refused and that is not waiting for their decision (#1059, #1452).
+    if (this.getActivePeerPublics(peer).length === 0) {
       throw new E2EEPluginError(
         'transient',
         'peer-key-missing',
         `${this.pluginName()}: no cached public key for ${peer} — probe first`,
+      )
+    }
+    const peerPublics = this.getUsedPeerPublics(peer)
+    if (peerPublics.length === 0) {
+      // Every key is held or refused. Sending to none of them would not be
+      // encryption, and falling back to plaintext would leak the message.
+      const waiting = this.activeKeyStandings(peer).some((k) => k.standing.notUsedReason === 'awaiting-decision')
+      throw new E2EEPluginError(
+        'permanent',
+        waiting ? 'peer-keys-awaiting-decision' : 'peer-keys-distrusted',
+        waiting
+          ? `${this.pluginName()}: every key of ${peer} waits for the user's decision`
+          : `${this.pluginName()}: the user refused every key of ${peer}`,
       )
     }
 
@@ -2841,72 +3372,74 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   private async evaluatePeerTrust(peer: BareJID): Promise<TrustState> {
-    const activeFps = this.getPeerFingerprints(peer)
-    if (activeFps.length === 0) return 'unknown'
-    // encrypt() fans out to every active cert, so the peer is verified only
-    // when every active cert is. A verified contact who gains an unverified
-    // key drops to tofu (per-key verification is #1452).
-    return activeFps.every((fp) => this.stores.verifiedPeers.isVerified(peer, fp)) ? 'verified' : 'tofu'
+    const standings = this.activeKeyStandings(peer)
+    if (standings.length === 0) return 'unknown'
+    // encrypt() fans out to every used key, so the peer is verified only when
+    // every used key is. Keys held for a decision or refused receive nothing.
+    // A contact whose keys are all held or refused still counts as having
+    // established trust, so a send is never downgraded to plaintext.
+    const used = standings.filter((k) => k.standing.used)
+    if (used.length === 0) return 'tofu'
+    return used.every((k) => k.standing.trust === 'verified') ? 'verified' : 'tofu'
   }
 
   // ---------------------------------------------------------------------------
   // Accessors (called by UI layer)
   // ---------------------------------------------------------------------------
 
-  /** Tell the app a peer's keyset changed, and the manager that its identities did. */
+  /** Tell the manager a peer's keyset changed, so its identities did. */
   private notifyKeysetChanged(jid: BareJID): void {
-    this.stores.peerKeysets.notifyChanged(jid)
-    this.ctx?.reportPeerIdentitiesChanged?.(jid)
+    this.reportIdentitiesChanged(jid)
   }
 
-  /** The manager hears of a changed trust decision, rejection or pin as well as a changed keyset. */
+  /** The manager hears of a changed trust decision or rejection as well as a changed keyset. */
   private reportIdentitiesChanged(jid: BareJID): void {
     this.ctx?.reportPeerIdentitiesChanged?.(jid)
   }
 
-  /** Report each peer whose entry differs between two store maps. */
-  private reportChangedPeers(next: Readonly<Record<string, string>>, prev: Readonly<Record<string, string>>): void {
-    for (const jid of new Set([...Object.keys(next), ...Object.keys(prev)])) {
-      if (next[jid] !== prev[jid]) this.reportIdentitiesChanged(jid)
-    }
-  }
-
   /**
-   * One identity per active announced key, then each rejected certificate as
-   * an unused one. Trust is `verified` when the key equals the contact's saved
-   * verified fingerprint, else `tofu`; every active key stays used. The store
-   * holds one fingerprint per contact, so Verify and Remove verification are
-   * allowed only for a contact with exactly one key.
+   * One identity per active announced key, then each verified key the contact
+   * no longer announces, then each rejected certificate, as unused ones.
+   *
+   * An active key stands by the user's decision about it (see
+   * `keyStanding`): verified, approved (`tofu`) or refused (`untrusted`, not
+   * used). A key without a decision is used for a contact never verified, and
+   * waits for a decision (`awaiting-decision`, not used) for a verified one,
+   * since a verified contact gaining a key must not have it trusted silently.
    */
   async listPeerIdentities(peer: BareJID): Promise<PeerIdentity[]> {
-    const active = this.getPeerFingerprints(peer)
-    const out: PeerIdentity[] = active.map((fp) => {
-      const verified = this.stores.verifiedPeers.isVerified(peer, fp)
-      const allowedDecisions: IdentityTrustDecision[] = active.length === 1 ? [verified ? 'tofu' : 'verified'] : []
-      const isNew = !verified && this.stores.pinnedPrimaryFingerprints.isNew?.(peer) === true
-      return { id: fp, fingerprint: fp, trust: verified ? 'verified' : 'tofu', usedForEncryption: true, allowedDecisions, ...(isNew ? { isNew } : {}) }
-    })
-    // A saved verification that no announced key matches belongs to a key the contact no longer
-    // announces. List it unused so the aggregate can tell a replaced verified key from a
-    // contact never verified.
-    const savedVerified = this.stores.verifiedPeers.getAll()[peer]
-    if (savedVerified && active.length > 0 && !active.some((fp) => normalizeFingerprint(fp) === normalizeFingerprint(savedVerified))) {
-      out.push({
-        id: savedVerified,
-        fingerprint: savedVerified,
-        trust: 'verified',
-        usedForEncryption: false,
-        notUsedReason: 'no-key',
-        allowedDecisions: [],
-      })
+    const out: PeerIdentity[] = this.activeKeyStandings(peer).map(({ cert, standing }) => ({
+      id: cert.fingerprint,
+      fingerprint: cert.fingerprint,
+      trust: standing.trust,
+      usedForEncryption: standing.used,
+      ...(standing.notUsedReason ? { notUsedReason: standing.notUsedReason } : {}),
+      allowedDecisions: [...standing.allowedDecisions],
+    }))
+    const listed = (fp: string) => out.findIndex((i) => normalizeFingerprint(i.id) === normalizeFingerprint(fp))
+    // A verified key the contact no longer announces: listed unused, so the
+    // aggregate can tell a replaced verified key from a contact never
+    // verified, and so the user can remove that verification.
+    if (out.length > 0) {
+      for (const fp of this.trustRecords.verifiedFingerprints(peer)) {
+        if (listed(fp) >= 0) continue
+        out.push({
+          id: fp,
+          fingerprint: fp,
+          trust: 'verified',
+          usedForEncryption: false,
+          notUsedReason: 'no-key',
+          allowedDecisions: ['tofu'],
+        })
+      }
     }
-    for (const rejection of this.stores.certRejections.get(peer)) {
-      if (active.some((fp) => normalizeFingerprint(fp) === normalizeFingerprint(rejection.fingerprint))) continue
-      // One identity per key: a rejected certificate that is also the saved verified key keeps
-      // its verification and gains the rejection's reason and detail.
-      const same = out.findIndex((i) => normalizeFingerprint(i.id) === normalizeFingerprint(rejection.fingerprint))
+    for (const rejection of this.trustRecords.rejectionsOf(peer)) {
+      // One identity per key: a rejected certificate that is also a verified key no longer
+      // announced keeps its verification and gains the rejection's reason and detail.
+      const same = listed(rejection.fingerprint)
       const problem = { code: rejection.code, detail: rejection.detail }
       if (same >= 0) {
+        if (out[same].usedForEncryption) continue
         out[same] = { ...out[same], notUsedReason: 'invalid-key', problem }
         continue
       }
@@ -2924,23 +3457,36 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   /**
-   * Writes the same record as the app's Verify and Remove verification:
-   * `verified` saves the key's fingerprint for the contact, `tofu` clears it.
-   * Only the decisions {@link listPeerIdentities} allows are applied.
+   * Record the user's decision about one key. `verified` and `tofu` (approve,
+   * or remove a verification) and `untrusted` (refuse) are allowed as
+   * {@link listPeerIdentities} lists them; a decision the key already has
+   * changes nothing. Removing the verification of a key the contact no longer
+   * announces forgets that key. A contact verified for the first time keeps
+   * using the keys it already used.
    */
   async setIdentityTrust(peer: BareJID, id: string, decision: IdentityTrustDecision): Promise<void> {
+    this.refuseUnsavedTrust()
     const identities = await this.listPeerIdentities(peer)
     const identity = identities.find((i) => normalizeFingerprint(i.id) === normalizeFingerprint(id))
     if (!identity) throw new Error(`${this.pluginName()}: unknown identity for ${peer}`)
-    // Idempotent for a one-key contact: a decision the key already satisfies changes nothing.
-    // A contact with several keys allows no decision at all.
-    const oneKey = identities.filter((i) => i.usedForEncryption).length === 1
-    if (oneKey && ((decision === 'verified' && identity.trust === 'verified') || (decision === 'tofu' && identity.trust === 'tofu'))) return
+    const recorded = this.trustRecords.decisionOf(peer, identity.fingerprint)
+    // A decision the key already has, recorded or not, changes nothing.
+    if (recorded === decision || (recorded === undefined && identity.trust === decision)) return
     if (!identity.allowedDecisions.includes(decision)) {
       throw new Error(`${this.pluginName()}: decision ${decision} is not allowed for this identity`)
     }
-    if (decision === 'verified') this.stores.verifiedPeers.set(peer, identity.fingerprint)
-    else this.stores.verifiedPeers.clear(peer)
+    const announced = this.getPeerFingerprints(peer).some(
+      (fp) => normalizeFingerprint(fp) === normalizeFingerprint(identity.fingerprint),
+    )
+    if (!announced) {
+      // Only a verified key the contact no longer announces takes a decision
+      // here, and only the removal of its verification: forget the key.
+      this.recordDecisions([{ peer, fingerprint: identity.fingerprint, decision: null }])
+      return
+    }
+    const firstVerification = decision === 'verified' && !this.trustRecords.hasVerified(peer)
+    this.recordDecisions([{ peer, fingerprint: identity.fingerprint, decision }])
+    if (firstVerification) this.approveUnrecordedActiveKeys(peer)
   }
 
   getOwnFingerprint(): string | null {
@@ -2964,14 +3510,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return readBackedUpFingerprint(jid)
   }
 
-  /** Active validated certs eligible for the current TOFU notification policy. */
+  /** Validated certs encrypt() sends to, for previews the notification service checks. */
   notificationVerifierSnapshot(accountJid: string): Record<string, { fingerprint: string; publicArmored: string }[]> | null {
     const peers: Record<string, { fingerprint: string; publicArmored: string }[]> = {}
-    if (!this.ctx || !this.ownBundle || getBareJid(this.ctx.account.jid) !== accountJid || this.stores.trustStateStatus.get() !== 'sealed') return null
-    for (const [jid, certs] of this.peerKeys) {
-      if (this.stores.keyChangeAlerts.get(jid)) continue
-      const active = certs.filter(c => c.active).map(({ fingerprint, publicArmored }) => ({ fingerprint, publicArmored }))
-      if (active.length > 0 && active.length <= 4) peers[jid] = active
+    if (!this.ctx || !this.ownBundle || getBareJid(this.ctx.account.jid) !== accountJid || this._trustState.status !== 'sealed') return null
+    for (const jid of this.peerKeys.keys()) {
+      // Only keys encrypt() sends to: a key waiting for a decision or refused
+      // does not vouch for a preview.
+      const used = this.activeKeyStandings(jid)
+        .filter((k) => k.standing.used)
+        .map(({ cert: { fingerprint, publicArmored } }) => ({ fingerprint, publicArmored }))
+      if (used.length > 0 && used.length <= 4) peers[jid] = used
     }
     return peers
   }
@@ -3132,9 +3681,14 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const signerEligible =
       !!output.signerFingerprint &&
       eligibleFps.some((fp) => fingerprintsEqual(fp, output.signerFingerprint!))
+    // A valid signature from an eligible key is `verified` or `tofu`, whatever
+    // the user decided about that key. A refusal is a decision the user can
+    // change later, so the app applies it when it shows the message, from the
+    // signing fingerprint kept here; `untrusted` stays for a signature that
+    // did not verify or came from an ineligible key.
     let trust: SecurityContext['trust']
     if (output.signatureVerified && signerEligible) {
-      trust = this.stores.verifiedPeers.isVerified(peer, output.signerFingerprint!) ? 'verified' : 'tofu'
+      trust = this.trustRecords.isVerified(peer, output.signerFingerprint!) ? 'verified' : 'tofu'
     } else {
       trust = 'untrusted'
     }

@@ -1,223 +1,235 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { E2EEPluginError } from '@fluux/sdk'
-import type { TrustStateStatus } from './hostStores'
-import { createMockHostStores } from './testing/mockHostStores'
+import { E2EEPluginError, InMemoryStorageBackend, createPluginStorage, type PluginStorage } from '@fluux/sdk'
 import {
-  clearCompromisedAndReseal,
-  isTofuBlockedByCompromise,
+  TRUST_SEAL_STORAGE_KEY,
+  canonicalJson,
   sealTrustState,
   verifyTrustStateSeal,
 } from './trustStateIntegrity'
+import { TrustRecordStore, emptyTrustRecords } from './trustRecords'
 
-const stores = createMockHostStores()
-const getTrustStateStatus = () => stores.trustStateStatus.get()
-const setTrustStateStatus = (s: TrustStateStatus) => stores.trustStateStatus.set(s)
 const OWN_FP = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
 const OWN_PUBLIC = 'OWN-PUBLIC-ARMOR'
+const PEER = 'peer@example.com'
+const PEER_FP = 'B0B0000000000000000000000000000000000012'
+const OTHER_FP = 'CA40100000000000000000000000000000000013'
 const passthroughEncrypt = async (plaintext: string) => plaintext
+const decryptOk = async (ciphertext: string) => ({
+  plaintext: ciphertext, signatureVerified: true, signerFingerprint: OWN_FP, signaturePresent: true,
+})
 
 // Predicate the plugin will supply. Inlined here to test the gate.
 const isKeyUnavailable = (err: unknown) =>
   err instanceof E2EEPluginError && (err.code === 'key-unrecoverable' || err.code === 'key-locked')
 
-function setPins(pins: Record<string, string>) {
-  stores.setPins(pins)
-}
+let storage: PluginStorage
+let records: TrustRecordStore
 
-beforeEach(() => {
-  localStorage.clear()
-  stores.reset()
+beforeEach(async () => {
+  storage = createPluginStorage(new InMemoryStorageBackend(), 'openpgp-test')
+  records = new TrustRecordStore()
+  await records.attach(storage)
 })
+
+const seal = () => sealTrustState(storage, records, passthroughEncrypt, OWN_PUBLIC)
+const verify = (decrypt: Parameters<typeof verifyTrustStateSeal>[2] = decryptOk, predicate = isKeyUnavailable) =>
+  verifyTrustStateSeal(storage, records, decrypt, OWN_PUBLIC, OWN_FP, predicate)
 
 describe('verifyTrustStateSeal: key-unavailable classification', () => {
   it('returns awaiting-key (not compromised) when decrypt fails because the secret key is unavailable', async () => {
-    setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
+    records.setDecision(PEER, PEER_FP, 'verified')
+    await seal()
     const decryptUnavailable = async () => {
       throw new E2EEPluginError('permanent', 'key-unrecoverable', 'cannot unlock')
     }
-    const res = await verifyTrustStateSeal(stores, decryptUnavailable, OWN_PUBLIC, OWN_FP, isKeyUnavailable)
-    expect(res.status).toBe('awaiting-key')
+    expect((await verify(decryptUnavailable)).status).toBe('awaiting-key')
   })
 
   it('returns awaiting-key when decrypt fails with a key-locked (transient) error', async () => {
-    setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
+    records.setDecision(PEER, PEER_FP, 'verified')
+    await seal()
     const decryptLocked = async () => {
       throw new E2EEPluginError('transient', 'key-locked', 'key is locked')
     }
-    const res = await verifyTrustStateSeal(stores, decryptLocked, OWN_PUBLIC, OWN_FP, isKeyUnavailable)
-    expect(res.status).toBe('awaiting-key')
+    expect((await verify(decryptLocked)).status).toBe('awaiting-key')
   })
 
   it('still returns compromised when decrypt fails for a non-key reason', async () => {
-    setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
+    records.setDecision(PEER, PEER_FP, 'verified')
+    await seal()
     const decryptBroken = async () => { throw new Error('garbage') }
-    const res = await verifyTrustStateSeal(stores, decryptBroken, OWN_PUBLIC, OWN_FP, isKeyUnavailable)
-    expect(res.status).toBe('compromised')
-  })
-
-  it('still returns compromised when the seal decrypts but pins no longer match', async () => {
-    setPins({ 'peer@example.com': 'OLDFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
-    setPins({ 'peer@example.com': 'TAMPERED' }) // mutate after sealing
-    const decryptOriginal = async (ciphertext: string) => ({
-      plaintext: ciphertext, signatureVerified: true, signerFingerprint: OWN_FP, signaturePresent: true,
-    })
-    const res = await verifyTrustStateSeal(stores, decryptOriginal, OWN_PUBLIC, OWN_FP, isKeyUnavailable)
-    expect(res.status).toBe('compromised')
+    expect((await verify(decryptBroken)).status).toBe('compromised')
   })
 
   it('still returns compromised on a foreign signature (decrypt succeeded => key was usable)', async () => {
-    setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
+    records.setDecision(PEER, PEER_FP, 'verified')
+    await seal()
     const decryptForeign = async (ciphertext: string) => ({
       plaintext: ciphertext, signatureVerified: true, signerFingerprint: 'FFFFFFFF', signaturePresent: true,
     })
-    const res = await verifyTrustStateSeal(stores, decryptForeign, OWN_PUBLIC, OWN_FP, isKeyUnavailable)
-    expect(res.status).toBe('compromised')
+    expect((await verify(decryptForeign)).status).toBe('compromised')
   })
 
-  it('returns sealed when decrypt succeeds and pins match', async () => {
-    setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
-    const decryptOk = async (ciphertext: string) => ({
-      plaintext: ciphertext, signatureVerified: true, signerFingerprint: OWN_FP, signaturePresent: true,
-    })
-    const res = await verifyTrustStateSeal(stores, decryptOk, OWN_PUBLIC, OWN_FP, isKeyUnavailable)
-    expect(res.status).toBe('sealed')
+  it('returns sealed when decrypt succeeds and the decisions match', async () => {
+    records.setDecision(PEER, PEER_FP, 'verified')
+    await seal()
+    expect(await verify()).toEqual({ status: 'sealed' })
   })
 
   it('defaults to current behavior when no predicate is passed (decrypt failure => compromised)', async () => {
-    setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
+    records.setDecision(PEER, PEER_FP, 'verified')
+    await seal()
     const decryptUnavailable = async () => {
       throw new E2EEPluginError('permanent', 'key-unrecoverable', 'cannot unlock')
     }
-    const res = await verifyTrustStateSeal(stores, decryptUnavailable, OWN_PUBLIC, OWN_FP)
+    const res = await verifyTrustStateSeal(storage, records, decryptUnavailable, OWN_PUBLIC, OWN_FP)
     expect(res.status).toBe('compromised')
   })
 })
 
 describe('verifyTrustStateSeal: no seal and tamper verdicts', () => {
-  const decryptOk = async (ciphertext: string) => ({
-    plaintext: ciphertext, signatureVerified: true, signerFingerprint: OWN_FP, signaturePresent: true,
+  it('is uninitialized when there is no seal and no decision', async () => {
+    expect(await verify()).toEqual({ status: 'uninitialized' })
   })
 
-  it('is uninitialized when there is no seal and the stores are empty', async () => {
-    expect(await verifyTrustStateSeal(stores, decryptOk, OWN_PUBLIC, OWN_FP)).toEqual({ status: 'uninitialized' })
+  it('is pending-seal when decisions exist but nothing was ever sealed', async () => {
+    records.setDecision(PEER, PEER_FP, 'tofu')
+    expect(await verify()).toEqual({ status: 'pending-seal' })
   })
 
-  it('is pending-seal when stores hold data but nothing was ever sealed', async () => {
-    setPins({ 'peer@example.com': 'PEERFP' })
-    expect(await verifyTrustStateSeal(stores, decryptOk, OWN_PUBLIC, OWN_FP)).toEqual({ status: 'pending-seal' })
-  })
-
-  it('is compromised when the seal was removed but stores contain data', async () => {
-    setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
-    const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!)
-      .filter((k) => k.includes('trust-state-seal'))
-    expect(keys.length).toBe(1)
-    localStorage.removeItem(keys[0])
-    const res = await verifyTrustStateSeal(stores, decryptOk, OWN_PUBLIC, OWN_FP)
-    expect(res).toEqual({
+  it('is compromised when the seal was removed but decisions exist', async () => {
+    records.setDecision(PEER, PEER_FP, 'tofu')
+    await seal()
+    await storage.delete(TRUST_SEAL_STORAGE_KEY)
+    expect(await verify()).toEqual({
       status: 'compromised',
-      details: ['Trust state seal was removed but stores contain data'],
+      details: ['Trust state seal was removed but trust records contain data'],
     })
   })
 
   it('names the invalid signature when the signature is not verified', async () => {
-    setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
+    records.setDecision(PEER, PEER_FP, 'tofu')
+    await seal()
     const unsigned = async (ciphertext: string) => ({
       plaintext: ciphertext, signatureVerified: false, signerFingerprint: OWN_FP, signaturePresent: true,
     })
-    const res = await verifyTrustStateSeal(stores, unsigned, OWN_PUBLIC, OWN_FP)
-    expect(res).toEqual({
+    expect(await verify(unsigned)).toEqual({
       status: 'compromised',
       details: ['Trust state seal has invalid or foreign signature'],
     })
   })
 
   it('is compromised with a malformed payload', async () => {
-    setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
+    records.setDecision(PEER, PEER_FP, 'tofu')
+    await seal()
     const garbled = async () => ({
       plaintext: 'not json', signatureVerified: true, signerFingerprint: OWN_FP, signaturePresent: true,
     })
-    expect(await verifyTrustStateSeal(stores, garbled, OWN_PUBLIC, OWN_FP)).toEqual({
+    expect(await verify(garbled)).toEqual({
       status: 'compromised',
       details: ['Trust state seal payload is malformed'],
     })
   })
 
-  it('is compromised with an unknown payload version', async () => {
-    setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
-    const future = async () => ({
-      plaintext: JSON.stringify({ v: 2 }), signatureVerified: true, signerFingerprint: OWN_FP, signaturePresent: true,
+  it('is compromised with the payload of an earlier seal version', async () => {
+    records.setDecision(PEER, PEER_FP, 'tofu')
+    await seal()
+    const earlier = async () => ({
+      plaintext: JSON.stringify({ v: 1, pins: {}, verified: {}, alerts: {}, syncVersion: -1 }),
+      signatureVerified: true,
+      signerFingerprint: OWN_FP,
+      signaturePresent: true,
     })
-    const res = await verifyTrustStateSeal(stores, future, OWN_PUBLIC, OWN_FP)
-    expect(res.details).toEqual(['Trust state seal payload is malformed'])
+    expect((await verify(earlier)).details).toEqual(['Trust state seal payload is malformed'])
   })
 
-  it('lists which part differs when the sealed state no longer matches', async () => {
-    setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
-    stores.setVerifiedPeers({ 'peer@example.com': 'PEERFP' })
-    const res = await verifyTrustStateSeal(stores, decryptOk, OWN_PUBLIC, OWN_FP)
-    expect(res).toEqual({ status: 'compromised', details: ['verified peers differ'] })
+  it('names a decision changed behind the plugin', async () => {
+    records.setDecision(PEER, PEER_FP, 'untrusted')
+    await seal()
+    // Storage edited outside the plugin: the refused key is now verified.
+    const edited = emptyTrustRecords()
+    edited.peers[PEER] = { [PEER_FP]: { decision: 'verified', decidedAt: '2024-01-01T00:00:00Z' } }
+    records.replace(edited)
+    expect(await verify()).toEqual({ status: 'compromised', details: ['trust decisions differ'] })
+  })
+
+  it('names a sync version changed behind the plugin', async () => {
+    records.setDecision(PEER, PEER_FP, 'verified')
+    records.setSyncVersion(4)
+    await seal()
+    records.setSyncVersion(1)
+    expect(await verify()).toEqual({ status: 'compromised', details: ['verification sync version differs'] })
+  })
+
+  it('names an adoption of the set node changed behind the plugin', async () => {
+    records.setDecision(PEER, PEER_FP, 'verified')
+    records.adoptSets()
+    await seal()
+    // Storage edited outside the plugin: the older sync node would be read again.
+    const edited = emptyTrustRecords()
+    edited.peers[PEER] = { [PEER_FP]: { decision: 'verified', decidedAt: '2024-01-01T00:00:00Z' } }
+    records.replace(edited)
+    expect(await verify()).toEqual({ status: 'compromised', details: ['verification sync format differs'] })
+  })
+
+  it('is sealed again for the same decisions saved in another order', async () => {
+    records.setDecisions([
+      { peer: PEER, fingerprint: PEER_FP, decision: 'verified' },
+      { peer: PEER, fingerprint: OTHER_FP, decision: 'tofu' },
+    ])
+    await seal()
+    const reordered = emptyTrustRecords()
+    reordered.peers[PEER] = {
+      [OTHER_FP]: { decision: 'tofu', decidedAt: '2024-01-01T00:00:00Z' },
+      [PEER_FP]: { decision: 'verified', decidedAt: '2024-01-01T00:00:00Z' },
+    }
+    records.replace(reordered)
+    expect(await verify()).toEqual({ status: 'sealed' })
   })
 })
 
-describe('isTofuBlockedByCompromise and clearCompromisedAndReseal', () => {
-  const decryptOk = async (ciphertext: string) => ({
-    plaintext: ciphertext, signatureVerified: true, signerFingerprint: OWN_FP, signaturePresent: true,
+describe('verifyTrustStateSeal: holds saved since the seal', () => {
+  // A verified contact's new key is held as soon as it is seen, also while
+  // nothing can be sealed; only a hold that restricts a key is accepted.
+  it('is pending-seal for a hold saved since the seal, and sealed once sealed again', async () => {
+    records.setDecision(PEER, PEER_FP, 'verified')
+    await seal()
+    records.setDecision(PEER, OTHER_FP, 'held')
+    expect(await verify()).toEqual({ status: 'pending-seal' })
+    await seal()
+    expect(await verify()).toEqual({ status: 'sealed' })
   })
 
-  beforeEach(() => {
-    stores.trustStateStatus.set('uninitialized')
+  it.each(['verified', 'tofu', 'untrusted'] as const)('names a key %s since the seal', async (decision) => {
+    records.setDecision(PEER, PEER_FP, 'verified')
+    await seal()
+    records.setDecision(PEER, OTHER_FP, decision)
+    expect(await verify()).toEqual({ status: 'compromised', details: ['trust decisions differ'] })
   })
 
-  it('never blocks while the trust state is not compromised', () => {
-    expect(isTofuBlockedByCompromise(stores, 'peer@example.com')).toBe(false)
+  it('names a hold that replaced a sealed decision', async () => {
+    records.setDecisions([
+      { peer: PEER, fingerprint: PEER_FP, decision: 'verified' },
+      { peer: PEER, fingerprint: OTHER_FP, decision: 'untrusted' },
+    ])
+    await seal()
+    records.setDecision(PEER, OTHER_FP, 'held')
+    expect(await verify()).toEqual({ status: 'compromised', details: ['trust decisions differ'] })
   })
 
-  it('blocks every peer when compromised and no sealed payload was read', () => {
-    setTrustStateStatus('compromised')
-    // Module state from earlier tests is cleared by a reseal; start clean.
-    return clearCompromisedAndReseal(stores, passthroughEncrypt, OWN_PUBLIC).then(() => {
-      setTrustStateStatus('compromised')
-      expect(isTofuBlockedByCompromise(stores, 'anyone@example.com')).toBe(true)
-    })
+  it('names a sealed hold that is gone', async () => {
+    records.setDecisions([
+      { peer: PEER, fingerprint: PEER_FP, decision: 'verified' },
+      { peer: PEER, fingerprint: OTHER_FP, decision: 'held' },
+    ])
+    await seal()
+    records.setDecision(PEER, OTHER_FP, null)
+    expect(await verify()).toEqual({ status: 'compromised', details: ['trust decisions differ'] })
   })
+})
 
-  it('blocks only peers that were pinned in the last sealed payload', async () => {
-    setPins({ 'pinned@example.com': 'PINNEDFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
-    setPins({ 'pinned@example.com': 'TAMPERED' })
-    const res = await verifyTrustStateSeal(stores, decryptOk, OWN_PUBLIC, OWN_FP)
-    setTrustStateStatus(res.status)
-    expect(res.status).toBe('compromised')
-    expect(isTofuBlockedByCompromise(stores, 'pinned@example.com')).toBe(true)
-    expect(isTofuBlockedByCompromise(stores, 'new@example.com')).toBe(false)
-  })
-
-  it('reseals the current state, forgets the payload and reports sealed', async () => {
-    setPins({ 'pinned@example.com': 'PINNEDFP' })
-    await sealTrustState(stores, passthroughEncrypt, OWN_PUBLIC)
-    setPins({ 'pinned@example.com': 'TAMPERED' })
-    await verifyTrustStateSeal(stores, decryptOk, OWN_PUBLIC, OWN_FP)
-    setTrustStateStatus('compromised')
-
-    await clearCompromisedAndReseal(stores, passthroughEncrypt, OWN_PUBLIC)
-
-    expect(getTrustStateStatus()).toBe('sealed')
-    expect(await verifyTrustStateSeal(stores, decryptOk, OWN_PUBLIC, OWN_FP)).toEqual({ status: 'sealed' })
-    setTrustStateStatus('compromised')
-    // The earlier payload was dropped, so the next verdict reads a fresh one.
-    expect(isTofuBlockedByCompromise(stores, 'new@example.com')).toBe(false)
+describe('canonicalJson', () => {
+  it('sorts keys at every depth', () => {
+    expect(canonicalJson({ b: { y: 1, x: [2, { d: 1, c: 2 }] }, a: null })).toBe('{"a":null,"b":{"x":[2,{"c":2,"d":1}],"y":1}}')
   })
 })

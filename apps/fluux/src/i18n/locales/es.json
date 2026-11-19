@@ -213,6 +213,8 @@
             "tryAgain": "Reintentar",
             "needsDecisionTitle": "Esperando tu decisión",
             "needsDecisionDescription": "Los mensajes a este contacto no se pueden cifrar hasta que decidas sobre una clave.",
+            "distrustedTitle": "Ninguna clave de confianza",
+            "distrustedDescription": "No se pueden enviar mensajes a este contacto hasta que confíes en una de sus claves.",
             "receivesWhenUnlocked": "Recibirá tus mensajes cuando desbloquees",
             "keyTrust": {
                 "verified": "Verificada",
@@ -642,6 +644,13 @@
             "sendBlockedKeyLocked": "Mensaje no enviado. Desbloquea tu clave de cifrado para enviar este mensaje.",
             "sendBlockedKeyConflict": "Mensaje no enviado. Resuelve el conflicto de tu clave de cifrado antes de enviar.",
             "sendBlockedGeneric": "Mensaje no enviado. El cifrado ha fallado.",
+            "sendBlockedKeysDistrusted": "Mensaje no enviado. No confías en ninguna clave de este contacto. Confía en una de ellas antes de enviar.",
+            "heldKeys": {
+                "partial": "{{name}} añadió una clave nueva después de que lo verificaras. No recibe mensajes hasta que confíes en ella o la verifiques.",
+                "all": "{{name}} añadió una clave nueva después de que lo verificaras. No recibe mensajes hasta que confíes en ella o la verifiques. Hasta entonces no puedes enviar mensajes.",
+                "distrusted": "No confías en ninguna clave de {{name}}. No puedes enviar mensajes hasta que confíes en una de ellas.",
+                "review": "Revisar claves"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Cifrado bloqueado",
@@ -708,15 +717,6 @@
             "alreadyVerifiedBanner": "Esta clave ya ha sido verificada. Puedes volver a verificarla si tienes alguna duda.",
             "confirmSuccess": "Huella verificada",
             "revokeAction": "Eliminar verificación"
-        },
-        "keyChangeBanner": {
-            "title": "La clave de cifrado de {{name}} ha cambiado",
-            "body": "Parece que este contacto ha rotado su clave de cifrado. Puedes verificar la nueva huella para restaurar la confianza plena, o aceptarla sin verificar para continuar con confianza básica.",
-            "reVerify": "Volver a verificar",
-            "encryptionBlocked": "El cifrado está en pausa para esta conversación hasta que resuelvas el cambio.",
-            "acceptWithoutVerifying": "Aceptar sin verificar",
-            "acceptedWithoutVerifying": "Clave nueva aceptada. El contacto no está verificado",
-            "acceptFailed": "No se pudo aceptar la clave nueva. Inténtalo de nuevo"
         },
         "offlinePlaceholder": "Sin conexión. Podrás enviar en cuanto te reconectes.",
         "loadImage": "Cargar imagen",
@@ -1084,7 +1084,7 @@
             "rotatePluginUnavailable": "Módulo OpenPGP no disponible",
             "trustStateCompromised": {
                 "title": "La verificación de integridad del estado de confianza falló",
-                "description": "Los datos de confianza locales pueden haber sido manipulados. La reasignación silenciosa de claves está bloqueada para evitar la sustitución de claves.",
+                "description": "Los datos de confianza locales pueden haber sido manipulados. Comprueba las claves de tus contactos antes de continuar.",
                 "reestablishButton": "Reverificar y continuar"
             },
             "ownKeyConflict": {

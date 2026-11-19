@@ -213,6 +213,8 @@
             "tryAgain": "Erneut versuchen",
             "needsDecisionTitle": "Wartet auf Ihre Entscheidung",
             "needsDecisionDescription": "Nachrichten an diesen Kontakt können nicht verschlüsselt werden, bis Sie über einen Schlüssel entschieden haben.",
+            "distrustedTitle": "Keinem Schlüssel vertraut",
+            "distrustedDescription": "Nachrichten an diesen Kontakt können nicht gesendet werden, bis Sie einem seiner Schlüssel vertrauen.",
             "receivesWhenUnlocked": "Erhält Ihre Nachrichten nach dem Entsperren",
             "keyTrust": {
                 "verified": "Verifiziert",
@@ -640,6 +642,13 @@
             "sendBlockedKeyLocked": "Nachricht nicht gesendet. Entsperre deinen Verschlüsselungsschlüssel, um diese Nachricht zu senden.",
             "sendBlockedKeyConflict": "Nachricht nicht gesendet. Löse den Konflikt deines Verschlüsselungsschlüssels vor dem Senden.",
             "sendBlockedGeneric": "Nachricht nicht gesendet. Verschlüsselung fehlgeschlagen.",
+            "sendBlockedKeysDistrusted": "Nachricht nicht gesendet. Du vertraust keinem Schlüssel dieses Kontakts. Vertraue einem davon vor dem Senden.",
+            "heldKeys": {
+                "partial": "{{name}} hat einen neuen Schlüssel hinzugefügt, nachdem du den Kontakt verifiziert hast. Er erhält keine Nachrichten, bis du ihm vertraust oder ihn verifizierst.",
+                "all": "{{name}} hat einen neuen Schlüssel hinzugefügt, nachdem du den Kontakt verifiziert hast. Er erhält keine Nachrichten, bis du ihm vertraust oder ihn verifizierst. Bis dahin kannst du keine Nachrichten senden.",
+                "distrusted": "Du vertraust keinem Schlüssel von {{name}}. Du kannst keine Nachrichten senden, bis du einem davon vertraust.",
+                "review": "Schlüssel prüfen"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Verschlüsselung gesperrt",
@@ -706,15 +715,6 @@
             "alreadyVerifiedBanner": "Dieser Schlüssel wurde bereits verifiziert. Sie können ihn erneut verifizieren, wenn Sie Zweifel haben.",
             "confirmSuccess": "Fingerabdruck verifiziert",
             "revokeAction": "Verifizierung entfernen"
-        },
-        "keyChangeBanner": {
-            "title": "Der Verschlüsselungsschlüssel von {{name}} hat sich geändert",
-            "body": "Dieser Kontakt scheint seinen Verschlüsselungsschlüssel gewechselt zu haben. Du kannst den neuen Fingerabdruck verifizieren, um das volle Vertrauen wiederherzustellen, oder ihn ohne Verifizierung akzeptieren, um mit grundlegendem Vertrauen fortzufahren.",
-            "reVerify": "Erneut verifizieren",
-            "encryptionBlocked": "Die Verschlüsselung ist für diese Unterhaltung pausiert, bis du die Änderung geklärt hast.",
-            "acceptWithoutVerifying": "Ohne Verifizierung akzeptieren",
-            "acceptedWithoutVerifying": "Neuer Schlüssel akzeptiert. Kontakt ist nicht verifiziert",
-            "acceptFailed": "Der neue Schlüssel konnte nicht akzeptiert werden. Versuche es erneut"
         },
         "offlinePlaceholder": "Offline. Senden ist nach der Wiederverbindung möglich.",
         "loadImage": "Bild laden",
@@ -1082,7 +1082,7 @@
             "rotatePluginUnavailable": "OpenPGP-Modul nicht verfügbar",
             "trustStateCompromised": {
                 "title": "Integritätsprüfung des Vertrauensstatus fehlgeschlagen",
-                "description": "Lokale Vertrauensdaten wurden möglicherweise manipuliert. Stilles erneutes Anheften von Schlüsseln ist blockiert, um Schlüsselersetzung zu verhindern.",
+                "description": "Lokale Vertrauensdaten wurden möglicherweise manipuliert. Prüfen Sie die Schlüssel Ihrer Kontakte, bevor Sie fortfahren.",
                 "reestablishButton": "Erneut verifizieren und fortfahren"
             },
             "ownKeyConflict": {

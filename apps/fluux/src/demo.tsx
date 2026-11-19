@@ -17,14 +17,14 @@ import { HashRouter } from 'react-router'
 import { XMPPProvider, E2EEManager, InMemoryStorageBackend, subscribeDiagnostics } from '@fluux/sdk'
 import { DemoClient, setResidentWindowSize } from '@fluux/sdk/demo'
 import { adminStore, cacheMigrationStore, chatStore, connectionStore, ignoreStore, roomStore } from '@fluux/sdk/stores'
-import { DemoOpenPGPPlugin, DEMO_AVA_FINGERPRINT } from './demo/DemoOpenPGPPlugin'
+import { DemoOpenPGPPlugin } from './demo/DemoOpenPGPPlugin'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { useThemeStore } from './stores/themeStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useToastStore } from './stores/toastStore'
 import { useArrivalJumpStore } from './stores/arrivalJumpStore'
 import { useEncryptionSettingsStore } from './stores/encryptionSettingsStore'
-import { useVerifiedPeerKeysStore } from './stores/verifiedPeerKeysStore'
+import { setOpenPGPTrustView, type OpenPGPTrustView } from './e2ee/openpgpTrustView'
 import { setSessionPassphrase } from '@fluux/openpgp-plugin'
 import { RenderLoopBoundary, RenderLoopWarningBanner } from './components/RenderLoopBoundary'
 import { WindowControls } from './components/WindowControls'
@@ -171,6 +171,8 @@ const demoRegistration = (async () => {
   // restore (see XMPPClient.setupE2EEManagerCallbacks).
   demoClient.e2ee.onKeyUnlocked(() => demoClient.notifyE2EEKeyUnlocked())
   await demoClient.e2ee.register(demoOpenpgpPlugin)
+  // As registerE2EEPlugins does: the app reads trust decisions from the plugin.
+  setOpenPGPTrustView(demoOpenpgpPlugin as unknown as OpenPGPTrustView, demoClient.e2ee)
   useEncryptionSettingsStore.getState().setOpenpgpEnabled(true)
   useEncryptionSettingsStore.getState().notifyPluginRegistered()
   if (recoveryFixture) {
@@ -178,7 +180,6 @@ const demoRegistration = (async () => {
     if (demoOpenpgpPlugin.getOwnFingerprint()) await demoClient.retryPendingDecrypts()
   }
 })()
-useVerifiedPeerKeysStore.getState().setVerified('ava@fluux.chat', DEMO_AVA_FINGERPRINT)
 setSessionPassphrase('demo')
 
 // Expose demo client and stores for automation (screenshot scripts, testing)

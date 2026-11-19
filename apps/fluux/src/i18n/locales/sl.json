@@ -213,6 +213,8 @@
             "tryAgain": "Poskusi znova",
             "needsDecisionTitle": "Čaka na vašo odločitev",
             "needsDecisionDescription": "Sporočil temu stiku ni mogoče šifrirati, dokler se ne odločite glede ključa.",
+            "distrustedTitle": "Ni zaupanja vrednih ključev",
+            "distrustedDescription": "Temu stiku ni mogoče pošiljati sporočil, dokler ne zaupate enemu od njegovih ključev.",
             "receivesWhenUnlocked": "Prejel bo vaša sporočila po odklepu",
             "keyTrust": {
                 "verified": "Preverjen",
@@ -644,6 +646,13 @@
             "sendBlockedKeyLocked": "Sporočilo ni bilo poslano. Odklenite svoj ključ za šifriranje, da pošljete to sporočilo.",
             "sendBlockedKeyConflict": "Sporočilo ni bilo poslano. Pred pošiljanjem razrešite spor svojega ključa za šifriranje.",
             "sendBlockedGeneric": "Sporočilo ni bilo poslano. Šifriranje ni uspelo.",
+            "sendBlockedKeysDistrusted": "Sporočilo ni bilo poslano. Ne zaupate nobenemu ključu tega stika. Pred pošiljanjem zaupajte enemu od njih.",
+            "heldKeys": {
+                "partial": "Stik {{name}} je dodal nov ključ, potem ko ste ga preverili. Ključ ne prejema sporočil, dokler mu ne zaupate ali ga ne preverite.",
+                "all": "Stik {{name}} je dodal nov ključ, potem ko ste ga preverili. Ključ ne prejema sporočil, dokler mu ne zaupate ali ga ne preverite. Do takrat ne morete pošiljati sporočil.",
+                "distrusted": "Ne zaupate nobenemu ključu stika {{name}}. Sporočil ne morete pošiljati, dokler ne zaupate enemu od njih.",
+                "review": "Preglej ključe"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Šifriranje zaklenjeno",
@@ -710,15 +719,6 @@
             "alreadyVerifiedBanner": "Ta ključ je že preverjen. Preverite lahko znova, če imate dvome.",
             "confirmSuccess": "Prstni odtis preverjen",
             "revokeAction": "Odstrani preverjanje"
-        },
-        "keyChangeBanner": {
-            "title": "Šifrirni ključ uporabnika {{name}} se je spremenil",
-            "body": "Zdi se, da je ta stik zamenjal svoj šifrirni ključ. Novi prstni odtis lahko preverite za obnovitev polnega zaupanja ali ga sprejmete brez preverjanja za nadaljevanje z osnovnim zaupanjem.",
-            "reVerify": "Znova preveri",
-            "encryptionBlocked": "Šifriranje je zaustavljeno za ta pogovor, dokler ne razrešite spremembe.",
-            "acceptWithoutVerifying": "Sprejmi brez preverjanja",
-            "acceptedWithoutVerifying": "Nov ključ sprejet. Sogovornik ni preverjen",
-            "acceptFailed": "Novega ključa ni bilo mogoče sprejeti. Poskusite znova"
         },
         "offlinePlaceholder": "Brez povezave. Pošiljate lahko takoj ob ponovni povezavi.",
         "loadImage": "Naloži sliko",
@@ -1086,7 +1086,7 @@
             "rotatePluginUnavailable": "Modul OpenPGP ni na voljo",
             "trustStateCompromised": {
                 "title": "Preverjanje celovitosti stanja zaupanja ni uspelo",
-                "description": "Lokalni podatki o zaupanju so bili morda spremenjeni. Tiho ponovno pripenjanje ključa je blokirano, da se prepreči zamenjava ključev.",
+                "description": "Lokalni podatki o zaupanju so bili morda spremenjeni. Pred nadaljevanjem preverite ključe svojih stikov.",
                 "reestablishButton": "Ponovno preveri in nadaljuj"
             },
             "ownKeyConflict": {

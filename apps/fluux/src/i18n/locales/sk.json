@@ -212,6 +212,8 @@
             "tryAgain": "Skúsiť znova",
             "needsDecisionTitle": "Čaká na vaše rozhodnutie",
             "needsDecisionDescription": "Správy tomuto kontaktu sa nedajú šifrovať, kým sa o kľúči nerozhodnete.",
+            "distrustedTitle": "Žiadne dôveryhodné kľúče",
+            "distrustedDescription": "Tomuto kontaktu nemožno posielať správy, kým nebudete dôverovať jednému z jeho kľúčov.",
             "receivesWhenUnlocked": "Prijme vaše správy po odomknutí",
             "keyTrust": {
                 "verified": "Overený",
@@ -643,6 +645,13 @@
             "sendBlockedKeyLocked": "Správa nebola odoslaná. Na odoslanie tejto správy odomknite svoj šifrovací kľúč.",
             "sendBlockedKeyConflict": "Správa nebola odoslaná. Pred odoslaním vyriešte konflikt svojho šifrovacieho kľúča.",
             "sendBlockedGeneric": "Správa nebola odoslaná. Šifrovanie zlyhalo.",
+            "sendBlockedKeysDistrusted": "Správa nebola odoslaná. Nedôverujete žiadnemu kľúču tohto kontaktu. Pred odoslaním jednému z nich dôverujte.",
+            "heldKeys": {
+                "partial": "Kontakt {{name}} pridal nový kľúč potom, ako ste ho overili. Kľúč nedostáva správy, kým mu nebudete dôverovať alebo ho neoveríte.",
+                "all": "Kontakt {{name}} pridal nový kľúč potom, ako ste ho overili. Kľúč nedostáva správy, kým mu nebudete dôverovať alebo ho neoveríte. Dovtedy nemôžete odosielať správy.",
+                "distrusted": "Nedôverujete žiadnemu kľúču kontaktu {{name}}. Nemôžete odosielať správy, kým jednému z nich nebudete dôverovať.",
+                "review": "Skontrolovať kľúče"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Šifrovanie uzamknuté",
@@ -709,15 +718,6 @@
             "alreadyVerifiedBanner": "Tento kľúč už bol overený. Môžete ho znova overiť, ak máte pochybnosti.",
             "confirmSuccess": "Odtlačok overený",
             "revokeAction": "Odstrániť overenie"
-        },
-        "keyChangeBanner": {
-            "title": "Šifrovací kľúč používateľa {{name}} sa zmenil",
-            "body": "Zdá sa, že tento kontakt vymenil svoj šifrovací kľúč. Môžete overiť nový odtlačok na obnovenie plnej dôvery alebo ho prijať bez overenia a pokračovať so základnou dôverou.",
-            "reVerify": "Znovu overiť",
-            "encryptionBlocked": "Šifrovanie je pozastavené pre túto konverzáciu, kým nevyriešite zmenu.",
-            "acceptWithoutVerifying": "Prijať bez overenia",
-            "acceptedWithoutVerifying": "Nový kľúč prijatý. Kontakt nie je overený",
-            "acceptFailed": "Nepodarilo sa prijať nový kľúč. Skúste znova"
         },
         "offlinePlaceholder": "Offline. Odosielať budete môcť po opätovnom pripojení.",
         "loadImage": "Načítať obrázok",
@@ -1085,7 +1085,7 @@
             "rotatePluginUnavailable": "Modul OpenPGP nie je k dispozícii",
             "trustStateCompromised": {
                 "title": "Kontrola integrity stavu dôvery zlyhala",
-                "description": "Miestne údaje dôvery mohli byť zmanipulované. Tiché opätovné pripnutie kľúča je zablokované, aby sa zabránilo zámene kľúčov.",
+                "description": "Miestne údaje dôvery mohli byť zmanipulované. Pred pokračovaním skontrolujte kľúče svojich kontaktov.",
                 "reestablishButton": "Znova overiť a pokračovať"
             },
             "ownKeyConflict": {

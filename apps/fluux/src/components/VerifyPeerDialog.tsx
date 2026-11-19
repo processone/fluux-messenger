@@ -47,9 +47,10 @@ interface VerifyPeerDialogProps {
  *   (Gajim, Dino, Conversations, …). Hidden behind a toggle to keep the
  *   default UX uncluttered, but always available.
  *
- * Either path records the same `peerFingerprint` in
- * `verifiedPeerKeysStore`, so a key rotation silently demotes trust
- * until the user re-verifies.
+ * Either path records `verified` for that one key, through the SDK. The
+ * decision belongs to the key, not the contact: a key the contact adds later
+ * is not verified, and while the contact has a verified key it receives no
+ * messages until the user approves it.
  */
 export function VerifyPeerDialog({
   peerName,

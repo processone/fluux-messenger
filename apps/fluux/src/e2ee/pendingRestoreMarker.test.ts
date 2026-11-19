@@ -8,7 +8,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { PluginContext } from '@fluux/sdk'
 import { resetUncertainImportsForTesting, SequoiaPgpPlugin, type BackupRecoveryMode, type InvokeFn, type KeyBundle } from '@fluux/openpgp-plugin'
-import { createAppHostStores } from './appHostStores'
 
 const JID = 'me@example.com'
 const MARKER = `__wry_pending_native_restore:${JID}`
@@ -25,7 +24,7 @@ class Probe extends SequoiaPgpPlugin {
 }
 
 function build(macosDesktop: boolean, invoke: InvokeFn) {
-  const plugin = new Probe({ stores: createAppHostStores(), fileIO, macosDesktop, invoke })
+  const plugin = new Probe({ fileIO, macosDesktop, invoke })
   plugin.setAccount()
   return plugin
 }

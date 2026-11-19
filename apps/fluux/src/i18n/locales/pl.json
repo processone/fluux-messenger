@@ -213,6 +213,8 @@
             "tryAgain": "Spróbuj ponownie",
             "needsDecisionTitle": "Czeka na Twoją decyzję",
             "needsDecisionDescription": "Wiadomości do tego kontaktu nie mogą być szyfrowane, dopóki nie zdecydujesz o kluczu.",
+            "distrustedTitle": "Brak zaufanych kluczy",
+            "distrustedDescription": "Nie można wysyłać wiadomości do tego kontaktu, dopóki nie zaufasz jednemu z jego kluczy.",
             "receivesWhenUnlocked": "Odbierze Twoje wiadomości po odblokowaniu",
             "keyTrust": {
                 "verified": "Zweryfikowany",
@@ -644,6 +646,13 @@
             "sendBlockedKeyLocked": "Wiadomość nie została wysłana. Odblokuj swój klucz szyfrowania, aby wysłać tę wiadomość.",
             "sendBlockedKeyConflict": "Wiadomość nie została wysłana. Rozwiąż konflikt swojego klucza szyfrowania przed wysłaniem.",
             "sendBlockedGeneric": "Wiadomość nie została wysłana. Szyfrowanie nie powiodło się.",
+            "sendBlockedKeysDistrusted": "Wiadomość nie została wysłana. Nie ufasz żadnemu kluczowi tego kontaktu. Zaufaj jednemu z nich przed wysłaniem.",
+            "heldKeys": {
+                "partial": "Kontakt {{name}} dodał nowy klucz po tym, jak go zweryfikowałeś. Klucz nie otrzymuje wiadomości, dopóki mu nie zaufasz lub go nie zweryfikujesz.",
+                "all": "Kontakt {{name}} dodał nowy klucz po tym, jak go zweryfikowałeś. Klucz nie otrzymuje wiadomości, dopóki mu nie zaufasz lub go nie zweryfikujesz. Do tego czasu nie możesz wysyłać wiadomości.",
+                "distrusted": "Nie ufasz żadnemu kluczowi kontaktu {{name}}. Nie możesz wysyłać wiadomości, dopóki nie zaufasz jednemu z nich.",
+                "review": "Przejrzyj klucze"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Szyfrowanie zablokowane",
@@ -710,15 +719,6 @@
             "alreadyVerifiedBanner": "Ten klucz został już zweryfikowany. Możesz zweryfikować ponownie, jeśli masz wątpliwości.",
             "confirmSuccess": "Odcisk zweryfikowany",
             "revokeAction": "Usuń weryfikację"
-        },
-        "keyChangeBanner": {
-            "title": "Klucz szyfrowania użytkownika {{name}} się zmienił",
-            "body": "Wygląda na to, że ten kontakt wymienił swój klucz szyfrowania. Możesz zweryfikować nowy odcisk, aby przywrócić pełne zaufanie, lub zaakceptować go bez weryfikacji, aby kontynuować z podstawowym zaufaniem.",
-            "reVerify": "Zweryfikuj ponownie",
-            "encryptionBlocked": "Szyfrowanie jest wstrzymane dla tej rozmowy do momentu rozwiązania zmiany.",
-            "acceptWithoutVerifying": "Zaakceptuj bez weryfikacji",
-            "acceptedWithoutVerifying": "Nowy klucz zaakceptowany. Rozmówca niezweryfikowany",
-            "acceptFailed": "Nie udało się zaakceptować nowego klucza. Spróbuj ponownie"
         },
         "offlinePlaceholder": "Offline. Wysyłanie będzie możliwe po ponownym połączeniu.",
         "loadImage": "Załaduj obraz",
@@ -1086,7 +1086,7 @@
             "rotatePluginUnavailable": "Moduł OpenPGP niedostępny",
             "trustStateCompromised": {
                 "title": "Sprawdzanie integralności stanu zaufania nie powiodło się",
-                "description": "Lokalne dane zaufania mogły zostać zmanipulowane. Ciche ponowne przypięcie klucza jest zablokowane, aby zapobiec podmianie kluczy.",
+                "description": "Lokalne dane zaufania mogły zostać zmanipulowane. Sprawdź klucze swoich kontaktów, zanim przejdziesz dalej.",
                 "reestablishButton": "Zweryfikuj ponownie i kontynuuj"
             },
             "ownKeyConflict": {

@@ -375,12 +375,13 @@ describe('Chat E2EE wiring', () => {
       expect(captured).toHaveLength(0)
     })
 
-    it('blocks the send (no plaintext) when a selected plugin throws pin-mismatch', async () => {
+    it('blocks the send (no plaintext) when the contact\'s only key waits for a decision', async () => {
       // A plugin is registered (dummy), so encryptOutbound reaches encrypt().
-      // Simulate the OpenPGP pin-mismatch failure: encryption was expected for
-      // this peer, so the message must NOT fall back to cleartext.
+      // Simulate OpenPGP refusing a verified contact's new key until the user
+      // approves it: encryption was expected for this peer, so the message
+      // must NOT fall back to cleartext.
       vi.spyOn(manager, 'encryptOutbound').mockRejectedValue(
-        new E2EEPluginError('permanent', 'pin-mismatch', 'fingerprint changed'),
+        new E2EEPluginError('permanent', 'peer-keys-awaiting-decision', 'every key of bob@example.com waits for a decision'),
       )
 
       await expect(chat.sendMessage('bob@example.com', 'secret')).rejects.toBeInstanceOf(
@@ -1364,7 +1365,7 @@ describe('Chat E2EE wiring', () => {
       // selected plugin failing mid-encrypt must block the retry, never fall
       // back to resending the body in cleartext.
       vi.spyOn(manager, 'encryptOutbound').mockRejectedValue(
-        new E2EEPluginError('permanent', 'pin-mismatch', 'fingerprint changed'),
+        new E2EEPluginError('permanent', 'peer-keys-awaiting-decision', 'every key waits for a decision'),
       )
 
       await expect(
@@ -1452,7 +1453,7 @@ describe('Chat E2EE wiring', () => {
       // failing mid-encrypt must block the edit, never push the corrected
       // body to the server in cleartext.
       vi.spyOn(manager, 'encryptOutbound').mockRejectedValue(
-        new E2EEPluginError('permanent', 'pin-mismatch', 'fingerprint changed'),
+        new E2EEPluginError('permanent', 'peer-keys-awaiting-decision', 'every key waits for a decision'),
       )
 
       await expect(

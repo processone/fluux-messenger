@@ -213,6 +213,8 @@
             "tryAgain": "Tentar novamente",
             "needsDecisionTitle": "À espera da sua decisão",
             "needsDecisionDescription": "As mensagens para este contacto não podem ser cifradas até decidir sobre uma chave.",
+            "distrustedTitle": "Nenhuma chave de confiança",
+            "distrustedDescription": "Não é possível enviar mensagens a este contacto até confiar numa das suas chaves.",
             "receivesWhenUnlocked": "Receberá as suas mensagens depois de desbloquear",
             "keyTrust": {
                 "verified": "Verificada",
@@ -642,6 +644,13 @@
             "sendBlockedKeyLocked": "Mensagem não enviada. Desbloqueie a sua chave de criptografia para enviar esta mensagem.",
             "sendBlockedKeyConflict": "Mensagem não enviada. Resolva o conflito da sua chave de criptografia antes de enviar.",
             "sendBlockedGeneric": "Mensagem não enviada. A criptografia falhou.",
+            "sendBlockedKeysDistrusted": "Mensagem não enviada. Não confia em nenhuma chave deste contacto. Confie numa delas antes de enviar.",
+            "heldKeys": {
+                "partial": "{{name}} adicionou uma nova chave depois de o ter verificado. Não recebe mensagens até confiar nela ou a verificar.",
+                "all": "{{name}} adicionou uma nova chave depois de o ter verificado. Não recebe mensagens até confiar nela ou a verificar. Até lá não pode enviar mensagens.",
+                "distrusted": "Não confia em nenhuma chave de {{name}}. Não pode enviar mensagens até confiar numa delas.",
+                "review": "Rever chaves"
+            },
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
             "keyLocked": "Criptografia bloqueada",
@@ -708,15 +717,6 @@
             "alreadyVerifiedBanner": "Esta chave já foi verificada. Podes verificar novamente se tiveres alguma dúvida.",
             "confirmSuccess": "Impressão digital verificada",
             "revokeAction": "Remover verificação"
-        },
-        "keyChangeBanner": {
-            "title": "A chave de cifragem de {{name}} mudou",
-            "body": "Parece que este contacto rodou a sua chave de cifragem. Podes verificar a nova impressão digital para restaurar a confiança total, ou aceitar sem verificar para continuar com confiança básica.",
-            "reVerify": "Verificar novamente",
-            "encryptionBlocked": "A cifragem está pausada para esta conversa até resolveres a alteração.",
-            "acceptWithoutVerifying": "Aceitar sem verificar",
-            "acceptedWithoutVerifying": "Nova chave aceite. Contacto não verificado",
-            "acceptFailed": "Não foi possível aceitar a nova chave. Tenta novamente"
         },
         "offlinePlaceholder": "Sem conexão. Poderá enviar assim que reconectar.",
         "loadImage": "Carregar imagem",
@@ -1084,7 +1084,7 @@
             "rotatePluginUnavailable": "Módulo OpenPGP indisponível",
             "trustStateCompromised": {
                 "title": "A verificação de integridade do estado de confiança falhou",
-                "description": "Os dados de confiança locais podem ter sido adulterados. A reatribuição silenciosa de chave está bloqueada para impedir a substituição de chaves.",
+                "description": "Os dados de confiança locais podem ter sido adulterados. Verifique as chaves dos seus contactos antes de continuar.",
                 "reestablishButton": "Reverificar e continuar"
             },
             "ownKeyConflict": {

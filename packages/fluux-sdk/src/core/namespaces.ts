@@ -157,6 +157,11 @@ export const NS_OPENPGP_IM = 'urn:xmpp:openpgp:im:0'
 // headlines when another device of the same account publishes.
 export const NS_FLUUX_VERIFICATIONS = 'urn:xmpp:fluux:verifications:0'
 export const NS_FLUUX_VERIFICATIONS_NOTIFY = 'urn:xmpp:fluux:verifications:0+notify'
+// Its successor, holding every verified key of each contact rather than one.
+// A client that finds it never reads the older node again, so an older client
+// still writing the older node cannot roll it back.
+export const NS_FLUUX_VERIFICATION_SETS = 'urn:xmpp:fluux:verifications:1'
+export const NS_FLUUX_VERIFICATION_SETS_NOTIFY = 'urn:xmpp:fluux:verifications:1+notify'
 
 // XEP-0422: Message Fastening
 export const NS_FASTEN = 'urn:xmpp:fasten:0'
