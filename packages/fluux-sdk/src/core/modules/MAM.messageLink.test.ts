@@ -38,7 +38,7 @@ afterEach(() => { roomStore.getState().reset(); setStorageScopeJid(null); vi.res
 // XEP-0313/RSM server boundary, shared by id lookup and context pages. The real
 // stores/cache own placement and read state; this stand-in owns only IQ replies.
 function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modification?: 'correction' | 'retraction' | 'correction-retraction', history = rows, targetReference?: string) {
-  let collect: ((stanza: Element) => void) | undefined
+  const collectors = new Map<string, (stanza: Element) => void>()
   const emitSDK = vi.fn()
   const sendIQ = vi.fn(async (iq: Element) => {
     if (failure === 'network') throw new Error('Connection lost')
@@ -54,7 +54,7 @@ function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modificati
     const pageMax = Math.min(max, 25)
     const page = before !== undefined ? history.slice(Math.max(0, at - pageMax), at)
       : after !== undefined ? history.slice(at + 1, at + 1 + pageMax) : history.slice(0, pageMax)
-    for (const row of page) collect!(xml('message', { from: ROOM },
+    for (const row of page) collectors.get(query.attrs.queryid)!(xml('message', { from: ROOM },
       xml('result', { xmlns: MAM_NS, queryid: query.attrs.queryid, id: row.stanzaId },
         xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
           xml('delay', { xmlns: 'urn:xmpp:delay', stamp: row.timestamp.toISOString() }),
@@ -72,7 +72,7 @@ function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modificati
   })
   const deps: ModuleDependencies = { stores: createDefaultStoreBindings(), presence: createMockPresenceReader(),
     getCurrentJid: () => ACCOUNT, getXmpp: () => null, sendStanza: vi.fn(), sendIQ, emit: vi.fn(), emitSDK,
-    registerMAMCollector: (_id, collector) => { collect = collector; return () => { collect = undefined } },
+    registerMAMCollector: (id, collector) => { collectors.set(id, collector); return () => { collectors.delete(id) } },
   }
   return { mam: new MAM(deps), sendIQ, emitSDK }
 }
@@ -226,6 +226,64 @@ describe('linked room message lookup', () => {
     roomStore.getState().addRoom({ ...room, joined: false })
     expect(await h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toEqual({ kind: 'unknown' })
     expect(h.sendIQ).not.toHaveBeenCalled()
+  })
+
+  // Intent: FLM-323 — a link to an old message must not make the client walk the whole room archive.
+  it('stops the forward archive walk after a bounded number of pages and reports unknown', async () => {
+    const long = Array.from({ length: 400 }, (_, index) => ({ ...rows[0], id: `long-${index}`, stanzaId: String(1731490100000000 + index),
+      body: `Long ${index}`, timestamp: new Date(Date.UTC(2026, 5, 1, 10, 0, index)) }))
+    const h = harness(undefined, undefined, undefined, long)
+    expect(await h.mam.readRoomMessagePreview(ROOM, long[0].stanzaId)).toEqual({ kind: 'unknown' })
+    const walked = h.sendIQ.mock.calls.filter(([iq]) => iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') === '100')
+    expect(walked.length).toBeLessThanOrEqual(10)
+    expect(walked.length).toBeGreaterThan(0)
+  })
+
+  // Intent: FLM-323 — many links in one room cannot each run their own walk at once.
+  it('runs only a few forward archive walks at once and finishes the rest as slots free', async () => {
+    const h = harness()
+    const serve = h.sendIQ.getMockImplementation()!
+    let inFlight = 0
+    let peak = 0
+    const gates: Array<() => void> = []
+    h.sendIQ.mockImplementation(async iq => {
+      const isWalk = iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') === '100'
+      if (!isWalk) return serve(iq)
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await new Promise<void>(resolve => gates.push(resolve))
+      inFlight--
+      return serve(iq)
+    })
+    const reads = [10, 11, 12, 13].map(index => h.mam.readRoomMessagePreview(ROOM, rows[index].stanzaId))
+    for (let turn = 0; turn < 40; turn++) await new Promise(resolve => setTimeout(resolve, 0))
+    expect(inFlight).toBe(2)
+    while (inFlight > 0 || gates.length) { gates.splice(0).forEach(open => open()); await new Promise(resolve => setTimeout(resolve, 0)) }
+    const results = await Promise.all(reads)
+    expect(results.map(result => result.kind)).toEqual(['found', 'found', 'found', 'found'])
+    expect(peak).toBe(2)
+  })
+
+  it('lets an aborted walk waiting for a slot leave without taking one', async () => {
+    const h = harness()
+    const serve = h.sendIQ.getMockImplementation()!
+    const gates: Array<() => void> = []
+    h.sendIQ.mockImplementation(async iq => {
+      if (iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') !== '100') return serve(iq)
+      await new Promise<void>(resolve => gates.push(resolve))
+      return serve(iq)
+    })
+    const running = [10, 11].map(index => h.mam.readRoomMessagePreview(ROOM, rows[index].stanzaId))
+    const controller = new AbortController()
+    const waiting = h.mam.readRoomMessagePreview(ROOM, rows[12].stanzaId, controller.signal)
+    const rejected = expect(waiting).rejects.toBeDefined()
+    for (let turn = 0; turn < 40; turn++) await new Promise(resolve => setTimeout(resolve, 0))
+    controller.abort()
+    await rejected
+    const later = h.mam.readRoomMessagePreview(ROOM, rows[13].stanzaId)
+    for (let turn = 0; turn < 60; turn++) { gates.splice(0).forEach(open => open()); await new Promise(resolve => setTimeout(resolve, 0)) }
+    await Promise.all(running)
+    expect((await later).kind).toBe('found')
   })
 
   it('does not confuse a deleted quote with a failed archive request', async () => {
