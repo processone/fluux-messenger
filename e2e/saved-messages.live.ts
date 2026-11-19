@@ -1407,7 +1407,6 @@ test('a deletion whose redaction the server refuses still shows as deleted, and 
     return out
   })
   expect(await ledger()).toHaveLength(0) // prerequisite: the durable ledger holds nothing about this deletion
-  const clearedAt = Date.now()
   const receivedBefore = one.received.length
   holdFetch = true
   holdArchive = true // no archive replay may deliver the deletion: only the cache can
@@ -1785,7 +1784,6 @@ test('a saved-node answer delivered to the first account own read after the acco
   await one.page.routeWebSocket(/\/ws$/, ws => {
     const server = ws.connectToServer()
     ws.onMessage(message => {
-      const frame = typeof message === 'string' ? message : message.toString()
       server.send(message)
     })
     server.onMessage(message => {
@@ -1809,7 +1807,7 @@ test('a saved-node answer delivered to the first account own read after the acco
     const w = window as unknown as { __idbHold: boolean; __idbQueue: Array<() => void> }
     w.__idbHold = false; w.__idbQueue = []
     const held = new WeakSet<object>()
-    for (const proto of [IDBObjectStore.prototype, IDBIndex.prototype] as Array<Record<string, (...a: unknown[]) => unknown>>) {
+    for (const proto of [IDBObjectStore.prototype, IDBIndex.prototype] as unknown as Array<Record<string, (...a: unknown[]) => unknown>>) {
       for (const method of ['get', 'getAll', 'getAllKeys', 'count']) {
         const original = proto[method]
         proto[method] = function (this: unknown, ...args: unknown[]) { const request = original.apply(this, args) as object; if (w.__idbHold) held.add(request); return request }
@@ -1891,7 +1889,6 @@ test('a saved room message opened but not yet joined is not continued once anoth
   await savedRow(two, text).click()
   await expect(two.page).toHaveURL(/\/rooms\//)
   await expect(two.page.getByRole('button', { name: 'Join room to participate' })).toBeVisible()
-  const roomUrl = two.page.url()
 
   // The account changes while the open waits for a join; the other account then reaches that same room and joins it.
   await two.page.getByRole('button', { name: 'Messages' }).first().click() // the account bar's menu is reached from a list view
