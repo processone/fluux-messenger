@@ -773,6 +773,20 @@
             "mcp": "Claude-integratie",
             "advanced": "Geavanceerd"
         },
+        "categoryDescriptions": {
+            "profile": "Je profiel, account en verbonden apparaten.",
+            "appearance": "Thema, modus, weergavedichtheid en accentkleur.",
+            "accessibility": "Tekstgrootte, leesbreedte, beweging en transparantie.",
+            "language": "Taal van de interface en regionale notaties.",
+            "notifications": "Kies hoe en wanneer Fluux je waarschuwt.",
+            "encryption": "End-to-end-versleutelingssleutels voor je gesprekken.",
+            "privacy": "Berichtarchivering op de server en automatisch downloaden van media.",
+            "blocked": "Mensen die je geen berichten kunnen sturen en je status niet zien.",
+            "storage": "Media in de cache op dit apparaat en de ruimte die ze innemen.",
+            "updates": "Houd Fluux up-to-date.",
+            "mcp": "Instellingen voor de lokale Claude-brug.",
+            "advanced": "Ontwikkelaarstools en diagnose."
+        },
         "groups": {
             "general": "Algemeen",
             "privacy": "Privacy en beveiliging",

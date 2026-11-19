@@ -775,6 +775,20 @@
             "mcp": "Claude'i integratsioon",
             "advanced": "Täpsem"
         },
+        "categoryDescriptions": {
+            "profile": "Sinu profiil, konto ja ühendatud seadmed.",
+            "appearance": "Teema, režiim, kuva tihedus ja rõhuvärv.",
+            "accessibility": "Teksti suurus, lugemislaius, liikumine ja läbipaistvus.",
+            "language": "Liidese keel ja piirkondlikud vormingud.",
+            "notifications": "Vali, kuidas ja millal Fluux sind teavitab.",
+            "encryption": "Sinu vestluste otspunktkrüpteerimise võtmed.",
+            "privacy": "Sõnumite arhiveerimine serveris ja meedia automaatne allalaadimine.",
+            "blocked": "Inimesed, kes ei saa sulle kirjutada ega sinu olekut näha.",
+            "storage": "Selles seadmes vahemällu salvestatud meedia ja selle kasutatav ruum.",
+            "updates": "Hoia Fluux ajakohasena.",
+            "mcp": "Kohaliku Claude'i silla seaded.",
+            "advanced": "Arendaja tööriistad ja diagnostika."
+        },
         "groups": {
             "general": "Üldine",
             "privacy": "Privaatsus ja turvalisus",

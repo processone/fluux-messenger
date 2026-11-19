@@ -779,6 +779,20 @@
             "mcp": "Integracija s Claude",
             "advanced": "Napredno"
         },
+        "categoryDescriptions": {
+            "profile": "Vaš profil, račun in povezane naprave.",
+            "appearance": "Tema, način, gostota prikaza in poudarna barva.",
+            "accessibility": "Velikost besedila, širina branja, gibanje in prosojnost.",
+            "language": "Jezik vmesnika in regionalne oblike.",
+            "notifications": "Izberite, kako in kdaj vas Fluux obvesti.",
+            "encryption": "Ključi za šifriranje od konca do konca za vaše pogovore.",
+            "privacy": "Arhiviranje sporočil na strežniku in samodejni prenos predstavnosti.",
+            "blocked": "Osebe, ki vam ne morejo pisati ali videti vašega stanja.",
+            "storage": "Predstavnost v predpomnilniku te naprave in prostor, ki ga zaseda.",
+            "updates": "Poskrbite, da bo Fluux posodobljen.",
+            "mcp": "Nastavitve lokalnega mostu Claude.",
+            "advanced": "Orodja za razvijalce in diagnostika."
+        },
         "groups": {
             "general": "Splošno",
             "privacy": "Zasebnost in varnost",

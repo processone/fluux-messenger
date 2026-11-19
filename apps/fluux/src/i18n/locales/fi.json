@@ -773,6 +773,20 @@
             "mcp": "Claude-integraatio",
             "advanced": "Lisäasetukset"
         },
+        "categoryDescriptions": {
+            "profile": "Profiilisi, tilisi ja yhdistetyt laitteet.",
+            "appearance": "Teema, tila, näkymän tiheys ja korostusväri.",
+            "accessibility": "Tekstin koko, lukuleveys, liike ja läpinäkyvyys.",
+            "language": "Käyttöliittymän kieli ja alueelliset muodot.",
+            "notifications": "Valitse, miten ja milloin Fluux ilmoittaa sinulle.",
+            "encryption": "Keskustelujesi päästä päähän -salauksen avaimet.",
+            "privacy": "Viestien arkistointi palvelimelle ja median automaattinen lataus.",
+            "blocked": "Henkilöt, jotka eivät voi lähettää sinulle viestejä tai nähdä tilaasi.",
+            "storage": "Tähän laitteeseen välimuistiin tallennettu media ja sen viemä tila.",
+            "updates": "Pidä Fluux ajan tasalla.",
+            "mcp": "Paikallisen Claude-sillan asetukset.",
+            "advanced": "Kehittäjätyökalut ja vianmääritys."
+        },
         "groups": {
             "general": "Yleiset",
             "privacy": "Yksityisyys ja turvallisuus",

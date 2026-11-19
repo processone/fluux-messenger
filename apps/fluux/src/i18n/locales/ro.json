@@ -777,6 +777,20 @@
             "mcp": "Integrare Claude",
             "advanced": "Avansat"
         },
+        "categoryDescriptions": {
+            "profile": "Profilul, contul și dispozitivele conectate.",
+            "appearance": "Temă, mod, densitatea afișării și culoarea de accent.",
+            "accessibility": "Dimensiunea textului, lățimea de citire, animații și transparență.",
+            "language": "Limba interfeței și formatele regionale.",
+            "notifications": "Alegeți cum și când vă anunță Fluux.",
+            "encryption": "Chei de criptare end-to-end pentru conversațiile dumneavoastră.",
+            "privacy": "Arhivarea mesajelor pe server și descărcarea automată a fișierelor media.",
+            "blocked": "Persoane care nu vă pot scrie și nu vă pot vedea starea.",
+            "storage": "Fișiere media din memoria cache a acestui dispozitiv și spațiul ocupat.",
+            "updates": "Păstrați Fluux actualizat.",
+            "mcp": "Setările punții Claude locale.",
+            "advanced": "Instrumente pentru dezvoltatori și diagnosticare."
+        },
         "groups": {
             "general": "General",
             "privacy": "Confidențialitate și securitate",

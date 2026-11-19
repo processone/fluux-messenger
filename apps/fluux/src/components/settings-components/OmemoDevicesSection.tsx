@@ -93,7 +93,7 @@ export function OmemoDevicesSection() {
           {read.devices.map((device) => (
             <li
               key={device.id}
-              className="flex items-start justify-between gap-3 p-3 rounded-lg bg-fluux-bg border border-fluux-border"
+              className="flex items-start justify-between gap-3 p-3 fluux-card"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-sm text-fluux-text">

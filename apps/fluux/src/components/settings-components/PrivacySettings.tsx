@@ -136,7 +136,7 @@ export function PrivacySettings() {
   const setMediaAutoDownload = useSettingsStore((s) => s.setMediaAutoDownload)
 
   return (
-    <section className="w-full max-w-md">
+    <section className="w-full">
       <SettingsSection>
         <ServerArchiveSetting />
         <div className="space-y-3">

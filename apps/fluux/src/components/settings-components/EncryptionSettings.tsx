@@ -68,7 +68,7 @@ function EncryptionOverview() {
   ]
 
   return (
-    <section className="w-full max-w-md">
+    <section className="w-full">
       <SettingsSection description={t('settings.encryption.overview.intro')}>
         <ul className="space-y-2">
           {rows.map((row) => (
@@ -76,7 +76,7 @@ function EncryptionOverview() {
               <button
                 type="button"
                 onClick={() => open(row.page)}
-                className="w-full flex items-center gap-3 p-3 rounded-lg bg-fluux-bg border border-fluux-border hover:bg-fluux-hover text-start transition-colors"
+                className="w-full flex items-center gap-3 p-3 fluux-card fluux-card-row-hover text-start transition-colors"
               >
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium text-fluux-text">{row.name}</span>

@@ -773,6 +773,20 @@
             "mcp": "Claude-integration",
             "advanced": "Avanceret"
         },
+        "categoryDescriptions": {
+            "profile": "Din profil, din konto og tilsluttede enheder.",
+            "appearance": "Tema, tilstand, visningstæthed og accentfarve.",
+            "accessibility": "Tekststørrelse, læsebredde, bevægelse og gennemsigtighed.",
+            "language": "Brugerfladens sprog og regionale formater.",
+            "notifications": "Vælg hvordan og hvornår Fluux giver dig besked.",
+            "encryption": "Nøgler til end-to-end-kryptering af dine samtaler.",
+            "privacy": "Arkivering af beskeder på serveren og automatisk download af medier.",
+            "blocked": "Personer, der ikke kan skrive til dig eller se din status.",
+            "storage": "Medier gemt i cache på denne enhed og den plads, de bruger.",
+            "updates": "Hold Fluux opdateret.",
+            "mcp": "Indstillinger for den lokale Claude-bro.",
+            "advanced": "Udviklerværktøjer og diagnosticering."
+        },
         "groups": {
             "general": "Generelt",
             "privacy": "Privatliv og sikkerhed",

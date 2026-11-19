@@ -776,6 +776,20 @@
             "mcp": "Claude integrācija",
             "advanced": "Papildu"
         },
+        "categoryDescriptions": {
+            "profile": "Jūsu profils, konts un pievienotās ierīces.",
+            "appearance": "Motīvs, režīms, attēlojuma blīvums un akcenta krāsa.",
+            "accessibility": "Teksta izmērs, lasīšanas platums, kustība un caurspīdīgums.",
+            "language": "Saskarnes valoda un reģionālie formāti.",
+            "notifications": "Izvēlieties, kā un kad Fluux jūs brīdina.",
+            "encryption": "Jūsu sarunu pilnīgas šifrēšanas atslēgas.",
+            "privacy": "Ziņojumu arhivēšana serverī un automātiska multivides lejupielāde.",
+            "blocked": "Cilvēki, kuri nevar jums rakstīt vai redzēt jūsu statusu.",
+            "storage": "Šīs ierīces kešatmiņā saglabātā multivide un tās aizņemtā vieta.",
+            "updates": "Uzturiet Fluux atjauninātu.",
+            "mcp": "Lokālā Claude tilta iestatījumi.",
+            "advanced": "Izstrādātāju rīki un diagnostika."
+        },
         "groups": {
             "general": "Vispārīgi",
             "privacy": "Konfidencialitāte un drošība",

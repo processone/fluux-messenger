@@ -25,7 +25,7 @@ export function LanguageSettings() {
   }
 
   return (
-    <section className="w-full max-w-md">
+    <section className="w-full">
       <SettingsSection>
         <div className="space-y-6">
           {/* Language selection */}

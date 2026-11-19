@@ -781,6 +781,20 @@
             "mcp": "Integrazzjoni ta' Claude",
             "advanced": "Avvanzat"
         },
+        "categoryDescriptions": {
+            "profile": "Il-profil tiegħek, il-kont u l-apparati konnessi.",
+            "appearance": "Tema, modalità, densità tal-wiri u kulur tal-enfasi.",
+            "accessibility": "Daqs tat-test, wisa' tal-qari, moviment u trasparenza.",
+            "language": "Il-lingwa tal-interfaċċja u l-formati reġjonali.",
+            "notifications": "Agħżel kif u meta Fluux javżak.",
+            "encryption": "Ċwievet tal-kriptaġġ minn tarf għal tarf għall-konversazzjonijiet tiegħek.",
+            "privacy": "Arkivjar tal-messaġġi fuq is-server u tniżżil awtomatiku tal-midja.",
+            "blocked": "Nies li ma jistgħux jiktbulek jew jaraw l-istatus tiegħek.",
+            "storage": "Midja maħżuna fil-cache ta' dan l-apparat u l-ispazju li tuża.",
+            "updates": "Żomm lil Fluux aġġornat.",
+            "mcp": "Settings għall-pont lokali ta' Claude.",
+            "advanced": "Għodod għall-iżviluppaturi u dijanjostika."
+        },
         "groups": {
             "general": "Ġenerali",
             "privacy": "Privatezza u sigurtà",

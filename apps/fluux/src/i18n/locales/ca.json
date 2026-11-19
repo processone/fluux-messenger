@@ -777,6 +777,20 @@
             "mcp": "Integració amb Claude",
             "advanced": "Avançat"
         },
+        "categoryDescriptions": {
+            "profile": "El teu perfil, el teu compte i els dispositius connectats.",
+            "appearance": "Tema, mode, densitat de visualització i color d'èmfasi.",
+            "accessibility": "Mida del text, amplada de lectura, moviment i transparència.",
+            "language": "Idioma de la interfície i formats regionals.",
+            "notifications": "Tria com i quan t'avisa Fluux.",
+            "encryption": "Claus de xifratge d'extrem a extrem per a les teves converses.",
+            "privacy": "Arxiu de missatges al servidor i baixada automàtica de multimèdia.",
+            "blocked": "Persones que no et poden escriure ni veure el teu estat.",
+            "storage": "Multimèdia en memòria cau en aquest dispositiu i l'espai que ocupa.",
+            "updates": "Mantén Fluux actualitzat.",
+            "mcp": "Configuració del pont local de Claude.",
+            "advanced": "Eines de desenvolupament i diagnòstic."
+        },
         "groups": {
             "general": "General",
             "privacy": "Privadesa i seguretat",

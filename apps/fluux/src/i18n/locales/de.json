@@ -775,6 +775,20 @@
             "mcp": "Claude-Integration",
             "advanced": "Erweitert"
         },
+        "categoryDescriptions": {
+            "profile": "Ihr Profil, Ihr Konto und verbundene Geräte.",
+            "appearance": "Design, Modus, Anzeigedichte und Akzentfarbe.",
+            "accessibility": "Textgröße, Lesebreite, Bewegung und Transparenz.",
+            "language": "Sprache der Oberfläche und regionale Formate.",
+            "notifications": "Legen Sie fest, wie und wann Fluux Sie benachrichtigt.",
+            "encryption": "Ende-zu-Ende-Verschlüsselungsschlüssel für Ihre Unterhaltungen.",
+            "privacy": "Nachrichtenarchivierung auf dem Server und automatische Mediendownloads.",
+            "blocked": "Personen, die Ihnen nicht schreiben und Ihren Status nicht sehen können.",
+            "storage": "Auf diesem Gerät zwischengespeicherte Medien und ihr Speicherbedarf.",
+            "updates": "Halten Sie Fluux auf dem neuesten Stand.",
+            "mcp": "Einstellungen für die lokale Claude-Brücke.",
+            "advanced": "Entwicklerwerkzeuge und Diagnose."
+        },
         "groups": {
             "general": "Allgemein",
             "privacy": "Datenschutz & Sicherheit",

@@ -773,6 +773,20 @@
             "mcp": "Claude-integráció",
             "advanced": "Speciális"
         },
+        "categoryDescriptions": {
+            "profile": "Profilod, fiókod és a csatlakoztatott eszközök.",
+            "appearance": "Téma, mód, megjelenítési sűrűség és kiemelőszín.",
+            "accessibility": "Szövegméret, olvasási szélesség, mozgás és átlátszóság.",
+            "language": "A felület nyelve és a területi formátumok.",
+            "notifications": "Válaszd ki, hogyan és mikor értesítsen a Fluux.",
+            "encryption": "Végpontok közötti titkosítási kulcsok a beszélgetéseidhez.",
+            "privacy": "Üzenetek archiválása a szerveren és a médiafájlok automatikus letöltése.",
+            "blocked": "Akik nem írhatnak neked és nem láthatják az állapotodat.",
+            "storage": "Az eszközön gyorsítótárazott médiafájlok és az általuk elfoglalt hely.",
+            "updates": "Tartsd naprakészen a Fluuxot.",
+            "mcp": "A helyi Claude-híd beállításai.",
+            "advanced": "Fejlesztői eszközök és diagnosztika."
+        },
         "groups": {
             "general": "Általános",
             "privacy": "Adatvédelem és biztonság",
