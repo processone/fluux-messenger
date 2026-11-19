@@ -117,6 +117,7 @@ async function saveMessage(client: Client, text: string) {
 async function openSaved(client: Client) {
   await client.page.getByRole('link', { name: 'Saved', exact: true }).or(client.page.getByRole('button', { name: 'Saved', exact: true })).first().click()
   await expect(client.page).toHaveURL(/\/saved/)
+  await client.page.mouse.move(700, 500) // the pointer leaves the rail, so no tooltip covers the page
 }
 
 const savedRow = (client: Client, text: string) => client.page.getByTestId('saved-row').filter({ hasText: text })
@@ -361,6 +362,117 @@ test('a save made offline survives a reload and is sent once after the reconnect
   await openSaved(one)
   await expect(savedRow(one, text)).toHaveCount(1, { timeout: 45_000 })
   await shot(one.page, 'offline-save-sent')
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('a removal made on the second client reaches the first and the node', async ({ browser }) => {
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser)
+  const two = await connect(browser)
+  const text = `Removed from the other side ${stamp}`
+  await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
+  await saveMessage(one, text)
+  await openSaved(one)
+  await openSaved(two)
+  await expect(savedRow(two, text)).toBeVisible()
+  await savedRow(two, text).getByRole('button', { name: 'Remove from saved' }).click()
+  await expect(savedRow(one, text)).toHaveCount(0)
+  await nodeHolds(reader, 0)
+  await one.context.close(); await two.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('a removal made offline survives a reload and is sent once after the reconnect', async ({ browser }) => {
+  const bob = await script('bob')
+  let reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser)
+  const text = `Removed while offline ${stamp}`
+  await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
+  await saveMessage(one, text)
+  await nodeHolds(reader, 1)
+
+  let refuse = true
+  await one.page.routeWebSocket(/\/ws$/, ws => { if (refuse) void ws.close(); else ws.connectToServer() })
+  kick('alice')
+  reader = await script('alice')
+  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).first()).toBeVisible({ timeout: 20_000 })
+  await openSaved(one)
+  await savedRow(one, text).getByRole('button', { name: 'Remove from saved' }).click()
+  await expect(savedRow(one, text)).toHaveCount(0)
+  const queued = () => one.page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.includes('fluux-saved-pending')).map(([, value]) => value).join(''))
+  await expect.poll(queued, { timeout: 10_000 }).toContain('retract')
+  expect((await reader.items()).length).toBe(1) // the server still holds it
+
+  await one.page.reload()
+  await expect.poll(queued, { timeout: 10_000 }).toContain('retract')
+  expect((await reader.items()).length).toBe(1)
+
+  refuse = false
+  await one.page.reload()
+  await nodeHolds(reader, 0)
+  await expect.poll(queued, { timeout: 20_000 }).not.toContain('retract')
+  expect(one.frames.filter(frame => frame.includes(`<retract node="${NODE}"`)).length).toBe(1)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('a saved message whose original no longer exists says so instead of opening nothing', async ({ browser }) => {
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const text = `Never sent ${stamp}`
+  const field = (name: string, value: string) => xml('field', { var: name }, xml('value', {}, value))
+  const options = xml('publish-options', {}, xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+    xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options')),
+    field('pubsub#persist_items', 'true'), field('pubsub#access_model', 'whitelist'), field('pubsub#max_items', '256'), field('pubsub#send_last_published_item', 'never')))
+  // An item for a message the archive has never held (the other device saved it, then it disappeared).
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('publish', { node: NODE },
+    xml('item', { id: `ghost${stamp}` }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
+      xml('delay', { xmlns: 'urn:xmpp:delay', stamp: new Date(Date.now() - 3_600_000).toISOString() }),
+      xml('message', { xmlns: 'jabber:client', from: 'bob@localhost/x', to: 'alice@localhost', type: 'chat', id: `ghost-${stamp}` }, xml('body', {}, text)))))), options)))
+  const one = await connect(browser)
+  await openSaved(one)
+  await expect(savedRow(one, text)).toBeVisible()
+  await savedRow(one, text).click()
+  await expect(one.page.getByText(/no longer available|Could not load/i).first()).toBeVisible({ timeout: 30_000 })
+  await expect(one.page).toHaveURL(/\/saved/)
+  await shot(one.page, 'original-missing')
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('a deletion made while this device was away is applied to the saved row and the stored item once it is back', async ({ browser }) => {
+  const bob = await script('bob')
+  let reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser)
+  const text = `Deleted while away ${stamp}`
+  const id = await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
+  await saveMessage(one, text)
+  await nodeHolds(reader, 1)
+
+  // The device cannot reach the server while the sender retracts the message.
+  let refuse = true
+  await one.page.routeWebSocket(/\/ws$/, ws => { if (refuse) void ws.close(); else ws.connectToServer() })
+  kick('alice')
+  reader = await script('alice')
+  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).first()).toBeVisible({ timeout: 20_000 })
+  await bob.retract('alice', id)
+  refuse = false
+  await one.page.reload()
+  await openSaved(one)
+  await expect(savedRow(one, 'Message deleted')).toBeVisible({ timeout: 45_000 })
+  await expect.poll(async () => (await reader.items())[0] ?? '', { timeout: 30_000 }).toContain('deleted="true"')
+  expect((await reader.items())[0]).not.toContain(text)
+  await shot(one.page, 'deleted-while-away')
   await emptyNode(reader)
   await one.context.close(); await bob.stop(); await reader.stop()
 })
