@@ -5124,6 +5124,9 @@ test('unfocused room scrolling recreates the divider at the first unread message
     return el.scrollHeight - el.scrollTop - el.clientHeight
   }), distance => distance <= AT_BOTTOM_OK_PX)
   await expect.poll(observe).toEqual({ badge: 3, count: null, anchor: null, pointer: readPointer })
+  // The next message arrives after the reader has stopped. A scroll event the wheel gesture still
+  // produced at the bottom after the arrival would rightly clear the new divider as read.
+  await settle(page)
   await arrive(4)
   await expect.poll(observe).toEqual({ badge: 4, count: 4, anchor: 'live-1', pointer: readPointer })
   await expect(page.locator('[data-new-message-marker]')).toHaveText('4 new messages')

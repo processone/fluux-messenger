@@ -4,7 +4,8 @@ import type { MessageVirtualizer, ScrollWrite, ScrollWriteOutcome, ScrollWriteOw
 
 // Frames with neither a scroll event nor an offset change before we declare scrolling settled and
 // stop polling (~100ms at 60fps — close to @tanstack's default 150ms isScrollingResetDelay).
-const OFFSET_POLL_IDLE_FRAMES = 6
+// Exported for the end-to-end settle wait, which must outlast it.
+export const OFFSET_POLL_IDLE_FRAMES = 6
 const ENTRY_OVERSCAN = 2
 const STEADY_OVERSCAN = 12
 
