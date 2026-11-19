@@ -292,10 +292,12 @@ describe('scrolling inside a context menu', () => {
     expect(screen.queryByTestId('menu')).not.toBeInTheDocument()
   })
 
-  it('preserves dismissal on scroll with a native frame', () => {
+  it('keeps the menu open for its own scrolling with a native frame too, and closes when its list scrolls', () => {
     render(<TestComponent />)
     fireEvent.contextMenu(screen.getByTestId('trigger'), { clientX: 100, clientY: 100 })
     fireEvent.scroll(screen.getByTestId('menu'))
+    expect(screen.getByTestId('menu')).toBeInTheDocument()
+    fireEvent.scroll(screen.getByTestId('trigger-list'))
     expect(screen.queryByTestId('menu')).not.toBeInTheDocument()
   })
 })
