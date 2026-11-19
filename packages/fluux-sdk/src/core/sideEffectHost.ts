@@ -85,7 +85,7 @@ export interface MdsSideEffectHost {
 /** The saved-messages node operations the sync side effect drives. */
 export interface SavedMessagesSideEffectHost {
   fetchAll(timeoutMs?: number): Promise<PepFetch<SavedMessage>>
-  publish(entry: SavedMessage): Promise<void>
+  publish(entry: SavedMessage, options?: { create?: boolean }): Promise<void>
   retract(itemId: string): Promise<void>
   fetchMaxItems(): Promise<number | undefined>
 }
