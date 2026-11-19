@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
-import { isKeyLocked, type BackupProbeResult } from '@fluux/openpgp-plugin'
+import type { BackupProbeResult } from '@fluux/openpgp-plugin'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { platform } from '@/platform'
+import { useWebKeyLocked } from '@/hooks/useWebKeyLocked'
+import { useOwnKeyConflict, useTrustStateVerdict } from '@/e2ee/openpgpTrustView'
 
 /** What the overview's OpenPGP row says. Each value has its own line of text. */
 export type OpenPgpOverviewState =
@@ -62,44 +64,70 @@ export function useOpenPgpOverviewState(): OpenPgpOverviewState {
   const enabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
   const registrationError = useEncryptionSettingsStore((s) => s.registrationError)
   const pluginRegisteredAt = useEncryptionSettingsStore((s) => s.pluginRegisteredAt)
+  const webKeyLocked = useWebKeyLocked()
+  // The same reactive sources as the OpenPGP screen's banners.
+  const ownKeyConflict = useOwnKeyConflict()
+  const trustCompromised = useTrustStateVerdict().status === 'compromised'
   const online = status === 'online'
-  const [read, setRead] = useState<Pick<OpenPgpOverviewInputs, 'fingerprint' | 'warning' | 'backupProbe' | 'backedUpFingerprint'>>({
-    fingerprint: null,
-    warning: false,
-    backupProbe: null,
-    backedUpFingerprint: null,
-  })
 
-  useEffect(() => {
-    if (!enabled || !online || registrationError) {
-      setRead({ fingerprint: null, warning: false, backupProbe: null, backedUpFingerprint: null })
-      return
-    }
-    let cancelled = false
-    void (async () => {
-      const plugin = client.e2ee?.getPlugin('openpgp') as OpenPgpPluginReads | null | undefined
-      const fingerprint = plugin?.getOwnFingerprint?.() ?? null
-      const pepSupported = await client.server.checkPepSupport().catch(() => null)
-      const warning =
-        pepSupported === false ||
+  // The key unlocking or being restored outside this screen (startup unlock, guided recovery, key picker,
+  // keychain retry) does not touch the stores above; the plugin announces it.
+  const [unlockCount, setUnlockCount] = useState(0)
+  useEffect(() => client.subscribe('e2ee:key-unlocked', () => setUnlockCount((n) => n + 1)), [client])
+
+  // What the plugin knows locally is read at once, before any server request.
+  const local = useMemo(() => {
+    // These say the plugin's state may have changed since the last read.
+    void [pluginRegisteredAt, unlockCount, webKeyLocked]
+    if (!enabled || !online || registrationError) return null
+    const plugin = client.e2ee?.getPlugin('openpgp') as OpenPgpPluginReads | null | undefined
+    const fingerprint = plugin?.getOwnFingerprint?.() ?? null
+    return {
+      fingerprint,
+      keyWarning:
         plugin?.isKeyRecoveryNeeded?.() === true ||
-        (platform().nativeOpenpgp && !!fingerprint && plugin?.isKeychainBacked?.() === false)
-      const backedUpFingerprint = plugin?.getBackedUpFingerprint?.() ?? null
-      const backupProbe = fingerprint
-        ? await (plugin?.probeSecretKeyBackup?.() ?? Promise.resolve('absent' as const)).catch(() => 'unknown' as const)
-        : null
-      if (!cancelled) setRead({ fingerprint, warning, backupProbe, backedUpFingerprint })
-    })()
+        (platform().nativeOpenpgp && !!fingerprint && plugin?.isKeychainBacked?.() === false),
+      backedUpFingerprint: plugin?.getBackedUpFingerprint?.() ?? null,
+    }
+  }, [enabled, online, registrationError, client, pluginRegisteredAt, unlockCount, webKeyLocked])
+
+  // The server answers arrive later and only add to the reading.
+  const [remote, setRemote] = useState<{ pepUnsupported: boolean; backupProbe: BackupProbeResult | null }>({
+    pepUnsupported: false,
+    backupProbe: null,
+  })
+  const hasKey = !!local?.fingerprint
+  useEffect(() => {
+    setRemote({ pepUnsupported: false, backupProbe: null })
+    if (!local) return
+    let cancelled = false
+    const plugin = client.e2ee?.getPlugin('openpgp') as OpenPgpPluginReads | null | undefined
+    void client.server
+      .checkPepSupport()
+      .catch(() => null)
+      .then((supported) => {
+        if (!cancelled && supported === false) setRemote((r) => ({ ...r, pepUnsupported: true }))
+      })
+    if (hasKey) {
+      void (plugin?.probeSecretKeyBackup?.() ?? Promise.resolve('absent' as const))
+        .catch(() => 'unknown' as const)
+        .then((backupProbe) => {
+          if (!cancelled) setRemote((r) => ({ ...r, backupProbe }))
+        })
+    }
     return () => {
       cancelled = true
     }
-  }, [enabled, online, registrationError, client, pluginRegisteredAt])
+  }, [local, hasKey, client])
 
   return openPgpOverviewState({
     enabled,
     online,
     registrationError: !!registrationError,
-    locked: platform().keyNeedsSessionPassphrase && enabled && isKeyLocked() && !registrationError,
-    ...read,
+    locked: webKeyLocked && enabled && !registrationError,
+    fingerprint: local?.fingerprint ?? null,
+    warning: !!local?.keyWarning || remote.pepUnsupported || !!ownKeyConflict || trustCompromised,
+    backupProbe: remote.backupProbe,
+    backedUpFingerprint: local?.backedUpFingerprint ?? null,
   })
 }
