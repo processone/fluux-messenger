@@ -34,19 +34,24 @@ function isMac(nav: Navigator): boolean {
   return /Mac/.test(nav.platform ?? '') && !/iPhone|iPad|iPod/.test(nav.userAgent ?? '') && !(nav.maxTouchPoints > 1)
 }
 
-function scrollBox(target: EventTarget | null): HTMLElement | null {
+/** The scroll boxes enclosing a target, nearest first: wheel and touch input chains outward. */
+function scrollBoxes(target: EventTarget | null): HTMLElement[] {
+  const boxes: HTMLElement[] = []
   let el = target instanceof Element ? target : null
   while (el) {
     if (el instanceof HTMLElement) {
       const o = getComputedStyle(el)
       const y = /(auto|scroll|overlay)/.test(o.overflowY) && el.scrollHeight > el.clientHeight
       const x = /(auto|scroll|overlay)/.test(o.overflowX) && el.scrollWidth > el.clientWidth
-      if (y || x) return el
+      if (y || x) boxes.push(el)
     }
     el = el.parentElement
   }
-  return null
+  return boxes
 }
+
+/** Space activates these instead of scrolling, so it is not scrolling input there. */
+const ACTIVATABLE = 'button, a, input, textarea, select, summary, [role="button"], [role="option"], [contenteditable]'
 
 /**
  * Whether a pointer is over the box's own scroll bar strip, on either side.
@@ -76,12 +81,14 @@ function overStrip(el: HTMLElement, e: MouseEvent): boolean {
 export function installScrollbarReveal(win: Window & typeof globalThis = window): () => void {
   const doc = win.document
   const timers = new Map<HTMLElement, number>()
-  /** Boxes the user is scrolling: when the intent lapses, and whether scroll events renew it (touch fling). */
-  const intents = new Map<HTMLElement, { until: number; momentum: boolean }>()
+  /** Boxes the user is scrolling (weak, so detached lists and dialogs are not retained): when the intent lapses, and whether scroll events renew it (touch fling). */
+  const intents = new WeakMap<HTMLElement, { until: number; momentum: boolean }>()
   /** The box whose strip the pointer rests on, and the box whose bar is being dragged. */
   let hovered: HTMLElement | null = null
   let held: HTMLElement | null = null
-  let touchBox: HTMLElement | null = null
+  let touchBoxes: HTMLElement[] = []
+  /** Keyboard navigation can scroll a list the focus is not in (selected rows), so it opens a short global window. */
+  let keyIntentUntil = 0
 
   const now = () => win.performance.now()
   const scheduleHide = (el: HTMLElement) => {
@@ -112,23 +119,22 @@ export function installScrollbarReveal(win: Window & typeof globalThis = window)
   }
 
   const onWheel = (e: WheelEvent) => {
-    const el = scrollBox(e.target)
-    if (!el) return
-    markIntent(el)
-    reveal(el)
+    const boxes = scrollBoxes(e.target)
+    for (const b of boxes) markIntent(b)
+    if (boxes[0]) reveal(boxes[0])
   }
   const onKey = (e: KeyboardEvent) => {
     if (!NAV_KEYS.has(e.key)) return
-    const el = scrollBox(e.target)
-    if (el) markIntent(el)
+    if (e.key === ' ' && e.target instanceof Element && e.target.closest(ACTIVATABLE)) return
+    keyIntentUntil = now() + USER_INTENT_MS
   }
   const onTouchStart = (e: TouchEvent) => {
-    touchBox = scrollBox(e.target)
-    if (touchBox) markIntent(touchBox, true)
+    touchBoxes = scrollBoxes(e.target)
+    for (const b of touchBoxes) markIntent(b, true)
   }
   const onTouchEnd = () => {
-    if (touchBox) markIntent(touchBox, true)
-    touchBox = null
+    for (const b of touchBoxes) markIntent(b, true)
+    touchBoxes = []
   }
   const onPointerDown = (e: PointerEvent) => {
     const el = e.target instanceof HTMLElement ? e.target : null
@@ -158,10 +164,12 @@ export function installScrollbarReveal(win: Window & typeof globalThis = window)
     const el = e.target
     if (!(el instanceof HTMLElement)) return
     const intent = intents.get(el)
-    if (el === held || (intent && intent.until > now())) {
+    // A finger still down owns its boxes however long it pauses.
+    if (touchBoxes.includes(el)) markIntent(el, true)
+    if (el === held || touchBoxes.includes(el) || keyIntentUntil > now() || (intent && intent.until > now())) {
       if (intent?.momentum) markIntent(el, true)
       reveal(el)
-    } else if (intent) intents.delete(el)
+    }
   }
 
   const opts = { capture: true, passive: true } as const
@@ -201,8 +209,8 @@ export function installScrollbarReveal(win: Window & typeof globalThis = window)
       el.removeAttribute('data-scrolling')
     }
     timers.clear()
-    intents.clear()
-    hovered = held = touchBox = null
+    hovered = held = null
+    touchBoxes = []
     doc.documentElement.removeAttribute('data-scrollbars')
   }
 }

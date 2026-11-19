@@ -106,6 +106,40 @@ describe('installScrollbarReveal', () => {
     expect(box.hasAttribute('data-scrolling')).toBe(false)
   })
 
+  it('keeps a held finger owning the box after a pause before the first scroll', () => {
+    box.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    vi.advanceTimersByTime(USER_INTENT_MS * 3)
+    box.dispatchEvent(new Event('scroll'))
+    expect(box.hasAttribute('data-scrolling')).toBe(true)
+  })
+
+  it('reveals the outer list when a wheel over an inner scroller chains outward', () => {
+    const inner = document.createElement('div')
+    inner.style.overflowX = 'auto'
+    Object.defineProperty(inner, 'scrollWidth', { value: 500, configurable: true })
+    Object.defineProperty(inner, 'clientWidth', { value: 100, configurable: true })
+    box.appendChild(inner)
+    inner.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
+    box.dispatchEvent(new Event('scroll'))
+    expect(box.hasAttribute('data-scrolling')).toBe(true)
+  })
+
+  it('reveals a list scrolled by arrow keys while focus sits in an input elsewhere', () => {
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    box.dispatchEvent(new Event('scroll'))
+    expect(box.hasAttribute('data-scrolling')).toBe(true)
+  })
+
+  it('does not treat Space on a button as scrolling', () => {
+    const btn = document.createElement('button')
+    box.appendChild(btn)
+    btn.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+    box.dispatchEvent(new Event('scroll'))
+    expect(box.hasAttribute('data-scrolling')).toBe(false)
+  })
+
   it('removes its attribute and listeners on uninstall', () => {
     box.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     uninstall()
