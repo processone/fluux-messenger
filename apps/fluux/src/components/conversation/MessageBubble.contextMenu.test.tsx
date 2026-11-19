@@ -206,4 +206,25 @@ describe('message right-click menu', () => {
     expect(within(m).queryByRole('button', { name: 'chat.deleteMessage' })).toBeNull()
     expect(within(m).getByRole('button', { name: 'chat.copyMessage' })).toBeInTheDocument()
   })
+
+  it('keeps the system menu inside the popup for Shift and text fields, and the keyboard out of the list', () => {
+    const onKeyDown = vi.fn()
+    render(<div onKeyDown={onKeyDown}><MessageBubble {...props()} /></div>)
+    fireEvent.contextMenu(screen.getByText('Hello, world!'))
+    const m = menu()!
+    expect(m).toHaveAttribute('data-modal', 'true')
+    expect(fireEvent.contextMenu(within(m).getByRole('button', { name: 'chat.reply' }), { shiftKey: true })).toBe(true)
+    expect(fireEvent.contextMenu(within(m).getByRole('button', { name: 'chat.reply' }))).toBe(false)
+    const field = document.createElement('input')
+    m.appendChild(field)
+    expect(fireEvent.contextMenu(field)).toBe(true)
+  })
+
+  it('limits a long menu to the window height so it can scroll', () => {
+    render(<MessageBubble {...props()} />)
+    fireEvent.contextMenu(screen.getByText('Hello, world!'))
+    const classes = menu()!.className
+    expect(classes).toContain('max-h-[calc(100dvh-1rem)]')
+    expect(classes).toContain('overflow-y-auto')
+  })
 })

@@ -1,14 +1,14 @@
 /** Touch actions and quick reactions anchored to the selected message. */
 import { useState, useRef, Suspense, lazy } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Reply, Pencil, Trash2, Copy, SmilePlus, Link2, Forward, BookmarkPlus, BookmarkMinus } from 'lucide-react'
+import { SmilePlus, Link2 } from 'lucide-react'
 import { TouchMenu } from '../ui/TouchMenu'
 import { SelectedMessagePreview } from './SelectedMessagePreview'
 import { MenuButton } from '../sidebar-components/SidebarListMenu'
 import { TOOLBAR_REACTIONS } from './MessageToolbar'
 import { extractLinks } from '../../utils/messageStyles'
 import { copyToClipboard } from '@/utils/clipboard'
-import { SaveActionIcon, saveActionLabelKey } from '@/utils/saveAction'
+import { MessageActionRows } from './MessageActionRows'
 
 // Lazy-load the emoji picker — only fetched when the user opens "more reactions".
 const EmojiPicker = lazy(() => import('../EmojiPicker').then((m) => ({ default: m.EmojiPicker })))
@@ -166,90 +166,26 @@ export function MessageActionSheet({
         </div>
       ) : (
         <>
-          {/* Action rows — py-3 gives a comfortable >=44px touch target */}
           <div className="pb-1">
-            {onShowReactors && (
-              <MenuButton
-                onClick={() => runAction(onShowReactors)}
-                icon={<SmilePlus className="size-5" />}
-                label={t('chat.reactions')}
-                className="py-3"
-              />
-            )}
-            {canReply && (
-              <MenuButton
-                onClick={() => runAction(onReply)}
-                icon={<Reply className="rtl-mirror size-5" />}
-                label={t('chat.reply')}
-                className="py-3"
-              />
-            )}
-            {canCopy && (
-              <MenuButton
-                onClick={copyBody}
-                icon={<Copy className="size-5" />}
-                label={t('chat.copyMessage')}
-                className="py-3"
-              />
-            )}
-            {onForward && (
-              <MenuButton
-                onClick={() => runAction(onForward)}
-                icon={<Forward className="rtl-mirror size-5" />}
-                label={t('chat.forwardMessageLink')}
-                className="py-3"
-              />
-            )}
-            {onToggleSaved && (
-              <MenuButton
-                onClick={() => runAction(onToggleSaved)}
-                icon={isSaved ? <BookmarkMinus className="size-5" /> : <BookmarkPlus className="size-5" />}
-                label={isSaved ? t('chat.removeFromSaved') : t('chat.saveMessage')}
-                className="py-3"
-              />
-            )}
-            {onCopyMessageLink && (
-              <MenuButton
-                onClick={() => runAction(onCopyMessageLink)}
-                icon={<Link2 className="size-5" />}
-                label={t('chat.copyMessageLink')}
-                className="py-3"
-              />
-            )}
-            {links.length > 0 && (
-              <MenuButton
-                buttonRef={linkButtonRef}
-                onClick={onCopyLinkClick}
-                icon={<Link2 className="size-5" />}
-                label={t('chat.copyLink')}
-                className="py-3"
-              />
-            )}
-            {onSaveAttachment && (
-              <MenuButton
-                onClick={() => runAction(onSaveAttachment)}
-                icon={<SaveActionIcon className="size-5" />}
-                label={t(saveActionLabelKey())}
-                className="py-3"
-              />
-            )}
-            {canEdit && (
-              <MenuButton
-                onClick={() => runAction(onEdit)}
-                icon={<Pencil className="size-5" />}
-                label={t('chat.editMessage')}
-                className="py-3"
-              />
-            )}
-            {canDelete && (
-              <MenuButton
-                onClick={() => runAction(onDelete)}
-                icon={<Trash2 className="size-5" />}
-                label={t('chat.deleteMessage')}
-                variant="danger"
-                className="py-3"
-              />
-            )}
+            <MessageActionRows
+              touch
+              run={runAction}
+              onShowReactors={onShowReactors}
+              onReply={onReply}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onCopyText={canCopy ? copyBody : undefined}
+              onForward={onForward}
+              onToggleSaved={onToggleSaved}
+              isSaved={isSaved}
+              onCopyMessageLink={onCopyMessageLink}
+              onCopyLink={links.length > 0 ? onCopyLinkClick : undefined}
+              copyLinkRef={linkButtonRef}
+              onSaveAttachment={onSaveAttachment}
+              canReply={canReply}
+              canEdit={canEdit}
+              canDelete={canDelete}
+            />
           </div>
         </>
       )}

@@ -2,13 +2,13 @@
 import { useRef, useState, useEffect, Suspense, lazy } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { Reply, Pencil, Trash2, Copy, SmilePlus, Link2, Forward, ExternalLink, Download, Link } from 'lucide-react'
+import { Copy, SmilePlus, Link2, ExternalLink, Download, Link } from 'lucide-react'
 import { MenuButton } from '../sidebar-components/SidebarListMenu'
 import { TOOLBAR_REACTIONS } from './MessageToolbar'
 import { extractLinks } from '../../utils/messageStyles'
 import { copyToClipboard } from '@/utils/clipboard'
 import { openInBrowser } from '@/utils/openInBrowser'
-import { SaveActionIcon, saveActionLabelKey } from '@/utils/saveAction'
+import { MessageActionRows } from './MessageActionRows'
 import type { ContextMenuState } from '@/hooks/useContextMenu'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 import type { MessageActionSheetProps } from './MessageActionSheet'
@@ -153,23 +153,22 @@ export function MessageContextMenu({
           <div className="my-1 border-t border-fluux-border" role="separator" />
         </>
       )}
-      {onShowReactors && <MenuButton onClick={() => run(onShowReactors)} icon={<SmilePlus className="size-4" />} label={t('chat.reactions')} />}
-      {canReply && <MenuButton onClick={() => run(onReply)} icon={<Reply className="rtl-mirror size-4" />} label={t('chat.reply')} />}
-      {!!body && (
-        <MenuButton onClick={() => run(() => copyToClipboard(body))} icon={<Copy className="size-4" />} label={t('chat.copyMessage')} />
-      )}
-      {onForward && <MenuButton onClick={() => run(onForward)} icon={<Forward className="rtl-mirror size-4" />} label={t('chat.forwardMessageLink')} />}
-      {onCopyMessageLink && <MenuButton onClick={() => run(onCopyMessageLink)} icon={<Link2 className="size-4" />} label={t('chat.copyMessageLink')} />}
-      {links.length > 0 && !target.linkUrl && (
-        <MenuButton
-          onClick={() => (links.length === 1 ? copyLink(links[0]) : setView('links'))}
-          icon={<Link2 className="size-4" />}
-          label={t('chat.copyLink')}
-        />
-      )}
-      {onSaveAttachment && <MenuButton onClick={() => run(onSaveAttachment)} icon={<SaveActionIcon className="size-4" />} label={t(saveActionLabelKey())} />}
-      {canEdit && <MenuButton onClick={() => run(onEdit)} icon={<Pencil className="size-4" />} label={t('chat.editMessage')} />}
-      {canDelete && <MenuButton onClick={() => run(onDelete)} icon={<Trash2 className="size-4" />} label={t('chat.deleteMessage')} variant="danger" />}
+      <MessageActionRows
+        run={run}
+        onShowReactors={onShowReactors}
+        onReply={onReply}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onCopyText={body ? () => run(() => copyToClipboard(body)) : undefined}
+        onForward={onForward}
+        onCopyMessageLink={onCopyMessageLink}
+        // A link under the pointer has its own Copy link above.
+        onCopyLink={links.length > 0 && !target.linkUrl ? () => (links.length === 1 ? copyLink(links[0]) : setView('links')) : undefined}
+        onSaveAttachment={onSaveAttachment}
+        canReply={canReply}
+        canEdit={canEdit}
+        canDelete={canDelete}
+      />
     </>
   )
 
@@ -182,8 +181,16 @@ export function MessageContextMenu({
       tabIndex={-1}
       // Portaled: keep clicks and right-clicks from reaching the message row's React handlers.
       onClick={(e) => e.stopPropagation()}
-      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation() }}
-      className="fixed z-50 min-w-[220px] py-1 rounded-lg fluux-popover outline-none"
+      // The system menu stays reachable with Shift and in the picker's search field.
+      onContextMenu={(e) => {
+        e.stopPropagation()
+        const el = e.target instanceof Element ? e.target : null
+        if (!e.shiftKey && !el?.closest('input, textarea, [contenteditable="true"]')) e.preventDefault()
+      }}
+      // Keeps the conversation's keyboard navigation out of the menu (same marker as other overlays).
+      data-modal="true"
+      // A long menu or link chooser scrolls inside a short window.
+      className="fixed z-50 min-w-[220px] py-1 rounded-lg fluux-popover outline-none max-h-[calc(100dvh-1rem)] overflow-y-auto"
       style={{ left: menu.position.x, top: menu.position.y }}
     >
       {menuBody}
