@@ -78,12 +78,17 @@ async function script(name: 'alice' | 'bob') {
       const id = randomUUID()
       await message(`${to}@localhost`, id, [xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: target }), xml('fallback', { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:message-retract:1' }), xml('body', {}, 'This person attempted to retract a previous message, but it\'s unsupported by your client.')])
     },
-    /** The raw items the account's private node holds. */
+    /** The raw items the account's private node holds; a failed or malformed read throws instead of looking empty. */
     async items(): Promise<string[]> {
-      try {
-        const reply = await c.iqCaller.request(xml('iq', { type: 'get' }, xml('pubsub', { xmlns: PUBSUB }, xml('items', { node: NODE }))))
-        return reply.getChild('pubsub', PUBSUB)?.getChild('items')?.getChildren('item').map((item: { toString(): string }) => item.toString()) ?? []
-      } catch { return [] }
+      // A node that does not exist yet holds nothing; any other failed read throws.
+      const reply = await c.iqCaller.request(xml('iq', { type: 'get' }, xml('pubsub', { xmlns: PUBSUB }, xml('items', { node: NODE })))).catch((error: { element?: { getChild(name: string): unknown } }) => {
+        if (error.element?.getChild('item-not-found')) return undefined
+        throw error
+      })
+      if (!reply) return []
+      const items = reply.getChild('pubsub', PUBSUB)?.getChild('items')
+      if (!items) throw new Error('the node read returned no items element')
+      return items.getChildren('item').map((item: { toString(): string }) => item.toString())
     },
     async stop() { await c.stop().catch(() => {}) },
   }
@@ -120,8 +125,9 @@ async function nodeHolds(peer: Awaited<ReturnType<typeof script>>, count: number
   return peer.items()
 }
 
+// Deleted rather than purged: the app then creates the node itself, with its own configuration, as for a new account.
 async function emptyNode(peer: Awaited<ReturnType<typeof script>>) {
-  await peer.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: `${PUBSUB}#owner` }, xml('purge', { node: NODE })))).catch(() => {})
+  await peer.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: `${PUBSUB}#owner` }, xml('delete', { node: NODE })))).catch(() => {})
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -202,49 +208,119 @@ test('a saved message opens from a device that has never seen it, through the ar
   await saveMessage(one, text)
   await nodeHolds(reader, 1)
   // Newer traffic pushes the original out of a first page of history.
-  for (let i = 0; i < 3; i++) await bob.say('alice', `later ${i} ${stamp}`)
+  for (let i = 0; i < 60; i++) await bob.say('alice', `later ${i} ${stamp}`)
 
   // A fresh browser has no cache: the row is known from the node, the original only from the archive.
+  const [stored] = await reader.items()
+  const sentAt = new Date(String(stored.match(/<delay [^>]*stamp="([^"]+)"/)?.[1])).getTime()
+  expect(Number.isFinite(sentAt)).toBe(true)
   const two = await connect(browser)
   await openSaved(two)
   await expect(savedRow(two, text)).toBeVisible()
+  await expect(two.page.locator('[data-message-body]').filter({ hasText: text })).toHaveCount(0) // not resident
   const before = two.frames.length
   await savedRow(two, text).click()
   await expect(two.page.locator('.message-highlight').filter({ hasText: text })).toBeInViewport({ timeout: 30_000 })
-  expect(two.frames.slice(before).some(frame => frame.includes('urn:xmpp:mam:2'))).toBe(true)
+  // The lookup was aimed at the target: an archive query bounded to a window around when it was sent.
+  const aimed = two.frames.slice(before).filter(frame => frame.includes('urn:xmpp:mam:2') && frame.includes('var="start"')).some((frame) => {
+    const start = Date.parse(frame.match(/var="start"><value>([^<]+)</)?.[1] ?? '')
+    const end = Date.parse(frame.match(/var="end"><value>([^<]+)</)?.[1] ?? '')
+    return start <= sentAt && sentAt <= end
+  })
+  expect(aimed).toBe(true)
   await shot(two.page, 'archive-navigation')
+
+  // The first browser holds the original in its cache: with the server unreachable it still opens it, with no archive query.
+  let refuse = true
+  await one.page.routeWebSocket(/\/ws$/, ws => { if (refuse) void ws.close(); else ws.connectToServer() })
+  kick('alice')
+  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).first()).toBeVisible({ timeout: 20_000 })
+  await openSaved(one)
+  const beforeCache = one.frames.length
+  await savedRow(one, text).click()
+  await expect(one.page.locator('.message-highlight').filter({ hasText: text })).toBeInViewport({ timeout: 30_000 })
+  expect(one.frames.slice(beforeCache).some(frame => frame.includes('urn:xmpp:mam:2'))).toBe(false)
+  refuse = false
   await one.context.close(); await two.context.close(); await bob.stop(); await reader.stop()
 })
 
-test('a full node refuses one more save and evicts nothing', async ({ browser }) => {
+test('a full node refuses one more save and evicts nothing, at the limit the server actually keeps', async ({ browser }) => {
   const bob = await script('bob')
   const reader = await script('alice')
-  await emptyNode(reader)
+  // Start from no node: the app creates it, with whatever limit this server grants.
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: `${PUBSUB}#owner` }, xml('delete', { node: NODE })))).catch(() => {})
+  const one = await connect(browser)
+  const first = `First of many ${stamp}`
+  await bob.say('alice', first)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: first })).toBeVisible()
+  await saveMessage(one, first)
+  await nodeHolds(reader, 1)
+
+  // The limit the server holds the node to, read from its configuration: the node the app creates names a number.
+  const form = await reader.c.iqCaller.request(xml('iq', { type: 'get' }, xml('pubsub', { xmlns: `${PUBSUB}#owner` }, xml('configure', { node: NODE }))))
+  const limit = Number.parseInt(String(form.toString().match(/pubsub#max_items[^]*?<value>([^<]*)<\/value>/)?.[1]), 10)
+  expect(limit).toBeGreaterThan(1)
   const seed = (id: string) => xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('publish', { node: NODE },
     xml('item', { id }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
       xml('message', { xmlns: 'jabber:client', from: 'bob@localhost', to: 'alice@localhost', type: 'chat', id: `seed-${id}` }, xml('body', {}, `seed ${id}`))))))))
-  for (let i = 0; i < 256; i++) await reader.c.iqCaller.request(seed(`seed${String(i).padStart(3, '0')}`))
-  expect((await reader.items()).length).toBe(256)
+  for (let i = 0; i < limit - 1; i++) await reader.c.iqCaller.request(seed(`seed${String(i).padStart(3, '0')}`))
+  expect((await reader.items()).length).toBe(limit)
+
+  // One more save must not push anything out: it is refused, and the person is told.
+  const text = `One too many ${stamp}`
+  await bob.say('alice', text)
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
+  await saveMessage(one, text)
+  await expect(one.page.getByText(/Saved messages are full/)).toBeVisible()
+  await one.page.waitForTimeout(2500) // the toast has settled
+  await shot(one.page, 'cap-refused')
+  const items = await reader.items()
+  expect(items.length).toBe(limit)
+  expect(items.some(item => item.includes(text))).toBe(false)
+  expect(items.some(item => item.includes(first))).toBe(true)
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+// Needs a server whose ceiling is known (FLUUX_LIVE_CEILING, the lab's max_items_node) and which reports a node kept at `max`
+// as `max`: nothing may then be assumed of how many items it keeps, so the app holds a further save back.
+test('a node that only says max is never pushed past the ceiling the server enforces', async ({ browser }) => {
+  const ceiling = Number.parseInt(process.env.FLUUX_LIVE_CEILING ?? '', 10)
+  test.skip(!Number.isFinite(ceiling), 'FLUUX_LIVE_CEILING names the lab server\'s own node ceiling')
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: `${PUBSUB}#owner` }, xml('delete', { node: NODE })))).catch(() => {})
+  const field = (name: string, value: string) => xml('field', { var: name }, xml('value', {}, value))
+  const options = xml('publish-options', {}, xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+    xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options')),
+    field('pubsub#persist_items', 'true'), field('pubsub#access_model', 'whitelist'), field('pubsub#max_items', 'max'), field('pubsub#send_last_published_item', 'never')))
+  const seed = (id: string) => xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('publish', { node: NODE },
+    xml('item', { id }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
+      xml('message', { xmlns: 'jabber:client', from: 'bob@localhost', to: 'alice@localhost', type: 'chat', id: `seed-${id}` }, xml('body', {}, `seed ${id}`)))))), options))
+  for (let i = 0; i < ceiling; i++) await reader.c.iqCaller.request(seed(`seed${String(i).padStart(3, '0')}`))
+  expect((await reader.items()).length).toBe(ceiling)
+  expect(String((await reader.c.iqCaller.request(xml('iq', { type: 'get' }, xml('pubsub', { xmlns: `${PUBSUB}#owner` }, xml('configure', { node: NODE })))))).includes('<value>max</value>')).toBe(true)
 
   const one = await connect(browser)
-  const text = `One too many ${stamp}`
+  const text = `Would push one out ${stamp}`
   await bob.say('alice', text)
   await openChatWith(one, 'Bob')
   await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
   await saveMessage(one, text)
-  await expect(one.page.getByText(/Saved messages are full/)).toBeVisible()
+  await one.page.waitForTimeout(8000)
   const items = await reader.items()
-  expect(items.length).toBe(256)
+  expect(items.length).toBe(ceiling)
   expect(items.some(item => item.includes(text))).toBe(false)
   expect(items.some(item => item.includes('id="seed000"'))).toBe(true)
-  await shot(one.page, 'cap-refused')
+  await shot(one.page, 'max-node-held-back')
   await emptyNode(reader)
   await one.context.close(); await bob.stop(); await reader.stop()
 })
 
 test('a save made offline survives a reload and is sent once after the reconnect', async ({ browser }) => {
   const bob = await script('bob')
-  const reader = await script('alice')
+  let reader = await script('alice')
   await emptyNode(reader)
   const one = await connect(browser)
   const text = `Saved while offline ${stamp}`
@@ -255,7 +331,8 @@ test('a save made offline survives a reload and is sent once after the reconnect
   // The server cannot be reached: the session is ended and every new connection is refused.
   let refuse = true
   await one.page.routeWebSocket(/\/ws$/, ws => { if (refuse) void ws.close(); else ws.connectToServer() })
-  kick('alice')
+  kick('alice') // ends the reader's session too
+  reader = await script('alice')
   await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).first()).toBeVisible({ timeout: 20_000 })
   await saveMessage(one, text)
   await expect.poll(() => one.page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.includes('fluux-saved-pending')).map(([, value]) => value).join('')), { timeout: 10_000 }).toContain(text.slice(0, 12))
@@ -274,6 +351,8 @@ test('a save made offline survives a reload and is sent once after the reconnect
   await expect.poll(() => one.page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.includes('fluux-saved-pending')).map(([, value]) => value).join('')), { timeout: 20_000 }).not.toContain(text.slice(0, 12))
   await new Promise(resolve => setTimeout(resolve, 3000))
   expect((await reader.items()).length).toBe(1)
+  // Counted on the wire: the queued save was published exactly once across the reload and reconnect.
+  expect(one.frames.filter(frame => frame.includes(`<publish node="${NODE}"`)).length).toBe(1)
   await openSaved(one)
   await expect(savedRow(one, text)).toHaveCount(1, { timeout: 45_000 })
   await shot(one.page, 'offline-save-sent')
@@ -356,4 +435,54 @@ test('an end-to-end encrypted message is saved without any readable body', async
   await shot(one.page, 'encrypted-row')
   await emptyNode(reader)
   await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('the private node answers only its owner', async () => {
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const peek = bob.c.iqCaller.request(xml('iq', { type: 'get', to: 'alice@localhost' }, xml('pubsub', { xmlns: PUBSUB }, xml('items', { node: NODE }))))
+  await expect(peek).rejects.toThrow()
+  const write = bob.c.iqCaller.request(xml('iq', { type: 'set', to: 'alice@localhost' }, xml('pubsub', { xmlns: PUBSUB },
+    xml('publish', { node: NODE }, xml('item', { id: 'intruder' }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }))))))
+  await expect(write).rejects.toThrow()
+  expect((await reader.items()).some(item => item.includes('intruder'))).toBe(false)
+  await bob.stop(); await reader.stop()
+})
+
+test('a client that was offline catches up on a save and a removal made elsewhere', async ({ browser }) => {
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser)
+  const two = await connect(browser)
+  const kept = `Saved after the other went away ${stamp}`
+  const gone = `Removed while the other was away ${stamp}`
+  await bob.say('alice', gone)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: gone })).toBeVisible()
+  await saveMessage(one, gone)
+  await openSaved(two)
+  await expect(savedRow(two, gone)).toBeVisible()
+
+  // The second client loses its connection; the first saves one message and removes the other.
+  await two.context.setOffline(true)
+  await bob.say('alice', kept)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: kept })).toBeVisible()
+  await saveMessage(one, kept)
+  await nodeHolds(reader, 2)
+  await openSaved(one)
+  await savedRow(one, gone).getByRole('button', { name: 'Remove from saved' }).click()
+  await nodeHolds(reader, 1)
+
+  // Back online, the second client reads the node again and shows both changes.
+  await two.context.setOffline(false)
+  await two.page.reload()
+  await openSaved(two)
+  await expect(savedRow(two, kept)).toBeVisible({ timeout: 30_000 })
+  await expect(savedRow(two, gone)).toHaveCount(0)
+  await shot(two.page, 'offline-client-caught-up')
+  await emptyNode(reader)
+  await one.context.close(); await two.context.close(); await bob.stop(); await reader.stop()
 })

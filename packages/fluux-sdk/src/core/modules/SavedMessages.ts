@@ -11,14 +11,18 @@ import type { SavedMessage } from '../types/saved'
 import { savedMessageKey, savedItemId, sameSavedMessage } from '../../utils/savedMessageKeys'
 
 /**
- * Private, retained, one item per saved message. `max_items=max` lets the
- * server keep as many as it allows; the client reads that limit and refuses a
- * save at it, because servers drop the oldest item without an error.
+ * Private, retained, one item per saved message. The node asks for a concrete
+ * `max_items` so that its limit can be read back as a number (a node set to
+ * `max` says nothing of it); a service with a lower ceiling refuses or lowers
+ * the value, and the client reads what it actually holds. It refuses a save at
+ * that limit, because servers drop the oldest item without an error.
  */
+export const SAVED_NODE_MAX_ITEMS = 256
+
 const SAVED_NODE_OPTIONS: PublishOptions = {
   persistItems: true,
   accessModel: 'whitelist',
-  maxItems: 'max',
+  maxItems: SAVED_NODE_MAX_ITEMS,
   sendLastPublishedItem: 'never',
 }
 
@@ -101,9 +105,6 @@ export function parseSavedItems(itemsEl: Element, ownBareJid: string | null): Sa
   return { upserts, removedIds }
 }
 
-/** The item limit assumed when a node's configuration only says `max`. */
-export const ASSUMED_SERVICE_MAX_ITEMS = 256
-
 /**
  * Fluux saved messages: private PEP node `urn:xmpp:fluux:saved-messages:0`,
  * one item per saved message holding a XEP-0297 forwarded copy.
@@ -153,9 +154,7 @@ export class SavedMessages {
       const form = result.getChild('pubsub', `${NS_PUBSUB}#owner`)?.getChild('configure')?.getChild('x', NS_DATA_FORMS)
       const field = form?.getChildren('field').find((f: Element) => f.attrs.var === 'pubsub#max_items')
       const raw = field?.getChildText('value') ?? ''
-      // `max` means "whatever the service allows" and says nothing of the number. Assume the smallest common
-      // service default (Prosody's `pep_max_items`), so a save is never sent that could push an item out.
-      if (raw === 'max') return ASSUMED_SERVICE_MAX_ITEMS
+      // `max` says nothing of a number: the limit stays unknown, and so does what a save could push out.
       const value = Number.parseInt(raw, 10)
       return Number.isFinite(value) && value > 0 ? value : undefined
     } catch {

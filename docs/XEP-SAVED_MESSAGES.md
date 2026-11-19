@@ -30,7 +30,7 @@ The node `urn:xmpp:fluux:saved-messages:0` is created on the first publish with 
 |-----------------------------------|-------------|
 | `pubsub#persist_items`            | `true`      |
 | `pubsub#access_model`             | `whitelist` |
-| `pubsub#max_items`                | `max`       |
+| `pubsub#max_items`                | `256`       |
 | `pubsub#send_last_published_item` | `never`     |
 
 ### 3.1 Item id
@@ -39,7 +39,7 @@ The item id is a hash of the message identity: the conversation JID, then the XE
 
 ### 3.2 Server limit
 
-Servers cap a node and silently drop the oldest item past the cap (Prosody `pep_max_items`, 256 by default; ejabberd `max_items_node`, 1000 by default). A client reads the effective `pubsub#max_items` from the node's owner configuration and does not publish an item that would exceed it.
+Servers cap a node and silently drop the oldest item past the cap (Prosody `pep_max_items`, 256 by default; ejabberd `max_items_node`, 1000 by default). The node asks for 256 items, a number a service with a lower ceiling refuses or lowers; a node set to `max` would not say how many it keeps. A client reads the effective `pubsub#max_items` from the node's owner configuration and does not publish an item that would exceed it.
 
 ---
 
@@ -88,7 +88,7 @@ Fluux builds the copy with the same function Forward uses and reads it with a re
 ## 5. Operations
 
 - **Save:** publish the item. **Remove:** retract it, asking the server to notify subscribers (`notify="true"`). Only `item-not-found` counts as a removal that is already done; any other refusal puts the item back in the list and tells the person.
-- **Node limit:** a client sends nothing before it has read the node, and refuses a new save that would take the node past its `pubsub#max_items`, because the server would silently drop the oldest item. A node configured with `max` (as ejabberd reports it) says nothing of the number, so 256, the smallest common service default, is assumed. The count is the items the server is known to hold (listed, notified or acknowledged), so a removal the server has not yet taken, or one it refused, still counts. A publish the server took counts even when a newer local change replaced it. When the limit cannot be read, only the first item of a node that does not exist yet is sent; the rest wait until it can.
+- **Node limit:** a client sends nothing before it has read the node, and refuses a new save that would take the node past its `pubsub#max_items`, because the server would silently drop the oldest item. A node configured with `max` says nothing of the number, so its limit stays unknown. The count is the items the server is known to hold (listed, notified or acknowledged), so a removal the server has not yet taken, or one it refused, still counts. A publish the server took counts even when a newer local change replaced it. When the limit cannot be read, only the first item of a node that does not exist yet is sent; the rest wait until it can.
 - **Fetch:** `<items node="urn:xmpp:fluux:saved-messages:0"/>` on the own account. Only an answered fetch (items, or `item-not-found`) replaces the local list; a refused or unanswered fetch leaves it as it is. Changes made or notified while the fetch is in flight win over its answer, and copies of originals already known to be deleted (from the retraction ledger or from a retracted copy in the device's cache) arrive without their text. One read owns the list at a time: a newer read supersedes an older one, and a read that outlived a local-data wipe is dropped, as is a notification that was waiting during one. A removal recovered after a reload keeps the server's copy, so a refusal can bring the row back without another read.
 - **Notify:** other online clients receive the item or retract through `+notify` and apply it without reloading.
 - **Offline:** a save or removal made while disconnected is shown at once, kept on the device across a reload, and sent on reconnect.
