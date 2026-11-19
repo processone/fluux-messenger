@@ -3700,6 +3700,56 @@ export class MAM extends BaseModule {
   }
 
   /**
+   * Locate a one-to-one message for a saved entry: the resident window, then the
+   * cache, then the account archive by exact archive id. An entry without an
+   * archive id falls back to the time-window lookup search uses. Fetched context
+   * lands in the cache, so the caller can open the conversation at the message.
+   *
+   * `absent` is only said when the archive answered and does not hold the
+   * message; a failed query is `unknown`.
+   */
+  async locateChatMessage(conversationId: string, ref: { id?: string; stanzaId?: string; originId?: string; sentAt?: number }): Promise<
+    { kind: 'found'; message: Message; source: 'resident' | 'cache' | 'archive' } | { kind: 'absent' | 'unknown' }
+  > {
+    const session = this.captureQuery()
+    const chat = this.deps.stores?.chat
+    if (!chat) return { kind: 'unknown' }
+    const matches = (message: Message) =>
+      (!!ref.stanzaId && (message.stanzaId === ref.stanzaId || message.ownArchiveId === ref.stanzaId))
+      || (!!ref.originId && message.originId === ref.originId)
+    const settle = (message: Message, source: 'resident' | 'cache') =>
+      message.isRetracted ? { kind: 'absent' as const } : { kind: 'found' as const, message, source }
+    for (const target of [ref.stanzaId, ref.originId, ref.id]) {
+      if (!target) continue
+      const resident = chat.getMessage(conversationId, target)
+      if (resident && (matches(resident) || resident.id === ref.id)) return settle(resident, 'resident')
+    }
+    for (const target of [ref.stanzaId, ref.originId]) {
+      if (!target || !chat.resolveReactionTarget) continue
+      const cached = await chat.resolveReactionTarget(conversationId, target)
+      session.assertCurrent()
+      if (cached && matches(cached)) return settle(cached, 'cache')
+    }
+
+    if (ref.stanzaId) {
+      const found = await this.lookUpArchivedMessage(conversationId, false, ref.stanzaId)
+      session.assertCurrent()
+      if (found.kind !== 'found') return found
+      await this.fetchContext(conversationId, false, new Date(found.timestamp).toISOString())
+      session.assertCurrent()
+      const message = found.row as Message | undefined
+      if (!message) return { kind: 'unknown' }
+      return message.isRetracted ? { kind: 'absent' } : { kind: 'found', message, source: 'archive' }
+    }
+    if (ref.sentAt === undefined) return { kind: 'unknown' }
+    const { messages } = await this.fetchContext(conversationId, false, new Date(ref.sentAt).toISOString())
+    session.assertCurrent()
+    const message = (messages as Message[]).find((m) => (ref.originId && m.originId === ref.originId) || (ref.id && m.id === ref.id))
+    if (!message) return { kind: 'absent' }
+    return message.isRetracted ? { kind: 'absent' } : { kind: 'found', message, source: 'archive' }
+  }
+
+  /**
    * Fetch a single room message by its ID using MAM.
    *
    * Checks the store first (by both client ID and stanza-id).

@@ -111,6 +111,7 @@ export {
   useAdminStore,
   useBlockingStore,
   useIgnoreStore,
+  useSavedStore,
   useSearchStore,
 } from './storeHooks'
 

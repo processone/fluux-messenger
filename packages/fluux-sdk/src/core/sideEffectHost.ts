@@ -27,6 +27,8 @@ import type { RoomAffiliation } from './types/room'
 import type { ConversationTarget } from './e2ee/types'
 import type { DisplayedMarkerFetchResult } from './modules/Mds'
 import type { SyncedConversation } from './modules/ConversationSync'
+import type { PepFetch } from './modules/PepNode'
+import type { SavedMessage } from './types/saved'
 
 /** A message as the catch-up entry points read it: position, not content. */
 export interface ArchivePosition {
@@ -80,6 +82,14 @@ export interface MdsSideEffectHost {
   retractDisplayed(conversationJid: string): Promise<void>
 }
 
+/** The saved-messages node operations the sync side effect drives. */
+export interface SavedMessagesSideEffectHost {
+  fetchAll(timeoutMs?: number): Promise<PepFetch<SavedMessage>>
+  publish(entry: SavedMessage): Promise<void>
+  retract(itemId: string): Promise<void>
+  fetchMaxItems(): Promise<number | undefined>
+}
+
 /** Capability discovery and search probes owned by background session preparation. */
 export interface DiscoverySideEffectHost {
   fetchServerInfo(): Promise<void>
@@ -130,6 +140,7 @@ export interface SideEffectHost extends SDKEventSource {
     readonly mam: MamSideEffectHost
     readonly mds: MdsSideEffectHost
     readonly conversationSync: ConversationSyncSideEffectHost
+    readonly savedMessages: SavedMessagesSideEffectHost
     /**
      * Fetches the conversation list and merges it, which raises
      * `conversationListReady` when the server answers.

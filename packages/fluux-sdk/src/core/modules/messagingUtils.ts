@@ -24,6 +24,7 @@ import {
   NS_THUMBS,
   NS_FILE_METADATA,
   NS_STANZA_ID,
+  NS_OCCUPANT_ID,
   NS_XHTML,
   NS_FASTEN,
   NS_REACTIONS,
@@ -441,6 +442,72 @@ export function parseForwardedCopy(messageEl: Element): ForwardedCopy | undefine
   const stanzaIdBy = stanzaId ? bounded(sid?.attrs.by) : undefined
   return { author, ...(address && address === from && { from: address }), text,
     ...(id && { id }), ...(stanzaId && stanzaIdBy && { stanzaId, stanzaIdBy }), ...(innerType && { type: innerType }), ...(Number.isFinite(time) && { timestamp: time }) }
+}
+
+/** Identity a saved-message copy keeps beside the plain forwarded fields (XEP-0359, XEP-0421). */
+export interface ForwardedCopyIdentity {
+  to?: string
+  id?: string
+  stanzaId?: string
+  stanzaIdBy?: string
+  originId?: string
+  occupantId?: string
+}
+
+/**
+ * XEP-0297: the standalone forwarded copy of one message, as a child of the outgoing message.
+ * Forward writes only the plain fields; a saved message also passes `identity`. `text` may be
+ * empty only for a copy that carries no body (an encrypted or deleted original).
+ */
+export function forwardedCopyElement(
+  copy: { from: string; text: string; timestamp?: number; type?: 'chat' | 'groupchat' },
+  identity: ForwardedCopyIdentity = {},
+): Element {
+  // The type is the source message's own, never guessed from the address.
+  const attrs: Record<string, string> = { xmlns: 'jabber:client', from: copy.from, type: copy.type ?? 'groupchat' }
+  if (identity.to) attrs.to = identity.to
+  if (identity.id) attrs.id = identity.id
+  const inner = xml('message', attrs,
+    ...(copy.text ? [xml('body', {}, copy.text)] : []),
+    ...(identity.stanzaId && identity.stanzaIdBy ? [xml('stanza-id', { xmlns: NS_STANZA_ID, id: identity.stanzaId, by: identity.stanzaIdBy })] : []),
+    ...(identity.originId ? [xml('origin-id', { xmlns: NS_STANZA_ID, id: identity.originId })] : []),
+    ...(identity.occupantId ? [xml('occupant-id', { xmlns: NS_OCCUPANT_ID, id: identity.occupantId })] : []),
+  )
+  return xml('forwarded', { xmlns: NS_FORWARD },
+    ...(copy.timestamp !== undefined && Number.isFinite(copy.timestamp)
+      ? [xml('delay', { xmlns: NS_DELAY, stamp: new Date(copy.timestamp).toISOString() })] : []),
+    inner)
+}
+
+/**
+ * Reader for a saved message's copy: the bounds of {@link parseForwardedCopy} (4000 code
+ * points, control characters removed, no nested forward) plus the identity elements Forward's
+ * reader ignores. Unlike Forward's reader, a copy without a body is valid.
+ */
+export function parseSavedForwardedCopy(forwarded: Element): {
+  from: string; to?: string; type?: 'chat' | 'groupchat'; text: string; timestamp?: number
+} & ForwardedCopyIdentity | undefined {
+  if (forwarded.attrs?.xmlns !== NS_FORWARD) return undefined
+  const inner = forwarded.getChildren('message').find((el: Element) => !el.attrs?.xmlns || el.attrs.xmlns === 'jabber:client')
+  if (!inner || typeof inner.attrs.from !== 'string' || !inner.attrs.from) return undefined
+  const body = inner.getChildren('body').find((el: Element) => !el.attrs?.xmlns || el.attrs.xmlns === 'jabber:client')
+  const text = body ? boundedPlainText(body.text(), MAX_FORWARDED_CODE_POINTS) : ''
+  const type = inner.attrs.type === 'chat' || inner.attrs.type === 'groupchat' ? inner.attrs.type : undefined
+  const stamp = forwarded.getChild('delay', NS_DELAY)?.attrs.stamp
+  const time = typeof stamp === 'string' ? new Date(stamp).getTime() : NaN
+  const sid = inner.getChild('stanza-id', NS_STANZA_ID)
+  const text_ = (value: unknown): string | undefined =>
+    typeof value === 'string' && value ? boundedPlainText(value, MAX_FORWARDED_ADDRESS_CODE_POINTS) : undefined
+  const to = text_(inner.attrs.to), id = text_(inner.attrs.id)
+  const stanzaId = text_(sid?.attrs.id), stanzaIdBy = text_(sid?.attrs.by)
+  const originId = text_(inner.getChild('origin-id', NS_STANZA_ID)?.attrs.id)
+  const occupantId = text_(inner.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id)
+  return {
+    from: boundedPlainText(inner.attrs.from, MAX_FORWARDED_ADDRESS_CODE_POINTS), text,
+    ...(type && { type }), ...(Number.isFinite(time) && { timestamp: time }),
+    ...(to && { to }), ...(id && { id }), ...(stanzaId && stanzaIdBy && { stanzaId, stanzaIdBy }),
+    ...(originId && { originId }), ...(occupantId && { occupantId }),
+  }
 }
 
 /**
