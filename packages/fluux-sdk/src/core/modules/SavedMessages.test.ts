@@ -53,7 +53,7 @@ describe('SavedMessages publish', () => {
   })
 
   it('asks for the limit only when it may create the node, and writes to an existing node with the privacy constraints alone', async () => {
-    const fieldsOf = (iq: Element) => iq.getChild('pubsub', NS_PUBSUB).getChild('publish-options').getChild('x').getChildren('field').map((f: Element) => f.attrs.var)
+    const fieldsOf = (iq: Element) => iq.getChild('pubsub', NS_PUBSUB)!.getChild('publish-options')!.getChild('x')!.getChildren('field').map((f: Element) => f.attrs.var)
     const created = await publishAndRead(roomEntry, true)
     expect(fieldsOf(created.iq)).toContain('pubsub#max_items')
     const existing = await publishAndRead(roomEntry, false)
