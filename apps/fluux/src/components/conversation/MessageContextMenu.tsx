@@ -1,5 +1,5 @@
 /** Pointer menu for a right-click on a message: the quick reactions, what sits under the pointer, then the message actions. */
-import { useRef, useState, Suspense, lazy } from 'react'
+import { useRef, useState, useEffect, Suspense, lazy } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { Reply, Pencil, Trash2, Copy, SmilePlus, Link2, Forward, ExternalLink, Download, Link } from 'lucide-react'
@@ -47,20 +47,36 @@ export function MessageContextMenu({
   const { t } = useTranslation()
   const [view, setView] = useState<'actions' | 'emoji' | 'links'>('actions')
   const emojiButtonRef = useRef<HTMLButtonElement>(null)
-  useFocusTrap(menu.menuRef, { active: menu.isOpen })
-  if (!menu.isOpen) return null
+  useFocusTrap(menu.menuRef, { active: menu.isOpen, includeShadowRoots: true })
+  // A view change replaces the focused control: move focus into the new view.
+  const previousView = useRef(view)
+  useEffect(() => {
+    const from = previousView.current
+    previousView.current = view
+    if (from === view) return
+    const root = menu.menuRef.current
+    const target = view === 'actions' && from === 'emoji' ? emojiButtonRef.current : root?.querySelector<HTMLElement>('button')
+    ;(target ?? root)?.focus({ preventScroll: true })
+  }, [view, menu.menuRef])
 
   const run = (fn: () => void | Promise<void>) => { menu.close(); void fn() }
   const react = (emoji: string) => { menu.close(); onReaction?.(emoji) }
 
   const links = extractLinks(body ?? '')
   const copyLink = (url: string) => run(() => copyToClipboard(url))
+  // Copy runs the browser's own copy over the live selection so the list's copy formatting (dates,
+  // sender headers) applies; the text read at open time is the fallback.
+  const copySelection = () => run(() => {
+    const live = window.getSelection()
+    const done = live?.toString() === target.selection && typeof document.execCommand === 'function' && document.execCommand('copy')
+    if (!done) return copyToClipboard(target.selection)
+  })
 
   const contextItems = (
     <>
       {target.selection && (
         <MenuButton
-          onClick={() => run(() => copyToClipboard(target.selection))}
+          onClick={copySelection}
           icon={<Copy className="size-4" />}
           label={t('chat.selection.copy')}
         />
@@ -144,7 +160,7 @@ export function MessageContextMenu({
       )}
       {onForward && <MenuButton onClick={() => run(onForward)} icon={<Forward className="rtl-mirror size-4" />} label={t('chat.forwardMessageLink')} />}
       {onCopyMessageLink && <MenuButton onClick={() => run(onCopyMessageLink)} icon={<Link2 className="size-4" />} label={t('chat.copyMessageLink')} />}
-      {links.length > 0 && (
+      {links.length > 0 && !target.linkUrl && (
         <MenuButton
           onClick={() => (links.length === 1 ? copyLink(links[0]) : setView('links'))}
           icon={<Link2 className="size-4" />}
@@ -163,7 +179,11 @@ export function MessageContextMenu({
       ref={menu.menuRef}
       role="menu"
       aria-label={t('chat.moreOptions')}
-      className="fixed z-50 min-w-[220px] py-1 rounded-lg fluux-popover"
+      tabIndex={-1}
+      // Portaled: keep clicks and right-clicks from reaching the message row's React handlers.
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation() }}
+      className="fixed z-50 min-w-[220px] py-1 rounded-lg fluux-popover outline-none"
       style={{ left: menu.position.x, top: menu.position.y }}
     >
       {menuBody}

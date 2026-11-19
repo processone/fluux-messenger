@@ -5,6 +5,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import type { BaseMessage } from '@fluux/sdk'
 import { MessageBubble, type MessageBubbleProps } from './MessageBubble'
+import { MessageInteractionContext } from './useMessageInteractionHold'
 
 const copy = vi.hoisted(() => vi.fn())
 const open = vi.hoisted(() => vi.fn())
@@ -125,5 +126,84 @@ describe('message right-click menu', () => {
     render(<MessageBubble {...props({ message: message({ body: 'caption', attachment }) })} />)
     fireEvent.contextMenu(screen.getByText('caption'))
     expect(within(menu()!).queryByText('chat.saveImage')).toBeNull()
+  })
+
+  it('shows one Copy link over a link, and the chooser only when no link is under the pointer', () => {
+    const body = 'a https://example.com/a b https://example.com/b'
+    render(<MessageBubble {...props({ message: message({ body }) })} />)
+    fireEvent.contextMenu(screen.getAllByRole('link')[0])
+    expect(within(menu()!).getAllByText('chat.copyLink')).toHaveLength(1)
+    fireEvent.click(within(menu()!).getByText('chat.copyLink'))
+    expect(copy).toHaveBeenCalledWith('https://example.com/a')
+    fireEvent.contextMenu(screen.getByText(/^a /))
+    expect(within(menu()!).getAllByText('chat.copyLink')).toHaveLength(1)
+  })
+
+  it('reopens on the actions after a picker was used', () => {
+    render(<MessageBubble {...props()} />)
+    const text = screen.getByText('Hello, world!')
+    fireEvent.contextMenu(text)
+    fireEvent.click(within(menu()!).getByRole('button', { name: 'chat.moreReactions' }))
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    fireEvent.mouseDown(document.body)
+    fireEvent.contextMenu(text)
+    expect(within(menu()!).getAllByRole('button', { name: 'chat.reactWith' })).toHaveLength(3)
+  })
+
+  it('unselects a word the right-click selected', () => {
+    render(<MessageBubble {...props()} />)
+    const text = screen.getByText('Hello, world!')
+    fireEvent.mouseDown(text, { button: 2 })
+    select(text)
+    fireEvent.contextMenu(text)
+    expect(window.getSelection()?.toString()).toBe('')
+  })
+
+  it('closes when the message is retracted and never offers deleted text', () => {
+    const p = props()
+    const view = render(<MessageBubble {...p} />)
+    fireEvent.contextMenu(screen.getByText('Hello, world!'))
+    expect(menu()).not.toBeNull()
+    view.rerender(<MessageBubble {...p} message={{ ...p.message, isRetracted: true }} />)
+    expect(menu()).toBeNull()
+    const notice = screen.getByText('chat.messageDeleted')
+    select(notice)
+    fireEvent.contextMenu(notice)
+    expect(menu()).toBeNull()
+  })
+
+  it('offers image items only over the message attachment, not another image in the row', () => {
+    const attachment = { url: 'https://example.com/pic.png', name: 'pic.png', mediaType: 'image/png', width: 10, height: 10 }
+    render(<MessageBubble {...props({ message: message({ body: 'caption', attachment }) })} />)
+    const other = document.createElement('img')
+    screen.getByText('caption').appendChild(other)
+    fireEvent.contextMenu(other)
+    expect(within(menu()!).queryByText('chat.saveImage')).toBeNull()
+  })
+
+  it('registers with the interaction hold while open and does not click through its portal', () => {
+    const setMenuOpen = vi.fn()
+    const onRowClick = vi.fn()
+    const ctx = { heldMessageId: null, heldRow: null, subscribe: () => () => {}, isHeld: () => false, setMenuOpen }
+    render(
+      <MessageInteractionContext.Provider value={ctx}>
+        <div onClick={onRowClick}><MessageBubble {...props()} /></div>
+      </MessageInteractionContext.Provider>,
+    )
+    fireEvent.contextMenu(screen.getByText('Hello, world!'))
+    expect(setMenuOpen).toHaveBeenLastCalledWith(expect.any(String), true, expect.any(Function), undefined)
+    fireEvent.click(within(menu()!).getByRole('button', { name: 'chat.copyMessage' }))
+    expect(onRowClick).not.toHaveBeenCalled()
+    expect(setMenuOpen).toHaveBeenLastCalledWith(expect.any(String), false, expect.any(Function), undefined)
+  })
+
+  it('hides Reply, Edit and Delete in a read-only preview but keeps the copy actions', () => {
+    render(<MessageBubble {...props({ message: message({ isOutgoing: true }), isLastOutgoing: true, readOnlyActions: true })} />)
+    fireEvent.contextMenu(screen.getByText('Hello, world!'))
+    const m = menu()!
+    expect(within(m).queryByRole('button', { name: 'chat.reply' })).toBeNull()
+    expect(within(m).queryByRole('button', { name: 'chat.editMessage' })).toBeNull()
+    expect(within(m).queryByRole('button', { name: 'chat.deleteMessage' })).toBeNull()
+    expect(within(m).getByRole('button', { name: 'chat.copyMessage' })).toBeInTheDocument()
   })
 })

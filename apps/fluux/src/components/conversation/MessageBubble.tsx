@@ -137,6 +137,8 @@ export interface MessageBubbleProps {
   onDelete: () => Promise<void>
   onRetry?: () => void
   onMediaLoad?: () => void
+  /** A read-only preview (search results): the pointer menu hides Reply, Edit and Delete, which do nothing there. */
+  readOnlyActions?: boolean
 
   // Reply context (view-specific rendering)
   replyContext?: {
@@ -368,6 +370,7 @@ export const MessageBubble = memo(function MessageBubble({
   onDelete,
   onRetry,
   onMediaLoad,
+  readOnlyActions,
   replyContext,
   mentions,
   nickname,
@@ -415,7 +418,7 @@ export const MessageBubble = memo(function MessageBubble({
     if (previous && wrapIdentity) useWrappedCodeBlocksStore.getState().promote(previous, wrapIdentity)
   }, [wrapIdentity])
   const interactionHeld = useMessageInteractionHeld(bubbleRef)
-  const openMenusRef = useRef({ more: false, reaction: false })
+  const openMenusRef = useRef({ more: false, reaction: false, pointer: false })
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false)
   const [showErrorDetails, setShowErrorDetails] = useState(false)
 
@@ -482,15 +485,17 @@ export const MessageBubble = memo(function MessageBubble({
     reactionsEnabled,
   })
 
+  const messageMenu = useContextMenu()
   const closeInteractionMenus = () => {
-    openMenusRef.current = { more: false, reaction: false }
+    openMenusRef.current = { more: false, reaction: false, pointer: false }
+    messageMenu.close()
     setShowMoreMenuState(false)
     setShowReactionPickerState(false)
     onReactionPickerChange?.(false)
   }
   const reportMenus = () => {
     if (rowId) interaction?.setMenuOpen(rowId,
-      openMenusRef.current.more || openMenusRef.current.reaction, closeInteractionMenus,
+      openMenusRef.current.more || openMenusRef.current.reaction || openMenusRef.current.pointer, closeInteractionMenus,
       bubbleRef.current?.closest<HTMLElement>('[data-message-row-id]') ?? undefined)
   }
   const setShowMoreMenu = (isOpen: boolean) => {
@@ -649,7 +654,6 @@ export const MessageBubble = memo(function MessageBubble({
 
   // Pointer menu. Shift + right-click and text fields keep the system menu. A word that only the
   // right-click itself selected is not a selection: the text is read as the button goes down.
-  const messageMenu = useContextMenu()
   const [menuTarget, setMenuTarget] = useState<MessageContextTarget>({ selection: '', image: false })
   const selectionBeforeClick = useRef<string | null>(null)
   const handleContentMouseDown = (event: React.MouseEvent) => {
@@ -658,19 +662,29 @@ export const MessageBubble = memo(function MessageBubble({
   const handleContentContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     const el = event.target instanceof Element ? event.target : null
     if (event.shiftKey || event.defaultPrevented || el?.closest('input, textarea, [contenteditable="true"]')) return
-    const imageAttachment = saveableAttachment && isRenderableImageMime(saveableAttachment.mediaType) ? saveableAttachment : undefined
-    const linkUrl = el?.closest('a[href]')?.getAttribute('href') ?? undefined
-    const image = !!imageAttachment && !!el?.closest('img')
+    // Only a readable message offers its text: a deleted notice or an encrypted placeholder does not.
+    const imageAttachment = readable && saveableAttachment && isRenderableImageMime(saveableAttachment.mediaType) ? saveableAttachment : undefined
+    const linkUrl = readable ? el?.closest('a[href]')?.getAttribute('href') ?? undefined : undefined
+    const image = !!imageAttachment && !!el?.closest('[data-context-image]')
     const selection = window.getSelection()
-    const text = selection && !selection.isCollapsed && selection.rangeCount > 0
+    const text = readable && selection && !selection.isCollapsed && selection.rangeCount > 0
       && selection.getRangeAt(0).intersectsNode(event.currentTarget) ? selection.toString() : ''
     const before = selectionBeforeClick.current
     selectionBeforeClick.current = null
     const selected = text.trim() !== '' && (before === null || before === text) ? text : ''
+    // The click itself selected a word: the menu opens over no selection.
+    if (text && !selected) selection?.removeAllRanges()
     if (!hasMessageActions && !selected && !linkUrl && !image) return
     setMenuTarget({ selection: selected, linkUrl, image })
     messageMenu.handleContextMenu(event)
   }
+  useEffect(() => {
+    openMenusRef.current.pointer = messageMenu.isOpen
+    reportMenus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messageMenu.isOpen])
+  // A message that is retracted or turns unreadable takes its open menu with it.
+  useEffect(() => { if (!readable) messageMenu.close() }, [readable, messageMenu.close]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const showSenderHeader = showAvatar && !isActionMessage(message.body)
   return (
@@ -1025,7 +1039,7 @@ export const MessageBubble = memo(function MessageBubble({
         />
       )}
 
-      <MessageContextMenu
+      {messageMenu.isOpen && <MessageContextMenu
         menu={messageMenu}
         target={menuTarget}
         imageUrl={saveableAttachment?.url}
@@ -1035,7 +1049,7 @@ export const MessageBubble = memo(function MessageBubble({
         onReaction={handleReaction}
         myReactions={reactionsEnabled ? myReactions : []}
         onShowReactors={hasViewableReactions ? () => setReactorEmoji(Object.keys(filteredReactions)[0]) : undefined}
-        body={message.body}
+        body={canCopyBody ? message.body : undefined}
         onReply={onReply}
         onEdit={onEdit}
         onDelete={onDelete}
@@ -1044,10 +1058,10 @@ export const MessageBubble = memo(function MessageBubble({
         onSaveAttachment={saveableAttachment
           ? () => downloadAttachment(saveableAttachment, { errorMessage: t('common.downloadFailed') })
           : undefined}
-        canReply={canReply}
-        canEdit={canEdit}
-        canDelete={canDelete}
-      />
+        canReply={canReply && !readOnlyActions}
+        canEdit={canEdit && !readOnlyActions}
+        canDelete={canDelete && !readOnlyActions}
+      />}
 
       {/* Touch action menu — opened by a long press.
           Mounted only while open so the list never carries one menu per row. */}
@@ -1062,7 +1076,7 @@ export const MessageBubble = memo(function MessageBubble({
           onReaction={handleReaction}
           myReactions={reactionsEnabled ? myReactions : []}
           onShowReactors={hasViewableReactions ? () => setReactorEmoji(Object.keys(filteredReactions)[0]) : undefined}
-          body={message.body}
+          body={canCopyBody ? message.body : undefined}
           onReply={onReply}
           onEdit={onEdit}
           onDelete={onDelete}

@@ -12,8 +12,9 @@ interface MessageLinkProps {
 /**
  * A hyperlink inside a message. Left-click follows the link (handled globally by
  * externalLinkHandler); right-click opens LinkContextMenu (Copy link / Open in
- * browser) so the URL can be copied even on packaged desktop builds where the
- * native WebView menu is suppressed.
+ * browser) where the link stands alone, so the URL can be copied even on packaged
+ * desktop builds where the native WebView menu is suppressed. Inside a message the
+ * message's own menu (MessageContextMenu) carries those link items.
  *
  * Touch long-press is intentionally NOT wired here: the message bubble already
  * owns a long-press that opens MessageActionSheet, which carries its own Copy-link

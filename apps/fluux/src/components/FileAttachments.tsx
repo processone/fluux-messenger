@@ -222,6 +222,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
     <>
       <button
         type="button"
+        data-context-image=""
         onClick={() => {
           if (imageMenu.isOpen || imageMenu.longPressTriggered.current) return
           setLightboxOpen(true)
