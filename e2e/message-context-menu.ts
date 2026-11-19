@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { test, expect, type Page } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
+import type { FileAttachment, LinkPreview } from '@fluux/sdk'
 import { bootDemo } from './harness/demoBoot'
 import { activateChat } from './harness/scrollHarness'
 
@@ -15,7 +16,7 @@ const shot = async (page: Page, name: string, engine: string) => {
   await page.screenshot({ path: join(SHOTS, `${engine}-${name}.png`) })
 }
 
-async function setup(page: Page, bodies: { id: string; from: string; body: string; attachment?: Record<string, unknown>; linkPreview?: Record<string, unknown> }[]) {
+async function setup(page: Page, bodies: { id: string; from: string; body: string; attachment?: FileAttachment; linkPreview?: LinkPreview }[]) {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
   await bootDemo(page, '/demo.html?tutorial=false')
   await page.evaluate(() => (window as unknown as { __demoClient: DemoClient }).__demoClient.stopAnimation())
