@@ -268,6 +268,34 @@ describe('linked room message lookup', () => {
     expect(starts).toEqual([undefined, undefined, longTail[0].timestamp.toISOString()])
   })
 
+  // Intent: FLM-339 review — a deletion on the first walk page still reads absent despite a long tail.
+  it('still applies a deletion on the first walk page before giving up on a long tail', async () => {
+    const h = harness(undefined, undefined, 'retraction', longTail, longTail[50].stanzaId)
+    withCount(h, longTail)
+    expect(await h.mam.readRoomMessagePreview(ROOM, longTail[50].stanzaId)).toEqual({ kind: 'absent' })
+    expect(h.sendIQ).toHaveBeenCalledTimes(3)
+  })
+
+  // Intent: FLM-339 review — a server that caps pages lower reads fewer entries within the cap.
+  it('sizes the cap by the page the server actually returned', async () => {
+    const tail = longTail.slice(0, 400)
+    const h = harness(undefined, undefined, undefined, tail)
+    withCount(h, tail)
+    // The stand-in serves 25 entries a page, so ten pages read 250 entries and a 399-entry tail cannot fit.
+    expect(await h.mam.readRoomMessagePreview(ROOM, tail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(h.sendIQ).toHaveBeenCalledTimes(3)
+  })
+
+  // Intent: FLM-339 review — the filter uses the archive's time, and none when that is missing.
+  it('sends no start filter when the original has no usable archive time', async () => {
+    const h = harness(undefined, undefined, undefined, longTail)
+    const starts = withCount(h, longTail)
+    vi.spyOn(h.mam as unknown as { extractForwardedTimestamp: () => undefined }, 'extractForwardedTimestamp').mockReturnValue(undefined)
+    expect(await h.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(starts.every(start => start === undefined)).toBe(true)
+    expect(h.sendIQ.mock.calls.length).toBeGreaterThan(3)
+  })
+
   it('walks as before when the server reports no count or a tail within the cap', async () => {
     const noCount = harness(undefined, undefined, undefined, longTail)
     withCount(noCount, longTail, false)

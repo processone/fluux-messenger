@@ -213,7 +213,7 @@ interface CorrectionOrderGroup {
   identity?: CorrectionReferences['identity']
 }
 
-/** Archive pages (100 entries each) one linked-quote walk may read before giving up. */
+/** Archive pages (up to 100 entries each; servers may cap lower) one linked-quote walk may read before giving up. */
 const PREVIEW_WALK_MAX_PAGES = 10
 /** Entries per linked-quote walk page. */
 const PREVIEW_WALK_PAGE_SIZE = 100
@@ -3434,7 +3434,9 @@ export class MAM extends BaseModule {
 
   /**
    * One bounded RSM page of an archive (one entry by default): entries before
-   * `before`, after `after`, or from the oldest when neither is given. A cursor the
+   * `before`, after `after`, or from the oldest when neither is given, optionally
+   * only from `start` (an ISO time) on; `count` is the server's RSM count when it
+   * sent one (for a start filter, the size of that tail). A cursor the
    * server rejects as item-not-found reads `absent`; any other failure, or an
    * answer without `<fin/>`, reads `unknown`.
    */
@@ -3601,6 +3603,10 @@ export class MAM extends BaseModule {
           const order = new Map<string, Set<CorrectionOrderGroup>>()
           let after = stanzaId
           let pages = 0
+          // The archive's own time for the original (never the sender's claimed time, which may lie
+          // ahead of it and hide edits archived in between); no usable time means no start filter.
+          const archivedAt = this.extractForwardedTimestamp(forwarded)
+          const archivedFrom = archivedAt && !Number.isNaN(archivedAt.getTime()) ? archivedAt.toISOString() : undefined
           while (joined()) {
             // Unverified edits or retractions may lie past the cap, so the quote is not shown as current.
             if (pages++ >= PREVIEW_WALK_MAX_PAGES) return { kind: 'unknown' }
@@ -3608,12 +3614,10 @@ export class MAM extends BaseModule {
             // The first page also asks for entries from the original's time on: servers report
             // that tail's size as the RSM count, which can settle the cap before any more pages.
             const page = await this.queryOneArchivedEntry(roomJid, true, { after }, PREVIEW_WALK_PAGE_SIZE, signal,
-              pages === 1 ? message.timestamp.toISOString() : undefined)
+              pages === 1 ? archivedFrom : undefined)
             signal?.throwIfAborted()
             session.assertCurrent()
             if (!joined() || page.kind !== 'page') return { kind: 'unknown' }
-            // The count includes the original itself; a tail past the cap cannot be verified.
-            if (pages === 1 && page.count !== undefined && page.count - 1 > PREVIEW_WALK_MAX_PAGES * PREVIEW_WALK_PAGE_SIZE) return { kind: 'unknown' }
             const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
             for (const entry of page.entries) {
               signal?.throwIfAborted()
@@ -3640,6 +3644,10 @@ export class MAM extends BaseModule {
             signal?.throwIfAborted()
             session.assertCurrent()
             if (messages[0].isRetracted || page.complete || !page.entries.length) break
+            // The count includes the original itself. The cap reads this many entries per page at
+            // most, but a server may cap pages lower; a tail past what the cap can read is unverifiable.
+            if (pages === 1 && archivedFrom && page.count !== undefined
+              && page.count - 1 > PREVIEW_WALK_MAX_PAGES * Math.min(PREVIEW_WALK_PAGE_SIZE, page.entries.length)) return { kind: 'unknown' }
             const next = page.entries.at(-1)!.archiveId
             if (!next || next === after) return { kind: 'unknown' }
             after = next
