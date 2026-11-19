@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import type { ForwardedCopy, Message, RoomMessage } from '../core/types'
@@ -105,6 +105,23 @@ describe('findForwardedOrigin', () => {
     await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'dup', stanzaId: 'foreign-8', ownArchiveId: 'mine-4', ownArchiveBy: 'me@example.org' }))
     expect(await findForwardedOrigin(copy({ id: 'dup', stanzaId: 'mine-3', stanzaIdBy: 'me@example.org' }), 'me@example.org', []))
       .toMatchObject({ row: { id: 'dup', stanzaId: 'foreign-9' } })
+  })
+
+  it('resolves the own-archive id through a scoped index, never reading the conversation history', async () => {
+    for (let i = 0; i < 20; i++) {
+      await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: `h${i}`, stanzaId: `s${i}`, ownArchiveId: `o${i}`, ownArchiveBy: 'me@example.org', body: `n${i}` }))
+    }
+    const queries: [string, unknown][] = []
+    const real = IDBIndex.prototype.getAll
+    const spy = vi.spyOn(IDBIndex.prototype, 'getAll').mockImplementation(function (this: IDBIndex, q?: IDBKeyRange | IDBValidKey | null, c?: number) {
+      queries.push([this.name, q]); return real.call(this, q, c)
+    })
+    try {
+      expect(await findForwardedOrigin(copy({ id: 'zz', stanzaId: 'o7', stanzaIdBy: 'me@example.org', timestamp: undefined }), 'me@example.org', ['memberbot@xmpp.org']))
+        .toMatchObject({ row: { id: 'h7' } })
+    } finally { spy.mockRestore() }
+    expect(queries.length).toBeGreaterThan(0)
+    expect(queries.every(([name, q]) => name !== 'conversationId' && q !== undefined && q !== null)).toBe(true)
   })
 
   it('rejects two rows sharing a client id and text when no archive id tells them apart', async () => {
