@@ -1694,7 +1694,7 @@ test('a save acknowledged after it was removed again still counts at a full node
   let held: string | undefined
   let sendToPage: ((m: string) => void) | undefined
   let swallowedRetracts = 0
-  let refuseRemovals = false // the removal is first left unanswered, then refused
+  let swallowedRetractId: string | undefined // the removal is left unanswered, then refused on this same connection under this id
   let dropPushes = true // the node's own change notifications must not tell the page what the acknowledgement alone is meant to
   await one.page.routeWebSocket(/\/ws$/, ws => {
     const server = ws.connectToServer()
@@ -1704,7 +1704,7 @@ test('a save acknowledged after it was removed again still counts at a full node
       const id = /^<iq\b[^>]*\bid="([^"]+)"/.exec(frame)?.[1]
       if (id && frame.includes(`<publish node="${NODE}"`)) heldId ??= id
       if (id && frame.includes(`<retract node="${NODE}"`)) {
-        if (refuseRemovals) { ws.send(`<iq xmlns="jabber:client" type="error" id="${id}"><error type="auth"><forbidden xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error></iq>`); return }
+        swallowedRetractId ??= id
         swallowedRetracts++ // unanswered: the row stays removed here, so no visible-list guard can stand in for the count of the server
         return
       }
@@ -1744,10 +1744,14 @@ test('a save acknowledged after it was removed again still counts at a full node
   expect(await pendingQueue(one)).toContain(third.slice(0, 12))
   expect(one.frames.slice(sentBefore).filter(f => f.includes(`<publish node="${NODE}"`))).toHaveLength(0)
   // Once the removal is refused the row is back and the node is known to be full: the waiting save is decided: refused by this device without being sent.
-  refuseRemovals = true
-  kick('alice') // the reconnect reads the node again and sends what is waiting: the removal first, then the save
+  // The outstanding removal is refused on the very connection that sent it: no reconnect, no new read of the node, so the node's content is not read again
+  // and the save's decision rests on the count the acknowledgement alone gave.
+  const refusal = `<iq xmlns="jabber:client" type="error" id="${swallowedRetractId}"><error type="auth"><forbidden xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error></iq>`
+  const readsBefore = one.frames.filter(f => /<items node=/.test(f) && f.includes(NODE)).length
+  sendToPage!(refusal)
   await expect(one.page.getByText(/Your server refused to store this message/).first()).toBeVisible({ timeout: 120_000 }) // the refusal of the waiting save, made when it was sent for
-  expect(swallowedRetracts).toBeGreaterThan(0)
+  expect(swallowedRetracts).toBe(1) // one removal, never resent: the same connection was kept
+  expect(one.frames.filter(f => /<items node=/.test(f) && f.includes(NODE)).length).toBe(readsBefore) // and the node was not read again
   expect(one.frames.slice(sentBefore).filter(f => f.includes(`<publish node="${NODE}"`))).toHaveLength(0)
   await expect.poll(() => pendingQueue(one), { timeout: 20_000 }).not.toContain(third.slice(0, 12)) // decided, not still waiting
   await shot(one.page, 'superseded-publish-full-node')
