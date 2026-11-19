@@ -28,7 +28,8 @@ const evidence = process.env.FLUUX_LIVE_EVIDENCE
 const NODE = 'urn:xmpp:fluux:saved-messages:0'
 const PUBSUB = 'http://jabber.org/protocol/pubsub'
 const stamp = Date.now().toString(36)
-const shot = (page: Page, name: string) => page.screenshot({ path: evidence ? `${evidence}/saved-live-${name}.png` : undefined })
+// Taken once what the page animates in has settled.
+const shot = async (page: Page, name: string) => { await page.waitForTimeout(800); await page.screenshot({ path: evidence ? `${evidence}/saved-live-${name}.png` : undefined }) }
 
 interface Client { page: Page; context: BrowserContext; frames: string[] }
 
