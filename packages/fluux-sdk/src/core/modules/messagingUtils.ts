@@ -456,7 +456,7 @@ export interface ForwardedCopyIdentity {
 
 /**
  * XEP-0297: the standalone forwarded copy of one message, as a child of the outgoing message.
- * Forward writes only the plain fields; a saved message also passes `identity`. `text` may be
+ * Forward writes the plain fields and the original's id and stanza-id; a saved message passes the full `identity`. `text` may be
  * empty only for a copy that carries no body (an encrypted or deleted original).
  */
 export function forwardedCopyElement(
@@ -482,7 +482,7 @@ export function forwardedCopyElement(
 /**
  * Reader for a saved message's copy: the bounds of {@link parseForwardedCopy} (4000 code
  * points, control characters removed, no nested forward) plus the identity elements Forward's
- * reader ignores. Unlike Forward's reader, a copy without a body is valid.
+ * reader does not read (author address, origin id, occupant id). Unlike Forward's reader, a copy without a body is valid.
  */
 export function parseSavedForwardedCopy(forwarded: Element): {
   from: string; to?: string; type?: 'chat' | 'groupchat'; text: string; timestamp?: number

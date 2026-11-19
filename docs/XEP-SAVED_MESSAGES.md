@@ -83,7 +83,7 @@ It holds exactly one XEP-0297 `<forwarded/>`. A client that rewrites an item MUS
 - `<origin-id/>` and `<occupant-id/>` (XEP-0421, rooms only) are included when known.
 - `<body/>` holds the plain text, at most 4000 characters, and only when the message was not end-to-end encrypted. Control characters and direction overrides are removed on read.
 
-Fluux builds the copy with the same function Forward uses and reads it with a reader that adds the identity elements to the bounds Forward's reader applies. Forward's own reader is unchanged and keeps ignoring every extension.
+Fluux builds the copy with the same function Forward uses and reads it with a reader that adds the identity elements to the bounds Forward's reader applies. Forward's own reader is unchanged; it reads the original's id and stanza-id that Forward now carries and ignores every other extension.
 
 ---
 
