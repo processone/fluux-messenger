@@ -2307,14 +2307,6 @@ export class Connection extends BaseModule {
           if (this.credentials?.jid) {
             void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
           }
-          setTimeout(() => {
-            const smObj = this.xmpp?.streamManagement
-            if (smObj) {
-              smObj.id = previd
-              smObj.enabled = true
-              smObj.inbound = inbound
-            }
-          }, 0)
         }
         logInfo(`Connection handshake complete: SM resumed via SASL2 inline (resolved=${resolved})`)
         handleResult(true)
@@ -2357,17 +2349,9 @@ export class Connection extends BaseModule {
         if (this.credentials?.jid) {
           void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
         }
-
-        // Delay to run after xmpp.js's SM plugin finishes processing,
-        // which otherwise resets the state after our update.
-        setTimeout(() => {
-          const smObj = this.xmpp?.streamManagement
-          if (smObj) {
-            smObj.id = previd
-            smObj.enabled = true
-            smObj.inbound = inbound
-          }
-        }, 0)
+        // xmpp.js keeps the session id, enabled flag and counter after a resumption, here and
+        // inline. Never write this snapshot back to it later: the stanzas the server resends
+        // right behind <resumed/> are counted in between and would drop out of every ack.
 
         logInfo(`Connection handshake complete: SM resumed (resolved=${resolved})`)
         handleResult(true)
