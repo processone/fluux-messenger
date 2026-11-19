@@ -143,10 +143,8 @@ test.describe('message right-click menu', () => {
     await expect(menu(page)).toHaveCount(0)
   })
 
-  // Reproduced defect, open: in WebKit a Tab from the picker's search field fires a window blur that the
-  // message interaction hold treats as the page losing focus, so the menu closes. Marked fixme there.
-  test('Tab in the emoji picker moves focus inside it and keeps the menu open', async ({ page, browserName }) => {
-    test.fixme(browserName === 'webkit', 'WebKit window blur on shadow focus change closes the menu (useMessageInteractionHold)')
+  // WebKit fires a window blur before the focus when Tab moves between shadow-DOM controls; the interaction hold waits for that focus.
+  test('Tab in the emoji picker moves focus inside it and keeps the menu open', async ({ page }) => {
     await setup(page, [{ id: 'tab-a', from: 'peer', body: 'Tab target message' }])
     const body = row(page, 'tab-a')
     await expect(body).toBeVisible()

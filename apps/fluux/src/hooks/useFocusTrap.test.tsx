@@ -32,6 +32,15 @@ describe('useFocusTrap', () => {
     expect(document.activeElement).toBe(getByText('first'))
   })
 
+  it('still wraps Tab when a widget inside the trap stops the key from bubbling', () => {
+    const { getByText } = render(<Trap />)
+    const last = getByText('last')
+    last.focus()
+    last.addEventListener('keydown', (e) => e.stopPropagation())
+    fireEvent.keyDown(last, { key: 'Tab' })
+    expect(document.activeElement).toBe(getByText('first'))
+  })
+
   it('wraps Shift+Tab from the first element to the last', () => {
     const { getByText } = render(<Trap />)
     const first = getByText('first')

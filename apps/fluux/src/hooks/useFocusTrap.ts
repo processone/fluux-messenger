@@ -83,10 +83,11 @@ export function useFocusTrap<T extends HTMLElement>(
       }
     }
 
-    container.addEventListener('keydown', handleKeyDown)
+    // Capture phase: a widget inside the trap (the emoji picker) may stop Tab before it bubbles.
+    container.addEventListener('keydown', handleKeyDown, true)
 
     return () => {
-      container.removeEventListener('keydown', handleKeyDown)
+      container.removeEventListener('keydown', handleKeyDown, true)
       if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true })
     }
   }, [containerRef, initialFocusRef, active, includeShadowRoots])
