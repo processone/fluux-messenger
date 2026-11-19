@@ -8,7 +8,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
 import { useState, useMemo, useRef, useEffect, useContext, memo, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
-import { connectionStore, formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
+import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { useKeyDecisions } from '@/e2ee/openpgpTrustView'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { Avatar } from '../Avatar'
@@ -598,7 +598,7 @@ export const MessageBubble = memo(function MessageBubble({
       ...(directForward && { from: getBareJid(message.from) }),
       type: message.type,
       timestamp: message.timestamp.getTime(),
-      ...forwardSourceIds(message, getBareJid(connectionStore.getState().jid ?? ''), message.type === 'groupchat' ? getBareJid(message.from) : undefined),
+      ...forwardSourceIds(message, message.type === 'groupchat' ? getBareJid(message.from) : undefined),
       ...(directForward && message.securityContext && { fromEncrypted: true }),
     } }),
   }) : undefined

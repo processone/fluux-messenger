@@ -44,9 +44,9 @@ describe('findForwardedOrigin', () => {
   it('finds a direct original by its carried id, then by sender, time and text', async () => {
     await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'orig-1' }))
     expect(await findForwardedOrigin(copy({ id: 'orig-1', timestamp: undefined }), 'me@example.org', ['memberbot@xmpp.org']))
-      .toEqual({ kind: 'chat', conversationId: 'memberbot@xmpp.org', messageId: 'orig-1' })
+      .toEqual({ kind: 'chat', conversationId: 'memberbot@xmpp.org', row: { id: 'orig-1' } })
     expect(await findForwardedOrigin(copy({ timestamp: T + 90_000 }), 'me@example.org', ['memberbot@xmpp.org']))
-      .toEqual({ kind: 'chat', conversationId: 'memberbot@xmpp.org', messageId: 'orig-1' })
+      .toEqual({ kind: 'chat', conversationId: 'memberbot@xmpp.org', row: { id: 'orig-1' } })
   })
 
   it('does not match another time, another sender or other text', async () => {
@@ -61,12 +61,14 @@ describe('findForwardedOrigin', () => {
     await messageCache.saveMessage(chat('bob@example.org', { id: 'theirs', body: 'on my way' }))
     const m = copy({ from: 'me@example.org', author: 'me@example.org', text: 'on my way' })
     expect(await findForwardedOrigin(m, 'me@example.org', ['bob@example.org', 'alice@example.org']))
-      .toEqual({ kind: 'chat', conversationId: 'alice@example.org', messageId: 'mine' })
+      .toEqual({ kind: 'chat', conversationId: 'alice@example.org', row: { id: 'mine' } })
   })
 
-  it('matches a copy cut at the length limit by its prefix', async () => {
-    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'long', body: 'Thank you for voting, again and again' }))
-    expect(await findForwardedOrigin(copy(), 'me@example.org', [])).toMatchObject({ messageId: 'long' })
+  it('matches a copy cut at the length limit by its prefix, and a shorter copy only exactly', async () => {
+    const full = 'x'.repeat(4000)
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'long', body: `${full} and the rest` }))
+    expect(await findForwardedOrigin(copy({ text: full }), 'me@example.org', [])).toMatchObject({ row: { id: 'long' } })
+    expect(await findForwardedOrigin(copy({ text: 'Thank you' }), 'me@example.org', [])).toBeNull()
   })
 
   it('finds a room original in local history by nickname, time and text', async () => {
@@ -75,5 +77,63 @@ describe('findForwardedOrigin', () => {
     await messageCache.saveRoomMessage(row)
     const m = { forwarded: { author: 'jenkins', from: 'tech@conference.example.org/jenkins', text: 'BUILD SUCCESS', type: 'groupchat' as const, timestamp: T } }
     expect(await findForwardedOrigin(m, 'me@example.org', [])).toEqual({ kind: 'room', roomJid: 'tech@conference.example.org', stanzaId: '88' })
+  })
+
+  it('finds a row by the original id even when its client id differs, and by the own-archive id first', async () => {
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'c1', originId: 'o1', timestamp: new Date(T + 60 * 60_000) }))
+    expect(await findForwardedOrigin(copy({ id: 'o1', timestamp: T }), 'me@example.org', [])).toMatchObject({ row: { id: 'c1' } })
+  })
+
+  it('targets the second of two rows sharing a client id by the archive id, and keeps its identity', async () => {
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'dup', stanzaId: 'a-1', body: 'first' }))
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'dup', stanzaId: 'a-2', body: 'Thank you for voting', timestamp: new Date(T + 10_000) }))
+    expect(await findForwardedOrigin(copy({ id: 'dup', stanzaId: 'a-2', stanzaIdBy: 'me@example.org' }), 'me@example.org', []))
+      .toEqual({ kind: 'chat', conversationId: 'memberbot@xmpp.org', row: { id: 'dup', stanzaId: 'a-2' } })
+  })
+
+  it('picks the closest of repeated messages, and rejects a tie', async () => {
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'far', timestamp: new Date(T - 100_000) }))
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'near', timestamp: new Date(T + 5_000) }))
+    expect(await findForwardedOrigin(copy(), 'me@example.org', [])).toMatchObject({ row: { id: 'near' } })
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'tie', timestamp: new Date(T - 5_000) }))
+    expect(await findForwardedOrigin(copy(), 'me@example.org', [])).toBeNull()
+  })
+
+  it('does not pick an own message by conversation order when two conversations hold it equally', async () => {
+    for (const [conv, id] of [['alice@example.org', 'a'], ['bob@example.org', 'b']] as const)
+      await messageCache.saveMessage(chat(conv, { id, from: 'me@example.org', isOutgoing: true, body: 'on my way' }))
+    const m = copy({ from: 'me@example.org', author: 'me@example.org', text: 'on my way' })
+    expect(await findForwardedOrigin(m, 'me@example.org', ['alice@example.org', 'bob@example.org'])).toBeNull()
+  })
+
+  it('looks only in the sender\'s own conversation for another sender\'s message', async () => {
+    await messageCache.saveMessage(chat('carol@example.org', { id: 'elsewhere', from: 'memberbot@xmpp.org' }))
+    expect(await findForwardedOrigin(copy(), 'me@example.org', ['carol@example.org'])).toBeNull()
+  })
+
+  it('picks the room row closest in time and rejects a tie', async () => {
+    const row = (id: string, stanzaId: string, at: number) => ({ type: 'groupchat', id, roomJid: 'tech@conference.example.org', from: 'tech@conference.example.org/jenkins',
+      nick: 'jenkins', body: 'BUILD SUCCESS', timestamp: new Date(at), isOutgoing: false, stanzaId, originId: undefined }) as unknown as RoomMessage
+    await messageCache.saveRoomMessage(row('r1', '1', T - 60_000))
+    await messageCache.saveRoomMessage(row('r2', '2', T + 10_000))
+    const m = { forwarded: { author: 'jenkins', from: 'tech@conference.example.org/jenkins', text: 'BUILD SUCCESS', type: 'groupchat' as const, timestamp: T } }
+    expect(await findForwardedOrigin(m, 'me@example.org', [])).toEqual({ kind: 'room', roomJid: 'tech@conference.example.org', stanzaId: '2' })
+    await messageCache.saveRoomMessage(row('r3', '3', T - 10_000))
+    expect(await findForwardedOrigin(m, 'me@example.org', [])).toBeNull()
+  })
+
+  it('takes the link that ends the marked text, whatever order the references are in', () => {
+    const quoted = 'xmpp:other@conference.example.org?join;msg=1'
+    const source = 'xmpp:tech@conference.example.org?join;msg=77'
+    const forwarded = { author: 'bot', text: 'x', fallback: { begin: 0, end: 5, text: `> bot wrote:\n> ${quoted}\n${source}` } } as ForwardedCopy
+    for (const order of [[source, quoted], [quoted, source]])
+      expect(forwardedCopyRoomLink({ forwarded, references: order.map(uri => ({ type: 'data' as const, uri })) })).toEqual({ roomJid: 'tech@conference.example.org', stanzaId: '77' })
+  })
+
+  it('rejects when the account changed while it ran', async () => {
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'orig-1' }))
+    const pending = findForwardedOrigin(copy(), 'me@example.org', [])
+    setStorageScopeJid('someone-else@example.org')
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
   })
 })

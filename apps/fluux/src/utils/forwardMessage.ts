@@ -19,11 +19,17 @@ export interface ForwardQuote {
   stanzaIdBy?: string
 }
 
-/** The ids of a source message the copy should carry: its sender-assigned id and its archive id. */
-export function forwardSourceIds(message: { id: string; originId?: string; stanzaId?: string; type: 'chat' | 'groupchat'; from: string }, account: string, roomJid?: string): Pick<ForwardQuote, 'id' | 'stanzaId' | 'stanzaIdBy'> {
+/**
+ * The ids of a source message the copy should carry: its sender-assigned id, and its archive id
+ * only when the archive is known. A room's own id is the room's; a direct message's is its
+ * authoritative own-archive pair, never a stanza id another archive may have stamped.
+ */
+export function forwardSourceIds(message: { id: string; originId?: string; stanzaId?: string; ownArchiveId?: string; ownArchiveBy?: string; type: 'chat' | 'groupchat' }, roomJid?: string): Pick<ForwardQuote, 'id' | 'stanzaId' | 'stanzaIdBy'> {
   const id = message.originId ?? message.id
-  const by = message.type === 'groupchat' ? roomJid : account
-  return { ...(id && { id }), ...(message.stanzaId && by && { stanzaId: message.stanzaId, stanzaIdBy: by }) }
+  const archive = message.type === 'groupchat'
+    ? (message.stanzaId && roomJid ? { stanzaId: message.stanzaId, stanzaIdBy: roomJid } : undefined)
+    : (message.ownArchiveId && message.ownArchiveBy ? { stanzaId: message.ownArchiveId, stanzaIdBy: message.ownArchiveBy } : undefined)
+  return { ...(id && { id }), ...archive }
 }
 
 const MAX_COPY_CHARACTERS = 4000

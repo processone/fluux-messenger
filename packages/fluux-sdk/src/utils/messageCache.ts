@@ -1886,6 +1886,19 @@ export async function getMessageByReference(
   return row ? deserializeMessage(row) : null
 }
 
+/** Every conversation-scoped row a reference names, archive ids before client ids; the caller decides between several. */
+export async function getMessagesByReference(
+  conversationId: string,
+  reference: string,
+): Promise<Message[]> {
+  if (!isIndexedDBAvailable()) return []
+  const scope = captureStorageScope()
+  const db = await getDB(scope.jid)
+  const resolution = await findChatRowsByReference(db.transaction(MESSAGES_STORE).store, conversationId, reference)
+  scope.assertCurrent()
+  return (resolution?.candidates ?? []).map(deserializeMessage)
+}
+
 export interface RoomMessageReference {
   roomJid: string
   id: string

@@ -87,10 +87,10 @@ describe('ForwardedCopyCard', () => {
   })
 
   it('opens a direct original in its conversation at that message, also with Enter', async () => {
-    mocks.find.mockResolvedValue({ kind: 'chat', conversationId: 'bob@example.org', messageId: 'm-9' })
+    mocks.find.mockResolvedValue({ kind: 'chat', conversationId: 'bob@example.org', row: { id: 'm-9', stanzaId: 'a-2' } })
     card({ type: 'chat', from: 'bob@example.org' })
     fireEvent.keyDown(screen.getByRole('link'), { key: 'Enter' })
-    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('bob@example.org', 'm-9'))
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('bob@example.org', { id: 'm-9', stanzaId: 'a-2' }))
   })
 
   it('stays put and says so when the original is not in local history', async () => {
@@ -108,5 +108,20 @@ describe('ForwardedCopyCard', () => {
     vi.spyOn(window, 'getSelection').mockReturnValue({ toString: () => 'Ship' } as Selection)
     fireEvent.click(screen.getByRole('link'))
     expect(mocks.find).not.toHaveBeenCalled()
+  })
+})
+
+describe('ForwardedCopyCard stale lookups', () => {
+  it('does nothing when the account changed or the card left while the lookup ran', async () => {
+    let finish: (value: unknown) => void = () => {}
+    mocks.find.mockReset(); mocks.navigate.mockReset(); mocks.toast.mockReset()
+    mocks.find.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const { unmount } = card({ type: 'chat', from: 'bob@example.org' })
+    fireEvent.click(screen.getByRole('link'))
+    unmount()
+    finish({ kind: 'chat', conversationId: 'bob@example.org', row: { id: 'm-9' } })
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(mocks.navigate).not.toHaveBeenCalled()
+    expect(mocks.toast).not.toHaveBeenCalled()
   })
 })

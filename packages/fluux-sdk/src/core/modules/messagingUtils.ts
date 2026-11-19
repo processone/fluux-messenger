@@ -410,8 +410,10 @@ function boundedPlainText(value: string, limit: number): string {
 
 /**
  * XEP-0297: the one structured copy a message carries beside its own body. Bounded and
- * non-recursive: only the forwarded message's plain body, sender and original time are read.
- * A nested forward, receipts, routing addresses and every other extension are ignored, and the
+ * non-recursive: only the forwarded message's plain body, sender, original time and the
+ * original's ids (the inner `id` and an XEP-0359 `<stanza-id/>` with its `by`) are read. The ids
+ * are a claim used only to find the original in local history. A nested forward, receipts,
+ * routing addresses and every other extension are ignored, and the
  * inner message is never routed as a message of its own. Attribution to the sender of the
  * outer message stays separate: the author here is only the forwarder's claim.
  */

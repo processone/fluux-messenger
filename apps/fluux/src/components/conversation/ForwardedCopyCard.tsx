@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, MessageSquare, Users } from 'lucide-react'
 import { buildRoomMessageLink, chatStore, connectionStore, findForwardedOrigin, getBareJid, type BaseMessage } from '@fluux/sdk'
@@ -38,19 +38,26 @@ export function ForwardedCopyCard({ message, formatTime, isDarkMode }: {
   const time = when && (isToday(when) ? formatTime(when)
     : `${formatDateHeader(format(when, 'yyyy-MM-dd'), t, i18n.language.split('-')[0])} ${formatTime(when)}`)
 
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+
   const open = useCallback(async () => {
     // A drag that selected text is not a click on the card.
     if (window.getSelection()?.toString()) return
     const account = connectionStore.getState().jid ?? ''
+    // A lookup that finishes after the card left or the account changed does nothing.
+    const stale = () => !mounted.current || (connectionStore.getState().jid ?? '') !== account
     let origin = null
     try {
       origin = await findForwardedOrigin(message, account, [...chatStore.getState().conversations.keys()])
     } catch (error) {
+      if ((error as { name?: string })?.name === 'AbortError') return
       console.warn('Could not look up the forwarded original', error)
     }
+    if (stale()) return
     if (!origin) addToast('info', t('chat.forwardedOriginNotFound'))
     else if (origin.kind === 'room') routeDeepLink(buildRoomMessageLink(origin.roomJid, origin.stanzaId))
-    else navigateToConversation(origin.conversationId, origin.messageId)
+    else navigateToConversation(origin.conversationId, origin.row)
   }, [message, addToast, t, navigateToConversation])
 
   return (

@@ -105,12 +105,13 @@ describe('forward composition with a copy', () => {
 
 // Captain's choice on FLM-332: the copy carries the original's ids for an exact match later.
 describe('ids of the original in a forward', () => {
-  it('names the sender id and the archive that assigned the archive id', () => {
-    expect(forwardSourceIds({ id: 'c1', originId: 'o1', stanzaId: 's1', type: 'groupchat', from: 'r@c.example.org/Bob' }, 'me@example.org', 'r@c.example.org'))
+  it('names the sender id and, only where the archive is known, the archive that assigned the archive id', () => {
+    expect(forwardSourceIds({ id: 'c1', originId: 'o1', stanzaId: 's1', type: 'groupchat' }, 'r@c.example.org'))
       .toEqual({ id: 'o1', stanzaId: 's1', stanzaIdBy: 'r@c.example.org' })
-    expect(forwardSourceIds({ id: 'c1', stanzaId: 's1', type: 'chat', from: 'bob@example.org' }, 'me@example.org'))
-      .toEqual({ id: 'c1', stanzaId: 's1', stanzaIdBy: 'me@example.org' })
-    expect(forwardSourceIds({ id: 'c1', type: 'chat', from: 'bob@example.org' }, 'me@example.org')).toEqual({ id: 'c1' })
+    // A direct message carries its authoritative own-archive pair, never a foreign stanza id beside it.
+    expect(forwardSourceIds({ id: 'c1', stanzaId: 'foreign', ownArchiveId: 'own-9', ownArchiveBy: 'me@example.org', type: 'chat' }))
+      .toEqual({ id: 'c1', stanzaId: 'own-9', stanzaIdBy: 'me@example.org' })
+    expect(forwardSourceIds({ id: 'c1', stanzaId: 'foreign', type: 'chat' })).toEqual({ id: 'c1' })
   })
 
   it('keeps them on the structured copy and leaves an unarchived source with its id only', () => {
