@@ -29,8 +29,9 @@ export function getGlance(
     case 'plaintextForced':
       return { icon: LockOpen, label: t('contacts.encryption.glanceDisabled'), tone: 'neutral' }
     case 'unsupported':
-      // Keys that wait for a decision, or for earlier trust data to be moved:
-      // nothing is sent, so never say "not encrypted".
+      // Keys that wait for a decision, or for trust data of an earlier version
+      // or of the account's other devices: nothing is sent, so never say
+      // "not encrypted".
       if (!state.needsDecision) return { icon: LockOpen, label: t('contacts.encryption.glanceNotEncrypted'), tone: 'neutral' }
       return waitsOnlyForTrustData(state)
         ? { icon: ShieldAlert, label: t('contacts.encryption.trustPendingTitle'), tone: 'warning' }

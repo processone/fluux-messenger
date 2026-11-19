@@ -21,8 +21,9 @@ type Notice = 'partial' | 'all' | 'pendingPartial' | 'pendingAll' | 'distrusted'
  * - `all`: every key the contact announces waits for a decision, so nothing
  *   can be sent.
  * - `pendingPartial`, `pendingAll`: the same, where every waiting key waits
- *   for the trust data of an earlier version to be moved, which the app tries
- *   again on its own.
+ *   for trust data the app tries again on its own to get: the trust data of
+ *   an earlier version, still being moved, or the keys the account's other
+ *   devices hold, not read yet on this device.
  * - `distrusted`: the person refused every key the contact announces, so
  *   nothing can be sent.
  */

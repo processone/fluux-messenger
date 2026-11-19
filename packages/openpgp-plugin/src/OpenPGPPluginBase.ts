@@ -382,8 +382,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * did not answer, the list could not be read, or no read could run), a key
    * of a contact without a verified key, that the user never decided about
    * on this device, waits (`trust-pending`): another device may hold it. Keys
-   * the user decided about here keep receiving messages. A failed read is
-   * tried again (see {@link scheduleVerificationsRetry}).
+   * the user trusted or verified here keep receiving messages; keys refused
+   * or held here stay blocked. Until the list is known, a contact verified
+   * here for the first time approves none of its other keys (see
+   * {@link setIdentityTrust}). A failed read is tried again (see
+   * {@link scheduleVerificationsRetry}).
    */
   private _verificationsKnown = false
   private _verificationsRetryTimeout: ReturnType<typeof setTimeout> | null = null
@@ -3820,7 +3823,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * {@link listPeerIdentities} lists them; a decision the key already has
    * changes nothing. Removing the verification of a key the contact no longer
    * announces forgets that key. A contact verified for the first time keeps
-   * using the keys it already used.
+   * using the keys it already used, once this session knows the account's
+   * verification list: before that, another device may hold one of them, so
+   * they wait for the user's decision.
    */
   async setIdentityTrust(peer: BareJID, id: string, decision: IdentityTrustDecision): Promise<void> {
     const sameKey = (i: PeerIdentity) => normalizeFingerprint(i.id) === normalizeFingerprint(id)
@@ -3858,7 +3863,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
     const firstVerification = decision === 'verified' && !this.trustRecords.hasVerified(peer)
     this.recordDecisions([{ peer, fingerprint: identity.fingerprint, decision }])
-    if (firstVerification) this.approveUnrecordedActiveKeys(peer)
+    if (firstVerification && this._verificationsKnown) this.approveUnrecordedActiveKeys(peer)
   }
 
   getOwnFingerprint(): string | null {

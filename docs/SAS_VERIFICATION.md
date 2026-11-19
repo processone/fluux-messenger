@@ -216,8 +216,10 @@ no list, a contact's key the device has no decision about receives nothing and
 shows as waiting (`trust-pending`); a contact with a key verified there has its
 new keys held anyway. This covers a read that fails or returns a list the
 device cannot read, tried again every 30 seconds, and a trust state not
-accepted yet, read once it is. Keys decided about on the device keep receiving
-messages. Nor does the session publish the list before it has read it, since
+accepted yet, read once it is. Keys trusted or verified on the device keep
+receiving messages, and keys refused or held there stay blocked; a contact
+verified there for the first time meanwhile approves none of its other keys,
+which wait for a decision. Nor does the session publish the list before it has read it, since
 its publication would replace what the account's other devices verify and
 hold; what changed meanwhile is published once the list is read. A device that
 just joined therefore sends nothing to a key another device holds. A device that reads a list lacking a key it knows is held on

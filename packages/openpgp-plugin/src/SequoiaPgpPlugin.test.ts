@@ -5605,8 +5605,9 @@ describe('SequoiaPgpPlugin', () => {
     // While the move waits, whether the user verified a contact the
     // unclaimed values name is not known: its keys wait for the move
     // (`trust-pending`, FLM-311), so nothing is sent to it, as for a verified
-    // contact's new keys, with its own reason: no decision is needed. Other
-    // contacts are not affected.
+    // contact's new keys, with its own reason: no decision is needed. No list
+    // of the account's devices is read meanwhile either, so another contact's
+    // key without a decision on this device waits with the same reason.
     it('sends nothing to a contact the unclaimed values verified while their move waits, and holds its new key once they move', async () => {
       const BOB_NEW_FP = 'B0B0000000000000000000000000000000000022'
       const DAVE_FP = 'DA4E000000000000000000000000000000000014'
@@ -5634,8 +5635,6 @@ describe('SequoiaPgpPlugin', () => {
       expect(await plugin.getPeerTrust('bob@example.com')).toBe('tofu')
       const toBob = await plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
       await expect(plugin.encrypt(toBob, encodeBodyAsPayload('to bob'))).rejects.toMatchObject({ code: 'peer-keys-trust-pending' })
-      // No list of the account's devices is read while the move waits: a
-      // key without a decision waits for it too.
       const toDave = await plugin.openConversation({ kind: 'direct', peer: 'dave@example.com' })
       await expect(plugin.encrypt(toDave, encodeBodyAsPayload('to dave'))).rejects.toMatchObject({ code: 'peer-keys-trust-pending' })
       await plugin.shutdown()
@@ -6670,6 +6669,66 @@ describe('SequoiaPgpPlugin', () => {
             verified: { [DAVE]: [DAVE_FP], 'carol@example.com': [CAROL_FP] },
             held: { [DAVE]: [ERIN_FP] },
           })
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+
+      // Intent: FLM-311 - a contact verified for the first time keeps using
+      // the keys it already used, but until the device has read the list of
+      // keys the account's devices hold, its other keys wait for the user's
+      // decision instead of being approved: another device may hold one.
+      it.each([
+        ['while the first read of the list waits for the server', 'pending'],
+        ['after the first read of the list failed', 'failed'],
+      ] as const)('approves no other key of a contact verified %s', async (_case, state) => {
+        vi.useFakeTimers()
+        try {
+          const built = makeContext('me@example.com')
+          const fp = state === 'pending' ? '3E46E0000000000000000000000000000000003A' : '3E46E0000000000000000000000000000000003B'
+          ownKey(fp)
+          const server = serverNodes(built)
+          // Another device verified DAVE_FP and holds ERIN_FP.
+          const list = setsWithHeld(fp, { [DAVE]: [DAVE_FP] }, { [DAVE]: [ERIN_FP] }, 2)
+          if (state === 'pending') server.nodes.sets = list
+          let answerList!: () => void
+          const listAnswered = new Promise<void>((resolve) => {
+            answerList = resolve
+          })
+          let answers = false
+          const queryPEP = built.ctx.xmpp.queryPEP
+          built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
+            if (node === SETS_NODE && state === 'pending') await listAnswered
+            if (node === SETS_NODE && state === 'failed' && !answers) throw new Error('remote-server-timeout')
+            return queryPEP(jid, node, maxItems)
+          }
+          const davePep = installDavePep(built)
+          davePep.announce([validDaveKey(DAVE_FP), validDaveKey(ERIN_FP)])
+          await plugin.init(built.ctx)
+          await vi.advanceTimersByTimeAsync(0)
+          await plugin.probePeer(DAVE)
+
+          await plugin.setIdentityTrust(DAVE, DAVE_FP, 'verified')
+          expect(trustRecordsOf(plugin).decisionOf(DAVE, ERIN_FP)).toBeUndefined()
+          expect((await plugin.listPeerIdentities(DAVE)).map((i) => [i.id, i.usedForEncryption, i.notUsedReason])).toEqual([
+            [DAVE_FP, true, undefined],
+            [ERIN_FP, false, 'awaiting-decision'],
+          ])
+
+          // The list arrives: ERIN_FP is held, and receives nothing.
+          if (state === 'pending') {
+            answerList()
+            await vi.advanceTimersByTimeAsync(0)
+          } else {
+            answers = true
+            server.nodes.sets = list
+            await vi.advanceTimersByTimeAsync(30_000)
+          }
+          expect(trustRecordsOf(plugin).decisionOf(DAVE, ERIN_FP)).toBe('held')
+          const toDave = await plugin.openConversation({ kind: 'direct', peer: DAVE })
+          const sent = await plugin.encrypt(toDave, encodeBodyAsPayload('to dave'))
+          expect(recipientFpsFromEncrypt(sent)).toContain(DAVE_FP)
+          expect(recipientFpsFromEncrypt(sent)).not.toContain(ERIN_FP)
         } finally {
           vi.useRealTimers()
         }

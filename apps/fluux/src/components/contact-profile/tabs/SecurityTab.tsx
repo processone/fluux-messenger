@@ -159,8 +159,8 @@ export function SecurityTab({
 
 /**
  * Why a contact with keys gets nothing: no key can be used, every key waits
- * for the user's decision, or every key waits for earlier trust data to be
- * moved, which needs no decision.
+ * for the user's decision, or every key waits for trust data of an earlier
+ * version or of the account's other devices, which needs no decision.
  */
 function unsupportedExplanation(
   state: Extract<ConversationEncryptionState, { kind: 'unsupported' }>,

@@ -1325,7 +1325,8 @@ export const MessageInput = memo(function MessageInput({
     }
 
     // Nothing can be sent while every key of the contact waits for the user's
-    // decision or for the trust data of an earlier version, or was refused:
+    // decision or for trust data of an earlier version or of the account's
+    // other devices, or was refused:
     // the SDK refuses to encrypt and never falls back to plaintext. Stop here
     // so a staged file is not uploaded unencrypted.
     const sendBlock = encryptionSendBlock(encryptionState)
