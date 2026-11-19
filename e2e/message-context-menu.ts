@@ -15,7 +15,7 @@ const shot = async (page: Page, name: string, engine: string) => {
   await page.screenshot({ path: join(SHOTS, `${engine}-${name}.png`) })
 }
 
-async function setup(page: Page, bodies: { id: string; from: string; body: string }[]) {
+async function setup(page: Page, bodies: { id: string; from: string; body: string; attachment?: Record<string, unknown> }[]) {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
   await bootDemo(page, '/demo.html?tutorial=false')
   await page.evaluate(() => (window as unknown as { __demoClient: DemoClient }).__demoClient.stopAnimation())
@@ -27,6 +27,7 @@ async function setup(page: Page, bodies: { id: string; from: string; body: strin
       scope.__demoClient.emitSDK('chat:message', { message: {
         type: 'chat', id: m.id, conversationId: peer, from: m.from === 'me' ? 'you@fluux.chat' : peer, body: m.body,
         stanzaId: undefined, originId: undefined, timestamp: new Date(t++), isOutgoing: m.from === 'me',
+        ...(m.attachment && { attachment: m.attachment }),
       }, isLiveArrival: true })
     }
   }, { bodies, peer: PEER })
@@ -204,5 +205,41 @@ test.describe('message right-click menu', () => {
     await page.waitForTimeout(1500)
     await expect(menu(page)).toBeVisible()
     await expect(menu(page).getByRole('button', { name: 'Reply' })).toBeVisible()
+  })
+
+  test('the link chooser takes focus on its first link, and Tab moves between links', async ({ page }) => {
+    await setup(page, [
+      { id: 'two-a', from: 'peer', body: 'Two links https://example.org/one and https://example.org/two here' },
+    ])
+    const body = row(page, 'two-a')
+    await expect(body).toBeVisible()
+    const box = (await body.getByText('Two links').boundingBox())!
+    await page.mouse.click(box.x + 20, box.y + box.height / 2, { button: 'right' })
+    await menu(page).getByRole('button', { name: 'Copy link' }).click()
+    const first = menu(page).getByRole('button', { name: 'https://example.org/one' })
+    await expect(first).toBeVisible()
+    await expect(menu(page).getByRole('button', { name: 'Reply' })).toHaveCount(0)
+    await expect(first).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(menu(page).getByRole('button', { name: 'https://example.org/two' })).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(menu(page)).toHaveCount(0)
+  })
+
+  test('a right-click on an image attachment offers Copy image URL and Open in browser right after the reactions', async ({ page }) => {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+    await setup(page, [{ id: 'img-a', from: 'peer', body: '', attachment: { url: png, name: 'pixel.png', mediaType: 'image/png', width: 240, height: 160 } }])
+    const img = page.locator('[data-message-id="img-a"] [data-context-image] img').first()
+    await expect(img).toBeVisible()
+    // A decoding image re-lays the list out and scrolls it, which rightly dismisses a menu; wait until it is decoded and still.
+    await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true)
+    let last = ''
+    await expect.poll(async () => { const now = JSON.stringify(await img.boundingBox()); const same = now === last; last = now; await page.waitForTimeout(250); return same }).toBe(true)
+    await img.click({ button: 'right' })
+    await expect(menu(page)).toBeVisible()
+    const labels = await menu(page).getByRole('button').evaluateAll(els => els.map(e => e.getAttribute('aria-label') ?? e.textContent?.trim()))
+    expect(labels.slice(0, 4)).toEqual(['React with 👍', 'React with ❤️', 'React with 😂', 'More reactions'])
+    expect(labels).toContain('Copy image URL')
+    expect(labels.indexOf('Copy image URL')).toBe(4 + (labels.includes('Save image') ? 1 : 0))
   })
 })
