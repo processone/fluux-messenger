@@ -14,7 +14,8 @@ function cyrb53(text: string, seed: number): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(14, '0')
 }
 
-export type SavedIdentity = Pick<SavedMessage, 'conversationJid' | 'stanzaId' | 'stanzaIdBy' | 'originId' | 'messageId'>
+/** What names a message; a whole entry satisfies it too. */
+export type SavedIdentity = Pick<SavedMessage, 'conversationJid'> & Partial<Pick<SavedMessage, 'stanzaId' | 'stanzaIdBy' | 'originId' | 'messageId'>> & Record<string, unknown>
 
 /**
  * The key naming one logical message: conversation, then archive id with its
