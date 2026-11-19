@@ -1,3 +1,4 @@
+import { markUserScrollIntent } from '../utils/scrollbarReveal'
 import React, { useState, useEffect, useRef, useCallback, RefObject } from 'react'
 
 /**
@@ -348,7 +349,11 @@ export function useListKeyboardNav<T>({
         const newSelectedId = newIndex >= 0 && newIndex < items.length ? getItemId(items[newIndex]) : null
         selectedItemIdRef.current = newSelectedId
         // Keyboard navigation deliberately moves the highlight — scroll it into view.
-        if (newSelectedId) scrollItemIntoView(newSelectedId)
+        if (newSelectedId) {
+          // The shared hook scrolls this list from wherever focus is (e.g. a search field).
+          markUserScrollIntent(listRef.current)
+          scrollItemIntoView(newSelectedId)
+        }
 
         // If Alt+arrow and activateOnAltNav, call onSelect (only if actually navigated)
         if (e.altKey && activateOnAltNav && !bounced && newIndex !== previousIndex && newIndex >= 0 && newIndex < items.length) {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { installScrollbarReveal, REVEAL_HIDE_DELAY_MS, USER_INTENT_MS } from './scrollbarReveal'
+import { installScrollbarReveal, markUserScrollIntent, REVEAL_HIDE_DELAY_MS, USER_INTENT_MS } from './scrollbarReveal'
 
 /** FLM-318: the helper reveals the thumb for user scrolls only and hides it after 1s. */
 describe('installScrollbarReveal', () => {
@@ -124,23 +124,47 @@ describe('installScrollbarReveal', () => {
     expect(box.hasAttribute('data-scrolling')).toBe(true)
   })
 
-  it('reveals a list scrolled by Up/Down in a search input beside it', () => {
+  /** A second, unrelated scrolling pane (the conversation) beside the box under test. */
+  const makePane = () => {
+    const pane = document.createElement('div')
+    pane.style.overflowY = 'auto'
+    Object.defineProperty(pane, 'scrollHeight', { value: 500, configurable: true })
+    Object.defineProperty(pane, 'clientHeight', { value: 100, configurable: true })
+    document.body.appendChild(pane)
+    return pane
+  }
+
+  it('reveals only the list a handled search-field navigation names', () => {
     const search = document.createElement('input')
     document.body.appendChild(search)
+    const conversation = makePane()
     search.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    markUserScrollIntent(box) // what useListKeyboardNav does for its result list
     box.dispatchEvent(new Event('scroll'))
+    conversation.dispatchEvent(new Event('scroll')) // chat auto-follow at the same moment
     expect(box.hasAttribute('data-scrolling')).toBe(true)
+    expect(conversation.hasAttribute('data-scrolling')).toBe(false)
   })
 
-  it('does not let a caret move in the composer authorize a later automatic scroll', () => {
+  it('reveals the composer\'s own thumb when PageDown or a caret move scrolls it, not the conversation', () => {
+    const field = document.createElement('textarea')
+    document.body.appendChild(field)
+    const conversation = makePane()
+    Object.defineProperty(field, 'scrollHeight', { value: 500, configurable: true })
+    Object.defineProperty(field, 'clientHeight', { value: 100, configurable: true })
+    field.style.overflowY = 'auto'
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }))
+    field.dispatchEvent(new Event('scroll'))
+    expect(field.hasAttribute('data-scrolling')).toBe(true)
+    expect(conversation.hasAttribute('data-scrolling')).toBe(false)
+  })
+
+  it('does not let a caret move in a composer authorize a later automatic scroll elsewhere', () => {
     const composer = document.createElement('textarea')
     document.body.appendChild(composer)
     for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']) {
       composer.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
     }
-    const line = document.createElement('input')
-    document.body.appendChild(line)
-    line.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
     box.dispatchEvent(new Event('scroll')) // the chat list following a new message
     expect(box.hasAttribute('data-scrolling')).toBe(false)
   })

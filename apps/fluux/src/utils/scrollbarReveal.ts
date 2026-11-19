@@ -78,17 +78,28 @@ function overStrip(el: HTMLElement, e: MouseEvent): boolean {
   )
 }
 
+/** Boxes the user is scrolling: when the intent lapses, and whether scroll events renew it (touch fling,
+ * smooth scroll). Weak, so detached lists and dialogs are not retained. */
+const intents = new WeakMap<HTMLElement, { until: number; momentum: boolean }>()
+
+/**
+ * A handled keyboard action names the list it is about to scroll (e.g. Up/Down in a
+ * search field moving the selection of its result list), so only that list's scroll
+ * boxes are revealed, not unrelated panes that happen to scroll at the same time.
+ */
+export function markUserScrollIntent(list: Element | null | undefined): void {
+  for (const box of scrollBoxes(list ?? null)) {
+    intents.set(box, { until: performance.now() + USER_INTENT_MS, momentum: true })
+  }
+}
+
 export function installScrollbarReveal(win: Window & typeof globalThis = window): () => void {
   const doc = win.document
   const timers = new Map<HTMLElement, number>()
-  /** Boxes the user is scrolling (weak, so detached lists and dialogs are not retained): when the intent lapses, and whether scroll events renew it (touch fling). */
-  const intents = new WeakMap<HTMLElement, { until: number; momentum: boolean }>()
   /** The box whose strip the pointer rests on, and the box whose bar is being dragged. */
   let hovered: HTMLElement | null = null
   let held: HTMLElement | null = null
   let touchBoxes: HTMLElement[] = []
-  /** Keyboard navigation can scroll a list the focus is not in (selected rows), so it opens a short global window. */
-  let keyIntentUntil = 0
 
   const now = () => win.performance.now()
   const scheduleHide = (el: HTMLElement) => {
@@ -126,14 +137,12 @@ export function installScrollbarReveal(win: Window & typeof globalThis = window)
   const onKey = (e: KeyboardEvent) => {
     if (!NAV_KEYS.has(e.key)) return
     if (e.key === ' ' && e.target instanceof Element && e.target.closest(ACTIVATABLE)) return
-    // In editable text the keys move a caret (composer), never a list. A one-line
-    // input (a search or palette field) drives its result list with Up and Down only.
-    const t = e.target
-    if (t instanceof HTMLElement) {
-      if (t instanceof HTMLTextAreaElement || t.isContentEditable) return
-      if (t instanceof HTMLInputElement && e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
-    }
-    keyIntentUntil = now() + USER_INTENT_MS
+    // Native key scrolling belongs to the focused box. An editable (the composer) can
+    // only scroll itself, so a caret move or PageDown there reveals that box alone.
+    // Lists driven from elsewhere claim their own scroll through markUserScrollIntent.
+    const boxes = scrollBoxes(e.target)
+    const editable = e.target instanceof HTMLElement && (e.target.isContentEditable || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement)
+    for (const b of editable ? boxes.slice(0, 1).filter(x => x === e.target) : boxes) markIntent(b)
   }
   const onTouchStart = (e: TouchEvent) => {
     touchBoxes = scrollBoxes(e.target)
@@ -173,7 +182,7 @@ export function installScrollbarReveal(win: Window & typeof globalThis = window)
     const intent = intents.get(el)
     // A finger still down owns its boxes however long it pauses.
     if (touchBoxes.includes(el)) markIntent(el, true)
-    if (el === held || touchBoxes.includes(el) || keyIntentUntil > now() || (intent && intent.until > now())) {
+    if (el === held || touchBoxes.includes(el) || (intent && intent.until > now())) {
       if (intent?.momentum) markIntent(el, true)
       reveal(el)
     }
