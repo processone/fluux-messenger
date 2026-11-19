@@ -77,8 +77,6 @@ export function useOpenPgpOverviewState(): OpenPgpOverviewState {
 
   // What the plugin knows locally is read at once, before any server request.
   const local = useMemo(() => {
-    // These say the plugin's state may have changed since the last read.
-    void [pluginRegisteredAt, unlockCount, webKeyLocked]
     if (!enabled || !online || registrationError) return null
     const plugin = client.e2ee?.getPlugin('openpgp') as OpenPgpPluginReads | null | undefined
     const fingerprint = plugin?.getOwnFingerprint?.() ?? null
@@ -88,6 +86,9 @@ export function useOpenPgpOverviewState(): OpenPgpOverviewState {
         plugin?.isKeyRecoveryNeeded?.() === true ||
         (platform().nativeOpenpgp && !!fingerprint && plugin?.isKeychainBacked?.() === false),
       backedUpFingerprint: plugin?.getBackedUpFingerprint?.() ?? null,
+      // These say the plugin's state may have changed since the last read. They are part of the result so the
+      // read is redone when they change, also where the React Compiler replaces the manual dependency list.
+      readAfter: `${pluginRegisteredAt}:${unlockCount}:${webKeyLocked}`,
     }
   }, [enabled, online, registrationError, client, pluginRegisteredAt, unlockCount, webKeyLocked])
 
