@@ -15,6 +15,7 @@ import {
   NS_CHATSTATES,
   NS_CARBONS,
   NS_FORWARD,
+  NS_STANZA_ID,
   NS_FORWARD_QUOTE,
   NS_REACTIONS,
   NS_CORRECTION,
@@ -193,9 +194,14 @@ function forwardFallbackElement(fullBody: string, shift: number, range: { begin:
 }
 
 /** XEP-0297: the standalone forwarded copy of one message, as a child of the outgoing message. */
-function forwardedCopyElement(copy: { from: string; text: string; timestamp?: number; type?: 'chat' | 'groupchat' }): Element {
-  // The type is the source message's own, never guessed from the address.
-  const inner = xml('message', { xmlns: 'jabber:client', from: copy.from, type: copy.type ?? 'groupchat' }, xml('body', {}, copy.text))
+type ForwardedCopyIds = { id?: string; stanzaId?: string; stanzaIdBy?: string }
+
+function forwardedCopyElement(copy: { from: string; text: string; timestamp?: number; type?: 'chat' | 'groupchat' } & ForwardedCopyIds): Element {
+  // The type is the source message's own, never guessed from the address. The original's ids
+  // ride on the inner message so a reader can find the original again; they are never routed.
+  const inner = xml('message', { xmlns: 'jabber:client', from: copy.from, type: copy.type ?? 'groupchat', ...(copy.id && { id: copy.id }) },
+    xml('body', {}, copy.text),
+    ...(copy.stanzaId && copy.stanzaIdBy ? [xml('stanza-id', { xmlns: NS_STANZA_ID, by: copy.stanzaIdBy, id: copy.stanzaId })] : []))
   return xml('forwarded', { xmlns: NS_FORWARD },
     ...(copy.timestamp !== undefined && Number.isFinite(copy.timestamp)
       ? [xml('delay', { xmlns: NS_DELAY, stamp: new Date(copy.timestamp).toISOString() })] : []),
@@ -203,7 +209,7 @@ function forwardedCopyElement(copy: { from: string; text: string; timestamp?: nu
 }
 
 /** The stored form of a copy: the author is a room nickname or a bare address, never a routing address. */
-function forwardedCopyFor(copy: { from: string; text: string; timestamp?: number; fromEncrypted?: boolean; type?: 'chat' | 'groupchat' }): ForwardedCopy | undefined {
+function forwardedCopyFor(copy: { from: string; text: string; timestamp?: number; fromEncrypted?: boolean; type?: 'chat' | 'groupchat' } & ForwardedCopyIds): ForwardedCopy | undefined {
   const parsed = parseForwardedCopy(xml('message', {}, forwardedCopyElement(copy)))
   // The requirement is kept on the stored copy so a retry or an edit enforces it too.
   return parsed && copy.fromEncrypted ? { ...parsed, fromEncrypted: true } : parsed
@@ -1193,7 +1199,7 @@ export class Chat extends BaseModule {
 
     // A retry keeps the structured copy inside the same protection as the first send.
     if (storedForwarded) {
-      children.push(forwardedCopyElement({ from: storedForwarded.from ?? storedForwarded.author, text: storedForwarded.text, timestamp: storedForwarded.timestamp, type: storedForwarded.type }))
+      children.push(forwardedCopyElement({ from: storedForwarded.from ?? storedForwarded.author, text: storedForwarded.text, timestamp: storedForwarded.timestamp, type: storedForwarded.type, id: storedForwarded.id, stanzaId: storedForwarded.stanzaId, stanzaIdBy: storedForwarded.stanzaIdBy }))
       if (storedForwarded.fallback && body.slice(storedForwarded.fallback.begin, storedForwarded.fallback.end) === storedForwarded.fallback.text) {
         children.push(forwardFallbackElement(fullBody, 0, storedForwarded.fallback, NS_FORWARD))
       }

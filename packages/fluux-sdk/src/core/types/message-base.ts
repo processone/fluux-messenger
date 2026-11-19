@@ -274,6 +274,12 @@ export interface ForwardedCopy {
   fromEncrypted?: true
   /** The type of the source message the copy names (`chat` for a private message, `groupchat` for a room one); a retry sends the same. */
   type?: 'chat' | 'groupchat'
+  /** The id the original's sender gave it (its origin id or message id), for an exact match in local history. */
+  id?: string
+  /** The archive id the original has in `stanzaIdBy`'s archive (a room, or the forwarder's own account). */
+  stanzaId?: string
+  /** The archive that assigned `stanzaId`. */
+  stanzaIdBy?: string
   /**
    * The text of the message body that only stands in for the copy (a quote of it), as a
    * XEP-0428 fallback for the copy. A reader that shows the copy hides it; any other reader

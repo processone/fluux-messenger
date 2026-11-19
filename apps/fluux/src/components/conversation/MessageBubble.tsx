@@ -8,7 +8,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
 import { useState, useMemo, useRef, useEffect, useContext, memo, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
-import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
+import { connectionStore, formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { useKeyDecisions } from '@/e2ee/openpgpTrustView'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { Avatar } from '../Avatar'
@@ -16,8 +16,9 @@ import { NickText, NickSentence } from '../NickText'
 import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
 import { useForwardMessage } from './forwardMessageContext'
+import { ForwardedCopyCard } from './ForwardedCopyCard'
 import { RoomMessageLinkPreview } from './RoomMessageLinkPreview'
-import { forwardFallbackRange, forwardableText, forwardedCopyFallbackRange, withoutForwardFallback } from '@/utils/forwardMessage'
+import { forwardFallbackRange, forwardSourceIds, forwardableText, forwardedCopyFallbackRange, withoutForwardFallback } from '@/utils/forwardMessage'
 import { MessageBody } from './MessageBody'
 import { renderQuotePreview } from '@/utils/messageStyles'
 import { deriveCopyBody } from '@/utils/copyMessageBody'
@@ -597,6 +598,7 @@ export const MessageBubble = memo(function MessageBubble({
       ...(directForward && { from: getBareJid(message.from) }),
       type: message.type,
       timestamp: message.timestamp.getTime(),
+      ...forwardSourceIds(message, getBareJid(connectionStore.getState().jid ?? ''), message.type === 'groupchat' ? getBareJid(message.from) : undefined),
       ...(directForward && message.securityContext && { fromEncrypted: true }),
     } }),
   }) : undefined
@@ -876,13 +878,7 @@ export const MessageBubble = memo(function MessageBubble({
           )}
 
           {message.forwarded && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption && (
-            <div data-forwarded-copy className="mt-1 pl-2 border-l-2 border-fluux-hover">
-              <div className="text-xs text-fluux-muted">
-                {t('chat.forwardedCopyLabel', { author: message.forwarded.author || t('chat.forwardedCopyUnknownAuthor') })}
-                {message.forwarded.timestamp !== undefined && ` · ${formatTime(new Date(message.forwarded.timestamp))}`}
-              </div>
-              <div className="text-sm text-fluux-text whitespace-pre-wrap break-words">{message.forwarded.text}</div>
-            </div>
+            <ForwardedCopyCard message={message} formatTime={formatTime} isDarkMode={isDarkMode} />
           )}
 
           {/* A structured copy already shows the source, so no second preview of the same link. */}

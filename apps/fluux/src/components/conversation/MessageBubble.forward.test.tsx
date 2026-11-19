@@ -8,8 +8,8 @@ import { ForwardMessageProvider } from './forwardMessageContext'
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }))
-vi.mock('date-fns', () => ({ format: vi.fn(() => '14:30') }))
-vi.mock('../Avatar', () => ({ Avatar: () => <div data-testid="avatar" /> }))
+vi.mock('date-fns', async importOriginal => ({ ...(await importOriginal<typeof import('date-fns')>()), format: vi.fn(() => '14:30') }))
+vi.mock('../Avatar', () => ({ Avatar: () => <div data-testid="avatar" />, getConsistentTextColor: () => 'rgb(1,2,3)' }))
 vi.mock('@/stores/settingsStore', () => ({
   useSettingsStore: (selector: (s: { densityMode: string }) => unknown) => selector({ densityMode: 'comfortable' }),
 }))
@@ -28,6 +28,7 @@ vi.mock('../ForwardMessageModal', () => ({
   ForwardMessageModal: (props: { link?: string; quote?: Record<string, unknown> }) => { modal.props = props; return null },
 }))
 
+vi.mock('@/hooks/useNavigateToTarget', () => ({ useNavigateToTarget: () => ({ navigateToConversation: vi.fn() }) }))
 vi.mock('./EncryptedPlaceholder', () => ({ EncryptedPlaceholder: () => <div /> }))
 
 const link = 'xmpp:design@conference.fluux.chat?join;msg=1731490000123456'
@@ -83,7 +84,7 @@ describe('standalone forwarded copy', () => {
     const { container } = render(<MessageBubble {...bubble({ body: `Please review\n${link}`, references: undefined, forwarded })} />)
     expect(screen.getByText('Please review', { exact: false })).toBeTruthy()
     const copy = container.querySelector('[data-forwarded-copy]')!
-    expect(copy.textContent).toContain('chat.forwardedCopyLabel')
+    expect(copy.textContent).toContain('chat.forwardedFromLabel')
     expect(copy.textContent).toContain('Ship it')
     expect(copy.textContent).toContain('14:30')
     expect(screen.queryByTestId('source-preview')).toBeNull()
@@ -115,7 +116,7 @@ describe('forward on a one-to-one message', () => {
     renderDirect({ from: 'alice@example.com/phone' })
     fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
     expect(modal.props?.link).toBeUndefined()
-    expect(modal.props?.quote).toEqual({ author: 'Alice', text: 'Ship it', from: 'alice@example.com', type: 'chat', timestamp: Date.parse('2026-05-01T10:00:00Z') })
+    expect(modal.props?.quote).toEqual({ author: 'Alice', text: 'Ship it', from: 'alice@example.com', type: 'chat', id: 'fwd', timestamp: Date.parse('2026-05-01T10:00:00Z') })
   })
 
   it('marks a message from an encrypted chat so it can only go into an encrypted chat', () => {
