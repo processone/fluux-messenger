@@ -227,4 +227,14 @@ describe('message right-click menu', () => {
     expect(classes).toContain('max-h-[calc(100dvh-1rem)]')
     expect(classes).toContain('overflow-y-auto')
   })
+
+  it('keeps the system menu for an input inside a shadow root in the popup', () => {
+    render(<MessageBubble {...props()} />)
+    fireEvent.contextMenu(screen.getByText('Hello, world!'))
+    const host = document.createElement('div')
+    menu()!.appendChild(host)
+    const input = document.createElement('input')
+    host.attachShadow({ mode: 'open' }).appendChild(input)
+    expect(fireEvent.contextMenu(input, { composed: true })).toBe(true)
+  })
 })

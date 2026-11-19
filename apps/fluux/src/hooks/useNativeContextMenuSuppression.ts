@@ -63,7 +63,7 @@ export function useNativeContextMenuSuppression(): void {
   useEffect(() => {
     if (!platform().hasNativeContextMenu || !import.meta.env.PROD) return
     const handler = (event: MouseEvent) => {
-      if (shouldSuppressNativeMenu(event.target, window.getSelection(), event.defaultPrevented, event.shiftKey)) {
+      if (shouldSuppressNativeMenu(event.composedPath()[0] ?? event.target, window.getSelection(), event.defaultPrevented, event.shiftKey)) {
         event.preventDefault()
       }
     }

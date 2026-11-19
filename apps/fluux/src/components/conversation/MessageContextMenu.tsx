@@ -184,8 +184,10 @@ export function MessageContextMenu({
       // The system menu stays reachable with Shift and in the picker's search field.
       onContextMenu={(e) => {
         e.stopPropagation()
-        const el = e.target instanceof Element ? e.target : null
-        if (!e.shiftKey && !el?.closest('input, textarea, [contenteditable="true"]')) e.preventDefault()
+        // The emoji picker's search field sits in a shadow root, where the event is retargeted to its host.
+        const el = e.nativeEvent.composedPath()[0]
+        const editable = el instanceof Element && !!el.closest('input, textarea, [contenteditable="true"]')
+        if (!e.shiftKey && !editable) e.preventDefault()
       }}
       // Keeps the conversation's keyboard navigation out of the menu (same marker as other overlays).
       data-modal="true"
