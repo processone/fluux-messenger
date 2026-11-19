@@ -33,7 +33,8 @@ const shot = async (page: Page, name: string) => { await page.mouse.move(1270, 7
 
 interface Client { page: Page; context: BrowserContext; frames: string[] }
 
-async function connect(browser: Browser, name: 'alice' | 'bob' = 'alice'): Promise<Client> {
+const PASSPHRASE = 'correct horse battery staple'
+async function connect(browser: Browser, name: 'alice' | 'bob' = 'alice', options: { openpgp?: boolean } = {}): Promise<Client> {
   const { jid, password } = config!.users[name]
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
   const page = await context.newPage()
@@ -48,6 +49,17 @@ async function connect(browser: Browser, name: 'alice' | 'bob' = 'alice'): Promi
   await page.getByText('Remember me').click()
   await page.getByRole('button', { name: 'Connect' }).click()
   await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible({ timeout: 30_000 })
+  if (options.openpgp) {
+    // A real key made by the app itself (openpgp.js) for this throwaway account, as in e2e/forward-direct.live.ts.
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByRole('button', { name: 'Encryption' }).click()
+    await page.getByRole('switch').first().click()
+    const fields = page.locator('input[type=password]')
+    await fields.nth(0).fill(PASSPHRASE)
+    await fields.nth(1).fill(PASSPHRASE)
+    await page.getByRole('button', { name: 'Set up', exact: true }).click()
+    await expect(page.getByText('Your key is ready and published.')).toBeVisible({ timeout: 60_000 })
+  }
   return { page, context, frames }
 }
 
@@ -137,6 +149,15 @@ async function parseSavedChildren(rawItem: string) {
   // @ts-expect-error ltx (the parser under @xmpp/xml) ships no type declarations.
   const { parse } = await import('ltx') as unknown as { parse: (text: string) => { getChild(name: string): unknown } }
   return [parse(rawItem.replace(/^<item\b/, `<item xmlns="${PUBSUB}"`)).getChild('saved')]
+}
+
+/** Removes any OpenPGP identity an earlier run left on a throwaway account (its public keys and key backup nodes), so a fresh key is made. */
+async function forgetOpenpgpIdentity(name: 'alice' | 'bob') {
+  const peer = await script(name)
+  const reply = await peer.c.iqCaller.request(xml('iq', { type: 'get', to: `${name}@localhost` }, xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })))
+  const nodes = reply.getChild('query').getChildren('item').map((item: { attrs: { node?: string } }) => item.attrs.node).filter((node?: string) => node?.startsWith('urn:xmpp:openpgp:0'))
+  for (const node of nodes) await peer.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: `${PUBSUB}#owner` }, xml('delete', { node })))).catch(() => {})
+  await peer.stop()
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -729,4 +750,102 @@ test('a saved room message without an archive id opens in a room this device nev
   await shot(two.page, 'room-without-archive-id')
   await emptyNode(reader)
   await one.context.close(); await two.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('a message really decrypted on this device is saved without its text, and a later edit and a fetch keep it out', async ({ browser }) => {
+  test.setTimeout(240_000)
+  await forgetOpenpgpIdentity('alice'); await forgetOpenpgpIdentity('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser, 'alice', { openpgp: true })
+  const bobApp = await connect(browser, 'bob', { openpgp: true })
+  const text = `Really encrypted ${stamp}`
+  const edited = `Edited and encrypted ${stamp}`
+  const say = async (client: Client, peer: string, body: string) => {
+    await client.page.getByRole('button', { name: 'Messages' }).first().click()
+    const entry = client.page.getByRole('complementary').getByText(peer, { exact: true }).first()
+    if (!(await entry.isVisible({ timeout: 3000 }).catch(() => false))) {
+      await client.page.getByRole('button', { name: /^Contacts/ }).click()
+      await client.page.getByText(peer, { exact: true }).first().dblclick()
+    } else await entry.click()
+    const composer = client.page.getByRole('combobox', { name: /^Message / })
+    const accept = client.page.getByRole('button', { name: 'Accept' }).first()
+    if (await accept.isVisible({ timeout: 2000 }).catch(() => false)) await accept.click() // a first message from a stranger is a request
+    await composer.click(); await composer.pressSequentially(body); await composer.press('Enter')
+    await expect(client.page.locator('[data-message-body]').filter({ hasText: body }).last()).toBeVisible()
+  }
+  await say(one, 'Bob', `Hello ${stamp}`) // alice starts, so each side holds the other's key and the chat exists on both
+  await bobApp.page.getByRole('button', { name: 'Messages' }).first().click()
+  await expect.poll(() => bobApp.page.getByRole('complementary').getByText('alice', { exact: true }).count(), { timeout: 30_000 }).toBeGreaterThan(0)
+  await say(bobApp, 'alice', text)
+  expect(bobApp.frames.filter(f => f.startsWith('<message') && f.includes(text))).toHaveLength(0) // the wire carries no plaintext
+  expect(bobApp.frames.some(f => f.startsWith('<message') && f.includes('urn:xmpp:openpgp:0'))).toBe(true)
+
+  // Alice reads it decrypted, and saves it.
+  await openChatWith(one, 'Bob')
+  const row = one.page.locator('[data-message-body]').filter({ hasText: text }).last()
+  await expect(row).toBeVisible({ timeout: 30_000 }) // decrypted here
+  await saveMessage(one, text)
+  const [item] = await nodeHolds(reader, 1)
+  expect(item).toContain('encrypted="true"')
+  expect(item).not.toContain('<body')
+  expect(item).not.toContain(text)
+  expect(item).not.toContain('Really encrypted')
+
+  // Bob corrects it (an encrypted correction); the stored item never gains plaintext.
+  const bobRow = bobApp.page.locator('[data-message-body]').filter({ hasText: text }).last()
+  await bobRow.hover()
+  await bobRow.getByRole('button', { name: 'Edit message', exact: true }).click()
+  const editor = bobApp.page.getByRole('combobox', { name: /^Message / })
+  await editor.press('ControlOrMeta+a')
+  await editor.pressSequentially(edited)
+  await editor.press('Enter')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: edited })).toBeVisible({ timeout: 30_000 })
+  await new Promise(resolve => setTimeout(resolve, 3000))
+  for (const raw of await reader.items()) { expect(raw).not.toContain('Really encrypted'); expect(raw).not.toContain('Edited and encrypted') }
+
+  // Opening Saved reads the node again; nothing readable is written back.
+  await openSaved(one)
+  await expect(one.page.getByTestId('saved-row').first()).toBeVisible()
+  await new Promise(resolve => setTimeout(resolve, 2000))
+  for (const raw of await reader.items()) { expect(raw).toContain('encrypted="true"'); expect(raw).not.toContain('<body'); expect(raw).not.toContain('Edited and encrypted') }
+  await shot(one.page, 'decrypted-saved-row')
+  await emptyNode(reader)
+  await one.context.close(); await bobApp.context.close(); await reader.stop()
+})
+
+test('a save onto a node that already exists with another limit succeeds, because the lab server enforces publish-option preconditions', async ({ browser }) => {
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const field = (name: string, value: string) => xml('field', { var: name }, xml('value', {}, value))
+  const options = (max: string) => xml('publish-options', {}, xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+    xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options')),
+    field('pubsub#persist_items', 'true'), field('pubsub#access_model', 'whitelist'), field('pubsub#max_items', max), field('pubsub#send_last_published_item', 'never')))
+  const seed = (id: string, max: string) => xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('publish', { node: NODE },
+    xml('item', { id }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
+      xml('message', { xmlns: 'jabber:client', from: 'bob@localhost', to: 'alice@localhost', type: 'chat', id: `seed-${id}` }, xml('body', {}, `seed ${id}`)))))), options(max)))
+  // The node exists, empty, with a limit of 100.
+  await reader.c.iqCaller.request(seed('first', '100'))
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('retract', { node: NODE, notify: 'false' }, xml('item', { id: 'first' })))))
+  expect((await reader.items()).length).toBe(0)
+  // The server refuses a publish whose options differ from the node's: its precondition rules are in force here.
+  const refused = await reader.c.iqCaller.request(seed('second', 'max')).then(() => 'accepted', (error: unknown) => String((error as { stanza?: { toString(): string } }).stanza ?? error))
+  expect(refused).not.toBe('accepted')
+  expect(refused).toMatch(/precondition/i)
+
+  const one = await connect(browser)
+  const text = `Saved onto a node with another limit ${stamp}`
+  await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
+  await saveMessage(one, text)
+  const [saved] = await nodeHolds(reader, 1)
+  expect(saved).toContain(text)
+  await expect(one.page.getByText(/Your server refused/i)).toHaveCount(0)
+  await openSaved(one)
+  await expect(savedRow(one, text)).toBeVisible()
+  await shot(one.page, 'precondition-existing-node')
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
 })
