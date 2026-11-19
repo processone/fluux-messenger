@@ -56,6 +56,7 @@ const SUITES = [
   { name: 'forward-direct', testMatch: 'forward-direct.ts' },
   { name: 'mobile-members', testMatch: 'mobile-members.ts' },
   { name: 'command-palette', testMatch: 'command-palette.ts' },
+  { name: 'modal-glass', testMatch: 'modal-glass.ts' },
   { name: 'scroll-reading-width', testMatch: 'scroll-reading-width.ts' },
   { name: 'scroll-reading', testMatch: 'scroll-reading.ts' },
   { name: 'scroll-live-edge', testMatch: 'scroll-live-edge.ts' },

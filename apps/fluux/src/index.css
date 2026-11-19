@@ -676,12 +676,18 @@
      WebKit (Safari < 18, older WebKitGTK, the Tauri WKWebView) exposes only the
      prefixed one, so gating on the unprefixed property alone would silently drop
      the whole frost there. A touch more translucency (15%) + saturation gives the
-     panel its own life; the scrim frost below carries most of the glass feel. */
+     panel its own life; the scrim frost below carries most of the glass feel.
+     ORDER MATTERS: every backdrop-filter pair in these rules puts the -webkit-
+     declaration FIRST. The production CSS minifier (Lightning CSS) keeps only
+     the prefixed copy when it follows the unprefixed one, and Chromium and
+     Firefox ignore the prefix, so the frost (and the `none` opt-outs) would
+     silently vanish from built CSS there. The built-demo e2e suite
+     e2e/modal-glass.ts reads the computed result. */
   @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and (background: color-mix(in srgb, red, blue)) {
     .fluux-glass {
       background-color: color-mix(in srgb, var(--fluux-chat-bg), transparent 15%);
-      backdrop-filter: blur(var(--fluux-glass-blur)) saturate(1.4);
       -webkit-backdrop-filter: blur(var(--fluux-glass-blur)) saturate(1.4);
+      backdrop-filter: blur(var(--fluux-glass-blur)) saturate(1.4);
     }
     /* Linux keeps the SOLID surface. WebKitGTK advertises backdrop-filter +
        color-mix (so this @supports gate passes), but its compositor frequently
@@ -694,16 +700,16 @@
        also (0,3,0) and, being later, still wins the tie on Linux. */
     :root[data-platform="linux"] .fluux-glass {
       background-color: var(--fluux-chat-bg);
-      backdrop-filter: none;
       -webkit-backdrop-filter: none;
+      backdrop-filter: none;
     }
     /* Liquid tier: deeper translucency + specular edges + diagonal sheen.
        Scoped away from Linux; reduced-transparency reverts below. */
     :root:not([data-platform="linux"]) .fluux-glass {
       background-color: color-mix(in srgb, var(--fluux-chat-bg), transparent 40%);
       background-image: var(--fluux-glass-specular-sheen);
-      backdrop-filter: blur(var(--fluux-glass-blur-strong)) saturate(1.65);
       -webkit-backdrop-filter: blur(var(--fluux-glass-blur-strong)) saturate(1.65);
+      backdrop-filter: blur(var(--fluux-glass-blur-strong)) saturate(1.65);
       box-shadow: var(--fluux-glass-specular), var(--fluux-shadow-overlay);
     }
     :root:not([data-platform="linux"]):where(.light) .fluux-glass {
@@ -728,8 +734,8 @@
   :root[data-transparency="reduced"] .fluux-glass {
     background-color: var(--fluux-chat-bg);
     background-image: none;
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     box-shadow: var(--fluux-shadow-overlay);
   }
 
@@ -742,17 +748,18 @@
      unmistakably as glass even in a dark theme where a darkened-but-sharp
      backdrop looks like a plain solid panel. The scrim sits behind the opaque
      panel, so this never touches panel text contrast. saturate() keeps the
-     blurred colours lively. -webkit- prefix included for WebKit (see above). */
+     blurred colours lively. -webkit- prefix included for WebKit, and written
+     before the unprefixed declaration so the minifier keeps both (see above). */
   @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .modal-scrim {
-      backdrop-filter: blur(var(--fluux-scrim-blur)) saturate(1.2);
       -webkit-backdrop-filter: blur(var(--fluux-scrim-blur)) saturate(1.2);
+      backdrop-filter: blur(var(--fluux-scrim-blur)) saturate(1.2);
     }
   }
   /* Reduce-transparency: drop the scrim frost too (a11y opt-out → solid, no blur). */
   [data-transparency="reduced"] .modal-scrim {
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 

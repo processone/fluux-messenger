@@ -39,6 +39,7 @@ export const changelog: ChangelogEntry[] = [
         'When a notification setting you choose in a room\'s header cannot be saved to the room\'s bookmark, Fluux now shows an error. Before, nothing told you that the setting was not saved',
         'Reloading Fluux while a Settings page such as Encryption is open now keeps that page open instead of switching to Profile',
         'After a page reload or a reconnection, your server no longer sends again what Fluux had already received, and servers that limit how much they keep waiting for confirmation no longer disconnect Fluux during a long session',
+        'Dialogs in Chrome, Edge and other Chromium-based browsers now blur the conversation behind them, as they already did in Safari. Before, the conversation stayed sharp behind the dialog',
       ],
     }],
   },
