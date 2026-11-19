@@ -990,6 +990,7 @@ export function MessageComposer({
           id={emojiAutocompleteListboxId}
           matches={emojiAutocomplete.state.matches}
           selectedIndex={emojiAutocomplete.state.selectedIndex}
+          navSerial={emojiAutocomplete.state.navSerial}
           onSelect={selectEmoji}
           onDismiss={emojiAutocomplete.dismiss}
         />

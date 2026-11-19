@@ -11,6 +11,8 @@ export interface EmojiAutocompleteState {
   query: string
   triggerIndex: number
   selectedIndex: number
+  /** Counts Up/Down moves made by the key handler; lets the menu tell a handled move from a reset. */
+  navSerial?: number
   matches: EmojiMatch[]
 }
 
@@ -299,6 +301,7 @@ export function useEmojiAutocomplete(
   dismiss: () => void
 } {
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [navSerial, setNavSerial] = useState(0)
   const [dismissedTriggerIdentity, setDismissedTriggerIdentity] = useState<string | null>(null)
   const trigger = useMemo(
     () => (cursorPosition === null ? null : matchEmojiAutocompleteTrigger(text, cursorPosition)),
@@ -379,6 +382,7 @@ export function useEmojiAutocomplete(
   const moveSelection = (direction: 'up' | 'down') => {
     if (matches.length === 0) return
 
+    setNavSerial((n) => n + 1)
     setSelectedIndex((prev) => {
       if (direction === 'up') {
         return prev <= 0 ? matches.length - 1 : prev - 1
@@ -399,6 +403,7 @@ export function useEmojiAutocomplete(
       query,
       triggerIndex,
       selectedIndex,
+      navSerial,
       matches,
     },
     selectMatch,

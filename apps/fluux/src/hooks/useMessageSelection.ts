@@ -1,3 +1,4 @@
+import { markUserScrollIntent } from '../utils/scrollbarReveal'
 import { useState, useRef, useEffect, useCallback, type RefObject } from 'react'
 import { findMessageRowElement, messageTargetRowId } from '@/components/conversation/messageRowIdentity'
 import { messageRowRef, matchesMessageRowAlias, type MessageRowRef } from '@fluux/sdk'
@@ -187,6 +188,7 @@ export function useMessageSelection<T extends MessageLike>(
 
     // Notify caller that keyboard navigation started (e.g., to disable auto-scroll)
     keyboardScrollPendingRef.current = true
+    markUserScrollIntent(scrollRef.current)
     onKeyboardNavigate?.()
 
     // Set cooldown to ignore mouse events during/after scroll (300ms)

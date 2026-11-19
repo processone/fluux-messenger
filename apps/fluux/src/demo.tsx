@@ -43,8 +43,10 @@ import './index.css'
 import { installNotificationSettingsFixture } from './demo/notificationSettingsFixture'
 import { ShellSettledProbe } from './demo/shellSettledProbe'
 import { installMobileViewport } from './utils/mobileViewport'
+import { installScrollbarReveal } from './utils/scrollbarReveal'
 
 installMobileViewport()
+installScrollbarReveal()
 
 // Parse URL parameters
 const params = new URLSearchParams(window.location.search)

@@ -26,6 +26,8 @@ export function matchCommandMenu(
 interface MenuChoice {
   text: string
   selectedIndex: number
+  /** Counts Up/Down moves made by the key handler; lets the menu tell a handled move from a reset. */
+  navSerial?: number
   dismissed: boolean
 }
 
@@ -57,12 +59,17 @@ export function useCommandMenu(
       isActive: active,
       matches,
       selectedIndex: Math.min(choice.selectedIndex, Math.max(0, matches.length - 1)),
+      navSerial: choice.navSerial ?? 0,
     },
     moveSelection: (dir: 'up' | 'down') =>
       setChoice((c) => {
         const n = matches.length
         if (n === 0) return { ...c, selectedIndex: 0 }
-        return { ...c, selectedIndex: dir === 'down' ? (c.selectedIndex + 1) % n : (c.selectedIndex - 1 + n) % n }
+        return {
+          ...c,
+          navSerial: (c.navSerial ?? 0) + 1,
+          selectedIndex: dir === 'down' ? (c.selectedIndex + 1) % n : (c.selectedIndex - 1 + n) % n,
+        }
       }),
     dismiss: () => setChoice((c) => ({ ...c, dismissed: true })),
     reset: () => setChoice((c) => ({ ...c, selectedIndex: 0, dismissed: false })),

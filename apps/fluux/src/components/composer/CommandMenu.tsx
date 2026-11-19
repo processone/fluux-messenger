@@ -1,3 +1,4 @@
+import { useKeyboardScrollClaim } from '../../hooks/useKeyboardScrollClaim'
 import { useEffect, useRef } from 'react'
 import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useTranslation } from 'react-i18next'
@@ -6,22 +7,26 @@ import type { SlashCommand } from '../../commands/types'
 interface CommandMenuProps {
   matches: SlashCommand[]
   selectedIndex: number
+  /** Up/Down moves made by the key handler; a selection change without a new move is a reset. */
+  navSerial?: number
   onSelect: (index: number) => void
   /** Dismiss the menu (e.g. a pointer press outside the popover). */
   onDismiss: () => void
 }
 
 /** Command-name completion popover, rendered through MessageComposer's `aboveInput` slot. */
-export function CommandMenu({ matches, selectedIndex, onSelect, onDismiss }: CommandMenuProps) {
+export function CommandMenu({ matches, selectedIndex, navSerial, onSelect, onDismiss }: CommandMenuProps) {
   const { t } = useTranslation()
   const selectedRef = useRef<HTMLButtonElement>(null)
+  const claimKeyboardScroll = useKeyboardScrollClaim(navSerial)
   const menuRef = useRef<HTMLDivElement>(null)
   useFloatingLayerBounds(menuRef, matches.length > 0)
 
   // Keep the keyboard-highlighted item visible as selection moves past the popover edges.
   useEffect(() => {
+    claimKeyboardScroll(selectedRef.current)
     selectedRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [selectedIndex])
+  }, [selectedIndex, navSerial, claimKeyboardScroll])
 
   // Dismiss on a pointer press anywhere outside the popover. A press on the
   // composer's own textarea moves the caret, which already closes the menu via

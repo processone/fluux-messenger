@@ -787,14 +787,25 @@ em-emoji-picker {
   line-height: inherit;
 }
 
-/* Custom scrollbar styling — thin, subtle, always visible.
-   A previous auto-hide attempt (transparent thumb revealed on :hover /
-   [data-scrolling]) did not work in the engine the desktop app actually runs,
-   WebKit (Tauri WKWebView / WebKitGTK): WebKit drops grouped ::-webkit-scrollbar
-   selector lists and does not repaint the scrollbar when JS toggles an
-   attribute, so the thumb stayed invisible and the scrollbar appeared to vanish.
-   A thin (6px) muted thumb that is always present is the reliable cross-engine
-   result; it brightens on hover for affordance. */
+/* Custom scrollbar styling — a thin 6px strip that is always reserved, with a
+   thumb that is hidden at rest and shown while the user scrolls.
+   The strip's width never changes, so the layout does not grow and shrink as
+   scrolling starts and stops. Only the thumb colour changes.
+   WebKit (Tauri WKWebView / WebKitGTK) drops grouped ::-webkit-scrollbar
+   selector lists and does not repaint a scrollbar when only a pseudo-element
+   rule starts to match. Every reveal rule is therefore ungrouped, and the same
+   state also changes the box's own computed style (--fluux-scroll-reveal, a
+   registered non-inherited property, so rows inside the list are not restyled),
+   which makes WebKit repaint the bar.
+   utils/scrollbarReveal.ts sets [data-scrolling] on user scrolls and when the
+   pointer is over the strip, and <html data-scrollbars="always"> when the
+   system asks for scroll bars to be always shown (macOS "Always"). */
+@property --fluux-scroll-reveal {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -805,8 +816,24 @@ em-emoji-picker {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
+  background: transparent;
   border-radius: 3px;
+}
+
+[data-scrolling] {
+  --fluux-scroll-reveal: 1;
+}
+
+[data-scrolling]::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+}
+
+:root[data-scrollbars="always"] * {
+  --fluux-scroll-reveal: 1;
+}
+
+:root[data-scrollbars="always"] ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -950,7 +977,8 @@ em-emoji-picker {
 [data-density="compact"] .icon-rail-btn svg { width: 18px; height: 18px; }
 
 /* Sidebar scrollbar — keeps its own (theme-specific) thumb color. */
-.sidebar-scroll::-webkit-scrollbar-thumb { background: var(--fluux-scrollbar-thumb-sidebar); }
+.sidebar-scroll[data-scrolling]::-webkit-scrollbar-thumb { background: var(--fluux-scrollbar-thumb-sidebar); }
+:root[data-scrollbars="always"] .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--fluux-scrollbar-thumb-sidebar); }
 .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: var(--fluux-scrollbar-thumb-sidebar-hover); }
 
 /* Smooth scrolling */

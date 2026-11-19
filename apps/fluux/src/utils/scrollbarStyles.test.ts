@@ -4,19 +4,13 @@ import { fileURLToPath } from 'url'
 import { dirname, resolve } from 'path'
 
 /**
- * Scrollbar styling guard (index.css).
+ * Scrollbar styling guard (index.css), FLM-318.
  *
- * The scrollbar is a thin, subtle, always-visible thumb. Auto-hide was tried
- * (transparent thumb revealed on :hover / [data-scrolling]) but did not work in
- * the desktop app's WebKit engine, so a regression toward it must be caught:
- * a transparent resting thumb makes the scrollbar disappear in WebKit, and a
- * fatter gutter undoes the "thin/subtle" intent. These assertions lock the
- * contract:
- *
- *  - thin gutter (<= 6px)
- *  - thumb visible at rest (resolves to the scrollbar-thumb token, not transparent)
- *  - brighter on hover
- *  - sidebar keeps its own theme token
+ * The 6px strip is always reserved so the layout never changes width as scrolling
+ * starts and stops; only the thumb is hidden at rest and revealed while the user
+ * scrolls. WebKit does not repaint the bar when only a pseudo-element rule starts
+ * to match, so every reveal rule must also change the box's own style, and none
+ * may be grouped. This replaces the earlier "thumb visible at rest" contract.
  */
 
 const cssPath = resolve(dirname(fileURLToPath(import.meta.url)), '../index.css')
@@ -51,12 +45,23 @@ describe('scrollbar styles (index.css)', () => {
     expect(parseInt(bar.decls.height, 10)).toBeLessThanOrEqual(6)
   })
 
-  it('keeps the thumb visible at rest (not transparent)', () => {
-    // A transparent resting thumb is the auto-hide regression that vanished the
-    // scrollbar in WebKit. The thumb must paint the scrollbar-thumb token.
-    const thumb = ruleFor('::-webkit-scrollbar-thumb')
-    expect(thumb.decls.background).toBe('var(--scrollbar-thumb)')
-    expect(thumb.decls.background).not.toBe('transparent')
+  it('hides the thumb at rest', () => {
+    expect(ruleFor('::-webkit-scrollbar-thumb').decls.background).toBe('transparent')
+  })
+
+  it('reveals the thumb with its theme token, and also changes the box style', () => {
+    expect(ruleFor('[data-scrolling]::-webkit-scrollbar-thumb').decls.background).toBe(
+      'var(--scrollbar-thumb)',
+    )
+    expect(ruleFor('[data-scrolling]').decls['--fluux-scroll-reveal']).toBe('1')
+    expect(ruleFor(':root[data-scrollbars="always"] ::-webkit-scrollbar-thumb').decls.background).toBe(
+      'var(--scrollbar-thumb)',
+    )
+    expect(ruleFor(':root[data-scrollbars="always"] *').decls['--fluux-scroll-reveal']).toBe('1')
+  })
+
+  it('registers the reveal property as non-inherited', () => {
+    expect(css).toMatch(/@property --fluux-scroll-reveal\s*\{[^}]*inherits:\s*false/)
   })
 
   it('brightens the thumb on hover', () => {
@@ -65,10 +70,13 @@ describe('scrollbar styles (index.css)', () => {
     )
   })
 
-  it('gives the sidebar its own visible thumb token', () => {
-    expect(ruleFor('.sidebar-scroll::-webkit-scrollbar-thumb').decls.background).toBe(
+  it('gives the sidebar its own thumb token when revealed', () => {
+    expect(ruleFor('.sidebar-scroll[data-scrolling]::-webkit-scrollbar-thumb').decls.background).toBe(
       'var(--fluux-scrollbar-thumb-sidebar)',
     )
+    expect(
+      ruleFor(':root[data-scrollbars="always"] .sidebar-scroll::-webkit-scrollbar-thumb').decls.background,
+    ).toBe('var(--fluux-scrollbar-thumb-sidebar)')
   })
 
   it('never groups ::-webkit-scrollbar selectors (WebKit drops grouped lists)', () => {

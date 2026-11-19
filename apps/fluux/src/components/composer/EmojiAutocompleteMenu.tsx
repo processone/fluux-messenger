@@ -1,3 +1,4 @@
+import { useKeyboardScrollClaim } from '../../hooks/useKeyboardScrollClaim'
 import { useEffect, useRef } from 'react'
 import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useTranslation } from 'react-i18next'
@@ -8,6 +9,8 @@ interface EmojiAutocompleteMenuProps {
   id: string
   matches: EmojiMatch[]
   selectedIndex: number
+  /** Up/Down moves made by the key handler; a selection change without a new move is a reset. */
+  navSerial?: number
   onSelect: (index: number) => void
   onDismiss: () => void
 }
@@ -15,16 +18,18 @@ interface EmojiAutocompleteMenuProps {
 /**
  * Inline emoji completion dropdown popover rendered above the message composer input field.
  */
-export function EmojiAutocompleteMenu({ id, matches, selectedIndex, onSelect, onDismiss }: EmojiAutocompleteMenuProps) {
+export function EmojiAutocompleteMenu({ id, matches, selectedIndex, navSerial, onSelect, onDismiss }: EmojiAutocompleteMenuProps) {
   const { t } = useTranslation()
   const selectedRef = useRef<HTMLButtonElement>(null)
+  const claimKeyboardScroll = useKeyboardScrollClaim(navSerial)
   const menuRef = useRef<HTMLDivElement>(null)
   useFloatingLayerBounds(menuRef, matches.length > 0)
 
   // Keep the keyboard-highlighted item visible as selection moves past the popover edges.
   useEffect(() => {
+    claimKeyboardScroll(selectedRef.current)
     selectedRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [selectedIndex])
+  }, [selectedIndex, navSerial, claimKeyboardScroll])
 
   // Dismiss on a pointer press anywhere outside the popover.
   useEffect(() => {

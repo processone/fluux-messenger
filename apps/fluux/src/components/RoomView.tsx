@@ -2320,6 +2320,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
       id={mentionListboxId}
       matches={mentionState.matches}
       selectedIndex={mentionState.selectedIndex}
+      navSerial={mentionState.navSerial}
       onSelect={handleMentionSelect}
     />
   ) : null
@@ -2332,6 +2333,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     <CommandMenu
       matches={commandMenu.state.matches}
       selectedIndex={commandMenu.state.selectedIndex}
+      navSerial={commandMenu.state.navSerial}
       onSelect={(idx) => {
         const cmd = commandMenu.state.matches[idx]
         if (cmd) {
