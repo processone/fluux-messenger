@@ -1112,9 +1112,8 @@ test('logging out with local data cleared removes a save still waiting on this d
   await saveMessage(one, text)
   await expect.poll(() => pendingQueue(one), { timeout: 10_000 }).toContain(text.slice(0, 12))
 
-  // Log out, asking for the local data to be cleared.
-  refuse = false
-  await one.page.getByRole('button', { name: 'Online', exact: true }).locator('xpath=following::button[1]').click() // the options button beside the status
+  // Log out (the server still unreachable, so the waiting save cannot slip out first), asking for the local data to be cleared.
+  await one.page.getByRole('button', { name: 'alice', exact: true }).locator('xpath=following::button[2]').click() // the options button beside the status
   await one.page.getByRole('button', { name: 'Log out', exact: true }).click()
   const clear = one.page.getByRole('checkbox', { name: /Clear local data/ })
   if (!(await clear.isChecked())) await clear.check()
@@ -1124,6 +1123,7 @@ test('logging out with local data cleared removes a save still waiting on this d
   expect(await one.page.evaluate(() => JSON.stringify(Object.entries(localStorage)))).not.toContain(text.slice(0, 12))
 
   // Another account signs in on the same browser: it starts with nothing saved, and nothing of the first account's is sent.
+  refuse = false
   const { jid, password } = config!.users.bob
   const sentBefore = one.frames.length
   await one.page.locator('#jid').fill(jid)
@@ -1134,7 +1134,11 @@ test('logging out with local data cleared removes a save still waiting on this d
   await expect(one.page.getByTestId('saved-row')).toHaveCount(0)
   await one.page.waitForTimeout(5000)
   expect(one.frames.slice(sentBefore).filter(f => f.includes(`<publish node="${NODE}"`))).toHaveLength(0)
-  expect((await reader.items()).length).toBe(0)
+  // Read through a fresh session: the first one was ended with the account's other connection.
+  const fresh = await script('alice')
+  const held = await fresh.items()
+  expect(held.some(item => item.includes(text))).toBe(false)
+  await fresh.stop()
   await shot(one.page, 'logout-cleared-next-account')
   await emptyNode(reader)
   await one.context.close(); await readerBob.stop(); await reader.stop()
