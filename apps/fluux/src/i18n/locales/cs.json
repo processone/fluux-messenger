@@ -78,7 +78,7 @@
         "resizeHint": "Tažením změníte velikost, dvojklikem obnovíte",
         "dismiss": "Zavřít",
         "search": "Hledat",
-        "saved": "Saved"
+        "saved": "Uložené"
     },
     "newMessage": {
         "title": "Nová zpráva",
@@ -738,8 +738,8 @@
         "loadFilePreview": "Načíst náhled",
         "showLinkImage": "Zobrazit obrázek",
         "emojiSuggestions": "Návrhy emoji",
-        "saveMessage": "Save message",
-        "removeFromSaved": "Remove from saved"
+        "saveMessage": "Uložit zprávu",
+        "removeFromSaved": "Odebrat z uložených"
     },
     "dates": {
         "today": "Dnes",
@@ -1389,8 +1389,8 @@
             "description": "Vyberte výsledek v postranním panelu pro zobrazení konverzace."
         },
         "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
+            "title": "Uložené zprávy",
+            "description": "Vyberte uloženou zprávu v postranním panelu, aby se otevřela ve své konverzaci."
         }
     },
     "avatar": {
@@ -1778,15 +1778,15 @@
         "messages": "{{nickname}}: nové zprávy — {{count}}"
     },
     "saved": {
-        "title": "Saved messages",
-        "marker": "Saved",
-        "empty": "No saved messages",
-        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
-        "remove": "Remove from saved",
-        "encrypted": "Encrypted message",
-        "deleted": "Message deleted",
-        "tryAgain": "Try again",
-        "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "title": "Uložené zprávy",
+        "marker": "Uloženo",
+        "empty": "Žádné uložené zprávy",
+        "emptyHint": "Otevřete nabídku Více u zprávy a zvolte Uložit zprávu, aby se zde uchovala.",
+        "remove": "Odebrat z uložených",
+        "encrypted": "Šifrovaná zpráva",
+        "deleted": "Zpráva smazána",
+        "tryAgain": "Zkusit znovu",
+        "full": "Seznam uložených zpráv je plný ({{count}}). Odeberte jednu, abyste mohli uložit další.",
+        "refused": "Váš server odmítl tuto zprávu uložit."
     }
 }

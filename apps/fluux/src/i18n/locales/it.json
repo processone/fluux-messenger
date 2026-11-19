@@ -78,7 +78,7 @@
         "resizeHint": "Trascina per ridimensionare, doppio clic per reimpostare",
         "dismiss": "Ignora",
         "search": "Cerca",
-        "saved": "Saved"
+        "saved": "Salvati"
     },
     "newMessage": {
         "title": "Nuovo messaggio",
@@ -736,8 +736,8 @@
         "loadFilePreview": "Carica anteprima",
         "showLinkImage": "Mostra immagine",
         "emojiSuggestions": "Suggerimenti emoji",
-        "saveMessage": "Save message",
-        "removeFromSaved": "Remove from saved"
+        "saveMessage": "Salva messaggio",
+        "removeFromSaved": "Rimuovi dai salvati"
     },
     "dates": {
         "today": "Oggi",
@@ -1387,8 +1387,8 @@
             "description": "Seleziona un risultato dalla barra laterale per visualizzare la conversazione."
         },
         "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
+            "title": "Messaggi salvati",
+            "description": "Seleziona un messaggio salvato nella barra laterale per aprirlo nella sua conversazione."
         }
     },
     "avatar": {
@@ -1776,15 +1776,15 @@
         "messages": "{{nickname}}: {{count}} nuovi messaggi"
     },
     "saved": {
-        "title": "Saved messages",
-        "marker": "Saved",
-        "empty": "No saved messages",
-        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
-        "remove": "Remove from saved",
-        "encrypted": "Encrypted message",
-        "deleted": "Message deleted",
-        "tryAgain": "Try again",
-        "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "title": "Messaggi salvati",
+        "marker": "Salvato",
+        "empty": "Nessun messaggio salvato",
+        "emptyHint": "Apri il menu Altro di un messaggio e scegli Salva messaggio per conservarlo qui.",
+        "remove": "Rimuovi dai salvati",
+        "encrypted": "Messaggio cifrato",
+        "deleted": "Messaggio eliminato",
+        "tryAgain": "Riprova",
+        "full": "L'elenco dei messaggi salvati è pieno ({{count}}). Rimuovine uno per salvarne un altro.",
+        "refused": "Il tuo server ha rifiutato di archiviare questo messaggio."
     }
 }

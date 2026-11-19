@@ -78,7 +78,7 @@
         "resizeHint": "拖动即可调整大小，双击即可重置",
         "dismiss": "关闭",
         "search": "搜索",
-        "saved": "Saved"
+        "saved": "已保存"
     },
     "newMessage": {
         "title": "新消息",
@@ -732,8 +732,8 @@
         "loadFilePreview": "加载预览",
         "showLinkImage": "显示图片",
         "emojiSuggestions": "表情符号建议",
-        "saveMessage": "Save message",
-        "removeFromSaved": "Remove from saved"
+        "saveMessage": "保存消息",
+        "removeFromSaved": "从已保存中移除"
     },
     "dates": {
         "today": "今天",
@@ -1383,8 +1383,8 @@
             "description": "从侧边栏选择一个结果即可查看对话。"
         },
         "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
+            "title": "已保存的消息",
+            "description": "在侧边栏中选择一条已保存的消息，即可在其所在对话中打开。"
         }
     },
     "avatar": {
@@ -1772,15 +1772,15 @@
         "messages": "{{nickname}}：{{count}}条新消息"
     },
     "saved": {
-        "title": "Saved messages",
-        "marker": "Saved",
-        "empty": "No saved messages",
-        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
-        "remove": "Remove from saved",
-        "encrypted": "Encrypted message",
-        "deleted": "Message deleted",
-        "tryAgain": "Try again",
-        "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "title": "已保存的消息",
+        "marker": "已保存",
+        "empty": "没有已保存的消息",
+        "emptyHint": "打开消息的“更多”菜单并选择“保存消息”，即可保留在此处。",
+        "remove": "从已保存中移除",
+        "encrypted": "加密消息",
+        "deleted": "消息已删除",
+        "tryAgain": "重试",
+        "full": "已保存消息的列表已满（{{count}} 条）。请移除一条后再保存其他消息。",
+        "refused": "你的服务器拒绝存储这条消息。"
     }
 }

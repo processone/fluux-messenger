@@ -78,7 +78,7 @@
         "resizeHint": "Sleep om te verkleinen, dubbelklik om te herstellen",
         "dismiss": "Sluiten",
         "search": "Zoeken",
-        "saved": "Saved"
+        "saved": "Bewaard"
     },
     "newMessage": {
         "title": "Nieuw bericht",
@@ -732,8 +732,8 @@
         "loadFilePreview": "Voorbeeld laden",
         "showLinkImage": "Afbeelding tonen",
         "emojiSuggestions": "Emoji-suggesties",
-        "saveMessage": "Save message",
-        "removeFromSaved": "Remove from saved"
+        "saveMessage": "Bericht bewaren",
+        "removeFromSaved": "Verwijderen uit bewaard"
     },
     "dates": {
         "today": "Vandaag",
@@ -1383,8 +1383,8 @@
             "description": "Selecteer een resultaat in de zijbalk om het gesprek te bekijken."
         },
         "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
+            "title": "Bewaarde berichten",
+            "description": "Kies een bewaard bericht in de zijbalk om het in zijn gesprek te openen."
         }
     },
     "avatar": {
@@ -1772,15 +1772,15 @@
         "messages": "{{nickname}}: {{count}} nieuwe berichten"
     },
     "saved": {
-        "title": "Saved messages",
-        "marker": "Saved",
-        "empty": "No saved messages",
-        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
-        "remove": "Remove from saved",
-        "encrypted": "Encrypted message",
-        "deleted": "Message deleted",
-        "tryAgain": "Try again",
-        "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "title": "Bewaarde berichten",
+        "marker": "Bewaard",
+        "empty": "Geen bewaarde berichten",
+        "emptyHint": "Open het menu Meer van een bericht en kies Bericht bewaren om het hier te houden.",
+        "remove": "Verwijderen uit bewaard",
+        "encrypted": "Versleuteld bericht",
+        "deleted": "Bericht verwijderd",
+        "tryAgain": "Opnieuw proberen",
+        "full": "De lijst met bewaarde berichten is vol ({{count}}). Verwijder er een om een ander te bewaren.",
+        "refused": "Je server weigerde dit bericht op te slaan."
     }
 }

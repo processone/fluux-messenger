@@ -78,7 +78,7 @@
         "resizeHint": "Lohista suuruse muutmiseks, topeltklõps lähtestamiseks",
         "dismiss": "Loobu",
         "search": "Otsing",
-        "saved": "Saved"
+        "saved": "Salvestatud"
     },
     "newMessage": {
         "title": "Uus sõnum",
@@ -734,8 +734,8 @@
         "loadFilePreview": "Laadi eelvaade",
         "showLinkImage": "Kuva pilt",
         "emojiSuggestions": "Emoji soovitused",
-        "saveMessage": "Save message",
-        "removeFromSaved": "Remove from saved"
+        "saveMessage": "Salvesta sõnum",
+        "removeFromSaved": "Eemalda salvestatutest"
     },
     "dates": {
         "today": "Täna",
@@ -1385,8 +1385,8 @@
             "description": "Valige külgribal tulemus, et vaadata vestlust."
         },
         "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
+            "title": "Salvestatud sõnumid",
+            "description": "Valige külgribal salvestatud sõnum, et avada see oma vestluses."
         }
     },
     "avatar": {
@@ -1774,15 +1774,15 @@
         "messages": "{{nickname}}: {{count}} uut sõnumit"
     },
     "saved": {
-        "title": "Saved messages",
-        "marker": "Saved",
-        "empty": "No saved messages",
-        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
-        "remove": "Remove from saved",
-        "encrypted": "Encrypted message",
-        "deleted": "Message deleted",
-        "tryAgain": "Try again",
-        "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "title": "Salvestatud sõnumid",
+        "marker": "Salvestatud",
+        "empty": "Salvestatud sõnumeid pole",
+        "emptyHint": "Avage sõnumi menüü „Veel“ ja valige „Salvesta sõnum“, et see siia jätta.",
+        "remove": "Eemalda salvestatutest",
+        "encrypted": "Krüptitud sõnum",
+        "deleted": "Sõnum kustutatud",
+        "tryAgain": "Proovi uuesti",
+        "full": "Salvestatud sõnumite loend on täis ({{count}}). Eemaldage üks, et salvestada järgmine.",
+        "refused": "Teie server keeldus selle sõnumi salvestamisest."
     }
 }

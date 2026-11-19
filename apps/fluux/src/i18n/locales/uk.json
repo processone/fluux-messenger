@@ -78,7 +78,7 @@
         "resizeHint": "Потягніть для зміни розміру, подвійне клацання для скидання",
         "dismiss": "Скасувати",
         "search": "Пошук",
-        "saved": "Saved"
+        "saved": "Збережені"
     },
     "newMessage": {
         "title": "Нове повідомлення",
@@ -736,8 +736,8 @@
         "loadFilePreview": "Завантажити прев'ю",
         "showLinkImage": "Показати зображення",
         "emojiSuggestions": "Пропозиції емодзі",
-        "saveMessage": "Save message",
-        "removeFromSaved": "Remove from saved"
+        "saveMessage": "Зберегти повідомлення",
+        "removeFromSaved": "Прибрати зі збережених"
     },
     "dates": {
         "today": "Сьогодні",
@@ -1387,8 +1387,8 @@
             "description": "Виберіть результат на бічній панелі, щоб переглянути бесіду."
         },
         "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
+            "title": "Збережені повідомлення",
+            "description": "Виберіть збережене повідомлення на бічній панелі, щоб відкрити його у його розмові."
         }
     },
     "avatar": {
@@ -1776,15 +1776,15 @@
         "messages": "{{nickname}}: нових повідомлень — {{count}}"
     },
     "saved": {
-        "title": "Saved messages",
-        "marker": "Saved",
-        "empty": "No saved messages",
-        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
-        "remove": "Remove from saved",
-        "encrypted": "Encrypted message",
-        "deleted": "Message deleted",
-        "tryAgain": "Try again",
-        "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "title": "Збережені повідомлення",
+        "marker": "Збережено",
+        "empty": "Немає збережених повідомлень",
+        "emptyHint": "Відкрийте меню «Ще» біля повідомлення й виберіть «Зберегти повідомлення», щоб залишити його тут.",
+        "remove": "Прибрати зі збережених",
+        "encrypted": "Зашифроване повідомлення",
+        "deleted": "Повідомлення видалено",
+        "tryAgain": "Спробувати ще раз",
+        "full": "Список збережених повідомлень заповнено ({{count}}). Приберіть одне, щоб зберегти інше.",
+        "refused": "Ваш сервер відмовився зберегти це повідомлення."
     }
 }

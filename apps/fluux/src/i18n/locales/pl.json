@@ -78,7 +78,7 @@
         "resizeHint": "Przeciągnij, aby zmienić rozmiar, kliknij dwukrotnie, aby zresetować",
         "dismiss": "Odrzuć",
         "search": "Szukaj",
-        "saved": "Saved"
+        "saved": "Zapisane"
     },
     "newMessage": {
         "title": "Nowa wiadomość",
@@ -738,8 +738,8 @@
         "loadFilePreview": "Załaduj podgląd",
         "showLinkImage": "Pokaż obraz",
         "emojiSuggestions": "Podpowiedzi emoji",
-        "saveMessage": "Save message",
-        "removeFromSaved": "Remove from saved"
+        "saveMessage": "Zapisz wiadomość",
+        "removeFromSaved": "Usuń z zapisanych"
     },
     "dates": {
         "today": "Dzisiaj",
@@ -1389,8 +1389,8 @@
             "description": "Wybierz wynik na pasku bocznym, aby wyświetlić rozmowę."
         },
         "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
+            "title": "Zapisane wiadomości",
+            "description": "Wybierz zapisaną wiadomość na pasku bocznym, aby otworzyć ją w jej rozmowie."
         }
     },
     "avatar": {
@@ -1778,15 +1778,15 @@
         "messages": "{{nickname}}: nowe wiadomości — {{count}}"
     },
     "saved": {
-        "title": "Saved messages",
-        "marker": "Saved",
-        "empty": "No saved messages",
-        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
-        "remove": "Remove from saved",
-        "encrypted": "Encrypted message",
-        "deleted": "Message deleted",
-        "tryAgain": "Try again",
-        "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "title": "Zapisane wiadomości",
+        "marker": "Zapisano",
+        "empty": "Brak zapisanych wiadomości",
+        "emptyHint": "Otwórz menu Więcej wiadomości i wybierz Zapisz wiadomość, aby zachować ją tutaj.",
+        "remove": "Usuń z zapisanych",
+        "encrypted": "Zaszyfrowana wiadomość",
+        "deleted": "Wiadomość usunięta",
+        "tryAgain": "Spróbuj ponownie",
+        "full": "Lista zapisanych wiadomości jest pełna ({{count}}). Usuń jedną, aby zapisać kolejną.",
+        "refused": "Twój serwer odmówił zapisania tej wiadomości."
     }
 }

@@ -78,7 +78,7 @@
         "resizeHint": "Dra för att ändra storlek, dubbelklicka för att återställa",
         "dismiss": "Avfärda",
         "search": "Sök",
-        "saved": "Saved"
+        "saved": "Sparade"
     },
     "newMessage": {
         "title": "Nytt meddelande",
@@ -732,8 +732,8 @@
         "loadFilePreview": "Läs in förhandsgranskning",
         "showLinkImage": "Visa bild",
         "emojiSuggestions": "Emoji-förslag",
-        "saveMessage": "Save message",
-        "removeFromSaved": "Remove from saved"
+        "saveMessage": "Spara meddelande",
+        "removeFromSaved": "Ta bort från sparade"
     },
     "dates": {
         "today": "Idag",
@@ -1383,8 +1383,8 @@
             "description": "Välj ett resultat i sidofältet för att visa konversationen."
         },
         "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
+            "title": "Sparade meddelanden",
+            "description": "Välj ett sparat meddelande i sidofältet för att öppna det i sin konversation."
         }
     },
     "avatar": {
@@ -1772,15 +1772,15 @@
         "messages": "{{nickname}}: {{count}} nya meddelanden"
     },
     "saved": {
-        "title": "Saved messages",
-        "marker": "Saved",
-        "empty": "No saved messages",
-        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
-        "remove": "Remove from saved",
-        "encrypted": "Encrypted message",
-        "deleted": "Message deleted",
-        "tryAgain": "Try again",
-        "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "title": "Sparade meddelanden",
+        "marker": "Sparat",
+        "empty": "Inga sparade meddelanden",
+        "emptyHint": "Öppna menyn Mer för ett meddelande och välj Spara meddelande för att behålla det här.",
+        "remove": "Ta bort från sparade",
+        "encrypted": "Krypterat meddelande",
+        "deleted": "Meddelandet har tagits bort",
+        "tryAgain": "Försök igen",
+        "full": "Listan över sparade meddelanden är full ({{count}}). Ta bort ett för att spara ett annat.",
+        "refused": "Din server vägrade lagra det här meddelandet."
     }
 }

@@ -78,7 +78,7 @@
         "resizeHint": "Arrossega per redimensionar, doble clic per reiniciar",
         "dismiss": "Descarta",
         "search": "Cerca",
-        "saved": "Saved"
+        "saved": "Desats"
     },
     "newMessage": {
         "title": "Missatge nou",
@@ -736,8 +736,8 @@
         "loadFilePreview": "Carrega la previsualització",
         "showLinkImage": "Mostra la imatge",
         "emojiSuggestions": "Suggeriments d'emoji",
-        "saveMessage": "Save message",
-        "removeFromSaved": "Remove from saved"
+        "saveMessage": "Desa el missatge",
+        "removeFromSaved": "Treu dels desats"
     },
     "dates": {
         "today": "Avui",
@@ -1387,8 +1387,8 @@
             "description": "Seleccioneu un resultat a la barra lateral per veure la conversa."
         },
         "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
+            "title": "Missatges desats",
+            "description": "Seleccioneu un missatge desat a la barra lateral per obrir-lo a la seva conversa."
         }
     },
     "avatar": {
@@ -1776,15 +1776,15 @@
         "messages": "{{nickname}}: {{count}} missatges nous"
     },
     "saved": {
-        "title": "Saved messages",
-        "marker": "Saved",
-        "empty": "No saved messages",
-        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
-        "remove": "Remove from saved",
-        "encrypted": "Encrypted message",
-        "deleted": "Message deleted",
-        "tryAgain": "Try again",
-        "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "title": "Missatges desats",
+        "marker": "Desat",
+        "empty": "No hi ha cap missatge desat",
+        "emptyHint": "Obriu el menú «Més» d'un missatge i trieu «Desa el missatge» per conservar-lo aquí.",
+        "remove": "Treu dels desats",
+        "encrypted": "Missatge xifrat",
+        "deleted": "Missatge suprimit",
+        "tryAgain": "Torna-ho a provar",
+        "full": "La llista de missatges desats és plena ({{count}}). Traieu-ne un per desar-ne un altre.",
+        "refused": "El vostre servidor ha refusat emmagatzemar aquest missatge."
     }
 }

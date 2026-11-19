@@ -78,7 +78,7 @@
         "resizeHint": "Пцягніце для змены памеру, падвойнае пстрык для скідання",
         "dismiss": "Адхіліць",
         "search": "Пошук",
-        "saved": "Saved"
+        "saved": "Захаваныя"
     },
     "newMessage": {
         "title": "Новае паведамленне",
@@ -736,8 +736,8 @@
         "loadFilePreview": "Загрузіць папярэдні прагляд",
         "showLinkImage": "Паказаць выяву",
         "emojiSuggestions": "Прапановы эмодзі",
-        "saveMessage": "Save message",
-        "removeFromSaved": "Remove from saved"
+        "saveMessage": "Захаваць паведамленне",
+        "removeFromSaved": "Выдаліць са захаваных"
     },
     "dates": {
         "today": "Сёння",
@@ -1387,8 +1387,8 @@
             "description": "Выберыце вынік на бакавой панэлі, каб прагледзець размову."
         },
         "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
+            "title": "Захаваныя паведамленні",
+            "description": "Выберыце захаванае паведамленне ў бакавой панэлі, каб адкрыць яго ў яго размове."
         }
     },
     "avatar": {
@@ -1776,15 +1776,15 @@
         "messages": "{{nickname}}: новых паведамленняў — {{count}}"
     },
     "saved": {
-        "title": "Saved messages",
-        "marker": "Saved",
-        "empty": "No saved messages",
-        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
-        "remove": "Remove from saved",
-        "encrypted": "Encrypted message",
-        "deleted": "Message deleted",
-        "tryAgain": "Try again",
-        "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "title": "Захаваныя паведамленні",
+        "marker": "Захавана",
+        "empty": "Няма захаваных паведамленняў",
+        "emptyHint": "Адкрыйце меню «Яшчэ» для паведамлення і выберыце «Захаваць паведамленне», каб захаваць яго тут.",
+        "remove": "Выдаліць са захаваных",
+        "encrypted": "Зашыфраванае паведамленне",
+        "deleted": "Паведамленне выдалена",
+        "tryAgain": "Паспрабаваць зноў",
+        "full": "Спіс захаваных паведамленняў запоўнены ({{count}}). Выдаліце адно, каб захаваць іншае.",
+        "refused": "Ваш сервер адмовіўся захаваць гэта паведамленне."
     }
 }

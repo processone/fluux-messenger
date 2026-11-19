@@ -78,7 +78,7 @@
         "resizeHint": "Povucite za promjenu veličine, dvostruki klik za resetiranje",
         "dismiss": "Odbaci",
         "search": "Traži",
-        "saved": "Saved"
+        "saved": "Spremljeno"
     },
     "newMessage": {
         "title": "Nova poruka",
@@ -734,8 +734,8 @@
         "loadFilePreview": "Učitaj pretpregled",
         "showLinkImage": "Prikaži sliku",
         "emojiSuggestions": "Prijedlozi emojija",
-        "saveMessage": "Save message",
-        "removeFromSaved": "Remove from saved"
+        "saveMessage": "Spremi poruku",
+        "removeFromSaved": "Ukloni iz spremljenih"
     },
     "dates": {
         "today": "Danas",
@@ -1385,8 +1385,8 @@
             "description": "Odaberite rezultat u bočnoj traci za prikaz razgovora."
         },
         "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
+            "title": "Spremljene poruke",
+            "description": "Odaberite spremljenu poruku na bočnoj traci da biste je otvorili u njezinu razgovoru."
         }
     },
     "avatar": {
@@ -1774,15 +1774,15 @@
         "messages": "{{nickname}}: nove poruke — {{count}}"
     },
     "saved": {
-        "title": "Saved messages",
-        "marker": "Saved",
-        "empty": "No saved messages",
-        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
-        "remove": "Remove from saved",
-        "encrypted": "Encrypted message",
-        "deleted": "Message deleted",
-        "tryAgain": "Try again",
-        "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "title": "Spremljene poruke",
+        "marker": "Spremljeno",
+        "empty": "Nema spremljenih poruka",
+        "emptyHint": "Otvorite izbornik Više za poruku i odaberite Spremi poruku da je zadržite ovdje.",
+        "remove": "Ukloni iz spremljenih",
+        "encrypted": "Šifrirana poruka",
+        "deleted": "Poruka je izbrisana",
+        "tryAgain": "Pokušaj ponovno",
+        "full": "Popis spremljenih poruka je pun ({{count}}). Uklonite jednu da biste spremili drugu.",
+        "refused": "Vaš je poslužitelj odbio pohraniti ovu poruku."
     }
 }

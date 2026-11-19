@@ -78,7 +78,7 @@
         "resizeHint": "اسحب لتغيير الحجم، انقر مرتين لإعادة التعيين",
         "dismiss": "تجاهل",
         "search": "بحث",
-        "saved": "Saved"
+        "saved": "المحفوظة"
     },
     "newMessage": {
         "title": "رسالة جديدة",
@@ -740,8 +740,8 @@
         "loadFilePreview": "تحميل المعاينة",
         "showLinkImage": "عرض الصورة",
         "emojiSuggestions": "اقتراحات الرموز التعبيرية",
-        "saveMessage": "Save message",
-        "removeFromSaved": "Remove from saved"
+        "saveMessage": "حفظ الرسالة",
+        "removeFromSaved": "إزالة من المحفوظات"
     },
     "dates": {
         "today": "اليوم",
@@ -1391,8 +1391,8 @@
             "description": "اختر نتيجة من الشريط الجانبي لعرض المحادثة."
         },
         "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
+            "title": "الرسائل المحفوظة",
+            "description": "اختر رسالة محفوظة في الشريط الجانبي لفتحها في محادثتها."
         }
     },
     "avatar": {
@@ -1780,15 +1780,15 @@
         "messages": "{{nickname}}: {{count}} رسائل جديدة"
     },
     "saved": {
-        "title": "Saved messages",
-        "marker": "Saved",
-        "empty": "No saved messages",
-        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
-        "remove": "Remove from saved",
-        "encrypted": "Encrypted message",
-        "deleted": "Message deleted",
-        "tryAgain": "Try again",
-        "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "title": "الرسائل المحفوظة",
+        "marker": "محفوظة",
+        "empty": "لا توجد رسائل محفوظة",
+        "emptyHint": "افتح قائمة «المزيد» لرسالة واختر «حفظ الرسالة» للاحتفاظ بها هنا.",
+        "remove": "إزالة من المحفوظات",
+        "encrypted": "رسالة مشفّرة",
+        "deleted": "تم حذف الرسالة",
+        "tryAgain": "إعادة المحاولة",
+        "full": "قائمة الرسائل المحفوظة ممتلئة ({{count}}). أزل رسالة لتتمكن من حفظ أخرى.",
+        "refused": "رفض خادمك تخزين هذه الرسالة."
     }
 }
