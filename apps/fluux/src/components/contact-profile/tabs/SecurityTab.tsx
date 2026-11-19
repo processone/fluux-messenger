@@ -266,7 +266,11 @@ function IdentityRow({
     <div className="rounded-lg bg-fluux-bg/40 px-3 py-2 space-y-1.5" data-testid="identity-row">
       <div className="flex items-center justify-between gap-2">
         <span className={`text-xs font-medium ${visual.colorClass}`}>
-          {t(`contacts.encryption.keyTrust.${identity.trust}`)}
+          {/* A key waiting for trust data of an earlier version or of the
+              account's other devices needs no decision yet: say what it waits for. */}
+          {identity.notUsedReason === 'trust-pending'
+            ? t('contacts.encryption.trustPendingTitle')
+            : t(`contacts.encryption.keyTrust.${identity.trust}`)}
         </span>
         {identity.label && <span className="text-xs text-fluux-muted truncate">{identity.label}</span>}
       </div>
