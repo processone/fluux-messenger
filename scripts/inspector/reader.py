@@ -51,19 +51,20 @@ class Boundary(Exception):
     """Only fixed categories, never remote values, may cross the API boundary."""
 
 
-def describe_fault(error):
+def describe_fault(error, source=__file__):
     """Name only code-owned facts about the exception that ended collection.
 
-    The class comes from FAULT_CLASSES, the site is the innermost frame of this
-    file (function and line), a KeyError names one of this module's constant keys
-    and a transport OSError names one of the opener's fixed categories. Messages,
-    reprs and remote values are never read.
+    The class comes from FAULT_CLASSES, the site is the innermost frame of the
+    source file (this one unless a caller names its own), as function and line, a
+    KeyError names one of this module's constant keys and a transport OSError
+    names one of the opener's fixed categories. Messages, reprs and remote values
+    are never read.
     """
     name = type(error).__name__
     fault = {"class": name if name in FAULT_CLASSES else "other"}
     trace = error.__traceback__
     while trace is not None:
-        if trace.tb_frame.f_code.co_filename == __file__:
+        if trace.tb_frame.f_code.co_filename == source:
             fault["site"], fault["line"] = trace.tb_frame.f_code.co_name, trace.tb_lineno
         trace = trace.tb_next
     first = error.args[0] if len(error.args) == 1 else None

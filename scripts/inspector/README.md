@@ -3,7 +3,9 @@
 This is **preparation tooling, not a live-capture launcher**. The reader owns the
 Web Inspector framing/routing/filter boundary for FLM-350. The separate FLM-366
 service opener supplies its exclusive byte stream, only when explicitly called
-with an already-authorized exact USB device identity. Neither component changes
+with an already-authorized exact USB device identity. `oslog.py` reads the
+iPhone's framed process-log relay through the same opener and keeps only fixed
+metadata from listed processes (see Framed process logs). None of these changes
 inspection settings, launches an app, uses an account, reloads/restarts a page,
 or reads storage. Product application code is unchanged.
 
@@ -163,9 +165,10 @@ not row-attribute values or text. Both host and page limit sampling to four pull
 per second. Known invalid values stop capture; unknown fields are discarded before
 serialization. Console and unexpected replies are never printed or persisted.
 There is no stack capture: `stackFrames` must be empty. FLM-350 still owns a safe
-code-location sanitizer, the native-log allowlist, process ownership evidence,
-combined watchdog and budget integration, device service opener qualification,
-and the final consent/capture workflow.
+code-location sanitizer, the supervisor that runs both readers under one watchdog,
+device service opener qualification for a full capture, and the final
+consent/capture workflow. The framed process-log reader below supplies the
+native-log allowlist, PID ownership evidence and the shared budget and stop event.
 
 Protocol shapes were checked against pymobiledevice3's `services/webinspector.py`
 and `services/web_protocol/inspector_session.py`. This module intentionally uses
@@ -234,7 +237,8 @@ seconds with no fault.
 `service_worker.c` owns usbmuxd, lockdown and in-memory TLS.
 `service.py` owns the private control channel, shared budget reservations,
 per-operation watchdog and process reaping. `Reader` remains the sole owner of
-inspector framing/routing/filtering. No default inspector/session API is used.
+inspector framing/routing/filtering, and `oslog.LogReader` of process-log relay
+framing. No default inspector/session API is used.
 
 Build without discovering or opening a phone:
 
@@ -263,7 +267,7 @@ with open_service(worker_path, fresh_authorized_usb_identity, shared_budget,
 
 This is an API example, not a runnable live launcher or consent grant. Never print,
 tee, log or persist the raw stream. `open_service` does not request pages or send
-inspector commands; unavoidable service bytes enter only the existing reader.
+inspector commands; unavoidable service bytes enter only the reader it was opened for.
 The stream implements only `settimeout`, `recv`, `send`, `shutdown(SHUT_RDWR)` and
 idempotent `close`, plus a context manager. It exposes no duplicate/socket-file
 API, listener or public port. Concurrent operations are refused. It is single-use,
@@ -295,7 +299,9 @@ Only `StartSession` with the existing HostID/SystemBUID is allowed. The session
 must require TLS, using TLS 1.2 or newer and the **exact DeviceCertificate pin**
 from that existing record. The root certificate/private key authenticate the host.
 No public CA or hostname fallback substitutes for the pin. After pin verification,
-only `StartService(com.apple.webinspector)` is sent, with no escrow bag. The service
+exactly one `StartService` is sent, with no escrow bag, naming
+`com.apple.webinspector` or `com.apple.os_trace_relay`. The caller chooses between
+those two with a fixed numeric code and cannot send any other name. The service
 uses TLS with the same pin if lockdown requires it, otherwise explicit plaintext
 inside the authorized USB tunnel. A failed pin is closed without further lockdown
 commands; a verified session gets best-effort `StopSession` on closure. This does
@@ -392,3 +398,137 @@ attachment, sampling and confirmed removal on Fluux's page; remote frozen-page
 cleanup on a real phone remains unqualified. A different
 pin or protocol shape fails closed; do not weaken the boundary or add a pairing
 fallback to make a live connection work. No earlier audit finding was contradicted.
+
+## Framed process logs
+
+`oslog.LogReader(stream, shared_budget)` reads the iPhone's process-log relay,
+`com.apple.os_trace_relay`, from a stream opened with
+`open_service(worker, identity, shared_budget, service='os-trace-relay', lifetime=...)`.
+It is the only reader or writer of that stream. It sends one request, never
+discovers or opens a device itself, and has no retry or reconnect.
+
+```python
+with open_service(worker_path, fresh_authorized_usb_identity, shared_budget,
+                  service='os-trace-relay',
+                  lifetime=capture_deadline - time.monotonic() + CONTROL_GRACE) as logs:
+    result = LogReader(logs, shared_budget).run(
+        private_log_output, stop=shared_stop, duration=capture_deadline - time.monotonic())
+```
+
+### Protocol
+
+Wire shapes follow libimobiledevice's
+[`src/ostrace.c`](https://github.com/libimobiledevice/libimobiledevice/blob/1.4.0/src/ostrace.c)
+and [`tools/idevicesyslog.c`](https://github.com/libimobiledevice/libimobiledevice/blob/1.4.0/tools/idevicesyslog.c),
+and pymobiledevice3's `services/os_trace.py`.
+
+1. The reader sends a big-endian length and a `StartActivity` property list with
+   `MessageFilter` 0xFFFF, `Pid` -1 (all processes) or one PID, and `StreamFlags`
+   0x1C: payload, historical and call stack. Both references also set the debug
+   flag (0x3C); it is left out because it only adds volume to a shared budget.
+2. The relay answers with a frame of type 1 and a big-endian length, holding a
+   status dictionary of at most 4 KiB. Anything but `RequestSuccessful` stops
+   with `relay-refused`; the status is compared, never copied.
+3. Records follow as frames of type 2 with a little-endian length. A record is a
+   129-byte header followed by five NUL-terminated regions: process path, image
+   path, message, subsystem and category. Its size must lie between the header
+   size and 16 KiB.
+
+The subsystem and category sizes are 16-bit fields, each followed by 16 bits that
+an iPhone sets to other values. libimobiledevice names those `unk14` and `unk15`;
+pymobiledevice3 reads each size together with them as one 32-bit number, which on
+a real phone gives sizes far beyond the record. A record without a subsystem
+carries no category bytes, even when its category size is set, so the reader then
+ignores that size; pymobiledevice3 likewise reads both or neither.
+
+The header is unpacked only for its marker, record type, header size, PID,
+process identifier, time, level and region sizes; the UUIDs, thread and activity
+identifiers, mach time and image offset between them are skipped and never read.
+Every region must end with its NUL inside the record. The process path, subsystem
+and category must hold no other NUL. The image path and message are checked only
+for their terminator and are never scanned, decoded or copied. A well-framed
+record with an unknown type is counted in `unknownTypes` and dropped. Bytes after
+the five regions are allowed and counted in `trailingRecords`, so a live run shows
+whether the real layout has them.
+
+### What is written
+
+Each listed record becomes one JSON line with exactly `elapsedMs`, `timeUs`
+(device time in microseconds), `pid`, `level`, `process`, `subsystem` and
+`category`, rebuilt from code-owned values:
+
+- `process`: `fluux` for an executable path ending in `/Fluux.app/Fluux`;
+  `webkit-content`, `webkit-networking` or `webkit-gpu` for WebKit's helper
+  processes under `/System/`, as XPC services or extensions. Records of every other
+  process are checked, counted in `discarded` and dropped.
+- `level`: `default`, `info`, `debug`, `error` or `fault`, else `other`.
+- `subsystem`: `webkit` for `com.apple.WebKit`, `fluux` for `net.processone.fluux`,
+  else `other`, or `null` when the record has none.
+- `category`: WebKit's `ActivityState`, `Loading`, `MemoryPressure`, `Process`,
+  `ProcessSuspension`, `ProcessSwapping` and `ViewState`; Fluux's `hinge` and
+  `notification`; else `other`, or `null` when the record has none.
+
+Messages, paths, image names, UUIDs and every other remote string stay out of
+the output and the result.
+
+### PID attribution
+
+A record's PID must equal its header's process identifier and fit in 31 bits, or
+the capture stops with `pid-boundary`. PID 0 is the kernel, which logs throughout
+an all-process stream: its records are dropped as unlisted, and a listed process
+with PID 0 stops with `pid-boundary`. One PID keeps one listed label for the whole
+capture: a listed PID whose later record names another listed process, or an
+unlisted one, stops with `pid-boundary`.
+A PID first seen in an unlisted process and later in a listed one is accepted,
+because `xpcproxy` starts WebKit's helpers by replacing itself in the same process.
+At most 1024 listed PIDs are kept. `run(..., pid=n)` asks the relay for one
+process, such as Fluux's from the inspector's `PID:n` application identifier, and
+then requires every record to carry that PID. The result's `pids` maps each label
+to the PIDs it held.
+
+### Bounds and accounting
+
+- One `Budget` is shared with the inspector reader and the opener. Every frame
+  header and body is charged before it is read, and every output line before it
+  is written. An exhausted budget stops with `byte-limit`.
+- The deadline is at most 120 seconds. The reader shares the caller's stop event,
+  sets it on every exit, then shuts down and closes the stream. Closing the
+  connection ends the relay's stream; nothing is left to remove on the phone.
+- On an iPhone the all-process stream carried from about 150 KB to 1.9 MB per
+  second, often mostly kernel records. The opener and the reader both charge it,
+  so a five-MiB budget lasted between about 1.3 and 9 seconds. A PID-restricted
+  stream carries only that process's records, with no kernel records, so a
+  capture longer than a few seconds should restrict the relay to Fluux's PID.
+- A partial frame ends reading: the next read stops with `protocol-boundary`
+  instead of resynchronizing on remote bytes.
+- The output must be an empty private regular file (mode 0600), or the reader
+  stops with `unsafe-output` before sending its request.
+- `reason` is one of `time-limit`, `stopped`, `byte-limit`, `disconnected`,
+  `unsafe-output`, `protocol-boundary`, `record-boundary`, `pid-boundary` or
+  `relay-refused`. `phase` is `output`, `start` or `streaming`; `fault` has the
+  inspector reader's fixed shape. The result also counts records, emitted and
+  discarded lines, unknown types, trailing records, received and reserved input
+  bytes and output bytes. Keyboard interruption records `stopped`, closes the
+  stream and re-raises.
+
+### Proof and its boundary
+
+`test_oslog.py`, run by `prove.mjs`, drives the reader over a local socket peer
+with realistic process paths and a private canary in every message, path and
+image name. It checks that only listed processes and the seven fields above are
+written, and that the canary reaches neither the output nor the result. It also
+covers a PID-restricted session, PID attribution failures, malformed headers,
+regions and frames, a partial frame, a disconnect, unsafe outputs, the shared stop
+event, the deadline and its 120-second cap, a budget-exhausting flood and an
+interrupt. Its records set the 16 bits after each size, as an iPhone does, and
+include kernel records and a category size without a subsystem.
+`test_service.py` runs the reader through the actual worker and disposable
+lockdown peer, checks that an unknown service code exits without contacting
+usbmuxd, and runs the inspector reader and log reader on one budget and stop
+event: a log flood exhausts the budget and stops the inspector, and the
+inspector's deadline stops the logs.
+
+The peer stands in for the iPhone's relay. The header layout and record types
+follow the references above as corrected by diagnostic sessions on an iPhone,
+which kept only counts and numeric header fields; a live run on the iPhone, with
+its own consent, qualifies them.

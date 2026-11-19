@@ -2,7 +2,8 @@
 
 Only open_service() starts the native worker. Import/build/proof never use a phone.
 The worker handles existing pairing in memory; Python sees only service bytes and
-fixed statuses. Give the returned single-owner interface directly to Reader.
+fixed statuses. Give the returned single-owner interface directly to Reader, or for
+the process-log relay to oslog.LogReader.
 """
 
 import math
@@ -26,6 +27,8 @@ BLOCK = 64 * 1024
 CONTROL_GRACE = .5
 HEADER = struct.Struct('>cII')
 REQUEST = struct.Struct('>cIII')
+# The worker starts exactly one of these fixed lockdown services, chosen by code.
+SERVICES = {'webinspector': 1, 'os-trace-relay': 2}
 
 
 class ServiceError(OSError):
@@ -170,18 +173,23 @@ class ServiceStream:
         self.close()
 
 
-def open_service(worker, device_id, budget, *, startup_timeout=5, lifetime=120.5,
-                 mux_socket='/var/run/usbmuxd'):
-    """Open only the exact, already-authorized USB phone's Web Inspector service.
+def open_service(worker, device_id, budget, *, service='webinspector', startup_timeout=5,
+                 lifetime=120.5, mux_socket='/var/run/usbmuxd'):
+    """Open one fixed service on the exact, already-authorized USB phone.
 
+    service is 'webinspector' (the default, for Reader) or 'os-trace-relay' (the
+    framed process-log relay, for oslog.LogReader); nothing else can be named.
     Requires FLM-350's separate attachment/device consent before real use. Never
     infer consent here. mux_socket is a private disposable socket in tests; live
     callers keep the system default. No environment-based daemon redirection.
     Startup reserves 256 KiB in the existing attempt's Budget before any I/O.
     Lifetime is the time left to the capture deadline plus reader cleanup plus
     CONTROL_GRACE (README.md, Bounds and accounting); at most 121 seconds.
-    No retry, reconnect, trust prompt, pairing write, app launch or page request.
+    No retry, reconnect, trust prompt, pairing write, app launch, page or log request.
     """
+    code = SERVICES.get(service) if type(service) is str else None
+    if code is None:
+        raise ValueError('invalid-service')
     _seconds(startup_timeout, 5)
     _seconds(lifetime, 121)
     deadline = time.monotonic() + lifetime
@@ -209,7 +217,7 @@ def open_service(worker, device_id, budget, *, startup_timeout=5, lifetime=120.5
         parent.settimeout(stream._timeout)
         identity = device_id.encode()
         remaining = max(1, math.ceil((deadline - time.monotonic()) * 1000))
-        parent.sendall(struct.pack('>III', remaining, len(identity), len(path)) + identity + path)
+        parent.sendall(struct.pack('>IIII', remaining, len(identity), len(path), code) + identity + path)
         stream._response()
         stream._timeout = 1.0
         return stream

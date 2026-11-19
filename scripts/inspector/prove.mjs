@@ -68,6 +68,14 @@ const run = spawnSync('python3', ['-B', fileURLToPath(new URL('./test_reader.py'
 process.stderr.write(run.stderr || '')
 assert.equal(run.error, undefined)
 const transport = JSON.parse(run.stdout)
+// The framed process-log reader on local relay peers; its records carry private bodies.
+const logs = spawnSync('python3', ['-B', fileURLToPath(new URL('./test_oslog.py', import.meta.url))], {
+  encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024,
+})
+process.stderr.write(logs.stderr || '')
+assert.equal(logs.error, undefined)
+assert(!logs.stdout.includes('PRIVATE-CANARY'))
+const nativeLog = JSON.parse(logs.stdout)
 const scratch = mkdtempSync(join(process.env.FLUUX_INSPECTOR_TEMP || tmpdir(), 'fluux-service-'))
 let service
 try {
@@ -83,11 +91,13 @@ try {
   })
   process.stderr.write(proof.stderr || '')
   assert.equal(proof.error, undefined)
+  assert(!proof.stdout.includes('PRIVATE-CANARY'))
   service = JSON.parse(proof.stdout)
   console.log(JSON.stringify({ boundary: 'disposable WebKit + actual host reader and opener; not an iPhone',
-    webkit: version, browserClosed: true, samples, samplerRemovedAndReattached: true, spacing, transport, service }, null, 2))
+    webkit: version, browserClosed: true, samples, samplerRemovedAndReattached: true, spacing, transport, nativeLog, service }, null, 2))
   // Preserve completed failed-case observations as well as their nonzero exit status.
   assert.equal(run.status, 0)
+  assert.equal(logs.status, 0)
   assert.equal(proof.status, 0)
 } finally {
   rmSync(scratch, { recursive: true, force: true })
