@@ -76,6 +76,9 @@ export function setupSavedMessagesSideEffects(
           if (!current()) return
           if (state().pending[id] !== op) continue // settled, replaced or wiped meanwhile
           const revision = state().revisions[id]
+          // A wipe resets revisions, so a revision alone cannot tell this operation from a later one of the same id.
+          const generation = state().generation
+          const sameStore = () => mine === epoch && generation === state().generation
           try {
             if (op === 'publish') {
               const entry = state().entries[id]
@@ -97,25 +100,25 @@ export function setupSavedMessagesSideEffects(
               } catch (error) {
                 // A server that enforces publish-option preconditions refuses the limit on a node that exists with another one:
                 // repeat once with the privacy constraints alone, and only while this operation is still the current one.
-                if (!create || !isDefinitiveRejection(error) || !current() || state().pending[id] !== op) throw error
+                if (!create || !isDefinitiveRejection(error) || !current() || !sameStore() || state().pending[id] !== op || state().revisions[id] !== revision) throw error
                 await client.internal.savedMessages.publish(entry, { create: false })
               }
               created = true
             } else {
               await client.internal.savedMessages.retract(id)
             }
-            if (mine !== epoch) return
+            if (!sameStore()) return
             // The server took it, whatever this device has queued since: membership counts it either way.
             state().confirm(id, op)
             state().settle(id, op, revision)
             // The first publish creates the node, and only then can its limit be read: later saves wait for it.
             if (op === 'publish' && state().limit === undefined) {
               const limit = await client.internal.savedMessages.fetchMaxItems().catch(() => undefined)
-              if (mine !== epoch) return
+              if (!sameStore()) return
               state().setLimit(limit)
             }
           } catch (error) {
-            if (mine !== epoch) return
+            if (!sameStore()) return
             if (!isDefinitiveRejection(error)) continue // silence: the operation stays pending
             if (op === 'retract' && isItemNotFoundError(error)) { state().confirm(id, op); state().settle(id, op, revision) } // already gone
             else {

@@ -300,6 +300,41 @@ describe('saved messages sync side effect', () => {
     expect(node.publish).toHaveBeenCalledTimes(1)
   })
 
+  it('does not repeat a refused creating write whose operation was replaced by a newer one meanwhile', async () => {
+    const { node, stop } = setup()
+    savedStore.getState().reconcileFetch([])
+    let refuse!: (error: unknown) => void
+    node.publish.mockImplementationOnce(() => new Promise<void>((_, reject) => { refuse = reject }))
+    savedStore.getState().save(entry('a'))
+    await flushPromises()
+    // The original is deleted while the request waits: the queued publish is replaced by one without text.
+    redactSavedCopy({ conversationJid: 'team@conference.example', type: 'groupchat', from: 'team@conference.example/Alice', stanzaId: 's-a', stanzaIdBy: 'team@conference.example' })
+    refuse(Object.assign(new Error('conflict'), { name: 'StanzaError' }))
+    await flushPromises()
+    expect(node.publish.mock.calls.every(([sent]) => (sent as SavedMessage).text === '' || (sent as SavedMessage).id !== 'a' || sent === node.publish.mock.calls[0][0])).toBe(true)
+    // No call after the first sent the original text.
+    expect(node.publish.mock.calls.slice(1).some(([sent]) => (sent as SavedMessage).text === 'text a')).toBe(false)
+    stop()
+  })
+
+  it('lets stale work from before a wipe neither retry nor settle a new save of the same id', async () => {
+    const { node, stop } = setup()
+    savedStore.getState().reconcileFetch([])
+    let refuse!: (error: unknown) => void
+    node.publish.mockImplementationOnce(() => new Promise<void>((_, reject) => { refuse = reject }))
+    savedStore.getState().save(entry('a'))
+    await flushPromises()
+    savedStore.getState().reset()
+    savedStore.getState().reconcileFetch([])
+    savedStore.getState().save(entry('a', { text: 'new text' }))
+    const callsBefore = node.publish.mock.calls.length
+    refuse(Object.assign(new Error('conflict'), { name: 'StanzaError' }))
+    await flushPromises()
+    expect(node.publish.mock.calls.slice(callsBefore).some(([sent]) => (sent as SavedMessage).text === 'text a')).toBe(false)
+    expect(savedStore.getState().refusals).toBe(0)
+    stop()
+  })
+
   it('sends nothing further to a new node whose limit cannot be read', async () => {
     const { client, node, stop } = setup()
     node.fetchAll.mockResolvedValue({ status: 'absent' })
