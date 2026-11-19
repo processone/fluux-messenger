@@ -269,4 +269,35 @@ test.describe('message right-click menu', () => {
     expect(labels).not.toContain('Save image')
     expect(labels).not.toContain('Copy image URL')
   })
+
+  test('a retraction closes the open menu, and a reopened menu starts on the actions with focus inside it', async ({ page }) => {
+    await setup(page, [{ id: 'ret-a', from: 'peer', body: 'Soon to be retracted' }, { id: 'ret-b', from: 'peer', body: 'Stays readable' }])
+    const open = async (id: string, text: string) => {
+      const box = (await row(page, id).getByText(text).boundingBox())!
+      await page.mouse.click(box.x + 20, box.y + box.height / 2, { button: 'right' })
+      await expect(menu(page)).toBeVisible()
+    }
+    // Reopening after the picker: the menu starts on the actions, with focus inside it.
+    await open('ret-b', 'Stays readable')
+    await menu(page).getByRole('button', { name: 'More reactions' }).click()
+    await expect(menu(page).locator('em-emoji-picker')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(menu(page)).toHaveCount(0)
+    await open('ret-b', 'Stays readable')
+    await expect(menu(page).getByRole('button', { name: 'Forward message' })).toBeVisible()
+    await expect(menu(page).locator('em-emoji-picker')).toHaveCount(0)
+    await expect.poll(() => page.evaluate(() => document.querySelector('[role="menu"]')?.contains(document.activeElement) ?? false)).toBe(true)
+    await page.keyboard.press('Escape')
+    await expect(menu(page)).toHaveCount(0)
+    // A retraction arriving for the message the menu belongs to takes the menu with it.
+    await open('ret-a', 'Soon to be retracted')
+    await page.evaluate((peer) => {
+      const scope = window as unknown as { __demoClient: DemoClient }
+      ;(scope.__demoClient as unknown as { emitSDK: (n: string, d: unknown) => void }).emitSDK('chat:message-updated', {
+        conversationId: peer, messageId: 'ret-a', updates: { isRetracted: true, body: '' },
+      })
+    }, PEER)
+    await expect(row(page, 'ret-a').getByText('Soon to be retracted')).toHaveCount(0)
+    await expect(menu(page)).toHaveCount(0)
+  })
 })
