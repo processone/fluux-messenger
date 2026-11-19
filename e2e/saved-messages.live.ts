@@ -440,7 +440,8 @@ test('a saved message whose original no longer exists says so instead of opening
   await openSaved(one)
   await expect(savedRow(one, text)).toBeVisible()
   await savedRow(one, text).click()
-  await expect(one.page.getByText(/no longer available|Could not load/i).first()).toBeVisible({ timeout: 30_000 })
+  // The row's own status, not the opener's toast, which carries the same words.
+  await expect(savedRow(one, text).getByRole('status')).toContainText(/no longer available|Could not load/i, { timeout: 30_000 })
   await expect(one.page).toHaveURL(/\/saved/)
   await shot(one.page, 'original-missing')
   await emptyNode(reader)
