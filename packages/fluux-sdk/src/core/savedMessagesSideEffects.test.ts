@@ -324,7 +324,9 @@ describe('saved messages sync side effect', () => {
     node.publish.mockImplementationOnce(() => new Promise<void>((_, reject) => { refuse = reject }))
     savedStore.getState().save(entry('a'))
     await flushPromises()
+    // A wipe resets the store and removes the persisted queue.
     savedStore.getState().reset()
+    localStorage.clear()
     savedStore.getState().reconcileFetch([])
     savedStore.getState().save(entry('a', { text: 'new text' }))
     const callsBefore = node.publish.mock.calls.length
@@ -332,6 +334,9 @@ describe('saved messages sync side effect', () => {
     await flushPromises()
     expect(node.publish.mock.calls.slice(callsBefore).some(([sent]) => (sent as SavedMessage).text === 'text a')).toBe(false)
     expect(savedStore.getState().refusals).toBe(0)
+    // The new save is not left waiting for an unrelated trigger: it is published, and its pending operation clears.
+    expect(node.publish.mock.calls.slice(callsBefore).filter(([sent]) => (sent as SavedMessage).text === 'new text')).toHaveLength(1)
+    expect(savedStore.getState().pending).toEqual({})
     stop()
   })
 

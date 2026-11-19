@@ -134,7 +134,12 @@ export function setupSavedMessagesSideEffects(
         if (mine === epoch) state().setLimit(limit)
       }
     } finally {
-      if (mine === epoch) flushing = false
+      if (mine === epoch) {
+        flushing = false
+        // Work that left early (stale after a wipe, or interrupted) must not swallow a flush requested meanwhile
+        // for the current store: it is dispatched now instead of waiting for an unrelated trigger.
+        if (flushAgain) { flushAgain = false; void flush() }
+      }
     }
   }
 
