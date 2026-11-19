@@ -188,4 +188,22 @@ describe('installScrollbarReveal', () => {
   it('does not mark the page as always-showing scroll bars when none are measured', () => {
     expect(document.documentElement.hasAttribute('data-scrollbars')).toBe(false)
   })
+
+  it('follows the Show scroll bars setting when it changes while the app stays open (Mac)', () => {
+    let classic = false
+    const w = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(() => (classic ? 13 : 0))
+    const c = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => 0)
+    const p = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    uninstall()
+    uninstall = installScrollbarReveal(window)
+    const html = document.documentElement
+    expect(html.hasAttribute('data-scrollbars')).toBe(false)
+    classic = true
+    window.dispatchEvent(new Event('focus'))
+    expect(html.getAttribute('data-scrollbars')).toBe('always')
+    classic = false
+    window.dispatchEvent(new Event('focus'))
+    expect(html.hasAttribute('data-scrollbars')).toBe(false)
+    w.mockRestore(); c.mockRestore(); p.mockRestore()
+  })
 })
