@@ -32,7 +32,7 @@ export function LanguageSettings() {
           <div className="space-y-3">
             <label htmlFor="language-select" className="flex items-center gap-2">
               <Globe className="size-4 text-fluux-muted" />
-              <span className="text-sm font-medium text-fluux-text">{t('settings.language')}</span>
+              <span className="type-section-title text-fluux-text">{t('settings.language')}</span>
             </label>
             <Select
               id="language-select"
@@ -61,7 +61,7 @@ export function LanguageSettings() {
           <div className="space-y-3">
             <label htmlFor="time-format-select" className="flex items-center gap-2">
               <Clock className="size-4 text-fluux-muted" />
-              <span className="text-sm font-medium text-fluux-text">{t('settings.timeFormat')}</span>
+              <span className="type-section-title text-fluux-text">{t('settings.timeFormat')}</span>
             </label>
             <Select
               id="time-format-select"

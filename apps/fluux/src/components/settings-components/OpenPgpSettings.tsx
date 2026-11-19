@@ -1098,7 +1098,7 @@ export function OpenPgpSettings() {
 
         {openpgpEnabled && (
           <div className="space-y-3">
-            <label className="text-sm font-medium text-fluux-text">
+            <label className="type-section-title text-fluux-text">
               {t('settings.encryption.statusLabel')}
             </label>
             <div
@@ -1169,7 +1169,7 @@ export function OpenPgpSettings() {
         {pluginStatus === 'ready' && (
           <div className="space-y-2">
             <div className="flex items-center gap-1.5">
-              <label className="text-sm font-medium text-fluux-text">
+              <label className="type-section-title text-fluux-text">
                 {t('settings.encryption.backupLabel')}
               </label>
               <button
