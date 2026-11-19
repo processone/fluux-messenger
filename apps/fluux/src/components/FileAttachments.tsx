@@ -228,7 +228,10 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
         }}
         // A long press in the bubble opens the message's menu, which carries the image actions on
         // touch; the image's own menu is for the pointer's context click only.
-        onContextMenu={imageMenu.handleContextMenu}
+        onContextMenu={(e) => {
+          // Inside a message the bubble's menu carries the image items.
+          if (!e.currentTarget.closest('[data-message-id]')) imageMenu.handleContextMenu(e)
+        }}
         className={`block ${reserveBox ? 'w-full ' : ''}pt-2 rounded-lg overflow-hidden hover:opacity-90 transition-opacity cursor-pointer text-start`}
         style={{ maxWidth: `${maxWidthPx}px` }}
         tabIndex={-1}

@@ -22,6 +22,11 @@ interface MessageLinkProps {
  */
 export function MessageLink({ href, children, className = 'text-fluux-link hover:underline' }: MessageLinkProps) {
   const menu = useContextMenu()
+  // Inside a message the bubble's menu carries the link items; the link's own menu serves other places.
+  const onContextMenu = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (e.currentTarget.closest('[data-message-id]')) return
+    menu.handleContextMenu(e)
+  }
   return (
     <>
       <a
@@ -29,7 +34,7 @@ export function MessageLink({ href, children, className = 'text-fluux-link hover
         target="_blank"
         rel="noopener noreferrer"
         className={className}
-        onContextMenu={menu.handleContextMenu}
+        onContextMenu={onContextMenu}
       >
         {children ?? href}
       </a>

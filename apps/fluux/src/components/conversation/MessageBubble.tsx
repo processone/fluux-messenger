@@ -43,6 +43,9 @@ import { PollCard } from './PollCard'
 import { PollClosedCard } from './PollClosedCard'
 import { Tooltip } from '../Tooltip'
 import { MessageActionSheet } from './MessageActionSheet'
+import { MessageContextMenu, type MessageContextTarget } from './MessageContextMenu'
+import { useContextMenu } from '@/hooks/useContextMenu'
+import { isRenderableImageMime } from '@/utils/thumbnail'
 import { computeMessageActions } from './messageActionCapabilities'
 import { MessageInteractionContext, useMessageInteractionHeld } from './useMessageInteractionHold'
 import { downloadAttachment } from '@/utils/download'
@@ -644,6 +647,31 @@ export const MessageBubble = memo(function MessageBubble({
     }
   }
 
+  // Pointer menu. Shift + right-click and text fields keep the system menu. A word that only the
+  // right-click itself selected is not a selection: the text is read as the button goes down.
+  const messageMenu = useContextMenu()
+  const [menuTarget, setMenuTarget] = useState<MessageContextTarget>({ selection: '', image: false })
+  const selectionBeforeClick = useRef<string | null>(null)
+  const handleContentMouseDown = (event: React.MouseEvent) => {
+    selectionBeforeClick.current = event.button === 2 || event.ctrlKey ? (window.getSelection()?.toString() ?? '') : null
+  }
+  const handleContentContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    const el = event.target instanceof Element ? event.target : null
+    if (event.shiftKey || event.defaultPrevented || el?.closest('input, textarea, [contenteditable="true"]')) return
+    const imageAttachment = saveableAttachment && isRenderableImageMime(saveableAttachment.mediaType) ? saveableAttachment : undefined
+    const linkUrl = el?.closest('a[href]')?.getAttribute('href') ?? undefined
+    const image = !!imageAttachment && !!el?.closest('img')
+    const selection = window.getSelection()
+    const text = selection && !selection.isCollapsed && selection.rangeCount > 0
+      && selection.getRangeAt(0).intersectsNode(event.currentTarget) ? selection.toString() : ''
+    const before = selectionBeforeClick.current
+    selectionBeforeClick.current = null
+    const selected = text.trim() !== '' && (before === null || before === text) ? text : ''
+    if (!hasMessageActions && !selected && !linkUrl && !image) return
+    setMenuTarget({ selection: selected, linkUrl, image })
+    messageMenu.handleContextMenu(event)
+  }
+
   const showSenderHeader = showAvatar && !isActionMessage(message.body)
   return (
     <div
@@ -753,6 +781,8 @@ export const MessageBubble = memo(function MessageBubble({
         onTouchCancel={cancelLongPress}
         onTouchMove={cancelLongPress}
         onClickCapture={swallowPostLongPressClick}
+        onMouseDown={handleContentMouseDown}
+        onContextMenu={handleContentContextMenu}
       >
         {threadStart && (counterpartGone ? (
           <div className="flex items-center gap-1.5 pb-1 text-xs font-medium text-fluux-private">
@@ -994,6 +1024,30 @@ export const MessageBubble = memo(function MessageBubble({
           onClose={() => setReactorEmoji(null)}
         />
       )}
+
+      <MessageContextMenu
+        menu={messageMenu}
+        target={menuTarget}
+        imageUrl={saveableAttachment?.url}
+        onSaveImage={saveableAttachment
+          ? () => downloadAttachment(saveableAttachment, { errorMessage: t('common.downloadFailed') })
+          : undefined}
+        onReaction={handleReaction}
+        myReactions={reactionsEnabled ? myReactions : []}
+        onShowReactors={hasViewableReactions ? () => setReactorEmoji(Object.keys(filteredReactions)[0]) : undefined}
+        body={message.body}
+        onReply={onReply}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onCopyMessageLink={onCopyMessageLink}
+        onForward={onForward}
+        onSaveAttachment={saveableAttachment
+          ? () => downloadAttachment(saveableAttachment, { errorMessage: t('common.downloadFailed') })
+          : undefined}
+        canReply={canReply}
+        canEdit={canEdit}
+        canDelete={canDelete}
+      />
 
       {/* Touch action menu — opened by a long press.
           Mounted only while open so the list never carries one menu per row. */}
