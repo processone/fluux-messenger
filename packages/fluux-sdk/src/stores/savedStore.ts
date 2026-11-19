@@ -186,7 +186,10 @@ export function clearSavedLocalData(jid: string | null, allAccounts: boolean): v
     } else if (jid) {
       localStorage.removeItem(buildScopedStorageKey(PENDING_KEY, jid))
     } else {
-      localStorage.removeItem(PENDING_KEY) // a queue kept before accounts were told apart
+      // No account named (logout clears the session first): the queue of the account this device was last signed in to,
+      // and one kept before accounts were told apart.
+      localStorage.removeItem(buildScopedStorageKey(PENDING_KEY))
+      localStorage.removeItem(PENDING_KEY)
     }
   } catch { /* storage unavailable */ }
 }

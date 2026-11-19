@@ -187,6 +187,17 @@ describe('clearSavedLocalData', () => {
     clearSavedLocalData(null, true)
     expect(Object.keys(localStorage).filter((k) => k.startsWith('fluux-saved-pending'))).toEqual([])
   })
+
+  it('removes the queue of the account last signed in when no account is named, as after a logout that cleared the session first', () => {
+    setStorageScopeJid('romeo@montague.example')
+    s().save(entry('a'))
+    localStorage.setItem('fluux-saved-pending:other@example.com', '{"pending":{},"entries":{}}')
+    expect(localStorage.getItem('fluux-saved-pending:romeo@montague.example')).not.toBeNull()
+    clearSavedLocalData(null, false)
+    setStorageScopeJid(null)
+    expect(localStorage.getItem('fluux-saved-pending:romeo@montague.example')).toBeNull()
+    expect(localStorage.getItem('fluux-saved-pending:other@example.com')).not.toBeNull()
+  })
 })
 
 describe('a removal recovered after a reload', () => {
