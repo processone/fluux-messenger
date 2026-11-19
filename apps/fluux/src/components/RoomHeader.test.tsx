@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { RoomHeader } from './RoomHeader'
 import type { Room, RoomOccupant } from '@fluux/sdk'
+import { useToastStore } from '@/stores/toastStore'
 
 // Mock i18next
 vi.mock('react-i18next', () => ({
@@ -15,6 +16,7 @@ vi.mock('react-i18next', () => ({
         'rooms.thisSessionOnly': 'This session only',
         'rooms.alwaysSavedToBookmark': 'Always (saved to bookmark)',
         'rooms.notificationsOff': 'Off',
+        'rooms.failedToSaveBookmark': 'Failed to save bookmark',
         'rooms.manageRoom': 'Manage room',
         'rooms.roomSettings': 'Room settings',
         'rooms.configureRoom': 'Configure room',
@@ -603,6 +605,49 @@ describe('RoomHeader', () => {
       fireEvent.click(screen.getByLabelText('Notification settings'))
 
       expect(screen.queryByText('Always (saved to bookmark)')).not.toBeInTheDocument()
+    })
+
+    // The menu closes on click, so a level the bookmark save refuses must be
+    // reported in a toast, not dropped as an unhandled promise rejection.
+    describe('when the saved level reaches the bookmark', () => {
+      /** The rejection the SDK passes on when the server answers the bookmark publish with an error. */
+      const serverRefusal = Object.assign(new Error('conflict'), { name: 'StanzaError', condition: 'conflict' })
+      const chooseAllMessagesAlways = () => {
+        renderNotifyMenu(createRoom({ isBookmarked: true, isQuickChat: false }))
+        fireEvent.click(screen.getByRole('menuitem', { name: /All messages\s*Always \(saved to bookmark\)/ }))
+      }
+      const unhandled: unknown[] = []
+      const onUnhandled = (reason: unknown) => { unhandled.push(reason) }
+
+      beforeEach(() => {
+        useToastStore.setState({ toasts: [] })
+        unhandled.length = 0
+        process.on('unhandledRejection', onUnhandled)
+      })
+      afterEach(() => {
+        process.off('unhandledRejection', onUnhandled)
+      })
+
+      it('shows an error when the save fails', async () => {
+        mockSetRoomNotifyLevel.mockRejectedValueOnce(serverRefusal)
+
+        chooseAllMessagesAlways()
+
+        expect(mockSetRoomNotifyLevel).toHaveBeenCalledWith('room@conference.example.com', 'all', true)
+        await waitFor(() => expect(useToastStore.getState().toasts.map((t) => [t.type, t.message]))
+          .toEqual([['error', 'Failed to save bookmark']]))
+        // Node reports an unhandled rejection once the microtasks after it have run.
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(unhandled).toEqual([])
+      })
+
+      it('shows no error when the save succeeds', async () => {
+        chooseAllMessagesAlways()
+        // The menu's own handler on the save runs before this await resumes.
+        await mockSetRoomNotifyLevel.mock.results[0].value
+
+        expect(useToastStore.getState().toasts).toEqual([])
+      })
     })
   })
 
