@@ -1814,6 +1814,7 @@ test('a saved room message opened but not yet joined is not continued once anoth
   const reader = await script('alice')
   await emptyNode(reader)
   const room = `account${stamp}@conference.localhost`
+  const roomName = `Switch room ${stamp}` // unique, so no bookmark left by an earlier run can be picked
   const text = `Said before the switch ${stamp}`
   const BOOKMARKS = 'urn:xmpp:bookmarks:1'
   const field = (name: string, value: string) => xml('field', { var: name }, xml('value', {}, value))
@@ -1821,7 +1822,7 @@ test('a saved room message opened but not yet joined is not continued once anoth
     xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options')),
     field('pubsub#persist_items', 'true'), field('pubsub#access_model', 'whitelist'), field('pubsub#max_items', 'max'), field('pubsub#send_last_published_item', 'never')))
   const bookmark = () => reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
-    xml('publish', { node: BOOKMARKS }, xml('item', { id: room }, xml('conference', { xmlns: BOOKMARKS, name: 'Switch room', autojoin: 'true' }, xml('nick', {}, 'alice')))), options)))
+    xml('publish', { node: BOOKMARKS }, xml('item', { id: room }, xml('conference', { xmlns: BOOKMARKS, name: roomName, autojoin: 'true' }, xml('nick', {}, 'alice')))), options)))
   const unbookmark = () => reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
     xml('retract', { node: BOOKMARKS, notify: 'true' }, xml('item', { id: room })))))
   await bob.c.send(xml('presence', { to: `${room}/bob` }, xml('x', { xmlns: 'http://jabber.org/protocol/muc' })))
@@ -1830,7 +1831,7 @@ test('a saved room message opened but not yet joined is not continued once anoth
   await bookmark()
   const one = await connect(browser)
   await one.page.getByRole('button', { name: 'Rooms' }).first().click()
-  await one.page.getByRole('complementary').getByText('Switch room', { exact: true }).first().click()
+  await one.page.getByRole('complementary').getByText(roomName, { exact: true }).first().click()
   await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible({ timeout: 30_000 })
   await saveMessage(one, text)
   await nodeHolds(reader, 1)
@@ -1848,12 +1849,12 @@ test('a saved room message opened but not yet joined is not continued once anoth
   await two.page.getByRole('button', { name: 'Messages' }).first().click() // the account bar's menu is reached from a list view
   // The other account knows this room but has not joined it.
   await bob.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
-    xml('publish', { node: BOOKMARKS }, xml('item', { id: room }, xml('conference', { xmlns: BOOKMARKS, name: 'Switch room', autojoin: 'false' }, xml('nick', {}, 'bob')))), options)))
+    xml('publish', { node: BOOKMARKS }, xml('item', { id: room }, xml('conference', { xmlns: BOOKMARKS, name: roomName, autojoin: 'false' }, xml('nick', {}, 'bob')))), options)))
   await logoutOf(two, true)
   await loginAs(two, 'bob')
   await watchTransient(two.page) // from before the join to the end
   await two.page.getByRole('button', { name: 'Rooms' }).first().click()
-  await two.page.getByRole('complementary').getByText('Switch room', { exact: true }).first().click()
+  await two.page.getByRole('complementary').getByText(roomName, { exact: true }).first().click()
   await expect(two.page.getByRole('button', { name: 'Join room to participate' })).toBeVisible({ timeout: 30_000 })
   await two.page.getByRole('button', { name: 'Join room to participate' }).click()
   const join = two.page.getByRole('button', { name: /^Join$/ })
