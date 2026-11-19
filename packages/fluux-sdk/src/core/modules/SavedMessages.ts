@@ -19,12 +19,15 @@ import { savedMessageKey, savedItemId, sameSavedMessage } from '../../utils/save
  */
 export const SAVED_NODE_MAX_ITEMS = 256
 
+/** What every write carries: the privacy constraints, which any existing node already meets. */
 const SAVED_NODE_OPTIONS: PublishOptions = {
   persistItems: true,
   accessModel: 'whitelist',
-  maxItems: SAVED_NODE_MAX_ITEMS,
   sendLastPublishedItem: 'never',
 }
+
+/** Only a write that creates the node asks for the limit; a node that exists keeps the limit it was given. */
+const SAVED_NODE_CREATE_OPTIONS: PublishOptions = { ...SAVED_NODE_OPTIONS, maxItems: SAVED_NODE_MAX_ITEMS }
 
 const NS_FORWARD_URI = 'urn:xmpp:forward:0'
 
@@ -114,10 +117,13 @@ export function parseSavedItems(itemsEl: Element, ownBareJid: string | null): Sa
 export class SavedMessages {
   private readonly deps: ModuleDependencies
   private readonly node: PepNode<SavedMessage>
+  private readonly createNode: PepNode<SavedMessage>
 
   constructor(deps: ModuleDependencies) {
     this.deps = deps
-    this.node = new PepNode(deps, NS_SAVED_MESSAGES, buildCodec(() => this.ownBare()), SAVED_NODE_OPTIONS)
+    const codec = buildCodec(() => this.ownBare())
+    this.node = new PepNode(deps, NS_SAVED_MESSAGES, codec, SAVED_NODE_OPTIONS)
+    this.createNode = new PepNode(deps, NS_SAVED_MESSAGES, codec, SAVED_NODE_CREATE_OPTIONS)
   }
 
   private ownBare(): string | null {
@@ -130,8 +136,19 @@ export class SavedMessages {
     return this.node.get({ timeoutMs })
   }
 
-  async publish(entry: SavedMessage): Promise<void> {
-    await this.node.publish(entry.id, entry)
+  /**
+   * `create` is set when the node may not exist yet: the write then asks for the concrete limit. A server that
+   * enforces publish-options preconditions refuses it on a node that exists with another limit; the write is
+   * then made again with the privacy constraints alone.
+   */
+  async publish(entry: SavedMessage, options: { create?: boolean } = {}): Promise<void> {
+    if (!options.create) { await this.node.publish(entry.id, entry); return }
+    try {
+      await this.createNode.publish(entry.id, entry)
+    } catch (error) {
+      if ((error as { name?: unknown } | null)?.name !== 'StanzaError') throw error
+      await this.node.publish(entry.id, entry)
+    }
   }
 
   async retract(itemId: string): Promise<void> {

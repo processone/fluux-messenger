@@ -57,7 +57,7 @@ describe('saved messages sync side effect', () => {
     connectionStore.getState().setStatus('online')
     client._emit('online')
     await flushPromises()
-    expect(node.publish).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }))
+    expect(node.publish).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }), expect.anything())
     expect(savedStore.getState().pending).toEqual({})
     stop()
   })
@@ -97,7 +97,8 @@ describe('saved messages sync side effect', () => {
     savedStore.getState().reconcileFetch([entry('a', { messageId: 'm1' })])
     redactSavedCopy({ conversationJid: 'team@conference.example', type: 'groupchat', from: 'team@conference.example/Alice', stanzaId: 's-a', stanzaIdBy: 'team@conference.example', messageId: 'm1' })
     await flushPromises()
-    expect(node.publish).toHaveBeenCalledWith(expect.objectContaining({ id: 'a', text: '', deleted: true }))
+    // An item already on the node is rewritten without asking for the node's limit.
+    expect(node.publish).toHaveBeenCalledWith(expect.objectContaining({ id: 'a', text: '', deleted: true }), { create: false })
     stop()
   })
 
@@ -148,7 +149,7 @@ describe('saved messages sync side effect', () => {
     redactSavedCopy({ conversationJid: 'team@conference.example', type: 'groupchat', from: 'team@conference.example/Alice', stanzaId: 's-a', stanzaIdBy: 'team@conference.example' })
     release()
     await flushPromises()
-    expect(node.publish).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'a', text: '', deleted: true }))
+    expect(node.publish).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'a', text: '', deleted: true }), expect.anything())
     expect(savedStore.getState().pending).toEqual({})
     stop()
   })

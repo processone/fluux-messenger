@@ -307,8 +307,12 @@ test('a node that only says max is never pushed past the ceiling the server enfo
   await bob.say('alice', text)
   await openChatWith(one, 'Bob')
   await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
+  const sentBefore = one.frames.length
   await saveMessage(one, text)
   await one.page.waitForTimeout(8000)
+  // Nothing was published for it, and the save is still queued on this device.
+  expect(one.frames.slice(sentBefore).filter(frame => frame.includes(`<publish node="${NODE}"`)).length).toBe(0)
+  await expect.poll(() => one.page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.includes('fluux-saved-pending')).map(([, value]) => value).join('')), { timeout: 10_000 }).toContain(text.slice(0, 12))
   const items = await reader.items()
   expect(items.length).toBe(ceiling)
   expect(items.some(item => item.includes(text))).toBe(false)
@@ -437,17 +441,32 @@ test('an end-to-end encrypted message is saved without any readable body', async
   await one.context.close(); await bob.stop(); await reader.stop()
 })
 
-test('the private node answers only its owner', async () => {
+test('the private node the app creates answers only its owner', async ({ browser }) => {
   const bob = await script('bob')
   const reader = await script('alice')
   await emptyNode(reader)
+  // The node is created by the app, with a message in it.
+  const one = await connect(browser)
+  const text = `Private note ${stamp}`
+  await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
+  await saveMessage(one, text)
+  // The owner reads it back, so the refusals below are about access and not about a missing node.
+  const stored = await nodeHolds(reader, 1)
+  expect(stored[0]).toContain(text)
+
   const peek = bob.c.iqCaller.request(xml('iq', { type: 'get', to: 'alice@localhost' }, xml('pubsub', { xmlns: PUBSUB }, xml('items', { node: NODE }))))
-  await expect(peek).rejects.toThrow()
+  await expect(peek).rejects.toMatchObject({ element: expect.anything() })
+  await peek.catch((error: { element: { getChild(name: string): unknown } }) => expect(error.element.getChild('item-not-found')).toBeFalsy())
   const write = bob.c.iqCaller.request(xml('iq', { type: 'set', to: 'alice@localhost' }, xml('pubsub', { xmlns: PUBSUB },
     xml('publish', { node: NODE }, xml('item', { id: 'intruder' }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }))))))
-  await expect(write).rejects.toThrow()
-  expect((await reader.items()).some(item => item.includes('intruder'))).toBe(false)
-  await bob.stop(); await reader.stop()
+  await expect(write).rejects.toMatchObject({ element: expect.anything() })
+  const after = await reader.items()
+  expect(after.length).toBe(1)
+  expect(after.some(item => item.includes('intruder'))).toBe(false)
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
 })
 
 test('a client that was offline catches up on a save and a removal made elsewhere', async ({ browser }) => {

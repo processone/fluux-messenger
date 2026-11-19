@@ -28,10 +28,10 @@ const chatEntry: SavedMessage = {
   stanzaId: 's2', stanzaIdBy: OWN,
 }
 
-async function publishAndRead(entry: SavedMessage) {
+async function publishAndRead(entry: SavedMessage, create = true) {
   const sendIQ = vi.fn().mockResolvedValue(xml('iq', { type: 'result' }))
   const saved = new SavedMessages(makeDeps(sendIQ))
-  await saved.publish(entry)
+  await saved.publish(entry, { create })
   const iq = sendIQ.mock.calls[0][0]
   const item = iq.getChild('pubsub', NS_PUBSUB).getChild('publish').getChild('item')
   return { iq, item, items: xml('items', { node: NS_SAVED_MESSAGES }, item) }
@@ -49,6 +49,27 @@ describe('SavedMessages publish', () => {
       'pubsub#persist_items': 'true', 'pubsub#access_model': 'whitelist',
       'pubsub#max_items': '256', 'pubsub#send_last_published_item': 'never',
     })
+  })
+
+  it('asks for the limit only when it may create the node, and writes to an existing node with the privacy constraints alone', async () => {
+    const fieldsOf = (iq: Element) => iq.getChild('pubsub', NS_PUBSUB).getChild('publish-options').getChild('x').getChildren('field').map((f: Element) => f.attrs.var)
+    const created = await publishAndRead(roomEntry, true)
+    expect(fieldsOf(created.iq)).toContain('pubsub#max_items')
+    const existing = await publishAndRead(roomEntry, false)
+    expect(fieldsOf(existing.iq)).toEqual(expect.arrayContaining(['pubsub#persist_items', 'pubsub#access_model', 'pubsub#send_last_published_item']))
+    expect(fieldsOf(existing.iq)).not.toContain('pubsub#max_items')
+  })
+
+  it('repeats a creating write without the limit when the server enforces preconditions on an existing node', async () => {
+    const conflict = Object.assign(new Error('conflict'), { name: 'StanzaError' })
+    const sendIQ = vi.fn().mockRejectedValueOnce(conflict).mockResolvedValue(xml('iq', { type: 'result' }))
+    await new SavedMessages(makeDeps(sendIQ)).publish(roomEntry, { create: true })
+    expect(sendIQ).toHaveBeenCalledTimes(2)
+    const second = sendIQ.mock.calls[1][0].getChild('pubsub', NS_PUBSUB).getChild('publish-options').getChild('x').getChildren('field')
+    expect(second.map((f: Element) => f.attrs.var)).not.toContain('pubsub#max_items')
+    sendIQ.mockReset().mockRejectedValue(new Error('timeout'))
+    await expect(new SavedMessages(makeDeps(sendIQ)).publish(roomEntry, { create: true })).rejects.toThrow('timeout')
+    expect(sendIQ).toHaveBeenCalledTimes(1)
   })
 
   it('wraps one XEP-0297 forwarded copy with delay, ids and the plain body', async () => {
@@ -94,7 +115,7 @@ describe('saved item codec', () => {
     const [entry] = parseSavedItems(xml('items', {}, item), OWN).upserts
     expect(entry.extras).toHaveLength(1)
     const sendIQ = vi.fn().mockResolvedValue(xml('iq', { type: 'result' }))
-    await new SavedMessages(makeDeps(sendIQ)).publish(entry)
+    await new SavedMessages(makeDeps(sendIQ)).publish(entry, { create: true })
     const rewritten = sendIQ.mock.calls[0][0].getChild('pubsub', NS_PUBSUB).getChild('publish').getChild('item').getChild('saved')
     expect(rewritten.getChild('tags', 'urn:example:tags').getChildText('tag')).toBe('wiki')
   })

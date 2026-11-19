@@ -90,7 +90,8 @@ export function setupSavedMessagesSideEffects(
                 // anything else waits until the limit can be read.
                 if (limit === undefined && (created || serverCount() > 0)) continue
               }
-              await client.internal.savedMessages.publish(entry)
+              // Only a first item of a node that does not exist yet asks for the node's limit.
+              await client.internal.savedMessages.publish(entry, { create: limit === undefined && !state().remote[id] })
               created = true
             } else {
               await client.internal.savedMessages.retract(id)
