@@ -36,6 +36,8 @@ export interface SavedState {
   refusals: number
   /** Counts up when a stored copy of a message was durably changed (an edit or a deletion), so rows read it again. */
   copyVersion: number
+  /** Counts up on every reset, so work started before a wipe can tell it must not land. */
+  generation: number
 
   /** Save an entry (replaces an entry naming the same message). Returns false at the server limit. */
   save: (entry: SavedMessage) => boolean
@@ -46,13 +48,15 @@ export interface SavedState {
   /** A fresh read of the node begins: its list is unknown until it lands, and changes from now on outrank its answer. */
   beginFetch: () => SavedFetch
   /** Land a read. A read that a reset or a newer owner outlived is dropped (returns false). */
-  reconcileFetch: (entries: SavedMessage[], fetch?: SavedFetch) => boolean
+  reconcileFetch: (entries: SavedMessage[], fetch?: SavedFetch, deleted?: ReadonlySet<string>) => boolean
+  /** The read is over without landing (refused, unanswered or abandoned). */
+  endFetch: (fetch: SavedFetch) => void
   /** Is this read still the one the store is waiting for? */
   fetchCurrent: (fetch: SavedFetch) => boolean
   /** The server took (or lost) this item, whatever this device has queued since. */
   confirm: (id: string, op: SavedPendingOp) => void
   /** Apply a `+notify` event, leaving ids with a pending local operation alone. */
-  applyNotify: (update: { upserts: SavedMessage[]; removedIds: string[] }) => void
+  applyNotify: (update: { upserts: SavedMessage[]; removedIds: string[] }, deleted?: ReadonlySet<string>) => void
   /** The server took (or no longer needs) the operation for this id. */
   settle: (id: string, op: SavedPendingOp, revision?: number) => void
   setLimit: (limit: number | undefined) => void
@@ -87,7 +91,7 @@ function writeQueue(state: Pick<SavedState, 'pending' | 'entries'>): void {
   } catch { /* storage unavailable: the queue stays in memory only */ }
 }
 
-const initial = { entries: {}, pending: {}, remote: {}, removed: {}, revisions: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false, copyVersion: 0 }
+const initial = { entries: {}, pending: {}, remote: {}, removed: {}, revisions: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false, copyVersion: 0, generation: 0 }
 
 /** Is this message already saved (by any of its identities)? */
 export function findSavedEntry(entries: Record<string, SavedMessage>, probe: SavedIdentity): SavedMessage | undefined {
@@ -124,8 +128,9 @@ const track = (id: string) => { for (const fetch of fetches) fetch.add(id) }
  * retraction ledger (validated, kept across restarts) knows. Covers a saved copy that
  * arrives (fetched, notified, replayed) after the retraction was processed.
  */
-function originalWasRetracted(entry: SavedMessage): boolean {
+function originalWasRetracted(entry: SavedMessage, known?: ReadonlySet<string>): boolean {
   if (entry.deleted) return false
+  if (known?.has(entry.id)) return true
   try {
     const own = (record: { actorJid: string; actorOccupantId?: string; moderation?: unknown; stanzaId?: string; originId?: string }) => {
       if (entry.stanzaId && record.stanzaId && entry.stanzaId !== record.stanzaId) return false
@@ -140,10 +145,10 @@ function originalWasRetracted(entry: SavedMessage): boolean {
 }
 
 /** Incoming copies of retracted originals lose their text, and the cleared item is sent back. */
-function redactRetracted(entries: SavedMessage[]): { entries: SavedMessage[]; cleared: string[] } {
+function redactRetracted(entries: SavedMessage[], known?: ReadonlySet<string>): { entries: SavedMessage[]; cleared: string[] } {
   const cleared: string[] = []
   const next = entries.map((entry) => {
-    if (!originalWasRetracted(entry)) return entry
+    if (!originalWasRetracted(entry, known)) return entry
     cleared.push(entry.id)
     return { ...entry, text: '', encrypted: undefined, deleted: true as const }
   })
@@ -220,13 +225,17 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
   },
 
   beginFetch: () => {
+    // One read owns the store at a time: a newer read supersedes any older one still in flight.
     const fetch: SavedFetch = new Set()
+    fetches.clear()
     fetches.add(fetch)
     set({ loaded: false })
     return fetch
   },
 
   fetchCurrent: (fetch) => fetches.has(fetch),
+
+  endFetch: (fetch) => { fetches.delete(fetch) },
 
   confirm: (id, op) => {
     const { remote, removed } = get()
@@ -238,12 +247,12 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     set({ remote: nextRemote, removed: nextRemoved })
   },
 
-  reconcileFetch: (fetchedRaw, fetch) => {
+  reconcileFetch: (fetchedRaw, fetch, deleted) => {
     if (fetch && !fetches.has(fetch)) return false
     const keepCurrent = fetch ?? new Set<string>()
     if (fetch) fetches.delete(fetch)
     const { entries, pending, remote } = get()
-    const { entries: fetched, cleared: clearedFetched } = redactRetracted(fetchedRaw)
+    const { entries: fetched, cleared: clearedFetched } = redactRetracted(fetchedRaw, deleted)
     const cleared = [...clearedFetched]
     const merged: Record<string, SavedMessage> = {}
     const removedNow: Record<string, SavedMessage> = {}
@@ -256,7 +265,7 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     for (const [id, op] of Object.entries(pending)) {
       if (op !== 'publish' || !entries[id]) continue
       // A queued copy (one restored after a reload, say) of an original since deleted loses its text too.
-      const [copy] = redactRetracted([entries[id]]).entries
+      const [copy] = redactRetracted([entries[id]], deleted).entries
       if (copy.deleted && !entries[id].deleted) cleared.push(id)
       merged[id] = copy
     }
@@ -272,9 +281,9 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     return true
   },
 
-  applyNotify: ({ upserts: upsertsRaw, removedIds }) => {
+  applyNotify: ({ upserts: upsertsRaw, removedIds }, deleted) => {
     const { entries, pending, remote } = get()
-    const { entries: upserts, cleared } = redactRetracted(upsertsRaw)
+    const { entries: upserts, cleared } = redactRetracted(upsertsRaw, deleted)
     const next = { ...entries }
     const nextRemote = { ...remote }
     for (const id of removedIds) { track(id); delete nextRemote[id]; if (pending[id] === undefined) delete next[id] }
@@ -340,7 +349,7 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     }
   },
 
-  reset: () => { fetches.clear(); set({ ...initial }) },
+  reset: () => { fetches.clear(); set({ ...initial, generation: get().generation + 1 }) },
 }))
 
 // Keep the unsent queue on disk, so a save or removal made offline survives a reload.

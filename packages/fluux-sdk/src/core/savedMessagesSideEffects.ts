@@ -16,7 +16,7 @@ import type { SideEffectHost } from './sideEffectHost'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { connectionStore } from '../stores/connectionStore'
 import { savedStore } from '../stores/savedStore'
-import { noteCachedDeletions } from '../utils/savedLatestCopy'
+import { cachedDeletions } from '../utils/savedLatestCopy'
 import type { SavedMessage } from './types/saved'
 import { getBareJid } from './jid'
 import { isItemNotFoundError } from '../hooks/shared/mamCursor'
@@ -143,17 +143,18 @@ export function setupSavedMessagesSideEffects(
       if (result.status === 'ok' || result.status === 'absent') {
         const items = result.status === 'ok' ? result.items : []
         // What the cache already knows is deleted loses its text, whatever the retraction ledger still holds.
-        await noteCachedDeletions([...items, ...Object.values(state().entries)], connectionStore.getState().jid ?? '').catch(() => {})
+        const deleted = await cachedDeletions([...items, ...Object.values(state().entries)], connectionStore.getState().jid ?? '').catch(() => new Set<string>())
         if (mine !== epoch || !state().fetchCurrent(read)) return
         // The limit is set before the list lands: landing it triggers a flush that must see it.
         state().setLimit(limit ?? state().limit)
-        state().reconcileFetch(items, read)
+        state().reconcileFetch(items, read, deleted)
       } else {
         state().setLimit(limit ?? state().limit)
         logInfo(`SavedMessages: fetch ${result.status}; keeping the current list`)
       }
     } finally {
       refreshing = false
+      state().endFetch(read) // a read that did not land leaves nothing behind
     }
     await flush()
   }
@@ -167,11 +168,13 @@ export function setupSavedMessagesSideEffects(
   let notifications: Promise<void> = Promise.resolve()
   const unsubscribeNotify = client.subscribe('saved:synced', (update) => {
     const mine = epoch
+    const generation = state().generation
     notifications = notifications.then(async () => {
       const upserts: SavedMessage[] = update.upserts
-      await noteCachedDeletions(upserts, connectionStore.getState().jid ?? '').catch(() => {})
-      if (mine !== epoch) return
-      state().applyNotify(update)
+      const deleted = await cachedDeletions(upserts, connectionStore.getState().jid ?? '').catch(() => new Set<string>())
+      // A wipe or an account change while the cache was read means this update is not wanted any more.
+      if (mine !== epoch || generation !== state().generation) return
+      state().applyNotify(update, deleted)
       await flush()
     }).catch(() => {})
   })

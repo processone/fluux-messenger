@@ -318,4 +318,34 @@ describe('saved messages sync side effect', () => {
     expect(savedStore.getState().entries).toEqual({})
     stop()
   })
+
+  it('does not apply a notification that was waiting when local data was cleared', async () => {
+    const { client, stop } = setup()
+    client._emitSDK('saved:synced', { upserts: [entry('n')], removedIds: [] })
+    clearSavedLocalData(null, true)
+    await flushPromises()
+    expect(savedStore.getState().entries).toEqual({})
+    stop()
+  })
+
+  it('ignores an older read that answers after a newer one landed, and leaves no read behind on failure', async () => {
+    const { client, node, stop } = setup()
+    const answers: Array<(value: unknown) => void> = []
+    node.fetchAll.mockImplementation(() => new Promise((r) => { answers.push(r) }))
+    client._emit('online')
+    client._emit('online')
+    await flushPromises()
+    answers[1]({ status: 'ok', items: [entry('new')] })
+    await flushPromises()
+    answers[0]({ status: 'ok', items: [entry('old')] })
+    await flushPromises()
+    expect(Object.keys(savedStore.getState().entries)).toEqual(['new'])
+    node.fetchAll.mockResolvedValueOnce({ status: 'unavailable' })
+    client._emit('online')
+    await flushPromises()
+    const read = savedStore.getState().beginFetch()
+    expect(savedStore.getState().fetchCurrent(read)).toBe(true)
+    stop()
+  })
 })
+
