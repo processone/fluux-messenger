@@ -1657,13 +1657,13 @@ test('a save still being acknowledged when it is removed again is removed from t
   await one.context.close(); await bob.stop(); await reader.stop()
 })
 
-test('a save acknowledged after it was removed again still counts at a full node when the removal is refused, so a competing save is not sent', async ({ browser }) => {
+test('a save acknowledged after it was removed again still counts at a full node when its removal goes unanswered and no push announced it, so a competing save is not sent', async ({ browser }) => {
   test.setTimeout(300_000)
   const bob = await script('bob')
   const reader = await script('alice')
   await emptyNode(reader)
   const one = await connect(browser)
-  const first = `Creates the node ${stamp}`
+  const first = `Fills all but one place ${stamp}`
   await bob.say('alice', first)
   await openChatWith(one, 'Bob')
   await expect(one.page.locator('[data-message-body]').filter({ hasText: first })).toBeVisible()
@@ -1681,7 +1681,8 @@ test('a save acknowledged after it was removed again still counts at a full node
   let heldId: string | undefined
   let held: string | undefined
   let sendToPage: ((m: string) => void) | undefined
-  let refusedRetracts = 0
+  let swallowedRetracts = 0
+  let dropPushes = true // the node's own change notifications must not tell the page what the acknowledgement alone is meant to
   await one.page.routeWebSocket(/\/ws$/, ws => {
     const server = ws.connectToServer()
     sendToPage = m => ws.send(m)
@@ -1690,14 +1691,14 @@ test('a save acknowledged after it was removed again still counts at a full node
       const id = /^<iq\b[^>]*\bid="([^"]+)"/.exec(frame)?.[1]
       if (id && frame.includes(`<publish node="${NODE}"`)) heldId ??= id
       if (id && frame.includes(`<retract node="${NODE}"`)) {
-        refusedRetracts++
-        ws.send(`<iq xmlns="jabber:client" type="error" id="${id}"><error type="auth"><forbidden xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error></iq>`)
+        swallowedRetracts++ // unanswered: the row stays removed here, so no visible-list guard can stand in for the count of the server
         return
       }
       server.send(message)
     })
     server.onMessage(message => {
       const frame = typeof message === 'string' ? message : message.toString()
+      if (dropPushes && /^<message\b/.test(frame) && frame.includes('<event') && frame.includes(NODE)) return
       if (heldId && held === undefined && /^<iq\b/.test(frame) && (frame.includes(`id='${heldId}'`) || frame.includes(`id="${heldId}"`))) { held = frame; return }
       ws.send(message)
     })
@@ -1714,10 +1715,11 @@ test('a save acknowledged after it was removed again still counts at a full node
   await expect(savedRow(one, second)).toBeVisible()
   await savedRow(one, second).getByRole('button', { name: 'Remove from saved' }).click()
 
-  sendToPage!(held!) // the acknowledgement arrives after the removal was asked for; the removal is then refused
-  await expect.poll(() => refusedRetracts, { timeout: 20_000 }).toBeGreaterThan(0)
+  sendToPage!(held!) // the acknowledgement arrives after the removal was asked for; the removal then goes unanswered
+  await expect.poll(() => swallowedRetracts, { timeout: 20_000 }).toBeGreaterThan(0)
+  await expect(savedRow(one, second)).toHaveCount(0) // still removed here
   await one.page.waitForTimeout(2000)
-  // The node is full, whatever the page shows: a competing save is not sent and nothing is pushed out.
+  // The node is full, whatever the page shows (one visible place is free): a competing save is not sent and nothing is pushed out.
   const third = `Competes for no place ${stamp}`
   await bob.say('alice', third)
   await openChatWith(one, 'Bob')
@@ -1726,6 +1728,7 @@ test('a save acknowledged after it was removed again still counts at a full node
   await saveMessage(one, third)
   await one.page.waitForTimeout(4000)
   expect(one.frames.slice(sentBefore).filter(f => f.includes(`<publish node="${NODE}"`))).toHaveLength(0)
+  await expect(savedRow(one, second)).toHaveCount(0) // the row was never restored, so no other guard saw a full list
   await shot(one.page, 'superseded-publish-full-node')
   const items = await reader.items()
   expect(items.length).toBe(limit)
@@ -1737,7 +1740,7 @@ test('a save acknowledged after it was removed again still counts at a full node
   await one.context.close(); await bob.stop(); await reader.stop()
 })
 
-test('a saved-node answer that arrives only after another account has signed in shows nothing of the first account', async ({ browser }) => {
+test('a saved-node answer delivered to the first account own read after the account was signed out and cleared brings nothing back', async ({ browser }) => {
   test.setTimeout(240_000)
   const bob = await script('bob')
   let reader = await script('alice')
@@ -1753,14 +1756,16 @@ test('a saved-node answer that arrives only after another account has signed in 
   // From now on the page's reads of the node are answered by the server, but the answer is held back.
   let hold = false
   let held: string | undefined
-  let sendToPage: ((m: string) => void) | undefined
+  let sendHeld: ((m: string) => void) | undefined // bound to the very connection whose read was held, never to a later one
   await one.page.routeWebSocket(/\/ws$/, ws => {
     const server = ws.connectToServer()
-    sendToPage = m => ws.send(m)
-    ws.onMessage(message => server.send(message))
+    ws.onMessage(message => {
+      const frame = typeof message === 'string' ? message : message.toString()
+      server.send(message)
+    })
     server.onMessage(message => {
       const frame = typeof message === 'string' ? message : message.toString()
-      if (hold && held === undefined && isItemsResult(frame)) { held = frame; return }
+      if (hold && held === undefined && isItemsResult(frame)) { held = frame; sendHeld = m => ws.send(m); return }
       ws.send(message)
     })
   })
@@ -1772,14 +1777,27 @@ test('a saved-node answer that arrives only after another account has signed in 
   await expect.poll(() => held, { timeout: 60_000 }).toBeDefined()
   expect(held).toContain(text.slice(0, 12)) // it carries the first account's saved message
 
-  await logoutOf(one, true)
+  // Sign out and clear local data while that read is still unanswered; the connection is not ended until the answer is given.
   hold = false
+  await one.page.evaluate(() => { // the page's end of the connection is not closed until told, so the answer can still reach it after the cleanup
+    const w = window as unknown as { __deferClose: boolean; __deferred: Array<[WebSocket, unknown[]]> }
+    w.__deferClose = true; w.__deferred = []
+    const close = WebSocket.prototype.close
+    WebSocket.prototype.close = function (this: WebSocket, ...args: unknown[]) { if (w.__deferClose) { w.__deferred.push([this, args]); return } return (close as (...a: unknown[]) => void).apply(this, args) } as typeof WebSocket.prototype.close
+  })
+  await logoutOf(one, true)
+  expect(await savedKeys(one)).toHaveLength(0)
+  const answered = one.received.length
+  sendHeld!(held!) // the answer now reaches the read of the account that was just cleared, on its own connection
+  await expect.poll(() => one.received.length, { timeout: 10_000 }).toBeGreaterThan(answered)
+  await one.page.waitForTimeout(3000)
+  expect(await savedKeys(one)).toHaveLength(0) // nothing came back into the cleared storage
+  await one.page.evaluate(() => { const w = window as unknown as { __deferClose: boolean; __deferred: Array<[WebSocket, unknown[]]> }; w.__deferClose = false; for (const [socket, args] of w.__deferred) socket.close(...(args as [number?, string?])) })
   await loginAs(one, 'bob')
   await openSaved(one)
   await expect(one.page.getByTestId('saved-row')).toHaveCount(0)
   const sentBefore = one.frames.length
-  sendToPage!(held!) // the late answer reaches the page now
-  await one.page.waitForTimeout(5000)
+  await one.page.waitForTimeout(3000)
   await expect(one.page.getByTestId('saved-row')).toHaveCount(0)
   await expect(one.page.getByText(text)).toHaveCount(0)
   expect(await one.page.evaluate(() => JSON.stringify(Object.entries(localStorage).filter(([key]) => key.includes('fluux-saved'))))).not.toContain(text.slice(0, 12))
