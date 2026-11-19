@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
 import type { BackupProbeResult } from '@fluux/openpgp-plugin'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
@@ -49,6 +49,12 @@ export function openPgpOverviewState(i: OpenPgpOverviewInputs): OpenPgpOverviewS
   return 'on-backup-unconfirmed'
 }
 
+interface LocalRead {
+  fingerprint: string | null
+  keyWarning: boolean
+  backedUpFingerprint: string | null
+}
+
 interface OpenPgpPluginReads {
   getOwnFingerprint?: () => string | null
   isKeyRecoveryNeeded?: () => boolean
@@ -75,21 +81,23 @@ export function useOpenPgpOverviewState(): OpenPgpOverviewState {
   const [unlockCount, setUnlockCount] = useState(0)
   useEffect(() => client.subscribe('e2ee:key-unlocked', () => setUnlockCount((n) => n + 1)), [client])
 
-  // What the plugin knows locally is read at once, before any server request.
-  const local = useMemo(() => {
-    if (!enabled || !online || registrationError) return null
+  // What the plugin knows locally is read at once, before any server request. An effect rather than a memo:
+  // the plugin is a mutable object the dependencies below only signal changes of.
+  const [local, setLocal] = useState<LocalRead | null>(null)
+  useEffect(() => {
+    if (!enabled || !online || registrationError) {
+      setLocal(null)
+      return
+    }
     const plugin = client.e2ee?.getPlugin('openpgp') as OpenPgpPluginReads | null | undefined
     const fingerprint = plugin?.getOwnFingerprint?.() ?? null
-    return {
+    setLocal({
       fingerprint,
       keyWarning:
         plugin?.isKeyRecoveryNeeded?.() === true ||
         (platform().nativeOpenpgp && !!fingerprint && plugin?.isKeychainBacked?.() === false),
       backedUpFingerprint: plugin?.getBackedUpFingerprint?.() ?? null,
-      // These say the plugin's state may have changed since the last read. They are part of the result so the
-      // read is redone when they change, also where the React Compiler replaces the manual dependency list.
-      readAfter: `${pluginRegisteredAt}:${unlockCount}:${webKeyLocked}`,
-    }
+    })
   }, [enabled, online, registrationError, client, pluginRegisteredAt, unlockCount, webKeyLocked])
 
   // The server answers arrive later and only add to the reading.
