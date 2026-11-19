@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRoomMessageLink, parseRoomMessageLink } from './roomMessageLink'
+import { buildRoomMessageLink, parseRoomMessageLink, roomMessageLinkReferences } from './roomMessageLink'
 
 // Room links (docs/URL_SCHEMES.md) preserve the server's opaque archive identity.
 // Numeric (ejabberd) and UUID (Prosody) ids follow the project's stanza-id contract.
@@ -36,5 +36,29 @@ describe('room message links', () => {
     'https://example.org/?join;msg=id',
   ])('rejects a link without a valid room-message target: %s', link => {
     expect(parseRoomMessageLink(link)).toBeNull()
+  })
+})
+
+// FLM-322: a peer-sent body is only bounded by the server's stanza limit.
+describe('room message link detection on long bodies', () => {
+  const link = 'xmpp:team@conference.example.org?join;msg=42'
+
+  it('trims trailing punctuation from a pasted link', () => {
+    const body = `see (${link}).`
+    const [reference] = roomMessageLinkReferences(body)
+    expect(reference.uri).toBe(link)
+    expect(body.slice(reference.begin, reference.end)).toBe(link)
+  })
+
+  it('scans an 80 KB punctuation run followed by a letter in linear time', () => {
+    const body = `xmpp:${'.'.repeat(80_000)}x`
+    const started = performance.now()
+    expect(roomMessageLinkReferences(body)).toEqual([])
+    expect(performance.now() - started).toBeLessThan(250)
+  })
+
+  it('still finds a link after a long punctuation run', () => {
+    const body = `xmpp:${'!'.repeat(80_000)}x ${link}`
+    expect(roomMessageLinkReferences(body).map(r => r.uri)).toEqual([link])
   })
 })
