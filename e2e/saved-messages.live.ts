@@ -125,9 +125,8 @@ async function saveMessage(client: Client, text: string) {
     await row.scrollIntoViewIfNeeded({ timeout: 5000 })
     await row.hover({ timeout: 5000 })
     await row.getByRole('button', { name: 'More options', exact: true }).click({ timeout: 5000 })
-    await expect(row.getByRole('button', { name: 'Save message', exact: true })).toBeVisible({ timeout: 2000 })
+    await row.getByRole('button', { name: 'Save message', exact: true }).click({ timeout: 3000 })
   }).toPass({ timeout: 30_000 })
-  await row.getByRole('button', { name: 'Save message', exact: true }).click()
 }
 
 async function openSaved(client: Client) {
