@@ -104,7 +104,10 @@ describe('MessageBubble', () => {
       from: `${roomJid}/Alice`, nick: 'Alice', occupantId: 'alice', stanzaId: '1731490000123456' })
     const props = createDefaultProps({ message, supportsMAM: false })
     const view = render(<MessageBubble {...props} />)
-    expect(screen.getByLabelText('chat.moreOptions')).toBeDisabled()
+    // Without archive support only Save is offered; the link action appears once it is discovered.
+    fireEvent.click(screen.getByLabelText('chat.moreOptions'))
+    expect(screen.queryByText('chat.copyMessageLink')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('chat.moreOptions'))
     view.rerender(<MessageBubble {...props} supportsMAM />)
     const more = screen.getByLabelText('chat.moreOptions')
     expect(more).not.toBeDisabled()
@@ -1019,7 +1022,7 @@ describe('MessageBubble', () => {
 
     it('shows react but hides edit and delete on an incoming whisper', () => {
       render(<MessageBubble {...whisperProps({
-        message: createTestMessage({ isOutgoing: false }),
+        message: createTestMessage({ isOutgoing: false, isPrivate: true } as Partial<BaseMessage>),
       })} />)
 
       expect(screen.getByRole('button', { name: 'chat.moreReactions' })).toBeInTheDocument()

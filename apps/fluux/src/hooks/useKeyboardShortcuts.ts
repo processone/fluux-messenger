@@ -14,7 +14,7 @@ export interface ShortcutDefinition {
   displayOnly?: boolean
 }
 
-type SidebarView = 'messages' | 'rooms' | 'contacts' | 'admin' | 'settings' | 'search'
+type SidebarView = 'messages' | 'rooms' | 'contacts' | 'admin' | 'settings' | 'search' | 'saved'
 
 interface UseKeyboardShortcutsOptions {
   onToggleShortcutHelp: () => void

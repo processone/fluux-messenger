@@ -11,6 +11,7 @@ import {
   Terminal,
   Users,
   Search,
+  Bookmark,
 } from 'lucide-react'
 import { useChat, useRoom, useRoster, matchNameOrJid, getLocalPart, searchStore, roomActivityTone } from '@fluux/sdk'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'

@@ -509,6 +509,10 @@ vi.mock('@fluux/sdk/react', () => ({
     }
     return selector ? selector(state) : state
   }),
+  useSavedStore: vi.fn((selector) => {
+    const state = { entries: {}, pending: {}, loaded: true, limit: undefined, refusals: 0 }
+    return selector ? selector(state) : state
+  }),
   useRosterStore: vi.fn((selector) => {
     const state = {
       contacts: new Map(),
