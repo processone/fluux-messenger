@@ -15,7 +15,12 @@
 
 
 
-<a href="assets/readme/fluux-demo.mp4"><img src="screenshots/01-chat-dark.png" alt="Fluux Messenger demo: direct messaging, group rooms, encryption and themes" width="760"></a>
+<a href="assets/readme/fluux-demo.mp4">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="screenshots/showcase/02-chat-light.png">
+    <img src="screenshots/showcase/01-chat-dark.png" alt="Fluux Messenger: a conversation with a shared image, reactions and a reply" width="760">
+  </picture>
+</a>
 
 [Watch the Fluux Messenger demo](assets/readme/fluux-demo.mp4)
 
@@ -40,14 +45,24 @@
 
 <div align="center">
 
-<a href="screenshots/23-chat-light-dark.png"><img src="screenshots/23-chat-light-dark.png" width="600" alt="Light and Dark themes"/></a>
+<a href="screenshots/showcase/04-room-dark.png">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="screenshots/showcase/04-room-light.png">
+    <img src="screenshots/showcase/04-room-dark.png" width="760" alt="Group room with a poll, mentions, replies, a private whisper and the member list"/>
+  </picture>
+</a>
 
-*Light and dark modes side by side*
+*Group rooms with polls, mentions, replies, private whispers, and roles*
 
-| Group Chat | Themes & Customization |
-|------------|----------------------|
-| <a href="screenshots/02-group-chat-dark.png"><img src="screenshots/02-group-chat-dark.png" width="380" alt="Group Chat"/></a> | <a href="screenshots/08-settings-dark.png"><img src="screenshots/08-settings-dark.png" width="380" alt="Themes"/></a> |
-| *Multi-user chat with roles, reactions, and polls* | *14 built-in themes, custom accents, and font settings* |
+| End-to-End Encryption | Command Palette |
+|-----------------------|-----------------|
+| <a href="screenshots/showcase/03-encrypted-dark.png"><img src="screenshots/showcase/03-encrypted-dark.png" width="380" alt="End-to-end encrypted conversation with a verified contact"/></a> | <a href="screenshots/showcase/05-command-palette-dark.png"><img src="screenshots/showcase/05-command-palette-dark.png" width="380" alt="Command palette for jumping to any conversation"/></a> |
+| *Verified contacts and encrypted messages at a glance* | *Jump anywhere with ⌘K / Ctrl+K* |
+
+| Light Theme | Themes & Customization |
+|-------------|------------------------|
+| <a href="screenshots/showcase/02-chat-light.png"><img src="screenshots/showcase/02-chat-light.png" width="380" alt="Light theme"/></a> | <a href="screenshots/08-settings-dark.png"><img src="screenshots/08-settings-dark.png" width="380" alt="Themes"/></a> |
+| *Light and dark modes follow your system* | *14 built-in themes, custom accents, and font settings* |
 
 [See all screenshots in the visual overview](screenshots/OVERVIEW.md)
 

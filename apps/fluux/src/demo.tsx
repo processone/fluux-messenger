@@ -9,6 +9,7 @@ import { demoShareInbox } from './demo/shareInbox'
  *
  * URL parameters:
  *   ?tutorial=false  — disable tutorial tooltips (for video recording)
+ *   ?scene=showcase  — curated marketing data instead of the test fixture
  */
 
 import React from 'react'
@@ -31,6 +32,7 @@ import { WindowControls } from './components/WindowControls'
 import { ROUTER_USE_TRANSITIONS } from './config/routerTransitions'
 import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
 import { buildDemoData, buildDemoAnimation } from './demo/demoData'
+import { buildShowcaseData, SHOWCASE_SELF_NAME } from './demo/showcase'
 import { getDiscoverableRooms } from './demo/rooms'
 import { parseStressParam, installPerfHarness } from './demo/perfHarness'
 import { startRecountDeferralTally } from './utils/recountDeferralTally'
@@ -46,7 +48,10 @@ installMobileViewport()
 
 // Parse URL parameters
 const params = new URLSearchParams(window.location.search)
-const tutorialEnabled = params.get('tutorial') !== 'false'
+// The showcase scene has no tutorial or scripted animation: both are written
+// against the default fixture's contacts and rooms.
+const showcaseScene = params.get('scene') === 'showcase'
+const tutorialEnabled = !showcaseScene && params.get('tutorial') !== 'false'
 
 // Query-param seam: ?window=N shrinks the sliding-window bound (default 5000) BEFORE any seeding,
 // so the scroll-invariants e2e can exercise the slide / load-newer / jump-to-latest paths with a
@@ -95,11 +100,12 @@ indexedDB.deleteDatabase('fluux-message-cache')
 indexedDB.deleteDatabase('fluux-avatar-cache')
 
 // Create demo client and populate stores synchronously before first render
-const demoData = buildDemoData()
-const demoAnimation = buildDemoAnimation()
+const demoData = showcaseScene ? buildShowcaseData() : buildDemoData()
+const demoAnimation = showcaseScene ? [] : buildDemoAnimation()
 
 const demoClient = new DemoClient()
 demoClient.populateDemo(demoData)
+if (showcaseScene) connectionStore.getState().setOwnNickname(SHOWCASE_SELF_NAME)
 demoClient.setDiscoverableRooms(getDiscoverableRooms())
 // Make MAM scroll-up ("load older") prepend synthetic older messages in demo mode, so the
 // prepend-anchor scroll restore can be exercised without a server.
