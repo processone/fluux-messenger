@@ -19,7 +19,7 @@ export function useOwnOmemoDeviceCount(): number | null {
       return
     }
     let cancelled = false
-    readOwnDeviceLists(pepAccessFor(client), accountJid)
+    readOwnDeviceLists(pepAccessFor(client), accountJid, { withFingerprints: false })
       .then((lists) => {
         if (cancelled) return
         const ids = new Set<number>()

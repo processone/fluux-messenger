@@ -4,9 +4,9 @@
  * Tests URL parsing, state derivation, and navigation actions.
  */
 import { describe, it, expect } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
-import { MemoryRouter, useLocation } from 'react-router'
-import { useRouteSync, getViewPath } from './useRouteSync'
+import { render, renderHook, act } from '@testing-library/react'
+import { MemoryRouter, Navigate, Route, Routes, useLocation } from 'react-router'
+import { useRouteSync, getViewPath, SETTINGS_ROUTE_PATH } from './useRouteSync'
 import type { ReactNode } from 'react'
 
 // Helper to create wrapper with specific initial route
@@ -19,6 +19,25 @@ function createWrapper(initialEntries: string[] = ['/messages']) {
     )
   }
 }
+
+describe('settings route table', () => {
+  // The app's settings route followed by its catch-all redirect to Messages.
+  it.each(['/settings', '/settings/encryption', '/settings/encryption/openpgp', '/settings/encryption/omemo', '/settings/encryption/unknown'])(
+    'keeps %s on the settings view instead of redirecting to Messages',
+    (path) => {
+      let currentPath = ''
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path={SETTINGS_ROUTE_PATH} element={<LocationCapture onPathChange={(p) => (currentPath = p)} />} />
+            <Route path="*" element={<Navigate to="/messages" replace />} />
+          </Routes>
+        </MemoryRouter>
+      )
+      expect(currentPath).toBe(path)
+    }
+  )
+})
 
 describe('useRouteSync', () => {
   describe('URL parsing - sidebarView', () => {

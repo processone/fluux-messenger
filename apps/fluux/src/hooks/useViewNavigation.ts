@@ -12,7 +12,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { chatStore, roomStore, searchStore, type Contact } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
-import { useRouteSync, type NavigateOptions } from './useRouteSync'
+import { useRouteSync, type NavigateOptions, type SettingsNavigateOptions } from './useRouteSync'
 import { isSmallScreen } from './useIsMobileWeb'
 import type { SidebarView } from '@/components/sidebar-components/types'
 
@@ -41,7 +41,7 @@ export interface ViewNavigationResult {
   navigateToRooms: (jid?: string, options?: NavigateOptions) => void
   navigateToContacts: (jid?: string, options?: NavigateOptions) => void
   navigateToAdmin: (category?: string, options?: NavigateOptions) => void
-  navigateToSettings: (category?: string, options?: NavigateOptions) => void
+  navigateToSettings: (category?: string, options?: SettingsNavigateOptions) => void
   navigateToSearch: (options?: NavigateOptions) => void
 }
 

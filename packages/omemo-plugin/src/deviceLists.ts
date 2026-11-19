@@ -181,7 +181,12 @@ async function readFingerprints(
   return found
 }
 
-async function readList(pep: OwnPepAccess, jid: string, protocol: DeviceListProtocol): Promise<DeviceListRead> {
+async function readList(
+  pep: OwnPepAccess,
+  jid: string,
+  protocol: DeviceListProtocol,
+  withFingerprints: boolean,
+): Promise<DeviceListRead> {
   try {
     const current = await readCurrent(pep, jid, protocol)
     const entries = current ? deviceEntries(current.payload, protocol) : []
@@ -189,6 +194,7 @@ async function readList(pep: OwnPepAccess, jid: string, protocol: DeviceListProt
     for (const { el, id } of entries) {
       if (id !== null) devices.push(el.attrs.label ? { id, label: el.attrs.label } : { id })
     }
+    if (!withFingerprints) return { ok: true, devices }
     const prints = await readFingerprints(pep, jid, protocol, devices.map((d) => d.id))
     return { ok: true, devices: devices.map((d) => (prints.has(d.id) ? { ...d, fingerprint: prints.get(d.id) } : d)) }
   } catch (err) {
@@ -196,11 +202,19 @@ async function readList(pep: OwnPepAccess, jid: string, protocol: DeviceListProt
   }
 }
 
-/** Reads the account's OMEMO 2 and legacy device lists. A failure on one list leaves the other readable. */
-export async function readOwnDeviceLists(pep: OwnPepAccess, accountJid: string): Promise<OwnDeviceLists> {
+/**
+ * Reads the account's OMEMO 2 and legacy device lists. A failure on one list leaves the other readable.
+ * `withFingerprints: false` reads the lists only, with no bundle requests, for a caller that just needs the ids.
+ */
+export async function readOwnDeviceLists(
+  pep: OwnPepAccess,
+  accountJid: string,
+  options: { withFingerprints?: boolean } = {},
+): Promise<OwnDeviceLists> {
+  const withFingerprints = options.withFingerprints ?? true
   const [omemo2, legacy] = await Promise.all([
-    readList(pep, accountJid, 'omemo2'),
-    readList(pep, accountJid, 'legacy'),
+    readList(pep, accountJid, 'omemo2', withFingerprints),
+    readList(pep, accountJid, 'legacy', withFingerprints),
   ])
   return { omemo2, legacy }
 }

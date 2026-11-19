@@ -29,6 +29,12 @@ import { useCallback, useMemo } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
 import type { SidebarView } from '@/components/sidebar-components/types'
 
+/** Settings route pattern: `/settings`, `/settings/:category`, `/settings/:category/:subPage`. */
+export const SETTINGS_ROUTE_PATH = '/settings/:category?/:subPage?'
+
+/** Options for navigateToSettings: history control plus the screen inside the category */
+export type SettingsNavigateOptions = NavigateOptions & { subPage?: string }
+
 /** Options for navigation functions to control history behavior */
 export interface NavigateOptions {
   /** Use replace instead of push (prevents adding to browser history stack) */
@@ -58,7 +64,7 @@ export interface RouteActions {
   /** Navigate to admin view, optionally selecting a category */
   navigateToAdmin: (category?: string, options?: NavigateOptions) => void
   /** Navigate to settings view, optionally selecting a category and a screen inside it */
-  navigateToSettings: (category?: string, options?: NavigateOptions & { subPage?: string }) => void
+  navigateToSettings: (category?: string, options?: SettingsNavigateOptions) => void
   /** Navigate to search view */
   navigateToSearch: (options?: NavigateOptions) => void
   /** Deterministic "go up" within current tab (detail → list, or list → messages) */
@@ -239,7 +245,7 @@ export function useRouteSync(): RouteState & RouteActions {
     }
   }, [navigate])
 
-  const navigateToSettings = useCallback((category?: string, options?: NavigateOptions & { subPage?: string }) => {
+  const navigateToSettings = useCallback((category?: string, options?: SettingsNavigateOptions) => {
     const opts = options?.replace ? { replace: true } : undefined
     if (category) {
       const subPath = options?.subPage ? `/${encodeURIComponent(options.subPage)}` : ''

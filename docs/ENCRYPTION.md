@@ -2,7 +2,7 @@
 
 This guide explains how end-to-end encryption (E2EE) works in Fluux Messenger and walks you through enabling it, sharing your identity with contacts, backing up your key, and moving to a new device.
 
-If you just want the short version: turn it on in **Settings → Encryption**, write down the backup code the app shows you, and keep it somewhere safe. That's the one thing that (if lost) cannot be recovered.
+If you just want the short version: turn it on in **Settings → Encryption → OpenPGP**, write down the backup code the app shows you, and keep it somewhere safe. That's the one thing that (if lost) cannot be recovered.
 
 ## What end-to-end encryption means
 
@@ -23,7 +23,7 @@ Every key has a **fingerprint**, a long identifier (64 hex characters) that uniq
 
 ## Turning encryption on
 
-1. Open **Settings → Encryption**.
+1. Open **Settings → Encryption**, then **OpenPGP**.
 2. Toggle **Enable OpenPGP encryption**.
 3. Fluux generates a key pair for your account. This takes a few seconds: the app uses strong settings (Argon2id key derivation) so the work happens in the background.
 4. Your public key is published to your XMPP server under [PEP](https://xmpp.org/extensions/xep-0163.html) so contacts can discover it automatically.
@@ -71,7 +71,7 @@ Fluux solves this with an **encrypted server backup** of your secret key, define
 
 ### Backing up your key
 
-1. In **Settings → Encryption**, click **Back up**.
+1. In **Settings → Encryption → OpenPGP**, click **Back up**.
 2. Fluux generates a **backup code**. 24 upper-case characters drawn from an unambiguous alphabet (no `O` or `0`), grouped into 4-character chunks with dashes (e.g. `TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW`). This format follows XEP-0373 §5.4 and is accepted by other compliant clients such as Gajim. The code carries ~121 bits of entropy.
 3. **Write it down** or save it in a password manager. Confirm with the checkbox that you have stored it.
 4. Fluux encrypts your secret key with this code and publishes the encrypted blob to your XMPP server under a private PEP node that only you can read.
@@ -81,14 +81,14 @@ The backup code never leaves your device and is never sent to the server. Only t
 ### Restoring on a new device
 
 1. Log into Fluux on the new device with the same XMPP account.
-2. Open **Settings → Encryption**. Fluux detects the backup on the server and prompts for the backup code.
+2. Open **Settings → Encryption → OpenPGP**. Fluux detects the backup on the server and prompts for the backup code.
 3. Enter the backup code. Fluux downloads the encrypted blob, decrypts it locally, and installs your secret key.
 
 From that point on, the new device can read your encrypted history and send encrypted messages under the same identity.
 
 ### Exporting your key to a file
 
-Besides the server backup, **Settings → Encryption → Export to file** saves your secret key as an encrypted `.asc` file (named `openpgp-backup-<your-jid>.asc`). It uses the same XEP-0373 §5 format as the server backup (an OpenPGP message locked with your backup code) so nothing readable leaves your device.
+Besides the server backup, **Settings → Encryption → OpenPGP → Export to file** saves your secret key as an encrypted `.asc` file (named `openpgp-backup-<your-jid>.asc`). It uses the same XEP-0373 §5 format as the server backup (an OpenPGP message locked with your backup code) so nothing readable leaves your device.
 
 You can hand this file to another device or client:
 
@@ -191,10 +191,10 @@ It's just a label so the fingerprint's purpose is clear. The number below it is 
 Not currently. Encryption is enabled per account. If your contact's client supports OX, messages to them are encrypted.
 
 **I reinstalled Fluux and lost my key. What now?**
-If you had published a backup, restore it: open Settings → Encryption and enter the backup code. If you had not, generate a new key and your old encrypted messages will no longer be readable.
+If you had published a backup, restore it: open Settings → Encryption → OpenPGP and enter the backup code. If you had not, generate a new key and your old encrypted messages will no longer be readable.
 
 **Will this work with OMEMO?**
-Not yet for messages. Fluux's encryption engine is built as a plugin layer so OMEMO can be added alongside OpenPGP in the future, but at the moment the only supported protocol is XEP-0373. What you can do today is review your account's OMEMO devices: Settings → Encryption lists the devices that other apps registered on your account, for both OMEMO 2 and legacy OMEMO, and lets you remove one after confirming. Fluux is not one of those devices, saves no OMEMO key and does not encrypt with OMEMO.
+Not yet for messages. Fluux's encryption engine is built as a plugin layer so OMEMO can be added alongside OpenPGP in the future, but at the moment the only supported protocol is XEP-0373. What you can do today is review your account's OMEMO devices: Settings → Encryption → OMEMO lists the devices that other apps registered on your account, for both OMEMO 2 and legacy OMEMO, and lets you remove one after confirming. Fluux is not one of those devices, saves no OMEMO key and does not encrypt with OMEMO.
 
 ## Reference
 

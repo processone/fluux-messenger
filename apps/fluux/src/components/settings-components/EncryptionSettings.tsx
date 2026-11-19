@@ -1,14 +1,24 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, ChevronRight, X } from 'lucide-react'
-import { useConnection } from '@fluux/sdk'
 import { SettingsSection } from '@/components/ui/SettingsSection'
-import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useRouteSync } from '@/hooks/useRouteSync'
 import { OpenPgpSettings } from './OpenPgpSettings'
 import { OmemoSettings } from './OmemoSettings'
 import { useOwnOmemoDeviceCount } from './useOwnOmemoDeviceCount'
 import { type EncryptionSubPage } from './encryptionPages'
+import { useOpenPgpOverviewState, type OpenPgpOverviewState } from './openPgpOverviewState'
+
+const OPENPGP_STATE_KEYS: Record<OpenPgpOverviewState, string> = {
+  off: 'stateOff',
+  waiting: 'stateWaiting',
+  locked: 'stateLocked',
+  'needs-attention': 'stateNeedsAttention',
+  on: 'stateOn',
+  'on-backed-up': 'stateOnBackedUp',
+  'on-no-backup': 'stateOnNoBackup',
+  'on-backup-unconfirmed': 'stateOnBackupUnconfirmed',
+}
 
 interface EncryptionSettingsProps {
   /** The screen to show; null is the overview. */
@@ -24,10 +34,8 @@ export function EncryptionSettings({ subPage = null }: EncryptionSettingsProps) 
 
 function EncryptionOverview() {
   const { t } = useTranslation()
-  const { status } = useConnection()
   const { navigateToSettings } = useRouteSync()
-  const openpgpEnabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
-  const registrationError = useEncryptionSettingsStore((s) => s.registrationError)
+  const openpgpStateKey = OPENPGP_STATE_KEYS[useOpenPgpOverviewState()]
   const deviceCount = useOwnOmemoDeviceCount()
   const [limitationsDismissed, setLimitationsDismissed] = useState(
     () => localStorage.getItem('enc-limitations-dismissed') === '1'
@@ -38,13 +46,7 @@ function EncryptionOverview() {
     setLimitationsDismissed(true)
   }
 
-  const openpgpState = !openpgpEnabled
-    ? t('settings.encryption.overview.stateOff')
-    : registrationError
-      ? t('settings.encryption.overview.stateNeedsAttention')
-      : status !== 'online'
-        ? t('settings.encryption.overview.stateWaiting')
-        : t('settings.encryption.overview.stateOn')
+  const openpgpState = t(`settings.encryption.overview.${openpgpStateKey}`)
   const omemoState = deviceCount
     ? t('settings.encryption.overview.omemoNotUsedDevices', { devices: deviceCount })
     : t('settings.encryption.overview.omemoNotUsed')

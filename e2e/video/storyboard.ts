@@ -188,6 +188,7 @@ export const storyboard: Scene[] = [
     run: async (d) => {
       await d.navigateTo('settings')
       await d.glideClick(d.page.getByText('Encryption', { exact: true }).first(), 700)
+      await d.glideClick(d.page.getByRole('button', { name: /^OpenPGP/ }), 500)
       await d.page.locator('code').filter({ hasText: 'BAF0' }).first().waitFor({ timeout: 6_000 }).catch(() => {})
       await d.caption('Your keys, your control', 'Fingerprint, backup, export & key rotation')
       await d.dwell(2800)

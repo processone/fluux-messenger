@@ -51,6 +51,7 @@ async function connect(browser: Browser, name: string, options: { openpgp: boole
   if (options.openpgp) {
     await page.getByRole('button', { name: 'Settings' }).click()
     await page.getByRole('button', { name: 'Encryption' }).click()
+    await page.getByRole('button', { name: /^OpenPGP/ }).click()
     await page.getByRole('switch').first().click()
     const fields = page.locator('input[type=password]')
     await fields.nth(0).fill(PASSPHRASE)

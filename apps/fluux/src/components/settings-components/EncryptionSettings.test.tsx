@@ -4,18 +4,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { EncryptionSettings } from './EncryptionSettings'
 import { resolveEncryptionSubPage } from './encryptionPages'
 
-let mockStatus = 'online'
 let mockDeviceCount: number | null = null
+let mockOpenPgpState = 'off'
 const navigateToSettings = vi.fn()
 
-vi.mock('@fluux/sdk', () => ({
-  useConnection: () => ({ status: mockStatus, jid: 'me@example.com/laptop' }),
-}))
 vi.mock('@/hooks/useRouteSync', () => ({ useRouteSync: () => ({ navigateToSettings }) }))
+vi.mock('./openPgpOverviewState', () => ({ useOpenPgpOverviewState: () => mockOpenPgpState }))
 vi.mock('./useOwnOmemoDeviceCount', () => ({ useOwnOmemoDeviceCount: () => mockDeviceCount }))
 vi.mock('./OpenPgpSettings', () => ({ OpenPgpSettings: () => <div>openpgp-screen</div> }))
 vi.mock('./OmemoSettings', () => ({ OmemoSettings: () => <div>omemo-screen</div> }))
@@ -30,9 +27,8 @@ vi.mock('react-i18next', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
-  mockStatus = 'online'
+  mockOpenPgpState = 'off'
   mockDeviceCount = null
-  useEncryptionSettingsStore.setState({ openpgpEnabled: false, registrationError: null })
 })
 
 describe('EncryptionSettings overview', () => {
@@ -52,13 +48,16 @@ describe('EncryptionSettings overview', () => {
   })
 
   it.each([
-    ['off', { openpgpEnabled: false }, 'online', 'stateOff'],
-    ['on', { openpgpEnabled: true }, 'online', 'stateOn'],
-    ['waiting for a connection', { openpgpEnabled: true }, 'disconnected', 'stateWaiting'],
-    ['needing attention', { openpgpEnabled: true, registrationError: { code: 'x' } }, 'online', 'stateNeedsAttention'],
-  ])('reads OpenPGP %s', (_name, store, status, key) => {
-    useEncryptionSettingsStore.setState(store as never)
-    mockStatus = status
+    ['off', 'stateOff'],
+    ['waiting', 'stateWaiting'],
+    ['locked', 'stateLocked'],
+    ['needs-attention', 'stateNeedsAttention'],
+    ['on', 'stateOn'],
+    ['on-backed-up', 'stateOnBackedUp'],
+    ['on-no-backup', 'stateOnNoBackup'],
+    ['on-backup-unconfirmed', 'stateOnBackupUnconfirmed'],
+  ])('shows the OpenPGP state %s', (state, key) => {
+    mockOpenPgpState = state
     render(<EncryptionSettings />)
     expect(screen.getByText(`settings.encryption.overview.${key}`)).toBeTruthy()
   })

@@ -293,7 +293,7 @@ test('desktop Escape closes the emoji picker in the poll window, then the window
 // then gives the address a resource. Patching before the page shows would not work: in
 // this development build React runs the page's first check twice and the second one skips.
 test('desktop Escape closes shortcut help opened over the encryption setup dialog, then backs out of the dialog', async ({ page }) => {
-  await openDemoAt(page, '#/settings/encryption')
+  await openDemoAt(page, '#/settings/encryption/openpgp')
   const encryption = page.getByRole('switch', { name: 'OpenPGP end-to-end encryption', exact: true })
   await expect(encryption).toHaveAttribute('aria-checked', 'true')
   await page.evaluate(() => {

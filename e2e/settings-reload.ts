@@ -31,3 +31,23 @@ test('a reload on a Settings page reopens that page, not Profile', async ({ page
   await expect(page.getByRole('heading', { name: en.settings.categories.encryption, level: 2 })).toBeVisible()
   await expect(page.getByRole('heading', { name: en.settings.categories.profile, level: 2 })).toHaveCount(0)
 })
+
+/** The Encryption overview has a screen per method; a reload on one must reopen that screen, not the overview. */
+test('a reload on an Encryption method screen reopens that screen', async ({ page }) => {
+  await bootDemo(page, '/demo.html?tutorial=false')
+  await page.getByRole('button', { name: en.sidebar.settings, exact: true }).click()
+  await page.getByRole('button', { name: en.settings.categories.encryption, exact: true }).click()
+  await page.getByRole('button', { name: /^OMEMO/ }).click()
+  await expect(page.getByRole('heading', { name: en.settings.encryption.omemoName, level: 2 })).toBeVisible()
+
+  await expect.poll(() => page.evaluate(() => Object.keys(sessionStorage)
+    .filter(key => key.startsWith('xmpp-view-state'))
+    .map(key => JSON.parse(sessionStorage.getItem(key)!) as { sidebarView: string; settingsSubPage?: string | null })
+    .find(view => view.sidebarView === 'settings')?.settingsSubPage ?? null),
+  'the shell saved the open method screen').toBe('omemo')
+
+  await reloadDemo(page)
+
+  expect(await page.evaluate(() => location.hash)).toBe('#/settings/encryption/omemo')
+  await expect(page.getByRole('heading', { name: en.settings.encryption.omemoName, level: 2 })).toBeVisible()
+})
