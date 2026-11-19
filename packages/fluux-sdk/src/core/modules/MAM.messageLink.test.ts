@@ -300,13 +300,15 @@ describe('linked room message lookup', () => {
     const running = [10, 11].map(index => h.mam.readRoomMessagePreview(ROOM, rows[index].stanzaId))
     const c = new AbortController()
     const d = new AbortController()
+    // The slot wake removes the abort listener; abort right then, before the waiter resumes.
+    for (const controller of [c, d]) {
+      const remove = controller.signal.removeEventListener.bind(controller.signal)
+      vi.spyOn(controller.signal, 'removeEventListener').mockImplementation((...args: Parameters<typeof remove>) => { remove(...args); controller.abort() })
+    }
     const queued = [c, d].map((controller, offset) => h.mam.readRoomMessagePreview(ROOM, rows[12 + offset].stanzaId, controller.signal).catch(() => 'aborted'))
     const last = h.mam.readRoomMessagePreview(ROOM, rows[14].stanzaId)
     await settle()
     gates.splice(0).forEach(open => open())
-    // Abort in the same turn the releases wake C and D, before either resumes.
-    await Promise.resolve()
-    c.abort(); d.abort()
     for (let turn = 0; turn < 60; turn++) { gates.splice(0).forEach(open => open()); await new Promise(resolve => setTimeout(resolve, 0)) }
     await Promise.all(running)
     expect(await Promise.all(queued)).toEqual(['aborted', 'aborted'])
