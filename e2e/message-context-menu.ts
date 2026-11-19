@@ -62,17 +62,7 @@ test.describe('message right-click menu', () => {
     await expect(picker.locator('input[type="search"]')).toBeVisible()
     await expect(picker.locator('button[aria-label]').first()).toBeVisible()
     expect((await picker.boundingBox())!.height).toBeGreaterThan(200)
-    // Tab traversal inside the picker is checked in Chromium. In Playwright's WebKit a Tab from the
-    // search field closes the menu (unresolved, reported as a gap), so only the search focus is checked.
     expect(await picker.evaluate(el => el.shadowRoot?.activeElement?.tagName)).toBe('INPUT')
-    if (browserName === 'chromium') {
-      await page.keyboard.press('Tab')
-      expect(await page.evaluate(() => {
-        const m = document.querySelector('[role="menu"]')
-        const a = document.activeElement
-        return !!m && !!a && a !== m && m.contains(a)
-      })).toBe(true)
-    }
     await shot(page, 'picker', browserName)
     await page.keyboard.press('Escape')
     await expect(menu(page)).toHaveCount(0)
@@ -151,5 +141,33 @@ test.describe('message right-click menu', () => {
     })
     expect(prevented).toBe(false)
     await expect(menu(page)).toHaveCount(0)
+  })
+
+  // Reproduced defect, open: in WebKit a Tab from the picker's search field fires a window blur that the
+  // message interaction hold treats as the page losing focus, so the menu closes. Marked fixme there.
+  test('Tab in the emoji picker moves focus inside it and keeps the menu open', async ({ page, browserName }) => {
+    test.fixme(browserName === 'webkit', 'WebKit window blur on shadow focus change closes the menu (useMessageInteractionHold)')
+    await setup(page, [{ id: 'tab-a', from: 'peer', body: 'Tab target message' }])
+    const body = row(page, 'tab-a')
+    await expect(body).toBeVisible()
+    const box = (await body.getByText('Tab target message').boundingBox())!
+    await page.mouse.click(box.x + 30, box.y + box.height / 2, { button: 'right' })
+    await menu(page).getByRole('button', { name: 'More reactions' }).click()
+    const picker = menu(page).locator('em-emoji-picker')
+    await expect(picker.locator('input[type="search"]')).toBeVisible()
+    await expect(picker.locator('button[aria-label]').first()).toBeVisible()
+    const composedActive = () => page.evaluate(() => {
+      let a: Element | null = document.activeElement
+      while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement
+      const m = document.querySelector('[role="menu"]')
+      return { tag: a?.tagName ?? '', label: a?.getAttribute('aria-label') ?? '', inMenu: !!m && !!a && m.contains(a.getRootNode() instanceof ShadowRoot ? (a.getRootNode() as ShadowRoot).host : a), menu: !!m }
+    })
+    const before = await composedActive()
+    expect(before.tag).toBe('INPUT')
+    await page.keyboard.press('Tab')
+    const afterTab = await composedActive()
+    expect(afterTab.menu).toBe(true)
+    expect(afterTab.inMenu).toBe(true)
+    expect(`${afterTab.tag}:${afterTab.label}`).not.toBe(`${before.tag}:${before.label}`)
   })
 })
