@@ -15,7 +15,7 @@ function cyrb53(text: string, seed: number): string {
 }
 
 /** What names a message; a whole entry satisfies it too. */
-export type SavedIdentity = Pick<SavedMessage, 'conversationJid'> & Partial<Pick<SavedMessage, 'stanzaId' | 'stanzaIdBy' | 'originId' | 'messageId'>> & Record<string, unknown>
+export type SavedIdentity = Pick<SavedMessage, 'conversationJid'> & Partial<Pick<SavedMessage, 'stanzaId' | 'stanzaIdBy' | 'originId' | 'messageId'>>
 
 /**
  * The key naming one logical message: conversation, then archive id with its

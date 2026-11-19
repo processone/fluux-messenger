@@ -109,7 +109,8 @@ describe('saved item codec', () => {
   })
 
   it('gives one message one item id on every client, whatever else differs', () => {
-    expect(savedItemId(roomEntry)).toBe(savedItemId({ ...roomEntry, savedAt: 1 }))
+    const later = { ...roomEntry, savedAt: 1 }
+    expect(savedItemId(roomEntry)).toBe(savedItemId(later))
     expect(savedItemId(roomEntry)).not.toBe(savedItemId({ ...roomEntry, stanzaId: 'other' }))
   })
 })
