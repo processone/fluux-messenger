@@ -140,7 +140,7 @@ export const AppBar = memo(function AppBar() {
       onClickCapture={blockModalInteraction}
       onMouseDown={handleDragMouseDown}
       onDoubleClick={handleDragDoubleClick}
-      className="window-drag-region flex items-center gap-2 h-10 flex-shrink-0 bg-fluux-sidebar border-b border-fluux-bg shadow-sm select-none"
+      className="window-drag-region flex items-center gap-2 h-10 flex-shrink-0 bg-fluux-sidebar select-none"
       style={{
         paddingInlineStart: needsTrafficLightInset ? TRAFFIC_LIGHT_INSET : 8,
         paddingInlineEnd: reservesWindowControls ? WINDOW_CONTROLS_WIDTH : 8,
@@ -185,7 +185,7 @@ export const AppBar = memo(function AppBar() {
             onClick={() => toggleModal('commandPalette')}
             aria-label={t('commandPalette.open', 'Open command palette')}
             title={t('commandPalette.open', 'Open command palette')}
-            className="flex items-center justify-center h-6 px-2.5 rounded-md bg-fluux-bg/50 border border-fluux-bg text-fluux-muted hover:bg-fluux-bg/80 transition-[background-color]"
+            className="flex items-center justify-center h-6 px-2.5 rounded-md bg-fluux-hover/40 border border-[color:var(--fluux-panel-border)] text-fluux-muted hover:bg-fluux-hover/80 transition-[background-color]"
           >
             <kbd className="text-[11px] leading-none font-sans">{shortcutHint}</kbd>
           </button>

@@ -197,6 +197,15 @@
   --fluux-scrim-blur: 10px;
   --fluux-glass-border: rgba(255, 255, 255, 0.12);
   --fluux-shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.55);
+  /* Inset content panel lifted off the chrome frame. The frame and panel are
+     adjacent ramp steps, so on dark canvases a shadow alone barely reads: the
+     panel also carries a brighter hairline and a top-edge highlight. */
+  --fluux-shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 4px rgba(0, 0, 0, 0.32), 0 12px 36px rgba(0, 0, 0, 0.42);
+  --fluux-panel-border: rgba(255, 255, 255, 0.11);
+  /* How far the chrome frame recedes below the theme sidebar tone so the inset
+     content panel stands forward. Dark only: in light mode the white panel on
+     the grey frame already separates. */
+  --fluux-chrome-shade: 18%;
 
   /* Named palette colors */
   --fluux-color-red: #da373c;
@@ -592,6 +601,9 @@
   --fluux-glass-specular: inset 0 1px 0 rgba(255, 255, 255, 0.9);
   --fluux-glass-specular-sheen: linear-gradient(115deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.1) 42%);
   --fluux-shadow-overlay: 0 20px 50px rgba(20, 27, 48, 0.18);
+  --fluux-shadow-panel: 0 1px 2px rgba(20, 27, 48, 0.06), 0 6px 22px rgba(20, 27, 48, 0.07);
+  --fluux-panel-border: rgba(0, 0, 0, 0.07);
+  --fluux-chrome-shade: 0%;
 
   /* Divider flips to black-alpha on the light canvas. The rail is derived by
      compositing --fluux-rail-overlay over --fluux-sidebar-bg at render time;
@@ -882,6 +894,56 @@ em-emoji-picker {
 }
 /* Divider between the sidebar column and the main message view. */
 .chrome-sidebar { border-inline-end: 1px solid var(--fluux-surface-divider); }
+
+/* Derived on the root, where theme variables and the light class live, so the
+   value is already resolved when it is re-assigned below without a cycle. */
+:root {
+  --fluux-sidebar-base: var(--fluux-sidebar-bg);
+  --fluux-frame-bg: color-mix(in srgb, #000 var(--fluux-chrome-shade), var(--fluux-sidebar-bg));
+}
+/* Inset content panel. From md up, the rail, sidebar and app bar form one
+   chrome frame and the main pane floats inside it as a rounded card. The frame
+   colour is the sidebar surface, so the gap reads as chrome, not as a seam. Its
+   own border replaces the sidebar divider, which would otherwise double up
+   across the gap. Below md the single-pane layout stays edge to edge. */
+@media (min-width: 768px) {
+  /* The frame re-points the sidebar token rather than painting an overlay, so
+     everything derived from it (rail overlay, badge and presence cutout rings)
+     stays matched to the surface it sits on. The panel restores the theme tone
+     for views inside it that paint the sidebar colour. */
+  .chrome-shell { --fluux-sidebar-bg: var(--fluux-frame-bg); }
+  .chrome-shell .content-panel { --fluux-sidebar-bg: var(--fluux-sidebar-base); }
+  .chrome-frame { background: var(--fluux-sidebar-bg); }
+  .chrome-frame .chrome-sidebar { border-inline-end-color: transparent; }
+  .content-panel {
+    margin-inline-end: 8px;
+    margin-block-end: 8px;
+    border: 1px solid var(--fluux-panel-border);
+    border-radius: var(--fluux-radius-l);
+    box-shadow: var(--fluux-shadow-panel);
+    overflow: hidden;
+  }
+}
+
+/* Type hierarchy for chrome titles. Pane titles name the sidebar section
+   ("Messages", "Rooms"); view titles head the main pane (a conversation, a
+   settings category, a contact). Both use the display face so they separate
+   from the Inter body text by more than weight alone. */
+.type-pane-title {
+  font-family: var(--fluux-font-display);
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+[data-density="compact"] .type-pane-title { font-size: 1.125rem; line-height: 1.5rem; }
+.type-view-title {
+  font-family: var(--fluux-font-display);
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
 
 [data-density="compact"] .icon-rail { width: 48px; }
 [data-density="compact"] .icon-rail-btn { width: 36px; height: 36px; }

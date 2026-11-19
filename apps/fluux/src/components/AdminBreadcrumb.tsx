@@ -31,7 +31,7 @@ export function AdminBreadcrumb({ crumbs }: AdminBreadcrumbProps) {
               </button>
             ) : (
               <span
-                className={`text-sm truncate ${isLast ? 'text-fluux-text font-semibold' : 'text-fluux-muted'}`}
+                className={`truncate ${isLast ? 'type-view-title text-fluux-text' : 'text-sm text-fluux-muted'}`}
                 aria-current={isLast ? 'page' : undefined}
               >
                 {crumb.label}

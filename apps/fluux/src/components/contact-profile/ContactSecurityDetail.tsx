@@ -36,7 +36,7 @@ export function ContactSecurityDetail({
         >
           <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
         </button>
-        <h2 className="font-semibold text-fluux-text">{t('contacts.securityDetailsTitle')}</h2>
+        <h2 className="type-view-title text-fluux-text">{t('contacts.securityDetailsTitle')}</h2>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         <SecurityTab

@@ -314,7 +314,7 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
       <div className={`${mobileRailOnly ? 'hidden md:flex' : 'flex'} flex-1 flex-col min-w-0`}>
         {/* Header - with drag region for window movement */}
         <div data-testid="sidebar-header" className="h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
-          <div className="flex-1 min-w-0 font-semibold text-fluux-text">
+          <div className="flex-1 min-w-0 type-pane-title text-fluux-text">
             <ConnectionStepSlot narrowOnly>
               <h1 className="truncate">{sidebarView === 'messages' ? (showArchived ? t('messages.archivedTitle') : t('sidebar.messages'))
                 : sidebarView === 'rooms' ? t('sidebar.rooms')
