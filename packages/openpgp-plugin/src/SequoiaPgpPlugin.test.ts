@@ -6547,8 +6547,10 @@ describe('SequoiaPgpPlugin', () => {
 
       // Intent: FLM-311 - while a device cannot read the list of keys the
       // account's devices hold, the keys it never decided about receive no
-      // messages, and the keys decided on it keep receiving them. The read is
-      // tried again until it succeeds.
+      // messages, the keys decided on it keep receiving them, and a key held
+      // on it still waits for the user's decision. It publishes no list that
+      // would replace the account's, and the read is tried again until it
+      // succeeds.
       it.each([
         ['the server does not answer the read', 'no-answer'],
         ['the list is not signed by the account', 'forged'],
@@ -6557,6 +6559,7 @@ describe('SequoiaPgpPlugin', () => {
         try {
           const built = makeContext('me@example.com')
           const fp = '3E46E00000000000000000000000000000000037'
+          const heldFp = 'DA7E000000000000000000000000000000000016'
           ownKey(fp)
           const server = serverNodes(built)
           const list = setsWithHeld(fp, { [DAVE]: [DAVE_FP] }, { [DAVE]: [ERIN_FP] }, 2)
@@ -6568,29 +6571,40 @@ describe('SequoiaPgpPlugin', () => {
             return queryPEP(jid, node, maxItems)
           }
           const davePep = installDavePep(built)
-          davePep.announce([validDaveKey(DAVE_FP), validDaveKey(ERIN_FP)])
+          davePep.announce([validDaveKey(DAVE_FP), validDaveKey(ERIN_FP), validDaveKey(heldFp)])
           await plugin.init(built.ctx)
           await vi.advanceTimersByTimeAsync(0)
-          // The user trusted DAVE_FP on this device; ERIN_FP has no decision here.
+          // The user trusted DAVE_FP on this device and heldFp is held there;
+          // ERIN_FP has no decision here.
           trustRecordsOf(plugin).setDecision(DAVE, DAVE_FP, 'tofu')
+          trustRecordsOf(plugin).setDecision(DAVE, heldFp, 'held')
           const toDave = await plugin.openConversation({ kind: 'direct', peer: DAVE })
 
           const sent = await plugin.encrypt(toDave, encodeBodyAsPayload('to dave'))
           expect(recipientFpsFromEncrypt(sent)).toContain(DAVE_FP)
           expect(recipientFpsFromEncrypt(sent)).not.toContain(ERIN_FP)
+          expect(recipientFpsFromEncrypt(sent)).not.toContain(heldFp)
           expect((await plugin.listPeerIdentities(DAVE)).map((i) => [i.id, i.usedForEncryption, i.notUsedReason])).toEqual([
             [DAVE_FP, true, undefined],
             [ERIN_FP, false, 'trust-pending'],
+            [heldFp, false, 'awaiting-decision'],
           ])
           // The wait is no decision: nothing is saved for the key.
           expect(trustRecordsOf(plugin).decisionOf(DAVE, ERIN_FP)).toBeUndefined()
+          await vi.advanceTimersByTimeAsync(1_000)
+          expect(setsPublishes(built.published)).toEqual([])
 
-          // The server answers again: the next read applies the list.
+          // The server answers again: the next read applies the list, then
+          // the key held here joins the account's holds.
           answers = true
           server.nodes.sets = list
           await vi.advanceTimersByTimeAsync(30_000)
           expect(trustRecordsOf(plugin).decisionOf(DAVE, ERIN_FP)).toBe('held')
           expect((await plugin.listPeerIdentities(DAVE)).find((i) => i.id === ERIN_FP)?.notUsedReason).toBe('awaiting-decision')
+          await vi.advanceTimersByTimeAsync(1_000)
+          const published = setsPublishes(built.published)
+          expect(published).toHaveLength(1)
+          expect(decodePublished(published[0].item).held).toEqual({ [DAVE]: [heldFp, ERIN_FP] })
         } finally {
           vi.useRealTimers()
         }
@@ -6614,6 +6628,51 @@ describe('SequoiaPgpPlugin', () => {
 
         await plugin.setIdentityTrust(DAVE, DAVE_FP, 'tofu')
         expect(recipientFpsFromEncrypt(await plugin.encrypt(toDave, encodeBodyAsPayload('to dave')))).toContain(DAVE_FP)
+      })
+
+      // Intent: FLM-311 - a device that cannot read the list publishes none of
+      // its own, which would replace the account's; a verification made
+      // meanwhile is published once the list is read.
+      it('publishes a verification made while it could not read the list once it reads the list', async () => {
+        vi.useFakeTimers()
+        try {
+          const built = makeContext('me@example.com')
+          const fp = '3E46E00000000000000000000000000000000039'
+          ownKey(fp)
+          const server = serverNodes(built)
+          server.nodes.sets = setsWithHeld(fp, { [DAVE]: [DAVE_FP] }, { [DAVE]: [ERIN_FP] }, 2)
+          let answers = false
+          const queryPEP = built.ctx.xmpp.queryPEP
+          built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
+            if (node === SETS_NODE && !answers) throw new Error('remote-server-timeout')
+            return queryPEP(jid, node, maxItems)
+          }
+          await plugin.init(built.ctx)
+          await vi.advanceTimersByTimeAsync(0)
+          // This device applied that list in an earlier session.
+          trustRecordsOf(plugin).setDecisions([
+            { peer: DAVE, fingerprint: DAVE_FP, decision: 'verified' },
+            { peer: DAVE, fingerprint: ERIN_FP, decision: 'held' },
+          ])
+          trustRecordsOf(plugin).setSyncVersion(2)
+          trustRecordsOf(plugin).setAccountHolds({ [DAVE]: [ERIN_FP] })
+
+          trustRecordsOf(plugin).setDecision('carol@example.com', CAROL_FP, 'verified')
+          await vi.advanceTimersByTimeAsync(1_000)
+          expect(setsPublishes(built.published)).toEqual([])
+
+          answers = true
+          await vi.advanceTimersByTimeAsync(31_000)
+          const published = setsPublishes(built.published)
+          expect(published).toHaveLength(1)
+          expect(decodePublished(published[0].item)).toMatchObject({
+            version: 3,
+            verified: { [DAVE]: [DAVE_FP], 'carol@example.com': [CAROL_FP] },
+            held: { [DAVE]: [ERIN_FP] },
+          })
+        } finally {
+          vi.useRealTimers()
+        }
       })
     })
 

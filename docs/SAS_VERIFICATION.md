@@ -217,8 +217,10 @@ shows as waiting (`trust-pending`); a contact with a key verified there has its
 new keys held anyway. This covers a read that fails or returns a list the
 device cannot read, tried again every 30 seconds, and a trust state not
 accepted yet, read once it is. Keys decided about on the device keep receiving
-messages. A device that just joined therefore sends nothing to a key another
-device holds. A device that reads a list lacking a key it knows is held on
+messages. Nor does the session publish the list before it has read it, since
+its publication would replace what the account's other devices verify and
+hold; what changed meanwhile is published once the list is read. A device that
+just joined therefore sends nothing to a key another device holds. A device that reads a list lacking a key it knows is held on
 the account's devices, because it holds the key or an earlier list held it,
 publishes the list again: for instance when another device's publication
 replaced the list that held it. A newer list that verifies a key ends its

@@ -361,7 +361,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private _trustCheckRun = 0
   /** A trust-state check gave a verdict this session (see {@link trustStateAccepted}). */
   private _trustCheckDone = false
-  /** Verified keys changed before the trust state was accepted: publish them once it is. */
+  /**
+   * Verified or held keys changed before the trust state was accepted, or
+   * before this session read the account's verification list: publish them
+   * once both are done.
+   */
   private _verifiedChangedBeforeAccepted = false
   /**
    * This session's first read of the account's verification list, from the
@@ -2303,6 +2307,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (this._verificationsKnown) return
     this._verificationsKnown = true
     if (this._firstVerificationsRead?.settled) this.reportAllPeersChanged()
+    // Changes made while the list was not read are published after it is
+    // applied (see `publishVerificationSetsNow`).
+    if (this._verifiedChangedBeforeAccepted && this.trustStateAccepted()) {
+      this._verifiedChangedBeforeAccepted = false
+      this.scheduleVerificationsPublish()
+    }
   }
 
   /** Read the account's verification list again later, while it is not known this session. */
@@ -2429,7 +2439,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private async publishVerificationSetsNow(ctx: PluginContext, current: OwnKeyFreshness): Promise<void> {
     const ownPublicArmored = this.ownBundle?.publicArmored
     if (!ownPublicArmored || !current()) return
-    if (!this.trustStateAccepted()) {
+    // Nor before the account's list is read: this list would replace the
+    // keys the account's other devices verify and hold.
+    if (!this.trustStateAccepted() || !this._verificationsKnown) {
       this._verifiedChangedBeforeAccepted = true
       return
     }
