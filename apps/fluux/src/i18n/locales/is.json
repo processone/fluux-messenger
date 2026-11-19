@@ -929,8 +929,24 @@
         },
         "encryption": {
             "experimental": "Tilrauna",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Hvert spjall notar eina dulkóðunaraðferð. Þegar báðar eru í boði er OMEMO valið fram yfir OpenPGP, nema spjall sé stillt á tiltekna aðferð.",
+                "stateOff": "Slökkt",
+                "stateOn": "Kveikt",
+                "stateLocked": "Læst",
+                "stateOnBackedUp": "Kveikt, afritað",
+                "stateOnNoBackup": "Kveikt, ekkert afrit enn",
+                "stateOnBackupUnconfirmed": "Kveikt, afrit óstaðfest",
+                "stateWaiting": "Kveikt, bíður tengingar",
+                "stateNeedsAttention": "Þarfnast athygli",
+                "omemoNotUsed": "Ekki í notkun enn",
+                "omemoNotUsedDevices": "Ekki í notkun enn · tæki á reikningnum þínum: {{devices}}",
+                "omemoDescription": "Skoðaðu og fjarlægðu OMEMO-tæki sem skráð eru á reikninginn þinn."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "OMEMO-tækin þín",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

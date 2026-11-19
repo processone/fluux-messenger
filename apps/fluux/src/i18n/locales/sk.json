@@ -934,8 +934,24 @@
         },
         "encryption": {
             "experimental": "Experimentálne",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Každý čet používa jednu metódu šifrovania. Ak sú dostupné obe, uprednostní sa OMEMO pred OpenPGP, pokiaľ čet nie je nastavený na konkrétnu metódu.",
+                "stateOff": "Vypnuté",
+                "stateOn": "Zapnuté",
+                "stateLocked": "Zamknuté",
+                "stateOnBackedUp": "Zapnuté, zálohované",
+                "stateOnNoBackup": "Zapnuté, zatiaľ bez zálohy",
+                "stateOnBackupUnconfirmed": "Zapnuté, záloha nepotvrdená",
+                "stateWaiting": "Zapnuté, čaká na pripojenie",
+                "stateNeedsAttention": "Vyžaduje pozornosť",
+                "omemoNotUsed": "Zatiaľ sa nepoužíva",
+                "omemoNotUsedDevices": "Zatiaľ sa nepoužíva · zariadenia vo vašom účte: {{devices}}",
+                "omemoDescription": "Prezrite si a odstráňte zariadenia OMEMO zaregistrované vo vašom účte."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "Vaše zariadenia OMEMO",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

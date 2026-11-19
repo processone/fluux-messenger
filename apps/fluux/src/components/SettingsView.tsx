@@ -17,6 +17,8 @@ import {
   McpSettings,
   SETTINGS_CATEGORIES,
   resolveSettingsCategory,
+  resolveEncryptionSubPage,
+  ENCRYPTION_SUB_PAGE_LABEL_KEYS,
 } from './settings-components'
 import { ArrowLeft } from 'lucide-react'
 
@@ -32,7 +34,7 @@ export function SettingsView({ onBack }: SettingsViewProps) {
   detectRenderLoop('SettingsView')
   const { t } = useTranslation()
   const { dragRegionProps } = useWindowDrag()
-  const { settingsCategory } = useRouteSync()
+  const { settingsCategory, settingsSubPage, navigateToSettings } = useRouteSync()
 
   // Current category: default to profile if none specified, and fall back to
   // profile when the URL names a category this platform doesn't offer (e.g. a
@@ -43,6 +45,10 @@ export function SettingsView({ onBack }: SettingsViewProps) {
   const activeCategoryConfig = SETTINGS_CATEGORIES.find(cat => cat.id === activeCategory)
   const CategoryIcon = activeCategoryConfig?.icon
   const categoryLabel = activeCategoryConfig?.labelKey ? t(activeCategoryConfig.labelKey) : t('settings.title')
+
+  // Encryption has a screen per method behind its overview; an unknown one shows the overview.
+  const encryptionSubPage = activeCategory === 'encryption' ? resolveEncryptionSubPage(settingsSubPage) : null
+  const headerLabel = encryptionSubPage ? t(ENCRYPTION_SUB_PAGE_LABEL_KEYS[encryptionSubPage]) : categoryLabel
 
   // Render settings content based on active category
   const renderContent = () => {
@@ -68,7 +74,7 @@ export function SettingsView({ onBack }: SettingsViewProps) {
       case 'storage':
         return <StorageSettings />
       case 'encryption':
-        return <EncryptionSettings />
+        return <EncryptionSettings subPage={encryptionSubPage} />
       case 'mcp':
         return <McpSettings />
       case 'advanced':
@@ -82,8 +88,19 @@ export function SettingsView({ onBack }: SettingsViewProps) {
     <div className="h-full flex flex-col bg-fluux-chat">
       {/* Header */}
       <div className="h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
+        {/* Back to the Encryption overview, at every width */}
+        {encryptionSubPage && (
+          <button
+            type="button"
+            onClick={() => navigateToSettings('encryption', { replace: true })}
+            className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover tap-target"
+            aria-label={t('common.back')}
+          >
+            <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
+          </button>
+        )}
         {/* Back button - mobile only */}
-        {onBack && (
+        {onBack && !encryptionSubPage && (
           <button
             type="button"
             onClick={onBack}
@@ -94,7 +111,7 @@ export function SettingsView({ onBack }: SettingsViewProps) {
           </button>
         )}
         {CategoryIcon && <CategoryIcon className="size-5 text-fluux-muted me-2" />}
-        <h2 className="type-view-title text-fluux-text">{categoryLabel}</h2>
+        <h2 className="type-view-title text-fluux-text">{headerLabel}</h2>
       </div>
 
       {/* Content. Profile uses edge-to-edge hero (handles its own padding);

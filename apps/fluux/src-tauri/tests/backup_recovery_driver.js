@@ -96,7 +96,7 @@
       // FLM-304: decline the startup restore, then retry the keychain from Settings.
       await wait(() => heading('Restore from backup'), 'startup restore offer')
       ;(await wait(() => button('Cancel'), 'startup restore cancel')).click()
-      location.hash = '/settings/encryption'
+      location.hash = '/settings/encryption/openpgp'
       const ask = () => button('Ask macOS again')
       // The App offers the guided restore again for its new plugin; decline it.
       const declineRestore = async () => {
@@ -107,7 +107,7 @@
       const reopen = async (action = ask) => {
         location.hash = '/messages'
         await wait(() => !button('Advanced: ask the keychain again'), 'left Settings')
-        location.hash = '/settings/encryption'
+        location.hash = '/settings/encryption/openpgp'
         ;(await wait(() => button('Advanced: ask the keychain again'), 'advanced keychain retry panel')).click()
         return wait(action, 'keychain retry action')
       }
@@ -177,7 +177,7 @@
       if (await retryOffered()) throw new Error('the keychain retry is offered for a restored account')
       const retried = await window.__TAURI_INTERNALS__.invoke('openpgp_retry_keychain_access', account)
       if (retried.fingerprint !== fp) throw new Error('the keychain retry answered another key for a restored account')
-      location.hash = '/settings/encryption'
+      location.hash = '/settings/encryption/openpgp'
       await wait(() => document.body.textContent.includes('Your key is ready and published.'), 'restored key ready in Settings')
       if (button('Advanced: ask the keychain again')) throw new Error('the keychain retry panel is shown for a restored account')
       location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat')

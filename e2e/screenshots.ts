@@ -464,6 +464,7 @@ test('26 — Encryption Settings (dark)', async ({ page }) => {
   // shows the "ready" status plus the account fingerprint and key-management
   // actions (back up / export / rotate).
   await page.getByText('Encryption', { exact: true }).first().click()
+  await page.getByRole('button', { name: /^OpenPGP/ }).click()
   // Key details are collapsed by default; open the actual disclosure before
   // waiting for the demo fingerprint instead of capturing a hidden field.
   await page.getByRole('button', { name: 'Key details', exact: true }).click()

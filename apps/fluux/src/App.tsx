@@ -32,6 +32,7 @@ import { useFullscreen } from './hooks/useFullscreen'
 import { useTauriCloseHandler } from './hooks/useTauriCloseHandler'
 import { useTauriFocusRestore } from './hooks/useTauriFocusRestore'
 import { useAutoUpdate } from './hooks'
+import { SETTINGS_ROUTE_PATH } from './hooks/useRouteSync'
 import { useIgnoreSync } from './hooks/useIgnoreSync'
 import { useExternalLinkHandler } from './hooks/useExternalLinkHandler'
 import { usePlatformState } from './hooks/usePlatformState'
@@ -537,7 +538,7 @@ function App() {
         <Route path="/events" element={<ChatLayout />} />
         <Route path="/search" element={<ChatLayout />} />
         <Route path="/admin/*" element={<ChatLayout />} />
-        <Route path="/settings/:category?" element={<ChatLayout />} />
+        <Route path={SETTINGS_ROUTE_PATH} element={<ChatLayout />} />
         {/* Default redirect to messages */}
         <Route path="/" element={<Navigate to="/messages" replace />} />
         {/* Catch-all for unknown routes */}

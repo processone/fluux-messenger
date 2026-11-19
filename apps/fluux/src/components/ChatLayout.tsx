@@ -315,7 +315,7 @@ function ChatLayoutContent() {
   const [showRoomOccupants, setShowRoomOccupants] = useState(false)
 
   // Get URL-derived state for store sync and settings detection
-  const { sidebarView: urlSidebarView, settingsCategory, activeJid } = useRouteSync()
+  const { sidebarView: urlSidebarView, settingsCategory, settingsSubPage, activeJid } = useRouteSync()
 
   // Derive selectedContact from React state (selectedContactJid) with URL fallback (activeJid).
   // On mobile, React state and URL can briefly desync during navigation, causing the layout
@@ -442,7 +442,10 @@ function ChatLayoutContent() {
           break
         case 'settings':
           // Reopen the saved Settings page, not the default one.
-          navigateToSettings(savedViewState.settingsCategory ?? undefined, { replace: true })
+          navigateToSettings(savedViewState.settingsCategory ?? undefined, {
+            replace: true,
+            subPage: savedViewState.settingsSubPage ?? undefined,
+          })
           break
       }
     }
@@ -459,9 +462,10 @@ function ChatLayoutContent() {
       selectedContactJid: selectedContactJid,
       showRoomOccupants,
       settingsCategory,
+      settingsSubPage,
     }
     saveViewState(viewState)
-  }, [status, sidebarView, activeConversationId, activeRoomJid, selectedContactJid, showRoomOccupants, settingsCategory])
+  }, [status, sidebarView, activeConversationId, activeRoomJid, selectedContactJid, showRoomOccupants, settingsCategory, settingsSubPage])
 
   // Clear selected contact when conversation or room becomes active
   useEffect(() => {

@@ -118,6 +118,7 @@ export interface ViewStateData {
   selectedContactJid: string | null
   showRoomOccupants?: boolean  // Whether members sidebar is expanded in room view
   settingsCategory?: string | null  // Open Settings page (e.g. 'encryption'); absent in older saves
+  settingsSubPage?: string | null  // Screen inside that page (e.g. 'omemo'); absent in older saves
 }
 
 /**

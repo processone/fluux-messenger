@@ -933,8 +933,24 @@
         },
         "encryption": {
             "experimental": "Experimental",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Fiecare conversație folosește o singură metodă de criptare. Când sunt disponibile ambele, OMEMO are prioritate față de OpenPGP, cu excepția cazului în care o conversație este setată pe o metodă anume.",
+                "stateOff": "Dezactivat",
+                "stateOn": "Activat",
+                "stateLocked": "Blocat",
+                "stateOnBackedUp": "Activat, cu copie de rezervă",
+                "stateOnNoBackup": "Activat, încă fără copie de rezervă",
+                "stateOnBackupUnconfirmed": "Activat, copie de rezervă neconfirmată",
+                "stateWaiting": "Activat, așteaptă conexiunea",
+                "stateNeedsAttention": "Necesită atenție",
+                "omemoNotUsed": "Încă nefolosit",
+                "omemoNotUsedDevices": "Încă nefolosit · dispozitive pe contul tău: {{devices}}",
+                "omemoDescription": "Verifică și elimină dispozitivele OMEMO înregistrate pe contul tău."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "Dispozitivele tale OMEMO",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

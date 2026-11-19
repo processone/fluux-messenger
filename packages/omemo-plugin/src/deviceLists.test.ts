@@ -52,6 +52,18 @@ describe('own OMEMO device lists, from reference-client lists and bundles', () =
     for (const d of lists.legacy.devices) expect(d.fingerprint).toBe(fixture.legacy.fingerprints[d.id])
   })
 
+  it('reads only the device lists, with no bundle requests, when fingerprints are not wanted', async () => {
+    const { pep } = setup()
+    const nodes: string[] = []
+    const counting: OwnPepAccess = { ...pep, query: (jid, node, max) => (nodes.push(node), pep.query(jid, node, max)) }
+    const lists = await readOwnDeviceLists(counting, ME, { withFingerprints: false })
+    if (!lists.omemo2.ok || !lists.legacy.ok) throw new Error('lists should read')
+    expect(sortedIds(lists.omemo2.devices)).toEqual(ids(fixture.omemo2).sort((a, b) => a - b))
+    expect(sortedIds(lists.legacy.devices)).toEqual(ids(fixture.legacy).sort((a, b) => a - b))
+    expect(lists.omemo2.devices.every((d) => d.fingerprint === undefined)).toBe(true)
+    expect(nodes.sort()).toEqual([NS_DEVICES, NS_LEGACY_DEVICELIST].sort())
+  })
+
   it('keeps a device listed when its bundle is missing or unreadable', async () => {
     const [missingOmemo2] = ids(fixture.omemo2)
     const [missingLegacy, garbled] = ids(fixture.legacy)

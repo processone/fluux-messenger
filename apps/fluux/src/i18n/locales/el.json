@@ -930,8 +930,24 @@
         },
         "encryption": {
             "experimental": "Πειραματικό",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Κάθε συνομιλία χρησιμοποιεί μία μέθοδο κρυπτογράφησης. Όταν είναι διαθέσιμες και οι δύο, προτιμάται το OMEMO από το OpenPGP, εκτός αν η συνομιλία έχει οριστεί σε συγκεκριμένη μέθοδο.",
+                "stateOff": "Ανενεργό",
+                "stateOn": "Ενεργό",
+                "stateLocked": "Κλειδωμένο",
+                "stateOnBackedUp": "Ενεργό, με αντίγραφο ασφαλείας",
+                "stateOnNoBackup": "Ενεργό, χωρίς αντίγραφο ασφαλείας ακόμη",
+                "stateOnBackupUnconfirmed": "Ενεργό, μη επιβεβαιωμένο αντίγραφο ασφαλείας",
+                "stateWaiting": "Ενεργό, αναμονή σύνδεσης",
+                "stateNeedsAttention": "Απαιτεί προσοχή",
+                "omemoNotUsed": "Δεν χρησιμοποιείται ακόμη",
+                "omemoNotUsedDevices": "Δεν χρησιμοποιείται ακόμη · συσκευές στον λογαριασμό σας: {{devices}}",
+                "omemoDescription": "Δείτε και αφαιρέστε τις συσκευές OMEMO που έχουν καταχωριστεί στον λογαριασμό σας."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "Οι συσκευές σας OMEMO",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

@@ -4,9 +4,9 @@
  * Tests URL parsing, state derivation, and navigation actions.
  */
 import { describe, it, expect } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
-import { MemoryRouter, useLocation } from 'react-router'
-import { useRouteSync, getViewPath } from './useRouteSync'
+import { render, renderHook, act } from '@testing-library/react'
+import { MemoryRouter, Navigate, Route, Routes, useLocation } from 'react-router'
+import { useRouteSync, getViewPath, SETTINGS_ROUTE_PATH } from './useRouteSync'
 import type { ReactNode } from 'react'
 
 // Helper to create wrapper with specific initial route
@@ -19,6 +19,25 @@ function createWrapper(initialEntries: string[] = ['/messages']) {
     )
   }
 }
+
+describe('settings route table', () => {
+  // The app's settings route followed by its catch-all redirect to Messages.
+  it.each(['/settings', '/settings/encryption', '/settings/encryption/openpgp', '/settings/encryption/omemo', '/settings/encryption/unknown'])(
+    'keeps %s on the settings view instead of redirecting to Messages',
+    (path) => {
+      let currentPath = ''
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path={SETTINGS_ROUTE_PATH} element={<LocationCapture onPathChange={(p) => (currentPath = p)} />} />
+            <Route path="*" element={<Navigate to="/messages" replace />} />
+          </Routes>
+        </MemoryRouter>
+      )
+      expect(currentPath).toBe(path)
+    }
+  )
+})
 
 describe('useRouteSync', () => {
   describe('URL parsing - sidebarView', () => {
@@ -197,6 +216,15 @@ describe('useRouteSync', () => {
       })
       expect(result.current.sidebarView).toBe('settings')
       expect(result.current.settingsCategory).toBe('language')
+      expect(result.current.settingsSubPage).toBeNull()
+    })
+
+    it('reads the sub-page of /settings/:category/:subPage', () => {
+      const { result } = renderHook(() => useRouteSync(), {
+        wrapper: createWrapper(['/settings/encryption/openpgp']),
+      })
+      expect(result.current.settingsCategory).toBe('encryption')
+      expect(result.current.settingsSubPage).toBe('openpgp')
     })
   })
 
@@ -361,6 +389,24 @@ describe('useRouteSync', () => {
       })
 
       expect(currentPath).toBe('/settings/notifications')
+    })
+
+    it('navigateToSettings with a sub-page navigates to /settings/:category/:subPage', () => {
+      let currentPath = '/messages'
+      const wrapper = ({ children }: { children: ReactNode }) => (
+        <MemoryRouter initialEntries={['/messages']}>
+          {children}
+          <LocationCapture onPathChange={(p) => (currentPath = p)} />
+        </MemoryRouter>
+      )
+
+      const { result } = renderHook(() => useRouteSync(), { wrapper })
+
+      act(() => {
+        result.current.navigateToSettings('encryption', { subPage: 'omemo' })
+      })
+
+      expect(currentPath).toBe('/settings/encryption/omemo')
     })
 
     it('navigateUp goes from detail to list within current tab', () => {

@@ -935,8 +935,24 @@
         },
         "encryption": {
             "experimental": "Experimentální",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Každý chat používá jednu metodu šifrování. Jsou-li dostupné obě, upřednostní se OMEMO před OpenPGP, pokud chat není nastaven na konkrétní metodu.",
+                "stateOff": "Vypnuto",
+                "stateOn": "Zapnuto",
+                "stateLocked": "Uzamčeno",
+                "stateOnBackedUp": "Zapnuto, zálohováno",
+                "stateOnNoBackup": "Zapnuto, zatím bez zálohy",
+                "stateOnBackupUnconfirmed": "Zapnuto, záloha nepotvrzena",
+                "stateWaiting": "Zapnuto, čeká na připojení",
+                "stateNeedsAttention": "Vyžaduje pozornost",
+                "omemoNotUsed": "Zatím nepoužíváno",
+                "omemoNotUsedDevices": "Zatím nepoužíváno · zařízení ve vašem účtu: {{devices}}",
+                "omemoDescription": "Zobrazte a odeberte zařízení OMEMO zaregistrovaná ve vašem účtu."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "Vaše zařízení OMEMO",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

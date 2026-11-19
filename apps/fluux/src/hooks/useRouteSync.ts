@@ -17,6 +17,7 @@
  * - /admin/:category    → admin view, category selected
  * - /settings           → settings view
  * - /settings/:category → settings view with category selected
+ * - /settings/:category/:subPage → a screen inside the category (Encryption: openpgp, omemo)
  *
  * Navigation uses a push/replace discipline for clean mobile back behavior:
  * - Tab switches use `replace` (no history accumulation across tabs)
@@ -27,6 +28,12 @@
 import { useCallback, useMemo } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
 import type { SidebarView } from '@/components/sidebar-components/types'
+
+/** Settings route pattern: `/settings`, `/settings/:category`, `/settings/:category/:subPage`. */
+export const SETTINGS_ROUTE_PATH = '/settings/:category?/:subPage?'
+
+/** Options for navigateToSettings: history control plus the screen inside the category */
+export type SettingsNavigateOptions = NavigateOptions & { subPage?: string }
 
 /** Options for navigation functions to control history behavior */
 export interface NavigateOptions {
@@ -43,6 +50,8 @@ export interface RouteState {
   adminCategory: string | null
   /** Settings category from URL (for /settings/:category) */
   settingsCategory: string | null
+  /** Screen inside the settings category (for /settings/:category/:subPage) */
+  settingsSubPage: string | null
 }
 
 export interface RouteActions {
@@ -54,8 +63,8 @@ export interface RouteActions {
   navigateToContacts: (jid?: string, options?: NavigateOptions) => void
   /** Navigate to admin view, optionally selecting a category */
   navigateToAdmin: (category?: string, options?: NavigateOptions) => void
-  /** Navigate to settings view, optionally selecting a category */
-  navigateToSettings: (category?: string, options?: NavigateOptions) => void
+  /** Navigate to settings view, optionally selecting a category and a screen inside it */
+  navigateToSettings: (category?: string, options?: SettingsNavigateOptions) => void
   /** Navigate to search view */
   navigateToSearch: (options?: NavigateOptions) => void
   /** Deterministic "go up" within current tab (detail → list, or list → messages) */
@@ -132,6 +141,17 @@ function extractSettingsCategory(pathname: string): string | null {
 }
 
 /**
+ * Extract the screen inside a settings category from URL path.
+ */
+function extractSettingsSubPage(pathname: string): string | null {
+  if (pathname.startsWith('/settings/')) {
+    const parts = pathname.slice('/settings/'.length).split('/')
+    return parts[1] || null
+  }
+  return null
+}
+
+/**
  * Hook to sync React Router URL with view state.
  *
  * @example
@@ -181,6 +201,11 @@ export function useRouteSync(): RouteState & RouteActions {
     [location.pathname]
   )
 
+  const settingsSubPage = useMemo(
+    () => extractSettingsSubPage(location.pathname),
+    [location.pathname]
+  )
+
   // Navigation actions - all accept optional { replace: true } for history control.
   // Wrapped in useCallback to maintain referential stability across renders,
   // since these functions appear in effect dependency arrays in ChatLayout.
@@ -220,10 +245,11 @@ export function useRouteSync(): RouteState & RouteActions {
     }
   }, [navigate])
 
-  const navigateToSettings = useCallback((category?: string, options?: NavigateOptions) => {
+  const navigateToSettings = useCallback((category?: string, options?: SettingsNavigateOptions) => {
     const opts = options?.replace ? { replace: true } : undefined
     if (category) {
-      void navigate(`/settings/${encodeURIComponent(category)}`, opts)
+      const subPath = options?.subPage ? `/${encodeURIComponent(options.subPage)}` : ''
+      void navigate(`/settings/${encodeURIComponent(category)}${subPath}`, opts)
     } else {
       void navigate('/settings', opts)
     }
@@ -257,6 +283,7 @@ export function useRouteSync(): RouteState & RouteActions {
     activeJid,
     adminCategory,
     settingsCategory,
+    settingsSubPage,
     // Actions
     navigateToMessages,
     navigateToRooms,

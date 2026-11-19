@@ -1308,6 +1308,23 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
     })
   })
 
+  it('restores the open Encryption method screen after a reload', async () => {
+    vi.mocked(sessionStorage.getSavedViewState).mockReturnValue({
+      sidebarView: 'settings',
+      activeConversationId: null,
+      activeRoomJid: null,
+      selectedContactJid: null,
+      settingsCategory: 'encryption',
+      settingsSubPage: 'omemo',
+    })
+
+    render(<ChatLayoutWithProbe />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('probe-path')).toHaveTextContent('/settings/encryption/omemo')
+    })
+  })
+
   it('should handle session storage with both null correctly (fresh state)', async () => {
     // Scenario: Fresh session, nothing was active
     vi.mocked(sessionStorage.getSavedViewState).mockReturnValue({

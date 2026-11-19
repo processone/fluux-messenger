@@ -56,7 +56,12 @@ describe('OmemoDevicesSection', () => {
     const omemo2 = await screen.findByTestId('omemo-list-omemo2')
     expect(within(omemo2).getByText('Phone')).toBeTruthy()
     expect(within(omemo2).getByText('settings.encryption.omemoDevices.unnamed')).toBeTruthy()
-    expect(within(omemo2).getByText(FP.match(/.{8}/g)!.join(' '))).toBeTruthy()
+    const groups = FP.match(/.{8}/g)!
+    const spans = within(omemo2).getAllByText(groups[0])
+    expect(spans).toHaveLength(groups.length)
+    expect(spans[0].parentElement!.textContent).toBe(groups.join(' '))
+    // Each group of eight is unbreakable, so a line wraps only between groups.
+    for (const span of spans) expect(span.className).toContain('whitespace-nowrap')
     expect(within(omemo2).getByText('settings.encryption.omemoDevices.noFingerprint')).toBeTruthy()
     expect(within(screen.getByTestId('omemo-list-legacy')).getByText('Old laptop')).toBeTruthy()
     expect(readOwnDeviceLists).toHaveBeenCalledWith(pep, 'me@example.com')

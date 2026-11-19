@@ -118,7 +118,7 @@ for (const source of ['server', 'file']) {
     if (source === 'server') {
       await capture(page, 'after-startup-recovery.png')
       await page.getByRole('button', { name: 'Cancel', exact: true }).click()
-      await page.evaluate(() => { location.hash = '/settings/encryption' })
+      await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
       await expect(page.getByText('The local key could not be unlocked.', { exact: false })).toBeVisible()
       await capture(page, 'after-settings-recovery-needed.png')
       await page.getByRole('button', { name: 'Restore from backup', exact: true }).click()
@@ -140,13 +140,13 @@ for (const source of ['server', 'file']) {
     expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
     expect((await audit(page)).commands).not.toContain('openpgp_forget_account')
     expect((await audit(page)).commands).not.toContain('openpgp_rotate_encryption_subkey')
-    await page.evaluate(() => { location.hash = '/settings/encryption' })
+    await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
     await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()
     await expect(page.getByText('This key is backed up on the server.', { exact: true })).toBeVisible()
     await capture(page, `after-${source}-ready.png`)
     await reloadDemo(page)
     await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeHidden()
-    await page.evaluate(() => { location.hash = '/settings/encryption' })
+    await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
     await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()
     await page.evaluate(() => { location.hash = '/messages/' + encodeURIComponent('ava@fluux.chat') })
     await expectWaitingMessageDecrypted(page)
@@ -159,7 +159,7 @@ for (const source of ['server', 'file']) {
  * not a production-marker durability claim. */
 async function reloadWithResetMarker(page: Page, expectedFingerprint: string, expectedBackup: string) {
   await reloadDemo(page)
-  await page.evaluate(() => { location.hash = '/settings/encryption' })
+  await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
   await expect(page.getByText(encryptionCopy.backupStatusUnconfirmed, { exact: true })).toBeVisible()
   const actual = await page.evaluate(async () => {
     const plugin = (window as any).__demoClient.e2ee.getPlugin('openpgp')
@@ -201,7 +201,7 @@ for (const kind of ['single-key', 'multi-key']) {
       await previewServer(page)
       await page.getByRole('button', { name: 'Use this key', exact: true }).click()
       await page.getByRole('heading', { name: 'Confirm restored key', exact: true }).waitFor({ state: 'hidden' })
-      await page.evaluate(() => { location.hash = '/settings/encryption' })
+      await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
       await expect(page.getByText('This key is backed up on the server.', { exact: true })).toBeVisible()
       await page.getByRole('button', { name: 'Restore from backup', exact: true }).click()
       const bobKeys = await decrypt({ message: await readMessage({ armoredMessage: file }), passwords: [legacyNormalizeBackupPassphrase(code)], format: 'binary' })
@@ -216,7 +216,7 @@ for (const kind of ['single-key', 'multi-key']) {
     await page.locator(`input[name="key-picker"][value="${bobFingerprint}"]`).check()
     await page.getByRole('button', { name: 'Use this key', exact: true }).click()
     await page.getByRole('heading', { name: 'Confirm restored key', exact: true }).waitFor({ state: 'hidden' })
-    await page.evaluate(() => { location.hash = '/settings/encryption' })
+    await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
     const expectedStatus = kind === 'multi-key' ? encryptionCopy.backupStatusMismatch : encryptionCopy.backupStatusUnconfirmed
     await expect(page.getByText(expectedStatus, { exact: true })).toBeVisible()
     await expect(page.getByText(encryptionCopy.backupStatusInSync, { exact: true })).toBeHidden()
@@ -244,7 +244,7 @@ async function openUnconfirmedSettings(page: Page) {
   await page.getByRole('button', { name: 'Use this key', exact: true }).click()
   await page.getByRole('heading', { name: 'Confirm restored key', exact: true }).waitFor({ state: 'hidden' })
   await reloadDemo(page)
-  await page.evaluate(() => { location.hash = '/settings/encryption' })
+  await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
   await expect(page.getByText(encryptionCopy.backupStatusUnconfirmed, { exact: true })).toBeVisible()
 }
 
@@ -341,7 +341,7 @@ for (const mode of ['guided', 'ordinary-picker']) {
     await page.locator(`input[name="key-picker"][value="${fingerprint}"]`).check()
     await page.getByRole('button', { name: encryptionCopy.keyPicker.confirm, exact: true }).click()
     await expect(page.locator('input[name="key-picker"]')).toHaveCount(0)
-    await page.evaluate(() => { location.hash = '/settings/encryption' })
+    await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
     await expect(page.getByText(encryptionCopy.backupStatusInSync, { exact: true })).toBeVisible()
     expect((await audit(page)).publications).not.toContain('urn:xmpp:openpgp:0:secret-key')
     const observed = await page.evaluate(async () => {
@@ -421,7 +421,7 @@ test('an uncertain native save preserves its details and cannot be submitted aga
   await expect(page.getByText(/not confirmed durable/)).toBeVisible()
   await capture(page, 'uncertain-native-save.png')
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
-  await page.evaluate(() => { location.hash = '/settings/encryption' })
+  await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
   await page.getByRole('button', { name: 'Restore from backup', exact: true }).click()
   await previewServer(page)
   await expect(page.getByRole('button', { name: 'Use this key', exact: true })).toBeDisabled()
@@ -536,7 +536,7 @@ for (const backup of ['present', 'absent']) {
     await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeHidden()
     await capture(page, `desync-${backup}-startup.png`)
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
-    await page.evaluate(() => { location.hash = '/settings/encryption' })
+    await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
     await expectDecision()
     // FLM-304: no keychain refusal is held for a desynced key here, so no retry is offered.
     await expect(page.getByRole('button', { name: keychainRetryTitle, exact: true })).toBeHidden()
@@ -579,7 +579,7 @@ test('the advanced keychain retry asks macOS only on request and unlocks the sam
   expect(await audit(page)).toMatchObject({ build: expectedBuild })
   await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
-  await page.evaluate(() => { location.hash = '/settings/encryption' })
+  await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
   await expect(page.getByText('The local key could not be unlocked.', { exact: false })).toBeVisible()
   const advanced = page.getByRole('button', { name: keychainRetryTitle, exact: true })
   await expect(advanced).toHaveAttribute('aria-expanded', 'false')
@@ -629,7 +629,7 @@ test('the advanced keychain retry asks macOS only on request and unlocks the sam
 
   await reloadDemo(page)
   await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeHidden()
-  await page.evaluate(() => { location.hash = '/settings/encryption' })
+  await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
   await expect(page.getByText('Your key is ready and published.', { exact: true })).toBeVisible()
   expect(await retryReads(page)).toBe(0)
 })
@@ -644,7 +644,7 @@ test('the keychain retry stays hidden on desktop Windows', async ({ page }) => {
   const noBackup = page.getByRole('button', { name: encryption.identityChoice.restoreFromServerUnavailable, exact: false })
   await expect(noBackup).toBeDisabled()
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
-  await page.evaluate(() => { location.hash = '/settings/encryption' })
+  await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
   await expect(page.getByText(encryption.statusRecoveryNeeded, { exact: true })).toBeVisible()
   await expect(noBackup).toBeDisabled()
   await expect(page.getByRole('button', { name: keychainRetryTitle, exact: true })).toBeHidden()
@@ -674,7 +674,7 @@ for (const entry of ['startup', 'Settings']) {
       // The startup Cancel only closes the choice; Settings opens it again.
       await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
       await expect(replace).toBeHidden()
-      await page.evaluate(() => { location.hash = '/settings/encryption' })
+      await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
       await expect(replace).toBeEnabled()
     }
     const advanced = dialog.getByRole('button', { name: keychainRetryTitle, exact: true })
@@ -744,7 +744,7 @@ for (const placement of ['Settings', 'identity choice']) {
     if (!desync) {
       await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeVisible()
       await page.getByRole('button', { name: 'Cancel', exact: true }).click()
-      await page.evaluate(() => { location.hash = '/settings/encryption' })
+      await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
     }
     const advanced = scope.getByRole('button', { name: keychainRetryTitle, exact: true })
     await advanced.click()
@@ -779,7 +779,7 @@ for (const placement of ['Settings', 'identity choice']) {
     if (!desync) {
       await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeVisible()
       await page.getByRole('button', { name: 'Cancel', exact: true }).click()
-      await page.evaluate(() => { location.hash = '/settings/encryption' })
+      await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
     }
     const advanced = scope.getByRole('button', { name: keychainRetryTitle, exact: true })
     await advanced.click()
@@ -824,7 +824,7 @@ for (const placement of ['Settings', 'identity choice']) {
     if (!desync) {
       await expect(page.getByRole('heading', { name: 'Restore from backup', exact: true })).toBeVisible()
       await page.getByRole('button', { name: 'Cancel', exact: true }).click()
-      await page.evaluate(() => { location.hash = '/settings/encryption' })
+      await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
     }
     const advanced = scope.getByRole('button', { name: keychainRetryTitle, exact: true })
     await advanced.click()
@@ -855,7 +855,7 @@ for (const placement of ['Settings', 'identity choice']) {
       await expect(scope).toBeHidden()
     }
     await page.evaluate(() => { location.hash = '/messages' })
-    await page.evaluate(() => { location.hash = '/settings/encryption' })
+    await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
     if (desync) await expect(scope.getByRole('button', { name: new RegExp(encryptionCopy.identityChoice.importFromFileTitle) })).toBeEnabled()
     else await expect(page.getByRole('button', { name: 'Restore from backup', exact: true })).toBeEnabled()
     await expect.poll(probes, 'the reopened panel asked again whether a retry applies').toBeGreaterThan(probed)
@@ -896,7 +896,7 @@ for (const backup of ['present', 'unknown']) {
       w.__retryOffers = []
       plugin.keychainRetryState = async () => { const answer = await state(); w.__retryOffers.push(answer); return answer }
     }, backup)
-    await page.evaluate(() => { location.hash = '/settings/encryption' })
+    await page.evaluate(() => { location.hash = '/settings/encryption/openpgp' })
     await expect(page.getByText('The local key could not be unlocked.', { exact: false })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Restore from backup', exact: true })).toBeEnabled()
     await expect.poll(() => page.evaluate(() => (window as any).__retryOffers.length)).toBeGreaterThan(0)

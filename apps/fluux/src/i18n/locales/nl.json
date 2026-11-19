@@ -929,8 +929,24 @@
         },
         "encryption": {
             "experimental": "Experimenteel",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Elke chat gebruikt één versleutelingsmethode. Als beide beschikbaar zijn, krijgt OMEMO de voorkeur boven OpenPGP, tenzij een chat op een bepaalde methode staat.",
+                "stateOff": "Uit",
+                "stateOn": "Aan",
+                "stateLocked": "Vergrendeld",
+                "stateOnBackedUp": "Aan, back-up gemaakt",
+                "stateOnNoBackup": "Aan, nog geen back-up",
+                "stateOnBackupUnconfirmed": "Aan, back-up niet bevestigd",
+                "stateWaiting": "Aan, wacht op verbinding",
+                "stateNeedsAttention": "Aandacht nodig",
+                "omemoNotUsed": "Nog niet in gebruik",
+                "omemoNotUsedDevices": "Nog niet in gebruik · apparaten op je account: {{devices}}",
+                "omemoDescription": "Bekijk en verwijder de OMEMO-apparaten die op je account zijn geregistreerd."
+            },
             "omemoDevices": {
-                "title": "OMEMO-apparaten",
+                "title": "Je OMEMO-apparaten",
                 "description": "Apparaten die andere apps voor OMEMO op je account hebben geregistreerd. Fluux gebruikt OMEMO nog niet; deze lijst dient alleen om ze te bekijken en te verwijderen.",
                 "offline": "Verbind om je OMEMO-apparaten te zien.",
                 "loading": "Apparaten laden…",

@@ -937,8 +937,24 @@
         },
         "encryption": {
             "experimental": "Sperimentali",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Kull chat juża metodu wieħed ta’ kriptaġġ. Meta t-tnejn ikunu disponibbli, jiġi preferut OMEMO fuq OpenPGP, sakemm chat ma jkunx issettjat fuq metodu speċifiku.",
+                "stateOff": "Mitfi",
+                "stateOn": "Mixgħul",
+                "stateLocked": "Maqful",
+                "stateOnBackedUp": "Mixgħul, bil-backup",
+                "stateOnNoBackup": "Mixgħul, għad m’hemmx backup",
+                "stateOnBackupUnconfirmed": "Mixgħul, il-backup mhux ikkonfermat",
+                "stateWaiting": "Mixgħul, qed jistenna konnessjoni",
+                "stateNeedsAttention": "Teħtieġ attenzjoni",
+                "omemoNotUsed": "Għadu mhux qed jintuża",
+                "omemoNotUsedDevices": "Għadu mhux qed jintuża · apparati fil-kont tiegħek: {{devices}}",
+                "omemoDescription": "Ara u neħħi l-apparati OMEMO irreġistrati fil-kont tiegħek."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "L-apparati OMEMO tiegħek",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

@@ -964,8 +964,24 @@
         },
         "encryption": {
             "experimental": "Expérimental",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Chaque conversation utilise une seule méthode de chiffrement. Quand les deux sont disponibles, OMEMO est préféré à OpenPGP, sauf si une conversation est réglée sur une méthode précise.",
+                "stateOff": "Désactivé",
+                "stateOn": "Activé",
+                "stateLocked": "Verrouillé",
+                "stateOnBackedUp": "Activé, sauvegardé",
+                "stateOnNoBackup": "Activé, pas encore de sauvegarde",
+                "stateOnBackupUnconfirmed": "Activé, sauvegarde non confirmée",
+                "stateWaiting": "Activé, en attente de connexion",
+                "stateNeedsAttention": "À vérifier",
+                "omemoNotUsed": "Pas encore utilisé",
+                "omemoNotUsedDevices": "Pas encore utilisé · appareils sur votre compte : {{devices}}",
+                "omemoDescription": "Consultez et retirez les appareils OMEMO enregistrés sur votre compte."
+            },
             "omemoDevices": {
-                "title": "Appareils OMEMO",
+                "title": "Vos appareils OMEMO",
                 "description": "Appareils que d'autres applications ont enregistrés sur votre compte pour OMEMO. Fluux n'utilise pas encore OMEMO ; cette liste sert seulement à les consulter et à les retirer.",
                 "offline": "Connectez-vous pour voir vos appareils OMEMO.",
                 "loading": "Chargement des appareils…",

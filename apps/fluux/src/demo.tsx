@@ -26,7 +26,7 @@ import { useToastStore } from './stores/toastStore'
 import { useArrivalJumpStore } from './stores/arrivalJumpStore'
 import { useEncryptionSettingsStore } from './stores/encryptionSettingsStore'
 import { setOpenPGPTrustView, type OpenPGPTrustView } from './e2ee/openpgpTrustView'
-import { setSessionPassphrase } from '@fluux/openpgp-plugin'
+import { setSessionPassphrase, clearSessionPassphrase } from '@fluux/openpgp-plugin'
 import { RenderLoopBoundary, RenderLoopWarningBanner } from './components/RenderLoopBoundary'
 import { WindowControls } from './components/WindowControls'
 import { ROUTER_USE_TRANSITIONS } from './config/routerTransitions'
@@ -189,6 +189,7 @@ const demoRegistration = (async () => {
 setSessionPassphrase('demo')
 
 // Expose demo client and stores for automation (screenshot scripts, testing)
+;(window as any).__clearSessionPassphrase = clearSessionPassphrase
 ;(window as any).__demoClient = demoClient
 // The SDK's diagnostic channel is module-scoped, so automation reaches it here
 // rather than through the client.

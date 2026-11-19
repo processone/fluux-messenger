@@ -683,7 +683,7 @@ If native secret storage fails while loading an existing OpenPGP key, registrati
 recovery-capable plugin with `key-storage-unavailable`, distinct from absent keys, desynchronized
 key material, network failures and unknown native outcomes. App offers recovery once for that
 plugin's failure episode. Dismissal changes no identity. **Restore from backup** remains in
-Settings → Encryption outside the ready-key gate; storage refusal does not prompt again there.
+Settings → Encryption → OpenPGP outside the ready-key gate; storage refusal does not prompt again there.
 Recognized desynchronization/corruption retains the identity-choice dialog, including replacement,
 at startup, the Settings auto-prompt and the toggle, with or without a server backup.
 

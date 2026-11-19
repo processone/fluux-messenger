@@ -929,8 +929,24 @@
         },
         "encryption": {
             "experimental": "Eksperimentell",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Hver samtale bruker én krypteringsmetode. Når begge er tilgjengelige, foretrekkes OMEMO framfor OpenPGP, med mindre en samtale er satt til en bestemt metode.",
+                "stateOff": "Av",
+                "stateOn": "På",
+                "stateLocked": "Låst",
+                "stateOnBackedUp": "På, sikkerhetskopiert",
+                "stateOnNoBackup": "På, ingen sikkerhetskopi ennå",
+                "stateOnBackupUnconfirmed": "På, sikkerhetskopi ikke bekreftet",
+                "stateWaiting": "På, venter på tilkobling",
+                "stateNeedsAttention": "Trenger oppmerksomhet",
+                "omemoNotUsed": "Ikke i bruk ennå",
+                "omemoNotUsedDevices": "Ikke i bruk ennå · enheter på kontoen din: {{devices}}",
+                "omemoDescription": "Se gjennom og fjern OMEMO-enhetene som er registrert på kontoen din."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "Dine OMEMO-enheter",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

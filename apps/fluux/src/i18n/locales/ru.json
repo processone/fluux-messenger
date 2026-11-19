@@ -933,8 +933,24 @@
         },
         "encryption": {
             "experimental": "Экспериментально",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Каждый чат использует один метод шифрования. Если доступны оба, OMEMO предпочтительнее OpenPGP, если для чата не выбран конкретный метод.",
+                "stateOff": "Выключено",
+                "stateOn": "Включено",
+                "stateLocked": "Заблокировано",
+                "stateOnBackedUp": "Включено, есть резервная копия",
+                "stateOnNoBackup": "Включено, резервной копии пока нет",
+                "stateOnBackupUnconfirmed": "Включено, резервная копия не подтверждена",
+                "stateWaiting": "Включено, ожидает подключения",
+                "stateNeedsAttention": "Требует внимания",
+                "omemoNotUsed": "Пока не используется",
+                "omemoNotUsedDevices": "Пока не используется · устройств в вашей учётной записи: {{devices}}",
+                "omemoDescription": "Просмотрите и удалите устройства OMEMO, зарегистрированные в вашей учётной записи."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "Ваши устройства OMEMO",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

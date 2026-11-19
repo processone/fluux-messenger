@@ -935,8 +935,24 @@
         },
         "encryption": {
             "experimental": "Turgnamhach",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Úsáideann gach comhrá modh criptithe amháin. Nuair atá an dá cheann ar fáil, tá OMEMO ina rogha thar OpenPGP, mura bhfuil comhrá socraithe ar mhodh ar leith.",
+                "stateOff": "As",
+                "stateOn": "Air",
+                "stateLocked": "Faoighlas",
+                "stateOnBackedUp": "Air, cúltacaithe",
+                "stateOnNoBackup": "Air, gan cúltaca fós",
+                "stateOnBackupUnconfirmed": "Air, cúltaca gan deimhniú",
+                "stateWaiting": "Air, ag fanacht le nasc",
+                "stateNeedsAttention": "Teastaíonn aird",
+                "omemoNotUsed": "Gan úsáid go fóill",
+                "omemoNotUsedDevices": "Gan úsáid go fóill · gléasanna ar do chuntas: {{devices}}",
+                "omemoDescription": "Féach ar na gléasanna OMEMO atá cláraithe ar do chuntas agus bain díobh iad."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "Do ghléasanna OMEMO",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",
