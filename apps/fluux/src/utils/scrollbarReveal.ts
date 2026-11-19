@@ -126,6 +126,13 @@ export function installScrollbarReveal(win: Window & typeof globalThis = window)
   const onKey = (e: KeyboardEvent) => {
     if (!NAV_KEYS.has(e.key)) return
     if (e.key === ' ' && e.target instanceof Element && e.target.closest(ACTIVATABLE)) return
+    // In editable text the keys move a caret (composer), never a list. A one-line
+    // input (a search or palette field) drives its result list with Up and Down only.
+    const t = e.target
+    if (t instanceof HTMLElement) {
+      if (t instanceof HTMLTextAreaElement || t.isContentEditable) return
+      if (t instanceof HTMLInputElement && e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+    }
     keyIntentUntil = now() + USER_INTENT_MS
   }
   const onTouchStart = (e: TouchEvent) => {

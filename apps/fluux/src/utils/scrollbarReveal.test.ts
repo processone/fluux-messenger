@@ -124,12 +124,25 @@ describe('installScrollbarReveal', () => {
     expect(box.hasAttribute('data-scrolling')).toBe(true)
   })
 
-  it('reveals a list scrolled by arrow keys while focus sits in an input elsewhere', () => {
-    const input = document.createElement('input')
-    document.body.appendChild(input)
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+  it('reveals a list scrolled by Up/Down in a search input beside it', () => {
+    const search = document.createElement('input')
+    document.body.appendChild(search)
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
     box.dispatchEvent(new Event('scroll'))
     expect(box.hasAttribute('data-scrolling')).toBe(true)
+  })
+
+  it('does not let a caret move in the composer authorize a later automatic scroll', () => {
+    const composer = document.createElement('textarea')
+    document.body.appendChild(composer)
+    for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']) {
+      composer.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+    }
+    const line = document.createElement('input')
+    document.body.appendChild(line)
+    line.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+    box.dispatchEvent(new Event('scroll')) // the chat list following a new message
+    expect(box.hasAttribute('data-scrolling')).toBe(false)
   })
 
   it('does not treat Space on a button as scrolling', () => {
