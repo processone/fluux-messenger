@@ -3533,7 +3533,11 @@ export class MAM extends BaseModule {
         this.previewWalkWaiters.push(wake)
       })
     }
-    signal?.throwIfAborted()
+    if (signal?.aborted) {
+      // Woken for a slot it will not use: pass the wake on so later waiters are not stranded.
+      this.previewWalkWaiters.shift()?.()
+      signal.throwIfAborted()
+    }
     this.previewWalkActive++
     let released = false
     return () => {
@@ -3578,6 +3582,9 @@ export class MAM extends BaseModule {
         const messages = [message]
         const releaseSlot = await this.acquirePreviewWalkSlot(signal)
         try {
+          // A queued read may resume after the session was replaced or membership lost.
+          session.assertCurrent()
+          if (!joined()) return { kind: 'unknown' }
           // Edits and retractions may be separate entries arbitrarily far after
           // the original. Walk to archive completion without publishing a page.
           const order = new Map<string, Set<CorrectionOrderGroup>>()

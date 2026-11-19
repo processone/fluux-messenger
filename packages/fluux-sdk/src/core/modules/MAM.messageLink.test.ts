@@ -286,6 +286,56 @@ describe('linked room message lookup', () => {
     expect((await later).kind).toBe('found')
   })
 
+  // Intent: FLM-323 review — a cancelled slot handoff must not strand later waiters.
+  it('wakes later waiters when callers woken for a slot have already aborted', async () => {
+    const h = harness()
+    const serve = h.sendIQ.getMockImplementation()!
+    const gates: Array<() => void> = []
+    h.sendIQ.mockImplementation(async iq => {
+      if (iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') !== '100') return serve(iq)
+      await new Promise<void>(resolve => gates.push(resolve))
+      return serve(iq)
+    })
+    const settle = async () => { for (let turn = 0; turn < 40; turn++) await new Promise(resolve => setTimeout(resolve, 0)) }
+    const running = [10, 11].map(index => h.mam.readRoomMessagePreview(ROOM, rows[index].stanzaId))
+    const c = new AbortController()
+    const d = new AbortController()
+    const queued = [c, d].map((controller, offset) => h.mam.readRoomMessagePreview(ROOM, rows[12 + offset].stanzaId, controller.signal).catch(() => 'aborted'))
+    const last = h.mam.readRoomMessagePreview(ROOM, rows[14].stanzaId)
+    await settle()
+    gates.splice(0).forEach(open => open())
+    // Abort in the same turn the releases wake C and D, before either resumes.
+    await Promise.resolve()
+    c.abort(); d.abort()
+    for (let turn = 0; turn < 60; turn++) { gates.splice(0).forEach(open => open()); await new Promise(resolve => setTimeout(resolve, 0)) }
+    await Promise.all(running)
+    expect(await Promise.all(queued)).toEqual(['aborted', 'aborted'])
+    expect((await last).kind).toBe('found')
+  })
+
+  // Intent: FLM-323 review — a queued walk rechecks membership and session once it has a slot.
+  it('does not query the archive when membership is lost while waiting for a slot', async () => {
+    const h = harness()
+    const serve = h.sendIQ.getMockImplementation()!
+    const gates: Array<() => void> = []
+    let walks = 0
+    h.sendIQ.mockImplementation(async iq => {
+      if (iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') !== '100') return serve(iq)
+      walks++
+      await new Promise<void>(resolve => gates.push(resolve))
+      return serve(iq)
+    })
+    const running = [10, 11].map(index => h.mam.readRoomMessagePreview(ROOM, rows[index].stanzaId))
+    const queued = h.mam.readRoomMessagePreview(ROOM, rows[12].stanzaId)
+    for (let turn = 0; turn < 40; turn++) await new Promise(resolve => setTimeout(resolve, 0))
+    expect(walks).toBe(2)
+    roomStore.getState().addRoom({ ...room, joined: false })
+    for (let turn = 0; turn < 60; turn++) { gates.splice(0).forEach(open => open()); await new Promise(resolve => setTimeout(resolve, 0)) }
+    await Promise.all(running)
+    expect(await queued).toEqual({ kind: 'unknown' })
+    expect(walks).toBe(2)
+  })
+
   it('does not confuse a deleted quote with a failed archive request', async () => {
     await cache.saveRoomMessages([{ ...rows[40], isRetracted: true, body: '' }])
     expect(await harness().mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toEqual({ kind: 'absent' })
