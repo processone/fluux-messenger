@@ -1,49 +1,50 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bookmark, Trash2, RefreshCw } from 'lucide-react'
 import {
-  connectionStore, chatStore, roomStore, getBareJid, getLocalPart, getResource, messageRowRef, useSavedMessages, useXMPPContext,
-  type SavedMessage,
+  connectionStore, chatStore, findLatestCopy, getBareJid, getLocalPart, getResource, useSavedMessages,
+  type Message, type RoomMessage, type SavedMessage,
 } from '@fluux/sdk'
 import { useRoomStore, useRosterStore, useChatStore } from '@fluux/sdk/react'
 import { Avatar } from '../Avatar'
 import { RoomAvatar } from '../RoomAvatar'
 import { ListEmpty } from '../ui/ListEmpty'
-import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
-import { useRoomMessageLink } from '@/hooks/useRoomMessageLink'
+import { useDayChange } from '@/hooks/useDayChange'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useToastStore } from '@/stores/toastStore'
 import { formatConversationTime } from '@/utils/dateFormat'
-
-/** What a failed open says about a row: the message is gone, or the lookup failed. */
-type RowProblem = 'absent' | 'failed'
+import type { SavedOpenProblem } from '@/hooks/useSavedOpener'
 
 /**
- * The text a row shows: the latest copy this device holds (so edits and
- * deletions show), else what was saved. Encrypted entries hold no text.
+ * The text a row shows: the latest copy this device holds in its cache (so edits
+ * and deletions that arrived while the conversation was closed show), else what
+ * was saved. Encrypted entries hold no text; a message that never had text is
+ * not a deleted one.
  */
 function useRowText(entry: SavedMessage): string {
   const { t } = useTranslation()
-  const chatMessage = useChatStore((s) => (entry.type === 'chat'
-    ? [entry.stanzaId, entry.originId, entry.messageId].flatMap((id) => (id ? [s.getMessage(entry.conversationJid, id)] : [])).find(Boolean)
-    : undefined))
-  const roomMessage = useRoomStore((s) => (entry.type === 'groupchat'
-    ? [entry.stanzaId, entry.messageId].flatMap((id) => (id ? [s.getMessage(entry.conversationJid, id)] : [])).find(Boolean)
-    : undefined))
-  const message = chatMessage ?? roomMessage
-  if (message?.isRetracted) return t('saved.deleted')
-  if (message && message.body && !message.encryptedPayload) return message.body
+  // The resident window changes when messages arrive, edits included: look again then.
+  const chatWindow = useChatStore((s) => (entry.type === 'chat' ? s.messages.get(entry.conversationJid) : undefined))
+  const roomWindow = useRoomStore((s) => (entry.type === 'groupchat' ? s.messages.get(entry.conversationJid) : undefined))
+  const [copy, setCopy] = useState<Message | RoomMessage | undefined>()
+  useEffect(() => {
+    let current = true
+    void findLatestCopy(entry, connectionStore.getState().jid ?? '').then((found) => { if (current) setCopy(found) })
+    return () => { current = false }
+  }, [entry, chatWindow, roomWindow])
+  if (entry.deleted || copy?.isRetracted) return t('saved.deleted')
+  if (copy?.body && !copy.encryptedPayload) return copy.body
   if (entry.encrypted) return t('saved.encrypted')
-  return entry.text || t('saved.deleted')
+  return entry.text || t('chat.attachment')
 }
 
 function SavedRow({ entry, problem, onOpen, onRemove }: {
   entry: SavedMessage
-  problem: RowProblem | undefined
+  problem: SavedOpenProblem | undefined
   onOpen: (entry: SavedMessage) => void
   onRemove: (id: string) => void
 }) {
   const { t, i18n } = useTranslation()
+  useDayChange()
   const timeFormat = useSettingsStore((s) => s.timeFormat)
   const isRoom = entry.type === 'groupchat'
   const room = useRoomStore((s) => (isRoom ? s.rooms.get(entry.conversationJid) : undefined))
@@ -65,7 +66,7 @@ function SavedRow({ entry, problem, onOpen, onRemove }: {
       role="button"
       tabIndex={0}
       onClick={() => onOpen(entry)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(entry) } }}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(entry) } }}
       className="w-full px-2 py-1.5 rounded flex items-start gap-2.5 text-start cursor-pointer text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text transition-colors group/saved"
     >
       <div className="flex-shrink-0 mt-0.5">
@@ -105,63 +106,14 @@ function SavedRow({ entry, problem, onOpen, onRemove }: {
 }
 
 /** Sidebar list of saved messages, newest saved first. */
-export function SavedView() {
+export function SavedView({ problems, onOpen }: {
+  problems: Record<string, SavedOpenProblem>
+  onOpen: (entry: SavedMessage) => Promise<void>
+}) {
   const { t } = useTranslation()
-  const { client } = useXMPPContext()
   const { saved, remove } = useSavedMessages()
-  const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
-  const openRoomLink = useRoomMessageLink()
-  const addToast = useToastStore((s) => s.addToast)
-  const [problems, setProblems] = useState<Record<string, RowProblem>>({})
-  const latest = useRef({ client, navigateToConversation, navigateToRoom, openRoomLink, addToast, t })
-  latest.current = { client, navigateToConversation, navigateToRoom, openRoomLink, addToast, t }
 
-  const setProblem = useCallback((id: string, problem: RowProblem | undefined) => {
-    setProblems((current) => {
-      if (current[id] === problem) return current
-      const next = { ...current }
-      if (problem) next[id] = problem
-      else delete next[id]
-      return next
-    })
-  }, [])
-
-  const open = useCallback(async (entry: SavedMessage) => {
-    const { client, navigateToConversation, navigateToRoom, openRoomLink, addToast, t } = latest.current
-    setProblem(entry.id, undefined)
-    const fail = (kind: 'absent' | 'unknown') => {
-      setProblem(entry.id, kind === 'absent' ? 'absent' : 'failed')
-    }
-    if (entry.type === 'groupchat') {
-      if (entry.stanzaId) {
-        openRoomLink({ roomJid: entry.conversationJid, stanzaId: entry.stanzaId }, fail)
-        return
-      }
-      // No archive id: only a copy this device already holds can be opened.
-      const resident = entry.messageId ? roomStore.getState().getMessage(entry.conversationJid, entry.messageId) : undefined
-      if (resident) { navigateToRoom(entry.conversationJid, messageRowRef(resident)); return }
-      navigateToRoom(entry.conversationJid)
-      addToast('error', t('chat.linkedMessageUnavailable'))
-      fail('absent')
-      return
-    }
-    try {
-      const result = await client.messages.locateChatMessage(entry.conversationJid, {
-        id: entry.messageId, stanzaId: entry.stanzaId, originId: entry.originId, sentAt: entry.sentAt,
-      })
-      if (result.kind === 'found') { navigateToConversation(entry.conversationJid, result.message.id); return }
-      fail(result.kind)
-      addToast('error', result.kind === 'absent' ? t('chat.linkedMessageUnavailable') : t('chat.linkedMessageLoadFailed'))
-    } catch (error) {
-      console.warn('Could not open saved message', error)
-      fail('unknown')
-      addToast('error', t('chat.linkedMessageLoadFailed'))
-    }
-  }, [setProblem])
-
-  const rows = useMemo(() => saved, [saved])
-
-  if (rows.length === 0) {
+  if (saved.length === 0) {
     return (
       <ListEmpty
         icon={Bookmark}
@@ -172,8 +124,8 @@ export function SavedView() {
   }
   return (
     <div className="flex flex-col gap-0.5" data-testid="saved-list" aria-label={t('saved.title')}>
-      {rows.map((entry) => (
-        <SavedRow key={entry.id} entry={entry} problem={problems[entry.id]} onOpen={(e) => { void open(e) }} onRemove={remove} />
+      {saved.map((entry) => (
+        <SavedRow key={entry.id} entry={entry} problem={problems[entry.id]} onOpen={(e) => { void onOpen(e) }} onRemove={remove} />
       ))}
     </div>
   )

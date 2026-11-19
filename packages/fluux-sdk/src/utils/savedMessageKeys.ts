@@ -1,4 +1,8 @@
 import type { SavedMessage } from '../core/types/saved'
+import {
+  CHAT_SCOPE, roomScope, identityKeys, occupantConflict, archiveIdentityConflict, sameChatMessage, sameLogicalMessage,
+  type IdentityFields, type IdentityScope,
+} from './messageIdentity'
 
 /** cyrb53: a small deterministic string hash; two seeds give an id wide enough to name one message. */
 function cyrb53(text: string, seed: number): string {
@@ -15,16 +19,27 @@ function cyrb53(text: string, seed: number): string {
 }
 
 /** What names a message; a whole entry satisfies it too. */
-export type SavedIdentity = Pick<SavedMessage, 'conversationJid'> & Partial<Pick<SavedMessage, 'stanzaId' | 'stanzaIdBy' | 'originId' | 'messageId'>>
+export type SavedIdentity = Pick<SavedMessage, 'conversationJid'> &
+  Partial<Pick<SavedMessage, 'type' | 'from' | 'occupantId' | 'stanzaId' | 'stanzaIdBy' | 'originId' | 'messageId'>>
+
+/**
+ * The author an origin or client id belongs to. Those ids are chosen by the
+ * sender, so two senders may use the same one: the occupant-id names a room
+ * author when there is one, else the sender address.
+ */
+function author(entry: SavedIdentity): string {
+  return entry.occupantId ?? entry.from ?? ''
+}
 
 /**
  * The key naming one logical message: conversation, then archive id with its
- * `by`, else origin id, else the client id. Equal keys are one message.
+ * `by`, else the author's origin id, else the author's client id. Only the
+ * item id is derived from it; {@link sameSavedMessage} decides what is one message.
  */
 export function savedMessageKey(entry: SavedIdentity): string {
   if (entry.stanzaId && entry.stanzaIdBy) return `${entry.conversationJid}\u0000sid\u0000${entry.stanzaIdBy}\u0000${entry.stanzaId}`
-  if (entry.originId) return `${entry.conversationJid}\u0000origin\u0000${entry.originId}`
-  return `${entry.conversationJid}\u0000id\u0000${entry.messageId ?? ''}`
+  if (entry.originId) return `${entry.conversationJid}\u0000origin\u0000${author(entry)}\u0000${entry.originId}`
+  return `${entry.conversationJid}\u0000id\u0000${author(entry)}\u0000${entry.messageId ?? ''}`
 }
 
 /** The item id: a hash of {@link savedMessageKey}, so two devices saving one message publish one item. */
@@ -33,16 +48,41 @@ export function savedItemId(entry: SavedIdentity): string {
   return `${cyrb53(key, 0)}${cyrb53(key, 1)}`
 }
 
-/**
- * Every key an entry can be recognised by, strongest first. Two entries sharing
- * any key name the same message (one saved before the archive id was learned,
- * one after).
- */
-export function savedMessageKeys(entry: SavedIdentity): string[] {
-  const keys: string[] = []
-  if (entry.stanzaId && entry.stanzaIdBy) keys.push(savedMessageKey({ conversationJid: entry.conversationJid, stanzaId: entry.stanzaId, stanzaIdBy: entry.stanzaIdBy }))
-  if (entry.originId) keys.push(savedMessageKey({ conversationJid: entry.conversationJid, originId: entry.originId }))
-  if (keys.length === 0 && entry.messageId) keys.push(savedMessageKey({ conversationJid: entry.conversationJid, messageId: entry.messageId }))
-  return keys
+function scopeOf(entry: SavedIdentity): IdentityScope {
+  return entry.type === 'groupchat' ? roomScope(entry.conversationJid) : CHAT_SCOPE
 }
 
+/** The saved entry seen through the one message-identity ladder (utils/messageIdentity). */
+function identityOf(entry: SavedIdentity, missingId: string): IdentityFields {
+  return {
+    from: entry.from ?? '',
+    // An entry without a client id must not match every other one by the empty id.
+    id: entry.messageId ?? missingId,
+    stanzaId: entry.stanzaId,
+    originId: entry.originId,
+    occupantId: entry.occupantId,
+    ...(entry.type === 'groupchat' && { roomJid: entry.conversationJid }),
+  }
+}
+
+/**
+ * Whether two entries name one message: the shared identity ladder, with the
+ * archive authority (`by`) and the author kept in view. A shared origin id of
+ * two different archive entries or occupants stays two messages; an entry
+ * saved before its archive id was learned and one saved after stay one.
+ */
+export function sameSavedMessage(a: SavedIdentity, b: SavedIdentity): boolean {
+  if (a.conversationJid !== b.conversationJid) return false
+  if (a.stanzaId && b.stanzaId && a.stanzaId === b.stanzaId && a.stanzaIdBy && b.stanzaIdBy && a.stanzaIdBy !== b.stanzaIdBy) return false
+  const left = identityOf(a, '\u0000a')
+  const right = identityOf(b, '\u0000b')
+  if ((a.type === 'groupchat') !== (b.type === 'groupchat')) return false
+  return a.type === 'groupchat'
+    ? !occupantConflict(left, right) && !archiveIdentityConflict(left, right) && sameLogicalMessage(scopeOf(a), left, right)
+    : sameChatMessage(left, right)
+}
+
+/** Keys a candidate match can share, for indexing entries without comparing every pair. */
+export function savedCandidateKeys(entry: SavedIdentity): string[] {
+  return identityKeys(scopeOf(entry), identityOf(entry, `\u0000${savedItemId(entry)}`))
+}

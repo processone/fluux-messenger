@@ -95,3 +95,25 @@ test('a pending outgoing message offers no Save', async ({ page }) => {
   await row.hover()
   await expect(row.getByRole('button', { name: 'Save message', exact: true })).toHaveCount(0)
 })
+
+test('pressing Enter on Remove removes the entry and does not open the original', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+  await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(ROOM)}`)
+  await activateChat(page, PEER)
+  await page.evaluate(peer => {
+    const scope = window as unknown as { __demoClient: DemoClient }
+    scope.__demoClient.stopAnimation()
+    scope.__demoClient.emitSDK('chat:message', { message: {
+      type: 'chat', id: 'saved-kb-1', conversationId: peer, from: peer, body: 'Keyboard removal check',
+      stanzaId: 'archive-saved-kb-1', originId: undefined, timestamp: new Date(), isOutgoing: false,
+    }, isLiveArrival: true })
+  }, PEER)
+  const row = await openMore(page, 'saved-kb-1')
+  await row.getByRole('button', { name: 'Save message', exact: true }).click()
+  await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
+  await expect(page).toHaveURL(/\/saved/)
+  await page.getByTestId('saved-row').first().getByRole('button', { name: 'Remove from saved' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByText('No saved messages')).toBeVisible()
+  await expect(page).toHaveURL(/\/saved/)
+})

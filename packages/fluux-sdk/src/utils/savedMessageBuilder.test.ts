@@ -21,7 +21,10 @@ describe('buildSavedMessage', () => {
   })
 
   it('names a chat message by the account archive and addresses it from/to the account', () => {
-    expect(buildSavedMessage(chat(), OWN)).toMatchObject({ from: 'juliet@capulet.example', to: 'romeo@montague.example', stanzaId: 's1', stanzaIdBy: 'romeo@montague.example' })
+    expect(buildSavedMessage(chat({ ownArchiveId: 's1', ownArchiveBy: 'romeo@montague.example' }), OWN))
+      .toMatchObject({ from: 'juliet@capulet.example', to: 'romeo@montague.example', stanzaId: 's1', stanzaIdBy: 'romeo@montague.example' })
+    // An archive id stamped by a foreign archive is never relabelled as the account's own.
+    expect(buildSavedMessage(chat({ stanzaId: 's1' }), OWN).stanzaId).toBeUndefined()
     expect(buildSavedMessage(chat({ isOutgoing: true }), OWN)).toMatchObject({ from: 'romeo@montague.example', to: 'juliet@capulet.example' })
   })
 

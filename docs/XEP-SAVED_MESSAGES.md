@@ -68,6 +68,7 @@ Servers cap a node and silently drop the oldest item past the cap (Prosody `pep_
 |-------------|----------|----------------------------------------------------------------------|
 | `stamp`     | Yes      | When the message was saved (XEP-0082 date-time).                     |
 | `encrypted` | No       | `"true"` when the original was end-to-end encrypted; no body is stored. |
+| `deleted`   | No       | `"true"` when the original was retracted or moderated; no body is kept. An item with no body and no `deleted` is a message that never had text (an attachment, for example). |
 
 It holds exactly one XEP-0297 `<forwarded/>`. A client that rewrites an item MUST keep every other child element it does not understand, so tags and other data can be added later without a new node.
 
@@ -86,12 +87,14 @@ Fluux builds the copy with the same function Forward uses and reads it with a re
 
 ## 5. Operations
 
-- **Save:** publish the item. **Remove:** retract it.
+- **Save:** publish the item. **Remove:** retract it, asking the server to notify subscribers (`notify="true"`). Only `item-not-found` counts as a removal that is already done; any other refusal puts the item back in the list and tells the person.
+- **Node limit:** a client sends nothing before it has read the node, and refuses a new save that would take the node past its `pubsub#max_items`, because the server would silently drop the oldest item. Removals are sent first.
 - **Fetch:** `<items node="urn:xmpp:fluux:saved-messages:0"/>` on the own account. Only an answered fetch (items, or `item-not-found`) replaces the local list; a refused or unanswered fetch leaves it as it is.
 - **Notify:** other online clients receive the item or retract through `+notify` and apply it without reloading.
 - **Offline:** a save or removal made while disconnected is shown at once, kept on the device across a reload, and sent on reconnect.
+- **Identity:** two entries are one message when the client's message-identity rules say so: the archive id with its `by`, else the origin id, else the client id, each scoped to its author. Two room messages sharing a sender-chosen origin id but with different archive ids or occupants stay separate.
 - **Duplicates:** entries naming the same message (one saved before the archive id was known, one after) are shown once; the weaker one is retracted.
-- **Deleted originals:** when the client learns the original was retracted or moderated, the row shows "Message deleted" and the client republishes the item without its body.
+- **Deleted originals:** when the client learns the original was retracted or moderated, the client republishes the item with `deleted="true"` and no body, and the row shows "Message deleted". The retraction is the one the client has validated and stored, so a retraction of a closed conversation counts as much as one in the open window. A row shows the latest copy in the device's cache, so a received edit shows too.
 
 ---
 

@@ -2018,7 +2018,7 @@ export class Chat extends BaseModule {
     conversationId: string,
     at: string,
     size = 50,
-  ): Promise<{ messages: (Message | RoomMessage)[] }> {
+  ): Promise<{ messages: (Message | RoomMessage)[]; complete: boolean }> {
     return this.mamModule.fetchContext(conversationId, this.conversationKind(conversationId) === 'groupchat', at, size)
   }
 

@@ -8,7 +8,7 @@ import type { ModuleDependencies } from './BaseModule'
 import { PepNode, type PepCodec, type PepFetch, type PublishOptions } from './PepNode'
 import { forwardedCopyElement, parseSavedForwardedCopy } from './messagingUtils'
 import type { SavedMessage } from '../types/saved'
-import { savedMessageKey, savedItemId, savedMessageKeys } from '../../utils/savedMessageKeys'
+import { savedMessageKey, savedItemId, sameSavedMessage } from '../../utils/savedMessageKeys'
 
 /**
  * Private, retained, one item per saved message. `max_items=max` lets the
@@ -24,7 +24,7 @@ const SAVED_NODE_OPTIONS: PublishOptions = {
 
 const NS_FORWARD_URI = 'urn:xmpp:forward:0'
 
-export { savedMessageKey, savedItemId, savedMessageKeys }
+export { savedMessageKey, savedItemId, sameSavedMessage }
 
 function buildCodec(getOwnBareJid: () => string | null): PepCodec<SavedMessage> {
   return {
@@ -43,6 +43,7 @@ function buildCodec(getOwnBareJid: () => string | null): PepCodec<SavedMessage> 
         xmlns: NS_SAVED_MESSAGES,
         stamp: new Date(entry.savedAt).toISOString(),
         ...(entry.encrypted && { encrypted: 'true' }),
+        ...(entry.deleted && { deleted: 'true' }),
       }, copy, ...(entry.extras ?? []).map(dataToElement))
     },
     decode: (item) => {
@@ -68,6 +69,7 @@ function buildCodec(getOwnBareJid: () => string | null): PepCodec<SavedMessage> 
         savedAt: Number.isFinite(savedAt) ? savedAt : 0,
         ...(copy.to && { to: copy.to }),
         ...(saved.attrs.encrypted === 'true' && { encrypted: true as const }),
+        ...(saved.attrs.deleted === 'true' && { deleted: true as const }),
         ...(copy.timestamp !== undefined && { sentAt: copy.timestamp }),
         ...(copy.id && { messageId: copy.id }),
         ...(copy.stanzaId && copy.stanzaIdBy && { stanzaId: copy.stanzaId, stanzaIdBy: copy.stanzaIdBy }),
@@ -129,7 +131,8 @@ export class SavedMessages {
   }
 
   async retract(itemId: string): Promise<void> {
-    await this.node.retract(itemId)
+    // Other devices learn of a removal only if the server is asked to notify them.
+    await this.node.retract(itemId, { notify: true })
   }
 
   /**

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
 import { useWindowDrag, useRouteSync, useFollowUnarchivedActive } from '@/hooks'
 import { useHingePosture } from '@/hooks/useHingePosture'
+import { useSavedOpener } from '@/hooks/useSavedOpener'
 import { useModalStore } from '@/stores/modalStore'
 import { useUpdateAffordance } from '@/stores/appUpdateStore'
 import {
@@ -79,6 +80,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, onStartChatWithJid, onManageUser, adminCategory, onAdminCategoryChange, sidebarListRef, activeContactJid, onViewChange }: SidebarProps) {
+  // Above the Saved list, so a room join and a failure shown on an entry outlive the list itself.
+  const savedOpener = useSavedOpener()
   detectRenderLoop('Sidebar')
   const { t } = useTranslation()
   // Get current view from URL
@@ -388,7 +391,7 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
               ) : sidebarView === 'search' ? (
                 <SearchView />
               ) : sidebarView === 'saved' ? (
-                <SavedView />
+                <SavedView problems={savedOpener.problems} onOpen={savedOpener.open} />
               ) : sidebarView === 'settings' ? (
                 <SettingsSidebar
                   activeCategory={(settingsCategory as SettingsCategory) || DEFAULT_SETTINGS_CATEGORY}

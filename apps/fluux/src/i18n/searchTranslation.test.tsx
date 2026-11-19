@@ -37,6 +37,7 @@ vi.mock('@/hooks', async () => ({
 }))
 
 const navigation = vi.hoisted(() => ({ navigateToConversation: vi.fn(), navigateToRoom: vi.fn() }))
+vi.mock('@/hooks/useSavedOpener', () => ({ useSavedOpener: () => ({ problems: {}, open: vi.fn() }) }))
 vi.mock('@/hooks/useNavigateToTarget', () => ({ useNavigateToTarget: () => navigation }))
 
 vi.mock('@/components/sidebar-components', async () => ({

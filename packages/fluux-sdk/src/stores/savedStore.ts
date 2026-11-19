@@ -1,6 +1,7 @@
 import { createStore } from 'zustand/vanilla'
-import { savedMessageKeys } from '../utils/savedMessageKeys'
+import { sameSavedMessage, savedCandidateKeys } from '../utils/savedMessageKeys'
 import { buildScopedStorageKey } from '../utils/storageScope'
+import type { SavedIdentity } from '../utils/savedMessageKeys'
 import type { SavedMessage, SavedPendingOp } from '../core/types/saved'
 
 /**
@@ -17,6 +18,8 @@ export interface SavedState {
   entries: Record<string, SavedMessage>
   /** Operations not yet confirmed by the server, by item id. */
   pending: Record<string, SavedPendingOp>
+  /** Bumped on every local change to an id's operation, so a late acknowledgement of an older one is ignored. */
+  revisions: Record<string, number>
   /** True once a fetch was answered in this session; false means the list may be incomplete. */
   loaded: boolean
   /** The node's effective item limit, when known. */
@@ -31,15 +34,15 @@ export interface SavedState {
   remove: (id: string) => void
   /** The original was retracted or moderated: drop the text and republish. */
   markDeleted: (id: string) => void
-  /** Replace the list with an answered fetch, keeping pending operations. */
-  reconcileFetch: (entries: SavedMessage[]) => void
+  /** Replace the list with an answered fetch, keeping pending operations and the ids in `keepCurrent` (changed since the fetch began). */
+  reconcileFetch: (entries: SavedMessage[], keepCurrent?: ReadonlySet<string>) => void
   /** Apply a `+notify` event, leaving ids with a pending local operation alone. */
   applyNotify: (update: { upserts: SavedMessage[]; removedIds: string[] }) => void
   /** The server took (or no longer needs) the operation for this id. */
-  settle: (id: string, op: SavedPendingOp) => void
+  settle: (id: string, op: SavedPendingOp, revision?: number) => void
   setLimit: (limit: number | undefined) => void
   /** The server definitively refused this operation: undo a refused save, note the refusal. */
-  refuse: (id: string, op: SavedPendingOp) => void
+  refuse: (id: string, op: SavedPendingOp, revision?: number) => void
   /** Merge the queue stored by an earlier session of this account (local operations win). */
   hydratePending: () => void
   reset: () => void
@@ -69,13 +72,11 @@ function writeQueue(state: Pick<SavedState, 'pending' | 'entries'>): void {
   } catch { /* storage unavailable: the queue stays in memory only */ }
 }
 
-const initial = { entries: {}, pending: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false }
+const initial = { entries: {}, pending: {}, revisions: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false }
 
 /** Is this message already saved (by any of its identities)? */
-export function findSavedEntry(entries: Record<string, SavedMessage>, probe: Pick<SavedMessage, 'conversationJid' | 'stanzaId' | 'stanzaIdBy' | 'originId' | 'messageId'>): SavedMessage | undefined {
-  const keys = new Set(savedMessageKeys(probe))
-  if (keys.size === 0) return undefined
-  return Object.values(entries).find((entry) => savedMessageKeys(entry).some((key) => keys.has(key)))
+export function findSavedEntry(entries: Record<string, SavedMessage>, probe: SavedIdentity): SavedMessage | undefined {
+  return Object.values(entries).find((entry) => sameSavedMessage(entry, probe))
 }
 
 /**
@@ -83,18 +84,30 @@ export function findSavedEntry(entries: Record<string, SavedMessage>, probe: Pic
  * (the stronger identity), else the earlier save, and report the rest to retract.
  */
 function dedupe(entries: Record<string, SavedMessage>): { entries: Record<string, SavedMessage>; weaker: string[] } {
-  const owner = new Map<string, string>()
+  const byKey = new Map<string, SavedMessage[]>()
   const weaker: string[] = []
   const ordered = Object.values(entries).sort((a, b) =>
     Number(Boolean(b.stanzaId)) - Number(Boolean(a.stanzaId)) || a.savedAt - b.savedAt || a.id.localeCompare(b.id))
   const kept: Record<string, SavedMessage> = {}
   for (const entry of ordered) {
-    const keys = savedMessageKeys(entry)
-    if (keys.some((key) => owner.has(key))) { weaker.push(entry.id); continue }
-    keys.forEach((key) => owner.set(key, entry.id))
+    const keys = savedCandidateKeys(entry)
+    const twin = keys.flatMap((key) => byKey.get(key) ?? []).find((other) => sameSavedMessage(other, entry))
+    if (twin) { weaker.push(entry.id); continue }
+    for (const key of keys) byKey.set(key, [...(byKey.get(key) ?? []), entry])
     kept[entry.id] = entry
   }
   return { entries: kept, weaker }
+}
+
+const bump = (revisions: Record<string, number>, id: string) => ({ ...revisions, [id]: (revisions[id] ?? 0) + 1 })
+
+/**
+ * The original of a saved message was retracted or moderated (validated and
+ * stored by the durable retraction path): drop the saved text and republish.
+ */
+export function redactSavedCopy(probe: SavedIdentity): void {
+  const hit = findSavedEntry(savedStore.getState().entries, probe)
+  if (hit) savedStore.getState().markDeleted(hit.id)
 }
 
 export const savedStore = createStore<SavedState>()((set, get) => ({
@@ -106,31 +119,32 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     const existing = findSavedEntry(state.entries, entry)
     if (existing) return true
     if (state.limit !== undefined && Object.keys(state.entries).length >= state.limit) return false
-    set({ entries: { ...state.entries, [entry.id]: entry }, pending: { ...state.pending, [entry.id]: 'publish' } })
+    set({ entries: { ...state.entries, [entry.id]: entry }, pending: { ...state.pending, [entry.id]: 'publish' }, revisions: bump(state.revisions, entry.id) })
     return true
   },
 
   remove: (id) => {
     get().hydratePending()
-    const { entries, pending } = get()
+    const { entries, pending, revisions } = get()
     if (!entries[id]) return
     const next = { ...entries }
     delete next[id]
-    set({ entries: next, pending: { ...pending, [id]: 'retract' } })
+    set({ entries: next, pending: { ...pending, [id]: 'retract' }, revisions: bump(revisions, id) })
   },
 
   markDeleted: (id) => {
     get().hydratePending()
-    const { entries, pending } = get()
+    const { entries, pending, revisions } = get()
     const entry = entries[id]
-    if (!entry || (!entry.text && !entry.encrypted)) return
-    set({ entries: { ...entries, [id]: { ...entry, text: '', encrypted: undefined } }, pending: { ...pending, [id]: 'publish' } })
+    if (!entry || entry.deleted) return
+    set({ entries: { ...entries, [id]: { ...entry, text: '', encrypted: undefined, deleted: true } }, pending: { ...pending, [id]: 'publish' }, revisions: bump(revisions, id) })
   },
 
-  reconcileFetch: (fetched) => {
+  reconcileFetch: (fetched, keepCurrent = new Set<string>()) => {
     const { entries, pending } = get()
     const merged: Record<string, SavedMessage> = {}
-    for (const entry of fetched) if (pending[entry.id] !== 'retract') merged[entry.id] = entry
+    for (const entry of fetched) if (pending[entry.id] !== 'retract' && !keepCurrent.has(entry.id)) merged[entry.id] = entry
+    for (const id of keepCurrent) if (entries[id]) merged[id] = entries[id]
     for (const [id, op] of Object.entries(pending)) {
       if (op === 'publish' && entries[id]) merged[id] = entries[id]
     }
@@ -151,9 +165,9 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     set({ entries: unique, pending: nextPending })
   },
 
-  settle: (id, op) => {
-    const { pending } = get()
-    if (pending[id] !== op) return
+  settle: (id, op, revision) => {
+    const { pending, revisions } = get()
+    if (pending[id] !== op || (revision !== undefined && revisions[id] !== revision)) return
     const next = { ...pending }
     delete next[id]
     set({ pending: next })
@@ -168,18 +182,20 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     if (!stored) { set({ hydrated: true }); return }
     const nextEntries = { ...entries }
     const nextPending = { ...pending }
+    let nextRevisions = get().revisions
     for (const [id, op] of Object.entries(stored.pending)) {
       if (nextPending[id] !== undefined) continue
       nextPending[id] = op
+      nextRevisions = bump(nextRevisions, id)
       if (op === 'retract') delete nextEntries[id]
       else if (stored.entries[id]) nextEntries[id] = stored.entries[id]
     }
-    set({ entries: nextEntries, pending: nextPending, hydrated: true })
+    set({ entries: nextEntries, pending: nextPending, revisions: nextRevisions, hydrated: true })
   },
 
-  refuse: (id, op) => {
-    const { entries, pending, refusals } = get()
-    if (pending[id] !== op) return
+  refuse: (id, op, revision) => {
+    const { entries, pending, refusals, revisions } = get()
+    if (pending[id] !== op || (revision !== undefined && revisions[id] !== revision)) return
     const nextPending = { ...pending }
     delete nextPending[id]
     if (op === 'publish') {
@@ -187,7 +203,8 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
       delete next[id]
       set({ entries: next, pending: nextPending, refusals: refusals + 1 })
     } else {
-      set({ pending: nextPending })
+      // The server kept the item: a later fetch brings it back; tell the person once.
+      set({ pending: nextPending, refusals: refusals + 1 })
     }
   },
 

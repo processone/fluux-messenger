@@ -40,12 +40,14 @@ export function buildSavedMessage(message: Message | RoomMessage, ownJid: string
       ...(message.stanzaId && { stanzaId: message.stanzaId, stanzaIdBy: message.roomJid }),
     }
   } else {
-    const archiveId = message.ownArchiveId ?? message.stanzaId
+    // Only the account archive's own id names the message for a later exact lookup:
+    // `stanzaId` may have been stamped by a foreign archive.
+    const own = message.ownArchiveId && message.ownArchiveBy ? { id: message.ownArchiveId, by: message.ownArchiveBy } : undefined
     entry = {
       ...base, conversationJid: message.conversationId, type: 'chat',
       from: message.isOutgoing ? ownBare : getBareJid(message.from),
       to: message.isOutgoing ? message.conversationId : ownBare,
-      ...(archiveId && { stanzaId: archiveId, stanzaIdBy: message.ownArchiveBy ?? ownBare }),
+      ...(own && { stanzaId: own.id, stanzaIdBy: own.by }),
     }
   }
   return { id: savedItemId(entry), ...entry }

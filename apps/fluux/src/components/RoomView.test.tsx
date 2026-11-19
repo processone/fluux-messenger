@@ -181,6 +181,11 @@ function _filterIgnoredReactions(
 vi.mock('@fluux/sdk', async (importOriginal) => ({
   // The list resolves row handles through the SDK's own lookup; keep the real one.
   findMessageRowIndex: (await importOriginal<typeof import('@fluux/sdk')>()).findMessageRowIndex,
+  // Saving a message uses the SDK's own identity and builder; keep the real ones.
+  buildSavedMessage: (await importOriginal<typeof import('@fluux/sdk')>()).buildSavedMessage,
+  canSaveMessage: (await importOriginal<typeof import('@fluux/sdk')>()).canSaveMessage,
+  findSavedEntry: (await importOriginal<typeof import('@fluux/sdk')>()).findSavedEntry,
+  savedStore: (await importOriginal<typeof import('@fluux/sdk')>()).savedStore,
   findRoomMessageLink: (await importOriginal<typeof import('@fluux/sdk')>()).findRoomMessageLink,
   resolveNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).resolveNotifyLevel,
   savedNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).savedNotifyLevel,
@@ -356,6 +361,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
 
 // Mock React store hooks (from @fluux/sdk/react)
 vi.mock('@fluux/sdk/react', () => ({
+  useSavedStore: (selector: (state: { entries: Record<string, never> }) => unknown) => selector({ entries: {} }),
   useEventsStore: (selector: (state: { voiceRequests: never[]; voiceRequestStatuses: Record<string, never> }) => unknown) =>
     selector({ voiceRequests: [], voiceRequestStatuses: {} }),
   useConnectionStore: (selector: (state: { ownAvatar: null; status: string; httpUploadService: { supportsRetention: boolean } }) => unknown) => {

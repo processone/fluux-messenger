@@ -18,10 +18,12 @@ export interface SavedMessage {
   from: string
   /** Address the original was sent to, when known. */
   to?: string
-  /** Saved text (up to 4000 characters). Empty for encrypted and deleted originals. */
+  /** Saved text (up to 4000 characters). Empty for encrypted, deleted and text-less originals. */
   text: string
   /** The original was end-to-end encrypted: no text is stored. */
   encrypted?: true
+  /** The original was retracted or moderated: no text is kept. (A message with no text at all is not deleted.) */
+  deleted?: true
   /** When the original was sent (ms since epoch). */
   sentAt?: number
   /** When it was saved (ms since epoch). */

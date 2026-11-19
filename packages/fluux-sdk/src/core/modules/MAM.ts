@@ -1456,7 +1456,7 @@ export class MAM extends BaseModule {
     isRoom: boolean,
     targetTimestamp: string,
     contextSize: number = 50
-  ): Promise<{ messages: (Message | RoomMessage)[] }> {
+  ): Promise<{ messages: (Message | RoomMessage)[]; complete: boolean }> {
     const session = this.captureQuery()
     // Fetch messages before and after the target timestamp
     const oneHourBefore = new Date(new Date(targetTimestamp).getTime() - 3600000).toISOString()
@@ -1478,7 +1478,7 @@ export class MAM extends BaseModule {
         maxAutoPages: 1,
       })
       session.assertCurrent()
-      return { messages: result.messages }
+      return { messages: result.messages, complete: result.complete }
     } else {
       const result = await this.queryArchive({
         with: conversationId,
@@ -1488,7 +1488,7 @@ export class MAM extends BaseModule {
         preserveGapMarker: true,
       })
       session.assertCurrent()
-      return { messages: result.messages }
+      return { messages: result.messages, complete: result.complete }
     }
   }
 
@@ -3717,15 +3717,16 @@ export class MAM extends BaseModule {
     const matches = (message: Message) =>
       (!!ref.stanzaId && (message.stanzaId === ref.stanzaId || message.ownArchiveId === ref.stanzaId))
       || (!!ref.originId && message.originId === ref.originId)
+      || (!!ref.id && message.id === ref.id)
     const settle = (message: Message, source: 'resident' | 'cache') =>
       message.isRetracted ? { kind: 'absent' as const } : { kind: 'found' as const, message, source }
-    for (const target of [ref.stanzaId, ref.originId, ref.id]) {
-      if (!target) continue
+    const targets = [ref.stanzaId, ref.originId, ref.id].filter((target): target is string => !!target)
+    for (const target of targets) {
       const resident = chat.getMessage(conversationId, target)
-      if (resident && (matches(resident) || resident.id === ref.id)) return settle(resident, 'resident')
+      if (resident && matches(resident)) return settle(resident, 'resident')
     }
-    for (const target of [ref.stanzaId, ref.originId]) {
-      if (!target || !chat.resolveReactionTarget) continue
+    for (const target of targets) {
+      if (!chat.resolveReactionTarget) break
       const cached = await chat.resolveReactionTarget(conversationId, target)
       session.assertCurrent()
       if (cached && matches(cached)) return settle(cached, 'cache')
@@ -3735,17 +3736,24 @@ export class MAM extends BaseModule {
       const found = await this.lookUpArchivedMessage(conversationId, false, ref.stanzaId)
       session.assertCurrent()
       if (found.kind !== 'found') return found
-      await this.fetchContext(conversationId, false, new Date(found.timestamp).toISOString())
+      const { messages } = await this.fetchContext(conversationId, false, new Date(found.timestamp).toISOString())
       session.assertCurrent()
-      const message = found.row as Message | undefined
+      // The context query stores what it fetched; prefer that reconciled copy
+      // over the raw archive row, which nothing retains for the jump that follows.
+      const stored = chat.resolveReactionTarget ? await chat.resolveReactionTarget(conversationId, ref.stanzaId) : undefined
+      session.assertCurrent()
+      const message = (stored && matches(stored) ? stored : undefined)
+        ?? (messages as Message[]).find((m) => matches(m))
+        ?? (found.row as Message | undefined)
       if (!message) return { kind: 'unknown' }
       return message.isRetracted ? { kind: 'absent' } : { kind: 'found', message, source: 'archive' }
     }
     if (ref.sentAt === undefined) return { kind: 'unknown' }
-    const { messages } = await this.fetchContext(conversationId, false, new Date(ref.sentAt).toISOString())
+    const { messages, complete } = await this.fetchContext(conversationId, false, new Date(ref.sentAt).toISOString())
     session.assertCurrent()
-    const message = (messages as Message[]).find((m) => (ref.originId && m.originId === ref.originId) || (ref.id && m.id === ref.id))
-    if (!message) return { kind: 'absent' }
+    const message = (messages as Message[]).find((m) => matches(m))
+    // A bounded slice that did not reach the end of its window proves nothing about absence.
+    if (!message) return { kind: complete ? 'absent' : 'unknown' }
     return message.isRetracted ? { kind: 'absent' } : { kind: 'found', message, source: 'archive' }
   }
 
