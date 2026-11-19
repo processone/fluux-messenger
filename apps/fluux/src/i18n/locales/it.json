@@ -214,7 +214,7 @@
             "needsDecisionTitle": "In attesa della tua decisione",
             "needsDecisionDescription": "I messaggi a questo contatto non possono essere cifrati finché non decidi su una chiave.",
             "trustPendingTitle": "In attesa delle tue decisioni di fiducia precedenti",
-            "trustPendingDescription": "I messaggi a questo contatto non possono essere cifrati finché le tue decisioni di fiducia di una versione precedente non vengono trasferite. Viene ritentato automaticamente.",
+            "trustPendingDescription": "I messaggi a questo contatto non possono essere cifrati finché questo dispositivo non ha le tue decisioni di fiducia di una versione precedente o degli altri tuoi dispositivi. Viene ritentato automaticamente.",
             "distrustedTitle": "Nessuna chiave fidata",
             "distrustedDescription": "Non è possibile inviare messaggi a questo contatto finché non ti fidi di una delle sue chiavi.",
             "receivesWhenUnlocked": "Riceverà i tuoi messaggi dopo lo sblocco",
@@ -231,7 +231,7 @@
                 "no-key": "il contatto non la pubblica più",
                 "invalid-key": "certificato non valido",
                 "over-limit": "troppi dispositivi, questo viene saltato",
-                "trust-pending": "in attesa del trasferimento delle tue decisioni di fiducia di una versione precedente"
+                "trust-pending": "in attesa delle tue decisioni di fiducia di una versione precedente o degli altri tuoi dispositivi"
             },
             "trustButton": "Fidati di questa chiave",
             "distrustButton": "Non fidarti di questa chiave"
@@ -648,13 +648,13 @@
             "sendBlockedKeyConflict": "Messaggio non inviato. Risolvi il conflitto della tua chiave di cifratura prima di inviare.",
             "sendBlockedGeneric": "Messaggio non inviato. Cifratura non riuscita.",
             "sendBlockedKeysDistrusted": "Messaggio non inviato. Non ti fidi di nessuna chiave di questo contatto. Fidati di una di esse prima di inviare.",
-            "sendBlockedTrustPending": "Messaggio non inviato. Le chiavi di questo contatto attendono il trasferimento delle tue decisioni di fiducia di una versione precedente. Riprova tra un momento.",
+            "sendBlockedTrustPending": "Messaggio non inviato. Le chiavi di questo contatto attendono le tue decisioni di fiducia di una versione precedente o degli altri tuoi dispositivi. Riprova tra un momento.",
             "heldKeys": {
                 "partial": "{{name}} ha aggiunto una nuova chiave dopo che l'hai verificato. Non riceve messaggi finché non ti fidi di essa o non la verifichi.",
                 "all": "{{name}} ha aggiunto una nuova chiave dopo che l'hai verificato. Non riceve messaggi finché non ti fidi di essa o non la verifichi. Fino ad allora non puoi inviare messaggi.",
                 "distrusted": "Non ti fidi di nessuna chiave di {{name}}. Non puoi inviare messaggi finché non ti fidi di una di esse.",
-                "pendingPartial": "Alcune chiavi di {{name}} non ricevono messaggi finché le tue decisioni di fiducia di una versione precedente non vengono trasferite. Viene ritentato automaticamente.",
-                "pendingAll": "Le chiavi di {{name}} non ricevono messaggi finché le tue decisioni di fiducia di una versione precedente non vengono trasferite. Fino ad allora non puoi inviare messaggi. Viene ritentato automaticamente.",
+                "pendingPartial": "Alcune chiavi di {{name}} non ricevono messaggi finché questo dispositivo non ha le tue decisioni di fiducia di una versione precedente o degli altri tuoi dispositivi. Viene ritentato automaticamente.",
+                "pendingAll": "Le chiavi di {{name}} non ricevono messaggi finché questo dispositivo non ha le tue decisioni di fiducia di una versione precedente o degli altri tuoi dispositivi. Fino ad allora non puoi inviare messaggi. Viene ritentato automaticamente.",
                 "review": "Rivedi le chiavi"
             },
             "plaintextForced": "Encryption disabled",

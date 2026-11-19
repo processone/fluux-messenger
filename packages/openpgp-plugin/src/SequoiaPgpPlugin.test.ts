@@ -5634,8 +5634,10 @@ describe('SequoiaPgpPlugin', () => {
       expect(await plugin.getPeerTrust('bob@example.com')).toBe('tofu')
       const toBob = await plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
       await expect(plugin.encrypt(toBob, encodeBodyAsPayload('to bob'))).rejects.toMatchObject({ code: 'peer-keys-trust-pending' })
+      // No list of the account's devices is read while the move waits: a
+      // key without a decision waits for it too.
       const toDave = await plugin.openConversation({ kind: 'direct', peer: 'dave@example.com' })
-      expect(recipientFpsFromEncrypt(await plugin.encrypt(toDave, encodeBodyAsPayload('to dave')))).toContain(DAVE_FP)
+      await expect(plugin.encrypt(toDave, encodeBodyAsPayload('to dave'))).rejects.toMatchObject({ code: 'peer-keys-trust-pending' })
       await plugin.shutdown()
 
       const next = makeContext(ME, { storage: built.ctx.storage })
@@ -6541,6 +6543,77 @@ describe('SequoiaPgpPlugin', () => {
         await sending
         expect(recipientFpsFromEncrypt(sent!)).toContain(DAVE_FP)
         expect(recipientFpsFromEncrypt(sent!)).not.toContain(ERIN_FP)
+      })
+
+      // Intent: FLM-311 - while a device cannot read the list of keys the
+      // account's devices hold, the keys it never decided about receive no
+      // messages, and the keys decided on it keep receiving them. The read is
+      // tried again until it succeeds.
+      it.each([
+        ['the server does not answer the read', 'no-answer'],
+        ['the list is not signed by the account', 'forged'],
+      ] as const)('sends only to the keys decided on this device while it cannot read the list, when %s', async (_case, failure) => {
+        vi.useFakeTimers()
+        try {
+          const built = makeContext('me@example.com')
+          const fp = '3E46E00000000000000000000000000000000037'
+          ownKey(fp)
+          const server = serverNodes(built)
+          const list = setsWithHeld(fp, { [DAVE]: [DAVE_FP] }, { [DAVE]: [ERIN_FP] }, 2)
+          let answers = false
+          if (failure === 'forged') server.nodes.sets = setsItem(fp, { [DAVE]: [DAVE_FP, ERIN_FP] }, 9, 'BAD0000000000000000000000000000000000037')
+          const queryPEP = built.ctx.xmpp.queryPEP
+          built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
+            if (node === SETS_NODE && failure === 'no-answer' && !answers) throw new Error('remote-server-timeout')
+            return queryPEP(jid, node, maxItems)
+          }
+          const davePep = installDavePep(built)
+          davePep.announce([validDaveKey(DAVE_FP), validDaveKey(ERIN_FP)])
+          await plugin.init(built.ctx)
+          await vi.advanceTimersByTimeAsync(0)
+          // The user trusted DAVE_FP on this device; ERIN_FP has no decision here.
+          trustRecordsOf(plugin).setDecision(DAVE, DAVE_FP, 'tofu')
+          const toDave = await plugin.openConversation({ kind: 'direct', peer: DAVE })
+
+          const sent = await plugin.encrypt(toDave, encodeBodyAsPayload('to dave'))
+          expect(recipientFpsFromEncrypt(sent)).toContain(DAVE_FP)
+          expect(recipientFpsFromEncrypt(sent)).not.toContain(ERIN_FP)
+          expect((await plugin.listPeerIdentities(DAVE)).map((i) => [i.id, i.usedForEncryption, i.notUsedReason])).toEqual([
+            [DAVE_FP, true, undefined],
+            [ERIN_FP, false, 'trust-pending'],
+          ])
+          // The wait is no decision: nothing is saved for the key.
+          expect(trustRecordsOf(plugin).decisionOf(DAVE, ERIN_FP)).toBeUndefined()
+
+          // The server answers again: the next read applies the list.
+          answers = true
+          server.nodes.sets = list
+          await vi.advanceTimersByTimeAsync(30_000)
+          expect(trustRecordsOf(plugin).decisionOf(DAVE, ERIN_FP)).toBe('held')
+          expect((await plugin.listPeerIdentities(DAVE)).find((i) => i.id === ERIN_FP)?.notUsedReason).toBe('awaiting-decision')
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+
+      it('sends to a key the user trusts on this device while it cannot read the list', async () => {
+        const built = makeContext('me@example.com')
+        const fp = '3E46E00000000000000000000000000000000038'
+        ownKey(fp)
+        serverNodes(built)
+        const queryPEP = built.ctx.xmpp.queryPEP
+        built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
+          if (node === SETS_NODE) throw new Error('remote-server-timeout')
+          return queryPEP(jid, node, maxItems)
+        }
+        const davePep = installDavePep(built)
+        davePep.announce([validDaveKey(DAVE_FP)])
+        await plugin.init(built.ctx)
+        const toDave = await plugin.openConversation({ kind: 'direct', peer: DAVE })
+        await expect(plugin.encrypt(toDave, encodeBodyAsPayload('to dave'))).rejects.toMatchObject({ code: 'peer-keys-trust-pending' })
+
+        await plugin.setIdentityTrust(DAVE, DAVE_FP, 'tofu')
+        expect(recipientFpsFromEncrypt(await plugin.encrypt(toDave, encodeBodyAsPayload('to dave')))).toContain(DAVE_FP)
       })
     })
 

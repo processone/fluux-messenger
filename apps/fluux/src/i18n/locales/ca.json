@@ -214,7 +214,7 @@
             "needsDecisionTitle": "Esperant la vostra decisió",
             "needsDecisionDescription": "Els missatges a aquest contacte no es poden xifrar fins que decidiu sobre una clau.",
             "trustPendingTitle": "Esperant les vostres decisions de confiança anteriors",
-            "trustPendingDescription": "Els missatges a aquest contacte no es poden xifrar fins que no es traslladin les vostres decisions de confiança d'una versió anterior. Es torna a provar automàticament.",
+            "trustPendingDescription": "Els missatges a aquest contacte no es poden xifrar fins que aquest dispositiu no tingui les vostres decisions de confiança d'una versió anterior o dels vostres altres dispositius. Es torna a provar automàticament.",
             "distrustedTitle": "Cap clau de confiança",
             "distrustedDescription": "No es poden enviar missatges a aquest contacte fins que confieu en una de les seves claus.",
             "receivesWhenUnlocked": "Rebrà els vostres missatges un cop desbloquegeu",
@@ -231,7 +231,7 @@
                 "no-key": "el contacte ja no el publica",
                 "invalid-key": "certificat no vàlid",
                 "over-limit": "massa dispositius, aquest s'omet",
-                "trust-pending": "esperant que es traslladin les vostres decisions de confiança d'una versió anterior"
+                "trust-pending": "esperant les vostres decisions de confiança d'una versió anterior o dels vostres altres dispositius"
             },
             "trustButton": "Confia en aquesta clau",
             "distrustButton": "No confiïs en aquesta clau"
@@ -648,13 +648,13 @@
             "sendBlockedKeyConflict": "Missatge no enviat. Resoleu el conflicte de la vostra clau de xifratge abans d'enviar.",
             "sendBlockedGeneric": "Missatge no enviat. El xifratge ha fallat.",
             "sendBlockedKeysDistrusted": "Missatge no enviat. No confieu en cap clau d'aquest contacte. Confieu en una d'elles abans d'enviar.",
-            "sendBlockedTrustPending": "Missatge no enviat. Les claus d'aquest contacte esperen que es traslladin les vostres decisions de confiança d'una versió anterior. Torneu-ho a provar d'aquí a un moment.",
+            "sendBlockedTrustPending": "Missatge no enviat. Les claus d'aquest contacte esperen les vostres decisions de confiança d'una versió anterior o dels vostres altres dispositius. Torneu-ho a provar d'aquí a un moment.",
             "heldKeys": {
                 "partial": "{{name}} ha afegit una clau nova després que el verifiquéssiu. No rep missatges fins que hi confieu o la verifiqueu.",
                 "all": "{{name}} ha afegit una clau nova després que el verifiquéssiu. No rep missatges fins que hi confieu o la verifiqueu. Fins aleshores no podeu enviar missatges.",
                 "distrusted": "No confieu en cap clau de {{name}}. No podeu enviar missatges fins que confieu en una d'elles.",
-                "pendingPartial": "Algunes claus de {{name}} no reben missatges fins que no es traslladin les vostres decisions de confiança d'una versió anterior. Es torna a provar automàticament.",
-                "pendingAll": "Les claus de {{name}} no reben missatges fins que no es traslladin les vostres decisions de confiança d'una versió anterior. Fins aleshores no podeu enviar missatges. Es torna a provar automàticament.",
+                "pendingPartial": "Algunes claus de {{name}} no reben missatges fins que aquest dispositiu no tingui les vostres decisions de confiança d'una versió anterior o dels vostres altres dispositius. Es torna a provar automàticament.",
+                "pendingAll": "Les claus de {{name}} no reben missatges fins que aquest dispositiu no tingui les vostres decisions de confiança d'una versió anterior o dels vostres altres dispositius. Fins aleshores no podeu enviar missatges. Es torna a provar automàticament.",
                 "review": "Revisa les claus"
             },
             "plaintextForced": "Encryption disabled",

@@ -226,9 +226,10 @@ export interface KeyStanding {
  * is true for a verified contact other than the account itself: a key the user
  * never decided on then waits for a decision instead of being used.
  * `trustPending` is true while trust data an earlier version saved for the
- * contact is still being moved: whether they were verified is not known yet,
- * so a key without a decision, or held, waits for that instead
- * (`trust-pending`).
+ * contact is still being moved, or while the account's verification list,
+ * which says the keys the account's other devices hold, is not read yet:
+ * whether the key may receive messages is not known yet, so a key without a
+ * decision, or held, waits for that instead (`trust-pending`).
  */
 export function keyStanding(decision: KeyDecision | undefined, holdsNewKeys: boolean, trustPending = false): KeyStanding {
   if (trustPending && (decision === undefined || decision === 'held')) {

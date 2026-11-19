@@ -212,7 +212,7 @@
             "needsDecisionTitle": "Wacht op uw beslissing",
             "needsDecisionDescription": "Berichten aan dit contact kunnen niet worden versleuteld totdat u over een sleutel hebt beslist.",
             "trustPendingTitle": "Wacht op je eerdere vertrouwensbeslissingen",
-            "trustPendingDescription": "Berichten aan dit contact kunnen niet worden versleuteld totdat je vertrouwensbeslissingen uit een eerdere versie zijn overgezet. Dit wordt automatisch opnieuw geprobeerd.",
+            "trustPendingDescription": "Berichten aan dit contact kunnen niet worden versleuteld totdat dit apparaat je vertrouwensbeslissingen uit een eerdere versie of van je andere apparaten heeft. Dit wordt automatisch opnieuw geprobeerd.",
             "distrustedTitle": "Geen vertrouwde sleutel",
             "distrustedDescription": "Berichten aan dit contact kunnen niet worden verzonden totdat u een van de sleutels vertrouwt.",
             "receivesWhenUnlocked": "Ontvangt uw berichten zodra u ontgrendelt",
@@ -229,7 +229,7 @@
                 "no-key": "het contact publiceert hem niet meer",
                 "invalid-key": "ongeldig certificaat",
                 "over-limit": "te veel apparaten, dit wordt overgeslagen",
-                "trust-pending": "wacht tot de vertrouwensbeslissingen uit een eerdere versie zijn overgezet"
+                "trust-pending": "wacht op je vertrouwensbeslissingen uit een eerdere versie of van je andere apparaten"
             },
             "trustButton": "Deze sleutel vertrouwen",
             "distrustButton": "Deze sleutel niet vertrouwen"
@@ -644,13 +644,13 @@
             "sendBlockedKeyConflict": "Bericht niet verzonden. Los het conflict met je versleutelingssleutel op voordat je verzendt.",
             "sendBlockedGeneric": "Bericht niet verzonden. Versleuteling mislukt.",
             "sendBlockedKeysDistrusted": "Bericht niet verzonden. Je vertrouwt geen enkele sleutel van dit contact. Vertrouw er een voordat je verzendt.",
-            "sendBlockedTrustPending": "Bericht niet verzonden. De sleutels van dit contact wachten tot je vertrouwensbeslissingen uit een eerdere versie zijn overgezet. Probeer het zo meteen opnieuw.",
+            "sendBlockedTrustPending": "Bericht niet verzonden. De sleutels van dit contact wachten op je vertrouwensbeslissingen uit een eerdere versie of van je andere apparaten. Probeer het zo meteen opnieuw.",
             "heldKeys": {
                 "partial": "{{name}} heeft een nieuwe sleutel toegevoegd nadat je dit contact hebt geverifieerd. Die ontvangt geen berichten totdat je hem vertrouwt of verifieert.",
                 "all": "{{name}} heeft een nieuwe sleutel toegevoegd nadat je dit contact hebt geverifieerd. Die ontvangt geen berichten totdat je hem vertrouwt of verifieert. Tot die tijd kun je geen berichten verzenden.",
                 "distrusted": "Je vertrouwt geen enkele sleutel van {{name}}. Je kunt geen berichten verzenden totdat je er een vertrouwt.",
-                "pendingPartial": "Sommige sleutels van {{name}} ontvangen geen berichten totdat je vertrouwensbeslissingen uit een eerdere versie zijn overgezet. Dit wordt automatisch opnieuw geprobeerd.",
-                "pendingAll": "De sleutels van {{name}} ontvangen geen berichten totdat je vertrouwensbeslissingen uit een eerdere versie zijn overgezet. Tot die tijd kun je geen berichten verzenden. Dit wordt automatisch opnieuw geprobeerd.",
+                "pendingPartial": "Sommige sleutels van {{name}} ontvangen geen berichten totdat dit apparaat je vertrouwensbeslissingen uit een eerdere versie of van je andere apparaten heeft. Dit wordt automatisch opnieuw geprobeerd.",
+                "pendingAll": "De sleutels van {{name}} ontvangen geen berichten totdat dit apparaat je vertrouwensbeslissingen uit een eerdere versie of van je andere apparaten heeft. Tot die tijd kun je geen berichten verzenden. Dit wordt automatisch opnieuw geprobeerd.",
                 "review": "Sleutels bekijken"
             },
             "plaintextForced": "Encryption disabled",

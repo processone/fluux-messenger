@@ -214,7 +214,7 @@
             "needsDecisionTitle": "Esperando tu decisión",
             "needsDecisionDescription": "Los mensajes a este contacto no se pueden cifrar hasta que decidas sobre una clave.",
             "trustPendingTitle": "Esperando tus decisiones de confianza anteriores",
-            "trustPendingDescription": "Los mensajes a este contacto no se pueden cifrar hasta que se trasladen tus decisiones de confianza de una versión anterior. Se vuelve a intentar automáticamente.",
+            "trustPendingDescription": "Los mensajes a este contacto no se pueden cifrar hasta que este dispositivo tenga tus decisiones de confianza de una versión anterior o de tus otros dispositivos. Se vuelve a intentar automáticamente.",
             "distrustedTitle": "Ninguna clave de confianza",
             "distrustedDescription": "No se pueden enviar mensajes a este contacto hasta que confíes en una de sus claves.",
             "receivesWhenUnlocked": "Recibirá tus mensajes cuando desbloquees",
@@ -231,7 +231,7 @@
                 "no-key": "el contacto ya no la publica",
                 "invalid-key": "certificado no válido",
                 "over-limit": "demasiados dispositivos, este se omite",
-                "trust-pending": "esperando a que se trasladen tus decisiones de confianza de una versión anterior"
+                "trust-pending": "esperando tus decisiones de confianza de una versión anterior o de tus otros dispositivos"
             },
             "trustButton": "Confiar en esta clave",
             "distrustButton": "No confiar en esta clave"
@@ -648,13 +648,13 @@
             "sendBlockedKeyConflict": "Mensaje no enviado. Resuelve el conflicto de tu clave de cifrado antes de enviar.",
             "sendBlockedGeneric": "Mensaje no enviado. El cifrado ha fallado.",
             "sendBlockedKeysDistrusted": "Mensaje no enviado. No confías en ninguna clave de este contacto. Confía en una de ellas antes de enviar.",
-            "sendBlockedTrustPending": "Mensaje no enviado. Las claves de este contacto esperan a que se trasladen tus decisiones de confianza de una versión anterior. Vuelve a intentarlo en un momento.",
+            "sendBlockedTrustPending": "Mensaje no enviado. Las claves de este contacto esperan tus decisiones de confianza de una versión anterior o de tus otros dispositivos. Vuelve a intentarlo en un momento.",
             "heldKeys": {
                 "partial": "{{name}} añadió una clave nueva después de que lo verificaras. No recibe mensajes hasta que confíes en ella o la verifiques.",
                 "all": "{{name}} añadió una clave nueva después de que lo verificaras. No recibe mensajes hasta que confíes en ella o la verifiques. Hasta entonces no puedes enviar mensajes.",
                 "distrusted": "No confías en ninguna clave de {{name}}. No puedes enviar mensajes hasta que confíes en una de ellas.",
-                "pendingPartial": "Algunas claves de {{name}} no reciben mensajes hasta que se trasladen tus decisiones de confianza de una versión anterior. Se vuelve a intentar automáticamente.",
-                "pendingAll": "Las claves de {{name}} no reciben mensajes hasta que se trasladen tus decisiones de confianza de una versión anterior. Hasta entonces no puedes enviar mensajes. Se vuelve a intentar automáticamente.",
+                "pendingPartial": "Algunas claves de {{name}} no reciben mensajes hasta que este dispositivo tenga tus decisiones de confianza de una versión anterior o de tus otros dispositivos. Se vuelve a intentar automáticamente.",
+                "pendingAll": "Las claves de {{name}} no reciben mensajes hasta que este dispositivo tenga tus decisiones de confianza de una versión anterior o de tus otros dispositivos. Hasta entonces no puedes enviar mensajes. Se vuelve a intentar automáticamente.",
                 "review": "Revisar claves"
             },
             "plaintextForced": "Encryption disabled",

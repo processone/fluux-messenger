@@ -213,7 +213,7 @@
             "needsDecisionTitle": "En attente de votre décision",
             "needsDecisionDescription": "Les messages à ce contact ne peuvent pas être chiffrés tant que vous n'avez pas décidé d'une clé.",
             "trustPendingTitle": "En attente de vos décisions de confiance antérieures",
-            "trustPendingDescription": "Les messages à ce contact ne peuvent pas être chiffrés tant que vos décisions de confiance d'une version précédente ne sont pas transférées. Une nouvelle tentative a lieu automatiquement.",
+            "trustPendingDescription": "Les messages à ce contact ne peuvent pas être chiffrés tant que cet appareil n'a pas vos décisions de confiance d'une version précédente ou de vos autres appareils. Une nouvelle tentative a lieu automatiquement.",
             "distrustedTitle": "Aucune clé de confiance",
             "distrustedDescription": "Les messages à ce contact ne peuvent pas être envoyés tant que vous ne faites pas confiance à l'une de ses clés.",
             "receivesWhenUnlocked": "Recevra vos messages une fois déverrouillé",
@@ -230,7 +230,7 @@
                 "no-key": "le contact ne la publie plus",
                 "invalid-key": "certificat invalide",
                 "over-limit": "trop d'appareils, celui-ci est ignoré",
-                "trust-pending": "en attente du transfert de vos décisions de confiance d'une version précédente"
+                "trust-pending": "en attente de vos décisions de confiance d'une version précédente ou de vos autres appareils"
             },
             "trustButton": "Faire confiance à cette clé",
             "distrustButton": "Ne pas faire confiance à cette clé"
@@ -673,13 +673,13 @@
             "sendBlockedKeyConflict": "Message non envoyé. Résolvez le conflit de votre clé de chiffrement avant d'envoyer.",
             "sendBlockedGeneric": "Message non envoyé. Le chiffrement a échoué.",
             "sendBlockedKeysDistrusted": "Message non envoyé. Vous ne faites confiance à aucune clé de ce contact. Faites confiance à l'une d'elles avant d'envoyer.",
-            "sendBlockedTrustPending": "Message non envoyé. Les clés de ce contact attendent le transfert de vos décisions de confiance d'une version précédente. Réessayez dans un instant.",
+            "sendBlockedTrustPending": "Message non envoyé. Les clés de ce contact attendent vos décisions de confiance d'une version précédente ou de vos autres appareils. Réessayez dans un instant.",
             "heldKeys": {
                 "partial": "{{name}} a ajouté une nouvelle clé après que vous l'avez vérifié. Elle ne reçoit aucun message tant que vous ne lui faites pas confiance ou ne la vérifiez pas.",
                 "all": "{{name}} a ajouté une nouvelle clé après que vous l'avez vérifié. Elle ne reçoit aucun message tant que vous ne lui faites pas confiance ou ne la vérifiez pas. Vous ne pouvez pas envoyer de message d'ici là.",
                 "distrusted": "Vous ne faites confiance à aucune clé de {{name}}. Vous ne pouvez pas envoyer de message tant que vous ne faites pas confiance à l'une d'elles.",
-                "pendingPartial": "Certaines clés de {{name}} ne reçoivent aucun message tant que vos décisions de confiance d'une version précédente ne sont pas transférées. Une nouvelle tentative a lieu automatiquement.",
-                "pendingAll": "Les clés de {{name}} ne reçoivent aucun message tant que vos décisions de confiance d'une version précédente ne sont pas transférées. Vous ne pouvez pas envoyer de message d'ici là. Une nouvelle tentative a lieu automatiquement.",
+                "pendingPartial": "Certaines clés de {{name}} ne reçoivent aucun message tant que cet appareil n'a pas vos décisions de confiance d'une version précédente ou de vos autres appareils. Une nouvelle tentative a lieu automatiquement.",
+                "pendingAll": "Les clés de {{name}} ne reçoivent aucun message tant que cet appareil n'a pas vos décisions de confiance d'une version précédente ou de vos autres appareils. Vous ne pouvez pas envoyer de message d'ici là. Une nouvelle tentative a lieu automatiquement.",
                 "review": "Examiner les clés"
             },
             "tooltip": {

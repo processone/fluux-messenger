@@ -379,8 +379,9 @@ export interface PeerIdentity {
  * - `awaiting-decision`: the user has to trust, verify or refuse it first.
  * - `trust-pending`: the protocol cannot tell yet whether the identity may
  *   receive messages, because trust data it keeps is still being prepared,
- *   such as trust saved by an earlier version that is still being moved. It
- *   receives nothing until that is done; a decision may be refused meanwhile.
+ *   such as trust saved by an earlier version that is still being moved, or
+ *   the keys the account's other devices hold, not read yet. It receives
+ *   nothing until that is done; a decision may be refused meanwhile.
  * - `distrusted`: the user refused it.
  * - `no-key`: the peer no longer publishes it.
  * - `invalid-key`: its key failed validation.

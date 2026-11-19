@@ -214,7 +214,7 @@
             "needsDecisionTitle": "Jistenna d-deċiżjoni tiegħek",
             "needsDecisionDescription": "Il-messaġġi lil dan il-kuntatt ma jistgħux jiġu kkriptati sakemm tiddeċiedi dwar ċavetta.",
             "trustPendingTitle": "Jistenna d-deċiżjonijiet ta' fiduċja preċedenti tiegħek",
-            "trustPendingDescription": "Il-messaġġi lil dan il-kuntatt ma jistgħux jiġu kkriptati sakemm id-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jiġu trasferiti. Jerġa' jiġi ppruvat awtomatikament.",
+            "trustPendingDescription": "Il-messaġġi lil dan il-kuntatt ma jistgħux jiġu kkriptati sakemm dan l-apparat ikollu d-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jew mill-apparati l-oħra tiegħek. Jerġa' jiġi ppruvat awtomatikament.",
             "distrustedTitle": "L-ebda ċavetta fdata",
             "distrustedDescription": "Ma jistgħux jintbagħtu messaġġi lil dan il-kuntatt sakemm tafda waħda miċ-ċwievet tiegħu.",
             "receivesWhenUnlocked": "Se jirċievi l-messaġġi tiegħek wara li tneħħi l-lock",
@@ -231,7 +231,7 @@
                 "no-key": "il-kuntatt m'għadux jippubblikah",
                 "invalid-key": "ċertifikat invalidu",
                 "over-limit": "wisq apparati, dan jinqabeż",
-                "trust-pending": "jistenna li d-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jiġu trasferiti"
+                "trust-pending": "jistenna d-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jew mill-apparati l-oħra tiegħek"
             },
             "trustButton": "Afda din iċ-ċavetta",
             "distrustButton": "Tafdax din iċ-ċavetta"
@@ -652,13 +652,13 @@
             "sendBlockedKeyConflict": "Il-messaġġ ma ntbagħatx. Solvi l-kunflitt taċ-ċavetta tal-encryption tiegħek qabel ma tibgħat.",
             "sendBlockedGeneric": "Il-messaġġ ma ntbagħatx. L-encryption falla.",
             "sendBlockedKeysDistrusted": "Il-messaġġ ma ntbagħatx. Ma tafda l-ebda ċavetta ta' dan il-kuntatt. Afda waħda minnhom qabel ma tibgħat.",
-            "sendBlockedTrustPending": "Il-messaġġ ma ntbagħatx. Iċ-ċwievet ta' dan il-kuntatt qed jistennew li d-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jiġu trasferiti. Erġa' pprova ftit wara.",
+            "sendBlockedTrustPending": "Il-messaġġ ma ntbagħatx. Iċ-ċwievet ta' dan il-kuntatt qed jistennew id-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jew mill-apparati l-oħra tiegħek. Erġa' pprova ftit wara.",
             "heldKeys": {
                 "partial": "{{name}} żied ċavetta ġdida wara li vverifikajtu. Ma tirċievi l-ebda messaġġ sakemm tafdaha jew tivverifikaha.",
                 "all": "{{name}} żied ċavetta ġdida wara li vverifikajtu. Ma tirċievi l-ebda messaġġ sakemm tafdaha jew tivverifikaha. Sa dakinhar ma tistax tibgħat messaġġi.",
                 "distrusted": "Ma tafda l-ebda ċavetta ta' {{name}}. Ma tistax tibgħat messaġġi sakemm tafda waħda minnhom.",
-                "pendingPartial": "Xi wħud miċ-ċwievet ta' {{name}} ma jirċievu l-ebda messaġġ sakemm id-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jiġu trasferiti. Jerġa' jiġi ppruvat awtomatikament.",
-                "pendingAll": "Iċ-ċwievet ta' {{name}} ma jirċievu l-ebda messaġġ sakemm id-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jiġu trasferiti. Sa dakinhar ma tistax tibgħat messaġġi. Jerġa' jiġi ppruvat awtomatikament.",
+                "pendingPartial": "Xi wħud miċ-ċwievet ta' {{name}} ma jirċievu l-ebda messaġġ sakemm dan l-apparat ikollu d-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jew mill-apparati l-oħra tiegħek. Jerġa' jiġi ppruvat awtomatikament.",
+                "pendingAll": "Iċ-ċwievet ta' {{name}} ma jirċievu l-ebda messaġġ sakemm dan l-apparat ikollu d-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jew mill-apparati l-oħra tiegħek. Sa dakinhar ma tistax tibgħat messaġġi. Jerġa' jiġi ppruvat awtomatikament.",
                 "review": "Irrevedi ċ-ċwievet"
             },
             "plaintextForced": "Encryption disabled",

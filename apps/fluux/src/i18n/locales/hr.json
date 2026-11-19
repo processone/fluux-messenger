@@ -212,7 +212,7 @@
             "needsDecisionTitle": "Čeka vašu odluku",
             "needsDecisionDescription": "Poruke ovom kontaktu ne mogu se šifrirati dok ne odlučite o ključu.",
             "trustPendingTitle": "Čeka vaše ranije odluke o povjerenju",
-            "trustPendingDescription": "Poruke ovom kontaktu ne mogu se šifrirati dok se vaše odluke o povjerenju iz starije verzije ne premjeste. Pokušaj se automatski ponavlja.",
+            "trustPendingDescription": "Poruke ovom kontaktu ne mogu se šifrirati dok ovaj uređaj ne dobije vaše odluke o povjerenju iz starije verzije ili s vaših drugih uređaja. Pokušaj se automatski ponavlja.",
             "distrustedTitle": "Nema pouzdanih ključeva",
             "distrustedDescription": "Ovom kontaktu ne mogu se slati poruke dok ne vjerujete jednom od njegovih ključeva.",
             "receivesWhenUnlocked": "Primit će vaše poruke nakon otključavanja",
@@ -229,7 +229,7 @@
                 "no-key": "kontakt ga više ne objavljuje",
                 "invalid-key": "nevažeći certifikat",
                 "over-limit": "previše uređaja, ovaj se preskače",
-                "trust-pending": "čeka premještanje vaših odluka o povjerenju iz starije verzije"
+                "trust-pending": "čeka vaše odluke o povjerenju iz starije verzije ili s vaših drugih uređaja"
             },
             "trustButton": "Vjeruj ovom ključu",
             "distrustButton": "Ne vjeruj ovom ključu"
@@ -646,13 +646,13 @@
             "sendBlockedKeyConflict": "Poruka nije poslana. Riješite sukob svog ključa za šifriranje prije slanja.",
             "sendBlockedGeneric": "Poruka nije poslana. Šifriranje nije uspjelo.",
             "sendBlockedKeysDistrusted": "Poruka nije poslana. Ne vjerujete nijednom ključu ovog kontakta. Prije slanja vjerujte jednom od njih.",
-            "sendBlockedTrustPending": "Poruka nije poslana. Ključevi ovog kontakta čekaju premještanje vaših odluka o povjerenju iz starije verzije. Pokušajte ponovno za trenutak.",
+            "sendBlockedTrustPending": "Poruka nije poslana. Ključevi ovog kontakta čekaju vaše odluke o povjerenju iz starije verzije ili s vaših drugih uređaja. Pokušajte ponovno za trenutak.",
             "heldKeys": {
                 "partial": "Kontakt {{name}} dodao je novi ključ nakon što ste ga provjerili. Ključ ne prima poruke dok mu ne vjerujete ili ga ne provjerite.",
                 "all": "Kontakt {{name}} dodao je novi ključ nakon što ste ga provjerili. Ključ ne prima poruke dok mu ne vjerujete ili ga ne provjerite. Do tada ne možete slati poruke.",
                 "distrusted": "Ne vjerujete nijednom ključu kontakta {{name}}. Ne možete slati poruke dok ne vjerujete jednom od njih.",
-                "pendingPartial": "Neki ključevi kontakta {{name}} ne primaju poruke dok se vaše odluke o povjerenju iz starije verzije ne premjeste. Pokušaj se automatski ponavlja.",
-                "pendingAll": "Ključevi kontakta {{name}} ne primaju poruke dok se vaše odluke o povjerenju iz starije verzije ne premjeste. Do tada ne možete slati poruke. Pokušaj se automatski ponavlja.",
+                "pendingPartial": "Neki ključevi kontakta {{name}} ne primaju poruke dok ovaj uređaj ne dobije vaše odluke o povjerenju iz starije verzije ili s vaših drugih uređaja. Pokušaj se automatski ponavlja.",
+                "pendingAll": "Ključevi kontakta {{name}} ne primaju poruke dok ovaj uređaj ne dobije vaše odluke o povjerenju iz starije verzije ili s vaših drugih uređaja. Do tada ne možete slati poruke. Pokušaj se automatski ponavlja.",
                 "review": "Pregledaj ključeve"
             },
             "plaintextForced": "Encryption disabled",

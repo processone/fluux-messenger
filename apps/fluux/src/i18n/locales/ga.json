@@ -212,7 +212,7 @@
             "needsDecisionTitle": "Ag fanacht le do chinneadh",
             "needsDecisionDescription": "Ní féidir teachtaireachtaí chuig an teagmhálaí seo a chriptiú go dtí go gcinneann tú faoi eochair.",
             "trustPendingTitle": "Ag fanacht le do chinntí muiníne roimhe seo",
-            "trustPendingDescription": "Ní féidir teachtaireachtaí chuig an teagmhálaí seo a chriptiú go dtí go mbogtar do chinntí muiníne ó leagan níos luaithe. Déantar iarracht arís go huathoibríoch.",
+            "trustPendingDescription": "Ní féidir teachtaireachtaí chuig an teagmhálaí seo a chriptiú go dtí go mbíonn do chinntí muiníne ó leagan níos luaithe nó ó do ghléasanna eile ag an ngléas seo. Déantar iarracht arís go huathoibríoch.",
             "distrustedTitle": "Gan eochair iontaofa",
             "distrustedDescription": "Ní féidir teachtaireachtaí a sheoladh chuig an teagmhálaí seo go dtí go mbíonn iontaoibh agat as ceann dá eochracha.",
             "receivesWhenUnlocked": "Gheobhaidh sé do theachtaireachtaí tar éis duit díghlasáil",
@@ -229,7 +229,7 @@
                 "no-key": "níl an teagmhálaí á fhoilsiú a thuilleadh",
                 "invalid-key": "teastas neamhbhailí",
                 "over-limit": "an iomarca feistí, scipeáiltear an ceann seo",
-                "trust-pending": "ag fanacht go mbogfar do chinntí muiníne ó leagan níos luaithe"
+                "trust-pending": "ag fanacht ar do chinntí muiníne ó leagan níos luaithe nó ó do ghléasanna eile"
             },
             "trustButton": "Iontaoibh a bheith agat as an eochair seo",
             "distrustButton": "Gan iontaoibh a bheith agat as an eochair seo"
@@ -650,13 +650,13 @@
             "sendBlockedKeyConflict": "Níor seoladh an teachtaireacht. Réitigh coinbhleacht d'eochrach criptithe sula seolann tú.",
             "sendBlockedGeneric": "Níor seoladh an teachtaireacht. Theip ar an gcriptiú.",
             "sendBlockedKeysDistrusted": "Níor seoladh an teachtaireacht. Níl iontaoibh agat as aon cheann d'eochracha an teagmhálaí seo. Bíodh iontaoibh agat as ceann acu sula seolann tú.",
-            "sendBlockedTrustPending": "Níor seoladh an teachtaireacht. Tá eochracha an teagmhálaí seo ag fanacht go mbogfar do chinntí muiníne ó leagan níos luaithe. Bain triail eile as i gceann tamaillín.",
+            "sendBlockedTrustPending": "Níor seoladh an teachtaireacht. Tá eochracha an teagmhálaí seo ag fanacht ar do chinntí muiníne ó leagan níos luaithe nó ó do ghléasanna eile. Bain triail eile as i gceann tamaillín.",
             "heldKeys": {
                 "partial": "Chuir {{name}} eochair nua leis tar éis duit an teagmhálaí a fhíorú. Ní fhaigheann sí aon teachtaireacht go dtí go mbíonn iontaoibh agat aisti nó go bhfíoraíonn tú í.",
                 "all": "Chuir {{name}} eochair nua leis tar éis duit an teagmhálaí a fhíorú. Ní fhaigheann sí aon teachtaireacht go dtí go mbíonn iontaoibh agat aisti nó go bhfíoraíonn tú í. Ní féidir leat teachtaireachtaí a sheoladh go dtí sin.",
                 "distrusted": "Níl iontaoibh agat as aon cheann d'eochracha {{name}}. Ní féidir leat teachtaireachtaí a sheoladh go dtí go mbíonn iontaoibh agat as ceann acu.",
-                "pendingPartial": "Ní fhaigheann cuid d'eochracha {{name}} aon teachtaireacht go dtí go mbogtar do chinntí muiníne ó leagan níos luaithe. Déantar iarracht arís go huathoibríoch.",
-                "pendingAll": "Ní fhaigheann eochracha {{name}} aon teachtaireacht go dtí go mbogtar do chinntí muiníne ó leagan níos luaithe. Ní féidir leat teachtaireachtaí a sheoladh go dtí sin. Déantar iarracht arís go huathoibríoch.",
+                "pendingPartial": "Ní fhaigheann cuid d'eochracha {{name}} aon teachtaireacht go dtí go mbíonn do chinntí muiníne ó leagan níos luaithe nó ó do ghléasanna eile ag an ngléas seo. Déantar iarracht arís go huathoibríoch.",
+                "pendingAll": "Ní fhaigheann eochracha {{name}} aon teachtaireacht go dtí go mbíonn do chinntí muiníne ó leagan níos luaithe nó ó do ghléasanna eile ag an ngléas seo. Ní féidir leat teachtaireachtaí a sheoladh go dtí sin. Déantar iarracht arís go huathoibríoch.",
                 "review": "Athbhreithnigh eochracha"
             },
             "plaintextForced": "Encryption disabled",

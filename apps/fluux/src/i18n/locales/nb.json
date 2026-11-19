@@ -212,7 +212,7 @@
             "needsDecisionTitle": "Venter på avgjørelsen din",
             "needsDecisionDescription": "Meldinger til denne kontakten kan ikke krypteres før du har bestemt deg for en nøkkel.",
             "trustPendingTitle": "Venter på de tidligere tillitsbeslutningene dine",
-            "trustPendingDescription": "Meldinger til denne kontakten kan ikke krypteres før tillitsbeslutningene dine fra en tidligere versjon er flyttet. Det prøves på nytt automatisk.",
+            "trustPendingDescription": "Meldinger til denne kontakten kan ikke krypteres før denne enheten har tillitsbeslutningene dine fra en tidligere versjon eller fra de andre enhetene dine. Det prøves på nytt automatisk.",
             "distrustedTitle": "Ingen klarerte nøkler",
             "distrustedDescription": "Meldinger kan ikke sendes til denne kontakten før du stoler på én av nøklene.",
             "receivesWhenUnlocked": "Mottar meldingene dine når du låser opp",
@@ -229,7 +229,7 @@
                 "no-key": "kontakten publiserer den ikke lenger",
                 "invalid-key": "ugyldig sertifikat",
                 "over-limit": "for mange enheter, denne hoppes over",
-                "trust-pending": "venter på at tillitsbeslutningene dine fra en tidligere versjon flyttes"
+                "trust-pending": "venter på tillitsbeslutningene dine fra en tidligere versjon eller fra de andre enhetene dine"
             },
             "trustButton": "Stol på denne nøkkelen",
             "distrustButton": "Ikke stol på denne nøkkelen"
@@ -644,13 +644,13 @@
             "sendBlockedKeyConflict": "Meldingen ble ikke sendt. Løs konflikten med krypteringsnøkkelen din før du sender.",
             "sendBlockedGeneric": "Meldingen ble ikke sendt. Kryptering mislyktes.",
             "sendBlockedKeysDistrusted": "Meldingen ble ikke sendt. Du stoler ikke på noen av nøklene til denne kontakten. Stol på én av dem før du sender.",
-            "sendBlockedTrustPending": "Meldingen ble ikke sendt. Nøklene til denne kontakten venter på at tillitsbeslutningene dine fra en tidligere versjon flyttes. Prøv igjen om litt.",
+            "sendBlockedTrustPending": "Meldingen ble ikke sendt. Nøklene til denne kontakten venter på tillitsbeslutningene dine fra en tidligere versjon eller fra de andre enhetene dine. Prøv igjen om litt.",
             "heldKeys": {
                 "partial": "{{name}} har lagt til en ny nøkkel etter at du bekreftet kontakten. Den mottar ingen meldinger før du stoler på den eller bekrefter den.",
                 "all": "{{name}} har lagt til en ny nøkkel etter at du bekreftet kontakten. Den mottar ingen meldinger før du stoler på den eller bekrefter den. Til da kan du ikke sende meldinger.",
                 "distrusted": "Du stoler ikke på noen av nøklene til {{name}}. Du kan ikke sende meldinger før du stoler på én av dem.",
-                "pendingPartial": "Noen av nøklene til {{name}} mottar ingen meldinger før tillitsbeslutningene dine fra en tidligere versjon er flyttet. Det prøves på nytt automatisk.",
-                "pendingAll": "Nøklene til {{name}} mottar ingen meldinger før tillitsbeslutningene dine fra en tidligere versjon er flyttet. Til da kan du ikke sende meldinger. Det prøves på nytt automatisk.",
+                "pendingPartial": "Noen av nøklene til {{name}} mottar ingen meldinger før denne enheten har tillitsbeslutningene dine fra en tidligere versjon eller fra de andre enhetene dine. Det prøves på nytt automatisk.",
+                "pendingAll": "Nøklene til {{name}} mottar ingen meldinger før denne enheten har tillitsbeslutningene dine fra en tidligere versjon eller fra de andre enhetene dine. Til da kan du ikke sende meldinger. Det prøves på nytt automatisk.",
                 "review": "Gjennomgå nøkler"
             },
             "plaintextForced": "Encryption disabled",

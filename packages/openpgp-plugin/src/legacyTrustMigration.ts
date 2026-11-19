@@ -19,11 +19,12 @@
  *
  * Values the oldest versions stored before scoping them per account go to the
  * first account that migrates them, as those versions' loaders moved them,
- * once its claim on them is saved ({@link claimUnscopedLegacyTrust}), under a
- * lock the app's windows share, or in a database whose transactions they take
- * in turn. No account uses them without such a claim: when another account
- * holds it, an account moves only its own values; when no claim can be saved,
- * the migration waits and tries again during the session.
+ * once its claim on them is saved ({@link claimUnscopedLegacyTrust}) in a
+ * database whose transactions the app's windows take in turn, or, where there
+ * is none, under a lock they share. No account uses them without such a
+ * claim: when another account holds it, an account moves only its own
+ * values; when no claim can be saved, the migration waits and tries again
+ * during the session.
  *
  * The old seal is checked against the old data as earlier versions checked
  * it, once the account's key is usable (it may still be locked during the
@@ -99,13 +100,13 @@ const LEGACY_KEYS = {
  */
 const LEGACY_UNSCOPED_OWNER_KEY = 'fluux-e2ee-legacy-unscoped-owner'
 
-/** The lock windows of this app take in turn to claim the unscoped values. */
+/** The lock windows of this app take in turn to claim the unscoped values where the browser has no database. */
 export const LEGACY_UNSCOPED_CLAIM_LOCK = 'fluux-e2ee-legacy-unscoped-claim'
 
 /**
- * The database that keeps the claim where the windows share no lock. A
- * read-write transaction on its one store runs alone among the app's windows,
- * so reading the owner and saving a claim when there is none is one step.
+ * The database that keeps the claim for every window of the app. A
+ * read-write transaction on its one store runs alone among those windows, so
+ * reading the owner and saving a claim when there is none is one step.
  */
 export const LEGACY_UNSCOPED_CLAIM_DATABASE = 'fluux-e2ee-legacy-unscoped-claim'
 const CLAIM_STORE = 'claim'
@@ -357,14 +358,15 @@ function claimInDatabase(accountJid: string, timeoutMs: number): Promise<string 
  * the migration writes anything, so a migration that stops half way still
  * finds them on its next run.
  *
- * Windows of this app claim them one at a time, under a lock they share, so
- * two accounts cannot both find no owner and each save their own claim.
- * Where that lock is missing or refused (a browser or an older system web
- * view without Web Locks, or a page served without HTTPS), the claim is made
- * in one transaction of a database the windows share
- * ({@link LEGACY_UNSCOPED_CLAIM_DATABASE}), which runs alone among them, and
- * the owner it confirms is copied where the readers of the values look. Only
- * a claim that cannot be saved or read is `unavailable`.
+ * Every window of this app keeps the claim in one place, so two accounts
+ * cannot both find no owner and each save their own claim. Where there is a
+ * browser database, the claim is made in one transaction of a database the
+ * windows share ({@link LEGACY_UNSCOPED_CLAIM_DATABASE}), which runs alone
+ * among them, whether or not a window can take the lock below; the owner it
+ * confirms is copied where the readers of the values look. Only where there
+ * is no database at all, for every window alike, is the claim made in
+ * `localStorage` under a lock the windows share. A claim that cannot be saved
+ * or read, or a missing or refused lock without a database, is `unavailable`.
  */
 export async function claimUnscopedLegacyTrust(
   accountJid: string,
@@ -379,24 +381,24 @@ export async function claimUnscopedLegacyTrust(
       return 'unavailable'
     }
   }
-  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
-  if (locks) {
+  if (typeof indexedDB !== 'undefined') {
+    const owner = await claimInDatabase(accountJid, timeoutMs)
+    if (owner === null) return 'unavailable'
     try {
-      return await locks.request(LEGACY_UNSCOPED_CLAIM_LOCK, claim)
+      // The readers skip the values another account owns (see `mayReadUnscoped`).
+      localStorage.setItem(LEGACY_UNSCOPED_OWNER_KEY, owner)
     } catch {
-      // Refused: claim in the database, as below.
+      // The database keeps the owner; a reader that misses it claims again.
     }
+    return readOwner(accountJid, owner)
   }
-  if (typeof indexedDB === 'undefined') return 'unavailable'
-  const owner = await claimInDatabase(accountJid, timeoutMs)
-  if (owner === null) return 'unavailable'
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
+  if (!locks) return 'unavailable'
   try {
-    // The readers skip the values another account owns (see `mayReadUnscoped`).
-    localStorage.setItem(LEGACY_UNSCOPED_OWNER_KEY, owner)
+    return await locks.request(LEGACY_UNSCOPED_CLAIM_LOCK, claim)
   } catch {
-    // The database keeps the owner; a reader that misses it claims again.
+    return 'unavailable'
   }
-  return readOwner(accountJid, owner)
 }
 
 // ---------------------------------------------------------------------------

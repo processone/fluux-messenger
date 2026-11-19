@@ -214,7 +214,7 @@
             "needsDecisionTitle": "Čaka na vašo odločitev",
             "needsDecisionDescription": "Sporočil temu stiku ni mogoče šifrirati, dokler se ne odločite glede ključa.",
             "trustPendingTitle": "Čaka na vaše prejšnje odločitve o zaupanju",
-            "trustPendingDescription": "Sporočil temu stiku ni mogoče šifrirati, dokler vaše odločitve o zaupanju iz starejše različice niso prenesene. Poskus se samodejno ponavlja.",
+            "trustPendingDescription": "Sporočil temu stiku ni mogoče šifrirati, dokler ta naprava ne dobi vaših odločitev o zaupanju iz starejše različice ali z vaših drugih naprav. Poskus se samodejno ponavlja.",
             "distrustedTitle": "Ni zaupanja vrednih ključev",
             "distrustedDescription": "Temu stiku ni mogoče pošiljati sporočil, dokler ne zaupate enemu od njegovih ključev.",
             "receivesWhenUnlocked": "Prejel bo vaša sporočila po odklepu",
@@ -231,7 +231,7 @@
                 "no-key": "stik ga ne objavlja več",
                 "invalid-key": "neveljavno potrdilo",
                 "over-limit": "preveč naprav, ta je preskočena",
-                "trust-pending": "čaka na prenos vaših odločitev o zaupanju iz starejše različice"
+                "trust-pending": "čaka na vaše odločitve o zaupanju iz starejše različice ali z vaših drugih naprav"
             },
             "trustButton": "Zaupaj temu ključu",
             "distrustButton": "Ne zaupaj temu ključu"
@@ -650,13 +650,13 @@
             "sendBlockedKeyConflict": "Sporočilo ni bilo poslano. Pred pošiljanjem razrešite spor svojega ključa za šifriranje.",
             "sendBlockedGeneric": "Sporočilo ni bilo poslano. Šifriranje ni uspelo.",
             "sendBlockedKeysDistrusted": "Sporočilo ni bilo poslano. Ne zaupate nobenemu ključu tega stika. Pred pošiljanjem zaupajte enemu od njih.",
-            "sendBlockedTrustPending": "Sporočilo ni bilo poslano. Ključi tega stika čakajo na prenos vaših odločitev o zaupanju iz starejše različice. Poskusite znova čez trenutek.",
+            "sendBlockedTrustPending": "Sporočilo ni bilo poslano. Ključi tega stika čakajo na vaše odločitve o zaupanju iz starejše različice ali z vaših drugih naprav. Poskusite znova čez trenutek.",
             "heldKeys": {
                 "partial": "Stik {{name}} je dodal nov ključ, potem ko ste ga preverili. Ključ ne prejema sporočil, dokler mu ne zaupate ali ga ne preverite.",
                 "all": "Stik {{name}} je dodal nov ključ, potem ko ste ga preverili. Ključ ne prejema sporočil, dokler mu ne zaupate ali ga ne preverite. Do takrat ne morete pošiljati sporočil.",
                 "distrusted": "Ne zaupate nobenemu ključu stika {{name}}. Sporočil ne morete pošiljati, dokler ne zaupate enemu od njih.",
-                "pendingPartial": "Nekateri ključi stika {{name}} ne prejemajo sporočil, dokler vaše odločitve o zaupanju iz starejše različice niso prenesene. Poskus se samodejno ponavlja.",
-                "pendingAll": "Ključi stika {{name}} ne prejemajo sporočil, dokler vaše odločitve o zaupanju iz starejše različice niso prenesene. Do takrat ne morete pošiljati sporočil. Poskus se samodejno ponavlja.",
+                "pendingPartial": "Nekateri ključi stika {{name}} ne prejemajo sporočil, dokler ta naprava ne dobi vaših odločitev o zaupanju iz starejše različice ali z vaših drugih naprav. Poskus se samodejno ponavlja.",
+                "pendingAll": "Ključi stika {{name}} ne prejemajo sporočil, dokler ta naprava ne dobi vaših odločitev o zaupanju iz starejše različice ali z vaših drugih naprav. Do takrat ne morete pošiljati sporočil. Poskus se samodejno ponavlja.",
                 "review": "Preglej ključe"
             },
             "plaintextForced": "Encryption disabled",
