@@ -929,6 +929,16 @@ em-emoji-picker {
 /* Divider between the sidebar column and the main message view. */
 .chrome-sidebar { border-inline-end: 1px solid var(--fluux-surface-divider); }
 
+/* Accept on a pending sidebar item: an accent outline with a light accent tint
+   rather than a solid fill, so it reads as the primary action without
+   outshining the conversation rows. The label keeps the normal text colour,
+   which is AA on the sidebar in every theme; accent-coloured text is not. */
+.request-accept {
+  border: 1px solid color-mix(in srgb, var(--fluux-bg-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--fluux-bg-accent) 12%, transparent);
+}
+.request-accept:hover { background: color-mix(in srgb, var(--fluux-bg-accent) 22%, transparent); }
+
 /* Derived on the root, where theme variables and the light class live, so the
    value is already resolved when it is re-assigned below without a cycle. */
 :root {

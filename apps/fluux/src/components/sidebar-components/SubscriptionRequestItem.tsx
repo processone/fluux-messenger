@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { getLocalPart, type SubscriptionRequest } from '@fluux/sdk'
-import { Check, X, Ban } from 'lucide-react'
 import { Avatar } from '../Avatar'
-import { Tooltip } from '../Tooltip'
+import { RequestActions } from './RequestActions'
 
 interface SubscriptionRequestItemProps {
   request: SubscriptionRequest
@@ -24,38 +23,14 @@ export function SubscriptionRequestItem({ request, onAccept, onReject, onBlock }
           <p className="text-xs text-fluux-muted truncate">{request.from}</p>
         </div>
       </div>
-      {/* Accept keeps its label (primary action); reject/block are compact icon
-          buttons so the row never overflows the narrow sidebar. */}
-      <div className="flex items-stretch gap-1.5 mt-2">
-        <button
-          type="button"
-          onClick={onAccept}
-          className="flex-1 min-w-0 px-2 py-1.5 bg-fluux-green text-white text-sm font-medium rounded hover:bg-fluux-green/80 transition-colors flex items-center justify-center gap-1"
-        >
-          <Check className="size-4 flex-shrink-0" />
-          <span className="truncate">{t('common.accept')}</span>
-        </button>
-        <Tooltip content={t('common.reject')} position="top">
-          <button
-            type="button"
-            onClick={onReject}
-            className="flex-shrink-0 px-2.5 py-1.5 bg-fluux-muted/20 text-fluux-text rounded hover:bg-fluux-muted/30 transition-colors flex items-center justify-center"
-            aria-label={t('common.reject')}
-          >
-            <X className="size-4" />
-          </button>
-        </Tooltip>
-        <Tooltip content={t('common.block')} position="top">
-          <button
-            type="button"
-            onClick={onBlock}
-            className="flex-shrink-0 px-2.5 py-1.5 bg-fluux-red text-white rounded hover:bg-fluux-red/80 transition-colors flex items-center justify-center"
-            aria-label={t('common.block')}
-          >
-            <Ban className="size-4" />
-          </button>
-        </Tooltip>
-      </div>
+      <RequestActions
+        acceptLabel={t('common.accept')}
+        onAccept={onAccept}
+        dismissLabel={t('common.reject')}
+        onDismiss={onReject}
+        blockLabel={t('common.block')}
+        onBlock={onBlock}
+      />
     </div>
   )
 }
