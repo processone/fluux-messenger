@@ -34,6 +34,8 @@ function makeClient(manager: E2EEManager | null) {
       handlers.get(event)!.add(handler)
       return () => { handlers.get(event)!.delete(handler) }
     }),
+    // Desktop registration gives the plugin a persistent storage backend first.
+    setE2EEStorageBackend: vi.fn(),
   } as unknown as XMPPClient
   const emit = (event: string, payload?: unknown) => {
     for (const handler of handlers.get(event) ?? []) handler(payload)
