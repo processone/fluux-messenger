@@ -8,6 +8,7 @@ import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useToastStore } from '@/stores/toastStore'
 import { routeDeepLink } from '@/utils/deepLinkRouter'
 import { formatDateHeader } from '@/utils/dateFormat'
+import { useDayChange } from '@/hooks/useDayChange'
 import { format, isToday } from 'date-fns'
 
 /**
@@ -22,6 +23,7 @@ export function ForwardedCopyCard({ message, formatTime, isDarkMode }: {
 }) {
   const copy = message.forwarded!
   const { t, i18n } = useTranslation()
+  useDayChange()
   const { navigateToConversation } = useNavigateToTarget()
   const addToast = useToastStore(state => state.addToast)
   const isRoom = copy.type === 'groupchat'
