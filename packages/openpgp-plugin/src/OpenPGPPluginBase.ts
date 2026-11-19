@@ -362,6 +362,15 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   /** Verified keys changed before the trust state was accepted: publish them once it is. */
   private _verifiedChangedBeforeAccepted = false
   /**
+   * This session's first read of the account's verification list, from the
+   * activation of the subscriptions until it is done or does not run (see
+   * {@link syncOnceTrustAccepted}). encrypt() waits for it: a device that has
+   * not read the list yet, such as one just added to the account, would
+   * otherwise send to a key the account's other devices hold, or that a
+   * verification made there leaves waiting for a decision.
+   */
+  private _firstVerificationsRead: { done: Promise<void>; settle: () => void } | null = null
+  /**
    * The stored trust state the trust-state check compares with the seal: a
    * copy of the records as read at start, then as last sealed. Decisions made
    * since, even while the check waits for the key, are not part of it: they
@@ -853,6 +862,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   protected activateSubscriptions(): void {
     if (this._trustRecordsSyncUnsub) return
     const ctx = this.requireCtx()
+    if (!this._firstVerificationsRead) {
+      let settle!: () => void
+      const done = new Promise<void>((resolve) => {
+        settle = resolve
+      })
+      this._firstVerificationsRead = { done, settle }
+    }
     this._trustRecordsSyncUnsub = this.trustRecords.subscribe((change) => this.onTrustRecordsChanged(change))
     // The first sync runs once the trust-state check accepts the stored state
     // (see `verifyTrustStateOnInit`).
@@ -1085,11 +1101,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   protected async verifyTrustStateOnInit(): Promise<void> {
     const ctx = this.ctx
     try {
-      if (!(await this.checkTrustStateSeals())) return
+      if (!(await this.checkTrustStateSeals())) {
+        // While the move of earlier trust data waits, no list is read (see
+        // `syncOnceTrustAccepted`); otherwise a newer check decides.
+        if (this._deferredMigration) this._firstVerificationsRead?.settle()
+        return
+      }
     } catch (err) {
       // Storage failed: no verdict this time. The next unlock or key
-      // recovery checks again.
+      // recovery checks again; meanwhile no list is read.
       ctx?.logger.warn(`${this.pluginName()}: trust-state check failed: ${formatError(err)}`)
+      this._firstVerificationsRead?.settle()
       return
     }
     this._trustCheckDone = true
@@ -1112,12 +1134,20 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * devices published, then publish verified keys changed while it was not.
    */
   private syncOnceTrustAccepted(): void {
-    if (!this._trustRecordsSyncUnsub || !this.trustStateAccepted()) return
-    void this.syncVerificationsFromServer().then(() => {
-      if (!this._verifiedChangedBeforeAccepted || !this.trustStateAccepted()) return
-      this._verifiedChangedBeforeAccepted = false
-      this.scheduleVerificationsPublish()
-    })
+    const firstRead = this._firstVerificationsRead
+    if (!this._trustRecordsSyncUnsub || !this.trustStateAccepted()) {
+      // No list is read while the trust state is not accepted: sending goes
+      // on with what this device knows, as before the first read.
+      firstRead?.settle()
+      return
+    }
+    void this.syncVerificationsFromServer()
+      .finally(() => firstRead?.settle())
+      .then(() => {
+        if (!this._verifiedChangedBeforeAccepted || !this.trustStateAccepted()) return
+        this._verifiedChangedBeforeAccepted = false
+        this.scheduleVerificationsPublish()
+      })
   }
 
   /** Give the stored trust state a verdict; false when a newer check, or none, decides. */
@@ -1331,6 +1361,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this._trustStateUnderCheck = null
     this._deferredMigration = null
     this.clearDeferredMigrationRetry()
+    this._firstVerificationsRead?.settle()
+    this._firstVerificationsRead = null
     this.emitTrustView(null)
     this.ownBundle = null
     if (this.ctx) this.notifyKeysetChanged(this.ctx.account.jid)
@@ -2196,9 +2228,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       if (read.kind === 'snapshot') {
         this.trustRecords.adoptSets()
         this.applyVerificationSnapshot(read)
-        // A key held here that the list lacks, such as one held when the
-        // list removed the contact's last verification: publish it.
-        if (this.hasUnsharedHolds()) this.scheduleVerificationsPublish()
+        // A key held on the account's devices that the list lacks, such as
+        // one held when the list removed the contact's last verification, or
+        // one another device's list replaced: publish it again.
+        if (this.listLacksHolds(read)) this.scheduleVerificationsPublish()
         return
       }
       // Once the set node was read or written here, the older node is never
@@ -2222,8 +2255,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       }
       await this.publishVerificationSetsNow(ctx, current)
       const again = await fetchVerificationSets(ctx, decrypt, ctx.account.jid, ownPublicArmored, ownFingerprint)
-      if (!current()) return
-      if (again.kind === 'snapshot') this.applyVerificationSnapshot(again)
+      if (!current() || again.kind !== 'snapshot') return
+      this.applyVerificationSnapshot(again)
+      if (this.listLacksHolds(again)) this.scheduleVerificationsPublish()
     } catch {
       // Non-blocking — local records are always the source of truth.
     }
@@ -2265,7 +2299,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       } else {
         holdListed()
       }
-      this.trustRecords.setAccountHolds(unionKeyLists(this.trustRecords.accountHolds(), held))
+      // A key verified now needs no hold on any device.
+      this.trustRecords.setAccountHolds(
+        withoutVerified(unionKeyLists(this.trustRecords.accountHolds(), held), this.trustRecords.verifiedSets()),
+      )
     } finally {
       this._syncingFromRemoteCount--
     }
@@ -2275,6 +2312,14 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private ownHolds(): Record<string, string[]> {
     const ownJid = this.ctx ? getBareJid(this.ctx.account.jid) : null
     return Object.fromEntries(Object.entries(this.trustRecords.heldKeys()).filter(([peer]) => peer !== ownJid))
+  }
+
+  /** Whether `list` lacks a key held on the account's devices, as this device knows them. */
+  private listLacksHolds(list: VerificationSetsSnapshot): boolean {
+    const listed = parseKeyLists(list.held ?? {})
+    return Object.entries(this.accountHoldsToPublish(this.trustRecords.verifiedSets())).some(([peer, fps]) =>
+      fps.some((fp) => !listed[peer]?.includes(fp)),
+    )
   }
 
   /** Whether a key is held here that the account's other devices were not told of. */
@@ -3264,6 +3309,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         `${this.pluginName()}: ${peer}'s announced keyset is not fresh/complete — will retry`,
       )
     }
+    // The keys held on the account's devices, and the verifications made
+    // there, are known once this session read the account's list.
+    await this._firstVerificationsRead?.done
     // Fan out to every active (still-announced) validated peer cert the user
     // has not refused and that is not waiting for their decision (#1059, #1452).
     if (this.getActivePeerPublics(peer).length === 0) {
@@ -3277,14 +3325,15 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (peerPublics.length === 0) {
       // Every key is held or refused. Sending to none of them would not be
       // encryption, and falling back to plaintext would leak the message.
-      const waiting = this.activeKeyStandings(peer).some((k) => isWaiting(k.standing))
-      throw new E2EEPluginError(
-        'permanent',
-        waiting ? 'peer-keys-awaiting-decision' : 'peer-keys-distrusted',
-        waiting
-          ? `${this.pluginName()}: every key of ${peer} waits for the user's decision`
-          : `${this.pluginName()}: the user refused every key of ${peer}`,
-      )
+      // Keys that wait only for earlier trust data to be moved need no
+      // decision: the move is tried again on its own.
+      const reasons = new Set(this.activeKeyStandings(peer).map((k) => k.standing.notUsedReason))
+      const [code, why] = reasons.has('awaiting-decision')
+        ? ['peer-keys-awaiting-decision', `every key of ${peer} waits for the user's decision`]
+        : reasons.has('trust-pending')
+          ? ['peer-keys-trust-pending', `every key of ${peer} waits for earlier trust data to be moved`]
+          : ['peer-keys-distrusted', `the user refused every key of ${peer}`]
+      throw new E2EEPluginError('permanent', code, `${this.pluginName()}: ${why}`)
     }
 
     // Also fan out to our OWN announced siblings so every one of our devices can

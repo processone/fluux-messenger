@@ -211,6 +211,8 @@
             "tryAgain": "Pokušaj ponovno",
             "needsDecisionTitle": "Čeka vašu odluku",
             "needsDecisionDescription": "Poruke ovom kontaktu ne mogu se šifrirati dok ne odlučite o ključu.",
+            "trustPendingTitle": "Čeka vaše ranije odluke o povjerenju",
+            "trustPendingDescription": "Poruke ovom kontaktu ne mogu se šifrirati dok se vaše odluke o povjerenju iz starije verzije ne premjeste. Pokušaj se automatski ponavlja.",
             "distrustedTitle": "Nema pouzdanih ključeva",
             "distrustedDescription": "Ovom kontaktu ne mogu se slati poruke dok ne vjerujete jednom od njegovih ključeva.",
             "receivesWhenUnlocked": "Primit će vaše poruke nakon otključavanja",

@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, ShieldCheck } from 'lucide-react'
-import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { waitsOnlyForTrustData, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
 interface HeldKeysBannerProps {
   /** The conversation's encryption state. */
@@ -27,9 +27,8 @@ type Notice = 'partial' | 'all' | 'pendingPartial' | 'pendingAll' | 'distrusted'
  *   nothing can be sent.
  */
 export function heldKeysNotice(state: ConversationEncryptionState): Notice | null {
-  const onlyPending = (s: { waiting?: number; pending?: number }) => (s.pending ?? 0) > 0 && s.pending === s.waiting
-  if (state.kind === 'encrypted' && (state.waiting ?? 0) > 0) return onlyPending(state) ? 'pendingPartial' : 'partial'
-  if (state.kind === 'unsupported' && state.needsDecision) return onlyPending(state) ? 'pendingAll' : 'all'
+  if (state.kind === 'encrypted' && (state.waiting ?? 0) > 0) return waitsOnlyForTrustData(state) ? 'pendingPartial' : 'partial'
+  if (state.kind === 'unsupported' && state.needsDecision) return waitsOnlyForTrustData(state) ? 'pendingAll' : 'all'
   if (state.kind === 'rejected' && state.distrusted) return 'distrusted'
   return null
 }

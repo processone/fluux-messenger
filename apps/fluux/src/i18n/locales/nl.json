@@ -211,6 +211,8 @@
             "tryAgain": "Opnieuw proberen",
             "needsDecisionTitle": "Wacht op uw beslissing",
             "needsDecisionDescription": "Berichten aan dit contact kunnen niet worden versleuteld totdat u over een sleutel hebt beslist.",
+            "trustPendingTitle": "Wacht op je eerdere vertrouwensbeslissingen",
+            "trustPendingDescription": "Berichten aan dit contact kunnen niet worden versleuteld totdat je vertrouwensbeslissingen uit een eerdere versie zijn overgezet. Dit wordt automatisch opnieuw geprobeerd.",
             "distrustedTitle": "Geen vertrouwde sleutel",
             "distrustedDescription": "Berichten aan dit contact kunnen niet worden verzonden totdat u een van de sleutels vertrouwt.",
             "receivesWhenUnlocked": "Ontvangt uw berichten zodra u ontgrendelt",

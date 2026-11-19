@@ -13,6 +13,13 @@ describe('encryptionSendErrorKey', () => {
       .toBe('chat.encryption.sendBlockedKeyChanged')
   })
 
+  // FLM-311: keys that wait only for earlier trust data to be moved need no
+  // decision; the message must not say the contact changed keys.
+  it('maps a contact whose keys all wait for earlier trust data to its own message', () => {
+    expect(encryptionSendErrorKey(new E2EEPluginError('permanent', 'peer-keys-trust-pending', 'pending')))
+      .toBe('chat.encryption.sendBlockedTrustPending')
+  })
+
   it('maps a contact whose keys were all refused to the refused-keys message', () => {
     expect(encryptionSendErrorKey(new E2EEPluginError('permanent', 'peer-keys-distrusted', 'refused')))
       .toBe('chat.encryption.sendBlockedKeysDistrusted')

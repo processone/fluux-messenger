@@ -213,6 +213,8 @@
             "tryAgain": "Spróbuj ponownie",
             "needsDecisionTitle": "Czeka na Twoją decyzję",
             "needsDecisionDescription": "Wiadomości do tego kontaktu nie mogą być szyfrowane, dopóki nie zdecydujesz o kluczu.",
+            "trustPendingTitle": "Czeka na Twoje wcześniejsze decyzje dotyczące zaufania",
+            "trustPendingDescription": "Wiadomości do tego kontaktu nie mogą być szyfrowane, dopóki Twoje decyzje dotyczące zaufania z wcześniejszej wersji nie zostaną przeniesione. Próba jest ponawiana automatycznie.",
             "distrustedTitle": "Brak zaufanych kluczy",
             "distrustedDescription": "Nie można wysyłać wiadomości do tego kontaktu, dopóki nie zaufasz jednemu z jego kluczy.",
             "receivesWhenUnlocked": "Odbierze Twoje wiadomości po odblokowaniu",

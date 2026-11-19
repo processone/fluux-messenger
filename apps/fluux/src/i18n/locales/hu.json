@@ -211,6 +211,8 @@
             "tryAgain": "Újrapróbálás",
             "needsDecisionTitle": "Az Ön döntésére vár",
             "needsDecisionDescription": "Az ehhez a partnerhez küldött üzenetek nem titkosíthatók, amíg nem dönt egy kulcsról.",
+            "trustPendingTitle": "A korábbi bizalmi döntéseire vár",
+            "trustPendingDescription": "Az ehhez a partnerhez küldött üzenetek nem titkosíthatók, amíg egy korábbi verzióból származó bizalmi döntései át nem kerülnek. Az alkalmazás automatikusan újra megpróbálja.",
             "distrustedTitle": "Nincs megbízható kulcs",
             "distrustedDescription": "Ennek a partnernek nem küldhető üzenet, amíg meg nem bízik az egyik kulcsában.",
             "receivesWhenUnlocked": "Feloldás után megkapja az üzeneteit",

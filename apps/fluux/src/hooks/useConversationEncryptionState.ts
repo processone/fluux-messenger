@@ -87,6 +87,14 @@ export type ConversationEncryptionState =
   | { kind: 'keyLocked'; fingerprint?: string; groups?: PeerIdentityGroup[]; listError?: { retry: () => void } }
 
 /**
+ * Whether every key that receives nothing waits only for the protocol to
+ * finish preparing its trust data (`pending`), not for the user's decision.
+ */
+export function waitsOnlyForTrustData(state: { waiting?: number; pending?: number }): boolean {
+  return (state.pending ?? 0) > 0 && state.pending === state.waiting
+}
+
+/**
  * Why nothing can be sent to this contact now, if so: every key waits for the
  * user's decision, every key waits for the protocol to finish preparing its
  * trust data, or the user refused every key. The SDK then refuses to encrypt
@@ -96,7 +104,7 @@ export function encryptionSendBlock(
   state: ConversationEncryptionState,
 ): 'awaiting-decision' | 'trust-pending' | 'distrusted' | null {
   if (state.kind === 'unsupported' && state.needsDecision) {
-    return (state.pending ?? 0) > 0 && state.pending === state.waiting ? 'trust-pending' : 'awaiting-decision'
+    return waitsOnlyForTrustData(state) ? 'trust-pending' : 'awaiting-decision'
   }
   if (state.kind === 'rejected' && state.distrusted) return 'distrusted'
   return null

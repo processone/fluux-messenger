@@ -211,6 +211,8 @@
             "tryAgain": "נסה שוב",
             "needsDecisionTitle": "ממתין להחלטתך",
             "needsDecisionDescription": "לא ניתן להצפין הודעות לאיש קשר זה עד שתחליט לגבי מפתח.",
+            "trustPendingTitle": "ממתין להחלטות האמון הקודמות שלך",
+            "trustPendingDescription": "לא ניתן להצפין הודעות לאיש קשר זה עד שהחלטות האמון שלך מגרסה קודמת יועברו. הניסיון חוזר אוטומטית.",
             "distrustedTitle": "אין מפתחות מהימנים",
             "distrustedDescription": "לא ניתן לשלוח הודעות לאיש קשר זה עד שתסמוך על אחד מהמפתחות שלו.",
             "receivesWhenUnlocked": "יקבל את ההודעות שלך לאחר שתבטל את הנעילה",

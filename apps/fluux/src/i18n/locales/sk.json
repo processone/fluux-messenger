@@ -212,6 +212,8 @@
             "tryAgain": "Skúsiť znova",
             "needsDecisionTitle": "Čaká na vaše rozhodnutie",
             "needsDecisionDescription": "Správy tomuto kontaktu sa nedajú šifrovať, kým sa o kľúči nerozhodnete.",
+            "trustPendingTitle": "Čaká na vaše skoršie rozhodnutia o dôvere",
+            "trustPendingDescription": "Správy tomuto kontaktu sa nedajú šifrovať, kým sa nepresunú vaše rozhodnutia o dôvere zo staršej verzie. Pokus sa automaticky opakuje.",
             "distrustedTitle": "Žiadne dôveryhodné kľúče",
             "distrustedDescription": "Tomuto kontaktu nemožno posielať správy, kým nebudete dôverovať jednému z jeho kľúčov.",
             "receivesWhenUnlocked": "Prijme vaše správy po odomknutí",

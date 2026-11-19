@@ -136,12 +136,14 @@ scoping them per account go to the first account that reads them, as those
 versions moved them, once that account's claim on them is confirmed; no account
 uses them without one. Under a lock the app's windows share, the claim is saved
 and read in one step. Where that lock is missing or refused (an older system
-web view, or a page served without HTTPS), the claim is saved, then read back
-a second later: of two windows that claimed at the same moment, both read the
-claim saved last, so one account owns the records. When another account holds
-the claim, an account moves only its own records.
+web view, or a page served without HTTPS), the claim is saved and read in one
+transaction of a browser database the windows share, which runs alone among
+them: the first claim saved is the one every later claim reads, so one account
+owns the records. When another account holds the claim, an account moves only
+its own records.
 
-When the claim cannot be saved or read, nothing is moved or sealed yet: the
+When the claim cannot be saved or read, or the database does not answer within
+five seconds, nothing is moved or sealed yet: the
 session uses only the account's own earlier records and still checks their
 seal. It tries the upgrade again every 30 seconds, and before each trust
 decision or reseal you make; while the upgrade still waits, those are refused,
@@ -204,10 +206,16 @@ keys it verifies. A device that reads the list holds each listed key it has no
 decision about, before it approves the keys of a contact verified there for the
 first time. A device that joins later therefore holds what another device
 holds, and so does a device where the contact's verification was removed
-before it saw the key. A device that holds a key the list lacks publishes the
-list again. A snapshot of the version already applied, such as one another
-device published at the same time, adds its held keys only, since a hold only
-stops messages; an older one changes nothing. The list is part of the sealed
+before it saw the key. Each session encrypts nothing until it has read the
+list once, or knows it cannot read it (the trust state is not accepted, or the
+read fails), so a device that just joined sends nothing to a key another
+device holds. A device that reads a list lacking a key it knows is held on
+the account's devices, because it holds the key or an earlier list held it,
+publishes the list again: for instance when another device's publication
+replaced the list that held it. A newer list that verifies a key ends its
+hold on the account's devices. A snapshot of the version already applied,
+such as one another device published at the same time, adds its held keys
+only, since a hold only stops messages; an older one changes nothing. The list is part of the sealed
 trust records.
 
 A key you trusted or refused without verifying keeps that decision on the

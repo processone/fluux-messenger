@@ -213,6 +213,8 @@
             "tryAgain": "Încearcă din nou",
             "needsDecisionTitle": "Așteaptă decizia ta",
             "needsDecisionDescription": "Mesajele către acest contact nu pot fi criptate până când decizi asupra unei chei.",
+            "trustPendingTitle": "Așteaptă deciziile tale de încredere anterioare",
+            "trustPendingDescription": "Mesajele către acest contact nu pot fi criptate până când deciziile tale de încredere dintr-o versiune anterioară nu sunt mutate. Se încearcă din nou automat.",
             "distrustedTitle": "Nicio cheie de încredere",
             "distrustedDescription": "Nu se pot trimite mesaje acestui contact până nu ai încredere în una dintre cheile sale.",
             "receivesWhenUnlocked": "Va primi mesajele tale după deblocare",

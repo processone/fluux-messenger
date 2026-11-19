@@ -636,13 +636,16 @@ describe('encryption state as people see it', () => {
     })
 
     // FLM-311: keys can wait for the trust data of an earlier version to be
-    // moved; the notice and the Security tab say so, not that the contact
-    // added a key.
+    // moved; the notice, the Security glance and the Security tab say so, not
+    // that the contact added a key or that a decision is needed.
     it('says every key waits for the trust data of an earlier version, and nothing can be sent', async () => {
       world.announced = [A]
       world.trustPending = true
       await open()
       expect(notice()).toContain('chat.encryption.heldKeys.pendingAll')
+      expect(seen().glance).toBe('contacts.encryption.trustPendingTitle')
+      expect(seen().tabText).toContain('contacts.encryption.trustPendingTitlecontacts.encryption.trustPendingDescription')
+      expect(seen().tabText).not.toContain('needsDecision')
       expect(seen().tabText).toContain('contacts.encryption.notUsedReason.trust-pending')
       expect(seen().composerLock).toBeNull()
     })

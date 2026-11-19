@@ -211,6 +211,8 @@
             "tryAgain": "Prøv igen",
             "needsDecisionTitle": "Venter på din beslutning",
             "needsDecisionDescription": "Beskeder til denne kontakt kan ikke krypteres, før du har taget stilling til en nøgle.",
+            "trustPendingTitle": "Venter på dine tidligere tillidsbeslutninger",
+            "trustPendingDescription": "Beskeder til denne kontakt kan ikke krypteres, før dine tillidsbeslutninger fra en tidligere version er flyttet. Det forsøges igen automatisk.",
             "distrustedTitle": "Ingen betroede nøgler",
             "distrustedDescription": "Der kan ikke sendes beskeder til denne kontakt, før du stoler på en af dens nøgler.",
             "receivesWhenUnlocked": "Modtager dine beskeder, når du låser op",

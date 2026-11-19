@@ -213,6 +213,8 @@
             "tryAgain": "Riprova",
             "needsDecisionTitle": "In attesa della tua decisione",
             "needsDecisionDescription": "I messaggi a questo contatto non possono essere cifrati finché non decidi su una chiave.",
+            "trustPendingTitle": "In attesa delle tue decisioni di fiducia precedenti",
+            "trustPendingDescription": "I messaggi a questo contatto non possono essere cifrati finché le tue decisioni di fiducia di una versione precedente non vengono trasferite. Viene ritentato automaticamente.",
             "distrustedTitle": "Nessuna chiave fidata",
             "distrustedDescription": "Non è possibile inviare messaggi a questo contatto finché non ti fidi di una delle sue chiavi.",
             "receivesWhenUnlocked": "Riceverà i tuoi messaggi dopo lo sblocco",

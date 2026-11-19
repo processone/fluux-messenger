@@ -213,6 +213,8 @@
             "tryAgain": "Erġa' pprova",
             "needsDecisionTitle": "Jistenna d-deċiżjoni tiegħek",
             "needsDecisionDescription": "Il-messaġġi lil dan il-kuntatt ma jistgħux jiġu kkriptati sakemm tiddeċiedi dwar ċavetta.",
+            "trustPendingTitle": "Jistenna d-deċiżjonijiet ta' fiduċja preċedenti tiegħek",
+            "trustPendingDescription": "Il-messaġġi lil dan il-kuntatt ma jistgħux jiġu kkriptati sakemm id-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jiġu trasferiti. Jerġa' jiġi ppruvat awtomatikament.",
             "distrustedTitle": "L-ebda ċavetta fdata",
             "distrustedDescription": "Ma jistgħux jintbagħtu messaġġi lil dan il-kuntatt sakemm tafda waħda miċ-ċwievet tiegħu.",
             "receivesWhenUnlocked": "Se jirċievi l-messaġġi tiegħek wara li tneħħi l-lock",

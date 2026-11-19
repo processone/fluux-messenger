@@ -213,6 +213,8 @@
             "tryAgain": "Erneut versuchen",
             "needsDecisionTitle": "Wartet auf Ihre Entscheidung",
             "needsDecisionDescription": "Nachrichten an diesen Kontakt können nicht verschlüsselt werden, bis Sie über einen Schlüssel entschieden haben.",
+            "trustPendingTitle": "Wartet auf deine früheren Vertrauensentscheidungen",
+            "trustPendingDescription": "Nachrichten an diesen Kontakt können nicht verschlüsselt werden, bis deine Vertrauensentscheidungen aus einer früheren Version übernommen sind. Das wird automatisch erneut versucht.",
             "distrustedTitle": "Keinem Schlüssel vertraut",
             "distrustedDescription": "Nachrichten an diesen Kontakt können nicht gesendet werden, bis Sie einem seiner Schlüssel vertrauen.",
             "receivesWhenUnlocked": "Erhält Ihre Nachrichten nach dem Entsperren",

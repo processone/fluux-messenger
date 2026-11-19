@@ -213,6 +213,8 @@
             "tryAgain": "Poskusi znova",
             "needsDecisionTitle": "Čaka na vašo odločitev",
             "needsDecisionDescription": "Sporočil temu stiku ni mogoče šifrirati, dokler se ne odločite glede ključa.",
+            "trustPendingTitle": "Čaka na vaše prejšnje odločitve o zaupanju",
+            "trustPendingDescription": "Sporočil temu stiku ni mogoče šifrirati, dokler vaše odločitve o zaupanju iz starejše različice niso prenesene. Poskus se samodejno ponavlja.",
             "distrustedTitle": "Ni zaupanja vrednih ključev",
             "distrustedDescription": "Temu stiku ni mogoče pošiljati sporočil, dokler ne zaupate enemu od njegovih ključev.",
             "receivesWhenUnlocked": "Prejel bo vaša sporočila po odklepu",

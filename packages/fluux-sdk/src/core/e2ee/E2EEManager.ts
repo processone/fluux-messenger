@@ -392,8 +392,9 @@ export class E2EEManager {
    * and `unknown` are excluded: the former is a deliberate not-trusted marker
    * (forward-looking — the OpenPGP plugin never reports `untrusted` for peer
    * trust: a contact whose keys all wait for a decision or were all refused
-   * reports `tofu`, and encrypt() throws peer-keys-awaiting-decision or
-   * peer-keys-distrusted), the latter means we have never seen a key
+   * reports `tofu`, and encrypt() throws peer-keys-awaiting-decision,
+   * peer-keys-trust-pending or peer-keys-distrusted), the latter means we
+   * have never seen a key
    * (legitimate first contact).
    *
    * Plugin trust-check errors are treated as not-established (fail-open) so a

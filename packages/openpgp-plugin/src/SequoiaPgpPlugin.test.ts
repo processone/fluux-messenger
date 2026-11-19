@@ -5605,7 +5605,8 @@ describe('SequoiaPgpPlugin', () => {
     // While the move waits, whether the user verified a contact the
     // unclaimed values name is not known: its keys wait for the move
     // (`trust-pending`, FLM-311), so nothing is sent to it, as for a verified
-    // contact's new keys. Other contacts are not affected.
+    // contact's new keys, with its own reason: no decision is needed. Other
+    // contacts are not affected.
     it('sends nothing to a contact the unclaimed values verified while their move waits, and holds its new key once they move', async () => {
       const BOB_NEW_FP = 'B0B0000000000000000000000000000000000022'
       const DAVE_FP = 'DA4E000000000000000000000000000000000014'
@@ -5632,7 +5633,7 @@ describe('SequoiaPgpPlugin', () => {
       // A contact with keys is never sent plaintext instead.
       expect(await plugin.getPeerTrust('bob@example.com')).toBe('tofu')
       const toBob = await plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
-      await expect(plugin.encrypt(toBob, encodeBodyAsPayload('to bob'))).rejects.toMatchObject({ code: 'peer-keys-awaiting-decision' })
+      await expect(plugin.encrypt(toBob, encodeBodyAsPayload('to bob'))).rejects.toMatchObject({ code: 'peer-keys-trust-pending' })
       const toDave = await plugin.openConversation({ kind: 'direct', peer: 'dave@example.com' })
       expect(recipientFpsFromEncrypt(await plugin.encrypt(toDave, encodeBodyAsPayload('to dave')))).toContain(DAVE_FP)
       await plugin.shutdown()
@@ -6442,6 +6443,104 @@ describe('SequoiaPgpPlugin', () => {
         expect(trustRecordsOf(plugin).decisionOf('carol@example.com', CAROL_FP)).toBeUndefined()
         expect(trustRecordsOf(plugin).isVerified(DAVE, DAVE_FP)).toBe(true)
         expect(trustRecordsOf(plugin).syncVersion()).toBe(2)
+      })
+
+      // Another device that had not read this device's list yet published
+      // its own over it, without the hold: a device added later would use the key.
+      it('publishes its hold again when another device\'s list replaced the one that had it', async () => {
+        const built = makeContext('me@example.com')
+        const fp = '3E46E00000000000000000000000000000000034'
+        ownKey(fp)
+        const server = serverNodes(built)
+        await plugin.init(built.ctx)
+        const davePep = installDavePep(built)
+        davePep.announce([validDaveKey(DAVE_FP)])
+        await plugin.probePeer(DAVE)
+        server.nodes.sets = setsItem(fp, { [DAVE]: [DAVE_FP] }, 2)
+        server.notify(SETS_NODE)
+        await settle()
+        davePep.announce([validDaveKey(DAVE_FP), validDaveKey(ERIN_FP)])
+        plugin.onPeerKeysChanged(DAVE)
+        await vi.waitFor(() => expect(setsPublishes(built.published)).toHaveLength(1))
+        expect(decodePublished(setsPublishes(built.published)[0].item).held).toEqual({ [DAVE]: [ERIN_FP] })
+
+        // The other device removed dave's verification, and knew of no hold.
+        server.nodes.sets = setsItem(fp, {}, 4)
+        server.notify(SETS_NODE)
+        await vi.waitFor(() => expect(setsPublishes(built.published)).toHaveLength(2))
+
+        expect(decodePublished(setsPublishes(built.published)[1].item)).toMatchObject({
+          version: 5, verified: {}, held: { [DAVE]: [ERIN_FP] },
+        })
+        expect(trustRecordsOf(plugin).decisionOf(DAVE, ERIN_FP)).toBe('held')
+      })
+
+      // A device that was told of a hold, then of the key's verification,
+      // must not tell of the hold again once the verification is removed:
+      // no device holds the key any more.
+      it('forgets a hold of the account\'s devices once a list verifies the key', async () => {
+        const built = makeContext('me@example.com')
+        const fp = '3E46E00000000000000000000000000000000035'
+        ownKey(fp)
+        const server = serverNodes(built)
+        await plugin.init(built.ctx)
+        server.nodes.sets = setsWithHeld(fp, { [DAVE]: [DAVE_FP] }, { [DAVE]: [ERIN_FP] }, 2)
+        server.notify(SETS_NODE)
+        await settle()
+        expect(trustRecordsOf(plugin).decisionOf(DAVE, ERIN_FP)).toBe('held')
+
+        server.nodes.sets = setsItem(fp, { [DAVE]: [DAVE_FP, ERIN_FP] }, 3)
+        server.notify(SETS_NODE)
+        await settle()
+        server.nodes.sets = setsItem(fp, { [DAVE]: [DAVE_FP] }, 4)
+        server.notify(SETS_NODE)
+        await settle()
+        expect(trustRecordsOf(plugin).decisionOf(DAVE, ERIN_FP)).toBe('tofu')
+        expect(setsPublishes(built.published)).toEqual([])
+
+        // Any later list this device publishes leaves the key out.
+        trustRecordsOf(plugin).setDecision('eve@example.com', ALICE_FP, 'verified')
+        await vi.waitFor(() => expect(setsPublishes(built.published)).toHaveLength(1))
+        expect(decodePublished(setsPublishes(built.published)[0].item)).toMatchObject({
+          version: 5, verified: { [DAVE]: [DAVE_FP], 'eve@example.com': [ALICE_FP] },
+        })
+        expect(decodePublished(setsPublishes(built.published)[0].item).held).toEqual({})
+      })
+
+      // A device just added to the account knows of no verification or hold
+      // until it reads the list: a message sent before that list arrives
+      // must wait for it.
+      it('sends a message of a device just added to the account only once it read the list', async () => {
+        const built = makeContext('me@example.com')
+        const fp = '3E46E00000000000000000000000000000000036'
+        ownKey(fp)
+        const server = serverNodes(built)
+        server.nodes.sets = setsWithHeld(fp, { [DAVE]: [DAVE_FP] }, { [DAVE]: [ERIN_FP] }, 2)
+        const davePep = installDavePep(built)
+        davePep.announce([validDaveKey(DAVE_FP), validDaveKey(ERIN_FP)])
+        // The server answers the first read of the list late.
+        const queryPEP = built.ctx.xmpp.queryPEP
+        let answerList!: () => void
+        const listAnswered = new Promise<void>((resolve) => {
+          answerList = resolve
+        })
+        built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
+          if (node === SETS_NODE) await listAnswered
+          return queryPEP(jid, node, maxItems)
+        }
+        await plugin.init(built.ctx)
+        const toDave = await plugin.openConversation({ kind: 'direct', peer: DAVE })
+        let sent: Awaited<ReturnType<typeof plugin.encrypt>> | null = null
+        const sending = plugin.encrypt(toDave, encodeBodyAsPayload('to dave')).then((payload) => {
+          sent = payload
+        })
+        await settle()
+        expect(sent).toBeNull()
+
+        answerList()
+        await sending
+        expect(recipientFpsFromEncrypt(sent!)).toContain(DAVE_FP)
+        expect(recipientFpsFromEncrypt(sent!)).not.toContain(ERIN_FP)
       })
     })
 

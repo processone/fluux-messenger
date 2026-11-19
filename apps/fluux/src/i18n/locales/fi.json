@@ -211,6 +211,8 @@
             "tryAgain": "Yritä uudelleen",
             "needsDecisionTitle": "Odottaa päätöstäsi",
             "needsDecisionDescription": "Tälle yhteystiedolle ei voi salata viestejä, ennen kuin olet päättänyt avaimesta.",
+            "trustPendingTitle": "Odottaa aiempia luottamuspäätöksiäsi",
+            "trustPendingDescription": "Tälle yhteystiedolle ei voi salata viestejä ennen kuin aiemman version luottamuspäätöksesi on siirretty. Yritystä toistetaan automaattisesti.",
             "distrustedTitle": "Ei luotettuja avaimia",
             "distrustedDescription": "Tälle yhteystiedolle ei voi lähettää viestejä ennen kuin luotat johonkin sen avaimista.",
             "receivesWhenUnlocked": "Vastaanottaa viestisi, kun avaat lukituksen",

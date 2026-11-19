@@ -213,6 +213,8 @@
             "tryAgain": "Tentar novamente",
             "needsDecisionTitle": "À espera da sua decisão",
             "needsDecisionDescription": "As mensagens para este contacto não podem ser cifradas até decidir sobre uma chave.",
+            "trustPendingTitle": "À espera das suas decisões de confiança anteriores",
+            "trustPendingDescription": "As mensagens para este contacto não podem ser cifradas até que as suas decisões de confiança de uma versão anterior sejam transferidas. É tentado de novo automaticamente.",
             "distrustedTitle": "Nenhuma chave de confiança",
             "distrustedDescription": "Não é possível enviar mensagens a este contacto até confiar numa das suas chaves.",
             "receivesWhenUnlocked": "Receberá as suas mensagens depois de desbloquear",

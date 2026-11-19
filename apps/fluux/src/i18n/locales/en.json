@@ -212,6 +212,8 @@
             "tryAgain": "Try again",
             "needsDecisionTitle": "Waiting for your decision",
             "needsDecisionDescription": "Messages can't be encrypted to this contact until you decide on a key.",
+            "trustPendingTitle": "Waiting for your earlier trust decisions",
+            "trustPendingDescription": "Messages can't be encrypted to this contact until your trust decisions from an earlier version are moved. This is tried again automatically.",
             "distrustedTitle": "Keys not trusted",
             "distrustedDescription": "Messages can't be sent to this contact until you trust one of their keys.",
             "receivesWhenUnlocked": "Receives your messages once you unlock",

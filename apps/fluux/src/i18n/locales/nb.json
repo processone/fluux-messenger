@@ -211,6 +211,8 @@
             "tryAgain": "Prøv igjen",
             "needsDecisionTitle": "Venter på avgjørelsen din",
             "needsDecisionDescription": "Meldinger til denne kontakten kan ikke krypteres før du har bestemt deg for en nøkkel.",
+            "trustPendingTitle": "Venter på de tidligere tillitsbeslutningene dine",
+            "trustPendingDescription": "Meldinger til denne kontakten kan ikke krypteres før tillitsbeslutningene dine fra en tidligere versjon er flyttet. Det prøves på nytt automatisk.",
             "distrustedTitle": "Ingen klarerte nøkler",
             "distrustedDescription": "Meldinger kan ikke sendes til denne kontakten før du stoler på én av nøklene.",
             "receivesWhenUnlocked": "Mottar meldingene dine når du låser opp",

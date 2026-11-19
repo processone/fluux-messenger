@@ -211,6 +211,8 @@
             "tryAgain": "重试",
             "needsDecisionTitle": "等待你的决定",
             "needsDecisionDescription": "在你对某个密钥做出决定之前，无法对发给此联系人的消息加密。",
+            "trustPendingTitle": "等待你之前的信任决定",
+            "trustPendingDescription": "在你来自旧版本的信任决定迁移完成之前，无法对发给此联系人的消息加密。系统会自动重试。",
             "distrustedTitle": "没有受信任的密钥",
             "distrustedDescription": "在你信任此联系人的某个密钥之前，无法向其发送消息。",
             "receivesWhenUnlocked": "解锁后接收你的消息",

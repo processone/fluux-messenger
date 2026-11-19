@@ -211,6 +211,8 @@
             "tryAgain": "Reyna aftur",
             "needsDecisionTitle": "Bíður ákvörðunar þinnar",
             "needsDecisionDescription": "Ekki er hægt að dulrita skilaboð til þessa tengiliðar fyrr en þú hefur ákveðið með lykil.",
+            "trustPendingTitle": "Bíður eftir fyrri traustákvörðunum þínum",
+            "trustPendingDescription": "Ekki er hægt að dulrita skilaboð til þessa tengiliðar fyrr en traustákvarðanir þínar úr eldri útgáfu hafa verið fluttar. Reynt er aftur sjálfkrafa.",
             "distrustedTitle": "Engir traustir lyklar",
             "distrustedDescription": "Ekki er hægt að senda skilaboð til þessa tengiliðar fyrr en þú treystir einum af lyklum hans.",
             "receivesWhenUnlocked": "Fær skilaboðin þín þegar þú aflæsir",

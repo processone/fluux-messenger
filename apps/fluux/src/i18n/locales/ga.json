@@ -211,6 +211,8 @@
             "tryAgain": "Bain triail eile as",
             "needsDecisionTitle": "Ag fanacht le do chinneadh",
             "needsDecisionDescription": "Ní féidir teachtaireachtaí chuig an teagmhálaí seo a chriptiú go dtí go gcinneann tú faoi eochair.",
+            "trustPendingTitle": "Ag fanacht le do chinntí muiníne roimhe seo",
+            "trustPendingDescription": "Ní féidir teachtaireachtaí chuig an teagmhálaí seo a chriptiú go dtí go mbogtar do chinntí muiníne ó leagan níos luaithe. Déantar iarracht arís go huathoibríoch.",
             "distrustedTitle": "Gan eochair iontaofa",
             "distrustedDescription": "Ní féidir teachtaireachtaí a sheoladh chuig an teagmhálaí seo go dtí go mbíonn iontaoibh agat as ceann dá eochracha.",
             "receivesWhenUnlocked": "Gheobhaidh sé do theachtaireachtaí tar éis duit díghlasáil",

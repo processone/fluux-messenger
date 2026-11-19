@@ -211,6 +211,8 @@
             "tryAgain": "Bandyti dar kartą",
             "needsDecisionTitle": "Laukiama jūsų sprendimo",
             "needsDecisionDescription": "Žinučių šiam adresatui negalima šifruoti, kol nenusprendžiate dėl rakto.",
+            "trustPendingTitle": "Laukiama ankstesnių jūsų pasitikėjimo sprendimų",
+            "trustPendingDescription": "Žinučių šiam adresatui negalima šifruoti, kol nebus perkelti jūsų pasitikėjimo sprendimai iš ankstesnės versijos. Bandoma iš naujo automatiškai.",
             "distrustedTitle": "Nėra patikimų raktų",
             "distrustedDescription": "Šiam adresatui negalima siųsti žinučių, kol nepasitikėsite vienu iš jo raktų.",
             "receivesWhenUnlocked": "Gaus jūsų žinutes, kai atrakinsite",

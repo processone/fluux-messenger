@@ -211,6 +211,8 @@
             "tryAgain": "Försök igen",
             "needsDecisionTitle": "Väntar på ditt beslut",
             "needsDecisionDescription": "Meddelanden till den här kontakten kan inte krypteras förrän du har bestämt dig för en nyckel.",
+            "trustPendingTitle": "Väntar på dina tidigare förtroendebeslut",
+            "trustPendingDescription": "Meddelanden till den här kontakten kan inte krypteras förrän dina förtroendebeslut från en tidigare version har flyttats. Det försöks igen automatiskt.",
             "distrustedTitle": "Inga betrodda nycklar",
             "distrustedDescription": "Meddelanden kan inte skickas till den här kontakten förrän du litar på en av dess nycklar.",
             "receivesWhenUnlocked": "Tar emot dina meddelanden när du låser upp",

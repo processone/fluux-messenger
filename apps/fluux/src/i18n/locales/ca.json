@@ -213,6 +213,8 @@
             "tryAgain": "Torna-ho a provar",
             "needsDecisionTitle": "Esperant la vostra decisió",
             "needsDecisionDescription": "Els missatges a aquest contacte no es poden xifrar fins que decidiu sobre una clau.",
+            "trustPendingTitle": "Esperant les vostres decisions de confiança anteriors",
+            "trustPendingDescription": "Els missatges a aquest contacte no es poden xifrar fins que no es traslladin les vostres decisions de confiança d'una versió anterior. Es torna a provar automàticament.",
             "distrustedTitle": "Cap clau de confiança",
             "distrustedDescription": "No es poden enviar missatges a aquest contacte fins que confieu en una de les seves claus.",
             "receivesWhenUnlocked": "Rebrà els vostres missatges un cop desbloquegeu",
