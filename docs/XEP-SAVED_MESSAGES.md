@@ -33,13 +33,15 @@ The node `urn:xmpp:fluux:saved-messages:0` is created on the first publish with 
 | `pubsub#max_items`                | `256`       |
 | `pubsub#send_last_published_item` | `never`     |
 
+Only the publish that may create the node carries `pubsub#max_items`. Every later publish (a new save, or the rewrite of a deleted entry) carries the other three fields alone, so a server that enforces publish-option preconditions does not refuse it on a node that exists with another limit. If the creating publish is refused, the client repeats it once without `pubsub#max_items`; the node then takes the service's default, and the client reads the effective `pubsub#max_items` from the owner configuration afterwards (§3.2) before it sends anything more.
+
 ### 3.1 Item id
 
 The item id is a hash of the message identity: the conversation JID, then the XEP-0359 archive id with its `by`, else the origin id, else the client id. Two devices saving the same message publish the same item. The id is opaque; a reader never parses it.
 
 ### 3.2 Server limit
 
-Servers cap a node and silently drop the oldest item past the cap (Prosody `pep_max_items`, 256 by default; ejabberd `max_items_node`, 1000 by default). The node asks for 256 items, a number a service with a lower ceiling refuses or lowers; a node set to `max` would not say how many it keeps. A client reads the effective `pubsub#max_items` from the node's owner configuration and does not publish an item that would exceed it.
+Servers cap a node and silently drop the oldest item past the cap (Prosody `pep_max_items`, 256 by default; ejabberd `max_items_node`, 1000 by default). The creating publish asks for 256 items, a number a service with a lower ceiling refuses or lowers; a node set to `max` would not say how many it keeps. A client reads the effective `pubsub#max_items` from the node's owner configuration and does not publish an item that would exceed it.
 
 ---
 

@@ -75,7 +75,7 @@ describe('saved messages sync side effect', () => {
   it('undoes a save the server definitively refuses', async () => {
     const { node, stop } = setup()
     savedStore.getState().reconcileFetch([])
-    node.publish.mockRejectedValueOnce(Object.assign(new Error('not-allowed'), { name: 'StanzaError' }))
+    node.publish.mockRejectedValue(Object.assign(new Error('not-allowed'), { name: 'StanzaError' }))
     savedStore.getState().save(entry('a'))
     await flushPromises()
     expect(savedStore.getState().entries.a).toBeUndefined()
@@ -274,6 +274,30 @@ describe('saved messages sync side effect', () => {
     await flushPromises()
     expect(savedStore.getState().entries.c).toBeUndefined() // the node holds b and a: full
     stop()
+  })
+
+  it('repeats a creating write without the limit when the server refuses it, once', async () => {
+    const { node, stop } = setup()
+    savedStore.getState().reconcileFetch([])
+    node.publish.mockRejectedValueOnce(Object.assign(new Error('conflict'), { name: 'StanzaError' }))
+    savedStore.getState().save(entry('a'))
+    await flushPromises()
+    expect(node.publish.mock.calls.map(call => call[1])).toEqual([{ create: true }, { create: false }])
+    expect(savedStore.getState().pending).toEqual({})
+    stop()
+  })
+
+  it('makes no second request when the refusal arrives after the account was switched or the effects stopped', async () => {
+    const { node, stop } = setup()
+    savedStore.getState().reconcileFetch([])
+    let refuse!: (error: unknown) => void
+    node.publish.mockImplementationOnce(() => new Promise<void>((_, reject) => { refuse = reject }))
+    savedStore.getState().save(entry('a'))
+    await flushPromises()
+    stop()
+    refuse(Object.assign(new Error('conflict'), { name: 'StanzaError' }))
+    await flushPromises()
+    expect(node.publish).toHaveBeenCalledTimes(1)
   })
 
   it('sends nothing further to a new node whose limit cannot be read', async () => {

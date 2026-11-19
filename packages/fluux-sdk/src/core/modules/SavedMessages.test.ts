@@ -61,18 +61,6 @@ describe('SavedMessages publish', () => {
     expect(fieldsOf(existing.iq)).not.toContain('pubsub#max_items')
   })
 
-  it('repeats a creating write without the limit when the server enforces preconditions on an existing node', async () => {
-    const conflict = Object.assign(new Error('conflict'), { name: 'StanzaError' })
-    const sendIQ = vi.fn().mockRejectedValueOnce(conflict).mockResolvedValue(xml('iq', { type: 'result' }))
-    await new SavedMessages(makeDeps(sendIQ)).publish(roomEntry, { create: true })
-    expect(sendIQ).toHaveBeenCalledTimes(2)
-    const second = sendIQ.mock.calls[1][0].getChild('pubsub', NS_PUBSUB).getChild('publish-options').getChild('x').getChildren('field')
-    expect(second.map((f: Element) => f.attrs.var)).not.toContain('pubsub#max_items')
-    sendIQ.mockReset().mockRejectedValue(new Error('timeout'))
-    await expect(new SavedMessages(makeDeps(sendIQ)).publish(roomEntry, { create: true })).rejects.toThrow('timeout')
-    expect(sendIQ).toHaveBeenCalledTimes(1)
-  })
-
   it('wraps one XEP-0297 forwarded copy with delay, ids and the plain body', async () => {
     const { item } = await publishAndRead(roomEntry)
     const saved = item.getChild('saved', NS_SAVED_MESSAGES)

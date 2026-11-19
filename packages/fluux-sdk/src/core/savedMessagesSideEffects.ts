@@ -91,7 +91,15 @@ export function setupSavedMessagesSideEffects(
                 if (limit === undefined && (created || serverCount() > 0)) continue
               }
               // Only a first item of a node that does not exist yet asks for the node's limit.
-              await client.internal.savedMessages.publish(entry, { create: limit === undefined && !state().remote[id] })
+              const create = limit === undefined && !state().remote[id]
+              try {
+                await client.internal.savedMessages.publish(entry, { create })
+              } catch (error) {
+                // A server that enforces publish-option preconditions refuses the limit on a node that exists with another one:
+                // repeat once with the privacy constraints alone, and only while this operation is still the current one.
+                if (!create || !isDefinitiveRejection(error) || !current() || state().pending[id] !== op) throw error
+                await client.internal.savedMessages.publish(entry, { create: false })
+              }
               created = true
             } else {
               await client.internal.savedMessages.retract(id)

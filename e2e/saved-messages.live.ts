@@ -456,12 +456,15 @@ test('the private node the app creates answers only its owner', async ({ browser
   const stored = await nodeHolds(reader, 1)
   expect(stored[0]).toContain(text)
 
-  const peek = bob.c.iqCaller.request(xml('iq', { type: 'get', to: 'alice@localhost' }, xml('pubsub', { xmlns: PUBSUB }, xml('items', { node: NODE }))))
-  await expect(peek).rejects.toMatchObject({ element: expect.anything() })
-  await peek.catch((error: { element: { getChild(name: string): unknown } }) => expect(error.element.getChild('item-not-found')).toBeFalsy())
-  const write = bob.c.iqCaller.request(xml('iq', { type: 'set', to: 'alice@localhost' }, xml('pubsub', { xmlns: PUBSUB },
-    xml('publish', { node: NODE }, xml('item', { id: 'intruder' }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }))))))
-  await expect(write).rejects.toMatchObject({ element: expect.anything() })
+  // Both probes must be answered with an access refusal, not any failure: another failure would prove nothing of privacy.
+  const refusal = async (request: Promise<unknown>) => {
+    const error = await request.then(() => undefined, (e: { element?: { getChild(name: string): unknown; toString(): string } }) => e)
+    expect(error, 'the server answered the foreign request with an error').toBeDefined()
+    expect(['forbidden', 'not-allowed'].some(condition => error!.element?.getChild(condition))).toBe(true)
+  }
+  await refusal(bob.c.iqCaller.request(xml('iq', { type: 'get', to: 'alice@localhost' }, xml('pubsub', { xmlns: PUBSUB }, xml('items', { node: NODE })))))
+  await refusal(bob.c.iqCaller.request(xml('iq', { type: 'set', to: 'alice@localhost' }, xml('pubsub', { xmlns: PUBSUB },
+    xml('publish', { node: NODE }, xml('item', { id: 'intruder' }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() })))))))
   const after = await reader.items()
   expect(after.length).toBe(1)
   expect(after.some(item => item.includes('intruder'))).toBe(false)

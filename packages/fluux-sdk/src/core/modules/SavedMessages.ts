@@ -137,18 +137,11 @@ export class SavedMessages {
   }
 
   /**
-   * `create` is set when the node may not exist yet: the write then asks for the concrete limit. A server that
-   * enforces publish-options preconditions refuses it on a node that exists with another limit; the write is
-   * then made again with the privacy constraints alone.
+   * `create` is set when the node may not exist yet: the write then asks for the concrete limit. The caller decides
+   * whether a refusal is worth repeating without it, so that the repeat stays under its own account and session guard.
    */
   async publish(entry: SavedMessage, options: { create?: boolean } = {}): Promise<void> {
-    if (!options.create) { await this.node.publish(entry.id, entry); return }
-    try {
-      await this.createNode.publish(entry.id, entry)
-    } catch (error) {
-      if ((error as { name?: unknown } | null)?.name !== 'StanzaError') throw error
-      await this.node.publish(entry.id, entry)
-    }
+    await (options.create ? this.createNode : this.node).publish(entry.id, entry)
   }
 
   async retract(itemId: string): Promise<void> {
