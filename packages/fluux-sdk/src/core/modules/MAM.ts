@@ -215,6 +215,8 @@ interface CorrectionOrderGroup {
 
 /** Archive pages (100 entries each) one linked-quote walk may read before giving up. */
 const PREVIEW_WALK_MAX_PAGES = 10
+/** Entries per linked-quote walk page. */
+const PREVIEW_WALK_PAGE_SIZE = 100
 /** Linked-quote archive walks allowed in flight at once. */
 const PREVIEW_WALK_MAX_CONCURRENT = 2
 
@@ -3442,13 +3444,19 @@ export class MAM extends BaseModule {
     cursor: { before?: string; after?: string },
     max = 1,
     signal?: AbortSignal,
-  ): Promise<{ kind: 'page'; entries: RawArchiveEntry[]; complete: boolean } | { kind: 'absent' } | { kind: 'unknown' }> {
+    start?: string,
+  ): Promise<{ kind: 'page'; entries: RawArchiveEntry[]; complete: boolean; count?: number } | { kind: 'absent' } | { kind: 'unknown' }> {
     signal?.throwIfAborted()
     const session = this.captureQuery()
     const queryId = `mam_${generateUUID()}`
     // No `with` filter: the account archive is ordered as a whole, so the
     // predecessor proof holds without narrowing it to one conversation.
-    const iq = this.buildMAMQuery(queryId, [], max, cursor.before, isRoom ? entityId : undefined, cursor.after)
+    // A start time narrows the archive to entries from then on; the server's count then sizes that tail.
+    const startFields = start ? [
+      xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
+      xml('field', { var: 'start' }, xml('value', {}, start)),
+    ] : []
+    const iq = this.buildMAMQuery(queryId, startFields, max, cursor.before, isRoom ? entityId : undefined, cursor.after)
 
     const entries: RawArchiveEntry[] = []
     const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, id) => {
@@ -3477,7 +3485,8 @@ export class MAM extends BaseModule {
       unregister()
     }
     if (!session.isCurrent() || !response?.getChild('fin', NS_MAM)) return { kind: 'unknown' }
-    return { kind: 'page', entries, complete: this.parseMAMResponse(response).complete }
+    const parsed = this.parseMAMResponse(response)
+    return { kind: 'page', entries, complete: parsed.complete, count: parsed.page?.count }
   }
 
   /** Resolve an update's archive tier before considering detached sender-id aliases. */
@@ -3596,10 +3605,15 @@ export class MAM extends BaseModule {
             // Unverified edits or retractions may lie past the cap, so the quote is not shown as current.
             if (pages++ >= PREVIEW_WALK_MAX_PAGES) return { kind: 'unknown' }
             signal?.throwIfAborted()
-            const page = await this.queryOneArchivedEntry(roomJid, true, { after }, 100, signal)
+            // The first page also asks for entries from the original's time on: servers report
+            // that tail's size as the RSM count, which can settle the cap before any more pages.
+            const page = await this.queryOneArchivedEntry(roomJid, true, { after }, PREVIEW_WALK_PAGE_SIZE, signal,
+              pages === 1 ? message.timestamp.toISOString() : undefined)
             signal?.throwIfAborted()
             session.assertCurrent()
             if (!joined() || page.kind !== 'page') return { kind: 'unknown' }
+            // The count includes the original itself; a tail past the cap cannot be verified.
+            if (pages === 1 && page.count !== undefined && page.count - 1 > PREVIEW_WALK_MAX_PAGES * PREVIEW_WALK_PAGE_SIZE) return { kind: 'unknown' }
             const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
             for (const entry of page.entries) {
               signal?.throwIfAborted()

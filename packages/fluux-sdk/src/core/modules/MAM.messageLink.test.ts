@@ -239,6 +239,46 @@ describe('linked room message lookup', () => {
     expect(walked.length).toBeGreaterThan(0)
   })
 
+  // Intent: FLM-339 — a start time lets the server's count settle a too-long tail on the first page.
+  function withCount(h: ReturnType<typeof harness>, history: typeof rows, reply = true) {
+    const serve = h.sendIQ.getMockImplementation()!
+    const starts: (string | undefined)[] = []
+    h.sendIQ.mockImplementation(async (iq: Element) => {
+      const query = iq.getChild('query', MAM_NS)!
+      const start = query.getChild('x')?.getChildren('field').find(f => f.attrs.var === 'start')?.getChildText('value') ?? undefined
+      starts.push(start)
+      const res = await serve(iq)
+      if (reply) {
+        const from = start ? history.filter(row => row.timestamp.getTime() >= Date.parse(start)).length : history.length
+        res.getChild('fin', MAM_NS)!.getChild('set', RSM_NS)!.append(xml('count', {}, String(from)))
+      }
+      return res
+    })
+    return starts
+  }
+  const longTail = Array.from({ length: 1200 }, (_, index) => ({ ...rows[0], id: `tail-${index}`, stanzaId: String(1731490200000000 + index),
+    body: `Tail ${index}`, timestamp: new Date(Date.UTC(2026, 5, 1, 10, 0, index)) }))
+
+  it('stops after the first walk page when the reported tail exceeds the cap', async () => {
+    const h = harness(undefined, undefined, undefined, longTail)
+    const starts = withCount(h, longTail)
+    expect(await h.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    // Two requests to locate the original, one first walk page carrying the original's time.
+    expect(h.sendIQ).toHaveBeenCalledTimes(3)
+    expect(starts).toEqual([undefined, undefined, longTail[0].timestamp.toISOString()])
+  })
+
+  it('walks as before when the server reports no count or a tail within the cap', async () => {
+    const noCount = harness(undefined, undefined, undefined, longTail)
+    withCount(noCount, longTail, false)
+    expect(await noCount.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(noCount.sendIQ.mock.calls.length).toBeGreaterThan(3)
+    const fits = harness(undefined, undefined, 'retraction')
+    const starts = withCount(fits, rows)
+    expect(await fits.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toEqual({ kind: 'absent' })
+    expect(starts.filter(Boolean)).toEqual([rows[40].timestamp.toISOString()])
+  })
+
   // Intent: FLM-323 — many links in one room cannot each run their own walk at once.
   it('runs only a few forward archive walks at once and finishes the rest as slots free', async () => {
     const h = harness()

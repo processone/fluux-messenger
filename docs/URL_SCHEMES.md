@@ -71,7 +71,7 @@ original comes from the archive, the lookup reads subsequent pages (at most 100
 entries each) to apply separately archived edits and deletions before displaying
 its text. To keep many links in one room from flooding the server, a lookup reads
 at most ten such pages and each client instance runs at most two of these walks
-at once; others wait. If the cutoff is reached before the archive ends, the quote
+at once; others wait. The first page asks only for entries from the original's time on, so a server that reports a count lets the lookup stop right away, after about three requests, when that tail alone exceeds the cutoff. If the cutoff is reached before the archive ends, the quote
 is unavailable (the same state as a failed lookup) rather than possibly stale. Live updates
 also reconcile quotes whose targets are no longer in the resident window. Update
 references resolve against canonical room/cache/archive targets, so a sender id
