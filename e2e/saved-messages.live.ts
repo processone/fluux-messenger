@@ -1440,3 +1440,184 @@ test('a saved message whose archive lookup goes unanswered says the lookup faile
   await emptyNode(reader)
   await one.context.close(); await bob.stop(); await reader.stop()
 })
+
+async function logoutOf(client: Client, wipe: boolean) {
+  await client.page.locator('button.p-2:has(svg[class*="vertical"])').first().click()
+  await client.page.getByRole('button', { name: 'Log out', exact: true }).click()
+  const clear = client.page.getByRole('checkbox', { name: /Clear local data/ })
+  if ((await clear.isChecked()) !== wipe) await (wipe ? clear.check() : clear.uncheck())
+  await client.page.getByRole('button', { name: 'Disconnect', exact: true }).click()
+  await expect(client.page.locator('#jid')).toBeVisible({ timeout: 30_000 })
+}
+
+async function loginAs(client: Client, name: 'alice' | 'bob') {
+  const { jid, password } = config!.users[name]
+  await client.page.locator('#jid').fill(jid)
+  await client.page.locator('input[type=password]').first().fill(password)
+  await client.page.getByRole('button', { name: 'Connect' }).click()
+  await expect(client.page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible({ timeout: 30_000 })
+}
+
+const savedKeys = (client: Client) => client.page.evaluate(() => Object.keys(localStorage).filter(key => key.includes('fluux-saved')))
+
+test('switching account keeps the first account\'s waiting save, and a wipe by the second account leaves it alone', async ({ browser }) => {
+  test.setTimeout(240_000)
+  const bob = await script('bob')
+  let reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser)
+  const text = `Waiting across accounts ${stamp}`
+  await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
+  let refuse = true
+  await one.page.routeWebSocket(/\/ws$/, ws => { if (refuse) void ws.close(); else ws.connectToServer() })
+  kick('alice')
+  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).first()).toBeVisible({ timeout: 20_000 })
+  await saveMessage(one, text)
+  await expect.poll(() => pendingQueue(one), { timeout: 10_000 }).toContain(text.slice(0, 12))
+  const queueKeys = await savedKeys(one)
+  expect(queueKeys.length).toBeGreaterThan(0)
+
+  // Log out without clearing local data, then another account signs in on this browser.
+  await logoutOf(one, false)
+  expect(await savedKeys(one)).toEqual(queueKeys) // kept
+  refuse = false
+  const sentBefore = one.frames.length
+  await loginAs(one, 'bob')
+  await openSaved(one)
+  await expect(one.page.getByTestId('saved-row')).toHaveCount(0) // the second account sees nothing of the first
+  await one.page.waitForTimeout(5000)
+  expect(one.frames.slice(sentBefore).filter(f => f.includes(`<publish node="${NODE}"`))).toHaveLength(0)
+  expect(await savedKeys(one)).toEqual(expect.arrayContaining(queueKeys)) // and has not touched it
+
+  // The second account logs out and clears its local data: the first account's waiting save stays.
+  await logoutOf(one, true)
+  expect(await savedKeys(one)).toEqual(expect.arrayContaining(queueKeys))
+  await shot(one.page, 'account-switch-queue-kept')
+
+  // The first account returns: its save is sent once.
+  const before = one.frames.length
+  await loginAs(one, 'alice')
+  reader = await script('alice')
+  await nodeHolds(reader, 1)
+  await one.page.waitForTimeout(5000)
+  expect(one.frames.slice(before).filter(f => f.includes(`<publish node="${NODE}"`))).toHaveLength(1)
+  expect((await reader.items())[0]).toContain(text)
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('a full node whose removal goes unanswered stays full: a competing save is not sent, before or after the request deadline', async ({ browser }) => {
+  test.setTimeout(300_000)
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser)
+  const first = `Removal waits at the limit ${stamp}`
+  await bob.say('alice', first)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: first })).toBeVisible()
+  await saveMessage(one, first)
+  await nodeHolds(reader, 1)
+  const form = await reader.c.iqCaller.request(xml('iq', { type: 'get' }, xml('pubsub', { xmlns: `${PUBSUB}#owner` }, xml('configure', { node: NODE }))))
+  const limit = Number.parseInt(String(form.toString().match(/pubsub#max_items[^]*?<value>([^<]*)<\/value>/)?.[1]), 10)
+  const seed = (id: string) => xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('publish', { node: NODE },
+    xml('item', { id }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
+      xml('message', { xmlns: 'jabber:client', from: 'bob@localhost', to: 'alice@localhost', type: 'chat', id: `seed-${id}` }, xml('body', {}, `seed ${id}`))))))))
+  for (let i = 0; i < limit - 1; i++) await reader.c.iqCaller.request(seed(`seed${String(i).padStart(3, '0')}`))
+  expect((await reader.items()).length).toBe(limit)
+
+  const swallowedAt: number[] = []
+  await one.page.routeWebSocket(/\/ws$/, ws => {
+    const server = ws.connectToServer()
+    ws.onMessage(message => {
+      const frame = typeof message === 'string' ? message : message.toString()
+      if (/^<iq\b/.test(frame) && frame.includes(`<retract node="${NODE}"`)) { swallowedAt.push(Date.now()); return }
+      server.send(message)
+    })
+    server.onMessage(message => ws.send(message))
+  })
+  await one.page.reload()
+  await openSaved(one)
+  await expect(savedRow(one, first)).toBeVisible({ timeout: 60_000 })
+  await savedRow(one, first).getByRole('button', { name: 'Remove from saved' }).click()
+  await expect.poll(() => swallowedAt.length, { timeout: 20_000 }).toBeGreaterThan(0)
+
+  // The removal is unanswered, so nothing is known to be freed: a competing save is not sent, and nothing is evicted.
+  const text = `Competes for the freed place ${stamp}`
+  await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible({ timeout: 30_000 })
+  const sentBefore = one.frames.length
+  await saveMessage(one, text)
+  await one.page.waitForTimeout(3000)
+  await shot(one.page, 'unanswered-removal-at-cap')
+  const noPublish = () => one.frames.slice(sentBefore).filter(f => f.includes(`<publish node="${NODE}"`))
+  expect(noPublish()).toHaveLength(0)
+  // Past the request deadline, with the removal sent again and still unanswered, still nothing goes out.
+  await expect.poll(() => swallowedAt.length, { timeout: 90_000 }).toBeGreaterThan(1)
+  expect(swallowedAt[swallowedAt.length - 1] - swallowedAt[0]).toBeGreaterThanOrEqual(29_000)
+  await one.page.waitForTimeout(2000)
+  expect(noPublish()).toHaveLength(0)
+  const items = await reader.items()
+  expect(items.length).toBe(limit)
+  expect(items.some(item => item.includes(text))).toBe(false)
+  expect(items.some(item => item.includes(first))).toBe(true)
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('a save still being acknowledged when it is removed again is removed from the node once the acknowledgement arrives', async ({ browser }) => {
+  test.setTimeout(240_000)
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser)
+  const text = `Removed while being stored ${stamp}`
+  await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
+  // The publication reaches the server, but its answer is held back until released.
+  let heldId: string | undefined
+  let held: string | undefined
+  let sendToPage: ((m: string) => void) | undefined
+  const retracts: string[] = []
+  await one.page.routeWebSocket(/\/ws$/, ws => {
+    const server = ws.connectToServer()
+    sendToPage = m => ws.send(m)
+    ws.onMessage(message => {
+      const frame = typeof message === 'string' ? message : message.toString()
+      if (/^<iq\b/.test(frame) && frame.includes(`<publish node="${NODE}"`)) heldId ??= /\bid="([^"]+)"/.exec(frame)?.[1]
+      if (frame.includes(`<retract node="${NODE}"`)) retracts.push(frame)
+      server.send(message)
+    })
+    server.onMessage(message => {
+      const frame = typeof message === 'string' ? message : message.toString()
+      if (heldId && held === undefined && /^<iq\b/.test(frame) && frame.includes(`id='${heldId}'`) || (heldId && held === undefined && /^<iq\b/.test(frame) && frame.includes(`id="${heldId}"`))) { held = frame; return }
+      ws.send(message)
+    })
+  })
+  await one.page.reload()
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible({ timeout: 45_000 })
+  await saveMessage(one, text)
+  await expect.poll(() => held, { timeout: 20_000 }).toBeDefined()
+  await nodeHolds(reader, 1) // stored, but the page has not heard so yet
+  await openSaved(one)
+  await expect(savedRow(one, text)).toBeVisible()
+  await savedRow(one, text).getByRole('button', { name: 'Remove from saved' }).click()
+  await expect(savedRow(one, text)).toHaveCount(0)
+  await one.page.waitForTimeout(2000)
+  expect(retracts).toHaveLength(0) // not before the save is acknowledged
+
+  sendToPage!(held!) // the acknowledgement arrives
+  await expect.poll(() => retracts.length, { timeout: 20_000 }).toBeGreaterThan(0)
+  await nodeHolds(reader, 0)
+  await expect(savedRow(one, text)).toHaveCount(0) // and the row never comes back
+  await one.page.waitForTimeout(3000)
+  await expect(savedRow(one, text)).toHaveCount(0)
+  expect(await pendingQueue(one)).not.toContain(text.slice(0, 12))
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
