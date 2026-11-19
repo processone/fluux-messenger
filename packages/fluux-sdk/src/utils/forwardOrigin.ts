@@ -1,7 +1,7 @@
 import type { BaseMessage } from '../core/types'
 import { getBareJid } from '../core/jid'
 import { parseRoomMessageLink, type RoomMessageLink } from './roomMessageLink'
-import { getMessagesByReference, getMessages, getRoomMessages } from './messageCache'
+import { getMessagesByForwardedId, getMessages, getRoomMessages, type ForwardedIdReference } from './messageCache'
 import { captureStorageScope } from './storageScope'
 import { messageRowRef } from './roomStanzaId'
 import type { MessageRowRef } from '../core/types/messageRow'
@@ -33,12 +33,12 @@ export function forwardedCopyRoomLink(message: Pick<BaseMessage, 'references' | 
   return null
 }
 
-/** Exact text first; a longer original counts only for a copy that was cut at the limit. */
+/** Exact text first; a longer original counts only for a copy that was cut at the limit, judged before trimming. */
 function textMatch(body: string, copy: string): 'exact' | 'prefix' | null {
   const a = body.trim(), b = copy.trim()
   if (!b) return null
   if (a === b) return 'exact'
-  return Array.from(b).length >= COPY_LIMIT_CHARACTERS && a.startsWith(b) ? 'prefix' : null
+  return Array.from(copy).length >= COPY_LIMIT_CHARACTERS && a.startsWith(b) ? 'prefix' : null
 }
 
 /** The one closest match to the copy's time, exact text before prefix; null when none or when two tie. */
@@ -99,11 +99,14 @@ export async function findForwardedOrigin(
     ({ kind: 'chat', conversationId, row: messageRowRef(row) })
 
   // Carried ids: the archive id when it is this account's own archive, then the sender's id.
-  const references = [...(copy.stanzaId && copy.stanzaIdBy === me ? [copy.stanzaId] : []), ...(copy.id ? [copy.id] : [])]
+  const references: ForwardedIdReference[] = [
+    ...(copy.stanzaId && copy.stanzaIdBy === me ? [{ kind: 'own-archive' as const, id: copy.stanzaId, by: me }] : []),
+    ...(copy.id ? [{ kind: 'sender-id' as const, id: copy.id }] : []),
+  ]
   for (const reference of references) {
-    const hits: { conversationId: string; row: Awaited<ReturnType<typeof getMessagesByReference>>[number] }[] = []
+    const hits: { conversationId: string; row: Awaited<ReturnType<typeof getMessagesByForwardedId>>[number] }[] = []
     for (const conversationId of candidates) {
-      for (const row of await getMessagesByReference(conversationId, reference)) if (valid(row)) hits.push({ conversationId, row })
+      for (const row of await getMessagesByForwardedId(conversationId, reference)) if (valid(row)) hits.push({ conversationId, row })
       scope.assertCurrent()
     }
     // Several rows under one id: the text tells them apart; still several, none is the original.

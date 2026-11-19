@@ -91,6 +91,42 @@ describe('findForwardedOrigin', () => {
       .toEqual({ kind: 'chat', conversationId: 'memberbot@xmpp.org', row: { id: 'dup', stanzaId: 'a-2' } })
   })
 
+  it('never reads a sender id as an archive id or the reverse', async () => {
+    // Another row's origin id equals the archive id the copy carries: the archive id must not match it.
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'x1', originId: 'A', body: 'unrelated' }))
+    expect(await findForwardedOrigin(copy({ id: 'zz', stanzaId: 'A', stanzaIdBy: 'me@example.org', timestamp: undefined }), 'me@example.org', ['memberbot@xmpp.org'])).toBeNull()
+    // A client id equal to the carried archive id of a different row in another conversation.
+    await messageCache.saveMessage(chat('alice@example.org', { id: 'A', from: 'me@example.org', isOutgoing: true, body: 'other' }))
+    expect(await findForwardedOrigin(copy({ stanzaId: 'A', stanzaIdBy: 'me@example.org', from: 'me@example.org', author: 'me', timestamp: undefined }), 'me@example.org', ['alice@example.org'])).toBeNull()
+  })
+
+  it('resolves the own-archive pair from the cached own-archive fields, not the possibly foreign stanza id', async () => {
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'dup', stanzaId: 'foreign-9', ownArchiveId: 'mine-3', ownArchiveBy: 'me@example.org', body: 'first', timestamp: new Date(T - 1000) }))
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'dup', stanzaId: 'foreign-8', ownArchiveId: 'mine-4', ownArchiveBy: 'me@example.org' }))
+    expect(await findForwardedOrigin(copy({ id: 'dup', stanzaId: 'mine-3', stanzaIdBy: 'me@example.org' }), 'me@example.org', []))
+      .toMatchObject({ row: { id: 'dup', stanzaId: 'foreign-9' } })
+  })
+
+  it('rejects two rows sharing a client id and text when no archive id tells them apart', async () => {
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'dup', stanzaId: 'a-1' }))
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'dup', stanzaId: 'a-2' }))
+    expect(await findForwardedOrigin(copy({ id: 'dup', timestamp: undefined }), 'me@example.org', [])).toBeNull()
+  })
+
+  it('judges a cut copy by its untrimmed length, in direct and room matching', async () => {
+    const cut = `${'x'.repeat(3990)}${' '.repeat(10)}`
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'long', body: `${'x'.repeat(3990)} and the rest` }))
+    expect(await findForwardedOrigin(copy({ text: cut }), 'me@example.org', [])).toMatchObject({ row: { id: 'long' } })
+    const nl = `${'x'.repeat(3999)}\n`
+    await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'long2', body: `${'x'.repeat(3999)}\nmore`, timestamp: new Date(T + 30 * 60_000) }))
+    expect(await findForwardedOrigin(copy({ text: nl, timestamp: T + 30 * 60_000 }), 'me@example.org', [])).toMatchObject({ row: { id: 'long2' } })
+    const room = { type: 'groupchat', id: 'r1', roomJid: 'tech@conference.example.org', from: 'tech@conference.example.org/jenkins', nick: 'jenkins',
+      body: `${'y'.repeat(3990)} tail`, timestamp: new Date(T), isOutgoing: false, stanzaId: '9' } as unknown as RoomMessage
+    await messageCache.saveRoomMessage(room)
+    const m = { forwarded: { author: 'jenkins', from: 'tech@conference.example.org/jenkins', text: `${'y'.repeat(3990)}${' '.repeat(10)}`, type: 'groupchat' as const, timestamp: T } }
+    expect(await findForwardedOrigin(m, 'me@example.org', [])).toEqual({ kind: 'room', roomJid: 'tech@conference.example.org', stanzaId: '9' })
+  })
+
   it('picks the closest of repeated messages, and rejects a tie', async () => {
     await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'far', timestamp: new Date(T - 100_000) }))
     await messageCache.saveMessage(chat('memberbot@xmpp.org', { id: 'near', timestamp: new Date(T + 5_000) }))

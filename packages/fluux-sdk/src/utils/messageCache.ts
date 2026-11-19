@@ -1886,17 +1886,35 @@ export async function getMessageByReference(
   return row ? deserializeMessage(row) : null
 }
 
-/** Every conversation-scoped row a reference names, archive ids before client ids; the caller decides between several. */
-export async function getMessagesByReference(
+/** An id a forwarded copy carries, kept with what kind of id it is. */
+export type ForwardedIdReference =
+  | { kind: 'sender-id'; id: string }
+  | { kind: 'own-archive'; id: string; by: string }
+
+/**
+ * The conversation's rows a carried id names, in that id's own namespace only. A sender id is a
+ * client id (any alias a merged row absorbed) or an origin id, never an archive id; an own-archive
+ * id is the row's authoritative own-archive pair, or, for a row that records none, its stanza id.
+ * The caller decides between several rows.
+ */
+export async function getMessagesByForwardedId(
   conversationId: string,
-  reference: string,
+  reference: ForwardedIdReference,
 ): Promise<Message[]> {
   if (!isIndexedDBAvailable()) return []
   const scope = captureStorageScope()
   const db = await getDB(scope.jid)
-  const resolution = await findChatRowsByReference(db.transaction(MESSAGES_STORE).store, conversationId, reference)
+  const store = db.transaction(MESSAGES_STORE).store
+  const rows = reference.kind === 'sender-id'
+    ? [...new Map([
+        ...await findChatRowsForTier(store, conversationId, 'originId', reference.id),
+        ...await findChatRowsForTier(store, conversationId, 'fallback', reference.id),
+      ].map(row => [row.cacheKey, row])).values()]
+    : (await store.index('conversationId').getAll(conversationId)).filter(row => row.ownArchiveId
+        ? row.ownArchiveId === reference.id && row.ownArchiveBy === reference.by
+        : row.stanzaId === reference.id)
   scope.assertCurrent()
-  return (resolution?.candidates ?? []).map(deserializeMessage)
+  return rows.map(deserializeMessage)
 }
 
 export interface RoomMessageReference {
