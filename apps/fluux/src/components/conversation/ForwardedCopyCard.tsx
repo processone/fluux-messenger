@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, MessageSquare, Users } from 'lucide-react'
 import { buildRoomMessageLink, chatStore, connectionStore, findForwardedOrigin, getBareJid, type BaseMessage } from '@fluux/sdk'
@@ -9,7 +9,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { routeDeepLink } from '@/utils/deepLinkRouter'
 import { formatDateHeader } from '@/utils/dateFormat'
 import { useDayChange } from '@/hooks/useDayChange'
-import { format, isToday } from 'date-fns'
+import { format } from 'date-fns'
 
 /**
  * One forwarded copy, drawn as the source card: who wrote it, where, when, and the copied text.
@@ -23,7 +23,7 @@ export function ForwardedCopyCard({ message, formatTime, isDarkMode }: {
 }) {
   const copy = message.forwarded!
   const { t, i18n } = useTranslation()
-  useDayChange()
+  const dayKey = useDayChange()
   const { navigateToConversation } = useNavigateToTarget()
   const addToast = useToastStore(state => state.addToast)
   const isRoom = copy.type === 'groupchat'
@@ -36,9 +36,15 @@ export function ForwardedCopyCard({ message, formatTime, isDarkMode }: {
   // The room is named when known, by its full address otherwise.
   const source = isRoom ? (room?.name || roomJid || t('chat.forwardedCopyUnknownSource')) : t('chat.forwardedCopyDirectChat')
   const SourceIcon = isRoom ? Users : MessageSquare
-  const when = copy.timestamp !== undefined ? new Date(copy.timestamp) : undefined
-  const time = when && (isToday(when) ? formatTime(when)
-    : `${formatDateHeader(format(when, 'yyyy-MM-dd'), t, i18n.language.split('-')[0])} ${formatTime(when)}`)
+  const timestamp = copy.timestamp
+  // Derived from the current day key, so the label is redrawn when the local day rolls over.
+  const time = useMemo(() => {
+    if (timestamp === undefined) return undefined
+    const when = new Date(timestamp)
+    const day = format(when, 'yyyy-MM-dd')
+    return day === dayKey ? formatTime(when)
+      : `${formatDateHeader(day, t, i18n.language.split('-')[0])} ${formatTime(when)}`
+  }, [timestamp, dayKey, formatTime, t, i18n.language])
 
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
