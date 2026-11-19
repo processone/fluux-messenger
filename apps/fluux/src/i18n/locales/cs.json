@@ -213,6 +213,8 @@
             "tryAgain": "Zkusit znovu",
             "needsDecisionTitle": "Čeká na vaše rozhodnutí",
             "needsDecisionDescription": "Zprávy tomuto kontaktu nelze šifrovat, dokud se o klíči nerozhodnete.",
+            "trustPendingTitle": "Čeká na vaše dřívější rozhodnutí o důvěře",
+            "trustPendingDescription": "Zprávy tomuto kontaktu nelze šifrovat, dokud toto zařízení nezíská vaše rozhodnutí o důvěře ze starší verze nebo z vašich dalších zařízení. Pokus se automaticky opakuje.",
             "distrustedTitle": "Žádné důvěryhodné klíče",
             "distrustedDescription": "Tomuto kontaktu nelze posílat zprávy, dokud nebudete důvěřovat jednomu z jeho klíčů.",
             "receivesWhenUnlocked": "Přijme vaše zprávy po odemknutí",
@@ -228,7 +230,8 @@
                 "distrusted": "nedůvěřujete mu",
                 "no-key": "kontakt jej už nezveřejňuje",
                 "invalid-key": "neplatný certifikát",
-                "over-limit": "příliš mnoho zařízení, toto je přeskočeno"
+                "over-limit": "příliš mnoho zařízení, toto je přeskočeno",
+                "trust-pending": "čeká na vaše rozhodnutí o důvěře ze starší verze nebo z vašich dalších zařízení"
             },
             "trustButton": "Důvěřovat tomuto klíči",
             "distrustButton": "Nedůvěřovat tomuto klíči"
@@ -647,10 +650,13 @@
             "sendBlockedKeyConflict": "Zpráva nebyla odeslána. Před odesláním vyřešte konflikt svého šifrovacího klíče.",
             "sendBlockedGeneric": "Zpráva nebyla odeslána. Šifrování selhalo.",
             "sendBlockedKeysDistrusted": "Zpráva nebyla odeslána. Nedůvěřujete žádnému klíči tohoto kontaktu. Před odesláním jednomu z nich důvěřujte.",
+            "sendBlockedTrustPending": "Zpráva nebyla odeslána. Klíče tohoto kontaktu čekají na vaše rozhodnutí o důvěře ze starší verze nebo z vašich dalších zařízení. Zkuste to za chvíli znovu.",
             "heldKeys": {
                 "partial": "Kontakt {{name}} přidal nový klíč poté, co jste ho ověřili. Klíč nedostává zprávy, dokud mu nebudete důvěřovat nebo ho neověříte.",
                 "all": "Kontakt {{name}} přidal nový klíč poté, co jste ho ověřili. Klíč nedostává zprávy, dokud mu nebudete důvěřovat nebo ho neověříte. Do té doby nemůžete odesílat zprávy.",
                 "distrusted": "Nedůvěřujete žádnému klíči kontaktu {{name}}. Nemůžete odesílat zprávy, dokud jednomu z nich nebudete důvěřovat.",
+                "pendingPartial": "Některé klíče kontaktu {{name}} nedostávají zprávy, dokud toto zařízení nezíská vaše rozhodnutí o důvěře ze starší verze nebo z vašich dalších zařízení. Pokus se automaticky opakuje.",
+                "pendingAll": "Klíče kontaktu {{name}} nedostávají zprávy, dokud toto zařízení nezíská vaše rozhodnutí o důvěře ze starší verze nebo z vašich dalších zařízení. Do té doby nemůžete odesílat zprávy. Pokus se automaticky opakuje.",
                 "review": "Zkontrolovat klíče"
             },
             "plaintextForced": "Encryption disabled",

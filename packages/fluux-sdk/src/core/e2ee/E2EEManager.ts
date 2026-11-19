@@ -392,8 +392,9 @@ export class E2EEManager {
    * and `unknown` are excluded: the former is a deliberate not-trusted marker
    * (forward-looking — the OpenPGP plugin never reports `untrusted` for peer
    * trust: a contact whose keys all wait for a decision or were all refused
-   * reports `tofu`, and encrypt() throws peer-keys-awaiting-decision or
-   * peer-keys-distrusted), the latter means we have never seen a key
+   * reports `tofu`, and encrypt() throws peer-keys-awaiting-decision,
+   * peer-keys-trust-pending or peer-keys-distrusted), the latter means we
+   * have never seen a key
    * (legitimate first contact).
    *
    * Plugin trust-check errors are treated as not-established (fail-open) so a
@@ -845,7 +846,7 @@ export class E2EEManager {
     // empty listing is not encryption: report what the plugin could not give.
     if (!plugin.listPeerIdentities) {
       const trust = await plugin.getPeerTrust(peer).catch((): TrustState => 'unknown')
-      return { kind: 'encrypted', protocolId, displayName, trust, used: 1, verified: trust === 'verified' ? 1 : 0, waiting: 0 }
+      return { kind: 'encrypted', protocolId, displayName, trust, used: 1, verified: trust === 'verified' ? 1 : 0, waiting: 0, pending: 0 }
     }
     const identities = await this.pluginIdentities(plugin, peer)
     if (identities === null) {
@@ -853,9 +854,13 @@ export class E2EEManager {
     }
     if (identities.length === 0) return { kind: 'unusable', protocolId, displayName, problems: [] }
     const used = identities.filter((i) => i.usedForEncryption)
-    const waiting = identities.filter((i) => !i.usedForEncryption && i.notUsedReason === 'awaiting-decision').length
+    // A key whose trust data is still being prepared waits like one awaiting the user's
+    // decision: it may receive messages once that is done, so nothing falls back.
+    const pending = identities.filter((i) => !i.usedForEncryption && i.notUsedReason === 'trust-pending').length
+    const waiting =
+      identities.filter((i) => !i.usedForEncryption && i.notUsedReason === 'awaiting-decision').length + pending
     if (used.length === 0) {
-      if (waiting > 0) return { kind: 'needsDecision', protocolId, displayName, waiting }
+      if (waiting > 0) return { kind: 'needsDecision', protocolId, displayName, waiting, pending }
       return { kind: 'unusable', protocolId, displayName, problems: problemsOf(identities) }
     }
     const verified = used.filter((i) => i.trust === 'verified').length
@@ -871,6 +876,7 @@ export class E2EEManager {
       used: used.length,
       verified,
       waiting,
+      pending,
       ...(partlyVerified ? { partlyVerified: true as const } : {}),
       // A key replacing a verified one is the partly verified case, not a new contact.
       ...(verified === 0 && !partlyVerified && used.some((i) => i.isNew) ? { isNew: true as const } : {}),

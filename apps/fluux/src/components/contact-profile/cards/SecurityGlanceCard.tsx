@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import {
   ChevronRight, Loader2, Lock, LockOpen, ShieldAlert, ShieldCheck, ShieldX,
 } from 'lucide-react'
-import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { waitsOnlyForTrustData, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
 interface SecurityGlanceCardProps {
   state: ConversationEncryptionState
@@ -29,10 +29,13 @@ export function getGlance(
     case 'plaintextForced':
       return { icon: LockOpen, label: t('contacts.encryption.glanceDisabled'), tone: 'neutral' }
     case 'unsupported':
-      // Keys that wait for a decision: nothing is sent, so never say "not encrypted".
-      return state.needsDecision
-        ? { icon: ShieldAlert, label: t('contacts.encryption.needsDecisionTitle'), tone: 'warning' }
-        : { icon: LockOpen, label: t('contacts.encryption.glanceNotEncrypted'), tone: 'neutral' }
+      // Keys that wait for a decision, or for trust data of an earlier version
+      // or of the account's other devices: nothing is sent, so never say
+      // "not encrypted".
+      if (!state.needsDecision) return { icon: LockOpen, label: t('contacts.encryption.glanceNotEncrypted'), tone: 'neutral' }
+      return waitsOnlyForTrustData(state)
+        ? { icon: ShieldAlert, label: t('contacts.encryption.trustPendingTitle'), tone: 'warning' }
+        : { icon: ShieldAlert, label: t('contacts.encryption.needsDecisionTitle'), tone: 'warning' }
     case 'rejected':
       return { icon: ShieldX, label: t(state.distrusted ? 'contacts.encryption.distrustedTitle' : 'contacts.encryption.rejectedTitle'), tone: 'danger' }
     case 'blocked':

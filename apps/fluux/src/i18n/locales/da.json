@@ -211,6 +211,8 @@
             "tryAgain": "Prøv igen",
             "needsDecisionTitle": "Venter på din beslutning",
             "needsDecisionDescription": "Beskeder til denne kontakt kan ikke krypteres, før du har taget stilling til en nøgle.",
+            "trustPendingTitle": "Venter på dine tidligere tillidsbeslutninger",
+            "trustPendingDescription": "Beskeder til denne kontakt kan ikke krypteres, før denne enhed har dine tillidsbeslutninger fra en tidligere version eller fra dine andre enheder. Det forsøges igen automatisk.",
             "distrustedTitle": "Ingen betroede nøgler",
             "distrustedDescription": "Der kan ikke sendes beskeder til denne kontakt, før du stoler på en af dens nøgler.",
             "receivesWhenUnlocked": "Modtager dine beskeder, når du låser op",
@@ -226,7 +228,8 @@
                 "distrusted": "du stoler ikke på den",
                 "no-key": "kontakten udgiver den ikke længere",
                 "invalid-key": "ugyldigt certifikat",
-                "over-limit": "for mange enheder, denne springes over"
+                "over-limit": "for mange enheder, denne springes over",
+                "trust-pending": "venter på dine tillidsbeslutninger fra en tidligere version eller fra dine andre enheder"
             },
             "trustButton": "Stol på denne nøgle",
             "distrustButton": "Stol ikke på denne nøgle"
@@ -641,10 +644,13 @@
             "sendBlockedKeyConflict": "Beskeden blev ikke sendt. Løs konflikten med din krypteringsnøgle, før du sender.",
             "sendBlockedGeneric": "Beskeden blev ikke sendt. Kryptering mislykkedes.",
             "sendBlockedKeysDistrusted": "Beskeden blev ikke sendt. Du stoler ikke på nogen af denne kontakts nøgler. Stol på en af dem, før du sender.",
+            "sendBlockedTrustPending": "Beskeden blev ikke sendt. Denne kontakts nøgler venter på dine tillidsbeslutninger fra en tidligere version eller fra dine andre enheder. Prøv igen om lidt.",
             "heldKeys": {
                 "partial": "{{name}} har tilføjet en ny nøgle, efter du bekræftede kontakten. Den modtager ingen beskeder, før du stoler på den eller bekræfter den.",
                 "all": "{{name}} har tilføjet en ny nøgle, efter du bekræftede kontakten. Den modtager ingen beskeder, før du stoler på den eller bekræfter den. Indtil da kan du ikke sende beskeder.",
                 "distrusted": "Du stoler ikke på nogen af nøglerne til {{name}}. Du kan ikke sende beskeder, før du stoler på en af dem.",
+                "pendingPartial": "Nogle af nøglerne fra {{name}} modtager ingen beskeder, før denne enhed har dine tillidsbeslutninger fra en tidligere version eller fra dine andre enheder. Det forsøges igen automatisk.",
+                "pendingAll": "Nøglerne fra {{name}} modtager ingen beskeder, før denne enhed har dine tillidsbeslutninger fra en tidligere version eller fra dine andre enheder. Indtil da kan du ikke sende beskeder. Det forsøges igen automatisk.",
                 "review": "Gennemgå nøgler"
             },
             "plaintextForced": "Encryption disabled",

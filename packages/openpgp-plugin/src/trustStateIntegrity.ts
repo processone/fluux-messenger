@@ -1,7 +1,8 @@
 /**
  * Trust-state integrity: a sealed copy of the trust decisions and the
- * verification-sync state (its version, and whether the set node was
- * adopted), to detect changes made to storage behind the plugin's back.
+ * verification-sync state (its version, whether the set node was adopted, and
+ * the keys held on the account's devices), to detect changes made to storage
+ * behind the plugin's back.
  *
  * The seal is the decisions encrypted to the account's own key, which also
  * signs them. It is rewritten after every change of a decision or of the sync
@@ -19,6 +20,7 @@
 
 import type { PluginStorage } from '@fluux/sdk'
 import { fingerprintsEqual } from './fingerprintCompare'
+import { parseKeyLists } from './trustRecords'
 import type { KeyDecision, TrustStateVerdict } from './trustTypes'
 import type { DecryptFn, EncryptFn } from './verificationSync'
 
@@ -33,6 +35,8 @@ interface TrustStateSealPayload {
   decisions: Record<string, Record<string, KeyDecision>>
   syncVersion: number
   setsAdopted: boolean
+  /** Absent from a seal written before held keys were synced: none then. */
+  accountHolds?: Record<string, string[]>
 }
 
 /**
@@ -43,6 +47,8 @@ export interface TrustStateReading {
   decisions(): Record<string, Record<string, KeyDecision>>
   syncVersion(): number
   setsAdopted(): boolean
+  /** The keys held on the account's devices, in the form `parseKeyLists` gives. */
+  accountHolds(): Record<string, string[]>
 }
 
 /** A copy of what the seal covers, as the records hold it now. */
@@ -50,10 +56,12 @@ export function copyTrustState(records: TrustStateReading): TrustStateReading {
   const decisions = canonicalJson(records.decisions())
   const syncVersion = records.syncVersion()
   const setsAdopted = records.setsAdopted()
+  const accountHolds = canonicalJson(records.accountHolds())
   return {
     decisions: () => JSON.parse(decisions) as Record<string, Record<string, KeyDecision>>,
     syncVersion: () => syncVersion,
     setsAdopted: () => setsAdopted,
+    accountHolds: () => JSON.parse(accountHolds) as Record<string, string[]>,
   }
 }
 
@@ -62,7 +70,8 @@ export function sameTrustState(a: TrustStateReading, b: TrustStateReading): bool
   return (
     canonicalJson(a.decisions()) === canonicalJson(b.decisions()) &&
     a.syncVersion() === b.syncVersion() &&
-    a.setsAdopted() === b.setsAdopted()
+    a.setsAdopted() === b.setsAdopted() &&
+    canonicalJson(a.accountHolds()) === canonicalJson(b.accountHolds())
   )
 }
 
@@ -99,6 +108,7 @@ export async function sealTrustState(
     decisions: records.decisions(),
     syncVersion: records.syncVersion(),
     setsAdopted: records.setsAdopted(),
+    accountHolds: records.accountHolds(),
   }
   const armored = await encryptFn(JSON.stringify(payload), ownPublicArmored)
   await storage.put(TRUST_SEAL_STORAGE_KEY, encodeText(armored))
@@ -187,6 +197,9 @@ export async function verifyTrustStateSeal(
   if (canonicalJson(payload.decisions) !== canonicalJson(sealedDecisions)) details.push('trust decisions differ')
   if (payload.syncVersion !== records.syncVersion()) details.push('verification sync version differs')
   if ((payload.setsAdopted === true) !== records.setsAdopted()) details.push('verification sync format differs')
+  if (canonicalJson(parseKeyLists(payload.accountHolds)) !== canonicalJson(records.accountHolds())) {
+    details.push('keys held on the account\'s devices differ')
+  }
   if (details.length > 0) return { status: 'compromised', details }
   return canonicalJson(sealedDecisions) === canonicalJson(decisions) ? { status: 'sealed' } : { status: 'pending-seal' }
 }

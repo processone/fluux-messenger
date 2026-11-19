@@ -212,6 +212,8 @@
             "tryAgain": "Skúsiť znova",
             "needsDecisionTitle": "Čaká na vaše rozhodnutie",
             "needsDecisionDescription": "Správy tomuto kontaktu sa nedajú šifrovať, kým sa o kľúči nerozhodnete.",
+            "trustPendingTitle": "Čaká na vaše skoršie rozhodnutia o dôvere",
+            "trustPendingDescription": "Správy tomuto kontaktu sa nedajú šifrovať, kým toto zariadenie nezíska vaše rozhodnutia o dôvere zo staršej verzie alebo z vašich ďalších zariadení. Pokus sa automaticky opakuje.",
             "distrustedTitle": "Žiadne dôveryhodné kľúče",
             "distrustedDescription": "Tomuto kontaktu nemožno posielať správy, kým nebudete dôverovať jednému z jeho kľúčov.",
             "receivesWhenUnlocked": "Prijme vaše správy po odomknutí",
@@ -227,7 +229,8 @@
                 "distrusted": "nedôverujete mu",
                 "no-key": "kontakt ho už nezverejňuje",
                 "invalid-key": "neplatný certifikát",
-                "over-limit": "príliš veľa zariadení, toto sa preskočí"
+                "over-limit": "príliš veľa zariadení, toto sa preskočí",
+                "trust-pending": "čaká na vaše rozhodnutia o dôvere zo staršej verzie alebo z vašich ďalších zariadení"
             },
             "trustButton": "Dôverovať tomuto kľúču",
             "distrustButton": "Nedôverovať tomuto kľúču"
@@ -646,10 +649,13 @@
             "sendBlockedKeyConflict": "Správa nebola odoslaná. Pred odoslaním vyriešte konflikt svojho šifrovacieho kľúča.",
             "sendBlockedGeneric": "Správa nebola odoslaná. Šifrovanie zlyhalo.",
             "sendBlockedKeysDistrusted": "Správa nebola odoslaná. Nedôverujete žiadnemu kľúču tohto kontaktu. Pred odoslaním jednému z nich dôverujte.",
+            "sendBlockedTrustPending": "Správa nebola odoslaná. Kľúče tohto kontaktu čakajú na vaše rozhodnutia o dôvere zo staršej verzie alebo z vašich ďalších zariadení. Skúste to znova o chvíľu.",
             "heldKeys": {
                 "partial": "Kontakt {{name}} pridal nový kľúč potom, ako ste ho overili. Kľúč nedostáva správy, kým mu nebudete dôverovať alebo ho neoveríte.",
                 "all": "Kontakt {{name}} pridal nový kľúč potom, ako ste ho overili. Kľúč nedostáva správy, kým mu nebudete dôverovať alebo ho neoveríte. Dovtedy nemôžete odosielať správy.",
                 "distrusted": "Nedôverujete žiadnemu kľúču kontaktu {{name}}. Nemôžete odosielať správy, kým jednému z nich nebudete dôverovať.",
+                "pendingPartial": "Niektoré kľúče kontaktu {{name}} nedostávajú správy, kým toto zariadenie nezíska vaše rozhodnutia o dôvere zo staršej verzie alebo z vašich ďalších zariadení. Pokus sa automaticky opakuje.",
+                "pendingAll": "Kľúče kontaktu {{name}} nedostávajú správy, kým toto zariadenie nezíska vaše rozhodnutia o dôvere zo staršej verzie alebo z vašich ďalších zariadení. Dovtedy nemôžete odosielať správy. Pokus sa automaticky opakuje.",
                 "review": "Skontrolovať kľúče"
             },
             "plaintextForced": "Encryption disabled",

@@ -211,6 +211,8 @@
             "tryAgain": "Försök igen",
             "needsDecisionTitle": "Väntar på ditt beslut",
             "needsDecisionDescription": "Meddelanden till den här kontakten kan inte krypteras förrän du har bestämt dig för en nyckel.",
+            "trustPendingTitle": "Väntar på dina tidigare förtroendebeslut",
+            "trustPendingDescription": "Meddelanden till den här kontakten kan inte krypteras förrän den här enheten har dina förtroendebeslut från en tidigare version eller från dina andra enheter. Det försöks igen automatiskt.",
             "distrustedTitle": "Inga betrodda nycklar",
             "distrustedDescription": "Meddelanden kan inte skickas till den här kontakten förrän du litar på en av dess nycklar.",
             "receivesWhenUnlocked": "Tar emot dina meddelanden när du låser upp",
@@ -226,7 +228,8 @@
                 "distrusted": "du litar inte på den",
                 "no-key": "kontakten publicerar den inte längre",
                 "invalid-key": "ogiltigt certifikat",
-                "over-limit": "för många enheter, den här hoppas över"
+                "over-limit": "för många enheter, den här hoppas över",
+                "trust-pending": "väntar på dina förtroendebeslut från en tidigare version eller från dina andra enheter"
             },
             "trustButton": "Lita på den här nyckeln",
             "distrustButton": "Lita inte på den här nyckeln"
@@ -641,10 +644,13 @@
             "sendBlockedKeyConflict": "Meddelandet skickades inte. Lös konflikten med din krypteringsnyckel innan du skickar.",
             "sendBlockedGeneric": "Meddelandet skickades inte. Krypteringen misslyckades.",
             "sendBlockedKeysDistrusted": "Meddelandet skickades inte. Du litar inte på någon av den här kontaktens nycklar. Lita på en av dem innan du skickar.",
+            "sendBlockedTrustPending": "Meddelandet skickades inte. Den här kontaktens nycklar väntar på dina förtroendebeslut från en tidigare version eller från dina andra enheter. Försök igen om en stund.",
             "heldKeys": {
                 "partial": "{{name}} har lagt till en ny nyckel efter att du verifierade kontakten. Den tar inte emot några meddelanden förrän du litar på den eller verifierar den.",
                 "all": "{{name}} har lagt till en ny nyckel efter att du verifierade kontakten. Den tar inte emot några meddelanden förrän du litar på den eller verifierar den. Fram till dess kan du inte skicka meddelanden.",
                 "distrusted": "Du litar inte på någon av nycklarna för {{name}}. Du kan inte skicka meddelanden förrän du litar på en av dem.",
+                "pendingPartial": "Vissa av nycklarna för {{name}} tar inte emot några meddelanden förrän den här enheten har dina förtroendebeslut från en tidigare version eller från dina andra enheter. Det försöks igen automatiskt.",
+                "pendingAll": "Nycklarna för {{name}} tar inte emot några meddelanden förrän den här enheten har dina förtroendebeslut från en tidigare version eller från dina andra enheter. Fram till dess kan du inte skicka meddelanden. Det försöks igen automatiskt.",
                 "review": "Granska nycklar"
             },
             "plaintextForced": "Encryption disabled",

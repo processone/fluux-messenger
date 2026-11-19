@@ -213,6 +213,8 @@
             "tryAgain": "Erneut versuchen",
             "needsDecisionTitle": "Wartet auf Ihre Entscheidung",
             "needsDecisionDescription": "Nachrichten an diesen Kontakt können nicht verschlüsselt werden, bis Sie über einen Schlüssel entschieden haben.",
+            "trustPendingTitle": "Wartet auf deine früheren Vertrauensentscheidungen",
+            "trustPendingDescription": "Nachrichten an diesen Kontakt können nicht verschlüsselt werden, bis dieses Gerät deine Vertrauensentscheidungen aus einer früheren Version oder von deinen anderen Geräten hat. Das wird automatisch erneut versucht.",
             "distrustedTitle": "Keinem Schlüssel vertraut",
             "distrustedDescription": "Nachrichten an diesen Kontakt können nicht gesendet werden, bis Sie einem seiner Schlüssel vertrauen.",
             "receivesWhenUnlocked": "Erhält Ihre Nachrichten nach dem Entsperren",
@@ -228,7 +230,8 @@
                 "distrusted": "Sie vertrauen ihm nicht",
                 "no-key": "der Kontakt veröffentlicht ihn nicht mehr",
                 "invalid-key": "ungültiges Zertifikat",
-                "over-limit": "zu viele Geräte, dieses wird übersprungen"
+                "over-limit": "zu viele Geräte, dieses wird übersprungen",
+                "trust-pending": "wartet auf deine Vertrauensentscheidungen aus einer früheren Version oder von deinen anderen Geräten"
             },
             "trustButton": "Diesem Schlüssel vertrauen",
             "distrustButton": "Diesem Schlüssel nicht vertrauen"
@@ -643,10 +646,13 @@
             "sendBlockedKeyConflict": "Nachricht nicht gesendet. Löse den Konflikt deines Verschlüsselungsschlüssels vor dem Senden.",
             "sendBlockedGeneric": "Nachricht nicht gesendet. Verschlüsselung fehlgeschlagen.",
             "sendBlockedKeysDistrusted": "Nachricht nicht gesendet. Du vertraust keinem Schlüssel dieses Kontakts. Vertraue einem davon vor dem Senden.",
+            "sendBlockedTrustPending": "Nachricht nicht gesendet. Die Schlüssel dieses Kontakts warten auf deine Vertrauensentscheidungen aus einer früheren Version oder von deinen anderen Geräten. Versuche es gleich noch einmal.",
             "heldKeys": {
                 "partial": "{{name}} hat einen neuen Schlüssel hinzugefügt, nachdem du den Kontakt verifiziert hast. Er erhält keine Nachrichten, bis du ihm vertraust oder ihn verifizierst.",
                 "all": "{{name}} hat einen neuen Schlüssel hinzugefügt, nachdem du den Kontakt verifiziert hast. Er erhält keine Nachrichten, bis du ihm vertraust oder ihn verifizierst. Bis dahin kannst du keine Nachrichten senden.",
                 "distrusted": "Du vertraust keinem Schlüssel von {{name}}. Du kannst keine Nachrichten senden, bis du einem davon vertraust.",
+                "pendingPartial": "Einige Schlüssel von {{name}} erhalten keine Nachrichten, bis dieses Gerät deine Vertrauensentscheidungen aus einer früheren Version oder von deinen anderen Geräten hat. Das wird automatisch erneut versucht.",
+                "pendingAll": "Die Schlüssel von {{name}} erhalten keine Nachrichten, bis dieses Gerät deine Vertrauensentscheidungen aus einer früheren Version oder von deinen anderen Geräten hat. Bis dahin kannst du keine Nachrichten senden. Das wird automatisch erneut versucht.",
                 "review": "Schlüssel prüfen"
             },
             "plaintextForced": "Encryption disabled",

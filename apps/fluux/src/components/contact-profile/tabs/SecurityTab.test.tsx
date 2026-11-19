@@ -41,6 +41,24 @@ describe('SecurityTab key list', () => {
     expect(rows[1].textContent).toContain('contacts.encryption.receivesNoMessages: contacts.encryption.notUsedReason.awaiting-decision')
   })
 
+  // A key waiting for trust data of an earlier version or of the account's other
+  // devices is labelled with that wait, not as one waiting for a decision; its
+  // decisions stay offered.
+  it('labels a key waiting for earlier trust decisions with that wait, and still offers its decisions', () => {
+    renderTab({ kind: 'unsupported', needsDecision: true, groups: [{
+      protocolId: 'openpgp', displayName: 'OpenPGP', inUse: true,
+      identities: [identity({
+        id: 'AAAA1111', trust: 'unknown', usedForEncryption: false, notUsedReason: 'trust-pending',
+        allowedDecisions: ['verified', 'tofu', 'untrusted'],
+      })],
+    }] })
+    const row = screen.getByTestId('identity-row')
+    expect(within(row).getByText('contacts.encryption.trustPendingTitle')).toBeInTheDocument()
+    expect(within(row).queryByText('contacts.encryption.keyTrust.unknown')).not.toBeInTheDocument()
+    expect(row.textContent).toContain('contacts.encryption.receivesNoMessages: contacts.encryption.notUsedReason.trust-pending')
+    expect(within(row).getByRole('button', { name: 'contacts.encryption.trustButton' })).toBeInTheDocument()
+  })
+
   it('groups keys by method and marks the one in use only when there are several methods', () => {
     const openpgp: PeerIdentityGroup = { protocolId: 'openpgp', displayName: 'OpenPGP', inUse: false, identities: [identity({ id: 'AAAA1111' })] }
     const omemo: PeerIdentityGroup = { protocolId: 'omemo', displayName: 'OMEMO', inUse: true, identities: [identity({ id: '42', fingerprint: 'CCCC3333' })] }

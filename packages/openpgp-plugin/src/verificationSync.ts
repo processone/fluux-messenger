@@ -31,6 +31,20 @@
  * must be re-done) — a fail-safe direction (under-trust → re-verify), never
  * resurrection of a revoked key.
  *
+ * # Held keys
+ *
+ * A snapshot also lists the keys held on the account's devices (`held`): keys
+ * of a contact that appeared after a verification and wait for the user's
+ * decision. Each publication carries on the list it last read, adds the keys
+ * held on the publishing device, and leaves out the keys verified in the
+ * same snapshot. A device that reads the list holds each listed key it has no
+ * decision about, before it approves the keys of a contact verified for the
+ * first time there, so a device that joins later holds what another device
+ * holds. Trusting or refusing a held key stays a decision of one device. A
+ * held key only stops messages, so the list is also merged from a snapshot of
+ * the same version as the one applied, such as one published at the same
+ * time by another device; an older one changes nothing.
+ *
  * # The set format and the older node
  *
  * Earlier versions published one verified fingerprint per contact to
@@ -49,6 +63,7 @@ import type { PluginContext, XMLElementData } from '@fluux/sdk'
 // The PEP node id is a raw protocol name, so it comes from the escape hatch.
 import { NS_FLUUX_VERIFICATIONS, NS_FLUUX_VERIFICATION_SETS } from '@fluux/sdk/xmpp'
 import { fingerprintsEqual } from './fingerprintCompare'
+import { parseKeyLists } from './trustRecords'
 
 /** Encrypt `plaintext` to `recipientPublicArmored`. Returns armored ciphertext. */
 export type EncryptFn = (
@@ -83,6 +98,8 @@ export const VERIFICATION_SETS_NODE = NS_FLUUX_VERIFICATION_SETS
 export interface VerificationSetsSnapshot {
   sets: Record<string, string[]>
   version: number
+  /** The keys held on the account's devices, by contact; absent from the older node. */
+  held?: Record<string, string[]>
 }
 
 /** What a read of the set node found. */
@@ -96,6 +113,7 @@ interface VerificationSetsPayload {
   ts: number
   version: number
   verified: Record<string, string[]>
+  held: Record<string, string[]>
 }
 
 // ---------------------------------------------------------------------------
@@ -185,8 +203,8 @@ async function decryptOwnSigned(
 // ---------------------------------------------------------------------------
 
 /**
- * Encrypt every contact's verified keys to our own key and publish them to
- * the set node.
+ * Encrypt every contact's verified keys, and the keys held on the account's
+ * devices, to our own key and publish them to the set node.
  *
  * Always publishes — including an empty map — so a revocation of the last
  * verification overwrites the server node instead of leaving a stale one
@@ -199,12 +217,14 @@ export async function publishVerificationSets(
   ownPublicArmored: string,
   sets: Record<string, string[]>,
   version: number,
+  held: Record<string, string[]> = {},
 ): Promise<void> {
   const json = JSON.stringify({
     v: 1,
     ts: Date.now(),
     version,
     verified: sets,
+    held,
   } satisfies VerificationSetsPayload)
 
   const armored = await encryptFn(json, ownPublicArmored)
@@ -247,7 +267,9 @@ export async function fetchVerificationSets(
     const fps = list.filter((fp): fp is string => typeof fp === 'string' && fp.length > 0)
     if (fps.length > 0) sets[jid] = fps
   }
-  return { kind: 'snapshot', sets, version: obj.version }
+  // A snapshot of an earlier build of this format has no held keys.
+  const held = parseKeyLists(obj.held)
+  return { kind: 'snapshot', sets, version: obj.version, ...(Object.keys(held).length > 0 ? { held } : {}) }
 }
 
 /**

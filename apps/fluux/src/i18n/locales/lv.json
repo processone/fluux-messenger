@@ -212,6 +212,8 @@
             "tryAgain": "Mēģināt vēlreiz",
             "needsDecisionTitle": "Gaida jūsu lēmumu",
             "needsDecisionDescription": "Ziņas šai kontaktpersonai nevar šifrēt, kamēr neesat izlēmis par atslēgu.",
+            "trustPendingTitle": "Gaida jūsu iepriekšējos uzticēšanās lēmumus",
+            "trustPendingDescription": "Ziņas šai kontaktpersonai nevar šifrēt, līdz šī ierīce saņem jūsu uzticēšanās lēmumus no iepriekšējās versijas vai no jūsu citām ierīcēm. Mēģinājums tiek automātiski atkārtots.",
             "distrustedTitle": "Nav uzticamu atslēgu",
             "distrustedDescription": "Šai kontaktpersonai nevar sūtīt ziņas, kamēr neuzticaties kādai no tās atslēgām.",
             "receivesWhenUnlocked": "Saņems jūsu ziņas pēc atslēgšanas",
@@ -227,7 +229,8 @@
                 "distrusted": "jūs tai neuzticaties",
                 "no-key": "kontaktpersona to vairs nepublicē",
                 "invalid-key": "nederīgs sertifikāts",
-                "over-limit": "pārāk daudz ierīču, šī tiek izlaista"
+                "over-limit": "pārāk daudz ierīču, šī tiek izlaista",
+                "trust-pending": "gaida jūsu uzticēšanās lēmumus no iepriekšējās versijas vai no jūsu citām ierīcēm"
             },
             "trustButton": "Uzticēties šai atslēgai",
             "distrustButton": "Neuzticēties šai atslēgai"
@@ -644,10 +647,13 @@
             "sendBlockedKeyConflict": "Ziņojums nav nosūtīts. Pirms sūtīšanas atrisiniet savas šifrēšanas atslēgas konfliktu.",
             "sendBlockedGeneric": "Ziņojums nav nosūtīts. Šifrēšana neizdevās.",
             "sendBlockedKeysDistrusted": "Ziņojums nav nosūtīts. Jūs neuzticaties nevienai šī kontakta atslēgai. Pirms sūtīšanas uzticieties vienai no tām.",
+            "sendBlockedTrustPending": "Ziņojums nav nosūtīts. Šī kontakta atslēgas gaida jūsu uzticēšanās lēmumus no iepriekšējās versijas vai no jūsu citām ierīcēm. Mēģiniet vēlreiz pēc brīža.",
             "heldKeys": {
                 "partial": "{{name}} pievienoja jaunu atslēgu pēc tam, kad jūs verificējāt šo kontaktu. Tā nesaņem ziņas, līdz jūs tai uzticaties vai to verificējat.",
                 "all": "{{name}} pievienoja jaunu atslēgu pēc tam, kad jūs verificējāt šo kontaktu. Tā nesaņem ziņas, līdz jūs tai uzticaties vai to verificējat. Līdz tam jūs nevarat sūtīt ziņas.",
                 "distrusted": "Jūs neuzticaties nevienai {{name}} atslēgai. Jūs nevarat sūtīt ziņas, līdz uzticaties vienai no tām.",
+                "pendingPartial": "Dažas {{name}} atslēgas nesaņem ziņas, līdz šī ierīce saņem jūsu uzticēšanās lēmumus no iepriekšējās versijas vai no jūsu citām ierīcēm. Mēģinājums tiek automātiski atkārtots.",
+                "pendingAll": "{{name}} atslēgas nesaņem ziņas, līdz šī ierīce saņem jūsu uzticēšanās lēmumus no iepriekšējās versijas vai no jūsu citām ierīcēm. Līdz tam jūs nevarat sūtīt ziņas. Mēģinājums tiek automātiski atkārtots.",
                 "review": "Pārskatīt atslēgas"
             },
             "plaintextForced": "Encryption disabled",

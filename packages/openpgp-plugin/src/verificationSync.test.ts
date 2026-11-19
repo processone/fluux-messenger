@@ -140,6 +140,18 @@ describe('publishVerificationSets', () => {
       kind: 'snapshot', sets: { 'bob@example.com': [BOB_FP] }, version: 2,
     })
   })
+
+  // A device that joins later holds what another device holds (FLM-311).
+  it('carries the keys held on the account\'s devices, and reads them back', async () => {
+    const { ctx, published } = makeCtx()
+    await publishVerificationSets(ctx, passthroughEncrypt, OWN_PUBLIC, { 'bob@example.com': [BOB_FP] }, 2, {
+      'bob@example.com': [BOB_FP_2],
+    })
+    expect(decodePublishedPayload(published[0].item)).toMatchObject({ held: { 'bob@example.com': [BOB_FP_2] } })
+    expect(await fetchVerificationSets(ctx, decryptSignedBy(OWN_FP), OWN_JID, OWN_PUBLIC, OWN_FP)).toEqual({
+      kind: 'snapshot', sets: { 'bob@example.com': [BOB_FP] }, version: 2, held: { 'bob@example.com': [BOB_FP_2] },
+    })
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -206,6 +218,17 @@ describe('fetchVerificationSets — node state', () => {
     const plaintext = JSON.stringify({ v: 1, version: 2, verified: { 'bob@example.com': [BOB_FP, 7, ''], 'eve@example.com': 'E7E0' } })
     expect(await fetchVerificationSets(ctx, selfSignedDecrypt(plaintext), OWN_JID, OWN_PUBLIC, OWN_FP)).toEqual({
       kind: 'snapshot', sets: { 'bob@example.com': [BOB_FP] }, version: 2,
+    })
+  })
+
+  it('drops held entries that are not lists of fingerprints', async () => {
+    const { ctx, setNode } = makeCtx()
+    setNode(VERIFICATION_SETS_NODE, itemOn(VERIFICATION_SETS_NODE, 'x'))
+    const plaintext = JSON.stringify({
+      v: 1, version: 2, verified: {}, held: { 'bob@example.com': [BOB_FP_2.toLowerCase(), 7, ''], 'eve@example.com': 'E7E0' },
+    })
+    expect(await fetchVerificationSets(ctx, selfSignedDecrypt(plaintext), OWN_JID, OWN_PUBLIC, OWN_FP)).toEqual({
+      kind: 'snapshot', sets: {}, version: 2, held: { 'bob@example.com': [BOB_FP_2] },
     })
   })
 })

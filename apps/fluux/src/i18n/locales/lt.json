@@ -211,6 +211,8 @@
             "tryAgain": "Bandyti dar kartą",
             "needsDecisionTitle": "Laukiama jūsų sprendimo",
             "needsDecisionDescription": "Žinučių šiam adresatui negalima šifruoti, kol nenusprendžiate dėl rakto.",
+            "trustPendingTitle": "Laukiama ankstesnių jūsų pasitikėjimo sprendimų",
+            "trustPendingDescription": "Žinučių šiam adresatui negalima šifruoti, kol šis įrenginys negaus jūsų pasitikėjimo sprendimų iš ankstesnės versijos ar kitų jūsų įrenginių. Bandoma iš naujo automatiškai.",
             "distrustedTitle": "Nėra patikimų raktų",
             "distrustedDescription": "Šiam adresatui negalima siųsti žinučių, kol nepasitikėsite vienu iš jo raktų.",
             "receivesWhenUnlocked": "Gaus jūsų žinutes, kai atrakinsite",
@@ -226,7 +228,8 @@
                 "distrusted": "jūs juo nepasitikite",
                 "no-key": "adresatas jo nebeskelbia",
                 "invalid-key": "netinkamas sertifikatas",
-                "over-limit": "per daug įrenginių, šis praleidžiamas"
+                "over-limit": "per daug įrenginių, šis praleidžiamas",
+                "trust-pending": "laukiama jūsų pasitikėjimo sprendimų iš ankstesnės versijos ar kitų jūsų įrenginių"
             },
             "trustButton": "Pasitikėti šiuo raktu",
             "distrustButton": "Nepasitikėti šiuo raktu"
@@ -645,10 +648,13 @@
             "sendBlockedKeyConflict": "Pranešimas neišsiųstas. Prieš siųsdami išspręskite savo šifravimo rakto konfliktą.",
             "sendBlockedGeneric": "Pranešimas neišsiųstas. Šifravimas nepavyko.",
             "sendBlockedKeysDistrusted": "Pranešimas neišsiųstas. Nepasitikite nė vienu šio kontakto raktu. Prieš siųsdami pasitikėkite vienu iš jų.",
+            "sendBlockedTrustPending": "Pranešimas neišsiųstas. Šio kontakto raktai laukia jūsų pasitikėjimo sprendimų iš ankstesnės versijos ar kitų jūsų įrenginių. Pabandykite dar kartą po akimirkos.",
             "heldKeys": {
                 "partial": "{{name}} pridėjo naują raktą po to, kai patvirtinote šį kontaktą. Raktas negauna žinučių, kol juo nepasitikėsite arba jo nepatvirtinsite.",
                 "all": "{{name}} pridėjo naują raktą po to, kai patvirtinote šį kontaktą. Raktas negauna žinučių, kol juo nepasitikėsite arba jo nepatvirtinsite. Iki tol negalite siųsti žinučių.",
                 "distrusted": "Nepasitikite nė vienu {{name}} raktu. Negalite siųsti žinučių, kol nepasitikėsite vienu iš jų.",
+                "pendingPartial": "Kai kurie {{name}} raktai negauna žinučių, kol šis įrenginys negaus jūsų pasitikėjimo sprendimų iš ankstesnės versijos ar kitų jūsų įrenginių. Bandoma iš naujo automatiškai.",
+                "pendingAll": "{{name}} raktai negauna žinučių, kol šis įrenginys negaus jūsų pasitikėjimo sprendimų iš ankstesnės versijos ar kitų jūsų įrenginių. Iki tol negalite siųsti žinučių. Bandoma iš naujo automatiškai.",
                 "review": "Peržiūrėti raktus"
             },
             "plaintextForced": "Encryption disabled",

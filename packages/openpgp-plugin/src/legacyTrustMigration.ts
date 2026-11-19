@@ -19,10 +19,12 @@
  *
  * Values the oldest versions stored before scoping them per account go to the
  * first account that migrates them, as those versions' loaders moved them,
- * once its claim on them is saved ({@link claimUnscopedLegacyTrust}), under a
- * lock the app's windows share. No account uses them without such a claim:
- * when another account holds it, an account moves only its own values; when
- * no claim can be confirmed, the migration waits for the next start.
+ * once its claim on them is saved ({@link claimUnscopedLegacyTrust}) in a
+ * database whose transactions the app's windows take in turn, or, where there
+ * is none, under a lock they share. No account uses them without such a
+ * claim: when another account holds it, an account moves only its own
+ * values; when no claim can be saved, the migration waits and tries again
+ * during the session.
  *
  * The old seal is checked against the old data as earlier versions checked
  * it, once the account's key is usable (it may still be locked during the
@@ -98,8 +100,17 @@ const LEGACY_KEYS = {
  */
 const LEGACY_UNSCOPED_OWNER_KEY = 'fluux-e2ee-legacy-unscoped-owner'
 
-/** The lock windows of this app take in turn to claim the unscoped values. */
+/** The lock windows of this app take in turn to claim the unscoped values where the browser has no database. */
 export const LEGACY_UNSCOPED_CLAIM_LOCK = 'fluux-e2ee-legacy-unscoped-claim'
+
+/**
+ * The database that keeps the claim for every window of the app. A
+ * read-write transaction on its one store runs alone among those windows, so
+ * reading the owner and saving a claim when there is none is one step.
+ */
+export const LEGACY_UNSCOPED_CLAIM_DATABASE = 'fluux-e2ee-legacy-unscoped-claim'
+const CLAIM_STORE = 'claim'
+const CLAIM_RECORD = 'owner'
 
 /** A key-change alert as earlier versions stored it. */
 export interface LegacyKeyChangeAlert {
@@ -271,31 +282,115 @@ export function readLegacyTrustState(accountJid: string, includeUnscoped = true)
 
 /**
  * Who holds the unscoped values: this account (`owned`), another one
- * (`other-owner`), or no one confirmed (`unavailable`), because the lock the
- * app's windows share is missing or this account's claim could not be saved.
+ * (`other-owner`), or no one confirmed (`unavailable`), because this
+ * account's claim could not be saved.
  */
 export type UnscopedLegacyClaim = 'owned' | 'other-owner' | 'unavailable'
+
+/**
+ * How long a claim in the database may take before it counts as not saved: a
+ * database that never answers, as some older system web views do, must not
+ * stop the start. The claim is tried again later.
+ */
+export const DATABASE_CLAIM_TIMEOUT_MS = 5000
+
+function readOwner(accountJid: string, owner: string | null): UnscopedLegacyClaim {
+  if (owner === null) return 'unavailable'
+  return owner === accountJid ? 'owned' : 'other-owner'
+}
+
+/**
+ * The owner the database keeps, saving `accountJid` when it keeps none, in
+ * one read-write transaction. A claim saved under the lock before, which
+ * only `localStorage` names, is kept as the owner.
+ */
+function claimInDatabase(accountJid: string, timeoutMs: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), timeoutMs)
+    const done = (owner: string | null) => {
+      clearTimeout(timer)
+      resolve(owner)
+    }
+    try {
+      const open = indexedDB.open(LEGACY_UNSCOPED_CLAIM_DATABASE, 1)
+      open.onupgradeneeded = () => {
+        if (!open.result.objectStoreNames.contains(CLAIM_STORE)) open.result.createObjectStore(CLAIM_STORE)
+      }
+      open.onerror = () => done(null)
+      open.onsuccess = () => {
+        const db = open.result
+        let owner: string | null = null
+        try {
+          const tx = db.transaction(CLAIM_STORE, 'readwrite')
+          const store = tx.objectStore(CLAIM_STORE)
+          const read = store.get(CLAIM_RECORD)
+          read.onsuccess = () => {
+            if (typeof read.result === 'string') {
+              owner = read.result
+              return
+            }
+            owner = localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY) ?? accountJid
+            store.put(owner, CLAIM_RECORD)
+          }
+          // Only a committed transaction confirms the owner.
+          tx.oncomplete = () => {
+            db.close()
+            done(owner)
+          }
+          tx.onabort = () => {
+            db.close()
+            done(null)
+          }
+        } catch {
+          db.close()
+          done(null)
+        }
+      }
+    } catch {
+      done(null)
+    }
+  })
+}
 
 /**
  * Claim the unscoped values for `accountJid`, the first account whose
  * migration read them; no other account reads them after that. Run before
  * the migration writes anything, so a migration that stops half way still
- * finds them on its next run. Windows of this app claim them one at a time,
- * under a lock they share, so two accounts cannot both find no owner and
- * each save their own claim. Without that lock no claim is confirmed:
- * `unavailable`.
+ * finds them on its next run.
+ *
+ * Every window of this app keeps the claim in one place, so two accounts
+ * cannot both find no owner and each save their own claim. Where there is a
+ * browser database, the claim is made in one transaction of a database the
+ * windows share ({@link LEGACY_UNSCOPED_CLAIM_DATABASE}), which runs alone
+ * among them, whether or not a window can take the lock below; the owner it
+ * confirms is copied where the readers of the values look. Only where there
+ * is no database at all, for every window alike, is the claim made in
+ * `localStorage` under a lock the windows share. A claim that cannot be saved
+ * or read, or a missing or refused lock without a database, is `unavailable`.
  */
-export async function claimUnscopedLegacyTrust(accountJid: string): Promise<UnscopedLegacyClaim> {
+export async function claimUnscopedLegacyTrust(
+  accountJid: string,
+  timeoutMs: number = DATABASE_CLAIM_TIMEOUT_MS,
+): Promise<UnscopedLegacyClaim> {
   const claim = (): UnscopedLegacyClaim => {
     try {
       const owner = localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY)
       if (owner === null) localStorage.setItem(LEGACY_UNSCOPED_OWNER_KEY, accountJid)
-      const saved = owner ?? localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY)
-      if (saved === null) return 'unavailable'
-      return saved === accountJid ? 'owned' : 'other-owner'
+      return readOwner(accountJid, owner ?? localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY))
     } catch {
       return 'unavailable'
     }
+  }
+  if (typeof indexedDB !== 'undefined') {
+    const owner = await claimInDatabase(accountJid, timeoutMs)
+    if (owner === null) return 'unavailable'
+    try {
+      // The readers skip the values another account owns (see `mayReadUnscoped`).
+      localStorage.setItem(LEGACY_UNSCOPED_OWNER_KEY, owner)
+    } catch {
+      // The database keeps the owner; a reader that misses it claims again.
+    }
+    return readOwner(accountJid, owner)
   }
   const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
   if (!locks) return 'unavailable'
@@ -360,7 +455,7 @@ export function trustRecordsFromLegacy(legacy: LegacyTrustState, now: string): T
  * What differs between the records and what the migration made of the data
  * the old seal covers. The old seal vouches for that data only, so the
  * records are sealed anew only while nothing differs: decisions, sync
- * version, and the set node not yet adopted. Holds saved since the upgrade
+ * version, the set node not yet adopted and no synced held keys. Holds saved since the upgrade
  * do not count ({@link withoutHoldsAddedSince}).
  */
 export function legacyRecordsMismatch(check: PendingLegacySealCheck, records: TrustStateReading): string[] {
@@ -369,7 +464,11 @@ export function legacyRecordsMismatch(check: PendingLegacySealCheck, records: Tr
   if (canonicalJson(upgraded) !== canonicalJson(withoutHoldsAddedSince(records.decisions(), upgraded))) {
     details.push('trust decisions differ from the upgraded trust state')
   }
-  if (legacySyncVersion(check.snapshot.syncVersion) !== records.syncVersion() || records.setsAdopted()) {
+  if (
+    legacySyncVersion(check.snapshot.syncVersion) !== records.syncVersion() ||
+    records.setsAdopted() ||
+    Object.keys(records.accountHolds()).length > 0
+  ) {
     details.push('verification sync state differs from the upgraded trust state')
   }
   return details

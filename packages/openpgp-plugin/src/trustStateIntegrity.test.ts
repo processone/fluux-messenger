@@ -172,6 +172,19 @@ describe('verifyTrustStateSeal: no seal and tamper verdicts', () => {
     expect(await verify()).toEqual({ status: 'compromised', details: ['verification sync format differs'] })
   })
 
+  // The keys held on the account's devices go to every device that joins
+  // later: a list emptied behind the plugin would let them use those keys.
+  it('names keys held on the account\'s devices changed behind the plugin', async () => {
+    records.setDecision(PEER, PEER_FP, 'verified')
+    records.setAccountHolds({ [PEER]: [OTHER_FP] })
+    await seal()
+    expect(await verify()).toEqual({ status: 'sealed' })
+    const edited = emptyTrustRecords()
+    edited.peers[PEER] = { [PEER_FP]: { decision: 'verified', decidedAt: '2024-01-01T00:00:00Z' } }
+    records.replace(edited)
+    expect(await verify()).toEqual({ status: 'compromised', details: ["keys held on the account's devices differ"] })
+  })
+
   it('is sealed again for the same decisions saved in another order', async () => {
     records.setDecisions([
       { peer: PEER, fingerprint: PEER_FP, decision: 'verified' },

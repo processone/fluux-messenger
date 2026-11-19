@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Loader2, Shield, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from 'lucide-react'
 import type { IdentityTrustDecision, PeerIdentity, PeerIdentityGroup } from '@fluux/sdk'
-import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { waitsOnlyForTrustData, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { trustVisual } from '@/e2ee/trustVisual'
 
 export interface SecurityTabProps {
@@ -72,8 +72,7 @@ export function SecurityTab({
           <>
             <ExplanationPanel
               icon={<ShieldOff className="size-5 text-fluux-muted flex-shrink-0" />}
-              title={state.needsDecision ? t('contacts.encryption.needsDecisionTitle') : t('contacts.encryption.notAvailableTitle')}
-              description={state.needsDecision ? t('contacts.encryption.needsDecisionDescription') : t('contacts.encryption.notAvailableDescription')}
+              {...unsupportedExplanation(state, t)}
               tone="neutral"
             />
             {state.groups && <IdentityGroups groups={state.groups} onDecide={onDecide} />}
@@ -156,6 +155,24 @@ export function SecurityTab({
       </div>
     </div>
   )
+}
+
+/**
+ * Why a contact with keys gets nothing: no key can be used, every key waits
+ * for the user's decision, or every key waits for trust data of an earlier
+ * version or of the account's other devices, which needs no decision.
+ */
+function unsupportedExplanation(
+  state: Extract<ConversationEncryptionState, { kind: 'unsupported' }>,
+  t: (key: string) => string,
+): { title: string; description: string } {
+  if (!state.needsDecision) {
+    return { title: t('contacts.encryption.notAvailableTitle'), description: t('contacts.encryption.notAvailableDescription') }
+  }
+  if (waitsOnlyForTrustData(state)) {
+    return { title: t('contacts.encryption.trustPendingTitle'), description: t('contacts.encryption.trustPendingDescription') }
+  }
+  return { title: t('contacts.encryption.needsDecisionTitle'), description: t('contacts.encryption.needsDecisionDescription') }
 }
 
 /** The keys could not be read; nothing is wrong with the conversation's encryption itself. */
@@ -249,7 +266,11 @@ function IdentityRow({
     <div className="rounded-lg bg-fluux-bg/40 px-3 py-2 space-y-1.5" data-testid="identity-row">
       <div className="flex items-center justify-between gap-2">
         <span className={`text-xs font-medium ${visual.colorClass}`}>
-          {t(`contacts.encryption.keyTrust.${identity.trust}`)}
+          {/* A key waiting for trust data of an earlier version or of the
+              account's other devices needs no decision yet: say what it waits for. */}
+          {identity.notUsedReason === 'trust-pending'
+            ? t('contacts.encryption.trustPendingTitle')
+            : t(`contacts.encryption.keyTrust.${identity.trust}`)}
         </span>
         {identity.label && <span className="text-xs text-fluux-muted truncate">{identity.label}</span>}
       </div>

@@ -18,6 +18,8 @@ export function encryptionSendErrorKey(err: unknown): string | null {
     switch (err.code) {
       case 'peer-keys-awaiting-decision':
         return 'chat.encryption.sendBlockedKeyChanged'
+      case 'peer-keys-trust-pending':
+        return 'chat.encryption.sendBlockedTrustPending'
       case 'peer-keys-distrusted':
         return 'chat.encryption.sendBlockedKeysDistrusted'
       case 'key-locked':

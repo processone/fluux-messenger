@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { IDBFactory } from 'fake-indexeddb'
 import { E2EEPluginError } from '@fluux/sdk'
 import { TrustRecordStore } from './trustRecords'
 import {
@@ -144,17 +145,129 @@ describe('readLegacyTrustState', () => {
       expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBe('other@example.com')
     })
 
-    // Without the lock, two windows could each find no owner and save their
-    // own claim: no claim is confirmed, and none is saved.
-    it.each([
-      ['the browser has no lock shared between windows', null],
-      ['the lock is refused', { request: () => Promise.reject(new DOMException('The operation is insecure.', 'SecurityError')) }],
-    ])('confirms no claim when %s', async (_case, locks) => {
-      saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP } }, null)
-      useLocks(locks)
+    // Intent: FLM-311 - without Web Locks (an older system web view, a page
+    // served without HTTPS) the move no longer waits for ever, and still
+    // gives the values to one account: every window, whether it can take the
+    // lock or not, makes its claim in one transaction of a database the
+    // windows share.
+    describe('in a database the windows share', () => {
+      const refused = { request: () => Promise.reject(new DOMException('The operation is insecure.', 'SecurityError')) }
+      const lockCases: [string, () => unknown][] = [
+        ['the window can take the lock', () => lockManager],
+        ['the browser has no lock', () => null],
+        ['the lock is refused', () => refused],
+      ]
+      const indexedDBBefore = globalThis.indexedDB
+      const hideOwnerWrites = () => {
+        const setItem = localStorage.setItem
+        localStorage.setItem = (key: string, value: string) => {
+          if (key !== 'fluux-e2ee-legacy-unscoped-owner') setItem.call(localStorage, key, value)
+        }
+        return () => {
+          localStorage.setItem = setItem
+        }
+      }
+      beforeEach(() => {
+        globalThis.indexedDB = new IDBFactory()
+        saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP } }, null)
+      })
+      afterEach(() => {
+        globalThis.indexedDB = indexedDBBefore
+      })
 
-      expect(await claimUnscopedLegacyTrust(ME)).toBe('unavailable')
-      expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBeNull()
+      it.each(lockCases)('confirms the claim it saves when %s', async (_case, locks) => {
+        useLocks(locks())
+        expect(await claimUnscopedLegacyTrust(ME)).toBe('owned')
+        expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBe(ME)
+        expect(await claimUnscopedLegacyTrust('other@example.com')).toBe('other-owner')
+      })
+
+      // Another window's claim reaches this window's localStorage late, or
+      // not at all; it is the claim the database saved first that counts.
+      it.each(lockCases)('leaves the values to the claim another window saved first, even one this window cannot see, when %s', async (_case, locks) => {
+        useLocks(locks())
+        const restore = hideOwnerWrites()
+        try {
+          expect(await claimUnscopedLegacyTrust('other@example.com')).toBe('owned')
+          expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBeNull()
+          expect(await claimUnscopedLegacyTrust(ME)).toBe('other-owner')
+        } finally {
+          restore()
+        }
+      })
+
+      it.each(lockCases)('gives the values to one of two windows claiming at the same moment when %s', async (_case, locks) => {
+        useLocks(locks())
+        const restore = hideOwnerWrites()
+        try {
+          const claims = await Promise.all([claimUnscopedLegacyTrust(ME), claimUnscopedLegacyTrust('other@example.com')])
+          expect([...claims].sort()).toEqual(['other-owner', 'owned'])
+        } finally {
+          restore()
+        }
+      })
+
+      // One window takes the lock while another is refused it: both read and
+      // save the same claim.
+      it('leaves the values to a window refused the lock that claimed them first, to a window that can take it', async () => {
+        useLocks(refused)
+        const restore = hideOwnerWrites()
+        try {
+          expect(await claimUnscopedLegacyTrust('other@example.com')).toBe('owned')
+        } finally {
+          restore()
+        }
+        useLocks(lockManager)
+        expect(await claimUnscopedLegacyTrust(ME)).toBe('other-owner')
+        expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBe('other@example.com')
+      })
+
+      it('gives the values to one of a window that can take the lock and one refused it, claiming at the same moment', async () => {
+        const restore = hideOwnerWrites()
+        try {
+          useLocks(lockManager)
+          const withLock = claimUnscopedLegacyTrust(ME)
+          useLocks(refused)
+          const refusedLock = claimUnscopedLegacyTrust('other@example.com')
+          const claims = await Promise.all([withLock, refusedLock])
+          expect([...claims].sort()).toEqual(['other-owner', 'owned'])
+        } finally {
+          restore()
+        }
+      })
+
+      it.each([
+        ['the browser has no database', () => {
+          globalThis.indexedDB = undefined as unknown as IDBFactory
+        }],
+        ['the database cannot be opened', () => {
+          globalThis.indexedDB = { open: () => { throw new DOMException('denied', 'SecurityError') } } as unknown as IDBFactory
+        }],
+        ['the database never answers', () => {
+          globalThis.indexedDB = { open: () => ({}) } as unknown as IDBFactory
+        }],
+      ])('confirms no claim when %s', async (_case, breakDatabase) => {
+        useLocks(null)
+        breakDatabase()
+        expect(await claimUnscopedLegacyTrust(ME, 20)).toBe('unavailable')
+        expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBeNull()
+      })
+
+      // The lock is no second place to claim them: a window refused the lock
+      // could not see that claim.
+      it.each([
+        ['cannot be opened', () => {
+          globalThis.indexedDB = { open: () => { throw new DOMException('denied', 'SecurityError') } } as unknown as IDBFactory
+        }],
+        ['never answers', () => {
+          globalThis.indexedDB = { open: () => ({}) } as unknown as IDBFactory
+        }],
+      ])('confirms no claim under the lock either when the database %s', async (_case, breakDatabase) => {
+        useLocks(lockManager)
+        breakDatabase()
+        expect(await claimUnscopedLegacyTrust(ME, 20)).toBe('unavailable')
+        expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBeNull()
+      })
     })
   })
 

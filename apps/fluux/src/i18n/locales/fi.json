@@ -211,6 +211,8 @@
             "tryAgain": "Yritä uudelleen",
             "needsDecisionTitle": "Odottaa päätöstäsi",
             "needsDecisionDescription": "Tälle yhteystiedolle ei voi salata viestejä, ennen kuin olet päättänyt avaimesta.",
+            "trustPendingTitle": "Odottaa aiempia luottamuspäätöksiäsi",
+            "trustPendingDescription": "Tälle yhteystiedolle ei voi salata viestejä ennen kuin tämä laite saa luottamuspäätöksesi aiemmasta versiosta tai muilta laitteiltasi. Yritystä toistetaan automaattisesti.",
             "distrustedTitle": "Ei luotettuja avaimia",
             "distrustedDescription": "Tälle yhteystiedolle ei voi lähettää viestejä ennen kuin luotat johonkin sen avaimista.",
             "receivesWhenUnlocked": "Vastaanottaa viestisi, kun avaat lukituksen",
@@ -226,7 +228,8 @@
                 "distrusted": "et luota siihen",
                 "no-key": "yhteystieto ei enää julkaise sitä",
                 "invalid-key": "virheellinen varmenne",
-                "over-limit": "liian monta laitetta, tämä ohitetaan"
+                "over-limit": "liian monta laitetta, tämä ohitetaan",
+                "trust-pending": "odottaa luottamuspäätöksiäsi aiemmasta versiosta tai muilta laitteiltasi"
             },
             "trustButton": "Luota tähän avaimeen",
             "distrustButton": "Älä luota tähän avaimeen"
@@ -641,10 +644,13 @@
             "sendBlockedKeyConflict": "Viestiä ei lähetetty. Ratkaise salausavaimesi ristiriita ennen lähettämistä.",
             "sendBlockedGeneric": "Viestiä ei lähetetty. Salaus epäonnistui.",
             "sendBlockedKeysDistrusted": "Viestiä ei lähetetty. Et luota yhteenkään tämän yhteyshenkilön avaimeen. Luota johonkin niistä ennen lähettämistä.",
+            "sendBlockedTrustPending": "Viestiä ei lähetetty. Tämän yhteyshenkilön avaimet odottavat luottamuspäätöksiäsi aiemmasta versiosta tai muilta laitteiltasi. Yritä hetken kuluttua uudelleen.",
             "heldKeys": {
                 "partial": "{{name}} lisäsi uuden avaimen sen jälkeen, kun varmensit yhteystiedon. Avain ei vastaanota viestejä ennen kuin luotat siihen tai varmennat sen.",
                 "all": "{{name}} lisäsi uuden avaimen sen jälkeen, kun varmensit yhteystiedon. Avain ei vastaanota viestejä ennen kuin luotat siihen tai varmennat sen. Siihen asti et voi lähettää viestejä.",
                 "distrusted": "Et luota yhteenkään yhteystiedon {{name}} avaimeen. Et voi lähettää viestejä ennen kuin luotat johonkin niistä.",
+                "pendingPartial": "Jotkin yhteystiedon {{name}} avaimet eivät vastaanota viestejä ennen kuin tämä laite saa luottamuspäätöksesi aiemmasta versiosta tai muilta laitteiltasi. Yritystä toistetaan automaattisesti.",
+                "pendingAll": "Yhteystiedon {{name}} avaimet eivät vastaanota viestejä ennen kuin tämä laite saa luottamuspäätöksesi aiemmasta versiosta tai muilta laitteiltasi. Siihen asti et voi lähettää viestejä. Yritystä toistetaan automaattisesti.",
                 "review": "Tarkista avaimet"
             },
             "plaintextForced": "Encryption disabled",

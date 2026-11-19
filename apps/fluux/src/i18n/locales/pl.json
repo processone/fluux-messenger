@@ -213,6 +213,8 @@
             "tryAgain": "Spróbuj ponownie",
             "needsDecisionTitle": "Czeka na Twoją decyzję",
             "needsDecisionDescription": "Wiadomości do tego kontaktu nie mogą być szyfrowane, dopóki nie zdecydujesz o kluczu.",
+            "trustPendingTitle": "Czeka na Twoje wcześniejsze decyzje dotyczące zaufania",
+            "trustPendingDescription": "Wiadomości do tego kontaktu nie mogą być szyfrowane, dopóki to urządzenie nie otrzyma Twoich decyzji dotyczących zaufania z wcześniejszej wersji lub z Twoich innych urządzeń. Próba jest ponawiana automatycznie.",
             "distrustedTitle": "Brak zaufanych kluczy",
             "distrustedDescription": "Nie można wysyłać wiadomości do tego kontaktu, dopóki nie zaufasz jednemu z jego kluczy.",
             "receivesWhenUnlocked": "Odbierze Twoje wiadomości po odblokowaniu",
@@ -228,7 +230,8 @@
                 "distrusted": "nie ufasz mu",
                 "no-key": "kontakt już go nie publikuje",
                 "invalid-key": "nieprawidłowy certyfikat",
-                "over-limit": "zbyt wiele urządzeń, to jest pomijane"
+                "over-limit": "zbyt wiele urządzeń, to jest pomijane",
+                "trust-pending": "czeka na Twoje decyzje dotyczące zaufania z wcześniejszej wersji lub z Twoich innych urządzeń"
             },
             "trustButton": "Ufaj temu kluczowi",
             "distrustButton": "Nie ufaj temu kluczowi"
@@ -647,10 +650,13 @@
             "sendBlockedKeyConflict": "Wiadomość nie została wysłana. Rozwiąż konflikt swojego klucza szyfrowania przed wysłaniem.",
             "sendBlockedGeneric": "Wiadomość nie została wysłana. Szyfrowanie nie powiodło się.",
             "sendBlockedKeysDistrusted": "Wiadomość nie została wysłana. Nie ufasz żadnemu kluczowi tego kontaktu. Zaufaj jednemu z nich przed wysłaniem.",
+            "sendBlockedTrustPending": "Wiadomość nie została wysłana. Klucze tego kontaktu czekają na Twoje decyzje dotyczące zaufania z wcześniejszej wersji lub z Twoich innych urządzeń. Spróbuj ponownie za chwilę.",
             "heldKeys": {
                 "partial": "Kontakt {{name}} dodał nowy klucz po tym, jak go zweryfikowałeś. Klucz nie otrzymuje wiadomości, dopóki mu nie zaufasz lub go nie zweryfikujesz.",
                 "all": "Kontakt {{name}} dodał nowy klucz po tym, jak go zweryfikowałeś. Klucz nie otrzymuje wiadomości, dopóki mu nie zaufasz lub go nie zweryfikujesz. Do tego czasu nie możesz wysyłać wiadomości.",
                 "distrusted": "Nie ufasz żadnemu kluczowi kontaktu {{name}}. Nie możesz wysyłać wiadomości, dopóki nie zaufasz jednemu z nich.",
+                "pendingPartial": "Niektóre klucze kontaktu {{name}} nie otrzymują wiadomości, dopóki to urządzenie nie otrzyma Twoich decyzji dotyczących zaufania z wcześniejszej wersji lub z Twoich innych urządzeń. Próba jest ponawiana automatycznie.",
+                "pendingAll": "Klucze kontaktu {{name}} nie otrzymują wiadomości, dopóki to urządzenie nie otrzyma Twoich decyzji dotyczących zaufania z wcześniejszej wersji lub z Twoich innych urządzeń. Do tego czasu nie możesz wysyłać wiadomości. Próba jest ponawiana automatycznie.",
                 "review": "Przejrzyj klucze"
             },
             "plaintextForced": "Encryption disabled",

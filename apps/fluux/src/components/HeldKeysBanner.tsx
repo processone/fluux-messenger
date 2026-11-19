@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, ShieldCheck } from 'lucide-react'
-import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { waitsOnlyForTrustData, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
 interface HeldKeysBannerProps {
   /** The conversation's encryption state. */
@@ -11,7 +11,7 @@ interface HeldKeysBannerProps {
   onReview?: () => void
 }
 
-type Notice = 'partial' | 'all' | 'distrusted'
+type Notice = 'partial' | 'all' | 'pendingPartial' | 'pendingAll' | 'distrusted'
 
 /**
  * Why some or all of a contact's keys receive no messages.
@@ -20,12 +20,16 @@ type Notice = 'partial' | 'all' | 'distrusted'
  *   a decision while the other keys keep receiving messages.
  * - `all`: every key the contact announces waits for a decision, so nothing
  *   can be sent.
+ * - `pendingPartial`, `pendingAll`: the same, where every waiting key waits
+ *   for trust data the app tries again on its own to get: the trust data of
+ *   an earlier version, still being moved, or the keys the account's other
+ *   devices hold, not read yet on this device.
  * - `distrusted`: the person refused every key the contact announces, so
  *   nothing can be sent.
  */
 export function heldKeysNotice(state: ConversationEncryptionState): Notice | null {
-  if (state.kind === 'encrypted' && (state.waiting ?? 0) > 0) return 'partial'
-  if (state.kind === 'unsupported' && state.needsDecision) return 'all'
+  if (state.kind === 'encrypted' && (state.waiting ?? 0) > 0) return waitsOnlyForTrustData(state) ? 'pendingPartial' : 'partial'
+  if (state.kind === 'unsupported' && state.needsDecision) return waitsOnlyForTrustData(state) ? 'pendingAll' : 'all'
   if (state.kind === 'rejected' && state.distrusted) return 'distrusted'
   return null
 }

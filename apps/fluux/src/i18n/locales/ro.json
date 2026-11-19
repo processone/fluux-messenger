@@ -213,6 +213,8 @@
             "tryAgain": "Încearcă din nou",
             "needsDecisionTitle": "Așteaptă decizia ta",
             "needsDecisionDescription": "Mesajele către acest contact nu pot fi criptate până când decizi asupra unei chei.",
+            "trustPendingTitle": "Așteaptă deciziile tale de încredere anterioare",
+            "trustPendingDescription": "Mesajele către acest contact nu pot fi criptate până când acest dispozitiv nu are deciziile tale de încredere dintr-o versiune anterioară sau de pe celelalte dispozitive ale tale. Se încearcă din nou automat.",
             "distrustedTitle": "Nicio cheie de încredere",
             "distrustedDescription": "Nu se pot trimite mesaje acestui contact până nu ai încredere în una dintre cheile sale.",
             "receivesWhenUnlocked": "Va primi mesajele tale după deblocare",
@@ -228,7 +230,8 @@
                 "distrusted": "nu ai încredere în ea",
                 "no-key": "contactul nu o mai publică",
                 "invalid-key": "certificat invalid",
-                "over-limit": "prea multe dispozitive, acesta este omis"
+                "over-limit": "prea multe dispozitive, acesta este omis",
+                "trust-pending": "așteaptă deciziile tale de încredere dintr-o versiune anterioară sau de pe celelalte dispozitive ale tale"
             },
             "trustButton": "Ai încredere în această cheie",
             "distrustButton": "Nu avea încredere în această cheie"
@@ -645,10 +648,13 @@
             "sendBlockedKeyConflict": "Mesaj netrimis. Rezolvă conflictul cheii tale de criptare înainte de a trimite.",
             "sendBlockedGeneric": "Mesaj netrimis. Criptarea a eșuat.",
             "sendBlockedKeysDistrusted": "Mesaj netrimis. Nu ai încredere în nicio cheie a acestui contact. Acordă încredere uneia dintre ele înainte de a trimite.",
+            "sendBlockedTrustPending": "Mesaj netrimis. Cheile acestui contact așteaptă deciziile tale de încredere dintr-o versiune anterioară sau de pe celelalte dispozitive ale tale. Încearcă din nou peste câteva momente.",
             "heldKeys": {
                 "partial": "Contactul {{name}} a adăugat o cheie nouă după ce l-ai verificat. Nu primește mesaje până nu ai încredere în ea sau o verifici.",
                 "all": "Contactul {{name}} a adăugat o cheie nouă după ce l-ai verificat. Nu primește mesaje până nu ai încredere în ea sau o verifici. Până atunci nu poți trimite mesaje.",
                 "distrusted": "Nu ai încredere în nicio cheie a contactului {{name}}. Nu poți trimite mesaje până nu ai încredere în una dintre ele.",
+                "pendingPartial": "Unele chei ale lui {{name}} nu primesc mesaje până când acest dispozitiv nu are deciziile tale de încredere dintr-o versiune anterioară sau de pe celelalte dispozitive ale tale. Se încearcă din nou automat.",
+                "pendingAll": "Cheile lui {{name}} nu primesc mesaje până când acest dispozitiv nu are deciziile tale de încredere dintr-o versiune anterioară sau de pe celelalte dispozitive ale tale. Până atunci nu poți trimite mesaje. Se încearcă din nou automat.",
                 "review": "Revizuiește cheile"
             },
             "plaintextForced": "Encryption disabled",

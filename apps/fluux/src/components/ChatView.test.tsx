@@ -14,6 +14,7 @@ vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import { useConversationFileDropStore } from '@/stores/conversationFileDropStore'
 import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
+import { useToastStore } from '@/stores/toastStore'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { ChatView } from './ChatView'
 import { messageRowId } from './conversation/messageRowIdentity'
@@ -1018,12 +1019,24 @@ describe('ChatView', () => {
       window.HTMLElement.prototype.scrollTo = vi.fn()
     })
 
+    // FLM-311: keys that wait for the trust data of an earlier version are
+    // refused with their own reason, not as a changed key.
     it.each([
-      ['every key waits for a decision', { kind: 'unsupported', needsDecision: true } as const],
-      ['every key was refused', { kind: 'rejected', reasons: [{ id: 'A', code: 'distrusted', detail: '' }], distrusted: true } as const],
-    ])('uploads and sends nothing when %s', async (_case, state) => {
+      ['every key waits for a decision', { kind: 'unsupported', needsDecision: true } as const, 'chat.encryption.sendBlockedKeyChanged'],
+      [
+        'every key waits for the trust data of an earlier version',
+        { kind: 'unsupported', needsDecision: true, waiting: 1, pending: 1 } as const,
+        'chat.encryption.sendBlockedTrustPending',
+      ],
+      [
+        'every key was refused',
+        { kind: 'rejected', reasons: [{ id: 'A', code: 'distrusted', detail: '' }], distrusted: true } as const,
+        'chat.encryption.sendBlockedKeysDistrusted',
+      ],
+    ])('uploads and sends nothing when %s', async (_case, state, toast) => {
       const file = createPrivateFile()
       mockEncryptionState = state
+      useToastStore.setState({ toasts: [] })
       render(<ChatView />)
       act(() => mockDropOptions.onFileDrop(file))
 
@@ -1032,6 +1045,7 @@ describe('ChatView', () => {
       expect(mockUploadFile).not.toHaveBeenCalled()
       expect(mockSendMessage).not.toHaveBeenCalled()
       expect(screen.getByTestId('pending-attachment')).toHaveTextContent(file.name)
+      expect(useToastStore.getState().toasts.map((t) => t.message)).toEqual([toast])
     })
   })
 

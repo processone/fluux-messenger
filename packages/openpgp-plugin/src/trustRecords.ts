@@ -15,6 +15,11 @@
  * used without asking (blind trust) for a contact never verified, and is held
  * until the user decides for a verified contact. A key with a `held` record
  * stays held either way.
+ *
+ * The keys held on any of the account's devices travel with the synced
+ * verifications (see `verificationSync.ts`); the records keep what this device
+ * last read or published of them ({@link TrustRecordsData.accountHolds}), so
+ * a device that joins later holds them too.
  */
 
 import type { PluginStorage } from '@fluux/sdk'
@@ -43,6 +48,14 @@ export interface TrustRecordsData {
    * published it once. The older node is never read again after that.
    */
   setsAdopted: boolean
+  /**
+   * Contact bare JID → canonical fingerprints, sorted, of the keys held on
+   * the account's devices, as this device last read or published them with
+   * the synced verifications. Each publication carries them on, with this
+   * device's own holds, so a key held on one device is held on every device
+   * that joins later. Left out when there are none.
+   */
+  accountHolds?: Record<string, string[]>
 }
 
 /** What one change to the records touched. */
@@ -53,7 +66,10 @@ export interface TrustRecordsChange {
   decisions: boolean
   /** The verified keys of some contact changed: they sync across devices. */
   verified: boolean
-  /** The sync version or the set adoption changed: the trust-state seal covers both. */
+  /**
+   * The sync state changed: its version, the set adoption or the keys held on
+   * the account's devices. The trust-state seal covers all three.
+   */
   syncVersion: boolean
   /**
    * Every record was replaced at once: read from storage, replaced by the
@@ -154,7 +170,42 @@ export function parseTrustRecords(bytes: Uint8Array): TrustRecordsData | null {
     data.syncVersion = parsed.syncVersion
   }
   data.setsAdopted = parsed.setsAdopted === true
+  const accountHolds = parseKeyLists(parsed.accountHolds)
+  if (Object.keys(accountHolds).length > 0) data.accountHolds = accountHolds
   return data
+}
+
+/**
+ * Read lists of fingerprints keyed by contact from untrusted data: canonical
+ * fingerprints only, sorted and without repeats, contacts in sorted order;
+ * contacts with none are left out, and so is anything that is not such a list.
+ */
+export function parseKeyLists(value: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  if (!isRecord(value)) return out
+  for (const peer of Object.keys(value).sort()) {
+    const list = value[peer]
+    if (!Array.isArray(list)) continue
+    const fps = new Set<string>()
+    for (const fp of list) {
+      const canonical = typeof fp === 'string' ? canonicalFingerprint(fp) : null
+      if (canonical) fps.add(canonical)
+    }
+    if (fps.size > 0) out[peer] = [...fps].sort()
+  }
+  return out
+}
+
+/** Every key of `a` and of `b`, in the form {@link parseKeyLists} gives. */
+export function unionKeyLists(
+  a: Readonly<Record<string, readonly string[]>>,
+  b: Readonly<Record<string, readonly string[]>>,
+): Record<string, string[]> {
+  const merged: Record<string, string[]> = {}
+  for (const lists of [a, b]) {
+    for (const [peer, fps] of Object.entries(lists)) merged[peer] = [...(merged[peer] ?? []), ...fps]
+  }
+  return parseKeyLists(merged)
 }
 
 export function serializeTrustRecords(data: TrustRecordsData): Uint8Array {
@@ -165,7 +216,7 @@ export function serializeTrustRecords(data: TrustRecordsData): Uint8Array {
 export interface KeyStanding {
   trust: 'verified' | 'tofu' | 'untrusted' | 'unknown'
   used: boolean
-  notUsedReason?: 'awaiting-decision' | 'distrusted'
+  notUsedReason?: 'awaiting-decision' | 'trust-pending' | 'distrusted'
   /** The decisions the user may take; `held` is never one of them. */
   allowedDecisions: Array<Exclude<KeyDecision, 'held'>>
 }
@@ -174,8 +225,16 @@ export interface KeyStanding {
  * The standing of an announced key from its recorded decision. `holdsNewKeys`
  * is true for a verified contact other than the account itself: a key the user
  * never decided on then waits for a decision instead of being used.
+ * `trustPending` is true while trust data an earlier version saved for the
+ * contact is still being moved, or while the account's verification list,
+ * which says the keys the account's other devices hold, is not read yet:
+ * whether the key may receive messages is not known yet, so a key without a
+ * decision, or held, waits for that instead (`trust-pending`).
  */
-export function keyStanding(decision: KeyDecision | undefined, holdsNewKeys: boolean): KeyStanding {
+export function keyStanding(decision: KeyDecision | undefined, holdsNewKeys: boolean, trustPending = false): KeyStanding {
+  if (trustPending && (decision === undefined || decision === 'held')) {
+    return { trust: 'unknown', used: false, notUsedReason: 'trust-pending', allowedDecisions: ['verified', 'tofu', 'untrusted'] }
+  }
   switch (decision) {
     case 'verified':
       return { trust: 'verified', used: true, allowedDecisions: ['tofu', 'untrusted'] }
@@ -345,12 +404,32 @@ export class TrustRecordStore {
     return [...(this.data.rejections[peer] ?? [])]
   }
 
+  /** Every contact's rejected certificates. */
+  allRejections(): Record<string, CertRejection[]> {
+    return Object.fromEntries(Object.entries(this.data.rejections).map(([peer, list]) => [peer, list.map((r) => ({ ...r }))]))
+  }
+
   syncVersion(): number {
     return this.data.syncVersion
   }
 
   setsAdopted(): boolean {
     return this.data.setsAdopted
+  }
+
+  /** The keys held on the account's devices, as last read or published here (see {@link TrustRecordsData.accountHolds}). */
+  accountHolds(): Record<string, string[]> {
+    return parseKeyLists(this.data.accountHolds ?? {})
+  }
+
+  /** Every key held here, by contact, in the form {@link parseKeyLists} gives. */
+  heldKeys(): Record<string, string[]> {
+    const held: Record<string, string[]> = {}
+    for (const [peer, keys] of Object.entries(this.data.peers)) {
+      const fps = Object.entries(keys).filter(([, r]) => r.decision === 'held').map(([fp]) => fp)
+      if (fps.length > 0) held[peer] = fps
+    }
+    return parseKeyLists(held)
   }
 
   // ---- writes ----
@@ -410,6 +489,30 @@ export class TrustRecordStore {
     this.data = { ...this.data, setsAdopted: true }
     this.persist()
     this.emit({ peers: [], decisions: false, verified: false, syncVersion: true, loaded: false })
+  }
+
+  /** Replace the keys held on the account's devices. */
+  setAccountHolds(holds: Readonly<Record<string, readonly string[]>>): void {
+    const next = parseKeyLists(holds)
+    if (JSON.stringify(next) === JSON.stringify(this.accountHolds())) return
+    const data: TrustRecordsData = { ...this.data }
+    if (Object.keys(next).length > 0) data.accountHolds = next
+    else delete data.accountHolds
+    this.data = data
+    this.persist()
+    this.emit({ peers: [], decisions: false, verified: false, syncVersion: true, loaded: false })
+  }
+
+  /**
+   * Use `data` with `storage` from now on, in one step, without reading
+   * what `storage` holds: `save` writes it there. A migration that completes
+   * during the session swaps its records in this way, so nothing reads the
+   * records half-replaced.
+   */
+  adopt(storage: PluginStorage, data: TrustRecordsData, save: boolean): void {
+    this.storage = storage
+    this.setData(data)
+    if (save) this.persist()
   }
 
   // ---- internals ----

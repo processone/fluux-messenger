@@ -213,6 +213,8 @@
             "tryAgain": "Proovi uuesti",
             "needsDecisionTitle": "Ootab teie otsust",
             "needsDecisionDescription": "Sellele kontaktile ei saa sõnumeid krüptida, kuni olete võtme kohta otsustanud.",
+            "trustPendingTitle": "Ootab sinu varasemaid usaldusotsuseid",
+            "trustPendingDescription": "Sellele kontaktile ei saa sõnumeid krüptida enne, kui see seade on saanud sinu usaldusotsused varasemast versioonist või sinu teistest seadmetest. Seda proovitakse automaatselt uuesti.",
             "distrustedTitle": "Usaldatud võtmeid pole",
             "distrustedDescription": "Sellele kontaktile ei saa sõnumeid saata enne, kui usaldate üht tema võtit.",
             "receivesWhenUnlocked": "Saab teie sõnumeid pärast lukustuse avamist",
@@ -228,7 +230,8 @@
                 "distrusted": "te ei usalda seda",
                 "no-key": "kontakt ei avalda seda enam",
                 "invalid-key": "kehtetu sertifikaat",
-                "over-limit": "liiga palju seadmeid, see jäetakse vahele"
+                "over-limit": "liiga palju seadmeid, see jäetakse vahele",
+                "trust-pending": "ootab sinu usaldusotsuseid varasemast versioonist või sinu teistest seadmetest"
             },
             "trustButton": "Usalda seda võtit",
             "distrustButton": "Ära usalda seda võtit"
@@ -643,10 +646,13 @@
             "sendBlockedKeyConflict": "Sõnumit ei saadetud. Lahenda enne saatmist oma krüpteerimisvõtme vastuolu.",
             "sendBlockedGeneric": "Sõnumit ei saadetud. Krüpteerimine ebaõnnestus.",
             "sendBlockedKeysDistrusted": "Sõnumit ei saadetud. Sa ei usalda ühtegi selle kontakti võtit. Usalda enne saatmist üht neist.",
+            "sendBlockedTrustPending": "Sõnumit ei saadetud. Selle kontakti võtmed ootavad sinu usaldusotsuseid varasemast versioonist või sinu teistest seadmetest. Proovi hetke pärast uuesti.",
             "heldKeys": {
                 "partial": "Kontakt {{name}} lisas uue võtme pärast seda, kui sa ta kinnitasid. See ei saa sõnumeid enne, kui seda usaldad või kinnitad.",
                 "all": "Kontakt {{name}} lisas uue võtme pärast seda, kui sa ta kinnitasid. See ei saa sõnumeid enne, kui seda usaldad või kinnitad. Seni ei saa sa sõnumeid saata.",
                 "distrusted": "Sa ei usalda ühtegi kontakti {{name}} võtit. Sa ei saa sõnumeid saata enne, kui usaldad üht neist.",
+                "pendingPartial": "Mõned kontakti {{name}} võtmed ei saa sõnumeid enne, kui see seade on saanud sinu usaldusotsused varasemast versioonist või sinu teistest seadmetest. Seda proovitakse automaatselt uuesti.",
+                "pendingAll": "Kontakti {{name}} võtmed ei saa sõnumeid enne, kui see seade on saanud sinu usaldusotsused varasemast versioonist või sinu teistest seadmetest. Seni ei saa sa sõnumeid saata. Seda proovitakse automaatselt uuesti.",
                 "review": "Vaata võtmed üle"
             },
             "plaintextForced": "Encryption disabled",

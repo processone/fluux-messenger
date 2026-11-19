@@ -26,7 +26,9 @@ export interface EncryptionProblem {
  *                   `partlyVerified` a contact with a verified key whose
  *                   messages also go to a key that is not verified.
  *                   `waiting` counts the keys that receive nothing until the
- *                   user approves them (a verified contact's new keys).
+ *                   user approves them (a verified contact's new keys), and
+ *                   `pending` those of them that wait for the protocol to
+ *                   finish preparing its trust data instead.
  *                   `canVerify` and `canClearVerification` say whether the
  *                   protocol accepts that decision for this contact now.
  * - `blocked`       — retired: no protocol produces it any more. Kept for the
@@ -35,6 +37,7 @@ export interface EncryptionProblem {
  *                     Composer falls back to plaintext. `needsDecision` marks a
  *                     contact whose keys all wait for the user's decision:
  *                     nothing can be sent then (see {@link encryptionSendBlock});
+ *                     `waiting` and `pending` count them as for `encrypted`;
  *                     `listError` marks keys that could not be read, with a way
  *                     to ask again. `groups` lists the keys known meanwhile.
  * - `rejected`      — keys exist but none can receive messages; `reasons`
@@ -66,21 +69,43 @@ export type ConversationEncryptionState =
       partlyVerified?: true
       /** How many keys receive nothing until the user approves them. */
       waiting?: number
+      /** How many of the waiting keys wait for the protocol's trust data instead. */
+      pending?: number
       canVerify?: true
       canClearVerification?: true
     }
   | { kind: 'blocked'; pinnedFingerprint: string; advertisedFingerprint: string }
-  | { kind: 'unsupported'; groups?: PeerIdentityGroup[]; needsDecision?: true; listError?: { retry: () => void } }
+  | {
+      kind: 'unsupported'
+      groups?: PeerIdentityGroup[]
+      needsDecision?: true
+      waiting?: number
+      pending?: number
+      listError?: { retry: () => void }
+    }
   | { kind: 'rejected'; reasons: EncryptionProblem[]; groups?: PeerIdentityGroup[]; distrusted?: true }
   | { kind: 'keyLocked'; fingerprint?: string; groups?: PeerIdentityGroup[]; listError?: { retry: () => void } }
 
 /**
- * Why nothing can be sent to this contact now, if so: every key waits for the
- * user's decision, or the user refused every key. The SDK then refuses to
- * encrypt and never sends plaintext, so a send must not start, nor an upload.
+ * Whether every key that receives nothing waits only for the protocol to
+ * finish preparing its trust data (`pending`), not for the user's decision.
  */
-export function encryptionSendBlock(state: ConversationEncryptionState): 'awaiting-decision' | 'distrusted' | null {
-  if (state.kind === 'unsupported' && state.needsDecision) return 'awaiting-decision'
+export function waitsOnlyForTrustData(state: { waiting?: number; pending?: number }): boolean {
+  return (state.pending ?? 0) > 0 && state.pending === state.waiting
+}
+
+/**
+ * Why nothing can be sent to this contact now, if so: every key waits for the
+ * user's decision, every key waits for the protocol to finish preparing its
+ * trust data, or the user refused every key. The SDK then refuses to encrypt
+ * and never sends plaintext, so a send must not start, nor an upload.
+ */
+export function encryptionSendBlock(
+  state: ConversationEncryptionState,
+): 'awaiting-decision' | 'trust-pending' | 'distrusted' | null {
+  if (state.kind === 'unsupported' && state.needsDecision) {
+    return waitsOnlyForTrustData(state) ? 'trust-pending' : 'awaiting-decision'
+  }
   if (state.kind === 'rejected' && state.distrusted) return 'distrusted'
   return null
 }
@@ -103,7 +128,13 @@ async function resolveState(manager: E2EEManager, peer: string, retry: () => voi
       const groups = await manager.listPeerIdentities(peer)
       // The manager leaves out a plugin whose listing failed this time; that is a failure to retry.
       if (!groups.some((g) => g.protocolId === security.protocolId)) return listFailed
-      return { kind: 'unsupported', needsDecision: true, groups }
+      return {
+        kind: 'unsupported',
+        needsDecision: true,
+        groups,
+        ...(security.waiting > 0 ? { waiting: security.waiting } : {}),
+        ...(security.pending > 0 ? { pending: security.pending } : {}),
+      }
     }
     case 'unusable': {
       // The SDK could not read the keys: say so and offer another try, not "no encryption" or "invalid".
@@ -156,6 +187,7 @@ async function resolveState(manager: E2EEManager, peer: string, retry: () => voi
         ...(security.isNew ? { isNew: true as const } : {}),
         ...(security.partlyVerified ? { partlyVerified: true as const } : {}),
         ...(security.waiting > 0 ? { waiting: security.waiting } : {}),
+        ...(security.pending > 0 ? { pending: security.pending } : {}),
         ...(only?.allowedDecisions.includes('verified') ? { canVerify: true as const } : {}),
         ...(only?.allowedDecisions.includes('tofu') && only.trust === 'verified' ? { canClearVerification: true as const } : {}),
       }
