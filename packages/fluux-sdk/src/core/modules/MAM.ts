@@ -213,6 +213,11 @@ interface CorrectionOrderGroup {
   identity?: CorrectionReferences['identity']
 }
 
+/** Archive pages (100 entries each) one linked-quote walk may read before giving up. */
+const PREVIEW_WALK_MAX_PAGES = 10
+/** Linked-quote archive walks allowed in flight at once. */
+const PREVIEW_WALK_MAX_CONCURRENT = 2
+
 /**
  * Message Archive Management (XEP-0313) module.
  *
@@ -3511,6 +3516,40 @@ export class MAM extends BaseModule {
     return target ? { kind: 'found', message: target } : { kind: 'absent' }
   }
 
+  private previewWalkActive = 0
+  private readonly previewWalkWaiters: Array<() => void> = []
+
+  /** Bound concurrent archive walks so many links in one room cannot flood the server. */
+  private async acquirePreviewWalkSlot(signal?: AbortSignal): Promise<() => void> {
+    while (this.previewWalkActive >= PREVIEW_WALK_MAX_CONCURRENT) {
+      // An abort event does not replay, so never enqueue (or requeue after losing a woken slot) when already aborted.
+      signal?.throwIfAborted()
+      await new Promise<void>((resolve, reject) => {
+        const wake = () => { signal?.removeEventListener('abort', onAbort); resolve() }
+        const onAbort = () => {
+          const at = this.previewWalkWaiters.indexOf(wake)
+          if (at >= 0) this.previewWalkWaiters.splice(at, 1)
+          reject(signal!.reason)
+        }
+        signal?.addEventListener('abort', onAbort, { once: true })
+        this.previewWalkWaiters.push(wake)
+      })
+    }
+    if (signal?.aborted) {
+      // Woken for a slot it will not use: pass the wake on so later waiters are not stranded.
+      this.previewWalkWaiters.shift()?.()
+      signal.throwIfAborted()
+    }
+    this.previewWalkActive++
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.previewWalkActive--
+      this.previewWalkWaiters.shift()?.()
+    }
+  }
+
   /** Read a linked quote without publishing arrivals, moving windows or claiming coverage. */
   async readRoomMessagePreview(roomJid: string, stanzaId: string, signal?: AbortSignal): Promise<
     { kind: 'found'; message: RoomMessage } | { kind: 'absent' | 'unknown' }
@@ -3543,45 +3582,56 @@ export class MAM extends BaseModule {
       message = this.parseRoomArchiveMessage(forwarded, roomJid, roomSelf(this.deps.stores?.room.getRoom(roomJid)), archiveId) ?? undefined
       if (message && !message.isRetracted) {
         const messages = [message]
-        // Edits and retractions may be separate entries arbitrarily far after
-        // the original. Walk to archive completion without publishing a page.
-        const order = new Map<string, Set<CorrectionOrderGroup>>()
-        let after = stanzaId
-        while (joined()) {
-          signal?.throwIfAborted()
-          const page = await this.queryOneArchivedEntry(roomJid, true, { after }, 100, signal)
-          signal?.throwIfAborted()
+        const releaseSlot = await this.acquirePreviewWalkSlot(signal)
+        try {
+          // A queued read may resume after the session was replaced or membership lost.
           session.assertCurrent()
-          if (!joined() || page.kind !== 'page') return { kind: 'unknown' }
-          const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
-          for (const entry of page.entries) {
+          if (!joined()) return { kind: 'unknown' }
+          // Edits and retractions may be separate entries arbitrarily far after
+          // the original. Walk to archive completion without publishing a page.
+          const order = new Map<string, Set<CorrectionOrderGroup>>()
+          let after = stanzaId
+          let pages = 0
+          while (joined()) {
+            // Unverified edits or retractions may lie past the cap, so the quote is not shown as current.
+            if (pages++ >= PREVIEW_WALK_MAX_PAGES) return { kind: 'unknown' }
             signal?.throwIfAborted()
-            const delay = entry.forwarded.getChild('delay', NS_DELAY)
-            await this.decryptArchiveEntryIfNeeded(entry.messageEl, roomJid, 'room', delayStamp(delay), entry.archiveId)
+            const page = await this.queryOneArchivedEntry(roomJid, true, { after }, 100, signal)
             signal?.throwIfAborted()
             session.assertCurrent()
-            if (!this.collectModification(entry.messageEl, modifications, from => from, delay, roomJid, entry.archiveId)) {
-              const row = this.parseRoomArchiveMessage(entry.forwarded, roomJid, roomSelf(this.deps.stores?.room.getRoom(roomJid)), entry.archiveId)
-              // Keep only competing identities, not the entire room history.
-              if (row && !messages.some(candidate => candidate.stanzaId === row.stanzaId) && messageReferences(message, 'archive-first')
-                .some(reference => resolveMessageReference([row], reference, 'archive-first'))) messages.push(row)
+            if (!joined() || page.kind !== 'page') return { kind: 'unknown' }
+            const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+            for (const entry of page.entries) {
+              signal?.throwIfAborted()
+              const delay = entry.forwarded.getChild('delay', NS_DELAY)
+              await this.decryptArchiveEntryIfNeeded(entry.messageEl, roomJid, 'room', delayStamp(delay), entry.archiveId)
+              signal?.throwIfAborted()
+              session.assertCurrent()
+              if (!this.collectModification(entry.messageEl, modifications, from => from, delay, roomJid, entry.archiveId)) {
+                const row = this.parseRoomArchiveMessage(entry.forwarded, roomJid, roomSelf(this.deps.stores?.room.getRoom(roomJid)), entry.archiveId)
+                // Keep only competing identities, not the entire room history.
+                if (row && !messages.some(candidate => candidate.stanzaId === row.stanzaId) && messageReferences(message, 'archive-first')
+                  .some(reference => resolveMessageReference([row], reference, 'archive-first'))) messages.push(row)
+              }
             }
+            // A sender id on the quote must not shadow another entry's archive id.
+            for (const reference of new Set([...modifications.corrections, ...modifications.retractions,
+              ...modifications.fastenings, ...modifications.reactions].map(change => change.targetId))) {
+              if (!resolveMessageReference([message], reference, 'archive-first')) continue
+              const canonical = await this.resolveRoomMessagePreviewTarget(message, reference, signal)
+              if (canonical.kind === 'unknown') return canonical
+              if (canonical.kind === 'found' && !messages.some(row => row.stanzaId === canonical.message.stanzaId)) messages.push(canonical.message)
+            }
+            await this.applyModifications(messages, modifications, roomMessageAuthor, undefined, order)
+            signal?.throwIfAborted()
+            session.assertCurrent()
+            if (messages[0].isRetracted || page.complete || !page.entries.length) break
+            const next = page.entries.at(-1)!.archiveId
+            if (!next || next === after) return { kind: 'unknown' }
+            after = next
           }
-          // A sender id on the quote must not shadow another entry's archive id.
-          for (const reference of new Set([...modifications.corrections, ...modifications.retractions,
-            ...modifications.fastenings, ...modifications.reactions].map(change => change.targetId))) {
-            if (!resolveMessageReference([message], reference, 'archive-first')) continue
-            const canonical = await this.resolveRoomMessagePreviewTarget(message, reference, signal)
-            if (canonical.kind === 'unknown') return canonical
-            if (canonical.kind === 'found' && !messages.some(row => row.stanzaId === canonical.message.stanzaId)) messages.push(canonical.message)
-          }
-          await this.applyModifications(messages, modifications, roomMessageAuthor, undefined, order)
-          signal?.throwIfAborted()
-          session.assertCurrent()
-          if (messages[0].isRetracted || page.complete || !page.entries.length) break
-          const next = page.entries.at(-1)!.archiveId
-          if (!next || next === after) return { kind: 'unknown' }
-          after = next
+        } finally {
+          releaseSlot()
         }
         message = messages[0]
       }

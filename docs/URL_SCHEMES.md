@@ -67,8 +67,12 @@ Below a shared link, a joined reader sees a quote with the room name, sender,
 time and a two-line excerpt resolved from their own resident history, local
 cache or archive. `readRoomMessagePreview` performs this lookup without adding
 arrivals, moving a room's history window or claiming archive coverage. When the
-original comes from the archive, the lookup reads subsequent pages to apply
-separately archived edits and deletions before displaying its text. Live updates
+original comes from the archive, the lookup reads subsequent pages (at most 100
+entries each) to apply separately archived edits and deletions before displaying
+its text. To keep many links in one room from flooding the server, a lookup reads
+at most ten such pages and each client instance runs at most two of these walks
+at once; others wait. If the cutoff is reached before the archive ends, the quote
+is unavailable (the same state as a failed lookup) rather than possibly stale. Live updates
 also reconcile quotes whose targets are no longer in the resident window. Update
 references resolve against canonical room/cache/archive targets, so a sender id
 cannot shadow another message's room-assigned id. Closing or unmounting a quote
