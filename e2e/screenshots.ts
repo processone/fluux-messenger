@@ -20,7 +20,12 @@ const OUTPUT_DIR = 'screenshots'
 mkdirSync(OUTPUT_DIR, { recursive: true })
 
 /** Wait for the demo to fully load and freeze animation state. */
-async function waitForDemoReady(page: Page, colorScheme: 'dark' | 'light' = 'dark', url: string = DEMO_URL) {
+async function waitForDemoReady(
+  page: Page,
+  colorScheme: 'dark' | 'light' = 'dark',
+  url: string = DEMO_URL,
+  readyText = 'Emma Wilson',
+) {
   // Set color scheme BEFORE navigation so the theme resolves correctly on load
   await page.emulateMedia({ colorScheme })
   await page.goto(url)
@@ -29,7 +34,7 @@ async function waitForDemoReady(page: Page, colorScheme: 'dark' | 'light' = 'dar
   await page.waitForSelector('[data-nav="messages"]', { timeout: 15_000 })
 
   // Wait for conversation items to appear (proves stores are populated)
-  await page.getByText('Emma Wilson').first().waitFor({ timeout: 10_000 })
+  await page.getByText(readyText).first().waitFor({ timeout: 10_000 })
 
   // Wait for images and assets to load
   await page.waitForLoadState('networkidle')
@@ -907,3 +912,63 @@ for (const entry of loginThemes) {
     await page.screenshot({ path: `${OUTPUT_DIR}/8x-login-${entry.label}.png`, type: 'png' })
   })
 }
+
+// ── Showcase Scenes (README and marketing) ─────────────────────────
+// Captured from the curated `?scene=showcase` data rather than the test fixture,
+// at 2× so they stay sharp when the README scales them down on a retina screen.
+
+const SHOWCASE_URL = '/demo.html?scene=showcase'
+const SHOWCASE_DIR = `${OUTPUT_DIR}/showcase`
+
+test.describe('Showcase', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 })
+
+  test.beforeAll(() => mkdirSync(SHOWCASE_DIR, { recursive: true }))
+
+  test.beforeEach(async ({ page }) => {
+    // The sidebar width is a user preference the demo does not reset. At the
+    // default 288px most "first last" names truncate next to a timestamp.
+    await page.addInitScript(() => localStorage.setItem('sidebar-width', '340'))
+  })
+
+  async function openShowcase(page: Page, colorScheme: 'dark' | 'light' = 'dark') {
+    await waitForDemoReady(page, colorScheme, SHOWCASE_URL, 'Emma Ward')
+  }
+
+  test('showcase — 1:1 chat (dark)', async ({ page }) => {
+    await openShowcase(page)
+    await selectItem(page, 'Emma Ward')
+    await capture(page, 'showcase/01-chat-dark')
+  })
+
+  test('showcase — 1:1 chat (light)', async ({ page }) => {
+    await openShowcase(page, 'light')
+    await selectItem(page, 'Emma Ward')
+    await capture(page, 'showcase/02-chat-light')
+  })
+
+  test('showcase — encrypted chat (dark)', async ({ page }) => {
+    await openShowcase(page)
+    await selectItem(page, 'Ava Reyes')
+    await capture(page, 'showcase/03-encrypted-dark')
+  })
+
+  for (const colorScheme of ['dark', 'light'] as const) {
+    test(`showcase — room with members (${colorScheme})`, async ({ page }) => {
+      await openShowcase(page, colorScheme)
+      await navigateTo(page, 'rooms')
+      await selectItem(page, 'Launch Crew')
+      await page.locator('button[aria-label="Show members"]').click()
+      await page.waitForTimeout(500)
+      await capture(page, `showcase/04-room-${colorScheme}`)
+    })
+  }
+
+  test('showcase — command palette (dark)', async ({ page }) => {
+    await openShowcase(page)
+    await selectItem(page, 'Emma Ward')
+    await page.keyboard.press('Meta+k')
+    await page.waitForTimeout(800)
+    await capture(page, 'showcase/05-command-palette-dark')
+  })
+})

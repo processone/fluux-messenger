@@ -1,0 +1,25 @@
+<html><body style="margin:0;width:1200px;height:750px;overflow:hidden;background:#05060f">
+<svg width="1200" height="750" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="wall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#151a3a"/><stop offset="1" stop-color="#07081a"/></linearGradient>
+<linearGradient id="scr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f46e5"/><stop offset=".5" stop-color="#9333ea"/><stop offset="1" stop-color="#ec4899"/></linearGradient>
+<radialGradient id="spot" cx=".5" cy="0" r="1"><stop offset="0" stop-color="#fff7d6" stop-opacity=".55"/><stop offset="1" stop-color="#fff7d6" stop-opacity="0"/></radialGradient>
+<linearGradient id="floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1f4d"/><stop offset="1" stop-color="#0b0a1c"/></linearGradient>
+<filter id="glow"><feGaussianBlur stdDeviation="30"/></filter>
+</defs>
+<rect width="1200" height="750" fill="url(#wall)"/>
+<rect x="250" y="80" width="700" height="380" rx="10" fill="url(#scr)" filter="url(#glow)" opacity=".6"/>
+<rect x="270" y="95" width="660" height="350" rx="8" fill="url(#scr)"/>
+<text x="600" y="255" fill="#fff" font-family="-apple-system,Helvetica,Arial" font-size="72" font-weight="800" text-anchor="middle">Welcome</text>
+<text x="600" y="315" fill="#fff" opacity=".85" font-family="-apple-system,Helvetica,Arial" font-size="28" text-anchor="middle">Launch Night · Thursday</text>
+<polygon points="130,0 230,0 420,560 -60,560" fill="url(#spot)"/>
+<polygon points="970,0 1070,0 1260,560 780,560" fill="url(#spot)"/>
+<rect y="470" width="1200" height="280" fill="url(#floor)"/>
+<rect x="160" y="470" width="880" height="26" fill="#3b2f6b"/>
+<g fill="#0a0a16">
+<g id="row"><circle cx="80" cy="610" r="34"/><rect x="40" y="636" width="80" height="120" rx="30"/></g>
+<use href="#row" x="140"/><use href="#row" x="280"/><use href="#row" x="420"/><use href="#row" x="560"/><use href="#row" x="700"/><use href="#row" x="840"/><use href="#row" x="980"/><use href="#row" x="1120"/>
+</g>
+<g fill="#000"><g id="row2"><circle cx="150" cy="700" r="40"/><rect x="104" y="728" width="92" height="60" rx="34"/></g>
+<use href="#row2" x="160"/><use href="#row2" x="320"/><use href="#row2" x="480"/><use href="#row2" x="640"/><use href="#row2" x="800"/></g>
+</svg></body></html>
