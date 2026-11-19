@@ -332,10 +332,12 @@ describe('linked room message lookup', () => {
     for (let turn = 0; turn < 40; turn++) await new Promise(resolve => setTimeout(resolve, 0))
     expect(walks).toBe(2)
     roomStore.getState().addRoom({ ...room, joined: false })
+    const reconcile = vi.spyOn(roomStore.getState(), 'reconcileHistoryMessages')
     for (let turn = 0; turn < 60; turn++) { gates.splice(0).forEach(open => open()); await new Promise(resolve => setTimeout(resolve, 0)) }
     await Promise.all(running)
     expect(await queued).toEqual({ kind: 'unknown' })
     expect(walks).toBe(2)
+    expect(reconcile).not.toHaveBeenCalled()
   })
 
   it('does not confuse a deleted quote with a failed archive request', async () => {
