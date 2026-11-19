@@ -144,16 +144,48 @@ describe('readLegacyTrustState', () => {
       expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBe('other@example.com')
     })
 
-    // Without the lock, two windows could each find no owner and save their
-    // own claim: no claim is confirmed, and none is saved.
-    it.each([
+    // Intent: FLM-311 - without Web Locks (an older system web view, a page
+    // served without HTTPS) the move no longer waits for ever: the claim is
+    // saved, then read back once a claim saved at the same moment elsewhere
+    // has had time to arrive.
+    const noLock: [string, unknown][] = [
       ['the browser has no lock shared between windows', null],
       ['the lock is refused', { request: () => Promise.reject(new DOMException('The operation is insecure.', 'SecurityError')) }],
-    ])('confirms no claim when %s', async (_case, locks) => {
+    ]
+    it.each(noLock)('confirms the claim it reads back when %s', async (_case, locks) => {
       saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP } }, null)
       useLocks(locks)
 
-      expect(await claimUnscopedLegacyTrust(ME)).toBe('unavailable')
+      expect(await claimUnscopedLegacyTrust(ME, 5)).toBe('owned')
+      expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBe(ME)
+    })
+
+    it.each(noLock)('leaves the values to the claim another window saved at the same moment when %s', async (_case, locks) => {
+      saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP } }, null)
+      useLocks(locks)
+
+      // Both windows found no owner; the other window's claim lands while this one settles.
+      const claim = claimUnscopedLegacyTrust(ME, 20)
+      await new Promise((r) => setTimeout(r, 5))
+      expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBe(ME)
+      localStorage.setItem('fluux-e2ee-legacy-unscoped-owner', 'other@example.com')
+
+      expect(await claim).toBe('other-owner')
+      expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBe('other@example.com')
+    })
+
+    it('confirms no claim it cannot save when the browser has no lock shared between windows', async () => {
+      saveLegacy({ 'fluux-e2ee-verified-peers': { [BOB]: BOB_FP } }, null)
+      useLocks(null)
+      const setItem = localStorage.setItem
+      localStorage.setItem = () => {
+        throw new Error('quota exceeded')
+      }
+      try {
+        expect(await claimUnscopedLegacyTrust(ME, 5)).toBe('unavailable')
+      } finally {
+        localStorage.setItem = setItem
+      }
       expect(localStorage.getItem('fluux-e2ee-legacy-unscoped-owner')).toBeNull()
     })
   })

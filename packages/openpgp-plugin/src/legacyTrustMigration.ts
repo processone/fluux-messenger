@@ -20,9 +20,10 @@
  * Values the oldest versions stored before scoping them per account go to the
  * first account that migrates them, as those versions' loaders moved them,
  * once its claim on them is saved ({@link claimUnscopedLegacyTrust}), under a
- * lock the app's windows share. No account uses them without such a claim:
- * when another account holds it, an account moves only its own values; when
- * no claim can be confirmed, the migration waits for the next start.
+ * lock the app's windows share where there is one. No account uses them
+ * without such a claim: when another account holds it, an account moves only
+ * its own values; when no claim can be saved, the migration waits and tries
+ * again during the session.
  *
  * The old seal is checked against the old data as earlier versions checked
  * it, once the account's key is usable (it may still be locked during the
@@ -271,36 +272,69 @@ export function readLegacyTrustState(accountJid: string, includeUnscoped = true)
 
 /**
  * Who holds the unscoped values: this account (`owned`), another one
- * (`other-owner`), or no one confirmed (`unavailable`), because the lock the
- * app's windows share is missing or this account's claim could not be saved.
+ * (`other-owner`), or no one confirmed (`unavailable`), because this
+ * account's claim could not be saved.
  */
 export type UnscopedLegacyClaim = 'owned' | 'other-owner' | 'unavailable'
+
+/**
+ * How long a claim made without the shared lock waits before it reads the
+ * owner back: long enough for a claim another window saved at the same moment
+ * to reach this one.
+ */
+export const UNLOCKED_CLAIM_SETTLE_MS = 1000
+
+function readOwner(accountJid: string, owner: string | null): UnscopedLegacyClaim {
+  if (owner === null) return 'unavailable'
+  return owner === accountJid ? 'owned' : 'other-owner'
+}
 
 /**
  * Claim the unscoped values for `accountJid`, the first account whose
  * migration read them; no other account reads them after that. Run before
  * the migration writes anything, so a migration that stops half way still
- * finds them on its next run. Windows of this app claim them one at a time,
- * under a lock they share, so two accounts cannot both find no owner and
- * each save their own claim. Without that lock no claim is confirmed:
- * `unavailable`.
+ * finds them on its next run.
+ *
+ * Windows of this app claim them one at a time, under a lock they share, so
+ * two accounts cannot both find no owner and each save their own claim.
+ * Where that lock is missing or refused (a browser or an older system web
+ * view without Web Locks, or a page served without HTTPS), a claim that finds
+ * no owner saves its own, waits {@link UNLOCKED_CLAIM_SETTLE_MS} and reads
+ * the owner back: of two windows that saved a claim at the same moment, both
+ * then read the one saved last, so one account owns the values. Only a claim
+ * that cannot be saved or read is `unavailable`.
  */
-export async function claimUnscopedLegacyTrust(accountJid: string): Promise<UnscopedLegacyClaim> {
+export async function claimUnscopedLegacyTrust(
+  accountJid: string,
+  settleMs: number = UNLOCKED_CLAIM_SETTLE_MS,
+): Promise<UnscopedLegacyClaim> {
   const claim = (): UnscopedLegacyClaim => {
     try {
       const owner = localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY)
       if (owner === null) localStorage.setItem(LEGACY_UNSCOPED_OWNER_KEY, accountJid)
-      const saved = owner ?? localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY)
-      if (saved === null) return 'unavailable'
-      return saved === accountJid ? 'owned' : 'other-owner'
+      return readOwner(accountJid, owner ?? localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY))
     } catch {
       return 'unavailable'
     }
   }
   const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
-  if (!locks) return 'unavailable'
+  if (locks) {
+    try {
+      return await locks.request(LEGACY_UNSCOPED_CLAIM_LOCK, claim)
+    } catch {
+      // Refused: claim without it, as below.
+    }
+  }
   try {
-    return await locks.request(LEGACY_UNSCOPED_CLAIM_LOCK, claim)
+    const owner = localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY)
+    if (owner !== null) return readOwner(accountJid, owner)
+    localStorage.setItem(LEGACY_UNSCOPED_OWNER_KEY, accountJid)
+  } catch {
+    return 'unavailable'
+  }
+  await new Promise((resolve) => setTimeout(resolve, settleMs))
+  try {
+    return readOwner(accountJid, localStorage.getItem(LEGACY_UNSCOPED_OWNER_KEY))
   } catch {
     return 'unavailable'
   }
@@ -360,7 +394,7 @@ export function trustRecordsFromLegacy(legacy: LegacyTrustState, now: string): T
  * What differs between the records and what the migration made of the data
  * the old seal covers. The old seal vouches for that data only, so the
  * records are sealed anew only while nothing differs: decisions, sync
- * version, and the set node not yet adopted. Holds saved since the upgrade
+ * version, the set node not yet adopted and no synced held keys. Holds saved since the upgrade
  * do not count ({@link withoutHoldsAddedSince}).
  */
 export function legacyRecordsMismatch(check: PendingLegacySealCheck, records: TrustStateReading): string[] {
@@ -369,7 +403,11 @@ export function legacyRecordsMismatch(check: PendingLegacySealCheck, records: Tr
   if (canonicalJson(upgraded) !== canonicalJson(withoutHoldsAddedSince(records.decisions(), upgraded))) {
     details.push('trust decisions differ from the upgraded trust state')
   }
-  if (legacySyncVersion(check.snapshot.syncVersion) !== records.syncVersion() || records.setsAdopted()) {
+  if (
+    legacySyncVersion(check.snapshot.syncVersion) !== records.syncVersion() ||
+    records.setsAdopted() ||
+    Object.keys(records.accountHolds()).length > 0
+  ) {
     details.push('verification sync state differs from the upgraded trust state')
   }
   return details

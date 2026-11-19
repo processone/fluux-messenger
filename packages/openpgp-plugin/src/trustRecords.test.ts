@@ -119,6 +119,8 @@ describe('TrustRecordStore', () => {
     ], '2024-01-01T00:00:00.000Z')
     first.setSyncVersion(2)
     first.adoptSets()
+    // The keys held on the account's devices, as the last sync read them (FLM-311).
+    first.setAccountHolds({ [BOB]: [FP_B.toLowerCase()] })
     await first.flush()
 
     const second = new TrustRecordStore()
@@ -127,6 +129,7 @@ describe('TrustRecordStore', () => {
     expect(second.syncVersion()).toBe(2)
     expect(second.setsAdopted()).toBe(true)
     expect(second.verifiedSets()).toEqual({ [BOB]: [FP_A] })
+    expect(second.accountHolds()).toEqual({ [BOB]: [FP_B] })
   })
 
   it('starts empty from an unreadable blob and says so', async () => {

@@ -226,7 +226,8 @@
                 "distrusted": "jūs juo nepasitikite",
                 "no-key": "adresatas jo nebeskelbia",
                 "invalid-key": "netinkamas sertifikatas",
-                "over-limit": "per daug įrenginių, šis praleidžiamas"
+                "over-limit": "per daug įrenginių, šis praleidžiamas",
+                "trust-pending": "laukiama, kol bus perkelti jūsų pasitikėjimo sprendimai iš ankstesnės versijos"
             },
             "trustButton": "Pasitikėti šiuo raktu",
             "distrustButton": "Nepasitikėti šiuo raktu"
@@ -645,10 +646,13 @@
             "sendBlockedKeyConflict": "Pranešimas neišsiųstas. Prieš siųsdami išspręskite savo šifravimo rakto konfliktą.",
             "sendBlockedGeneric": "Pranešimas neišsiųstas. Šifravimas nepavyko.",
             "sendBlockedKeysDistrusted": "Pranešimas neišsiųstas. Nepasitikite nė vienu šio kontakto raktu. Prieš siųsdami pasitikėkite vienu iš jų.",
+            "sendBlockedTrustPending": "Pranešimas neišsiųstas. Šio kontakto raktai laukia, kol bus perkelti jūsų pasitikėjimo sprendimai iš ankstesnės versijos. Pabandykite dar kartą po akimirkos.",
             "heldKeys": {
                 "partial": "{{name}} pridėjo naują raktą po to, kai patvirtinote šį kontaktą. Raktas negauna žinučių, kol juo nepasitikėsite arba jo nepatvirtinsite.",
                 "all": "{{name}} pridėjo naują raktą po to, kai patvirtinote šį kontaktą. Raktas negauna žinučių, kol juo nepasitikėsite arba jo nepatvirtinsite. Iki tol negalite siųsti žinučių.",
                 "distrusted": "Nepasitikite nė vienu {{name}} raktu. Negalite siųsti žinučių, kol nepasitikėsite vienu iš jų.",
+                "pendingPartial": "Kai kurie {{name}} raktai negauna žinučių, kol nebus perkelti jūsų pasitikėjimo sprendimai iš ankstesnės versijos. Bandoma iš naujo automatiškai.",
+                "pendingAll": "{{name}} raktai negauna žinučių, kol nebus perkelti jūsų pasitikėjimo sprendimai iš ankstesnės versijos. Iki tol negalite siųsti žinučių. Bandoma iš naujo automatiškai.",
                 "review": "Peržiūrėti raktus"
             },
             "plaintextForced": "Encryption disabled",

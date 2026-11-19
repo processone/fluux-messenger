@@ -226,7 +226,8 @@
                 "distrusted": "du litar inte på den",
                 "no-key": "kontakten publicerar den inte längre",
                 "invalid-key": "ogiltigt certifikat",
-                "over-limit": "för många enheter, den här hoppas över"
+                "over-limit": "för många enheter, den här hoppas över",
+                "trust-pending": "väntar på att dina förtroendebeslut från en tidigare version flyttas"
             },
             "trustButton": "Lita på den här nyckeln",
             "distrustButton": "Lita inte på den här nyckeln"
@@ -641,10 +642,13 @@
             "sendBlockedKeyConflict": "Meddelandet skickades inte. Lös konflikten med din krypteringsnyckel innan du skickar.",
             "sendBlockedGeneric": "Meddelandet skickades inte. Krypteringen misslyckades.",
             "sendBlockedKeysDistrusted": "Meddelandet skickades inte. Du litar inte på någon av den här kontaktens nycklar. Lita på en av dem innan du skickar.",
+            "sendBlockedTrustPending": "Meddelandet skickades inte. Den här kontaktens nycklar väntar på att dina förtroendebeslut från en tidigare version flyttas. Försök igen om en stund.",
             "heldKeys": {
                 "partial": "{{name}} har lagt till en ny nyckel efter att du verifierade kontakten. Den tar inte emot några meddelanden förrän du litar på den eller verifierar den.",
                 "all": "{{name}} har lagt till en ny nyckel efter att du verifierade kontakten. Den tar inte emot några meddelanden förrän du litar på den eller verifierar den. Fram till dess kan du inte skicka meddelanden.",
                 "distrusted": "Du litar inte på någon av nycklarna för {{name}}. Du kan inte skicka meddelanden förrän du litar på en av dem.",
+                "pendingPartial": "Vissa av nycklarna för {{name}} tar inte emot några meddelanden förrän dina förtroendebeslut från en tidigare version har flyttats. Det försöks igen automatiskt.",
+                "pendingAll": "Nycklarna för {{name}} tar inte emot några meddelanden förrän dina förtroendebeslut från en tidigare version har flyttats. Fram till dess kan du inte skicka meddelanden. Det försöks igen automatiskt.",
                 "review": "Granska nycklar"
             },
             "plaintextForced": "Encryption disabled",

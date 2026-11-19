@@ -106,7 +106,10 @@ sealed decision, and a sealed hold that is gone, are still reported as changes
 made behind the plugin's back. When the contact then loses its last verified
 key (you refuse it, remove its verification or forget it, or another device
 removes it), the key stays held, and a later verification of another key does
-not approve it.
+not approve it. A key held on one of the account's devices is held on each of
+them, including a device that joins later and one where the contact's
+verification was removed before it saw the key (see
+[Cross-device sync](#cross-device-sync-optional)).
 
 While some keys are held, messages go to the keys that are used. When no key of
 the contact can be used, because every key is held or refused, nothing is sent:
@@ -130,18 +133,32 @@ decisions to plugin storage:
 The earlier records are read without being changed, so an older version still
 finds them, and are never written again. Records the oldest versions kept before
 scoping them per account go to the first account that reads them, as those
-versions moved them, once that account's claim on them is saved under a lock
-the app's windows share; no account uses them without such a claim. When
-another account holds the claim, an account moves only its own records. When
-no claim can be confirmed, because the lock is missing or the claim cannot be
-saved, nothing is moved or sealed: the session uses only the account's own
-earlier records, still checks their seal, and refuses trust decisions and
-sealing the trust state again until the upgrade runs at the next start.
-Whether you verified a contact the unclaimed records name is not known in that
-session, so its keys wait for a decision as a verified contact's new keys do,
-and nothing is sent to it. The keys that session holds are kept apart from its
-unsaved records; once the upgrade runs, each stays held if the contact turns out
-verified and the upgrade has no decision about the key.
+versions moved them, once that account's claim on them is confirmed; no account
+uses them without one. Under a lock the app's windows share, the claim is saved
+and read in one step. Where that lock is missing or refused (an older system
+web view, or a page served without HTTPS), the claim is saved, then read back
+a second later: of two windows that claimed at the same moment, both read the
+claim saved last, so one account owns the records. When another account holds
+the claim, an account moves only its own records.
+
+When the claim cannot be saved or read, nothing is moved or sealed yet: the
+session uses only the account's own earlier records and still checks their
+seal. It tries the upgrade again every 30 seconds, and before each trust
+decision or reseal you make; while the upgrade still waits, those are refused,
+with the reason. Whether you verified a contact the unclaimed records name is
+not known meanwhile, so each of its keys without a decision waits for the
+upgrade (`trust-pending`), and nothing is sent to it; the conversation and the
+contact's Security details say that the keys wait for the earlier version's
+trust data, not that the contact added a key. The keys that session holds are
+kept apart from its unsaved records; once the upgrade runs, during the session
+or at the next start, each stays held if the contact turns out verified and
+the upgrade has no decision about the key.
+
+An upgrade that runs during the session is checked as at a start. Two
+decisions made while it waited meet records you have not seen, so they are
+refused for you to look again: a decision about a key that waited for the
+upgrade, where the upgrade gives that key an earlier decision, and a reseal
+whose moved records the check still reports.
 
 Earlier versions sealed their records too. That seal is checked against the
 earlier records as those versions checked it, once the account's key is usable.
@@ -164,18 +181,38 @@ verified keys to a private PEP node `urn:xmpp:fluux:verifications:1`
 is a set per contact:
 
 ```json
-{ "v": 1, "ts": 1763460000000, "version": 7, "verified": { "bob@example.com": ["<fingerprint>", "<fingerprint>"] } }
+{
+  "v": 1,
+  "ts": 1763460000000,
+  "version": 7,
+  "verified": { "bob@example.com": ["<fingerprint>", "<fingerprint>"] },
+  "held": { "bob@example.com": ["<fingerprint>"] }
+}
 ```
 
 `ts` is the publish time in milliseconds since the epoch. A fetched snapshot is
 applied only if it is signed by the own key (authorship)
-and carries a strictly higher `version` (replay defence). Applying it makes each
+and carries a strictly higher `version` (replay defence); the held keys of one
+with the same `version` are applied as described below. Applying it makes each
 listed key verified; a key verified locally but absent from the snapshot loses
 its verification and stays trusted (`tofu`).
 
-Only verifications sync. A key you trusted or refused without verifying keeps
-that decision on the device where you made it, so a key held on one device is
-held on each device until you decide there.
+Verifications and holds sync; trusting or refusing a key does not. `held`
+lists the keys held on the account's devices. Each publication carries the list
+it last read, adds the keys held on the publishing device and leaves out the
+keys it verifies. A device that reads the list holds each listed key it has no
+decision about, before it approves the keys of a contact verified there for the
+first time. A device that joins later therefore holds what another device
+holds, and so does a device where the contact's verification was removed
+before it saw the key. A device that holds a key the list lacks publishes the
+list again. A snapshot of the version already applied, such as one another
+device published at the same time, adds its held keys only, since a hold only
+stops messages; an older one changes nothing. The list is part of the sealed
+trust records.
+
+A key you trusted or refused without verifying keeps that decision on the
+device where you made it, so a held key stays held on each device until you
+decide there.
 
 Earlier versions published one fingerprint per contact to
 `urn:xmpp:fluux:verifications:0`. A device reads that node only while the `:1`

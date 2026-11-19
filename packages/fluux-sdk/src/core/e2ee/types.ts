@@ -373,8 +373,26 @@ export interface PeerIdentity {
   allowedDecisions: IdentityTrustDecision[]
 }
 
-/** Why an identity receives no messages. */
-export type IdentityNotUsedReason = 'awaiting-decision' | 'distrusted' | 'no-key' | 'invalid-key' | 'over-limit'
+/**
+ * Why an identity receives no messages.
+ *
+ * - `awaiting-decision`: the user has to trust, verify or refuse it first.
+ * - `trust-pending`: the protocol cannot tell yet whether the identity may
+ *   receive messages, because trust data it keeps is still being prepared,
+ *   such as trust saved by an earlier version that is still being moved. It
+ *   receives nothing until that is done; a decision may be refused meanwhile.
+ * - `distrusted`: the user refused it.
+ * - `no-key`: the peer no longer publishes it.
+ * - `invalid-key`: its key failed validation.
+ * - `over-limit`: the peer has more identities than are encrypted to.
+ */
+export type IdentityNotUsedReason =
+  | 'awaiting-decision'
+  | 'trust-pending'
+  | 'distrusted'
+  | 'no-key'
+  | 'invalid-key'
+  | 'over-limit'
 
 /**
  * An explicit trust decision for one identity.
@@ -404,12 +422,16 @@ export interface PeerIdentityGroup {
  * - `locked`: the own key is present but not usable now.
  * - `encrypted`: messages are encrypted; `trust` is the aggregate and
  *   `fingerprint` is set when exactly one key is used.
+ *
+ * `waiting` counts the identities that receive nothing until something
+ * changes: the user's decision (`awaiting-decision`) or trust data still being
+ * prepared (`trust-pending`). `pending` counts the latter among them.
  */
 export type ConversationSecurity =
   | { kind: 'plaintextForced' }
   | { kind: 'unsupported' }
   | { kind: 'unusable'; protocolId: string; displayName: string; problems: { id: string; code: string; detail: string }[] }
-  | { kind: 'needsDecision'; protocolId: string; displayName: string; waiting: number }
+  | { kind: 'needsDecision'; protocolId: string; displayName: string; waiting: number; pending: number }
   | { kind: 'locked'; protocolId: string; displayName: string }
   | {
       kind: 'encrypted'
@@ -420,6 +442,7 @@ export type ConversationSecurity =
       used: number
       verified: number
       waiting: number
+      pending: number
       /** Set when a verified key exists for this contact yet at least one key that receives messages is not verified. */
       partlyVerified?: true
       /** Set when the contact is not verified and a used key appeared recently without the user having seen it. */

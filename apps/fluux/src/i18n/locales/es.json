@@ -228,7 +228,8 @@
                 "distrusted": "no confías en ella",
                 "no-key": "el contacto ya no la publica",
                 "invalid-key": "certificado no válido",
-                "over-limit": "demasiados dispositivos, este se omite"
+                "over-limit": "demasiados dispositivos, este se omite",
+                "trust-pending": "esperando a que se trasladen tus decisiones de confianza de una versión anterior"
             },
             "trustButton": "Confiar en esta clave",
             "distrustButton": "No confiar en esta clave"
@@ -645,10 +646,13 @@
             "sendBlockedKeyConflict": "Mensaje no enviado. Resuelve el conflicto de tu clave de cifrado antes de enviar.",
             "sendBlockedGeneric": "Mensaje no enviado. El cifrado ha fallado.",
             "sendBlockedKeysDistrusted": "Mensaje no enviado. No confías en ninguna clave de este contacto. Confía en una de ellas antes de enviar.",
+            "sendBlockedTrustPending": "Mensaje no enviado. Las claves de este contacto esperan a que se trasladen tus decisiones de confianza de una versión anterior. Vuelve a intentarlo en un momento.",
             "heldKeys": {
                 "partial": "{{name}} añadió una clave nueva después de que lo verificaras. No recibe mensajes hasta que confíes en ella o la verifiques.",
                 "all": "{{name}} añadió una clave nueva después de que lo verificaras. No recibe mensajes hasta que confíes en ella o la verifiques. Hasta entonces no puedes enviar mensajes.",
                 "distrusted": "No confías en ninguna clave de {{name}}. No puedes enviar mensajes hasta que confíes en una de ellas.",
+                "pendingPartial": "Algunas claves de {{name}} no reciben mensajes hasta que se trasladen tus decisiones de confianza de una versión anterior. Se vuelve a intentar automáticamente.",
+                "pendingAll": "Las claves de {{name}} no reciben mensajes hasta que se trasladen tus decisiones de confianza de una versión anterior. Hasta entonces no puedes enviar mensajes. Se vuelve a intentar automáticamente.",
                 "review": "Revisar claves"
             },
             "plaintextForced": "Encryption disabled",

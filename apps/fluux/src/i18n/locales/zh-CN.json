@@ -226,7 +226,8 @@
                 "distrusted": "你不信任它",
                 "no-key": "联系人不再发布它",
                 "invalid-key": "证书无效",
-                "over-limit": "设备过多，已跳过此设备"
+                "over-limit": "设备过多，已跳过此设备",
+                "trust-pending": "等待迁移你来自旧版本的信任决定"
             },
             "trustButton": "信任此密钥",
             "distrustButton": "不信任此密钥"
@@ -641,10 +642,13 @@
             "sendBlockedKeyConflict": "消息未发送。发送前请解决您的加密密钥冲突。",
             "sendBlockedGeneric": "消息未发送。加密失败。",
             "sendBlockedKeysDistrusted": "消息未发送。你不信任此联系人的任何密钥。发送前请信任其中一个。",
+            "sendBlockedTrustPending": "消息未发送。此联系人的密钥正在等待你来自旧版本的信任决定迁移完成。请稍后重试。",
             "heldKeys": {
                 "partial": "{{name}} 在你验证之后添加了新密钥。在你信任或验证它之前，它不会收到任何消息。",
                 "all": "{{name}} 在你验证之后添加了新密钥。在你信任或验证它之前，它不会收到任何消息。在此之前无法发送消息。",
                 "distrusted": "你不信任 {{name}} 的任何密钥。在你信任其中一个之前，无法发送消息。",
+                "pendingPartial": "在你来自旧版本的信任决定迁移完成之前，{{name}} 的部分密钥不会收到任何消息。系统会自动重试。",
+                "pendingAll": "在你来自旧版本的信任决定迁移完成之前，{{name}} 的密钥不会收到任何消息。在此之前无法发送消息。系统会自动重试。",
                 "review": "查看密钥"
             },
             "plaintextForced": "加密已禁用",

@@ -228,7 +228,8 @@
                 "distrusted": "te ei usalda seda",
                 "no-key": "kontakt ei avalda seda enam",
                 "invalid-key": "kehtetu sertifikaat",
-                "over-limit": "liiga palju seadmeid, see jäetakse vahele"
+                "over-limit": "liiga palju seadmeid, see jäetakse vahele",
+                "trust-pending": "ootab varasema versiooni usaldusotsuste ülekandmist"
             },
             "trustButton": "Usalda seda võtit",
             "distrustButton": "Ära usalda seda võtit"
@@ -643,10 +644,13 @@
             "sendBlockedKeyConflict": "Sõnumit ei saadetud. Lahenda enne saatmist oma krüpteerimisvõtme vastuolu.",
             "sendBlockedGeneric": "Sõnumit ei saadetud. Krüpteerimine ebaõnnestus.",
             "sendBlockedKeysDistrusted": "Sõnumit ei saadetud. Sa ei usalda ühtegi selle kontakti võtit. Usalda enne saatmist üht neist.",
+            "sendBlockedTrustPending": "Sõnumit ei saadetud. Selle kontakti võtmed ootavad sinu varasema versiooni usaldusotsuste ülekandmist. Proovi hetke pärast uuesti.",
             "heldKeys": {
                 "partial": "Kontakt {{name}} lisas uue võtme pärast seda, kui sa ta kinnitasid. See ei saa sõnumeid enne, kui seda usaldad või kinnitad.",
                 "all": "Kontakt {{name}} lisas uue võtme pärast seda, kui sa ta kinnitasid. See ei saa sõnumeid enne, kui seda usaldad või kinnitad. Seni ei saa sa sõnumeid saata.",
                 "distrusted": "Sa ei usalda ühtegi kontakti {{name}} võtit. Sa ei saa sõnumeid saata enne, kui usaldad üht neist.",
+                "pendingPartial": "Mõned kontakti {{name}} võtmed ei saa sõnumeid enne, kui sinu varasema versiooni usaldusotsused on üle viidud. Seda proovitakse automaatselt uuesti.",
+                "pendingAll": "Kontakti {{name}} võtmed ei saa sõnumeid enne, kui sinu varasema versiooni usaldusotsused on üle viidud. Seni ei saa sa sõnumeid saata. Seda proovitakse automaatselt uuesti.",
                 "review": "Vaata võtmed üle"
             },
             "plaintextForced": "Encryption disabled",

@@ -226,7 +226,8 @@
                 "distrusted": "ne vjerujete mu",
                 "no-key": "kontakt ga više ne objavljuje",
                 "invalid-key": "nevažeći certifikat",
-                "over-limit": "previše uređaja, ovaj se preskače"
+                "over-limit": "previše uređaja, ovaj se preskače",
+                "trust-pending": "čeka premještanje vaših odluka o povjerenju iz starije verzije"
             },
             "trustButton": "Vjeruj ovom ključu",
             "distrustButton": "Ne vjeruj ovom ključu"
@@ -643,10 +644,13 @@
             "sendBlockedKeyConflict": "Poruka nije poslana. Riješite sukob svog ključa za šifriranje prije slanja.",
             "sendBlockedGeneric": "Poruka nije poslana. Šifriranje nije uspjelo.",
             "sendBlockedKeysDistrusted": "Poruka nije poslana. Ne vjerujete nijednom ključu ovog kontakta. Prije slanja vjerujte jednom od njih.",
+            "sendBlockedTrustPending": "Poruka nije poslana. Ključevi ovog kontakta čekaju premještanje vaših odluka o povjerenju iz starije verzije. Pokušajte ponovno za trenutak.",
             "heldKeys": {
                 "partial": "Kontakt {{name}} dodao je novi ključ nakon što ste ga provjerili. Ključ ne prima poruke dok mu ne vjerujete ili ga ne provjerite.",
                 "all": "Kontakt {{name}} dodao je novi ključ nakon što ste ga provjerili. Ključ ne prima poruke dok mu ne vjerujete ili ga ne provjerite. Do tada ne možete slati poruke.",
                 "distrusted": "Ne vjerujete nijednom ključu kontakta {{name}}. Ne možete slati poruke dok ne vjerujete jednom od njih.",
+                "pendingPartial": "Neki ključevi kontakta {{name}} ne primaju poruke dok se vaše odluke o povjerenju iz starije verzije ne premjeste. Pokušaj se automatski ponavlja.",
+                "pendingAll": "Ključevi kontakta {{name}} ne primaju poruke dok se vaše odluke o povjerenju iz starije verzije ne premjeste. Do tada ne možete slati poruke. Pokušaj se automatski ponavlja.",
                 "review": "Pregledaj ključeve"
             },
             "plaintextForced": "Encryption disabled",

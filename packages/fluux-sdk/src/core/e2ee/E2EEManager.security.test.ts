@@ -84,7 +84,7 @@ describe('E2EEManager.getConversationSecurity', () => {
     plugin.identities = [identity('1', { trust: 'verified' })]
     expect(await manager.getConversationSecurity(target)).toEqual({
       kind: 'encrypted', protocolId: 'listing', displayName: 'Listing', trust: 'verified',
-      fingerprint: 'FP1', used: 1, verified: 1, waiting: 0,
+      fingerprint: 'FP1', used: 1, verified: 1, waiting: 0, pending: 0,
     })
   })
 
@@ -98,7 +98,7 @@ describe('E2EEManager.getConversationSecurity', () => {
     const sec = await manager.getConversationSecurity(target)
     expect(sec).toEqual({
       kind: 'encrypted', protocolId: 'listing', displayName: 'Listing', trust: 'tofu',
-      used: 2, verified: 1, waiting: 1, partlyVerified: true,
+      used: 2, verified: 1, waiting: 1, pending: 0, partlyVerified: true,
     })
   })
 
@@ -137,6 +137,20 @@ describe('E2EEManager.getConversationSecurity', () => {
       identity('1', { trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision' }),
     ]
     expect(await manager.getConversationSecurity(target)).toMatchObject({ kind: 'needsDecision', waiting: 1 })
+  })
+
+  // Intent: FLM-311 - a key whose trust data the protocol is still preparing (OpenPGP:
+  // trust an earlier version saved, still being moved) waits like a held key, and is told
+  // apart from one waiting for the user's decision.
+  it('counts a key whose trust data is still being prepared as waiting and pending, never as unusable', async () => {
+    const { manager, plugin } = await setup()
+    const pendingKey = identity('2', { trust: 'unknown', usedForEncryption: false, notUsedReason: 'trust-pending' })
+    plugin.identities = [pendingKey]
+    expect(await manager.getConversationSecurity(target)).toEqual({
+      kind: 'needsDecision', protocolId: 'listing', displayName: 'Listing', waiting: 1, pending: 1,
+    })
+    plugin.identities = [identity('1'), pendingKey, identity('3', { trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision' })]
+    expect(await manager.getConversationSecurity(target)).toMatchObject({ kind: 'encrypted', used: 1, waiting: 2, pending: 1 })
   })
 
   it('keys that exist but none can be used are unusable and carry each problem', async () => {

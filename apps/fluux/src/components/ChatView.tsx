@@ -1325,13 +1325,17 @@ export const MessageInput = memo(function MessageInput({
     }
 
     // Nothing can be sent while every key of the contact waits for the user's
-    // decision or was refused: the SDK refuses to encrypt and never falls back
-    // to plaintext. Stop here so a staged file is not uploaded unencrypted.
+    // decision or for the trust data of an earlier version, or was refused:
+    // the SDK refuses to encrypt and never falls back to plaintext. Stop here
+    // so a staged file is not uploaded unencrypted.
     const sendBlock = encryptionSendBlock(encryptionState)
     if (sendBlock) {
-      useToastStore.getState().addToast('error', t(sendBlock === 'distrusted'
-        ? 'chat.encryption.sendBlockedKeysDistrusted'
-        : 'chat.encryption.sendBlockedKeyChanged'))
+      const toast = {
+        'distrusted': 'chat.encryption.sendBlockedKeysDistrusted',
+        'trust-pending': 'chat.encryption.sendBlockedTrustPending',
+        'awaiting-decision': 'chat.encryption.sendBlockedKeyChanged',
+      }[sendBlock]
+      useToastStore.getState().addToast('error', t(toast))
       return false
     }
 

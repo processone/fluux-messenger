@@ -226,7 +226,8 @@
                 "distrusted": "Ön nem bízik benne",
                 "no-key": "a partner már nem teszi közzé",
                 "invalid-key": "érvénytelen tanúsítvány",
-                "over-limit": "túl sok eszköz, ez ki lesz hagyva"
+                "over-limit": "túl sok eszköz, ez ki lesz hagyva",
+                "trust-pending": "a korábbi verzióból származó bizalmi döntései áthelyezésére vár"
             },
             "trustButton": "Megbízás ebben a kulcsban",
             "distrustButton": "Nem bízom ebben a kulcsban"
@@ -641,10 +642,13 @@
             "sendBlockedKeyConflict": "Az üzenet nem lett elküldve. Küldés előtt oldja fel a titkosítási kulcsa ütközését.",
             "sendBlockedGeneric": "Az üzenet nem lett elküldve. A titkosítás sikertelen volt.",
             "sendBlockedKeysDistrusted": "Az üzenet nem lett elküldve. A partner egyik kulcsában sem bízik meg. Küldés előtt bízzon meg az egyikben.",
+            "sendBlockedTrustPending": "Az üzenet nem lett elküldve. Ennek a partnernek a kulcsai a korábbi verzióból származó bizalmi döntései áthelyezésére várnak. Próbálja újra egy pillanat múlva.",
             "heldKeys": {
                 "partial": "{{name}} új kulcsot adott hozzá, miután Ön ellenőrizte. A kulcs nem kap üzeneteket, amíg meg nem bízik benne, vagy nem ellenőrzi.",
                 "all": "{{name}} új kulcsot adott hozzá, miután Ön ellenőrizte. A kulcs nem kap üzeneteket, amíg meg nem bízik benne, vagy nem ellenőrzi. Addig nem küldhet üzenetet.",
                 "distrusted": "Nem bízik meg {{name}} egyik kulcsában sem. Nem küldhet üzenetet, amíg meg nem bízik az egyikben.",
+                "pendingPartial": "{{name}} egyes kulcsai nem kapnak üzeneteket, amíg egy korábbi verzióból származó bizalmi döntései át nem kerülnek. Az alkalmazás automatikusan újra megpróbálja.",
+                "pendingAll": "{{name}} kulcsai nem kapnak üzeneteket, amíg egy korábbi verzióból származó bizalmi döntései át nem kerülnek. Addig nem küldhet üzenetet. Az alkalmazás automatikusan újra megpróbálja.",
                 "review": "Kulcsok áttekintése"
             },
             "plaintextForced": "Encryption disabled",

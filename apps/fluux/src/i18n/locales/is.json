@@ -226,7 +226,8 @@
                 "distrusted": "þú treystir honum ekki",
                 "no-key": "tengiliðurinn birtir hann ekki lengur",
                 "invalid-key": "ógilt skilríki",
-                "over-limit": "of mörg tæki, þessu er sleppt"
+                "over-limit": "of mörg tæki, þessu er sleppt",
+                "trust-pending": "bíður þess að traustákvarðanir þínar úr eldri útgáfu verði fluttar"
             },
             "trustButton": "Treysta þessum lykli",
             "distrustButton": "Treysta ekki þessum lykli"
@@ -641,10 +642,13 @@
             "sendBlockedKeyConflict": "Skilaboð ekki send. Leystu árekstur dulkóðunarlykilsins þíns áður en þú sendir.",
             "sendBlockedGeneric": "Skilaboð ekki send. Dulkóðun mistókst.",
             "sendBlockedKeysDistrusted": "Skilaboð ekki send. Þú treystir engum lykli þessa tengiliðs. Treystu einum þeirra áður en þú sendir.",
+            "sendBlockedTrustPending": "Skilaboð ekki send. Lyklar þessa tengiliðs bíða þess að traustákvarðanir þínar úr eldri útgáfu verði fluttar. Reyndu aftur eftir smástund.",
             "heldKeys": {
                 "partial": "{{name}} bætti við nýjum lykli eftir að þú staðfestir tengiliðinn. Lykillinn fær engin skilaboð fyrr en þú treystir honum eða staðfestir hann.",
                 "all": "{{name}} bætti við nýjum lykli eftir að þú staðfestir tengiliðinn. Lykillinn fær engin skilaboð fyrr en þú treystir honum eða staðfestir hann. Þangað til geturðu ekki sent skilaboð.",
                 "distrusted": "Þú treystir engum lykli tengiliðarins {{name}}. Þú getur ekki sent skilaboð fyrr en þú treystir einum þeirra.",
+                "pendingPartial": "Sumir lyklar {{name}} fá engin skilaboð fyrr en traustákvarðanir þínar úr eldri útgáfu hafa verið fluttar. Reynt er aftur sjálfkrafa.",
+                "pendingAll": "Lyklar {{name}} fá engin skilaboð fyrr en traustákvarðanir þínar úr eldri útgáfu hafa verið fluttar. Þangað til geturðu ekki sent skilaboð. Reynt er aftur sjálfkrafa.",
                 "review": "Yfirfara lykla"
             },
             "plaintextForced": "Encryption disabled",

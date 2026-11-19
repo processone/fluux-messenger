@@ -228,7 +228,8 @@
                 "distrusted": "nie ufasz mu",
                 "no-key": "kontakt już go nie publikuje",
                 "invalid-key": "nieprawidłowy certyfikat",
-                "over-limit": "zbyt wiele urządzeń, to jest pomijane"
+                "over-limit": "zbyt wiele urządzeń, to jest pomijane",
+                "trust-pending": "czeka na przeniesienie Twoich decyzji dotyczących zaufania z wcześniejszej wersji"
             },
             "trustButton": "Ufaj temu kluczowi",
             "distrustButton": "Nie ufaj temu kluczowi"
@@ -647,10 +648,13 @@
             "sendBlockedKeyConflict": "Wiadomość nie została wysłana. Rozwiąż konflikt swojego klucza szyfrowania przed wysłaniem.",
             "sendBlockedGeneric": "Wiadomość nie została wysłana. Szyfrowanie nie powiodło się.",
             "sendBlockedKeysDistrusted": "Wiadomość nie została wysłana. Nie ufasz żadnemu kluczowi tego kontaktu. Zaufaj jednemu z nich przed wysłaniem.",
+            "sendBlockedTrustPending": "Wiadomość nie została wysłana. Klucze tego kontaktu czekają na przeniesienie Twoich decyzji dotyczących zaufania z wcześniejszej wersji. Spróbuj ponownie za chwilę.",
             "heldKeys": {
                 "partial": "Kontakt {{name}} dodał nowy klucz po tym, jak go zweryfikowałeś. Klucz nie otrzymuje wiadomości, dopóki mu nie zaufasz lub go nie zweryfikujesz.",
                 "all": "Kontakt {{name}} dodał nowy klucz po tym, jak go zweryfikowałeś. Klucz nie otrzymuje wiadomości, dopóki mu nie zaufasz lub go nie zweryfikujesz. Do tego czasu nie możesz wysyłać wiadomości.",
                 "distrusted": "Nie ufasz żadnemu kluczowi kontaktu {{name}}. Nie możesz wysyłać wiadomości, dopóki nie zaufasz jednemu z nich.",
+                "pendingPartial": "Niektóre klucze kontaktu {{name}} nie otrzymują wiadomości, dopóki Twoje decyzje dotyczące zaufania z wcześniejszej wersji nie zostaną przeniesione. Próba jest ponawiana automatycznie.",
+                "pendingAll": "Klucze kontaktu {{name}} nie otrzymują wiadomości, dopóki Twoje decyzje dotyczące zaufania z wcześniejszej wersji nie zostaną przeniesione. Do tego czasu nie możesz wysyłać wiadomości. Próba jest ponawiana automatycznie.",
                 "review": "Przejrzyj klucze"
             },
             "plaintextForced": "Encryption disabled",

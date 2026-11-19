@@ -227,7 +227,8 @@
                 "distrusted": "you don't trust it",
                 "no-key": "the contact no longer publishes it",
                 "invalid-key": "invalid certificate",
-                "over-limit": "too many devices, this one is skipped"
+                "over-limit": "too many devices, this one is skipped",
+                "trust-pending": "waiting for your trust decisions from an earlier version to be moved"
             },
             "trustButton": "Trust this key",
             "distrustButton": "Don't trust this key"
@@ -667,10 +668,13 @@
             "sendBlockedKeyConflict": "Message not sent. Resolve your encryption key conflict before sending.",
             "sendBlockedGeneric": "Message not sent. Encryption failed.",
             "sendBlockedKeysDistrusted": "Message not sent. You don't trust any of this contact's keys. Trust one of them before sending.",
+            "sendBlockedTrustPending": "Message not sent. This contact's keys wait until your trust decisions from an earlier version are moved. Try again in a moment.",
             "heldKeys": {
                 "partial": "{{name}} added a new key after you verified them. It receives no messages until you trust or verify it.",
                 "all": "{{name}} added a new key after you verified them. It receives no messages until you trust or verify it. You can't send messages until then.",
                 "distrusted": "You don't trust any of {{name}}'s keys. You can't send messages until you trust one of them.",
+                "pendingPartial": "Some of {{name}}'s keys receive no messages until your trust decisions from an earlier version are moved. This is tried again automatically.",
+                "pendingAll": "{{name}}'s keys receive no messages until your trust decisions from an earlier version are moved. You can't send messages until then. This is tried again automatically.",
                 "review": "Review keys"
             },
             "tooltip": {

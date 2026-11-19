@@ -227,7 +227,8 @@
                 "distrusted": "nedôverujete mu",
                 "no-key": "kontakt ho už nezverejňuje",
                 "invalid-key": "neplatný certifikát",
-                "over-limit": "príliš veľa zariadení, toto sa preskočí"
+                "over-limit": "príliš veľa zariadení, toto sa preskočí",
+                "trust-pending": "čaká na presun vašich rozhodnutí o dôvere zo staršej verzie"
             },
             "trustButton": "Dôverovať tomuto kľúču",
             "distrustButton": "Nedôverovať tomuto kľúču"
@@ -646,10 +647,13 @@
             "sendBlockedKeyConflict": "Správa nebola odoslaná. Pred odoslaním vyriešte konflikt svojho šifrovacieho kľúča.",
             "sendBlockedGeneric": "Správa nebola odoslaná. Šifrovanie zlyhalo.",
             "sendBlockedKeysDistrusted": "Správa nebola odoslaná. Nedôverujete žiadnemu kľúču tohto kontaktu. Pred odoslaním jednému z nich dôverujte.",
+            "sendBlockedTrustPending": "Správa nebola odoslaná. Kľúče tohto kontaktu čakajú na presun vašich rozhodnutí o dôvere zo staršej verzie. Skúste to znova o chvíľu.",
             "heldKeys": {
                 "partial": "Kontakt {{name}} pridal nový kľúč potom, ako ste ho overili. Kľúč nedostáva správy, kým mu nebudete dôverovať alebo ho neoveríte.",
                 "all": "Kontakt {{name}} pridal nový kľúč potom, ako ste ho overili. Kľúč nedostáva správy, kým mu nebudete dôverovať alebo ho neoveríte. Dovtedy nemôžete odosielať správy.",
                 "distrusted": "Nedôverujete žiadnemu kľúču kontaktu {{name}}. Nemôžete odosielať správy, kým jednému z nich nebudete dôverovať.",
+                "pendingPartial": "Niektoré kľúče kontaktu {{name}} nedostávajú správy, kým sa nepresunú vaše rozhodnutia o dôvere zo staršej verzie. Pokus sa automaticky opakuje.",
+                "pendingAll": "Kľúče kontaktu {{name}} nedostávajú správy, kým sa nepresunú vaše rozhodnutia o dôvere zo staršej verzie. Dovtedy nemôžete odosielať správy. Pokus sa automaticky opakuje.",
                 "review": "Skontrolovať kľúče"
             },
             "plaintextForced": "Encryption disabled",

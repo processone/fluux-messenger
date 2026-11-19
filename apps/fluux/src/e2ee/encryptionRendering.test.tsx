@@ -24,6 +24,8 @@
  * unused, rejected certificates listed with their reason); the real one is
  * covered in packages/openpgp-plugin. `recentlyMet` stands for a protocol that
  * marks a contact met recently, which the SDK reports as `isNew`.
+ * `trustPending` stands for trust data of an earlier version that waits to be
+ * moved, which may hold a verification of the contact (FLM-311).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -44,7 +46,7 @@ const PEER = 'bob@example.com'
 const A = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
 const B = 'BBBB1111CCCC2222DDDD3333EEEE4444FFFF5555'
 
-const world = vi.hoisted(() => ({ announced: [] as string[], locked: false, recentlyMet: false, listCalls: 0, failListingFrom: null as number | null }))
+const world = vi.hoisted(() => ({ announced: [] as string[], locked: false, recentlyMet: false, trustPending: false, listCalls: 0, failListingFrom: null as number | null }))
 const manager = vi.hoisted(() => ({ current: null as unknown }))
 
 vi.mock('@fluux/sdk', async (importOriginal) => {
@@ -102,9 +104,10 @@ class OpenPgpStandIn extends DummyPlaintextPlugin implements E2EEPlugin {
     world.listCalls += 1
     if (world.failListingFrom !== null && world.listCalls >= world.failListingFrom) throw new Error('listing failed')
     const decisions = records.decisionsView(peer)
-    const holds = records.hasVerified(peer)
+    const pending = world.trustPending && !records.hasVerified(peer)
+    const holds = records.hasVerified(peer) || pending
     const out: PeerIdentity[] = world.announced.map((fp) => {
-      const standing = keyStanding(decisions[canonicalFingerprint(fp)!], holds)
+      const standing = keyStanding(decisions[canonicalFingerprint(fp)!], holds, pending)
       return {
         id: fp,
         fingerprint: fp,
@@ -202,6 +205,7 @@ describe('encryption state as people see it', () => {
     world.listCalls = 0
     world.failListingFrom = null
     world.recentlyMet = false
+    world.trustPending = false
     records = new TrustRecordStore()
     await records.attach(createPluginStorage(new InMemoryStorageBackend(), 'e2ee/openpgp'))
     useConversationPlaintextOverrideStore.setState({ plaintextJids: {} })
@@ -629,6 +633,27 @@ describe('encryption state as people see it', () => {
       await act(async () => { await (manager.current as E2EEManager).setIdentityTrust('openpgp', PEER, B, 'tofu') })
       await waitFor(() => expect(notice()).toBe(''))
       expect(seen().tabText).not.toContain('notUsedReason.awaiting-decision')
+    })
+
+    // FLM-311: keys can wait for the trust data of an earlier version to be
+    // moved; the notice and the Security tab say so, not that the contact
+    // added a key.
+    it('says every key waits for the trust data of an earlier version, and nothing can be sent', async () => {
+      world.announced = [A]
+      world.trustPending = true
+      await open()
+      expect(notice()).toContain('chat.encryption.heldKeys.pendingAll')
+      expect(seen().tabText).toContain('contacts.encryption.notUsedReason.trust-pending')
+      expect(seen().composerLock).toBeNull()
+    })
+
+    it('says some keys wait for the trust data of an earlier version while the others receive', async () => {
+      world.announced = [A, B]
+      world.trustPending = true
+      records.setDecision(PEER, A, 'tofu')
+      await open()
+      expect(notice()).toContain('chat.encryption.heldKeys.pendingPartial')
+      expect(seen().composerLock?.label).toBe('chat.encryption.openpgpTooltip')
     })
 
     it('explains a contact whose every key the user refused, everywhere it shows', async () => {

@@ -227,7 +227,8 @@
                 "distrusted": "jūs tai neuzticaties",
                 "no-key": "kontaktpersona to vairs nepublicē",
                 "invalid-key": "nederīgs sertifikāts",
-                "over-limit": "pārāk daudz ierīču, šī tiek izlaista"
+                "over-limit": "pārāk daudz ierīču, šī tiek izlaista",
+                "trust-pending": "gaida, līdz tiks pārnesti jūsu uzticēšanās lēmumi no iepriekšējās versijas"
             },
             "trustButton": "Uzticēties šai atslēgai",
             "distrustButton": "Neuzticēties šai atslēgai"
@@ -644,10 +645,13 @@
             "sendBlockedKeyConflict": "Ziņojums nav nosūtīts. Pirms sūtīšanas atrisiniet savas šifrēšanas atslēgas konfliktu.",
             "sendBlockedGeneric": "Ziņojums nav nosūtīts. Šifrēšana neizdevās.",
             "sendBlockedKeysDistrusted": "Ziņojums nav nosūtīts. Jūs neuzticaties nevienai šī kontakta atslēgai. Pirms sūtīšanas uzticieties vienai no tām.",
+            "sendBlockedTrustPending": "Ziņojums nav nosūtīts. Šī kontakta atslēgas gaida, līdz tiks pārnesti jūsu uzticēšanās lēmumi no iepriekšējās versijas. Mēģiniet vēlreiz pēc brīža.",
             "heldKeys": {
                 "partial": "{{name}} pievienoja jaunu atslēgu pēc tam, kad jūs verificējāt šo kontaktu. Tā nesaņem ziņas, līdz jūs tai uzticaties vai to verificējat.",
                 "all": "{{name}} pievienoja jaunu atslēgu pēc tam, kad jūs verificējāt šo kontaktu. Tā nesaņem ziņas, līdz jūs tai uzticaties vai to verificējat. Līdz tam jūs nevarat sūtīt ziņas.",
                 "distrusted": "Jūs neuzticaties nevienai {{name}} atslēgai. Jūs nevarat sūtīt ziņas, līdz uzticaties vienai no tām.",
+                "pendingPartial": "Dažas {{name}} atslēgas nesaņem ziņas, līdz jūsu uzticēšanās lēmumi no iepriekšējās versijas tiek pārnesti. Mēģinājums tiek automātiski atkārtots.",
+                "pendingAll": "{{name}} atslēgas nesaņem ziņas, līdz jūsu uzticēšanās lēmumi no iepriekšējās versijas tiek pārnesti. Līdz tam jūs nevarat sūtīt ziņas. Mēģinājums tiek automātiski atkārtots.",
                 "review": "Pārskatīt atslēgas"
             },
             "plaintextForced": "Encryption disabled",

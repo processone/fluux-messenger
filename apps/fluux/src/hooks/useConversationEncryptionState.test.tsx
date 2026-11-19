@@ -53,7 +53,7 @@ function wire(opts: { manager?: unknown; online?: boolean; enabled?: boolean }) 
 }
 
 const encrypted = (over: Partial<Extract<ConversationSecurity, { kind: 'encrypted' }>> = {}): ConversationSecurity => ({
-  kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', trust: 'tofu', fingerprint: 'FP1', used: 1, verified: 0, waiting: 0, ...over,
+  kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', trust: 'tofu', fingerprint: 'FP1', used: 1, verified: 0, waiting: 0, pending: 0, ...over,
 })
 
 async function stateFor(security: ConversationSecurity | (() => Promise<ConversationSecurity>), identities?: PeerIdentity[]) {
@@ -152,8 +152,8 @@ describe('useConversationEncryptionState', () => {
 
   it('keeps the keys of a contact whose every key waits for a decision', async () => {
     const waiting = identity('1', { trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision', allowedDecisions: ['verified', 'tofu'] })
-    expect(await stateFor({ kind: 'needsDecision', protocolId: 'openpgp', displayName: 'OpenPGP', waiting: 1 }, [waiting]))
-      .toEqual({ kind: 'unsupported', needsDecision: true, groups: [group([waiting])] })
+    expect(await stateFor({ kind: 'needsDecision', protocolId: 'openpgp', displayName: 'OpenPGP', waiting: 1, pending: 0 }, [waiting]))
+      .toEqual({ kind: 'unsupported', needsDecision: true, waiting: 1, groups: [group([waiting])] })
   })
 
   it('counts the keys of a verified contact that wait for a decision while the others receive messages', async () => {
@@ -166,8 +166,20 @@ describe('useConversationEncryptionState', () => {
 
   it('blocks sending to a contact whose every key waits for a decision', async () => {
     const held = identity('1', { trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision', allowedDecisions: ['verified', 'tofu', 'untrusted'] })
-    const state = await stateFor({ kind: 'needsDecision', protocolId: 'openpgp', displayName: 'OpenPGP', waiting: 1 }, [held])
+    const state = await stateFor({ kind: 'needsDecision', protocolId: 'openpgp', displayName: 'OpenPGP', waiting: 1, pending: 0 }, [held])
     expect(encryptionSendBlock(state)).toBe('awaiting-decision')
+  })
+
+  // FLM-311: a key can wait for the protocol to finish preparing its trust
+  // data rather than for the user; the send refusal says which.
+  it('blocks sending with its own reason while every waiting key waits for the trust data instead', async () => {
+    const pending = identity('1', { trust: 'unknown', usedForEncryption: false, notUsedReason: 'trust-pending', allowedDecisions: ['verified', 'tofu', 'untrusted'] })
+    const held = identity('2', { trust: 'unknown', usedForEncryption: false, notUsedReason: 'awaiting-decision', allowedDecisions: ['verified', 'tofu', 'untrusted'] })
+    const onlyPending = await stateFor({ kind: 'needsDecision', protocolId: 'openpgp', displayName: 'OpenPGP', waiting: 1, pending: 1 }, [pending])
+    expect(onlyPending).toMatchObject({ kind: 'unsupported', needsDecision: true, waiting: 1, pending: 1 })
+    expect(encryptionSendBlock(onlyPending)).toBe('trust-pending')
+    const both = await stateFor({ kind: 'needsDecision', protocolId: 'openpgp', displayName: 'OpenPGP', waiting: 2, pending: 1 }, [pending, held])
+    expect(encryptionSendBlock(both)).toBe('awaiting-decision')
   })
 
   it('blocks sending to a contact whose every key the user refused, and keeps the reasons', async () => {

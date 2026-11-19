@@ -228,7 +228,8 @@
                 "distrusted": "não confia nela",
                 "no-key": "o contacto já não a publica",
                 "invalid-key": "certificado inválido",
-                "over-limit": "demasiados dispositivos, este é ignorado"
+                "over-limit": "demasiados dispositivos, este é ignorado",
+                "trust-pending": "à espera da transferência das suas decisões de confiança de uma versão anterior"
             },
             "trustButton": "Confiar nesta chave",
             "distrustButton": "Não confiar nesta chave"
@@ -645,10 +646,13 @@
             "sendBlockedKeyConflict": "Mensagem não enviada. Resolva o conflito da sua chave de criptografia antes de enviar.",
             "sendBlockedGeneric": "Mensagem não enviada. A criptografia falhou.",
             "sendBlockedKeysDistrusted": "Mensagem não enviada. Não confia em nenhuma chave deste contacto. Confie numa delas antes de enviar.",
+            "sendBlockedTrustPending": "Mensagem não enviada. As chaves deste contacto aguardam a transferência das suas decisões de confiança de uma versão anterior. Tente novamente dentro de momentos.",
             "heldKeys": {
                 "partial": "{{name}} adicionou uma nova chave depois de o ter verificado. Não recebe mensagens até confiar nela ou a verificar.",
                 "all": "{{name}} adicionou uma nova chave depois de o ter verificado. Não recebe mensagens até confiar nela ou a verificar. Até lá não pode enviar mensagens.",
                 "distrusted": "Não confia em nenhuma chave de {{name}}. Não pode enviar mensagens até confiar numa delas.",
+                "pendingPartial": "Algumas chaves de {{name}} não recebem mensagens até que as suas decisões de confiança de uma versão anterior sejam transferidas. É tentado de novo automaticamente.",
+                "pendingAll": "As chaves de {{name}} não recebem mensagens até que as suas decisões de confiança de uma versão anterior sejam transferidas. Até lá não pode enviar mensagens. É tentado de novo automaticamente.",
                 "review": "Rever chaves"
             },
             "plaintextForced": "Encryption disabled",
