@@ -3522,6 +3522,8 @@ export class MAM extends BaseModule {
   /** Bound concurrent archive walks so many links in one room cannot flood the server. */
   private async acquirePreviewWalkSlot(signal?: AbortSignal): Promise<() => void> {
     while (this.previewWalkActive >= PREVIEW_WALK_MAX_CONCURRENT) {
+      // An abort event does not replay, so never enqueue (or requeue after losing a woken slot) when already aborted.
+      signal?.throwIfAborted()
       await new Promise<void>((resolve, reject) => {
         const wake = () => { signal?.removeEventListener('abort', onAbort); resolve() }
         const onAbort = () => {

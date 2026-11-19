@@ -340,6 +340,52 @@ describe('linked room message lookup', () => {
     expect(reconcile).not.toHaveBeenCalled()
   })
 
+  // Intent: FLM-323 review — a woken caller that aborts and loses its slot to a competitor cancels promptly.
+  it('rejects a woken aborted waiter whose slot was taken by a competing walk', async () => {
+    type Slots = { acquirePreviewWalkSlot(signal?: AbortSignal): Promise<() => void> }
+    const slots = harness().mam as unknown as Slots
+    const releaseA = await slots.acquirePreviewWalkSlot()
+    const releaseB = await slots.acquirePreviewWalkSlot()
+    const controller = new AbortController()
+    const remove = controller.signal.removeEventListener.bind(controller.signal)
+    vi.spyOn(controller.signal, 'removeEventListener').mockImplementation((...args: Parameters<typeof remove>) => { remove(...args); controller.abort() })
+    const waiting = slots.acquirePreviewWalkSlot(controller.signal).then(() => 'acquired', () => 'aborted')
+    releaseA() // wakes the waiter, which aborts before it resumes
+    const releaseCompetitor = await slots.acquirePreviewWalkSlot() // takes the freed slot first
+    expect(await Promise.race([waiting, new Promise(resolve => setTimeout(() => resolve('still queued'), 50))])).toBe('aborted')
+    // The competing walks still hold their slots: one more acquirer must wait.
+    const extra = slots.acquirePreviewWalkSlot().then(release => { release(); return 'acquired' })
+    expect(await Promise.race([extra, new Promise(resolve => setTimeout(() => resolve('waiting'), 20))])).toBe('waiting')
+    releaseB(); releaseCompetitor()
+    expect(await extra).toBe('acquired')
+  })
+
+  // Intent: FLM-323 review — a queued walk is cancelled when the session changes while it waits.
+  it('does not query or reconcile for a queued walk whose session was replaced while the room stays joined', async () => {
+    const h = harness()
+    const serve = h.sendIQ.getMockImplementation()!
+    const gates: Array<() => void> = []
+    let walks = 0
+    h.sendIQ.mockImplementation(async iq => {
+      if (iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') !== '100') return serve(iq)
+      walks++
+      await new Promise<void>(resolve => gates.push(resolve))
+      return serve(iq)
+    })
+    const running = [10, 11].map(index => h.mam.readRoomMessagePreview(ROOM, rows[index].stanzaId).catch(() => 'cancelled'))
+    const queued = h.mam.readRoomMessagePreview(ROOM, rows[12].stanzaId).then(() => 'resolved', () => 'cancelled')
+    for (let turn = 0; turn < 40; turn++) await new Promise(resolve => setTimeout(resolve, 0))
+    expect(walks).toBe(2)
+    setStorageScopeJid('carol@example.org')
+    expect(roomStore.getState().rooms.get(ROOM)?.joined).toBe(true)
+    const reconcile = vi.spyOn(roomStore.getState(), 'reconcileHistoryMessages')
+    for (let turn = 0; turn < 60; turn++) { gates.splice(0).forEach(open => open()); await new Promise(resolve => setTimeout(resolve, 0)) }
+    await Promise.all(running)
+    expect(await queued).toBe('cancelled')
+    expect(walks).toBe(2)
+    expect(reconcile).not.toHaveBeenCalled()
+  })
+
   it('does not confuse a deleted quote with a failed archive request', async () => {
     await cache.saveRoomMessages([{ ...rows[40], isRetracted: true, body: '' }])
     expect(await harness().mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toEqual({ kind: 'absent' })
