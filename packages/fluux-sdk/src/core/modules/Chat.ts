@@ -248,10 +248,19 @@ export class Chat extends BaseModule {
     context: MessageEnvelopeContext = {},
   ): { handled: boolean; message?: Message | RoomMessage | null } {
     const { isCarbonCopy = false, isSentCarbon = false, delayEl } = context
-    const carbonSent = stanza.getChild('sent', NS_CARBONS)
-    const carbonReceived = stanza.getChild('received', NS_CARBONS)
+    // XEP-0280 §7/§11: a carbon is trusted only when its wrapper comes from the
+    // user's own bare address (or has no sender, as a server may omit it), and a
+    // carbon is never unwrapped from inside another carbon. Anything else would
+    // let any account forge, retract or edit messages by wrapping them.
+    const carbonSent = isCarbonCopy ? undefined : stanza.getChild('sent', NS_CARBONS)
+    const carbonReceived = isCarbonCopy ? undefined : stanza.getChild('received', NS_CARBONS)
 
     if (carbonSent || carbonReceived) {
+      const outerFrom = stanza.attrs.from as string | undefined
+      const ownBare = getBareJid(this.deps.getCurrentJid() ?? '').toLowerCase()
+      if (outerFrom && (!ownBare || outerFrom.toLowerCase() !== ownBare)) {
+        return { handled: true }
+      }
       const forwarded = (carbonSent || carbonReceived)!.getChild('forwarded', NS_FORWARD)
       const forwardedMessage = forwarded?.getChild('message')
       if (forwardedMessage) {
