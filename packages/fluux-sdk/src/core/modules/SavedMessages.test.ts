@@ -135,4 +135,14 @@ describe('SavedMessages fetch', () => {
     expect(await new SavedMessages(makeDeps(sendIQ)).fetchMaxItems()).toBe(256)
     expect(await new SavedMessages(makeDeps(vi.fn().mockRejectedValue(new Error('x')))).fetchMaxItems()).toBeUndefined()
   })
+
+  // Seen live on ejabberd: the node's configuration form says `max`, not a number.
+  it('assumes the smallest common service limit when the configuration only says max', async () => {
+    const form = xml('x', { xmlns: 'jabber:x:data', type: 'form' },
+      xml('field', { var: 'pubsub#max_items' }, xml('value', {}, 'max')))
+    const sendIQ = vi.fn().mockResolvedValue(xml('iq', { type: 'result' },
+      xml('pubsub', { xmlns: `${NS_PUBSUB}#owner` }, xml('configure', { node: NS_SAVED_MESSAGES }, form))))
+    expect(await new SavedMessages(makeDeps(sendIQ)).fetchMaxItems()).toBe(256)
+  })
 })
+

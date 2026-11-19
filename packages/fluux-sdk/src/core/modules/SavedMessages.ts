@@ -101,6 +101,9 @@ export function parseSavedItems(itemsEl: Element, ownBareJid: string | null): Sa
   return { upserts, removedIds }
 }
 
+/** The item limit assumed when a node's configuration only says `max`. */
+export const ASSUMED_SERVICE_MAX_ITEMS = 256
+
 /**
  * Fluux saved messages: private PEP node `urn:xmpp:fluux:saved-messages:0`,
  * one item per saved message holding a XEP-0297 forwarded copy.
@@ -149,7 +152,11 @@ export class SavedMessages {
       )
       const form = result.getChild('pubsub', `${NS_PUBSUB}#owner`)?.getChild('configure')?.getChild('x', NS_DATA_FORMS)
       const field = form?.getChildren('field').find((f: Element) => f.attrs.var === 'pubsub#max_items')
-      const value = Number.parseInt(field?.getChildText('value') ?? '', 10)
+      const raw = field?.getChildText('value') ?? ''
+      // `max` means "whatever the service allows" and says nothing of the number. Assume the smallest common
+      // service default (Prosody's `pep_max_items`), so a save is never sent that could push an item out.
+      if (raw === 'max') return ASSUMED_SERVICE_MAX_ITEMS
+      const value = Number.parseInt(raw, 10)
       return Number.isFinite(value) && value > 0 ? value : undefined
     } catch {
       return undefined
