@@ -929,8 +929,20 @@
         },
         "encryption": {
             "experimental": "Kísérleti",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Minden csevegés egy titkosítási módszert használ. Ha mindkettő elérhető, az OMEMO élvez elsőbbséget az OpenPGP-vel szemben, kivéve ha egy csevegés meghatározott módszerre van állítva.",
+                "stateOff": "Ki",
+                "stateOn": "Be",
+                "stateWaiting": "Be, kapcsolatra vár",
+                "stateNeedsAttention": "Figyelmet igényel",
+                "omemoNotUsed": "Még nincs használatban",
+                "omemoNotUsedDevices": "Még nincs használatban · eszközök a fiókján: {{devices}}",
+                "omemoDescription": "Tekintse át és távolítsa el a fiókjában regisztrált OMEMO-eszközöket."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "Az Ön OMEMO-eszközei",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

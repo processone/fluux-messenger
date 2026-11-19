@@ -1,7 +1,7 @@
 // The account's OMEMO devices, as other apps published them, with a confirmed Remove.
 // Reads and edits the two device lists (OMEMO 2 and legacy) directly: it registers no plugin, saves no trust and
 // makes Fluux no device, so it works before OMEMO is turned on and stores nothing on this device.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Smartphone, Trash2 } from 'lucide-react'
 import { useConnection, useXMPPContext, getBareJid } from '@fluux/sdk'
@@ -23,8 +23,8 @@ const PROTOCOLS: readonly DeviceListProtocol[] = ['omemo2', 'legacy']
 type LoadState = { kind: 'loading' } | { kind: 'loaded'; lists: OwnDeviceLists } | { kind: 'failed' }
 
 /** The 64 hex characters of a key in groups of 8, so they can be compared by eye. */
-function groupFingerprint(fp: string): string {
-  return fp.match(/.{1,8}/g)?.join(' ') ?? fp
+function groupFingerprint(fp: string): string[] {
+  return fp.match(/.{1,8}/g) ?? [fp]
 }
 
 export function OmemoDevicesSection() {
@@ -103,9 +103,15 @@ export function OmemoDevicesSection() {
                 <p className="mt-0.5 text-xs text-fluux-muted">
                   {t('settings.encryption.omemoDevices.deviceId', { id: device.id })}
                 </p>
-                <p className="mt-1 text-xs font-mono text-fluux-muted break-all">
+                <p className="mt-1 text-xs font-mono text-fluux-muted">
                   {device.fingerprint
-                    ? groupFingerprint(device.fingerprint)
+                    ? groupFingerprint(device.fingerprint).map((group, i) => (
+                        // A line breaks only between groups, never inside one.
+                        <Fragment key={i}>
+                          {i > 0 && ' '}
+                          <span className="whitespace-nowrap">{group}</span>
+                        </Fragment>
+                      ))
                     : t('settings.encryption.omemoDevices.noFingerprint')}
                 </p>
               </div>
@@ -114,7 +120,7 @@ export function OmemoDevicesSection() {
                 onClick={() => setPending({ protocol, device })}
                 disabled={removing}
                 aria-label={t('settings.encryption.omemoDevices.removeDevice', { name: deviceName(device) })}
-                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-error rounded transition-colors disabled:opacity-50"
+                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors disabled:opacity-50"
               >
                 <Trash2 className="size-3.5" />
                 {t('settings.encryption.omemoDevices.remove')}
@@ -164,7 +170,6 @@ export function OmemoDevicesSection() {
       <SettingsSection
         title={t('settings.encryption.omemoDevices.title')}
         description={t('settings.encryption.omemoDevices.description')}
-        className="mt-8"
       >
         {body}
       </SettingsSection>

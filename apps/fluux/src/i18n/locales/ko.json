@@ -797,8 +797,20 @@
         },
         "encryption": {
             "experimental": "실험적",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "각 대화는 하나의 암호화 방식을 사용합니다. 둘 다 사용할 수 있으면 대화에 특정 방식을 지정하지 않는 한 OMEMO가 OpenPGP보다 우선합니다.",
+                "stateOff": "꺼짐",
+                "stateOn": "켜짐",
+                "stateWaiting": "켜짐, 연결 대기 중",
+                "stateNeedsAttention": "확인 필요",
+                "omemoNotUsed": "아직 사용 안 함",
+                "omemoNotUsedDevices": "아직 사용 안 함 · 계정의 기기: {{devices}}",
+                "omemoDescription": "계정에 등록된 OMEMO 기기를 확인하고 제거합니다."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "내 OMEMO 기기",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

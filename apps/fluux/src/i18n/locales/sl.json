@@ -935,8 +935,20 @@
         },
         "encryption": {
             "experimental": "Eksperimentalno",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Vsak klepet uporablja eno metodo šifriranja. Če sta na voljo obe, ima OMEMO prednost pred OpenPGP, razen če je klepet nastavljen na določeno metodo.",
+                "stateOff": "Izklopljeno",
+                "stateOn": "Vklopljeno",
+                "stateWaiting": "Vklopljeno, čaka na povezavo",
+                "stateNeedsAttention": "Zahteva pozornost",
+                "omemoNotUsed": "Še ni v uporabi",
+                "omemoNotUsedDevices": "Še ni v uporabi · naprave v vašem računu: {{devices}}",
+                "omemoDescription": "Preglejte in odstranite naprave OMEMO, registrirane v vašem računu."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "Vaše naprave OMEMO",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

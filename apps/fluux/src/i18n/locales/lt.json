@@ -933,8 +933,20 @@
         },
         "encryption": {
             "experimental": "Eksperimentinis",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Kiekvienas pokalbis naudoja vieną šifravimo metodą. Kai pasiekiami abu, OMEMO teikiama pirmenybė prieš OpenPGP, nebent pokalbiui nustatytas konkretus metodas.",
+                "stateOff": "Išjungta",
+                "stateOn": "Įjungta",
+                "stateWaiting": "Įjungta, laukiama ryšio",
+                "stateNeedsAttention": "Reikia dėmesio",
+                "omemoNotUsed": "Dar nenaudojama",
+                "omemoNotUsedDevices": "Dar nenaudojama · įrenginių jūsų paskyroje: {{devices}}",
+                "omemoDescription": "Peržiūrėkite ir pašalinkite jūsų paskyroje užregistruotus OMEMO įrenginius."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "Jūsų OMEMO įrenginiai",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

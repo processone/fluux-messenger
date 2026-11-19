@@ -931,8 +931,20 @@
         },
         "encryption": {
             "experimental": "Eksperimentaalne",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Iga vestlus kasutab ühte krüptimismeetodit. Kui mõlemad on saadaval, eelistatakse OMEMO-t OpenPGP-le, välja arvatud juhul, kui vestlus on seatud kindlale meetodile.",
+                "stateOff": "Väljas",
+                "stateOn": "Sees",
+                "stateWaiting": "Sees, ootab ühendust",
+                "stateNeedsAttention": "Vajab tähelepanu",
+                "omemoNotUsed": "Pole veel kasutusel",
+                "omemoNotUsedDevices": "Pole veel kasutusel · seadmeid teie kontol: {{devices}}",
+                "omemoDescription": "Vaadake üle ja eemaldage teie kontole registreeritud OMEMO seadmed."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "Teie OMEMO seadmed",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

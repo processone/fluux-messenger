@@ -25,6 +25,11 @@ export const changelog: ChangelogEntry[] = [
         'Settings → Encryption now lists the OMEMO devices on your account, both OMEMO 2 and legacy, with each device\'s name and key fingerprint. You can remove a device after confirming; the other devices and their names stay as they are. Fluux does not use OMEMO itself yet, so this only reads and edits the list other apps keep on your server',
       ],
     }, {
+      type: 'changed',
+      items: [
+        'Settings → Encryption now opens an overview with a row for OpenPGP and one for OMEMO. Each method has its own screen with a back arrow: OpenPGP keeps its switch, key backup and key controls, and OMEMO shows your devices. In the device list, a key fingerprint now wraps only between its groups of eight characters, and Remove is no longer red',
+      ],
+    }, {
       type: 'fixed',
       items: [
         'When Fluux could not refresh your bookmarks after reconnecting, changing a room\'s bookmark, autojoin or notification setting no longer brings back an older room name, nickname, room password, notification setting or another XMPP app\'s settings',

@@ -929,8 +929,20 @@
         },
         "encryption": {
             "experimental": "Eksperimentel",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Hver chat bruger én krypteringsmetode. Når begge er tilgængelige, foretrækkes OMEMO frem for OpenPGP, medmindre en chat er sat til en bestemt metode.",
+                "stateOff": "Fra",
+                "stateOn": "Til",
+                "stateWaiting": "Til, venter på forbindelse",
+                "stateNeedsAttention": "Kræver opmærksomhed",
+                "omemoNotUsed": "Ikke i brug endnu",
+                "omemoNotUsedDevices": "Ikke i brug endnu · enheder på din konto: {{devices}}",
+                "omemoDescription": "Gennemse og fjern de OMEMO-enheder, der er registreret på din konto."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "Dine OMEMO-enheder",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

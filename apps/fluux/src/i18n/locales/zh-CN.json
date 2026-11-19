@@ -929,8 +929,20 @@
         },
         "encryption": {
             "experimental": "实验性",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "每个聊天使用一种加密方式。两种都可用时，优先使用 OMEMO 而非 OpenPGP，除非该聊天已指定某种方式。",
+                "stateOff": "关闭",
+                "stateOn": "开启",
+                "stateWaiting": "已开启，等待连接",
+                "stateNeedsAttention": "需要处理",
+                "omemoNotUsed": "尚未使用",
+                "omemoNotUsedDevices": "尚未使用 · 账户中的设备：{{devices}}",
+                "omemoDescription": "查看并移除账户中已注册的 OMEMO 设备。"
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "你的 OMEMO 设备",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

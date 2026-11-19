@@ -931,8 +931,20 @@
         },
         "encryption": {
             "experimental": "ניסיוני",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "כל צ׳אט משתמש בשיטת הצפנה אחת. כששתיהן זמינות, OMEMO עדיף על OpenPGP, אלא אם הצ׳אט הוגדר לשיטה מסוימת.",
+                "stateOff": "כבוי",
+                "stateOn": "פעיל",
+                "stateWaiting": "פעיל, ממתין לחיבור",
+                "stateNeedsAttention": "דורש תשומת לב",
+                "omemoNotUsed": "עדיין לא בשימוש",
+                "omemoNotUsedDevices": "עדיין לא בשימוש · מכשירים בחשבון שלך: {{devices}}",
+                "omemoDescription": "עיון והסרה של מכשירי OMEMO הרשומים בחשבון שלך."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "מכשירי ה-OMEMO שלך",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

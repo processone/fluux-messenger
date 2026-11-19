@@ -197,6 +197,15 @@ describe('useRouteSync', () => {
       })
       expect(result.current.sidebarView).toBe('settings')
       expect(result.current.settingsCategory).toBe('language')
+      expect(result.current.settingsSubPage).toBeNull()
+    })
+
+    it('reads the sub-page of /settings/:category/:subPage', () => {
+      const { result } = renderHook(() => useRouteSync(), {
+        wrapper: createWrapper(['/settings/encryption/openpgp']),
+      })
+      expect(result.current.settingsCategory).toBe('encryption')
+      expect(result.current.settingsSubPage).toBe('openpgp')
     })
   })
 
@@ -361,6 +370,24 @@ describe('useRouteSync', () => {
       })
 
       expect(currentPath).toBe('/settings/notifications')
+    })
+
+    it('navigateToSettings with a sub-page navigates to /settings/:category/:subPage', () => {
+      let currentPath = '/messages'
+      const wrapper = ({ children }: { children: ReactNode }) => (
+        <MemoryRouter initialEntries={['/messages']}>
+          {children}
+          <LocationCapture onPathChange={(p) => (currentPath = p)} />
+        </MemoryRouter>
+      )
+
+      const { result } = renderHook(() => useRouteSync(), { wrapper })
+
+      act(() => {
+        result.current.navigateToSettings('encryption', { subPage: 'omemo' })
+      })
+
+      expect(currentPath).toBe('/settings/encryption/omemo')
     })
 
     it('navigateUp goes from detail to list within current tab', () => {

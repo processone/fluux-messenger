@@ -19,3 +19,4 @@ export {
   resolveSettingsCategory,
   DEFAULT_SETTINGS_CATEGORY,
 } from './types'
+export { ENCRYPTION_SUB_PAGES, ENCRYPTION_SUB_PAGE_LABEL_KEYS, resolveEncryptionSubPage, type EncryptionSubPage } from './encryptionPages'

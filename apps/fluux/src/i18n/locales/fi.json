@@ -929,8 +929,20 @@
         },
         "encryption": {
             "experimental": "Kokeellinen",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Jokainen keskustelu käyttää yhtä salausmenetelmää. Kun molemmat ovat käytettävissä, OMEMO on ensisijainen OpenPGP:hen nähden, ellei keskustelulle ole asetettu tiettyä menetelmää.",
+                "stateOff": "Pois",
+                "stateOn": "Päällä",
+                "stateWaiting": "Päällä, odottaa yhteyttä",
+                "stateNeedsAttention": "Vaatii huomiota",
+                "omemoNotUsed": "Ei vielä käytössä",
+                "omemoNotUsedDevices": "Ei vielä käytössä · tilisi laitteet: {{devices}}",
+                "omemoDescription": "Tarkastele ja poista tilillesi rekisteröidyt OMEMO-laitteet."
+            },
             "omemoDevices": {
-                "title": "OMEMO devices",
+                "title": "OMEMO-laitteesi",
                 "description": "Devices that other apps registered on your account for OMEMO. Fluux does not use OMEMO yet; this list only lets you review and remove them.",
                 "offline": "Connect to see your OMEMO devices.",
                 "loading": "Loading devices…",

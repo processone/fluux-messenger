@@ -933,8 +933,20 @@
         },
         "encryption": {
             "experimental": "Sperimentale",
+            "openpgpName": "OpenPGP",
+            "omemoName": "OMEMO",
+            "overview": {
+                "intro": "Ogni chat usa un solo metodo di cifratura. Quando sono disponibili entrambi, OMEMO ha la precedenza su OpenPGP, a meno che una chat sia impostata su un metodo specifico.",
+                "stateOff": "Disattivato",
+                "stateOn": "Attivo",
+                "stateWaiting": "Attivo, in attesa di connessione",
+                "stateNeedsAttention": "Richiede attenzione",
+                "omemoNotUsed": "Non ancora usato",
+                "omemoNotUsedDevices": "Non ancora usato · dispositivi sul tuo account: {{devices}}",
+                "omemoDescription": "Controlla e rimuovi i dispositivi OMEMO registrati sul tuo account."
+            },
             "omemoDevices": {
-                "title": "Dispositivi OMEMO",
+                "title": "I tuoi dispositivi OMEMO",
                 "description": "Dispositivi che altre app hanno registrato sul tuo account per OMEMO. Fluux non usa ancora OMEMO; questo elenco serve solo a controllarli e rimuoverli.",
                 "offline": "Connettiti per vedere i tuoi dispositivi OMEMO.",
                 "loading": "Caricamento dei dispositivi…",
