@@ -3509,6 +3509,14 @@ test.describe('Insertion drift while scrolled up', () => {
     // Rows of one time sort by sender, then id: this id puts the tall message before the arrival.
     const tallId = 'a-tall-message'
     const list = page.locator('[data-message-list]').first()
+    // The hold for the tall message's own arrival keeps rewriting the reader's place, and on a slow
+    // engine its re-assert loop does not converge, so the list does not hold still here. settle()
+    // would wait the whole hold out, after which the row is no longer rendered. This helper acts
+    // during the hold, after the fixed settle time.
+    const settleDuringHold = async () => {
+      await page.waitForTimeout(SETTLE_MS)
+      await syncEngineGeometry(page)
+    }
     await gateOlderLoad(page, kind)
     await settleHover(page, 'none')
 
@@ -3528,14 +3536,14 @@ test.describe('Insertion drift while scrolled up', () => {
         (_, i) => `line ${i + 1} of a long message`,
       ).join('\n'),
     })
-    await settle(page)
+    await settleDuringHold()
     // Dispatched, not clicked: a click first scrolls the button into view, and in a virtualized
     // room the hold for the tall message's own arrival scrolls back, so the row never settles.
     await page
       .locator(`[data-message-list] .message-row[data-message-id="${tallId}"]`)
       .getByRole('button', { name: 'Show more' })
       .dispatchEvent('click')
-    await settle(page)
+    await settleDuringHold()
     await syncEngineGeometry(page)
 
     const readTall = () => list.evaluate((element, id) => {
@@ -3557,7 +3565,7 @@ test.describe('Insertion drift while scrolled up', () => {
         scroller.scrollTop += by
         scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
       }, delta)
-      await settle(page)
+      await settleDuringHold()
       await syncEngineGeometry(page)
     }
 
