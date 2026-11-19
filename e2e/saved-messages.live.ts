@@ -1139,3 +1139,99 @@ test('logging out with local data cleared removes a save still waiting on this d
   await emptyNode(reader)
   await one.context.close(); await readerBob.stop(); await reader.stop()
 })
+
+test('a saved room message is not continued once a newer saved message was opened instead', async ({ browser }) => {
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const room = `cancel${stamp}@conference.localhost`
+  const text = `Said in the room ${stamp}`
+  const chatText = `Said in the chat ${stamp}`
+  const BOOKMARKS = 'urn:xmpp:bookmarks:1'
+  const field = (name: string, value: string) => xml('field', { var: name }, xml('value', {}, value))
+  const options = xml('publish-options', {}, xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+    xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options')),
+    field('pubsub#persist_items', 'true'), field('pubsub#access_model', 'whitelist'), field('pubsub#max_items', 'max'), field('pubsub#send_last_published_item', 'never')))
+  const bookmark = () => reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
+    xml('publish', { node: BOOKMARKS }, xml('item', { id: room }, xml('conference', { xmlns: BOOKMARKS, name: 'Proof room', autojoin: 'true' }, xml('nick', {}, 'alice')))), options)))
+  const unbookmark = () => reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
+    xml('retract', { node: BOOKMARKS, notify: 'true' }, xml('item', { id: room })))))
+
+  // The room exists, with one message in it, before the first device joins.
+  await bob.c.send(xml('presence', { to: `${room}/bob` }, xml('x', { xmlns: 'http://jabber.org/protocol/muc' })))
+  await new Promise(resolve => setTimeout(resolve, 1500))
+  await bob.c.send(xml('message', { to: room, type: 'groupchat', id: randomUUID() }, xml('body', {}, text)))
+  await bookmark()
+
+  const one = await connect(browser)
+  await one.page.getByRole('button', { name: 'Rooms' }).first().click()
+  await one.page.getByRole('complementary').getByText('Proof room', { exact: true }).first().click()
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible({ timeout: 30_000 })
+  await saveMessage(one, text)
+  await nodeHolds(reader, 1)
+  await bob.say('alice', chatText)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: chatText })).toBeVisible({ timeout: 30_000 })
+  await saveMessage(one, chatText)
+  await nodeHolds(reader, 2)
+
+  // The bookmark goes away: a device that connects now has not joined, and does not list, this room.
+  await unbookmark()
+  const two = await connect(browser)
+  await openSaved(two)
+  await expect(savedRow(two, text)).toBeVisible()
+  await savedRow(two, text).click()
+  // The room is shown but not joined, with the join still to come.
+  await expect(two.page).toHaveURL(/\/rooms\//)
+  await expect(two.page.getByRole('button', { name: 'Join room to participate' })).toBeVisible()
+  const roomUrl = two.page.url()
+  // A newer open (another saved message) replaces it before the person joins.
+  await openSaved(two)
+  await expect(savedRow(two, chatText)).toBeVisible()
+  await savedRow(two, chatText).click()
+  await expect(two.page).not.toHaveURL(/\/rooms\//, { timeout: 30_000 })
+  await expect(two.page.locator('.message-highlight').filter({ hasText: chatText })).toBeInViewport({ timeout: 30_000 })
+  const chatUrl = two.page.url()
+  // The person now joins that room on their own: the abandoned open must not resume (no jump, no highlight).
+  // Back through the app's own history, so no page reload clears what the app remembers.
+  for (let back = 0; back < 4 && two.page.url() !== roomUrl; back++) { await two.page.goBack(); await two.page.waitForTimeout(500) }
+  expect(two.page.url()).toBe(roomUrl)
+  await two.page.getByRole('button', { name: 'Join room to participate' }).click()
+  const join = two.page.getByRole('button', { name: /^Join$/ })
+  if (await join.isVisible({ timeout: 3000 }).catch(() => false)) await join.click()
+  await expect(two.page.locator('[data-message-body]').filter({ hasText: text }).first()).toBeVisible({ timeout: 30_000 })
+  await two.page.waitForTimeout(6000)
+  expect(two.page.url()).toBe(roomUrl)
+  expect(chatUrl).not.toBe(roomUrl)
+  await expect(two.page.locator('.message-highlight')).toHaveCount(0)
+  await shot(two.page, 'room-open-superseded')
+  await emptyNode(reader)
+  await one.context.close(); await two.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('a saved message the archive answers it does not hold says it is no longer available, not that the lookup failed', async ({ browser }) => {
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const text = `Gone from the archive ${stamp}`
+  const field = (name: string, value: string) => xml('field', { var: name }, xml('value', {}, value))
+  const options = xml('publish-options', {}, xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+    xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options')),
+    field('pubsub#persist_items', 'true'), field('pubsub#access_model', 'whitelist'), field('pubsub#max_items', '256'), field('pubsub#send_last_published_item', 'never')))
+  // An item for a message the archive has never held (the other device saved it, then it disappeared).
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('publish', { node: NODE },
+    xml('item', { id: `gone${stamp}` }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
+      xml('delay', { xmlns: 'urn:xmpp:delay', stamp: new Date(Date.now() - 3_600_000).toISOString() }),
+      xml('message', { xmlns: 'jabber:client', from: 'bob@localhost/x', to: 'alice@localhost', type: 'chat', id: `gone-${stamp}` }, xml('body', {}, text), xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', id: `1700000000000000${stamp.length}`, by: 'alice@localhost' })))))), options)))
+  const one = await connect(browser)
+  await openSaved(one)
+  await expect(savedRow(one, text)).toBeVisible()
+  await savedRow(one, text).click()
+  // The row's own status, not the opener's toast, which carries the same words.
+  await expect(savedRow(one, text).getByRole('status')).toContainText(/no longer available/i, { timeout: 30_000 })
+  await expect(savedRow(one, text).getByRole('status')).not.toContainText(/Could not load/i)
+  await expect(one.page).toHaveURL(/\/saved/)
+  await shot(one.page, 'original-confirmed-gone')
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
