@@ -143,7 +143,7 @@ test.describe('message right-click menu', () => {
     await expect(menu(page)).toHaveCount(0)
   })
 
-  // WebKit fires a window blur before the focus when Tab moves between shadow-DOM controls; the interaction hold waits for that focus.
+  // The emoji picker stops Tab before it bubbles, so the focus trap listens in the capture phase to keep Tab inside the menu.
   test('Tab in the emoji picker moves focus inside it and keeps the menu open', async ({ page }) => {
     await setup(page, [{ id: 'tab-a', from: 'peer', body: 'Tab target message' }])
     const body = row(page, 'tab-a')
