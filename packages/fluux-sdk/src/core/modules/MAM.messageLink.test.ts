@@ -250,7 +250,7 @@ describe('linked room message lookup', () => {
       const res = await serve(iq)
       if (reply) {
         const from = start ? history.filter(row => row.timestamp.getTime() >= Date.parse(start)).length : history.length
-        res.getChild('fin', MAM_NS)!.getChild('set', RSM_NS)!.append(xml('count', {}, String(from)))
+        res.getChild('fin', MAM_NS)!.getChild('set', RSM_NS)!.children.push(xml('count', {}, String(from)))
       }
       return res
     })
