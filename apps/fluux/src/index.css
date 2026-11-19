@@ -828,7 +828,7 @@ em-emoji-picker {
   background: var(--scrollbar-thumb);
 }
 
-:root[data-scrollbars="always"] {
+:root[data-scrollbars="always"] * {
   --fluux-scroll-reveal: 1;
 }
 

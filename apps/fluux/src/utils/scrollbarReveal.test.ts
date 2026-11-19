@@ -46,15 +46,64 @@ describe('installScrollbarReveal', () => {
     expect(box.hasAttribute('data-scrolling')).toBe(false)
   })
 
-  it('reveals while the pointer is held on the strip (a bar drag)', () => {
+  /** Give the box a right-side (or left-side) 6px strip. */
+  const giveStrip = (side: 'right' | 'left' = 'right') => {
     Object.defineProperty(box, 'offsetWidth', { value: 106, configurable: true })
     Object.defineProperty(box, 'clientWidth', { value: 100, configurable: true })
+    Object.defineProperty(box, 'clientLeft', { value: side === 'left' ? 6 : 0, configurable: true })
     box.getBoundingClientRect = () => ({ right: 106, bottom: 100, left: 0, top: 0, width: 106, height: 100, x: 0, y: 0, toJSON() {} })
-    box.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 104, clientY: 20 }))
-    expect(box.hasAttribute('data-scrolling')).toBe(true)
+  }
+  const pointer = (type: string, clientX: number, extra: object = {}) =>
+    box.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX, clientY: 20, ...extra }))
+
+  it('keeps the thumb while a drag is paused, then hides 1s after release', () => {
+    giveStrip()
+    pointer('pointerdown', 104)
     vi.advanceTimersByTime(5000)
-    box.dispatchEvent(new Event('scroll'))
     expect(box.hasAttribute('data-scrolling')).toBe(true)
+    pointer('pointerup', 104)
+    vi.advanceTimersByTime(REVEAL_HIDE_DELAY_MS)
+    expect(box.hasAttribute('data-scrolling')).toBe(false)
+  })
+
+  it('keeps the thumb while the pointer rests on the strip, and hides it 1s after leaving', () => {
+    giveStrip()
+    pointer('pointermove', 104)
+    vi.advanceTimersByTime(5000)
+    expect(box.hasAttribute('data-scrolling')).toBe(true)
+    pointer('pointermove', 50)
+    vi.advanceTimersByTime(REVEAL_HIDE_DELAY_MS)
+    expect(box.hasAttribute('data-scrolling')).toBe(false)
+  })
+
+  it('finds a left-side strip and ignores the content area', () => {
+    giveStrip('left')
+    pointer('pointermove', 50)
+    expect(box.hasAttribute('data-scrolling')).toBe(false)
+    pointer('pointermove', 3)
+    expect(box.hasAttribute('data-scrolling')).toBe(true)
+  })
+
+  it('does not reveal for an ordinary click or an unrelated key', () => {
+    pointer('pointerup', 50)
+    pointer('click', 50)
+    box.dispatchEvent(new Event('scroll'))
+    expect(box.hasAttribute('data-scrolling')).toBe(false)
+    box.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }))
+    box.dispatchEvent(new Event('scroll'))
+    expect(box.hasAttribute('data-scrolling')).toBe(false)
+  })
+
+  it('keeps following a touch fling that outlasts the intent window', () => {
+    box.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    box.dispatchEvent(new Event('touchend', { bubbles: true }))
+    for (let i = 0; i < 10; i++) {
+      vi.advanceTimersByTime(USER_INTENT_MS - 50)
+      box.dispatchEvent(new Event('scroll'))
+      expect(box.hasAttribute('data-scrolling')).toBe(true)
+    }
+    vi.advanceTimersByTime(REVEAL_HIDE_DELAY_MS)
+    expect(box.hasAttribute('data-scrolling')).toBe(false)
   })
 
   it('removes its attribute and listeners on uninstall', () => {

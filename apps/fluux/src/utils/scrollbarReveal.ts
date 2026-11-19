@@ -48,86 +48,134 @@ function scrollBox(target: EventTarget | null): HTMLElement | null {
   return null
 }
 
-/** Whether a pointer position is over the box's own scroll bar strip. */
-function overStrip(el: HTMLElement, e: PointerEvent | MouseEvent): boolean {
+/**
+ * Whether a pointer is over the box's own scroll bar strip, on either side.
+ * Mirrors the strip geometry of useScrollContainerBinding: the strip is what
+ * lies between the border edge and the client area, so borders are excluded and
+ * a left-side bar (RTL) is found as well as a right-side one.
+ */
+function overStrip(el: HTMLElement, e: MouseEvent): boolean {
+  if (e.target !== el) return false
   const r = el.getBoundingClientRect()
-  const sw = el.offsetWidth - el.clientWidth
-  const sh = el.offsetHeight - el.clientHeight
-  return (sw > 0 && e.clientX >= r.right - sw - el.clientLeft) || (sh > 0 && e.clientY >= r.bottom - sh)
+  const style = getComputedStyle(el)
+  const bl = parseFloat(style.borderLeftWidth) || 0
+  const br = parseFloat(style.borderRightWidth) || 0
+  const bb = parseFloat(style.borderBottomWidth) || 0
+  const left = r.left + el.clientLeft
+  const right = left + el.clientWidth
+  const top = r.top + el.clientTop
+  const bottom = top + el.clientHeight
+  const inY = e.clientY >= top && e.clientY < bottom
+  const inX = e.clientX >= left && e.clientX < right
+  return (
+    (inY && ((e.clientX >= r.left + bl && e.clientX < left) || (e.clientX >= right && e.clientX < r.right - br))) ||
+    (inX && e.clientY >= bottom && e.clientY < r.bottom - bb)
+  )
 }
 
 export function installScrollbarReveal(win: Window & typeof globalThis = window): () => void {
   const doc = win.document
   const timers = new Map<HTMLElement, number>()
-  let intentUntil = 0
-  let touching = false
-  let dragging = false
+  /** Boxes the user is scrolling: when the intent lapses, and whether scroll events renew it (touch fling). */
+  const intents = new Map<HTMLElement, { until: number; momentum: boolean }>()
+  /** The box whose strip the pointer rests on, and the box whose bar is being dragged. */
+  let hovered: HTMLElement | null = null
+  let held: HTMLElement | null = null
+  let touchBox: HTMLElement | null = null
 
-  const reveal = (el: HTMLElement) => {
-    el.setAttribute('data-scrolling', '')
+  const now = () => win.performance.now()
+  const scheduleHide = (el: HTMLElement) => {
     const prev = timers.get(el)
     if (prev !== undefined) win.clearTimeout(prev)
     timers.set(
       el,
       win.setTimeout(() => {
         timers.delete(el)
+        // A resting pointer on the strip or a paused drag keeps the thumb.
+        if (el === hovered || el === held) return
         el.removeAttribute('data-scrolling')
       }, REVEAL_HIDE_DELAY_MS),
     )
   }
-  const markIntent = () => {
-    intentUntil = win.performance.now() + USER_INTENT_MS
+  const reveal = (el: HTMLElement) => {
+    el.setAttribute('data-scrolling', '')
+    scheduleHide(el)
   }
-  const hasIntent = () => touching || dragging || win.performance.now() < intentUntil
+  const markIntent = (el: HTMLElement, momentum = false) => {
+    intents.set(el, { until: now() + USER_INTENT_MS, momentum })
+  }
+  const releaseHover = () => {
+    if (!hovered) return
+    const el = hovered
+    hovered = null
+    if (el.hasAttribute('data-scrolling')) scheduleHide(el)
+  }
 
   const onWheel = (e: WheelEvent) => {
-    markIntent()
     const el = scrollBox(e.target)
-    if (el) reveal(el)
+    if (!el) return
+    markIntent(el)
+    reveal(el)
   }
   const onKey = (e: KeyboardEvent) => {
-    if (NAV_KEYS.has(e.key)) markIntent()
+    if (!NAV_KEYS.has(e.key)) return
+    const el = scrollBox(e.target)
+    if (el) markIntent(el)
   }
-  const onTouchStart = () => {
-    touching = true
-    markIntent()
+  const onTouchStart = (e: TouchEvent) => {
+    touchBox = scrollBox(e.target)
+    if (touchBox) markIntent(touchBox, true)
   }
   const onTouchEnd = () => {
-    touching = false
-    markIntent()
+    if (touchBox) markIntent(touchBox, true)
+    touchBox = null
   }
   const onPointerDown = (e: PointerEvent) => {
     const el = e.target instanceof HTMLElement ? e.target : null
-    if (el && overStrip(el, e)) {
-      dragging = true
+    if (el && e.button === 0 && overStrip(el, e)) {
+      held = el
       reveal(el)
     }
   }
   const onPointerUp = () => {
-    dragging = false
-    markIntent()
+    const el = held
+    held = null
+    if (el && el.hasAttribute('data-scrolling')) scheduleHide(el)
   }
   const onPointerMove = (e: PointerEvent) => {
     if (e.pointerType === 'touch') return
     const el = e.target instanceof HTMLElement ? e.target : null
-    if (el && overStrip(el, e)) reveal(el)
+    if (el && overStrip(el, e)) {
+      if (hovered !== el) releaseHover()
+      hovered = el
+      reveal(el)
+    } else releaseHover()
+  }
+  const onPointerOut = (e: MouseEvent) => {
+    if (!e.relatedTarget) releaseHover()
   }
   const onScroll = (e: Event) => {
-    if (!hasIntent()) return
-    if (e.target instanceof HTMLElement) reveal(e.target)
+    const el = e.target
+    if (!(el instanceof HTMLElement)) return
+    const intent = intents.get(el)
+    if (el === held || (intent && intent.until > now())) {
+      if (intent?.momentum) markIntent(el, true)
+      reveal(el)
+    } else if (intent) intents.delete(el)
   }
 
   const opts = { capture: true, passive: true } as const
   const bindings: Array<[string, EventListener]> = [
     ['wheel', onWheel as EventListener],
     ['keydown', onKey as EventListener],
-    ['touchstart', onTouchStart],
+    ['touchstart', onTouchStart as EventListener],
     ['touchend', onTouchEnd],
     ['touchcancel', onTouchEnd],
     ['pointerdown', onPointerDown as EventListener],
     ['pointerup', onPointerUp],
     ['pointercancel', onPointerUp],
     ['pointermove', onPointerMove as EventListener],
+    ['pointerout', onPointerOut as EventListener],
     ['scroll', onScroll],
   ]
   for (const [type, fn] of bindings) doc.addEventListener(type, fn, opts)
@@ -153,6 +201,8 @@ export function installScrollbarReveal(win: Window & typeof globalThis = window)
       el.removeAttribute('data-scrolling')
     }
     timers.clear()
+    intents.clear()
+    hovered = held = touchBox = null
     doc.documentElement.removeAttribute('data-scrollbars')
   }
 }

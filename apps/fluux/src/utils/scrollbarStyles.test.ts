@@ -57,7 +57,7 @@ describe('scrollbar styles (index.css)', () => {
     expect(ruleFor(':root[data-scrollbars="always"] ::-webkit-scrollbar-thumb').decls.background).toBe(
       'var(--scrollbar-thumb)',
     )
-    expect(ruleFor(':root[data-scrollbars="always"]').decls['--fluux-scroll-reveal']).toBe('1')
+    expect(ruleFor(':root[data-scrollbars="always"] *').decls['--fluux-scroll-reveal']).toBe('1')
   })
 
   it('registers the reveal property as non-inherited', () => {
