@@ -127,7 +127,7 @@ export function ChatHeader({
 
       {/* Name and status — the name is intentionally not clickable; "View Profile" lives in the kebab menu */}
       <div className="flex-1 min-w-0">
-        <h2 className="font-semibold text-fluux-text truncate leading-tight">{name}</h2>
+        <h2 className="type-view-title text-fluux-text truncate !leading-tight">{name}</h2>
         <ConnectionStepSlot>
         <UpdateStatus scope={`chat:${jid}`} target={name}>
         {!isGroupChat && (

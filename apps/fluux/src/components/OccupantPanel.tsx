@@ -710,11 +710,11 @@ export function OccupantPanel({
             >
               <ArrowLeft className="size-5 rtl-mirror" />
             </button>
-            <h3 className="font-semibold text-fluux-text">{t('rooms.members')}</h3>
+            <h3 className="type-view-title text-fluux-text">{t('rooms.members')}</h3>
           </div>
         ) : (
           <>
-            <h3 className="font-semibold text-fluux-text">{t('rooms.members')}</h3>
+            <h3 className="type-view-title text-fluux-text">{t('rooms.members')}</h3>
             <Tooltip content={t('rooms.closePanel')} position="left">
               <button
                 type="button"

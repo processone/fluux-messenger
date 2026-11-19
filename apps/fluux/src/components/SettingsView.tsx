@@ -94,7 +94,7 @@ export function SettingsView({ onBack }: SettingsViewProps) {
           </button>
         )}
         {CategoryIcon && <CategoryIcon className="size-5 text-fluux-muted me-2" />}
-        <h2 className="font-semibold text-fluux-text">{categoryLabel}</h2>
+        <h2 className="type-view-title text-fluux-text">{categoryLabel}</h2>
       </div>
 
       {/* Content. Profile uses edge-to-edge hero (handles its own padding);

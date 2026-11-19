@@ -1032,7 +1032,7 @@ function ChatLayoutContent() {
     <div
       ref={containerRef}
       tabIndex={-1}
-      className="flex flex-col h-full bg-fluux-bg text-fluux-text no-focus-ring"
+      className="chrome-shell flex flex-col h-full bg-fluux-bg text-fluux-text no-focus-ring"
     >
       {/* Global side-effect hooks isolated from ChatLayout re-renders */}
       <GlobalEffects />
@@ -1044,7 +1044,7 @@ function ChatLayoutContent() {
       <AppBar />
 
       {/* Main content area */}
-      <div className={`flex flex-1 min-h-0 ${previewBack ? 'relative overflow-hidden' : ''}`}>
+      <div className={`chrome-frame flex flex-1 min-h-0 ${previewBack ? 'relative overflow-hidden' : ''}`}>
         {/* Left Sidebar - Conversations */}
         {/* Hidden on mobile when conversation or room is active, full width on mobile */}
         <div className={`${previewBack ? 'absolute inset-0 flex w-full' : adminHasMainContent ? 'flex w-auto' : hasActiveContent ? 'hidden md:flex w-full' : 'flex w-full'} md:w-auto`} inert={previewBack || undefined} aria-hidden={previewBack || undefined} data-testid="sidebar-pane">
@@ -1064,7 +1064,7 @@ function ChatLayoutContent() {
 
         {/* Main Content Area */}
         {/* Hidden on mobile when no conversation/room selected */}
-        <main ref={mobileMainRef} className={`${hasActiveContent ? 'flex' : 'hidden md:flex'} ${previewBack ? 'relative z-10 shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : mobileOccupants ? 'relative' : ''} flex-1 flex-col bg-fluux-chat min-w-0 min-h-0`}>
+        <main ref={mobileMainRef} className={`${hasActiveContent ? 'flex' : 'hidden md:flex'} ${previewBack ? 'relative z-10 shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : mobileOccupants ? 'relative' : ''} content-panel flex-1 flex-col bg-fluux-chat min-w-0 min-h-0`}>
           {sidebarView === 'settings' ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <SettingsView onBack={() => mainPane.back(handleSettingsBack)} />
@@ -1267,7 +1267,7 @@ function AdminEmptyState() {
       <div className="flex items-center px-4 py-3 border-b border-fluux-bg">
         <div className="flex items-center gap-2">
           <Server className="size-5 text-fluux-muted" />
-          <h2 className="font-semibold text-fluux-text">{t('admin.title')}</h2>
+          <h2 className="type-view-title text-fluux-text">{t('admin.title')}</h2>
         </div>
       </div>
 

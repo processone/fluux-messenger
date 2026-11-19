@@ -102,7 +102,7 @@ export function StrangerRequestPreviewView({
 
         {/* Conversation info */}
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-fluux-text truncate">
+          <div className="type-view-title text-fluux-text truncate !leading-tight">
             {displayName}
           </div>
           <div className="text-xs text-fluux-muted">

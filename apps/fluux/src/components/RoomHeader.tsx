@@ -146,7 +146,7 @@ export function RoomHeader({
           />
         </Tooltip>
         <div className="relative pointer-events-none min-w-0 [&_a]:pointer-events-auto">
-          <span aria-hidden="true" className="block font-semibold text-fluux-text truncate leading-tight">{room.name}</span>
+          <span aria-hidden="true" className="block type-view-title text-fluux-text truncate !leading-tight">{room.name}</span>
           <ConnectionStepSlot>
             <UpdateStatus scope={`room:${room.jid}`} target={room.name} visible={!covered}>
               {room.subject?.trim() ? renderTextWithLinks(room.subject) : room.jid}
