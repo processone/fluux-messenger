@@ -8,6 +8,7 @@ import {
   consoleStore,
   adminStore,
   blockingStore,
+  clearSavedLocalData,
   getBareJid,
   deleteFastToken,
   clearSearchIndex,
@@ -92,6 +93,8 @@ export async function clearLocalData(options: ClearLocalDataOptions = {}): Promi
     consoleStore.getState().reset()
     adminStore.getState().reset()
     blockingStore.getState().reset()
+    // Saved messages and their unsent queue are message text kept on this device too.
+    clearSavedLocalData(scopedJid, allAccounts)
     // Clear search index (IndexedDB)
     await clearSearchIndex()
     console.log('[Fluux] clearLocalData: stores reset')

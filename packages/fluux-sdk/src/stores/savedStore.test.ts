@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { savedStore, findSavedEntry } from './savedStore'
+import { savedStore, findSavedEntry, clearSavedLocalData } from './savedStore'
+import { noteRetractedIdentity, roomRetractionAliases, _clearRetractedIdentitiesForTesting } from '../utils/retractedIdentities'
 import type { SavedMessage } from '../core/types/saved'
 
 const entry = (id: string, extra: Partial<SavedMessage> = {}): SavedMessage => ({
@@ -139,5 +140,50 @@ describe('identity of saved messages', () => {
     expect(Object.keys(s().entries)).toEqual(['learned'])
     expect(s().pending.legacy).toBe('retract')
     expect(findSavedEntry(s().entries, legacy)?.id).toBe('learned')
+  })
+})
+
+describe('saved copies and the retraction ledger', () => {
+  beforeEach(() => { localStorage.clear(); s().reset(); _clearRetractedIdentitiesForTesting() })
+  const scope = { kind: 'room' as const, entityId: 'team@conference.example', accountScope: null }
+
+  it('clears the text of a retracted original that is fetched, notified or hydrated after the retraction', () => {
+    const note = (id: string) => noteRetractedIdentity(scope,
+      roomRetractionAliases({ roomJid: scope.entityId, id: `m-${id}`, from: 'team@conference.example/Alice', stanzaId: `s-${id}`, stanzaIdBy: scope.entityId } as never),
+      { from: 'team@conference.example/Alice', stanzaId: `s-${id}` }, 1)
+    note('a'); note('b')
+    s().reconcileFetch([entry('a')])
+    expect(s().entries.a.deleted).toBe(true)
+    expect(s().pending.a).toBe('publish')
+    s().applyNotify({ upserts: [entry('b')], removedIds: [] })
+    expect(s().entries.b?.deleted).toBe(true)
+  })
+})
+
+describe('two senders sharing a client-chosen id', () => {
+  beforeEach(() => { localStorage.clear(); s().reset() })
+
+  it('keeps one-to-one messages from different authors apart when only the origin id matches', () => {
+    const a = entry('a', { type: 'chat', conversationJid: 'juliet@capulet.example', from: 'juliet@capulet.example', stanzaId: undefined, stanzaIdBy: undefined, originId: 'same', messageId: 'm' })
+    const b = entry('b', { type: 'chat', conversationJid: 'juliet@capulet.example', from: 'romeo@montague.example', stanzaId: undefined, stanzaIdBy: undefined, originId: 'same', messageId: 'm' })
+    s().save(a)
+    expect(s().save(b)).toBe(true)
+    expect(Object.keys(s().entries).sort()).toEqual(['a', 'b'])
+    s().reconcileFetch([a, b])
+    expect(Object.keys(s().entries).sort()).toEqual(['a', 'b'])
+  })
+})
+
+describe('clearSavedLocalData', () => {
+  beforeEach(() => { localStorage.clear(); s().reset() })
+
+  it('forgets the list and the stored queue of one account, or of all', () => {
+    s().save(entry('a'))
+    localStorage.setItem('fluux-saved-pending:other@example.com', '{"pending":{},"entries":{}}')
+    clearSavedLocalData('romeo@montague.example', false)
+    expect(s().entries).toEqual({})
+    expect(localStorage.getItem('fluux-saved-pending:other@example.com')).not.toBeNull()
+    clearSavedLocalData(null, true)
+    expect(Object.keys(localStorage).filter((k) => k.startsWith('fluux-saved-pending'))).toEqual([])
   })
 })

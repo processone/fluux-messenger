@@ -1,6 +1,8 @@
 import { createStore } from 'zustand/vanilla'
 import { sameSavedMessage, savedCandidateKeys } from '../utils/savedMessageKeys'
-import { buildScopedStorageKey } from '../utils/storageScope'
+import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
+import { retractedAtForIdentity } from '../utils/retractedIdentities'
+import { getBareJid } from '../core/jid'
 import type { SavedIdentity } from '../utils/savedMessageKeys'
 import type { SavedMessage, SavedPendingOp } from '../core/types/saved'
 
@@ -18,6 +20,10 @@ export interface SavedState {
   entries: Record<string, SavedMessage>
   /** Operations not yet confirmed by the server, by item id. */
   pending: Record<string, SavedPendingOp>
+  /** Item ids the server is known to hold (fetched, notified or acknowledged), whatever this device has queued. */
+  remote: Record<string, true>
+  /** Entries removed here whose retract the server has not yet taken, kept to restore them if it refuses. */
+  removed: Record<string, SavedMessage>
   /** Bumped on every local change to an id's operation, so a late acknowledgement of an older one is ignored. */
   revisions: Record<string, number>
   /** True once a fetch was answered in this session; false means the list may be incomplete. */
@@ -28,14 +34,18 @@ export interface SavedState {
   hydrated: boolean
   /** The server refused to store the last entry (counts up so a view can react once per refusal). */
   refusals: number
+  /** Counts up when a stored copy of a message was durably changed (an edit or a deletion), so rows read it again. */
+  copyVersion: number
 
   /** Save an entry (replaces an entry naming the same message). Returns false at the server limit. */
   save: (entry: SavedMessage) => boolean
   remove: (id: string) => void
   /** The original was retracted or moderated: drop the text and republish. */
   markDeleted: (id: string) => void
-  /** Replace the list with an answered fetch, keeping pending operations and the ids in `keepCurrent` (changed since the fetch began). */
-  reconcileFetch: (entries: SavedMessage[], keepCurrent?: ReadonlySet<string>) => void
+  /** Replace the list with an answered fetch, keeping pending operations and every id changed since {@link beginFetch}. */
+  /** A fresh read of the node begins: its list is unknown until it lands, and changes from now on outrank its answer. */
+  beginFetch: () => void
+  reconcileFetch: (entries: SavedMessage[]) => void
   /** Apply a `+notify` event, leaving ids with a pending local operation alone. */
   applyNotify: (update: { upserts: SavedMessage[]; removedIds: string[] }) => void
   /** The server took (or no longer needs) the operation for this id. */
@@ -72,7 +82,7 @@ function writeQueue(state: Pick<SavedState, 'pending' | 'entries'>): void {
   } catch { /* storage unavailable: the queue stays in memory only */ }
 }
 
-const initial = { entries: {}, pending: {}, revisions: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false }
+const initial = { entries: {}, pending: {}, remote: {}, removed: {}, revisions: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false, copyVersion: 0 }
 
 /** Is this message already saved (by any of its identities)? */
 export function findSavedEntry(entries: Record<string, SavedMessage>, probe: SavedIdentity): SavedMessage | undefined {
@@ -99,15 +109,72 @@ function dedupe(entries: Record<string, SavedMessage>): { entries: Record<string
   return { entries: kept, weaker }
 }
 
+/** Ids changed since the current fetch began; null when none is in flight. */
+let changedDuringFetch: Set<string> | null = null
+const track = (id: string) => { changedDuringFetch?.add(id) }
+
+/**
+ * Whether the original of this entry was retracted or moderated, as the durable
+ * retraction ledger (validated, kept across restarts) knows. Covers a saved copy that
+ * arrives (fetched, notified, replayed) after the retraction was processed.
+ */
+function originalWasRetracted(entry: SavedMessage): boolean {
+  if (entry.deleted) return false
+  try {
+    const own = (record: { actorJid: string; actorOccupantId?: string; moderation?: unknown; stanzaId?: string; originId?: string }) => {
+      if (entry.stanzaId && record.stanzaId && entry.stanzaId !== record.stanzaId) return false
+      if (entry.originId && record.originId && entry.originId !== record.originId) return false
+      if (record.moderation) return true
+      if (record.actorOccupantId && entry.occupantId) return record.actorOccupantId === entry.occupantId
+      return entry.type === 'groupchat' ? record.actorJid === entry.from : getBareJid(record.actorJid) === getBareJid(entry.from)
+    }
+    const scope = { kind: entry.type === 'groupchat' ? 'room' as const : 'chat' as const, entityId: entry.conversationJid, accountScope: getStorageScopeJid() }
+    return retractedAtForIdentity(scope, savedCandidateKeys(entry), own) !== undefined
+  } catch { return false }
+}
+
+/** Incoming copies of retracted originals lose their text, and the cleared item is sent back. */
+function redactRetracted(entries: SavedMessage[]): { entries: SavedMessage[]; cleared: string[] } {
+  const cleared: string[] = []
+  const next = entries.map((entry) => {
+    if (!originalWasRetracted(entry)) return entry
+    cleared.push(entry.id)
+    return { ...entry, text: '', encrypted: undefined, deleted: true as const }
+  })
+  return { entries: next, cleared }
+}
+
 const bump = (revisions: Record<string, number>, id: string) => ({ ...revisions, [id]: (revisions[id] ?? 0) + 1 })
+
+/** A stored copy of a message was durably edited or retracted: saved rows read it again. */
+export function noteSavedCopyChanged(): void {
+  savedStore.setState((state) => ({ copyVersion: state.copyVersion + 1 }))
+}
 
 /**
  * The original of a saved message was retracted or moderated (validated and
  * stored by the durable retraction path): drop the saved text and republish.
  */
 export function redactSavedCopy(probe: SavedIdentity): void {
+  noteSavedCopyChanged()
   const hit = findSavedEntry(savedStore.getState().entries, probe)
   if (hit) savedStore.getState().markDeleted(hit.id)
+}
+
+/**
+ * Forget saved messages and the unsent queue kept for them, when the person clears
+ * local data: one account's, or every account's.
+ */
+export function clearSavedLocalData(jid: string | null, allAccounts: boolean): void {
+  savedStore.getState().reset()
+  try {
+    if (allAccounts) {
+      for (const key of Object.keys(localStorage)) if (key === PENDING_KEY || key.startsWith(`${PENDING_KEY}:`)) localStorage.removeItem(key)
+    } else {
+      localStorage.removeItem(buildScopedStorageKey(PENDING_KEY, jid ?? undefined))
+      localStorage.removeItem(buildScopedStorageKey(PENDING_KEY))
+    }
+  } catch { /* storage unavailable */ }
 }
 
 export const savedStore = createStore<SavedState>()((set, get) => ({
@@ -119,6 +186,7 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     const existing = findSavedEntry(state.entries, entry)
     if (existing) return true
     if (state.limit !== undefined && Object.keys(state.entries).length >= state.limit) return false
+    track(entry.id)
     set({ entries: { ...state.entries, [entry.id]: entry }, pending: { ...state.pending, [entry.id]: 'publish' }, revisions: bump(state.revisions, entry.id) })
     return true
   },
@@ -129,7 +197,8 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     if (!entries[id]) return
     const next = { ...entries }
     delete next[id]
-    set({ entries: next, pending: { ...pending, [id]: 'retract' }, revisions: bump(revisions, id) })
+    track(id)
+    set({ entries: next, pending: { ...pending, [id]: 'retract' }, removed: { ...get().removed, [id]: entries[id] }, revisions: bump(revisions, id) })
   },
 
   markDeleted: (id) => {
@@ -137,11 +206,20 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     const { entries, pending, revisions } = get()
     const entry = entries[id]
     if (!entry || entry.deleted) return
+    track(id)
     set({ entries: { ...entries, [id]: { ...entry, text: '', encrypted: undefined, deleted: true } }, pending: { ...pending, [id]: 'publish' }, revisions: bump(revisions, id) })
   },
 
-  reconcileFetch: (fetched, keepCurrent = new Set<string>()) => {
-    const { entries, pending } = get()
+  beginFetch: () => {
+    changedDuringFetch = new Set()
+    set({ loaded: false })
+  },
+
+  reconcileFetch: (fetchedRaw) => {
+    const keepCurrent = changedDuringFetch ?? new Set<string>()
+    changedDuringFetch = null
+    const { entries, pending, remote } = get()
+    const { entries: fetched, cleared } = redactRetracted(fetchedRaw)
     const merged: Record<string, SavedMessage> = {}
     for (const entry of fetched) if (pending[entry.id] !== 'retract' && !keepCurrent.has(entry.id)) merged[entry.id] = entry
     for (const id of keepCurrent) if (entries[id]) merged[id] = entries[id]
@@ -151,26 +229,39 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     const { entries: unique, weaker } = dedupe(merged)
     const nextPending = { ...pending }
     for (const id of weaker) if (nextPending[id] === undefined) nextPending[id] = 'retract'
-    set({ entries: unique, pending: nextPending, loaded: true })
+    for (const id of cleared) if (unique[id] && nextPending[id] === undefined) nextPending[id] = 'publish'
+    // What the server holds: its answer, except for ids that changed while it was in flight.
+    const nextRemote: Record<string, true> = {}
+    for (const entry of fetchedRaw) if (!keepCurrent.has(entry.id)) nextRemote[entry.id] = true
+    for (const id of keepCurrent) if (remote[id]) nextRemote[id] = true
+    set({ entries: unique, pending: nextPending, remote: nextRemote, loaded: true, revisions: cleared.reduce(bump, get().revisions) })
   },
 
-  applyNotify: ({ upserts, removedIds }) => {
-    const { entries, pending } = get()
+  applyNotify: ({ upserts: upsertsRaw, removedIds }) => {
+    const { entries, pending, remote } = get()
+    const { entries: upserts, cleared } = redactRetracted(upsertsRaw)
     const next = { ...entries }
-    for (const id of removedIds) if (pending[id] === undefined) delete next[id]
-    for (const entry of upserts) if (pending[entry.id] === undefined) next[entry.id] = entry
+    const nextRemote = { ...remote }
+    for (const id of removedIds) { track(id); delete nextRemote[id]; if (pending[id] === undefined) delete next[id] }
+    for (const entry of upserts) { track(entry.id); nextRemote[entry.id] = true; if (pending[entry.id] === undefined) next[entry.id] = entry }
     const { entries: unique, weaker } = dedupe(next)
     const nextPending = { ...pending }
     for (const id of weaker) if (nextPending[id] === undefined) nextPending[id] = 'retract'
-    set({ entries: unique, pending: nextPending })
+    for (const id of cleared) if (unique[id] && nextPending[id] === undefined) nextPending[id] = 'publish'
+    set({ entries: unique, pending: nextPending, remote: nextRemote, revisions: cleared.reduce(bump, get().revisions) })
   },
 
   settle: (id, op, revision) => {
-    const { pending, revisions } = get()
+    const { pending, revisions, remote, removed } = get()
     if (pending[id] !== op || (revision !== undefined && revisions[id] !== revision)) return
     const next = { ...pending }
     delete next[id]
-    set({ pending: next })
+    const nextRemote = { ...remote }
+    const nextRemoved = { ...removed }
+    if (op === 'publish') nextRemote[id] = true
+    else { delete nextRemote[id]; delete nextRemoved[id] }
+    track(id)
+    set({ pending: next, remote: nextRemote, removed: nextRemoved })
   },
 
   setLimit: (limit) => set({ limit }),
@@ -183,32 +274,40 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     const nextEntries = { ...entries }
     const nextPending = { ...pending }
     let nextRevisions = get().revisions
+    const removedNow: Record<string, SavedMessage> = {}
     for (const [id, op] of Object.entries(stored.pending)) {
       if (nextPending[id] !== undefined) continue
       nextPending[id] = op
       nextRevisions = bump(nextRevisions, id)
-      if (op === 'retract') delete nextEntries[id]
-      else if (stored.entries[id]) nextEntries[id] = stored.entries[id]
+      if (op === 'retract') { if (nextEntries[id]) removedNow[id] = nextEntries[id]; delete nextEntries[id] }
+      else if (stored.entries[id]) nextEntries[id] = redactRetracted([stored.entries[id]]).entries[0]
     }
-    set({ entries: nextEntries, pending: nextPending, revisions: nextRevisions, hydrated: true })
+    set({ entries: nextEntries, pending: nextPending, revisions: nextRevisions, removed: { ...get().removed, ...removedNow }, hydrated: true })
   },
 
   refuse: (id, op, revision) => {
-    const { entries, pending, refusals, revisions } = get()
+    const { entries, pending, refusals, revisions, remote, removed } = get()
     if (pending[id] !== op || (revision !== undefined && revisions[id] !== revision)) return
     const nextPending = { ...pending }
     delete nextPending[id]
-    if (op === 'publish') {
+    track(id)
+    if (op === 'retract') {
+      // The server kept the item: bring the row back and tell the person once.
+      const restored = removed[id]
+      const nextRemoved = { ...removed }
+      delete nextRemoved[id]
+      set({ pending: nextPending, removed: nextRemoved, refusals: refusals + 1, ...(restored && { entries: { ...entries, [id]: restored } }) })
+    } else if (remote[id] || entries[id]?.deleted) {
+      // An item the server already holds stays listed (a deleted one keeps its tombstone); only the change was refused.
+      set({ pending: nextPending, refusals: refusals + 1 })
+    } else {
       const next = { ...entries }
       delete next[id]
       set({ entries: next, pending: nextPending, refusals: refusals + 1 })
-    } else {
-      // The server kept the item: a later fetch brings it back; tell the person once.
-      set({ pending: nextPending, refusals: refusals + 1 })
     }
   },
 
-  reset: () => set({ ...initial }),
+  reset: () => { changedDuringFetch = null; set({ ...initial }) },
 }))
 
 // Keep the unsent queue on disk, so a save or removal made offline survives a reload.

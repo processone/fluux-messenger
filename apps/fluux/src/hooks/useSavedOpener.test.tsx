@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import type { SavedMessage } from '@fluux/sdk'
+import { roomStore, type SavedMessage } from '@fluux/sdk'
 
 const locateChat = vi.fn()
 const fetchContextAround = vi.fn()
@@ -9,10 +9,11 @@ const navigateToConversation = vi.fn()
 const navigateToRoom = vi.fn()
 const openRoomLink = vi.fn()
 const addToast = vi.fn()
+const account = { jid: 'romeo@montague.example/phone' }
 
 vi.mock('@fluux/sdk', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@fluux/sdk')>()),
-  connectionStore: { getState: () => ({ jid: 'romeo@montague.example/phone' }) },
+  connectionStore: { getState: () => ({ jid: account.jid }), subscribe: () => () => {} },
   findLatestCopy: (...args: unknown[]) => findLatestCopy(...args),
   useXMPPContext: () => ({ client: { messages: { locateChatMessage: locateChat, fetchContextAround } } }),
 }))
@@ -33,7 +34,58 @@ const roomEntry = (extra: Partial<SavedMessage> = {}): SavedMessage => ({
 })
 
 describe('useSavedOpener', () => {
-  beforeEach(() => { vi.clearAllMocks(); findLatestCopy.mockResolvedValue(undefined) })
+  const room = (joined: boolean) => ({ jid: ROOM, name: 'team', nickname: 'romeo', joined, isBookmarked: false, occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() })
+  beforeEach(() => {
+    vi.clearAllMocks()
+    account.jid = 'romeo@montague.example/phone'
+    findLatestCopy.mockResolvedValue(undefined)
+    roomStore.getState().reset()
+    roomStore.getState().addRoom(room(true))
+  })
+
+  it('passes the author to the one-to-one lookup', async () => {
+    locateChat.mockResolvedValue({ kind: 'found', message: { id: 'real' } })
+    const { result } = renderHook(() => useSavedOpener())
+    await act(() => result.current.open(chatEntry()))
+    expect(locateChat).toHaveBeenCalledWith('juliet@capulet.example', expect.objectContaining({ from: 'juliet@capulet.example' }))
+  })
+
+  it('joins an unknown room before asking its archive, then looks the message up', async () => {
+    roomStore.getState().reset()
+    fetchContextAround.mockResolvedValue({ messages: [], complete: true })
+    const { result } = renderHook(() => useSavedOpener())
+    let done: Promise<void> | undefined
+    act(() => { done = result.current.open(roomEntry()) })
+    await act(async () => { await Promise.resolve() })
+    expect(navigateToRoom).toHaveBeenCalledWith(ROOM)
+    expect(fetchContextAround).not.toHaveBeenCalled()
+    await act(async () => { roomStore.getState().updateRoom(ROOM, { joined: true }); await done })
+    expect(fetchContextAround).toHaveBeenCalledWith(ROOM, new Date(500).toISOString(), 50)
+    expect(result.current.problems).toEqual({ r: 'absent' })
+  })
+
+  it('does not navigate for a lookup that finished after a newer open', async () => {
+    let release: (value: unknown) => void = () => {}
+    locateChat.mockReturnValueOnce(new Promise((resolve) => { release = resolve })).mockResolvedValueOnce({ kind: 'found', message: { id: 'second' } })
+    const { result } = renderHook(() => useSavedOpener())
+    let first: Promise<void> | undefined
+    act(() => { first = result.current.open(chatEntry({ id: 'a' })) })
+    await act(() => result.current.open(chatEntry({ id: 'b', messageId: 'm2' })))
+    await act(async () => { release({ kind: 'found', message: { id: 'first' } }); await first })
+    expect(navigateToConversation).toHaveBeenCalledTimes(1)
+    expect(navigateToConversation).toHaveBeenCalledWith('juliet@capulet.example', 'second')
+  })
+
+  it('does not navigate when the account changed during the lookup', async () => {
+    let release: (value: unknown) => void = () => {}
+    locateChat.mockReturnValueOnce(new Promise((resolve) => { release = resolve }))
+    const { result } = renderHook(() => useSavedOpener())
+    let pending: Promise<void> | undefined
+    act(() => { pending = result.current.open(chatEntry()) })
+    account.jid = 'other@montague.example/phone'
+    await act(async () => { release({ kind: 'found', message: { id: 'late' } }); await pending })
+    expect(navigateToConversation).not.toHaveBeenCalled()
+  })
 
   it('opens a found one-to-one message in its conversation', async () => {
     locateChat.mockResolvedValue({ kind: 'found', message: { id: 'real' } })

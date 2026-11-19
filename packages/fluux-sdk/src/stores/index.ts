@@ -75,7 +75,7 @@ export type { BlockingState } from './blockingStore'
 export { ignoreStore, isMessageFromIgnoredUser, isReplyToIgnoredUser } from './ignoreStore'
 export type { IgnoreState, IgnoredUser } from './ignoreStore'
 
-export { savedStore, findSavedEntry } from './savedStore'
+export { savedStore, findSavedEntry, clearSavedLocalData } from './savedStore'
 export type { SavedState } from './savedStore'
 
 export { searchStore, setSearchClient, getSearchClient } from './searchStore'

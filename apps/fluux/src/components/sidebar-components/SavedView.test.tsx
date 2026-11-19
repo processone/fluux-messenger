@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useStore } from 'zustand'
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react'
 import { savedStore, type SavedMessage } from '@fluux/sdk'
+
+type SavedState = ReturnType<typeof savedStore.getState>
 
 const open = vi.fn().mockResolvedValue(undefined)
 const latestCopy = vi.fn().mockResolvedValue(undefined)
@@ -20,6 +22,7 @@ vi.mock('@fluux/sdk/react', () => ({
   useChatStore: (selector: (s: unknown) => unknown) => selector({ messages: new Map() }),
   useRoomStore: (selector: (s: unknown) => unknown) => selector({ messages: new Map(), rooms: new Map() }),
   useRosterStore: (selector: (s: unknown) => unknown) => selector({ contacts: new Map() }),
+  useSavedStore: (selector: (s: SavedState) => unknown) => useStore(savedStore, selector),
 }))
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'en' } }),
@@ -96,5 +99,15 @@ describe('SavedView', () => {
     latestCopy.mockImplementation(async (e: SavedMessage) => (e.id === 'a' ? { body: 'edited a' } : e.id === 'b' ? { isRetracted: true } : undefined))
     render(<SavedView problems={{}} onOpen={open} />)
     await waitFor(() => expect(screen.getAllByTestId('saved-text').map((n) => n.textContent)).toEqual(['edited a', 'saved.deleted', 'chat.attachment']))
+  })
+
+  it('reads the stored copy again when one was durably edited while it was not resident', async () => {
+    savedStore.setState({ entries: { a: entry('a') } })
+    latestCopy.mockResolvedValue(undefined)
+    render(<SavedView problems={{}} onOpen={open} />)
+    await waitFor(() => expect(screen.getByTestId('saved-text').textContent).toBe('text a'))
+    latestCopy.mockResolvedValue({ body: 'edited later' })
+    act(() => { savedStore.setState((state) => ({ copyVersion: state.copyVersion + 1 })) })
+    await waitFor(() => expect(screen.getByTestId('saved-text').textContent).toBe('edited later'))
   })
 })

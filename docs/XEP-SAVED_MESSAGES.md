@@ -88,8 +88,8 @@ Fluux builds the copy with the same function Forward uses and reads it with a re
 ## 5. Operations
 
 - **Save:** publish the item. **Remove:** retract it, asking the server to notify subscribers (`notify="true"`). Only `item-not-found` counts as a removal that is already done; any other refusal puts the item back in the list and tells the person.
-- **Node limit:** a client sends nothing before it has read the node, and refuses a new save that would take the node past its `pubsub#max_items`, because the server would silently drop the oldest item. Removals are sent first.
-- **Fetch:** `<items node="urn:xmpp:fluux:saved-messages:0"/>` on the own account. Only an answered fetch (items, or `item-not-found`) replaces the local list; a refused or unanswered fetch leaves it as it is.
+- **Node limit:** a client sends nothing before it has read the node, and refuses a new save that would take the node past its `pubsub#max_items`, because the server would silently drop the oldest item. The count is the items the server is known to hold (listed, notified or acknowledged), so a removal the server has not yet taken, or one it refused, still counts. Removals are sent first.
+- **Fetch:** `<items node="urn:xmpp:fluux:saved-messages:0"/>` on the own account. Only an answered fetch (items, or `item-not-found`) replaces the local list; a refused or unanswered fetch leaves it as it is. Changes made or notified while the fetch is in flight win over its answer, and copies of originals already known to be deleted arrive without their text.
 - **Notify:** other online clients receive the item or retract through `+notify` and apply it without reloading.
 - **Offline:** a save or removal made while disconnected is shown at once, kept on the device across a reload, and sent on reconnect.
 - **Identity:** two entries are one message when the client's message-identity rules say so: the archive id with its `by`, else the origin id, else the client id, each scoped to its author. Two room messages sharing a sender-chosen origin id but with different archive ids or occupants stay separate.

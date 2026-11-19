@@ -1875,7 +1875,7 @@ export class Chat extends BaseModule {
    * archive by exact id, or by time when the entry has no archive id).
    * A failed query is `unknown`, never `absent`.
    */
-  async locateChatMessage(conversationId: string, ref: { id?: string; stanzaId?: string; originId?: string; sentAt?: number }) {
+  async locateChatMessage(conversationId: string, ref: { id?: string; stanzaId?: string; originId?: string; sentAt?: number; from?: string }) {
     return this.mamModule.locateChatMessage(conversationId, ref)
   }
 

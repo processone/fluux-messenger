@@ -89,6 +89,7 @@ import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, n
 import { getResidentWindowSize } from './shared/residentWindow'
 import { lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 import { sortMessagesByTimestamp } from './shared/messageArrayUtils'
+import { noteSavedCopyChanged } from './savedStore'
 
 /**
  * Carry a previously-resolved avatar across a presence update.
@@ -2608,6 +2609,7 @@ export const roomStore = createStore<RoomState>()(
       void messageCache.applyRoomCorrection(roomJid, targetId, pendingUpdates, correctionActor, scope.jid)
         .then(message => {
           if (message) {
+            noteSavedCopyChanged()
             if (isCurrent()) set(current => {
               const rows = current.messages.get(roomJid) ?? []
               const index = rows.findIndex(row => matchesCorrectionTarget(row, message))

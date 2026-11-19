@@ -5,7 +5,7 @@ import {
   connectionStore, chatStore, findLatestCopy, getBareJid, getLocalPart, getResource, useSavedMessages,
   type Message, type RoomMessage, type SavedMessage,
 } from '@fluux/sdk'
-import { useRoomStore, useRosterStore, useChatStore } from '@fluux/sdk/react'
+import { useRoomStore, useRosterStore, useChatStore, useSavedStore } from '@fluux/sdk/react'
 import { Avatar } from '../Avatar'
 import { RoomAvatar } from '../RoomAvatar'
 import { ListEmpty } from '../ui/ListEmpty'
@@ -25,12 +25,14 @@ function useRowText(entry: SavedMessage): string {
   // The resident window changes when messages arrive, edits included: look again then.
   const chatWindow = useChatStore((s) => (entry.type === 'chat' ? s.messages.get(entry.conversationJid) : undefined))
   const roomWindow = useRoomStore((s) => (entry.type === 'groupchat' ? s.messages.get(entry.conversationJid) : undefined))
+  // A durable edit or deletion of a stored copy (even one not resident) bumps this: look again.
+  const copyVersion = useSavedStore((s) => s.copyVersion)
   const [copy, setCopy] = useState<Message | RoomMessage | undefined>()
   useEffect(() => {
     let current = true
     void findLatestCopy(entry, connectionStore.getState().jid ?? '').then((found) => { if (current) setCopy(found) })
     return () => { current = false }
-  }, [entry, chatWindow, roomWindow])
+  }, [entry, chatWindow, roomWindow, copyVersion])
   if (entry.deleted || copy?.isRetracted) return t('saved.deleted')
   if (copy?.body && !copy.encryptedPayload) return copy.body
   if (entry.encrypted) return t('saved.encrypted')

@@ -1,3 +1,4 @@
+import { getBareJid } from '../core/jid'
 import type { SavedMessage } from '../core/types/saved'
 import {
   CHAT_SCOPE, roomScope, identityKeys, occupantConflict, archiveIdentityConflict, sameChatMessage, sameLogicalMessage,
@@ -77,9 +78,19 @@ export function sameSavedMessage(a: SavedIdentity, b: SavedIdentity): boolean {
   const left = identityOf(a, '\u0000a')
   const right = identityOf(b, '\u0000b')
   if ((a.type === 'groupchat') !== (b.type === 'groupchat')) return false
+  // The same archive entry is the same message. Anything weaker (an origin or client id) is
+  // chosen by the sender, so it only counts for one author.
+  const sameArchiveEntry = !!a.stanzaId && a.stanzaId === b.stanzaId && !!a.stanzaIdBy && a.stanzaIdBy === b.stanzaIdBy
+  if (!sameArchiveEntry && !sameAuthor(a, b)) return false
   return a.type === 'groupchat'
     ? !occupantConflict(left, right) && !archiveIdentityConflict(left, right) && sameLogicalMessage(scopeOf(a), left, right)
     : sameChatMessage(left, right)
+}
+
+function sameAuthor(a: SavedIdentity, b: SavedIdentity): boolean {
+  if (a.occupantId && b.occupantId) return a.occupantId === b.occupantId
+  const name = (e: SavedIdentity) => (e.type === 'groupchat' ? e.from ?? '' : getBareJid(e.from ?? ''))
+  return name(a) === name(b)
 }
 
 /** Keys a candidate match can share, for indexing entries without comparing every pair. */

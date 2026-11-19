@@ -40,11 +40,8 @@ export function setupSavedMessagesSideEffects(
   const online = () => connectionStore.getState().status === 'online'
   const state = () => savedStore.getState()
 
-  /** Items the server holds: everything not waiting to be added (a republished deletion is already there). */
-  const serverCount = () => {
-    const { entries, pending } = state()
-    return Object.values(entries).filter((entry) => pending[entry.id] !== 'publish' || entry.deleted).length
-  }
+  /** Items the server is known to hold, including ones this device has asked to remove but not yet seen go. */
+  const serverCount = () => Object.keys(state().remote).length
 
   const switchAccount = () => {
     epoch += 1
@@ -74,7 +71,7 @@ export function setupSavedMessagesSideEffects(
               const entry = state().entries[id]
               if (!entry) { state().settle(id, op, revision); continue }
               const { limit } = state()
-              if (limit !== undefined && !entry.deleted && serverCount() >= limit) {
+              if (limit !== undefined && !state().remote[id] && serverCount() >= limit) {
                 state().refuse(id, op, revision)
                 continue
               }
@@ -82,7 +79,14 @@ export function setupSavedMessagesSideEffects(
             } else {
               await client.internal.savedMessages.retract(id)
             }
-            if (mine === epoch) state().settle(id, op, revision)
+            if (mine !== epoch) return
+            state().settle(id, op, revision)
+            // The first publish creates the node, and only then can its limit be read: later saves wait for it.
+            if (op === 'publish' && state().limit === undefined) {
+              const limit = await client.internal.savedMessages.fetchMaxItems()
+              if (mine !== epoch) return
+              state().setLimit(limit)
+            }
           } catch (error) {
             if (mine !== epoch) return
             if (!isDefinitiveRejection(error)) continue // silence: the operation stays pending
@@ -90,7 +94,7 @@ export function setupSavedMessagesSideEffects(
             else {
               logWarn(`SavedMessages: server refused a ${op}: ${String(error)}`)
               state().refuse(id, op, revision)
-              if (op === 'retract') void refresh().catch(() => {}) // the item is still there: list it again
+              if (op === 'retract' && !state().entries[id]) void refresh().catch(() => {}) // nothing to restore locally: read the node again
             }
           }
         }
@@ -111,7 +115,7 @@ export function setupSavedMessagesSideEffects(
     state().hydratePending()
     const mine = epoch
     // Changes that arrive while the fetch is in flight are newer than its answer.
-    const before = state().entries
+    state().beginFetch()
     refreshing = true
     try {
       const result = await client.internal.savedMessages.fetchAll()
@@ -121,10 +125,7 @@ export function setupSavedMessagesSideEffects(
       // The limit is set before the list lands: landing it triggers a flush that must see it.
       state().setLimit(limit ?? state().limit)
       if (result.status === 'ok' || result.status === 'absent') {
-        const now = state().entries
-        const changed = new Set<string>()
-        for (const id of new Set([...Object.keys(before), ...Object.keys(now)])) if (before[id] !== now[id]) changed.add(id)
-        state().reconcileFetch(result.status === 'ok' ? result.items : [], changed)
+        state().reconcileFetch(result.status === 'ok' ? result.items : [])
       } else logInfo(`SavedMessages: fetch ${result.status}; keeping the current list`)
     } finally {
       refreshing = false
