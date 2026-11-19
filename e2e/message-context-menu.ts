@@ -57,6 +57,22 @@ test.describe('message right-click menu', () => {
     // The emoji picker is a second view; Escape and an outside click close the menu, which reopens on the actions.
     await menu(page).getByRole('button', { name: 'More reactions' }).click()
     await expect(menu(page).getByRole('button', { name: 'Reply' })).toHaveCount(0)
+    // The picker is lazy: wait for its real search field and emoji grid, not the empty loading strip.
+    const picker = menu(page).locator('em-emoji-picker')
+    await expect(picker.locator('input[type="search"]')).toBeVisible()
+    await expect(picker.locator('button[aria-label]').first()).toBeVisible()
+    expect((await picker.boundingBox())!.height).toBeGreaterThan(200)
+    // Tab traversal inside the picker is checked in Chromium. In Playwright's WebKit a Tab from the
+    // search field closes the menu (unresolved, reported as a gap), so only the search focus is checked.
+    expect(await picker.evaluate(el => el.shadowRoot?.activeElement?.tagName)).toBe('INPUT')
+    if (browserName === 'chromium') {
+      await page.keyboard.press('Tab')
+      expect(await page.evaluate(() => {
+        const m = document.querySelector('[role="menu"]')
+        const a = document.activeElement
+        return !!m && !!a && a !== m && m.contains(a)
+      })).toBe(true)
+    }
     await shot(page, 'picker', browserName)
     await page.keyboard.press('Escape')
     await expect(menu(page)).toHaveCount(0)
@@ -85,6 +101,7 @@ test.describe('message right-click menu', () => {
     const box = (await b.getByText('Bravo line from me').boundingBox())!
     // The browser's own copy command fires the same copy event as the shortcut, in every engine.
     await page.evaluate(() => document.execCommand('copy'))
+    const baseline = await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied.length)
     await page.mouse.move(box.x + 20, box.y + 5)
     await page.evaluate(() => { /* keep selection */ })
     await page.mouse.click(box.x + 20, box.y + box.height / 2, { button: 'right' })
@@ -92,12 +109,14 @@ test.describe('message right-click menu', () => {
     await shot(page, 'selection', browserName)
     await menu(page).getByRole('button', { name: 'Copy', exact: true }).click()
     const copied = await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)
-    // WebKit does not fire a copy event for a scripted copy command, so the baseline exists in Chromium only.
-    expect(copied.length).toBeGreaterThanOrEqual(1)
-    expect(copied.at(-1)).toBe(copied[0])
-    expect(copied[0]).toContain('Alpha line from Emma')
-    expect(copied[0]).toContain('Bravo line from me')
-    expect(copied[0]).toMatch(/^— .+ —\nEmma Wilson .+\nAlpha line from Emma\nyou .+\nBravo line from me$/) // dated sender headers from the list formatter
+    // The menu's Copy must produce its own copy event after the baseline. WebKit fires no event for a
+    // scripted copy command, so its baseline is empty and only the menu copy is checked, for shape.
+    expect(copied.length).toBeGreaterThan(baseline)
+    const menuCopy = copied[copied.length - 1]
+    if (baseline > 0) expect(menuCopy).toBe(copied[0])
+    expect(menuCopy).toContain('Alpha line from Emma')
+    expect(menuCopy).toContain('Bravo line from me')
+    expect(menuCopy).toMatch(/^— .+ —\nEmma Wilson .+\nAlpha line from Emma\nyou .+\nBravo line from me$/) // dated sender headers from the list formatter
     await expect(a).toBeVisible()
   })
 

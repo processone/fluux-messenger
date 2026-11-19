@@ -675,7 +675,7 @@ export const MessageBubble = memo(function MessageBubble({
     // The click itself selected a word: the menu opens over no selection.
     if (text && !selected) selection?.removeAllRanges()
     if (!hasMessageActions && !selected && !linkUrl && !image) return
-    setMenuTarget({ selection: selected, linkUrl, image })
+    setMenuTarget({ selection: selected, range: selected ? selection!.getRangeAt(0).cloneRange() : undefined, linkUrl, image })
     messageMenu.handleContextMenu(event)
   }
   useEffect(() => {

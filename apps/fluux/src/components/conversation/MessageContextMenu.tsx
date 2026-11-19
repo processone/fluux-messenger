@@ -19,6 +19,8 @@ const EmojiPicker = lazy(() => import('../EmojiPicker').then((m) => ({ default: 
 export interface MessageContextTarget {
   /** Words the user selected before the click; empty when none. */
   selection: string
+  /** The selected range, restored for Copy when the engine drops the selection while the menu is open. */
+  range?: Range
   /** The link under the pointer. */
   linkUrl?: string
   /** True when the pointer is over an inline image of the message. */
@@ -68,6 +70,10 @@ export function MessageContextMenu({
   // sender headers) applies; the text read at open time is the fallback.
   const copySelection = () => run(() => {
     const live = window.getSelection()
+    if (live?.toString() !== target.selection && target.range) {
+      live?.removeAllRanges()
+      live?.addRange(target.range)
+    }
     const done = live?.toString() === target.selection && typeof document.execCommand === 'function' && document.execCommand('copy')
     if (!done) return copyToClipboard(target.selection)
   })
@@ -181,6 +187,18 @@ export function MessageContextMenu({
       tabIndex={-1}
       // Portaled: keep clicks and right-clicks from reaching the message row's React handlers.
       onClick={(e) => e.stopPropagation()}
+      // Pressing a button must not clear the page selection that Copy reads (WebKit drops it otherwise);
+      // the picker's search field still takes focus.
+      // The picker's search field swallows Escape before the document sees it, so the menu takes it first.
+      onKeyDownCapture={(e) => {
+        if (e.key !== 'Escape') return
+        e.stopPropagation()
+        menu.close()
+      }}
+      onMouseDown={(e) => {
+        const el = e.nativeEvent.composedPath()[0]
+        if (!(el instanceof Element && el.closest('input, textarea, [contenteditable="true"]'))) e.preventDefault()
+      }}
       // The system menu stays reachable with Shift and in the picker's search field.
       onContextMenu={(e) => {
         e.stopPropagation()
