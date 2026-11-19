@@ -34,6 +34,11 @@ async function setup(page: Page, bodies: { id: string; from: string; body: strin
     }
   }, { bodies, peer: PEER })
   await page.keyboard.press('End')
+  // Arriving rows re-lay the list out and scroll it, which rightly dismisses an open menu; start from a still list.
+  const last = page.locator(`[data-message-id="${bodies[bodies.length - 1].id}"][data-message-body]`)
+  await expect(last).toBeVisible()
+  let previous = ''
+  await expect.poll(async () => { const now = JSON.stringify(await last.boundingBox()); const same = now === previous; previous = now; await page.waitForTimeout(250); return same }).toBe(true)
 }
 const row = (page: Page, id: string) => page.locator(`[data-message-id="${id}"][data-message-body]`)
 const menu = (page: Page) => page.getByRole('menu', { name: 'More options' })
