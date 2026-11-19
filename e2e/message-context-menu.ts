@@ -62,7 +62,7 @@ test.describe('message right-click menu', () => {
     await expect(picker.locator('input[type="search"]')).toBeVisible()
     await expect(picker.locator('button[aria-label]').first()).toBeVisible()
     expect((await picker.boundingBox())!.height).toBeGreaterThan(200)
-    expect(await picker.evaluate(el => el.shadowRoot?.activeElement?.tagName)).toBe('INPUT')
+    await expect.poll(() => picker.evaluate(el => el.shadowRoot?.activeElement?.tagName), { timeout: 10_000 }).toBe('INPUT')
     await shot(page, 'picker', browserName)
     await page.keyboard.press('Escape')
     await expect(menu(page)).toHaveCount(0)
