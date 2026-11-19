@@ -1243,3 +1243,55 @@ test('a saved message the archive answers it does not hold says it is no longer 
   await emptyNode(reader)
   await one.context.close(); await bob.stop(); await reader.stop()
 })
+
+// Transport injection: the page's own socket answers the redaction republish with the error a server gives a stranger, without forwarding it.
+test('a deletion whose redaction the server refuses still shows as deleted, and is applied to the stored copy after a reload', async ({ browser }) => {
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser)
+  const text = `Deleted but refused ${stamp}`
+  const id = await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text })).toBeVisible()
+  await saveMessage(one, text)
+  await nodeHolds(reader, 1)
+
+  let refuse = true
+  let refused = 0
+  await one.page.routeWebSocket(/\/ws$/, ws => {
+    const server = ws.connectToServer()
+    ws.onMessage(message => {
+      const frame = typeof message === 'string' ? message : message.toString()
+      const iq = /^<iq\b[^>]*\bid="([^"]+)"/.exec(frame)?.[1]
+      if (refuse && iq && frame.includes(`<publish node="${NODE}"`)) {
+        refused++
+        ws.send(`<iq xmlns="jabber:client" type="error" id="${iq}"><error type="auth"><forbidden xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error></iq>`)
+        return
+      }
+      server.send(message)
+    })
+    server.onMessage(message => ws.send(message))
+  })
+  await one.page.reload()
+  await openSaved(one)
+  await expect(savedRow(one, text)).toBeVisible({ timeout: 45_000 })
+  await bob.retract('alice', id)
+  await expect.poll(() => refused, { timeout: 20_000 }).toBeGreaterThan(0)
+  // The bookmark stays, now as a deleted message; the server still holds the old text, because it refused the redaction.
+  await expect(one.page.getByTestId('saved-row')).toHaveCount(1)
+  await expect(savedRow(one, 'Message deleted')).toBeVisible()
+  expect((await reader.items())[0]).toContain(text)
+  await shot(one.page, 'redaction-refused')
+
+  // Allowed again, after a reload: the deletion is known only from this device's cache, and the stored copy is redacted.
+  refuse = false
+  await one.page.reload()
+  await openSaved(one)
+  await expect(savedRow(one, 'Message deleted')).toBeVisible({ timeout: 45_000 })
+  await expect(savedRow(one, text)).toHaveCount(0) // the fetched old copy does not bring its text back
+  await expect.poll(async () => (await reader.items())[0] ?? '', { timeout: 30_000 }).toContain('deleted="true"')
+  expect((await reader.items())[0]).not.toContain(text)
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
