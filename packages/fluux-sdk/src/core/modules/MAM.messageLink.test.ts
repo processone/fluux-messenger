@@ -3,6 +3,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { MAM } from './MAM'
+import * as stanzaDecrypt from '../e2ee/stanzaDecrypt'
 import { applyRoomMessagePreviewUpdate } from '../../stores/shared/correctionHandoff'
 import type { ModuleDependencies } from './BaseModule'
 import { createMockPresenceReader } from '../test-utils'
@@ -12,6 +13,8 @@ import { setStorageScopeJid } from '../../utils/storageScope'
 import * as cache from '../../utils/messageCache'
 import * as searchIndex from '../../utils/searchIndex'
 import type { Room, RoomMessage } from '../types'
+
+vi.mock('../e2ee/stanzaDecrypt', async importOriginal => ({ ...await importOriginal<typeof import('../e2ee/stanzaDecrypt')>() }))
 
 const ROOM = 'team@conference.example.org'
 const ACCOUNT = 'alice@example.org'
@@ -294,6 +297,15 @@ describe('linked room message lookup', () => {
     expect(await h.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
     expect(starts.every(start => start === undefined)).toBe(true)
     expect(h.sendIQ.mock.calls.length).toBeGreaterThan(3)
+  })
+
+  // Intent: FLM-339 review — an encrypted original's sender-claimed time, ahead of its archive time, never becomes the start filter.
+  it('starts the first walk page at the archive time, not the sender time of a decrypted original', async () => {
+    const h = harness(undefined, undefined, undefined, longTail)
+    const starts = withCount(h, longTail)
+    vi.spyOn(stanzaDecrypt, 'readStashedAuthoredAt').mockReturnValue(new Date(longTail[0].timestamp.getTime() + 3_600_000))
+    expect(await h.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(starts.filter(Boolean)).toEqual([longTail[0].timestamp.toISOString()])
   })
 
   it('walks as before when the server reports no count or a tail within the cap', async () => {
