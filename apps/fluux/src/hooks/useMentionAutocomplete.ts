@@ -18,6 +18,7 @@ export interface MentionAutocompleteState {
   query: string // Text after @ for filtering
   triggerIndex: number // Position of @ in text
   selectedIndex: number // Keyboard navigation index
+  navSerial?: number // Counts Up/Down moves made by the key handler (handled move vs reset)
   matches: MentionMatch[] // Filtered matches (includes @all + occupants)
 }
 
@@ -55,6 +56,7 @@ export function useMentionAutocomplete(
   dismiss: () => void
 } {
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [navSerial, setNavSerial] = useState(0)
   const [dismissed, setDismissed] = useState(false)
   const dismissedAtTriggerRef = useRef<number>(-1)
   const currentTriggerRef = useRef<number>(-1)
@@ -186,6 +188,7 @@ export function useMentionAutocomplete(
   const moveSelection = (direction: 'up' | 'down') => {
     if (matches.length === 0) return
 
+    setNavSerial((n) => n + 1)
     setSelectedIndex((prev) => {
       if (direction === 'up') {
         return prev <= 0 ? matches.length - 1 : prev - 1
@@ -208,6 +211,7 @@ export function useMentionAutocomplete(
       query,
       triggerIndex,
       selectedIndex,
+      navSerial,
       matches,
     },
     selectMatch,

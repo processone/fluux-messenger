@@ -1,26 +1,22 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useRef } from 'react'
 import { markUserScrollIntent } from '../utils/scrollbarReveal'
-
-/** How soon after an Up/Down key a selection scroll still counts as that key's doing. */
-const KEY_TO_SCROLL_MS = 200
 
 /**
  * For a popover whose selection is moved by a key handler elsewhere (the composer's
- * completion menus keep focus in the text field). Returns a function to call just
- * before scrolling the selected option: it claims the scroll for the option's own
- * scroll boxes only when an Up/Down key just moved the selection, so a selection
- * reset while typing does not reveal the thumb.
+ * completion menus keep focus in the text field). The handler counts its Up/Down
+ * moves in `navSerial`; the returned function, called just before scrolling the
+ * selected option, claims that option's scroll boxes only when the count has grown
+ * since the last call. A selection reset (typing, dismissal) leaves the count alone
+ * or lowers it, so it claims nothing, however soon after an arrow key it happens.
  */
-export function useKeyboardScrollClaim(): (selected: Element | null | undefined) => void {
-  const lastKeyAt = useRef(-Infinity)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') lastKeyAt.current = performance.now()
-    }
-    document.addEventListener('keydown', onKey, true)
-    return () => document.removeEventListener('keydown', onKey, true)
-  }, [])
-  return useCallback((selected) => {
-    if (performance.now() - lastKeyAt.current < KEY_TO_SCROLL_MS) markUserScrollIntent(selected)
-  }, [])
+export function useKeyboardScrollClaim(navSerial = 0): (selected: Element | null | undefined) => void {
+  const seen = useRef(navSerial)
+  return useCallback(
+    (selected) => {
+      const handled = navSerial > seen.current
+      seen.current = navSerial
+      if (handled) markUserScrollIntent(selected)
+    },
+    [navSerial],
+  )
 }

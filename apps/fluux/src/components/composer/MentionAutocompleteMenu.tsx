@@ -11,6 +11,8 @@ interface MentionAutocompleteMenuProps {
   id: string
   matches: MentionMatch[]
   selectedIndex: number
+  /** Up/Down moves made by the key handler; a selection change without a new move is a reset. */
+  navSerial?: number
   onSelect: (index: number) => void
 }
 
@@ -23,11 +25,12 @@ export function MentionAutocompleteMenu({
   id,
   matches,
   selectedIndex,
+  navSerial,
   onSelect,
 }: MentionAutocompleteMenuProps) {
   const { t } = useTranslation()
   const selectedRef = useRef<HTMLButtonElement>(null)
-  const claimKeyboardScroll = useKeyboardScrollClaim()
+  const claimKeyboardScroll = useKeyboardScrollClaim(navSerial)
   const menuRef = useRef<HTMLDivElement>(null)
   useFloatingLayerBounds(menuRef, matches.length > 0)
 
@@ -35,7 +38,7 @@ export function MentionAutocompleteMenu({
   useEffect(() => {
     claimKeyboardScroll(selectedRef.current)
     selectedRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [selectedIndex, claimKeyboardScroll])
+  }, [selectedIndex, navSerial, claimKeyboardScroll])
 
   if (matches.length === 0) return null
 

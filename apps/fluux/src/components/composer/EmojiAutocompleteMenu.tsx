@@ -9,6 +9,8 @@ interface EmojiAutocompleteMenuProps {
   id: string
   matches: EmojiMatch[]
   selectedIndex: number
+  /** Up/Down moves made by the key handler; a selection change without a new move is a reset. */
+  navSerial?: number
   onSelect: (index: number) => void
   onDismiss: () => void
 }
@@ -16,10 +18,10 @@ interface EmojiAutocompleteMenuProps {
 /**
  * Inline emoji completion dropdown popover rendered above the message composer input field.
  */
-export function EmojiAutocompleteMenu({ id, matches, selectedIndex, onSelect, onDismiss }: EmojiAutocompleteMenuProps) {
+export function EmojiAutocompleteMenu({ id, matches, selectedIndex, navSerial, onSelect, onDismiss }: EmojiAutocompleteMenuProps) {
   const { t } = useTranslation()
   const selectedRef = useRef<HTMLButtonElement>(null)
-  const claimKeyboardScroll = useKeyboardScrollClaim()
+  const claimKeyboardScroll = useKeyboardScrollClaim(navSerial)
   const menuRef = useRef<HTMLDivElement>(null)
   useFloatingLayerBounds(menuRef, matches.length > 0)
 
@@ -27,7 +29,7 @@ export function EmojiAutocompleteMenu({ id, matches, selectedIndex, onSelect, on
   useEffect(() => {
     claimKeyboardScroll(selectedRef.current)
     selectedRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [selectedIndex, claimKeyboardScroll])
+  }, [selectedIndex, navSerial, claimKeyboardScroll])
 
   // Dismiss on a pointer press anywhere outside the popover.
   useEffect(() => {
