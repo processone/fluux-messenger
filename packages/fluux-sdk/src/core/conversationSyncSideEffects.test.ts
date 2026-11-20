@@ -103,6 +103,40 @@ describe('setupConversationSyncSideEffects', () => {
       )
     })
 
+    it('publishes during unrelated chat activity that keeps the store changing', async () => {
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupConversationSyncSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      chatStore.getState().addConversation({
+        id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0,
+      })
+      // Typing notifications change chatStore without touching the list.
+      for (let i = 0; i < 5; i++) {
+        await vi.advanceTimersByTimeAsync(1_000)
+        chatStore.getState().setTyping('alice@example.com', 'alice@example.com', i % 2 === 0)
+      }
+
+      expect((mockClient as any).internal.conversationSync.publishConversations).toHaveBeenCalledTimes(1)
+    })
+
+    it('retries a failed publish without waiting for another list change', async () => {
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupConversationSyncSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+      const publish = (mockClient as any).internal.conversationSync.publishConversations
+      publish.mockRejectedValueOnce(new Error('pep unavailable'))
+
+      chatStore.getState().addConversation({
+        id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0,
+      })
+      await vi.advanceTimersByTimeAsync(3_000)
+      expect(publish).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(publish).toHaveBeenCalledTimes(2)
+    })
+
     it('should debounce multiple rapid changes into a single publish', async () => {
       connectionStore.getState().setStatus('disconnected')
       cleanup = setupConversationSyncSideEffects(mockClient)

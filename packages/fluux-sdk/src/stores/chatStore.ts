@@ -1816,6 +1816,10 @@ export const chatStore = createStore<ChatState>()(
         clearMessageIngressVersions('chat', id)
         // Delete messages from IndexedDB asynchronously
         void messageCache.deleteConversationMessages(id)
+        // The search index keeps its own copy of every body: drop it too, or
+        // search keeps finding the deleted conversation's text.
+        void searchIndex.removeConversation('chat', id)
+          .catch(error => logWarn(`Failed to purge search index for conversation: ${String(error)}`))
         // The durable cursors describe messages that no longer exist: drop
         // them with the cache, and invalidate in-flight deferred commits so
         // one can't resurrect an entry for the deleted conversation.

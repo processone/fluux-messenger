@@ -1,4 +1,5 @@
 import { AvatarStateOwner, captureOccupantAvatar, registerAvatarStateOwner } from '../utils/avatarState'
+import { raceDeadline } from '../utils/deadline'
 import { Client, Element, xml } from '@xmpp/client'
 import { createActor, type Subscription, type Snapshot } from 'xstate'
 import type { EventHook } from './EventHook'
@@ -1004,9 +1005,19 @@ export class XMPPClient {
     ...args: Parameters<ClientEvents[K]>
   ): void {
     this.eventHandlers.get(event)?.forEach((handler) => {
-      // Type assertion needed because the Map stores handlers as a union type
-      // but we know at runtime that handlers for this event accept these args
-      ;(handler as (...args: Parameters<ClientEvents[K]>) => void)(...args)
+      try {
+        // Type assertion needed because the Map stores handlers as a union type
+        // but we know at runtime that handlers for this event accept these args
+        const result: unknown = (handler as (...args: Parameters<ClientEvents[K]>) => unknown)(...args)
+        // Async handlers are not awaited; their rejection must not escape as
+        // an unhandled rejection (fatal for Node hosts in strict mode).
+        if (result instanceof Promise) {
+          result.catch((error: unknown) => console.error(`[SDK] Async handler failed for ${String(event)}:`, error))
+        }
+      } catch (error) {
+        // Same contract as emitSDK: one failing handler must not skip the rest.
+        console.error(`[SDK] Handler failed for ${String(event)}:`, error)
+      }
     })
   }
 
@@ -2116,12 +2127,7 @@ export class XMPPClient {
       // of every reply the send can expose.
       this.emitApplicationStanzaOut(iq)
       const response = timeoutMs != null
-        ? await Promise.race([
-            request,
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new RequestTimeoutError(timeoutMs)), timeoutMs)
-            ),
-          ])
+        ? await raceDeadline(request, timeoutMs, () => { throw new RequestTimeoutError(timeoutMs) })
         : await request
       this.observeTransportIQReply(iq, response)
       return response

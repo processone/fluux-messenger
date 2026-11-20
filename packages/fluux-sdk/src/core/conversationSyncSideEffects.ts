@@ -13,10 +13,15 @@ import type { SyncedConversation } from './modules/ConversationSync'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
-import { logInfo } from './logger'
+import { shallow } from 'zustand/shallow'
+import { logInfo, logWarn } from './logger'
 
 /** Debounce interval for publishing (ms) */
 const PUBLISH_DEBOUNCE_MS = 3_000
+/** Delay before retrying a failed publish (ms) */
+const PUBLISH_RETRY_MS = 30_000
+/** Consecutive failed publishes retried before waiting for the next change */
+const MAX_PUBLISH_RETRIES = 3
 
 /**
  * Sets up conversation sync side effects for debounced PEP publishing.
@@ -41,6 +46,7 @@ export function setupConversationSyncSideEffects(
   // The baseline of a session that lost its connection, kept for its resumption.
   let suspendedBaseline: { snapshot: string } | undefined
   let pendingListRefresh: object | undefined
+  let failedPublishes = 0
 
   function buildSnapshot(conversations: SyncedConversation[]): string {
     return JSON.stringify(conversations
@@ -51,12 +57,12 @@ export function setupConversationSyncSideEffects(
   /**
    * Schedule a debounced publish. Resets timer on each call.
    */
-  function schedulePublish(): void {
+  function schedulePublish(delayMs: number = PUBLISH_DEBOUNCE_MS): void {
     if (debounceTimer) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => {
       debounceTimer = undefined
       void doPublish()
-    }, PUBLISH_DEBOUNCE_MS)
+    }, delayMs)
   }
 
   /**
@@ -77,27 +83,34 @@ export function setupConversationSyncSideEffects(
     try {
       await client.internal.conversationSync.publishConversations(conversations)
       if (baseline === publishingBaseline) publishingBaseline.snapshot = snapshot
+      failedPublishes = 0
       logInfo('ConversationSync: published conversation list')
-    } catch {
-      // Best-effort — will retry on next change
+    } catch (err) {
+      failedPublishes++
+      logWarn(`ConversationSync: publish failed (${failedPublishes}): ${err instanceof Error ? err.message : String(err)}`)
+      // A later list change schedules its own publish; the retry covers a
+      // list that stays unchanged after the failure.
+      if (baseline === publishingBaseline && !debounceTimer && failedPublishes <= MAX_PUBLISH_RETRIES) {
+        schedulePublish(PUBLISH_RETRY_MS)
+      }
     }
   }
 
-  // Subscribe to conversation list changes.
-  // Uses a combined selector over conversationEntities size + archivedConversations size
-  // to detect additions, removals, and archive state changes.
+  // Subscribe to conversation list changes. The selector builds a new object
+  // on every call, so it needs `shallow`: with the default identity check it
+  // fires on every chatStore change and each unrelated update (typing, unread)
+  // restarts the debounce.
   const unsubscribeStore = chatStore.subscribe(
     (state) => ({
-      entityCount: state.conversationEntities.size,
-      archivedCount: state.archivedConversations.size,
-      // Include the identity of the maps so changes are detected
       entities: state.conversationEntities,
       archived: state.archivedConversations,
     }),
     () => {
       if (!baseline) return
+      failedPublishes = 0
       schedulePublish()
-    }
+    },
+    { equalityFn: shallow }
   )
 
   const unsubscribeOnline = client.internal.on('online', () => {

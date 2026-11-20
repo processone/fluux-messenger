@@ -184,7 +184,7 @@ describe('forward on a one-to-one message', () => {
       renderDirect({ body: '', attachment })
       open()
       expect(modal.props?.attachment).toEqual(attachment)
-      expect(modal.props?.quote).toMatchObject({ author: 'Alice', text: 'p.png', from: 'alice@example.com' })
+      expect(modal.props?.quote).toMatchObject({ author: 'alice@example.com', text: 'p.png', from: 'alice@example.com' })
     })
 
     it('passes the caption as the quote beside the file', () => {

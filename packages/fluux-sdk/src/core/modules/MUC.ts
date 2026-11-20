@@ -8,10 +8,11 @@ import type { MAM } from './MAM'
 import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
 import { stripNickWhitespace } from '../nick'
 import { generateUUID } from '../../utils/uuid'
+import { getStorageScopeJid } from '../../utils/storageScope'
 import { generateQuickChatSlug } from '../wordlist'
 import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
 import { buildForeignExtensions, parseBookmarkItem } from '../bookmarkItem'
-import { notifyLevelUpdates, savedNotifyLevel, type NotifyLevel } from '../notifyLevel'
+import { notifyLevelUpdates, savedNotifyLevel, type NotifyLevel, type NotifyLevelFields } from '../notifyLevel'
 import { createOriginIdElement } from './messagingUtils'
 import { PRESENCE_PRIORITY } from '../config'
 import {
@@ -174,6 +175,43 @@ interface SavedBookmarkFields {
   details?: BookmarkDetails
 }
 
+/** A room's session-only notification choice; both fields absent when it has none. */
+type SessionNotifyChoice = Pick<NotifyLevelFields, 'notifyAll' | 'notifyOff'>
+
+/** No session-only choice: the level saved in the bookmark applies. */
+const NO_SESSION_CHOICE: SessionNotifyChoice = { notifyAll: undefined, notifyOff: undefined }
+
+function sessionNotifyChoiceOf(room: NotifyLevelFields): SessionNotifyChoice {
+  return { notifyAll: room.notifyAll, notifyOff: room.notifyOff }
+}
+
+function sameSessionNotifyChoice(room: NotifyLevelFields, choice: SessionNotifyChoice): boolean {
+  return room.notifyAll === choice.notifyAll && !!room.notifyOff === !!choice.notifyOff
+}
+
+/**
+ * The notification choices of a room while at least one saved choice waits
+ * for its bookmark publish (see MUC.setRoomNotifyLevel). Choices are numbered
+ * in the order they are made.
+ */
+interface PendingNotifyChoices {
+  /** Whether the account the choices were made on is still the current one. */
+  isAccountCurrent: () => boolean
+  /** The room's latest choice, saved or for the session: the one the room shows. */
+  latest: number
+  /** Saved choices whose bookmark write has not finished. */
+  saving: number
+  /**
+   * The session choice the room returns to when the saved choices still
+   * waiting fail: the one it had before the first of them, or what the latest
+   * choice that took effect since left: a session-only choice, or none once
+   * the bookmark stored a saved one.
+   */
+  fallback: SessionNotifyChoice
+  /** The choice `fallback` comes from; 0 for the room's state before the first saved choice. */
+  fallbackFrom: number
+}
+
 /**
  * The name, nickname and autojoin a save publishes. The caller gives them as
  * Fluux showed them when the save was asked for (`startedFrom`). A field it
@@ -267,9 +305,15 @@ export class MUC extends BaseModule {
    * Rooms whose affiliation lists the server refused to share (forbidden).
    * Remembered for the client's lifetime so member discovery isn't retried
    * (3 IQs + warnings) on every reconnect. A restart — or a permission change
-   * followed by a restart — clears it.
+   * followed by a restart — clears it. Keyed by account as well as room: one
+   * client serves every account it switches to, and a refusal for one account
+   * says nothing about another.
    */
   private membersForbiddenRooms = new Set<string>()
+
+  private membersForbiddenKey(roomJid: string): string {
+    return JSON.stringify([getStorageScopeJid(), roomJid])
+  }
 
   /**
    * The rooms whose bookmark, as Fluux holds it, is known to match the stored
@@ -300,6 +344,15 @@ export class MUC extends BaseModule {
    * outcome.
    */
   private bookmarkWrites = new Map<string, Promise<unknown>>()
+
+  /** Numbers the notification choices made with setRoomNotifyLevel, in order. */
+  private notifyChoiceCount = 0
+
+  /**
+   * The rooms with a saved notification choice waiting for its bookmark
+   * publish, and what each shows if that publish fails (see setRoomNotifyLevel).
+   */
+  private pendingNotifyChoices = new Map<string, PendingNotifyChoices>()
 
   /**
    * Room presence, voice data forms, and correlated message errors.
@@ -776,7 +829,7 @@ export class MUC extends BaseModule {
     for (const [roomJid, deferred] of Array.from(this.joinDeferreds.entries())) {
       if (!deferred.settled) {
         deferred.settled = true
-        deferred.reject(new RoomJoinError(roomJid, 'timeout'))
+        deferred.reject(new RoomJoinError(roomJid, 'disconnected'))
       }
     }
     this.joinDeferreds.clear()
@@ -1418,15 +1471,8 @@ export class MUC extends BaseModule {
         xml('query', { xmlns: NS_DISCO_INFO })
       )
 
-      // Wrap sendIQ with a timeout to prevent hanging if remote server doesn't respond
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`Disco query timeout for ${roomJid}`)), DISCO_QUERY_TIMEOUT_MS)
-      })
-
-      const response = await Promise.race([
-        this.deps.sendIQ(iq),
-        timeoutPromise,
-      ])
+      // A remote room server may never answer.
+      const response = await this.deps.sendIQ(iq, DISCO_QUERY_TIMEOUT_MS)
 
       const query = response.getChild('query', NS_DISCO_INFO)
       if (!query) return null
@@ -1493,14 +1539,7 @@ export class MUC extends BaseModule {
         xml('query', { xmlns: NS_DISCO_INFO })
       )
 
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`Room exists check timeout for ${roomJid}`)), DISCO_QUERY_TIMEOUT_MS)
-      })
-
-      const response = await Promise.race([
-        this.deps.sendIQ(iq),
-        timeoutPromise,
-      ])
+      const response = await this.deps.sendIQ(iq, DISCO_QUERY_TIMEOUT_MS)
 
       const query = response.getChild('query', NS_DISCO_INFO)
       if (!query) return false
@@ -2022,8 +2061,11 @@ export class MUC extends BaseModule {
    * @param roomJid - The room JID
    * @param level - The notification level
    * @param persistent - If true and the room has a bookmark, saves the level to
-   *   it and replaces any session-only choice. Without a bookmark, or if false,
-   *   the choice lasts until the room is left.
+   *   it and replaces any session-only choice once the bookmark stores it.
+   *   Until then the room shows the level as a session-only choice. If the save
+   *   fails, the room returns to the choice it had before and the promise
+   *   rejects. Without a bookmark, or if false, the choice lasts until the room
+   *   is left.
    *
    * @example
    * ```typescript
@@ -2037,19 +2079,81 @@ export class MUC extends BaseModule {
     // leaving the room and would be published by the next automatic bookmark.
     const room = this.deps.stores?.room.getRoom(roomJid)
     const saved = persistent && !!room?.isBookmarked
+    const choice = ++this.notifyChoiceCount
+
+    // The saved fields hold only what the bookmark stores, since every later
+    // save of the bookmark publishes them again (see publishBookmark): a level
+    // the server refused must never reach them. A saved choice is therefore
+    // shown as a session choice until its publish succeeds.
+    const shown = notifyLevelUpdates(level, false)
+    let pending = this.pendingNotifyChoices.get(roomJid)
+    if (pending && !pending.isAccountCurrent()) pending = undefined
+    if (saved && !pending && room) {
+      pending = {
+        isAccountCurrent: this.captureQuery().isAccountCurrent,
+        latest: choice,
+        saving: 0,
+        fallback: sessionNotifyChoiceOf(room),
+        fallbackFrom: 0,
+      }
+      this.pendingNotifyChoices.set(roomJid, pending)
+    }
+    if (pending) {
+      pending.latest = choice
+      if (!saved) {
+        pending.fallback = shown
+        pending.fallbackFrom = choice
+      }
+    }
 
     // SDK event only - binding calls store.updateRoom
-    this.deps.emitSDK('room:updated', { roomJid, updates: notifyLevelUpdates(level, saved) })
+    this.deps.emitSDK('room:updated', { roomJid, updates: shown })
 
-    if (!saved || !room) return
-    // Only the level changes: the password and other fields are those the
-    // bookmark has when this save's turn comes.
-    const published = await this.updateBookmark(roomJid, { notifyLevel: level })
-    // A removal queued before this save won: it cleared the saved choice, and
-    // without a bookmark the choice lasts for the session.
-    if (!published && this.deps.stores?.room.getRoom(roomJid)) {
-      this.deps.emitSDK('room:updated', { roomJid, updates: notifyLevelUpdates(level, false) })
+    if (!saved || !pending) return
+    pending.saving++
+    try {
+      // Only the level changes: the password and other fields are those the
+      // bookmark has when this save's turn comes.
+      const published = await this.updateBookmark(roomJid, { notifyLevel: level })
+      // Published: publishBookmark wrote the stored level to the saved fields,
+      // and it replaces the session choice. Not published: a removal queued
+      // before this save won, and without a bookmark the choice lasts for the
+      // session.
+      const after = published ? NO_SESSION_CHOICE : shown
+      if (pending.fallbackFrom < choice) {
+        pending.fallback = after
+        pending.fallbackFrom = choice
+      }
+      if (pending.latest === choice) this.replaceShownNotifyChoice(roomJid, pending, shown, after)
+    } catch (err) {
+      // The bookmark keeps the level it had: unless a later choice replaced
+      // this one, the room shows again what it showed before.
+      if (pending.latest === choice) this.replaceShownNotifyChoice(roomJid, pending, shown, pending.fallback)
+      throw err
+    } finally {
+      pending.saving--
+      if (pending.saving === 0 && this.pendingNotifyChoices.get(roomJid) === pending) {
+        this.pendingNotifyChoices.delete(roomJid)
+      }
     }
+  }
+
+  /**
+   * Replace the session choice a saved choice showed with `next`, on the
+   * account it was made on, unless something else changed the room's session
+   * choice since (leaving the room ends it).
+   */
+  private replaceShownNotifyChoice(
+    roomJid: string,
+    pending: PendingNotifyChoices,
+    shown: SessionNotifyChoice,
+    next: SessionNotifyChoice,
+  ): void {
+    if (!pending.isAccountCurrent()) return
+    const room = this.deps.stores?.room.getRoom(roomJid)
+    if (!room || !sameSessionNotifyChoice(room, shown) || sameSessionNotifyChoice(room, next)) return
+    // SDK event only - binding calls store.updateRoom
+    this.deps.emitSDK('room:updated', { roomJid, updates: { notifyAll: next.notifyAll, notifyOff: next.notifyOff } })
   }
 
   /**
@@ -2692,7 +2796,7 @@ export class MUC extends BaseModule {
   async queryRoomMembers(
     roomJid: string
   ): Promise<Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }>> {
-    if (this.membersForbiddenRooms.has(roomJid)) return []
+    if (this.membersForbiddenRooms.has(this.membersForbiddenKey(roomJid))) return []
 
     const allMembers: Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }> = []
 
@@ -2732,7 +2836,7 @@ export class MUC extends BaseModule {
           // would lose the member list they ARE entitled to see on every later
           // session (#519).
           if (affiliation === 'member') {
-            this.membersForbiddenRooms.add(roomJid)
+            this.membersForbiddenRooms.add(this.membersForbiddenKey(roomJid))
             logWarn(`Member discovery forbidden for ${roomJid} — skipping for this session`)
           } else {
             logWarn(`Affiliation '${affiliation}' list forbidden for ${roomJid} — stopping at the accessible tiers`)

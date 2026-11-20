@@ -11,6 +11,15 @@ function getScopedStorageKey(): string {
 }
 
 /**
+ * Persisted payload for a scope with nothing stored. `persist` keeps the
+ * in-memory state when `getItem` returns null, so returning null after an
+ * account switch would leave the previous account's list in place.
+ */
+function emptyPersistedIgnoreState() {
+  return { state: { ignoredUsers: {} }, version: 0 }
+}
+
+/**
  * An ignored user entry, stored per room.
  *
  * @category Stores
@@ -134,11 +143,11 @@ export const ignoreStore = createStore<IgnoreState>()(
                 str = legacy
               }
             }
-            if (!str) return null
+            if (!str) return emptyPersistedIgnoreState()
             return JSON.parse(str)
           } catch {
             localStorage.removeItem(scopedKey)
-            return null
+            return emptyPersistedIgnoreState()
           }
         },
         setItem: (_, value) => {

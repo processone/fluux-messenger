@@ -100,6 +100,27 @@ describe('indexed room retraction identities', () => {
     expect((await search('cleanup')).map(row => row.messageId).sort()).toEqual(unrelated.map(row => row.id).sort())
   })
 
+  it('opens an older index that already carries the identity index', async () => {
+    // Stands for any future version bump: the upgrade then runs against a
+    // database where every current store and index already exists.
+    const db = await openDB(DB_NAME, 2, {
+      upgrade(db) {
+        db.createObjectStore('search-tokens', { keyPath: 'token' })
+        const docs = db.createObjectStore('search-docs', { keyPath: 'indexId' })
+        docs.createIndex('timestamp', 'timestamp')
+        docs.createIndex('conversationId', 'conversationId')
+        docs.createIndex('identityKeys', 'identityKeys', { multiEntry: true })
+        db.createObjectStore('search-meta', { keyPath: 'key' })
+      },
+    })
+    db.close()
+
+    await initSearchIndex(SCOPE)
+    await indexMessages([message('after-upgrade')])
+
+    expect((await search('cleanup')).map(row => row.messageId)).toEqual(['after-upgrade'])
+  })
+
   it.each([1, 2])('migrates a v%i index without losing legacy aliases or unrelated records', async (version) => {
     const target = message('survivor', { originId: 'shared-origin' })
     const originCopy = message('absorbed', { stanzaId: target.stanzaId, originId: target.originId })

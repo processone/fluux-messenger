@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { hasFastToken, getBareJid, connectionStore } from '@fluux/sdk'
+import { ignoreStore } from '@fluux/sdk/stores'
 import { clearAutoReconnectCredentials, clearLocalData } from './clearLocalData'
 
 // Exercise real store reset ordering rather than the test setup's connection facade.
 vi.unmock('@fluux/sdk')
+vi.unmock('@fluux/sdk/stores')
 
 const FAST_TOKEN_PREFIX = 'fluux:fast-token:'
 
@@ -55,5 +57,15 @@ describe('clearLocalData push cleanup', () => {
     expect(statusAtRequests).toEqual(['online', 'online'])
     expect(localStorage.getItem('fluux-push-registration')).toBeNull()
     expect(localStorage.getItem('fluux-push-token')).toBeNull()
+  })
+})
+
+describe('clearLocalData ignore list', () => {
+  it('clears the ignore list of the account being wiped', async () => {
+    ignoreStore.getState().addIgnored('room@conference.example.com', { identifier: 'occ-1', displayName: 'Spammer' })
+
+    await clearLocalData()
+
+    expect(ignoreStore.getState().ignoredUsers).toEqual({})
   })
 })

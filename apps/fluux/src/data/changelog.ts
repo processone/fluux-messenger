@@ -37,6 +37,7 @@ export const changelog: ChangelogEntry[] = [
         'Capital I and lowercase l now look different everywhere in Fluux: I has small serifs and l a curved foot, so names like Ilia and llia, or a look-alike such as PayPaI, can no longer pass for one another',
         'Italic text now uses real italic letters instead of slanted upright ones',
         'Aurora dark is a little lighter and calmer: the sidebar, frame and conversation now stand apart, text is softer on the eyes, and timestamps, code comments, keywords and the offline status dot are easier to read. Aurora light is cleaner too: a softer periwinkle accent, lighter sidebar, composer and quote cards, an icon rail tinted instead of grey, scrollbars that match the theme, and readable code comments and offline status dot. The Aurora accent choices are retuned so each one looks balanced next to the others: in dark they glow evenly and carry dark text, in light they are deep enough for white text and stay readable as links and icons',
+        'The accent choices shared by the other built-in themes (Indigo, Dracula, Nord, Gruvbox, Solarized, One Dark, Tokyo Night, Monokai, Rosé Pine, Kanagawa, GitHub and Pure) are balanced the same way. In light mode, orange, yellow, green, teal and sky no longer fade into the page as links and icons, and every choice now carries white text. An accent picked before an update now follows the update instead of keeping its old shade',
         'Settings → Encryption now opens an overview with a row for OpenPGP and one for OMEMO. Each method has its own screen with a back arrow: OpenPGP keeps its switch, key backup and key controls, and OMEMO shows your devices. In the device list, a key fingerprint now wraps only between its groups of eight characters, and Remove is no longer red',
       ],
     }, {
@@ -48,6 +49,7 @@ export const changelog: ChangelogEntry[] = [
         'A room bookmarked without a nickname in another XMPP app now joins under your profile name or account name instead of "user"',
         'When changing a room\'s Auto-join or removing its bookmark from the rooms list fails, Fluux now shows an error. Before, nothing told you that the change did not go through',
         'When a notification setting you choose in a room\'s header cannot be saved to the room\'s bookmark, Fluux now shows an error. Before, nothing told you that the setting was not saved',
+        'When a notification setting you choose in a room\'s header cannot be saved to the room\'s bookmark, the header now goes back to the setting the room had, and a later change to the room\'s Auto-join or bookmark no longer saves the refused setting. Before, the header kept showing it as saved',
         'Reloading Fluux while a Settings page such as Encryption is open now keeps that page open instead of switching to Profile',
         'After a page reload or a reconnection, your server no longer sends again what Fluux had already received, and servers that limit how much they keep waiting for confirmation no longer disconnect Fluux during a long session',
         'Dialogs in Chrome, Edge and other Chromium-based browsers now blur the conversation behind them, as they already did in Safari. Before, the conversation stayed sharp behind the dialog',
@@ -61,6 +63,7 @@ export const changelog: ChangelogEntry[] = [
         'Scrolling to the latest message right after opening a conversation or room now ends at the bottom. Before, it could stop a little short, with the last line of the latest message hidden',
         'OpenPGP: when another of your devices updates your verified contacts while this device is still saving a verification, the server can no longer later hand this device an older list of verified contacts, which could bring back a verification you had removed',
         'The chat header\'s choices to turn encryption off and back on, its lock and tooltip once encryption is off, and the notice that someone reacted to your message when it has no text to quote now appear in your language instead of English',
+        'Replying to someone in a one-to-one chat no longer sends the name you gave them in your contacts. The quote that other apps show above your reply now names them by their address',
       ],
     }],
   },

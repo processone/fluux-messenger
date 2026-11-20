@@ -16,6 +16,7 @@ import {
 import type { ModuleDependencies } from './BaseModule'
 import type { Room } from '../types/room'
 import { RoomJoinError } from '../errors'
+import { setStorageScopeJid } from '../../utils/storageScope'
 import { parse } from 'ltx'
 
 describe('MUC Module', () => {
@@ -930,16 +931,22 @@ describe('MUC Module', () => {
     })
 
     describe('setRoomNotifyLevel', () => {
-      it('saves Off to the bookmark and replaces the session choice', async () => {
+      // The saved fields are what every later bookmark save publishes, so only
+      // the bookmark's answer may write them, never the choice itself.
+      it('saves Off to the bookmark, and writes the saved level only from the stored bookmark', async () => {
         mockStores.room.getRoom.mockReturnValue(storedRoom())
 
         await muc.setRoomNotifyLevel(ROOM, 'none', true)
 
-        expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
-          roomJid: ROOM,
-          updates: { notifyAll: undefined, notifyOff: undefined, notifyAllPersistent: false, notifyOffPersistent: true },
-        })
         expect(notifyOf()).toBe('none')
+        expect(mockEmitSDK).toHaveBeenCalledWith('room:bookmark', {
+          roomJid: ROOM,
+          bookmark: expect.objectContaining({ notifyLevel: 'none' }),
+        })
+        const updates = mockEmitSDK.mock.calls.filter(([event]) => event === 'room:updated').map(([, payload]) => payload.updates)
+        // The choice shows at once, as a session choice while the bookmark is saved
+        expect(updates[0]).toEqual({ notifyAll: false, notifyOff: true })
+        expect(updates.filter((u) => 'notifyAllPersistent' in u || 'notifyOffPersistent' in u)).toEqual([])
       })
 
       it('holds Off for the session without publishing when not persistent', async () => {
@@ -1165,6 +1172,17 @@ describe('MUC Module', () => {
           children: [{ name: 'not-authorized', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } }],
         },
       ]))
+
+    it('reports a join cut short by client teardown as disconnected, not timed out', async () => {
+      mockStores.room.getRoom.mockReturnValue(storedRoom())
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.joinRoom(ROOM, 'mynick')
+      const result = muc.joinResult(ROOM)
+      muc.cleanup()
+
+      await expect(result).rejects.toMatchObject({ reason: 'disconnected' })
+    })
 
     it('reports a refused password as wrong-password', async () => {
       mockStores.room.getRoom.mockReturnValue(storedRoom())
@@ -1636,7 +1654,8 @@ describe('MUC Module', () => {
             type: 'get',
             to: 'room@conference.example.org',
           }),
-        })
+        }),
+        10_000,
       )
     })
 
@@ -2287,6 +2306,27 @@ describe('MUC Module', () => {
 
       expect(result).toEqual([])
       expect(mockSendIQ).not.toHaveBeenCalled()
+    })
+
+    it('keeps the forbidden cache per account', async () => {
+      const forbidden = Object.assign(new Error('forbidden'), { condition: 'forbidden' })
+      setStorageScopeJid('first@example.org')
+      try {
+        mockSendIQ.mockRejectedValueOnce(forbidden)
+        await muc.queryRoomMembers(roomJid)
+        mockSendIQ.mockClear()
+
+        setStorageScopeJid('second@example.org')
+        mockSendIQ
+          .mockResolvedValueOnce(createAffiliationResponse('member', [{ jid: 'carol@example.org', nick: 'Carol' }]))
+          .mockResolvedValueOnce(createAffiliationResponse('admin', []))
+          .mockResolvedValueOnce(createAffiliationResponse('owner', []))
+        const result = await muc.queryRoomMembers(roomJid)
+
+        expect(result).toEqual([{ jid: 'carol@example.org', nick: 'Carol', affiliation: 'member' }])
+      } finally {
+        setStorageScopeJid(null)
+      }
     })
 
     it('does NOT poison the cache when a higher tier is forbidden but member succeeded (#519 admin)', async () => {
