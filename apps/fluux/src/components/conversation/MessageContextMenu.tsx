@@ -44,7 +44,7 @@ export interface MessageContextMenuProps extends ActionProps {
 export function MessageContextMenu({
   menu, target, imageUrl, onSaveImage,
   onReaction, myReactions, onShowReactors, body, onReply, onEdit, onDelete,
-  onCopyMessageLink, onForward, onSaveAttachment, canReply, canEdit, canDelete,
+  onCopyMessageLink, onForward, onToggleSaved, isSaved, onSaveAttachment, canReply, canEdit, canDelete,
 }: MessageContextMenuProps) {
   const { t } = useTranslation()
   const [view, setView] = useState<'actions' | 'emoji' | 'links'>('actions')
@@ -167,6 +167,8 @@ export function MessageContextMenu({
         onDelete={onDelete}
         onCopyText={body ? () => run(() => copyToClipboard(body)) : undefined}
         onForward={onForward}
+        onToggleSaved={onToggleSaved}
+        isSaved={isSaved}
         onCopyMessageLink={onCopyMessageLink}
         // A link under the pointer has its own Copy link above.
         onCopyLink={links.length > 0 && !target.linkUrl ? () => (links.length === 1 ? copyLink(links[0]) : setView('links')) : undefined}

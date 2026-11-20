@@ -1055,6 +1055,8 @@ export const MessageBubble = memo(function MessageBubble({
         onDelete={onDelete}
         onCopyMessageLink={onCopyMessageLink}
         onForward={onForward}
+        onToggleSaved={onToggleSaved}
+        isSaved={isSaved}
         onSaveAttachment={saveableAttachment
           ? () => downloadAttachment(saveableAttachment, { errorMessage: t('common.downloadFailed') })
           : undefined}
