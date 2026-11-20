@@ -559,6 +559,8 @@
         "forwardedCopyDirectChat": "Conversație directă",
         "forwardedCopyOpen": "Deschide mesajul original",
         "forwardedCopyUnknownSource": "o cameră necunoscută",
+        "forwardedCopyDiffers": "The forwarder's copy differs from the original message",
+        "forwardedCopyClaimed": "Copy sent by the forwarder:",
         "forwardedOriginNotFound": "Mesajul original nu se află în istoricul tău",
         "forwardQuoteOnly": "Trimite comentariul tău și o copie citată a mesajului. Toți cei din destinație pot citi citatul.",
         "forwardEncryptedOnly": "Acest mesaj provine dintr-o conversație criptată, deci poate fi redirecționat doar către o conversație criptată.",

@@ -559,6 +559,8 @@
         "forwardedCopyDirectChat": "Priamy čet",
         "forwardedCopyOpen": "Otvoriť pôvodnú správu",
         "forwardedCopyUnknownSource": "neznáma miestnosť",
+        "forwardedCopyDiffers": "The forwarder's copy differs from the original message",
+        "forwardedCopyClaimed": "Copy sent by the forwarder:",
         "forwardedOriginNotFound": "Pôvodná správa nie je vo vašej histórii",
         "forwardQuoteOnly": "Odošle váš komentár a citovanú kópiu správy. Citáciu môžu čítať všetci v cieli.",
         "forwardEncryptedOnly": "Táto správa pochádza zo šifrovaného četu, preto ju možno preposlať iba do šifrovaného četu.",

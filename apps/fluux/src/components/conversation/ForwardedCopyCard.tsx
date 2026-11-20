@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, MessageSquare, Users } from 'lucide-react'
-import { buildRoomMessageLink, chatStore, connectionStore, findForwardedOrigin, getBareJid, type BaseMessage } from '@fluux/sdk'
+import { buildRoomMessageLink, chatStore, connectionStore, findForwardedOrigin, forwardedCopyRoomLink, getBareJid, type BaseMessage, type RoomMessage } from '@fluux/sdk'
 import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
 import { getConsistentTextColor } from '../Avatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
@@ -10,18 +10,48 @@ import { routeDeepLink } from '@/utils/deepLinkRouter'
 import { formatDateHeader } from '@/utils/dateFormat'
 import { useDayChange } from '@/hooks/useDayChange'
 import { format } from 'date-fns'
+import { useRoomMessagePreview } from './RoomMessageLinkPreview'
 
 /**
  * One forwarded copy, drawn as the source card: who wrote it, where, when, and the copied text.
  * A click (or Enter) opens the original in context, found by the room link, the ids the forward
  * carries, or local history; nothing is looked up until then.
  */
-export function ForwardedCopyCard({ message, formatTime, isDarkMode }: {
+export function ForwardedCopyCard(props: {
   message: Pick<BaseMessage, 'forwarded' | 'references'>
   formatTime: (date: Date) => string
   isDarkMode?: boolean
 }) {
-  const copy = message.forwarded!
+  const link = forwardedCopyRoomLink(props.message)
+  return link ? <VerifiedCopyCard {...props} link={link} /> : <CopyCardView {...props} />
+}
+
+/** A copy of a room message the reader can read: the room's own message replaces the forwarder's claim. */
+function VerifiedCopyCard({ link, ...props }: Parameters<typeof ForwardedCopyCard>[0] & { link: NonNullable<ReturnType<typeof forwardedCopyRoomLink>> }) {
+  const { readable } = useRoomMessagePreview(link)
+  return <CopyCardView {...props} real={readable} />
+}
+
+/** The copy was cut at this many characters, so a longer original may start with it. */
+const COPY_LIMIT_CHARACTERS = 4000
+
+function copyDiffers(copyText: string, real: string): boolean {
+  const a = real.trim(), b = copyText.trim()
+  if (a === b) return false
+  return !(Array.from(copyText).length >= COPY_LIMIT_CHARACTERS && a.startsWith(b))
+}
+
+function CopyCardView({ message, formatTime, isDarkMode, real }: {
+  message: Pick<BaseMessage, 'forwarded' | 'references'>
+  formatTime: (date: Date) => string
+  isDarkMode?: boolean
+  /** The room's own message the copy links to, when the reader can read it. */
+  real?: RoomMessage
+}) {
+  const claimed = message.forwarded!
+  const differs = !!real && copyDiffers(claimed.text, real.body)
+  // The room's message speaks for itself; the copy is only the forwarder's claim.
+  const copy = real ? { ...claimed, author: real.nick, from: claimed.from, text: real.body, timestamp: real.timestamp.getTime() } : claimed
   const { t, i18n } = useTranslation()
   const dayKey = useDayChange()
   const { navigateToConversation } = useNavigateToTarget()
@@ -92,6 +122,13 @@ export function ForwardedCopyCard({ message, formatTime, isDarkMode }: {
         {time && <span className="text-xs text-fluux-muted">· {time}</span>}
       </div>
       <div className="mt-1 text-sm text-fluux-text whitespace-pre-wrap break-words select-text cursor-text">{copy.text}</div>
+      {differs && (
+        <div data-forward-differs className="mt-1.5 border-t border-fluux-hover pt-1.5 text-xs">
+          <div className="font-medium text-fluux-yellow">{t('chat.forwardedCopyDiffers')}</div>
+          <div className="mt-0.5 text-fluux-muted">{t('chat.forwardedCopyClaimed')}</div>
+          <div className="whitespace-pre-wrap break-words select-text cursor-text text-fluux-muted">{claimed.text}</div>
+        </div>
+      )}
     </div>
   )
 }

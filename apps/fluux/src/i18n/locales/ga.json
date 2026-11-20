@@ -559,6 +559,8 @@
         "forwardedCopyDirectChat": "Comhrá díreach",
         "forwardedCopyOpen": "Oscail an bhunteachtaireacht",
         "forwardedCopyUnknownSource": "seomra anaithnid",
+        "forwardedCopyDiffers": "The forwarder's copy differs from the original message",
+        "forwardedCopyClaimed": "Copy sent by the forwarder:",
         "forwardedOriginNotFound": "Níl an bhunteachtaireacht i do stair",
         "forwardQuoteOnly": "Seolann sé do thrácht agus cóip luaite den teachtaireacht. Is féidir le gach duine sa cheann scríbe an lua a léamh.",
         "forwardEncryptedOnly": "Is ó chomhrá criptithe an teachtaireacht seo, mar sin ní féidir í a sheoladh ar aghaidh ach chuig comhrá criptithe.",

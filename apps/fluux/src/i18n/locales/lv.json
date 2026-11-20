@@ -558,6 +558,8 @@
         "forwardedCopyDirectChat": "Tiešā saruna",
         "forwardedCopyOpen": "Atvērt oriģinālo ziņu",
         "forwardedCopyUnknownSource": "nezināma istaba",
+        "forwardedCopyDiffers": "The forwarder's copy differs from the original message",
+        "forwardedCopyClaimed": "Copy sent by the forwarder:",
         "forwardedOriginNotFound": "Oriģinālās ziņas nav jūsu vēsturē",
         "forwardQuoteOnly": "Nosūta jūsu komentāru un ziņas citētu kopiju. Visi galamērķī var izlasīt citātu.",
         "forwardEncryptedOnly": "Šī ziņa ir no šifrētas sarunas, tāpēc to var pārsūtīt tikai uz šifrētu sarunu.",

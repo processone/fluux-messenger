@@ -558,6 +558,8 @@
         "forwardedCopyDirectChat": "Discussion privée",
         "forwardedCopyOpen": "Ouvrir le message d'origine",
         "forwardedCopyUnknownSource": "un salon inconnu",
+        "forwardedCopyDiffers": "La copie du transmetteur diffère du message d'origine",
+        "forwardedCopyClaimed": "Copie envoyée par le transmetteur :",
         "forwardedOriginNotFound": "Le message d'origine n'est pas dans votre historique",
         "forwardQuoteOnly": "Envoie votre commentaire et une copie citée du message. Tous les membres de la destination peuvent lire la citation.",
         "forwardEncryptedOnly": "Ce message provient d'une discussion chiffrée ; il ne peut être transféré que vers une discussion chiffrée.",

@@ -558,6 +558,8 @@
         "forwardedCopyDirectChat": "Direktchat",
         "forwardedCopyOpen": "Originalnachricht öffnen",
         "forwardedCopyUnknownSource": "ein unbekannter Raum",
+        "forwardedCopyDiffers": "Die Kopie des Weiterleitenden weicht von der Originalnachricht ab",
+        "forwardedCopyClaimed": "Vom Weiterleitenden gesendete Kopie:",
         "forwardedOriginNotFound": "Die Originalnachricht ist nicht in deinem Verlauf",
         "forwardQuoteOnly": "Sendet deinen Kommentar und eine zitierte Kopie der Nachricht. Alle im Ziel können das Zitat lesen.",
         "forwardEncryptedOnly": "Diese Nachricht stammt aus einem verschlüsselten Chat und kann nur in einen verschlüsselten Chat weitergeleitet werden.",

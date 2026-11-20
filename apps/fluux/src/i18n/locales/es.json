@@ -559,6 +559,8 @@
         "forwardedCopyDirectChat": "Chat directo",
         "forwardedCopyOpen": "Abrir el mensaje original",
         "forwardedCopyUnknownSource": "una sala desconocida",
+        "forwardedCopyDiffers": "La copia del reenviador difiere del mensaje original",
+        "forwardedCopyClaimed": "Copia enviada por quien reenvió:",
         "forwardedOriginNotFound": "El mensaje original no está en tu historial",
         "forwardQuoteOnly": "Envía tu comentario y una copia citada del mensaje. Todos los del destino pueden leer la cita.",
         "forwardEncryptedOnly": "Este mensaje es de un chat cifrado, por lo que solo se puede reenviar a un chat cifrado.",

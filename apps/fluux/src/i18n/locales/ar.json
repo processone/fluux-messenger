@@ -560,6 +560,8 @@
         "forwardedCopyDirectChat": "محادثة مباشرة",
         "forwardedCopyOpen": "فتح الرسالة الأصلية",
         "forwardedCopyUnknownSource": "غرفة غير معروفة",
+        "forwardedCopyDiffers": "The forwarder's copy differs from the original message",
+        "forwardedCopyClaimed": "Copy sent by the forwarder:",
         "forwardedOriginNotFound": "الرسالة الأصلية غير موجودة في سجلك",
         "forwardQuoteOnly": "يرسل تعليقك ونسخة مقتبسة من الرسالة. يمكن لجميع من في الوجهة قراءة الاقتباس.",
         "forwardEncryptedOnly": "هذه الرسالة من محادثة مشفرة، لذا لا يمكن إعادة توجيهها إلا إلى محادثة مشفرة.",

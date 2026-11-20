@@ -557,6 +557,8 @@
         "forwardedCopyDirectChat": "שיחה ישירה",
         "forwardedCopyOpen": "פתיחת ההודעה המקורית",
         "forwardedCopyUnknownSource": "חדר לא ידוע",
+        "forwardedCopyDiffers": "The forwarder's copy differs from the original message",
+        "forwardedCopyClaimed": "Copy sent by the forwarder:",
         "forwardedOriginNotFound": "ההודעה המקורית אינה בהיסטוריה שלך",
         "forwardQuoteOnly": "שולח את התגובה שלך ועותק מצוטט של ההודעה. כל מי שביעד יכול לקרוא את הציטוט.",
         "forwardEncryptedOnly": "הודעה זו מגיעה משיחה מוצפנת, ולכן אפשר להעביר אותה רק לשיחה מוצפנת.",

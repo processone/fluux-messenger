@@ -557,6 +557,8 @@
         "forwardedCopyDirectChat": "Izravni razgovor",
         "forwardedCopyOpen": "Otvori izvornu poruku",
         "forwardedCopyUnknownSource": "nepoznata soba",
+        "forwardedCopyDiffers": "The forwarder's copy differs from the original message",
+        "forwardedCopyClaimed": "Copy sent by the forwarder:",
         "forwardedOriginNotFound": "Izvorne poruke nema u vašoj povijesti",
         "forwardQuoteOnly": "Šalje vaš komentar i citiranu kopiju poruke. Citat mogu pročitati svi na odredištu.",
         "forwardEncryptedOnly": "Ova poruka je iz šifriranog razgovora pa se može proslijediti samo u šifrirani razgovor.",
