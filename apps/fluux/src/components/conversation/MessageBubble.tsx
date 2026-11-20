@@ -586,14 +586,14 @@ export const MessageBubble = memo(function MessageBubble({
   // A source that cannot be read, such as an undecryptable one, is forwarded as a link only.
   const readable = !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   // A message holding a copy forwards its displayed comment and the copied text as one readable quote.
-  const forwardText = readable ? (copyShown ? forwardableText(shown.body, message.forwarded) : (message.attachment && message.body.trim() === message.attachment.url ? '' : message.body)) : ''
+  const forwardText = readable ? (copyShown ? forwardableText(shown.body, message.forwarded) : message.body) : ''
   const quotable = !!forwardText.trim()
   // A room message forwards with its link; a one-to-one message has none, so it forwards its readable
   // content. A message read from an encrypted chat is marked so it can only go into an encrypted chat.
   const directForward = message.type === 'chat' && quotable && !message.deliveryError
   // A photo or file goes along as the file itself, whether the source is a room or a one-to-one chat.
   const forwardAttachment = readable && !message.deliveryError ? message.attachment : undefined
-  const attachmentOnlyForward = message.type === 'chat' && !!forwardAttachment && !quotable
+  const attachmentOnlyForward = message.type === 'chat' && !!forwardAttachment
   const onForward = forwardMessage && (messageLink || directForward || attachmentOnlyForward) ? () => forwardMessage({
     ...(messageLink && { link: messageLink }),
     ...(forwardAttachment && { attachment: forwardAttachment }),

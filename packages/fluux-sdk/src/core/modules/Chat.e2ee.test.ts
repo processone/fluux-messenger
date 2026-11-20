@@ -2173,6 +2173,22 @@ describe('Chat E2EE wiring', () => {
       expect(captured).toHaveLength(0)
     })
 
+    it('refuses to retry a file that first went out encrypted when encryption no longer applies', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({ jid: 'me@example.com', manager: emptyManager, captureStanza: (el) => captured.push(el) })
+      const plainChat = new Chat(deps, new MAM(deps))
+      const attachment = { url: 'https://upload.example.com/file.bin', name: 'file.bin', mediaType: 'application/octet-stream' }
+      await expect(plainChat.resendMessage('bob@example.com', '', 'm1', attachment, undefined, undefined, true))
+        .rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+      expect(captured).toHaveLength(0)
+      await plainChat.resendMessage('bob@example.com', '', 'm2', attachment)
+      expect(captured).toHaveLength(1)
+    })
+
     it('shifts OOB fallback offsets when a cleartext reply to an encrypted message carries an attachment', async () => {
       const emptyManager = new E2EEManager({
         storage: new InMemoryStorageBackend(),

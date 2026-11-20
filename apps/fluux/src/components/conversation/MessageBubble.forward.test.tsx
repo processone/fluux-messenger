@@ -160,13 +160,6 @@ describe('forward on a one-to-one message', () => {
       expect(modal.props?.quote).toBeUndefined()
     })
 
-    it('does not quote the file address as a caption', () => {
-      renderDirect({ body: attachment.url, attachment })
-      open()
-      expect(modal.props?.attachment).toEqual(attachment)
-      expect(modal.props?.quote).toBeUndefined()
-    })
-
     it('passes the caption as the quote beside the file', () => {
       renderDirect({ body: 'Look at this', attachment })
       open()
