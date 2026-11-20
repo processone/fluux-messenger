@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildRoomMessageLink, connectionStore, roomStore, type ForwardedCopy, type Room, type RoomMessage } from '@fluux/sdk'
+import { buildRoomMessageLink, connectionStore, roomStore, type FileAttachment, type ForwardedCopy, type Room, type RoomMessage } from '@fluux/sdk'
 import { ForwardedCopyCard } from './ForwardedCopyCard'
 
 // FLM-336 finding 2: a forward whose link names a room message the reader can read shows that message, and flags a copy that differs.
@@ -31,13 +31,13 @@ const room: Room = { jid, name: 'Team', nickname: 'Alice', joined: true, isBookm
   occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set() }
 const link = buildRoomMessageLink(jid, real.stanzaId!)
 
-function card(text: string, joined = true, claimed: Partial<ForwardedCopy> = {}, body = real.body) {
+function card(text: string, joined = true, claimed: Partial<ForwardedCopy> = {}, body = real.body, attachment?: FileAttachment, realAttachment?: FileAttachment) {
   const fallbackText = `> Bob wrote:\n> ${text}\n${link}`
   const forwarded: ForwardedCopy = { author: 'Mallory', from: `${jid}/Bob`, type: 'groupchat', text, timestamp: 1,
     fallback: { begin: 0, end: fallbackText.length, text: fallbackText }, ...claimed }
   const references = [{ type: 'data' as const, uri: link, begin: fallbackText.length - link.length, end: fallbackText.length }]
-  roomStore.getState().addRoom({ ...room, joined }, [{ ...real, body }])
-  return render(<ForwardedCopyCard message={{ forwarded, references }} formatTime={() => '18:52'} />)
+  roomStore.getState().addRoom({ ...room, joined }, [{ ...real, body, attachment: realAttachment }])
+  return render(<ForwardedCopyCard message={{ forwarded, references, attachment }} formatTime={() => '18:52'} />)
 }
 
 beforeEach(() => {
@@ -113,5 +113,28 @@ describe('forwarded copy of a readable room message', () => {
     expect(el.textContent).toContain('Mallory')
     expect(el.textContent).toContain('Send me your password')
     expect(container.querySelector('[data-forward-differs]')).toBeNull()
+  })
+
+  // FLM-403: the forwarder's file stays in the verified quote only when it is the room message's own file.
+  describe('forwarded file beside a readable room message', () => {
+    const photo = { url: 'https://upload.example/p.png', name: 'p.png', mediaType: 'image/png' }
+    const other = { url: 'https://upload.example/other.png', name: 'other.png', mediaType: 'image/png' }
+
+    it('draws the file in the quote, unflagged, when it is the room message\'s own', () => {
+      const { container } = card(real.body, true, {}, real.body, photo, photo)
+      expect(container.querySelector('[data-forwarded-copy] > [data-forwarded-attachment] img')).toBeTruthy()
+      expect(container.querySelector('[data-forward-differs]')).toBeNull()
+    })
+
+    it('flags a different file and shows it under the claimed text only', () => {
+      const { container } = card(real.body, true, {}, real.body, other, photo)
+      expect(container.querySelector('[data-forward-differs] [data-forwarded-attachment] img[src*="other.png"]')).toBeTruthy()
+      expect(container.querySelectorAll('img')).toHaveLength(1)
+    })
+
+    it('flags a file the room message does not have', () => {
+      const { container } = card(real.body, true, {}, real.body, photo, undefined)
+      expect(container.querySelector('[data-forward-differs] [data-forwarded-attachment] img')).toBeTruthy()
+    })
   })
 })

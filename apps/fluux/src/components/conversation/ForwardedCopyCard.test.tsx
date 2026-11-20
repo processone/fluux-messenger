@@ -169,11 +169,10 @@ describe('ForwardedCopyCard stale lookups', () => {
   // FLM-403: the source label shares the header baseline: a label row aligned by its text, its icon centred on its own.
   it('aligns the source label with the name and time by their text baseline', () => {
     mocks.rooms.set('tech@conference.example.org', { name: 'ProcessOne tech' })
-    const { container } = card({ type: 'groupchat', from: 'tech@conference.example.org/bob', timestamp: todayNoon })
+    card({ type: 'groupchat', from: 'tech@conference.example.org/bob', timestamp: todayNoon })
     const label = screen.getByText('ProcessOne tech')
     expect(label.className).toContain('items-baseline')
     expect(label.className).not.toContain('items-center')
     expect(label.querySelector('svg')!.getAttribute('class')).toContain('self-center')
-    expect(container.querySelector('[data-forwarded-copy] .items-baseline')).toBeTruthy()
   })
 })

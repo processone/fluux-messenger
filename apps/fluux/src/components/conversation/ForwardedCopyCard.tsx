@@ -28,6 +28,8 @@ interface CardProps {
  * A click outside a link, or Enter, opens the original in context, found by the room link, the ids the forward
  * carries, or local history. When the copy links a room message the reader can read, that message
  * is read on display and shown in place of the copy.
+ * The forwarding message's own file is drawn inside the card and a click on it opens the file, not the original;
+ * beside a readable room message, a file that is not that message's own is flagged with the claimed text.
  */
 export function ForwardedCopyCard(props: CardProps) {
   const link = forwardedCopyRoomLink(props.message)
@@ -45,7 +47,10 @@ function CopyCardView({ message, formatTime, isDarkMode, onMediaLoad, isOwnMessa
   real?: RoomMessage
 }) {
   const claimed = message.forwarded!
-  const differs = !!real && !forwardedCopyMatchesBody(claimed.text, real.body)
+  // A file the forwarder attached to a copy of a readable room message is shown in the quote only when it is the
+  // room message's own file; otherwise it is part of the forwarder's claim, shown under the flag.
+  const fileDiffers = !!real && !!message.attachment && message.attachment.url !== real.attachment?.url
+  const differs = !!real && (!forwardedCopyMatchesBody(claimed.text, real.body) || fileDiffers)
   // The room's message speaks for itself; the copy is only the forwarder's claim.
   // Everything shown comes from the room's message, never from the copy's claimed sender or kind.
   const copy: ForwardedCopy = real ? { author: real.nick, from: real.from, type: 'groupchat', text: real.body, timestamp: real.timestamp.getTime() } : claimed
@@ -124,10 +129,10 @@ function CopyCardView({ message, formatTime, isDarkMode, onMediaLoad, isOwnMessa
         {time && <span className="text-xs text-fluux-muted">· {time}</span>}
       </div>
       <div className="mt-1 text-sm text-fluux-text whitespace-pre-wrap break-words select-text cursor-text">{renderStyledMessage(copy.text)}</div>
-      {message.attachment && (
+      {message.attachment && !fileDiffers && (
         // The forwarded file is the forwarding message's own attachment; it is drawn in the quote it belongs to.
         // Clicks on it belong to the preview (open, play), not to opening the original.
-        <div data-forwarded-attachment className="cursor-default" onClick={event => event.stopPropagation()}>
+        <div data-forwarded-attachment title="" className="cursor-default" onClick={event => event.stopPropagation()}>
           <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} isOwnMessage={isOwnMessage} />
         </div>
       )}
@@ -136,6 +141,11 @@ function CopyCardView({ message, formatTime, isDarkMode, onMediaLoad, isOwnMessa
           <div className="font-medium text-fluux-yellow">{t('chat.forwardedCopyDiffers')}</div>
           <div className="mt-0.5 text-fluux-muted">{t('chat.forwardedCopyClaimed')}</div>
           <div className="whitespace-pre-wrap break-words select-text cursor-text text-fluux-muted">{claimed.text}</div>
+          {fileDiffers && (
+            <div data-forwarded-attachment title="" className="cursor-default" onClick={event => event.stopPropagation()}>
+              <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} isOwnMessage={isOwnMessage} />
+            </div>
+          )}
         </div>
       )}
     </div>
