@@ -34,6 +34,8 @@ export const changelog: ChangelogEntry[] = [
     }, {
       type: 'changed',
       items: [
+        'Capital I and lowercase l now look different everywhere in Fluux: I has small serifs and l a curved foot, so names like Ilia and llia, or a look-alike such as PayPaI, can no longer pass for one another',
+        'Italic text now uses real italic letters instead of slanted upright ones',
         'Aurora dark is a little lighter and calmer: the sidebar, frame and conversation now stand apart, text is softer on the eyes, and timestamps, code comments, keywords and the offline status dot are easier to read. Aurora light is cleaner too: a softer periwinkle accent, lighter sidebar, composer and quote cards, an icon rail tinted instead of grey, scrollbars that match the theme, and readable code comments and offline status dot. The Aurora accent choices are retuned so each one looks balanced next to the others: in dark they glow evenly and carry dark text, in light they are deep enough for white text and stay readable as links and icons',
         'The accent choices shared by the other built-in themes (Indigo, Dracula, Nord, Gruvbox, Solarized, One Dark, Tokyo Night, Monokai, Rosé Pine, Kanagawa, GitHub and Pure) are balanced the same way. In light mode, orange, yellow, green, teal and sky no longer fade into the page as links and icons, and every choice now carries white text. An accent picked before an update now follows the update instead of keeping its old shade',
         'Settings → Encryption now opens an overview with a row for OpenPGP and one for OMEMO. Each method has its own screen with a back arrow: OpenPGP keeps its switch, key backup and key controls, and OMEMO shows your devices. In the device list, a key fingerprint now wraps only between its groups of eight characters, and Remove is no longer red',
@@ -41,6 +43,7 @@ export const changelog: ChangelogEntry[] = [
     }, {
       type: 'fixed',
       items: [
+        'Headings and section titles in Polish, Czech, Slovak, Slovenian, Croatian, Hungarian, Romanian, Latvian, Lithuanian, Estonian and Maltese no longer switch typeface in the middle of a word, and Russian, Ukrainian, Belarusian, Bulgarian and Greek headings now get the same heading style as other languages. The heading font is now Inter Display, which covers the same letters as the rest of the interface',
         'When Fluux could not refresh your bookmarks after reconnecting, changing a room\'s bookmark, autojoin or notification setting no longer brings back an older room name, nickname, room password, notification setting or another XMPP app\'s settings',
         'Changing a room bookmark\'s nickname while you are in the room, in Fluux or in another XMPP app, no longer changes the nickname Fluux uses for you in that room',
         'A room bookmarked without a nickname in another XMPP app now joins under your profile name or account name instead of "user"',

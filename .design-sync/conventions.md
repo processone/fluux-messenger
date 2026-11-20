@@ -35,7 +35,7 @@ class set works across all fourteen themes. Use these families for your own layo
 | Backgrounds | `bg-fluux-bg` `bg-fluux-bg-secondary` `bg-fluux-surface` `bg-fluux-sidebar` `bg-fluux-chat` `bg-fluux-hover` `bg-fluux-float` `bg-fluux-brand` `bg-fluux-red` |
 | Text | `text-fluux-text` `text-fluux-muted` `text-fluux-link` `text-fluux-brand` `text-fluux-error` `text-fluux-encryption` `text-fluux-text-on-accent` |
 | Border | `border-fluux-border` |
-| Type | `font-sans` (Inter) `font-mono` (JetBrains Mono) `font-display` (Inter Tight) |
+| Type | `font-sans` (Inter) `font-mono` (JetBrains Mono) `font-display` (Inter Display) |
 | Effects | `fluux-glass` (frosted panel) `fluux-popover` (elevated menu) `animate-sheet-up` |
 
 **Important:** the shipped stylesheet is the app's compiled Tailwind output, so it contains only

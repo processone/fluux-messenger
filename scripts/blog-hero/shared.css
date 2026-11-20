@@ -20,18 +20,18 @@
   font-weight: 700;
 }
 @font-face {
-  font-family: 'Inter Tight';
-  src: url('../../apps/fluux/public/fonts/InterTight-Medium.woff2') format('woff2');
+  font-family: 'Inter Display';
+  src: url('../../apps/fluux/public/fonts/InterDisplay-Medium.woff2') format('woff2');
   font-weight: 500;
 }
 @font-face {
-  font-family: 'Inter Tight';
-  src: url('../../apps/fluux/public/fonts/InterTight-SemiBold.woff2') format('woff2');
+  font-family: 'Inter Display';
+  src: url('../../apps/fluux/public/fonts/InterDisplay-SemiBold.woff2') format('woff2');
   font-weight: 600;
 }
 @font-face {
-  font-family: 'Inter Tight';
-  src: url('../../apps/fluux/public/fonts/InterTight-Bold.woff2') format('woff2');
+  font-family: 'Inter Display';
+  src: url('../../apps/fluux/public/fonts/InterDisplay-Bold.woff2') format('woff2');
   font-weight: 700;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
