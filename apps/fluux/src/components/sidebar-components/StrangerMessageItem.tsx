@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { getLocalPart } from '@fluux/sdk'
-import { Check, X, Ban } from 'lucide-react'
 import { Avatar } from '../Avatar'
-import { Tooltip } from '../Tooltip'
+import { RequestActions } from './RequestActions'
 
 interface StrangerMessageItemProps {
   jid: string
@@ -57,39 +56,14 @@ export function StrangerMessageItem({ jid, messages, onSelect, onAccept, onIgnor
         </div>
       </div>
 
-      {/* Actions — same compact layout as SubscriptionRequestItem so the row
-          never overflows the narrow sidebar: Accept keeps its label (primary),
-          Ignore/Block are icon buttons with tooltips. */}
-      <div className="flex items-stretch gap-1.5 mt-2">
-        <button
-          type="button"
-          onClick={onAccept}
-          className="flex-1 min-w-0 px-2 py-1.5 bg-fluux-brand text-fluux-text-on-accent text-sm font-medium rounded hover:bg-fluux-brand-hover transition-colors flex items-center justify-center gap-1"
-        >
-          <Check className="size-4 flex-shrink-0" />
-          <span className="truncate">{t('common.accept')}</span>
-        </button>
-        <Tooltip content={t('common.ignore')} position="top">
-          <button
-            type="button"
-            onClick={onIgnore}
-            className="flex-shrink-0 px-2.5 py-1.5 bg-fluux-muted/20 text-fluux-text rounded hover:bg-fluux-muted/30 transition-colors flex items-center justify-center"
-            aria-label={t('common.ignore')}
-          >
-            <X className="size-4" />
-          </button>
-        </Tooltip>
-        <Tooltip content={t('common.block')} position="top">
-          <button
-            type="button"
-            onClick={onBlock}
-            className="flex-shrink-0 px-2.5 py-1.5 bg-fluux-red text-white rounded hover:bg-fluux-red/80 transition-colors flex items-center justify-center"
-            aria-label={t('common.block')}
-          >
-            <Ban className="size-4" />
-          </button>
-        </Tooltip>
-      </div>
+      <RequestActions
+        acceptLabel={t('common.accept')}
+        onAccept={onAccept}
+        dismissLabel={t('common.ignore')}
+        onDismiss={onIgnore}
+        blockLabel={t('common.block')}
+        onBlock={onBlock}
+      />
     </div>
   )
 }

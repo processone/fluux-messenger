@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { getLocalPart, type RoomInvitation } from '@fluux/sdk'
-import { Check, X, DoorOpen } from 'lucide-react'
-import { Tooltip } from '../Tooltip'
+import { DoorOpen } from 'lucide-react'
+import { RequestActions } from './RequestActions'
 
 interface MucInvitationItemProps {
   invitation: RoomInvitation
@@ -36,28 +36,12 @@ export function MucInvitationItem({ invitation, onAccept, onDecline }: MucInvita
         </div>
       </div>
 
-      {/* Join keeps its label (primary action); decline is a compact icon
-          button so the row never overflows the narrow sidebar. */}
-      <div className="flex items-stretch gap-1.5 mt-2">
-        <button
-          type="button"
-          onClick={onAccept}
-          className="flex-1 min-w-0 px-2 py-1.5 bg-fluux-green text-white text-sm font-medium rounded hover:bg-fluux-green/80 transition-colors flex items-center justify-center gap-1"
-        >
-          <Check className="size-4 flex-shrink-0" />
-          <span className="truncate">{t('events.join')}</span>
-        </button>
-        <Tooltip content={t('events.decline')} position="top">
-          <button
-            type="button"
-            onClick={onDecline}
-            className="flex-shrink-0 px-2.5 py-1.5 bg-fluux-muted/20 text-fluux-text rounded hover:bg-fluux-muted/30 transition-colors flex items-center justify-center"
-            aria-label={t('events.decline')}
-          >
-            <X className="size-4" />
-          </button>
-        </Tooltip>
-      </div>
+      <RequestActions
+        acceptLabel={t('events.join')}
+        onAccept={onAccept}
+        dismissLabel={t('events.decline')}
+        onDismiss={onDecline}
+      />
     </div>
   )
 }
