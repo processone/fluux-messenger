@@ -410,6 +410,14 @@ function boundedPlainText(value: string, limit: number): string {
 }
 
 /**
+ * The text a forwarded copy of a message body carries once received: the sender trims and cuts
+ * the body at the limit, and the parser drops control and direction-mark characters.
+ */
+export function forwardedCopyTextOf(body: string): string {
+  return boundedPlainText(Array.from(body.trim()).slice(0, MAX_FORWARDED_CODE_POINTS).join(''), MAX_FORWARDED_CODE_POINTS)
+}
+
+/**
  * XEP-0297: the one structured copy a message carries beside its own body. Bounded and
  * non-recursive: only the forwarded message's plain body, sender, original time and the
  * original's ids (the inner `id` and an XEP-0359 `<stanza-id/>` with its `by`) are read. The ids

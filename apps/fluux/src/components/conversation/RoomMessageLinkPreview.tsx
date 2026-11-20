@@ -26,7 +26,7 @@ export function RoomMessageLinkPreview({ message, formatTime, isDarkMode, onSour
 
 /**
  * The reader's own copy of a linked room message: found in the joined room's local history or its
- * archive, kept current by edits and retractions. `message` is set only when it is readable.
+ * archive, kept current by edits and retractions. `message` may be unreadable (an undecryptable entry); `readable` is set only when it is readable. Key the caller by the target: the state belongs to one target.
  */
 export function useRoomMessagePreview(target: RoomMessageLink) {
   const { client } = useXMPPContext()
