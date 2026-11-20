@@ -72,6 +72,13 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     maxWaitMs: 45_000,
   },
   {
+    id: 'saved-hint',
+    targetSelector: '[data-nav="saved"]',
+    position: 'right',
+    completionTrigger: { type: 'click', selector: '[data-nav="saved"]' },
+    maxWaitMs: 30_000,
+  },
+  {
     id: 'mention-hint',
     targetSelector: '[data-nav="rooms"]',
     position: 'right',

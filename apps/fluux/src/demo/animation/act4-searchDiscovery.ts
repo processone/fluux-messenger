@@ -55,6 +55,12 @@ export const act4Steps: DemoAnimationStep[] = [
     action: 'custom',
     data: { type: 'tutorial', stepId: 'search-hint' },
   },
+  // Tutorial: saved messages
+  {
+    delayMs: 157_000,
+    action: 'custom',
+    data: { type: 'tutorial', stepId: 'saved-hint' },
+  },
   // Emma DM with a link
   {
     delayMs: 160_000,

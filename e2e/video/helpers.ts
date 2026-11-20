@@ -42,6 +42,7 @@ export const VIEW_PATHS: Record<string, string> = {
   archive: '/archive',
   events: '/events',
   search: '/search',
+  saved: '/saved',
   admin: '/admin',
   settings: '/settings',
 }

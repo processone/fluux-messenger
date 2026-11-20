@@ -32,7 +32,7 @@ import { WindowControls } from './components/WindowControls'
 import { ROUTER_USE_TRANSITIONS } from './config/routerTransitions'
 import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
 import { buildDemoData, buildDemoAnimation } from './demo/demoData'
-import { buildShowcaseData, SHOWCASE_SELF_NAME } from './demo/showcase'
+import { buildShowcaseData, seedShowcaseSaved, SHOWCASE_SELF_NAME } from './demo/showcase'
 import { getDiscoverableRooms } from './demo/rooms'
 import { parseStressParam, installPerfHarness } from './demo/perfHarness'
 import { startRecountDeferralTally } from './utils/recountDeferralTally'
@@ -107,7 +107,10 @@ const demoAnimation = showcaseScene ? [] : buildDemoAnimation()
 
 const demoClient = new DemoClient()
 demoClient.populateDemo(demoData)
-if (showcaseScene) connectionStore.getState().setOwnNickname(SHOWCASE_SELF_NAME)
+if (showcaseScene) {
+  connectionStore.getState().setOwnNickname(SHOWCASE_SELF_NAME)
+  seedShowcaseSaved(demoData)
+}
 demoClient.setDiscoverableRooms(getDiscoverableRooms())
 // Make MAM scroll-up ("load older") prepend synthetic older messages in demo mode, so the
 // prepend-anchor scroll restore can be exercised without a server.

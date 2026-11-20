@@ -24,7 +24,7 @@
 
 [Watch the Fluux Messenger demo](assets/readme/fluux-demo.mp4)
 
-*A quick tour: messaging, group rooms, end-to-end encryption, and theming.*
+*A quick tour: messaging, search, saved messages, end-to-end encryption, and theming.*
 
 </div>
 
@@ -63,6 +63,11 @@
 |-------------|------------------------|
 | <a href="screenshots/showcase/02-chat-light.png"><img src="screenshots/showcase/02-chat-light.png" width="380" alt="Light theme"/></a> | <a href="screenshots/08-settings-dark.png"><img src="screenshots/08-settings-dark.png" width="380" alt="Themes"/></a> |
 | *Light and dark modes follow your system* | *14 built-in themes, custom accents, and font settings* |
+
+| Saved Messages | Search |
+|----------------|--------|
+| <a href="screenshots/showcase/06-saved-dark.png"><img src="screenshots/showcase/06-saved-dark.png" width="380" alt="Saved messages list, with the original message highlighted in its conversation"/></a> | <a href="screenshots/showcase/07-search-dark.png"><img src="screenshots/showcase/07-search-dark.png" width="380" alt="Message search with highlighted matches and a preview of the conversation"/></a> |
+| *Keep a private copy of any message, one click from the original* | *Full-text search across conversations and rooms* |
 
 [See all screenshots in the visual overview](screenshots/OVERVIEW.md)
 

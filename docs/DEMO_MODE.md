@@ -57,6 +57,14 @@ The demo populates the UI with:
   the next join) can be exercised without a server.
 - **Live animations** that start after page load: typing indicators, incoming messages, and emoji reactions
 
+### Showcase scene
+
+`http://localhost:5173/demo.html?scene=showcase` loads curated marketing data (used for the README and release pictures) instead of the test fixture. It opens with **5 saved messages**, seeded through the same path as a person's save (`apps/fluux/src/demo/showcase/saved.ts`): Emma Ward "Venue confirmed…", Ava Reyes "Door code is 4827…" (an end-to-end encrypted chat), Liam Ross "Press kit…", Liam in Launch Crew "Livestream is ready…" and Olivia in Design Studio "Badges are printed…". Opening a row shows the original message highlighted. The default demo keeps an empty Saved list, because `e2e/saved-messages.ts` depends on it.
+
+### Guided tour
+
+Without `tutorial=false`, the default demo runs a guided tour. Its Saved messages tip (`saved-hint`, English and French) points at the Saved icon in the icon rail.
+
 ## Recording a Demo Video
 
 A Playwright pipeline drives demo mode and records a promo-style walkthrough of the major features. It produces two variants from one shared storyboard:
@@ -64,7 +72,7 @@ A Playwright pipeline drives demo mode and records a promo-style walkthrough of 
 | Command                   | Produces                              | Length                |
 |---------------------------|---------------------------------------|-----------------------|
 | `npm run demo:video`      | both variants                         | —                     |
-| `npm run demo:video:reel` | `video/fluux-demo-reel.{mp4,webm}`    | ~2m 9s highlight reel |
+| `npm run demo:video:reel` | `video/fluux-demo-reel.{mp4,webm}`    | ~2m 31s highlight reel |
 | `npm run demo:video:full` | `video/fluux-demo-full.{mp4,webm}`    | Extended full tour    |
 
 Output is written to the git-ignored `video/` directory at the repo root, as **native 1920×1080 MP4 and WebM** (no upscaling). Set `FLUUX_VIDEO_OUTPUT_DIR` to an absolute directory to keep captures and exports outside the checkout:

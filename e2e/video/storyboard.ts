@@ -125,6 +125,42 @@ export const storyboard: Scene[] = [
     },
   },
 
+  // 7 — Global search (reel)
+  {
+    id: 'search',
+    variant: 'reel',
+    run: async (d) => {
+      await d.navigateTo('search')
+      await d.caption('Search everything', 'Full-text search across conversations & rooms')
+      await d.glideClick(d.page.locator('input[type="text"]').first(), 400)
+      await d.typeText('design')
+      await d.dwell(1400)
+      const firstResult = d.page.locator('[data-search-result-id]').first()
+      if (await firstResult.isVisible().catch(() => false)) await d.glideClick(firstResult, 1800)
+      await d.clearCaption()
+    },
+  },
+
+  // 7b — Saved messages (reel): save from the More menu, open Saved, open the original
+  {
+    id: 'saved',
+    variant: 'reel',
+    run: async (d) => {
+      await d.crossfade(async () => { await d.navigateTo('messages'); await d.selectItem('Emma Wilson') })
+      await d.caption('Save what matters', 'A private list that follows you on every device')
+      const row = d.page.locator('[data-message-id="demo-emma-4"][data-message-body]')
+      await d.glideTo(row, 20)
+      await row.hover()
+      await d.hold(500)
+      await d.glideClick(row.getByRole('button', { name: 'More options', exact: true }), 700)
+      await d.glideClick(d.page.getByRole('button', { name: 'Save message', exact: true }), 900)
+      await d.navigateTo('saved')
+      await d.dwell(1400)
+      await d.glideClick(d.page.getByTestId('saved-row').first(), 1800)
+      await d.clearCaption()
+    },
+  },
+
   // 7 — End-to-end encryption (reel)
   {
     id: 'encryption',
@@ -192,22 +228,6 @@ export const storyboard: Scene[] = [
       await d.page.locator('code').filter({ hasText: 'BAF0' }).first().waitFor({ timeout: 6_000 }).catch(() => {})
       await d.caption('Your keys, your control', 'Fingerprint, backup, export & key rotation')
       await d.dwell(2800)
-      await d.clearCaption()
-    },
-  },
-
-  // 12 — Global search (full only)
-  {
-    id: 'search',
-    variant: 'full',
-    run: async (d) => {
-      await d.navigateTo('search')
-      await d.caption('Search everything', 'Full-text search across conversations & rooms')
-      await d.glideClick(d.page.locator('input[type="text"]').first(), 400)
-      await d.typeText('design')
-      await d.dwell(1400)
-      const firstResult = d.page.locator('[data-search-result-id]').first()
-      if (await firstResult.isVisible().catch(() => false)) await d.glideClick(firstResult, 1800)
       await d.clearCaption()
     },
   },

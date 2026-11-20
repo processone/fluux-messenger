@@ -41,6 +41,8 @@ function ava(): Message[] {
     m('2', 'self', 'Great news! Can you send me the access details?', hoursAgo(2.9)),
     m('3', AVA, 'Sure. Sending them here since this chat is end-to-end encrypted 🔒', minutesAgo(13)),
     m('4', AVA, 'Door code is 4827, and the Wi-Fi password is printed on the badges', minutesAgo(12), {
+      // Decrypted on this device, so saving it keeps its text (sealed to the account's key in a real save).
+      contentAvailability: { state: 'ready' },
       reactions: { '🙏': [SELF_JID] },
     }),
   ]

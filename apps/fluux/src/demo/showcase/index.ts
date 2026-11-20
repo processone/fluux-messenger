@@ -16,6 +16,7 @@ import { buildShowcaseConversations } from './conversations'
 import { buildShowcaseRooms } from './rooms'
 
 export { SHOWCASE_SELF_NAME } from './constants'
+export { seedShowcaseSaved } from './saved'
 
 /** Build the showcase data with fresh relative timestamps. */
 export function buildShowcaseData(): DemoData {
