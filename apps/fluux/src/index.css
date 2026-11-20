@@ -1443,8 +1443,7 @@ html, body {
  */
 .composer-active [data-message-toolbar] {
   opacity: 0;
-  /* The visible bar sets its own pointer-events, so opacity alone would leave it clickable. */
-  visibility: hidden;
+  pointer-events: none;
 }
 
 /* Font size slider styling */
