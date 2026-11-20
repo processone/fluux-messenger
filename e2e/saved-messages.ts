@@ -61,6 +61,14 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await expect(page.getByTestId('saved-conversation')).toHaveCount(0)
   await page.getByRole('button', { name: 'Show all saved messages' }).click()
   await expect(page.getByTestId('saved-scope')).toHaveCount(0)
+  await expect(page.getByTestId('saved-row')).toHaveCount(2)
+
+  // Choosing a row of the narrowed list opens the message highlighted in this conversation.
+  await page.getByTestId('header-saved').click()
+  await expect(page.getByTestId('saved-row')).toHaveCount(1)
+  await page.getByTestId('saved-row').click()
+  await expect(page).toHaveURL(new RegExp(`/messages/${encodeURIComponent(PEER)}$`))
+  await expect(page.locator('[data-message-id="saved-chat-1"].message-highlight')).toBeInViewport()
 
   // Both appear in Saved, newest saved first.
   await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
@@ -88,6 +96,8 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await expect(page.getByTestId('saved-row')).toHaveCount(1)
   await page.getByTestId('saved-row').first().getByRole('button', { name: 'Remove from saved' }).click()
   await expect(page.getByText('No saved messages')).toBeVisible()
+  // Nothing is saved any more: no conversation shows the header button.
+  await expect(page.getByTestId('header-saved')).toHaveCount(0)
   expect(page.context().pages()).toHaveLength(1)
 })
 
