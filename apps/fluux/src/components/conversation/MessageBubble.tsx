@@ -44,6 +44,7 @@ import { Tooltip } from '../Tooltip'
 import { MessageActionSheet } from './MessageActionSheet'
 import { MessageContextMenu, type MessageContextTarget } from './MessageContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
+import { selectionAtButtonDown, selectionForMenu } from '@/utils/menuSelection'
 import { isRenderableImageMime } from '@/utils/thumbnail'
 import { computeMessageActions } from './messageActionCapabilities'
 import { MessageInteractionContext, useMessageInteractionHeld } from './useMessageInteractionHold'
@@ -641,7 +642,7 @@ export const MessageBubble = memo(function MessageBubble({
   const [menuTarget, setMenuTarget] = useState<MessageContextTarget>({ selection: '', image: false })
   const selectionBeforeClick = useRef<string | null>(null)
   const handleContentMouseDown = (event: React.MouseEvent) => {
-    selectionBeforeClick.current = event.button === 2 || event.ctrlKey ? (window.getSelection()?.toString() ?? '') : null
+    selectionBeforeClick.current = selectionAtButtonDown(event)
   }
   const handleContentContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     const el = event.target instanceof Element ? event.target : null
@@ -650,16 +651,13 @@ export const MessageBubble = memo(function MessageBubble({
     const imageAttachment = readable && saveableAttachment && isRenderableImageMime(saveableAttachment.mediaType) ? saveableAttachment : undefined
     const linkUrl = readable ? el?.closest('a[href]')?.getAttribute('href') ?? undefined : undefined
     const image = !!imageAttachment && !!el?.closest('[data-context-image]')
-    const selection = window.getSelection()
-    const text = readable && selection && !selection.isCollapsed && selection.rangeCount > 0
-      && selection.getRangeAt(0).intersectsNode(event.currentTarget) ? selection.toString() : ''
     const before = selectionBeforeClick.current
     selectionBeforeClick.current = null
-    const selected = text.trim() !== '' && (before === null || before === text) ? text : ''
-    // The click itself selected a word: the menu opens over no selection.
-    if (text && !selected) selection?.removeAllRanges()
+    const picked = readable ? selectionForMenu(event.currentTarget, before) : { text: '' }
+    const selected = picked.text
+    const range = picked.range
     if (!hasMessageActions && !selected && !linkUrl && !image) return
-    setMenuTarget({ selection: selected, range: selected ? selection!.getRangeAt(0).cloneRange() : undefined, linkUrl, image })
+    setMenuTarget({ selection: selected, range, linkUrl, image })
     messageMenu.handleContextMenu(event)
   }
   useEffect(() => {

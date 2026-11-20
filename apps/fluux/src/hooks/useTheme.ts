@@ -129,12 +129,19 @@ function applyAccentOverride(accent: AccentPreset | null, resolved: 'light' | 'd
   if (!accent) return
 
   const hsl = resolved === 'light' ? accent.light : accent.dark
+  const onAccent = contrastColorForHsl(hsl.h, hsl.s, hsl.l)
   const vars: [string, string][] = [
     ['--fluux-accent-h', `${hsl.h}`],
     ['--fluux-accent-s', `${hsl.s}%`],
     ['--fluux-accent-l', `${hsl.l}%`],
-    ['--fluux-text-on-accent', contrastColorForHsl(hsl.h, hsl.s, hsl.l)],
+    ['--fluux-text-on-accent', onAccent],
   ]
+  // A luminous dark fill (black text) reads as text at its own color, so undo
+  // any theme-level text lift. A deep dark fill (white text, e.g. Aurora's
+  // Periwinkle) keeps the theme's lift: it is too deep to read as text.
+  if (resolved === 'light' || onAccent === '#000000') {
+    vars.push(['--fluux-text-accent', 'var(--fluux-bg-accent)'])
+  }
   for (const [name, value] of vars) {
     root.style.setProperty(name, value)
     previousAccentVarsRef.current.push(name)

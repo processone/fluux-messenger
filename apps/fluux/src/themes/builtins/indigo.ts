@@ -30,10 +30,11 @@ export const indigoTheme: ThemeDefinition = {
       '--fluux-base-80': '#949ba4',
       '--fluux-base-90': '#dbdee1',
       '--fluux-base-100': '#f2f3f5',
-      // Accent (blurple)
+      // Accent (blurple), lifted so it reads as text and icon color on the grey
+      // chat surface (4.7:1; the classic #5865f2 was 2.8:1). Fills take black text.
       '--fluux-accent-h': '235',
       '--fluux-accent-s': '86%',
-      '--fluux-accent-l': '65%',
+      '--fluux-accent-l': '76%',
       // Companion + own-message name
       '--fluux-accent-2': '#00a8fc',
       '--fluux-text-self': '#a5b4fc',
@@ -59,10 +60,11 @@ export const indigoTheme: ThemeDefinition = {
       '--fluux-base-80': '#4a4d54',
       '--fluux-base-90': '#2e3338',
       '--fluux-base-100': '#1e1f22',
-      // Accent (blurple)
+      // Accent (blurple), a shade deeper than the classic #5865f2 so white text
+      // on fills clears AA with margin (5.8:1, was 4.55:1), as does accent text.
       '--fluux-accent-h': '235',
       '--fluux-accent-s': '86%',
-      '--fluux-accent-l': '65%',
+      '--fluux-accent-l': '60%',
       // Companion + own-message name
       '--fluux-accent-2': '#0969da',
       '--fluux-text-self': '#4f46e5',
@@ -81,7 +83,7 @@ export const indigoTheme: ThemeDefinition = {
     },
   },
   swatches: {
-    dark: ['#1e1f22', '#2b2d31', '#5865f2', '#00a8fc', '#23a559'],
-    light: ['#e3e5e8', '#ebedef', '#5865f2', '#0969da', '#23a559'],
+    dark: ['#1e1f22', '#2b2d31', '#8d96f6', '#00a8fc', '#23a559'],
+    light: ['#e3e5e8', '#ebedef', '#4150f1', '#0969da', '#23a559'],
   },
 }

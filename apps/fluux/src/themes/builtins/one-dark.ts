@@ -21,9 +21,11 @@ export const oneDarkTheme: ThemeDefinition = {
       '--fluux-base-80': '#828997', // mono-2
       '--fluux-base-90': '#abb2bf', // mono-1 / fg
       '--fluux-base-100': '#d7dae0',
-      // Foundation — accent (blue)
-      '--fluux-accent-h': '220',
-      '--fluux-accent-s': '100%',
+      // Foundation — accent: One Dark's syntax blue #61afef. The UI accent
+      // #528bff read at only 3.7:1 as text on the chat surface; #61afef reads at
+      // 5.1:1 and carries black text on fills.
+      '--fluux-accent-h': '207',
+      '--fluux-accent-s': '82%',
       '--fluux-accent-l': '66%',
       // Foundation — palette
       '--fluux-color-red': '#e06c75',

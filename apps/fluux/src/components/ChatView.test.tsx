@@ -94,6 +94,9 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   getBareJid: (jid: string) => jid.split('/')[0],
   getLocalPart: (jid: string) => jid.split('@')[0],
   useReferencedMessage: () => undefined,
+  // Contact actions of the header's menu; these render tests never open it.
+  useRosterActions: () => ({ addContact: vi.fn(), removeContact: vi.fn(), renameContact: vi.fn() }),
+  useBlocking: () => ({ blockJid: vi.fn(), unblockJid: vi.fn() }),
   // Viewport-evidence generation plumbing. A fixed
   // scope + generation is enough for these render tests — none of them
   // exercise the SDK's real activation path, so the generation never moves.
@@ -233,6 +236,7 @@ vi.mock('@fluux/sdk/react', () => ({
     mockContacts.forEach((c: Contact) => contactsMap.set(c.jid, c))
     return selector({ contacts: contactsMap })
   },
+  useBlockingStore: (selector: (state: { blockedJids: Set<string> }) => unknown) => selector({ blockedJids: new Set() }),
   useContactTime: () => null, useLastActivity: vi.fn(),
 }))
 
@@ -395,6 +399,8 @@ vi.mock('lucide-react', () => ({
   Archive: () => <span data-testid="icon-archive">Archive</span>,
   ArchiveRestore: () => <span data-testid="icon-archive-restore">Unarchive</span>,
   User: () => <span data-testid="icon-user">User</span>,
+  UserPlus: () => <span data-testid="icon-user-plus">UserPlus</span>,
+  Ban: () => <span data-testid="icon-ban">Ban</span>,
   MoreVertical: () => <span data-testid="icon-more-vertical">More</span>,
   MessageCircle: () => <span data-testid="icon-message-circle">MessageCircle</span>,
 }))

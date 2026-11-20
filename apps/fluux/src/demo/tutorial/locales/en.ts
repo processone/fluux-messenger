@@ -29,6 +29,10 @@ const tutorialEN = {
     content: 'Search messages across all conversations. Use type filters or "in:Team" to narrow results.',
     actionHint: 'Click the Search icon and try typing "SDK" or "in:Team"',
   },
+  'saved-hint': {
+    content: 'Keep a private copy of any message. Saved messages follow you on every device, and a click takes you back to the original.',
+    actionHint: 'Open a message\'s More menu and choose Save message, then click the Saved icon',
+  },
   'mention-hint': {
     content: 'You were @mentioned in Team Chat. The badge shows unread mentions.',
     actionHint: 'Click on Team Chat to jump to your mention',

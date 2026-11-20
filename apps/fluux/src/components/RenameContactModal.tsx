@@ -6,7 +6,7 @@ import { useModalInput } from '@/hooks'
 import { ModalShell } from './ModalShell'
 
 interface RenameContactModalProps {
-  contact: Contact
+  contact: Pick<Contact, 'jid' | 'name'>
   onRename: (name: string) => Promise<void>
   onClose: () => void
 }

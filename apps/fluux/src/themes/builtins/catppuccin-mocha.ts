@@ -9,7 +9,7 @@ const catppuccinAccents: AccentPreset[] = [
   { name: 'Rosewater',  dark: { h: 10,  s: 56, l: 91 }, light: { h: 11,  s: 59, l: 67 } },
   { name: 'Flamingo',   dark: { h: 0,   s: 59, l: 88 }, light: { h: 0,   s: 60, l: 67 } },
   { name: 'Pink',       dark: { h: 316, s: 72, l: 86 }, light: { h: 316, s: 73, l: 69 } },
-  { name: 'Mauve',      dark: { h: 267, s: 84, l: 81 }, light: { h: 266, s: 85, l: 58 } },
+  { name: 'Mauve',      dark: { h: 267, s: 84, l: 82 }, light: { h: 266, s: 85, l: 58 } },
   { name: 'Red',        dark: { h: 343, s: 81, l: 75 }, light: { h: 347, s: 87, l: 44 } },
   { name: 'Maroon',     dark: { h: 350, s: 65, l: 77 }, light: { h: 355, s: 76, l: 59 } },
   { name: 'Peach',      dark: { h: 23,  s: 92, l: 75 }, light: { h: 22,  s: 99, l: 52 } },
@@ -43,10 +43,11 @@ export const catppuccinMochaTheme: ThemeDefinition = {
       '--fluux-base-80': '#a6adc8', // subtext0
       '--fluux-base-90': '#cdd6f4', // text
       '--fluux-base-100': '#f5f5f5',
-      // Foundation — accent (mauve)
+      // Foundation — accent: mauve, one point lighter than canonical #cba6f7 so
+      // it reads at AA as text on the surface1 chat (4.7:1, was 4.48:1).
       '--fluux-accent-h': '267',
       '--fluux-accent-s': '84%',
-      '--fluux-accent-l': '81%',
+      '--fluux-accent-l': '82%',
       // Foundation — palette
       '--fluux-color-red': '#f38ba8',    // red
       '--fluux-color-green': '#a6e3a1',  // green

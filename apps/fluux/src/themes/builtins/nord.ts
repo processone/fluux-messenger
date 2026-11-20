@@ -21,10 +21,14 @@ export const nordTheme: ThemeDefinition = {
       '--fluux-base-80': '#a5b1c7',
       '--fluux-base-90': '#d8dee9',
       '--fluux-base-100': '#eceff4',
-      // Foundation — accent (frost blue)
-      '--fluux-accent-h': '213',
-      '--fluux-accent-s': '32%',
-      '--fluux-accent-l': '52%',
+      // Foundation — accent: frost cyan, nord8, the palette's primary accent.
+      // The accent doubles as text and icon color, and this theme's chat
+      // surface (#434c5e) is light for a dark theme: nord10 (#5e81ac) read at
+      // only 2.1:1 there. nord8, lifted a touch, reads at 4.6:1 and carries
+      // black text on fills.
+      '--fluux-accent-h': '193',
+      '--fluux-accent-s': '45%',
+      '--fluux-accent-l': '70%',
       // Foundation — palette
       '--fluux-color-red': '#bf616a',
       '--fluux-color-green': '#a3be8c',
