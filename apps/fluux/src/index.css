@@ -34,7 +34,11 @@
   }
 }
 
-/* Inter font - self-hosted for privacy (no Google Fonts connection) */
+/* Inter font - self-hosted for privacy (no Google Fonts connection).
+   Every Inter and Inter Display file has the serif capital I and tailed l baked
+   into its character map by scripts/fonts/bake-inter.py, so names like "Ilia"
+   and "llia" stay distinct and the canvas height predictor measures the same
+   glyphs the page draws. Do not copy release files in directly. */
 @font-face {
   font-family: 'Inter';
   font-style: normal;
@@ -65,6 +69,39 @@
   font-weight: 700;
   font-display: swap;
   src: url('/fonts/Inter-Bold.woff2') format('woff2');
+}
+
+/* Inter italics: true italic letterforms instead of a browser-slanted roman. */
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Inter-Italic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/Inter-MediumItalic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/Inter-SemiBoldItalic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/Inter-BoldItalic.woff2') format('woff2');
 }
 
 /* Inter Display — display font, self-hosted. The large-size cut of Inter from the

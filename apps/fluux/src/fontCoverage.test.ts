@@ -9,8 +9,12 @@
  * but the display face must still cover every script the UI face covers, or
  * Cyrillic and Greek headings lose the heading style entirely.
  *
- * The check reads the woff2 files' character maps directly, so it follows
- * whatever files `index.css` points at.
+ * The Inter and Inter Display files must also carry the serif I and tailed l
+ * baked in by scripts/fonts/bake-inter.py; a file copied straight from an Inter
+ * release lacks the version-string mark that script writes.
+ *
+ * The checks read the woff2 tables directly, so they follow whatever files
+ * `index.css` points at.
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -36,14 +40,17 @@ const GLYF = 10
 const LOCA = 11
 const ARBITRARY_TAG = 63
 
-/** Code points mapped by a woff2 file's `cmap` (format 4 or 12 subtable). */
-function woff2CodePoints(path: string): Set<number> {
+const CMAP = 0
+const NAME = 5
+
+/** A woff2 file's decompressed tables, by known-tag index (`cmap` is 0, `name` is 5). */
+function woff2Tables(path: string): Map<number, Buffer> {
   const file = readFileSync(path)
   if (file.toString('latin1', 0, 4) !== 'wOF2') throw new Error(`${path} is not woff2`)
   const numTables = file.readUInt16BE(12)
   let pos = 48
   let offset = 0
-  let cmap: { offset: number; length: number } | null = null
+  const spans = new Map<number, { offset: number; length: number }>()
   for (let t = 0; t < numTables; t++) {
     const flags = file[pos++]
     const tagIndex = flags & 0x3f
@@ -56,12 +63,35 @@ function woff2CodePoints(path: string): Set<number> {
     if ((isGlyfOrLoca && transform === 0) || (!isGlyfOrLoca && transform !== 0)) {
       ;[length, pos] = readBase128(file, pos)
     }
-    if (tagIndex === 0) cmap = { offset, length }
+    if (tagIndex !== ARBITRARY_TAG) spans.set(tagIndex, { offset, length })
     offset += length
   }
-  if (!cmap) throw new Error(`${path} has no cmap`)
   const data = brotliDecompressSync(file.subarray(pos, pos + file.readUInt32BE(20)))
-  const table = data.subarray(cmap.offset, cmap.offset + cmap.length)
+  const tables = new Map<number, Buffer>()
+  for (const [tag, span] of spans) tables.set(tag, data.subarray(span.offset, span.offset + span.length))
+  return tables
+}
+
+/** The Windows-platform (UTF-16BE) strings of a woff2 file's `name` table for one name id. */
+function woff2Names(path: string, nameId: number): string[] {
+  const table = woff2Tables(path).get(NAME)
+  if (!table) throw new Error(`${path} has no name table`)
+  const count = table.readUInt16BE(2)
+  const strings = table.readUInt16BE(4)
+  const out: string[] = []
+  for (let i = 0; i < count; i++) {
+    const rec = 6 + i * 12
+    if (table.readUInt16BE(rec) !== 3 || table.readUInt16BE(rec + 6) !== nameId) continue
+    const start = strings + table.readUInt16BE(rec + 10)
+    out.push(Buffer.from(table.subarray(start, start + table.readUInt16BE(rec + 8))).swap16().toString('utf16le'))
+  }
+  return out
+}
+
+/** Code points mapped by a woff2 file's `cmap` (format 4 or 12 subtable). */
+function woff2CodePoints(path: string): Set<number> {
+  const table = woff2Tables(path).get(CMAP)
+  if (!table) throw new Error(`${path} has no cmap`)
 
   const points = new Set<number>()
   const numSubtables = table.readUInt16BE(2)
@@ -145,7 +175,7 @@ describe('self-hosted font coverage', () => {
     expect(lettersByScript.get('Cyrillic')?.size).toBeGreaterThan(30)
   })
 
-  it.each([...uiFiles, ...displayFiles])('%s covers every translated letter of each script it touches', (file) => {
+  it.each([...new Set([...uiFiles, ...displayFiles])])('%s covers every translated letter of each script it touches', (file) => {
     const points = woff2CodePoints(resolve(appRoot, 'public/fonts', file))
     const missing: string[] = []
     for (const script of coveredScripts(points)) {
@@ -161,4 +191,13 @@ describe('self-hosted font coverage', () => {
     const ui = coveredScripts(woff2CodePoints(resolve(appRoot, 'public/fonts', uiFiles[0])))
     expect(display).toEqual(expect.arrayContaining(ui))
   })
+
+  it.each([...new Set([...uiFiles, ...displayFiles])].filter((f) => f.startsWith('Inter')))(
+    '%s has the I/l alternates baked in',
+    (file) => {
+      const versions = woff2Names(resolve(appRoot, 'public/fonts', file), 5)
+      expect(versions.length).toBeGreaterThan(0)
+      for (const version of versions) expect(version).toContain('fluux-baked cv05 cv08')
+    },
+  )
 })

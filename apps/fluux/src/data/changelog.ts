@@ -34,6 +34,8 @@ export const changelog: ChangelogEntry[] = [
     }, {
       type: 'changed',
       items: [
+        'Capital I and lowercase l now look different everywhere in Fluux: I has small serifs and l a curved foot, so names like Ilia and llia, or a look-alike such as PayPaI, can no longer pass for one another',
+        'Italic text now uses real italic letters instead of slanted upright ones',
         'Settings → Encryption now opens an overview with a row for OpenPGP and one for OMEMO. Each method has its own screen with a back arrow: OpenPGP keeps its switch, key backup and key controls, and OMEMO shows your devices. In the device list, a key fingerprint now wraps only between its groups of eight characters, and Remove is no longer red',
       ],
     }, {

@@ -67,8 +67,12 @@ look at it rather than assuming it is a known one.
 Three faces are self-hosted from `apps/fluux/public/fonts/`, all referenced by `@font-face`
 blocks near the top of `src/index.css` and copied to `dist/fonts/` by Vite:
 
-- **Inter** (400/500/600/700) — `--fluux-font-ui`, from the Inter 4.1 release, SIL OFL 1.1
-  (`public/fonts/Inter-OFL.txt`).
+- **Inter** (400/500/600/700, roman and italic) — `--fluux-font-ui`, from the Inter 4.1
+  release, SIL OFL 1.1 (`public/fonts/Inter-OFL.txt`). Every Inter and Inter Display file is
+  produced by `scripts/fonts/bake-inter.py`, which bakes the serif capital I (cv08) and tailed
+  l (cv05) into the character map. They are not turned on with `font-feature-settings`: the
+  canvas message-height predictor ignores font features and the alternates are wider. Never
+  copy release files in directly; `fontCoverage.test.ts` rejects an unbaked file.
 - **Inter Display** (500/600/700) — `--fluux-font-display`, the large-size cut from the same
   Inter 4.1 release, so it has Inter's full character set. It replaced Inter Tight, whose
   files stopped at Latin-1: headings in Polish, Czech, Romanian… switched face mid-word and
