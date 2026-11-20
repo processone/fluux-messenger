@@ -72,7 +72,7 @@ A Playwright pipeline drives demo mode and records a promo-style walkthrough of 
 | Command                   | Produces                              | Length                |
 |---------------------------|---------------------------------------|-----------------------|
 | `npm run demo:video`      | both variants                         | —                     |
-| `npm run demo:video:reel` | `video/fluux-demo-reel.{mp4,webm}`    | ~2m 31s highlight reel |
+| `npm run demo:video:reel` | `video/fluux-demo-reel.{mp4,webm}`    | ~2m 34s highlight reel |
 | `npm run demo:video:full` | `video/fluux-demo-full.{mp4,webm}`    | Extended full tour    |
 
 Output is written to the git-ignored `video/` directory at the repo root, as **native 1920×1080 MP4 and WebM** (no upscaling). Set `FLUUX_VIDEO_OUTPUT_DIR` to an absolute directory to keep captures and exports outside the checkout:

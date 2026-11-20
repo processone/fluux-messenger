@@ -23,15 +23,16 @@ const SAVED_IDS = [
 ]
 
 /** Save the curated messages of the showcase data; call once after the demo data is seeded. */
-export function seedShowcaseSaved(data: DemoData, now: number = Date.now()): void {
+export function seedShowcaseSaved(data: DemoData): void {
   const pool: (Message | RoomMessage)[] = [
     ...[...data.messages.values()].flat(),
     ...data.rooms.flatMap((entry) => entry.messages),
   ]
-  // Oldest save first, so the list (newest saved first) reads in SAVED_IDS order.
-  ;[...SAVED_IDS].reverse().forEach((id, index) => {
+  const now = Date.now()
+  // The list shows the newest save first, so earlier ids get later save times.
+  SAVED_IDS.forEach((id, index) => {
     const message = pool.find((candidate) => candidate.id === id)
     if (!message) throw new Error(`Showcase saved message not found: ${id}`)
-    savedStore.getState().save(buildSavedMessage(message, SELF_JID, now - (SAVED_IDS.length - index) * 60_000))
+    savedStore.getState().save(buildSavedMessage(message, SELF_JID, now - (index + 1) * 60_000))
   })
 }

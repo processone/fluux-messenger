@@ -83,8 +83,14 @@ async function selectItem(page: Page, name: string) {
 }
 
 /** Take a screenshot and save to the output directory. */
-async function capture(page: Page, filename: string, clip?: { x: number; y: number; width: number; height: number }) {
-  await clearHover(page)
+async function capture(
+  page: Page,
+  filename: string,
+  clip?: { x: number; y: number; width: number; height: number },
+  options: { keepHover?: boolean } = {},
+) {
+  // An open menu closes when the pointer leaves it: a scene that shows one keeps the pointer where it is.
+  if (!options.keepHover) await clearHover(page)
   await page.waitForTimeout(300)
   await waitForFloatingDateToFade(page)
   await page.screenshot({ path: `${OUTPUT_DIR}/${filename}.png`, type: 'png', clip })
@@ -921,6 +927,10 @@ for (const entry of loginThemes) {
 const SHOWCASE_URL = '/demo.html?scene=showcase'
 const SHOWCASE_DIR = `${OUTPUT_DIR}/showcase`
 
+async function openShowcase(page: Page, colorScheme: 'dark' | 'light' = 'dark') {
+  await waitForDemoReady(page, colorScheme, SHOWCASE_URL, 'Emma Ward')
+}
+
 test.describe('Showcase', () => {
   test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 })
 
@@ -931,10 +941,6 @@ test.describe('Showcase', () => {
     // default 288px most "first last" names truncate next to a timestamp.
     await page.addInitScript(() => localStorage.setItem('sidebar-width', '340'))
   })
-
-  async function openShowcase(page: Page, colorScheme: 'dark' | 'light' = 'dark') {
-    await waitForDemoReady(page, colorScheme, SHOWCASE_URL, 'Emma Ward')
-  }
 
   test('showcase — 1:1 chat (dark)', async ({ page }) => {
     await openShowcase(page)
@@ -973,8 +979,33 @@ test.describe('Showcase', () => {
     await capture(page, 'showcase/05-command-palette-dark')
   })
 
-  // Saved messages and search. The showcase scene opens with five saved messages
-  // (apps/fluux/src/demo/showcase/saved.ts), seeded through the same path as a person's save.
+  test('showcase — saved messages (dark)', async ({ page }) => {
+    await openShowcase(page)
+    await navigateTo(page, 'saved')
+    await expect(page.getByTestId('saved-row')).toHaveCount(5)
+    await capture(page, 'showcase/06-saved-dark')
+  })
+
+  test('showcase — search (dark)', async ({ page }) => {
+    await openShowcase(page)
+    await navigateTo(page, 'search')
+    await page.locator('input[type="text"]').first().fill('poster')
+    await page.waitForTimeout(1500)
+    const firstResult = page.locator('[data-search-result-id]').first()
+    await firstResult.click()
+    await page.waitForTimeout(800)
+    await capture(page, 'showcase/07-search-dark')
+  })
+})
+
+// ── Saved messages and in-conversation search (overview set) ───────
+// The showcase data opens with five saved messages (apps/fluux/src/demo/showcase/saved.ts)
+// and a poster thread to search; captured at the overview set's default size.
+test.describe('Saved messages and find', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('sidebar-width', '340'))
+  })
+
   test('34 — Saved messages (dark)', async ({ page }) => {
     await openShowcase(page)
     await navigateTo(page, 'saved')
@@ -990,8 +1021,7 @@ test.describe('Showcase', () => {
     await row.hover()
     await row.getByRole('button', { name: 'More options', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Save message', exact: true })).toBeVisible()
-    // The menu is open and the pointer stays on it: capture without clearing the hover.
-    await page.screenshot({ path: `${OUTPUT_DIR}/35-save-message-dark.png`, type: 'png' })
+    await capture(page, '35-save-message-dark', undefined, { keepHover: true })
   })
 
   test('36 — Find in conversation (dark)', async ({ page }) => {
@@ -1001,26 +1031,7 @@ test.describe('Showcase', () => {
     // The word goes in as one step: typed letter by letter, only the letters typed when
     // the matches were first found stay highlighted.
     await page.keyboard.insertText('poster')
-    await page.waitForTimeout(800)
+    await expect(page.getByText('2/2', { exact: true })).toBeVisible()
     await capture(page, '36-find-in-conversation-dark')
-  })
-
-  test('showcase — saved messages (dark)', async ({ page }) => {
-    await openShowcase(page)
-    await navigateTo(page, 'saved')
-    await page.getByTestId('saved-row').first().click()
-    await expect(page.locator('.message-highlight').first()).toBeVisible()
-    await capture(page, 'showcase/06-saved-dark')
-  })
-
-  test('showcase — search (dark)', async ({ page }) => {
-    await openShowcase(page)
-    await navigateTo(page, 'search')
-    await page.locator('input[type="text"]').first().fill('poster')
-    await page.waitForTimeout(1500)
-    const firstResult = page.locator('[data-search-result-id]').first()
-    await firstResult.click()
-    await page.waitForTimeout(800)
-    await capture(page, 'showcase/07-search-dark')
   })
 })
