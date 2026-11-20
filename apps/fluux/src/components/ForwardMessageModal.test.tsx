@@ -204,13 +204,13 @@ describe('ForwardMessageModal', () => {
         expect(fixture.roomSend.mock.calls[0][2]).toMatchObject({ attachment })
       })
 
-      it('keeps a file from an encrypted chat out of rooms and requires encryption on the send', async () => {
+      it('keeps a file from an encrypted chat out of rooms and marks its copy for protection', async () => {
         render(<ForwardMessageModal attachment={attachment} quote={{ ...direct, text: 'p.png', fromEncrypted: true }} onClose={vi.fn()} />)
         fireEvent.focus(picker())
         expect(Array.from(suggestions(), row => row.textContent).join()).not.toContain('Design')
         pickAndSend('em')
         await waitFor(() => expect(fixture.chatSend).toHaveBeenCalledOnce())
-        expect(fixture.chatSend.mock.calls[0][2]).toMatchObject({ attachment, requireEncryption: true })
+        expect(fixture.chatSend.mock.calls[0][2]).toMatchObject({ attachment, forwarded: { fromEncrypted: true } })
         expect(fixture.roomSend).not.toHaveBeenCalled()
       })
     })

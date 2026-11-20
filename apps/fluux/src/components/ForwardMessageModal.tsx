@@ -89,8 +89,8 @@ export function ForwardMessageModal({ link, quote, attachment, onClose }: Forwar
         if (roomStore.getState().rooms.has(jid)) throw new Error('Destination changed')
         // One stanza for every reader: the comment, quote and link, plus a structured copy. The quote
         // is marked as the copy's fallback, so a reader that shows the copy hides it; no device is asked.
-        // A file from an encrypted chat is refused unless this chat is encrypted too.
-        const fileOptions = attachment ? { attachment, ...(encryptedSource && { requireEncryption: true }) } : {}
+        // The copy of a source from an encrypted chat is marked, so the SDK refuses the send unless this chat is encrypted too.
+        const fileOptions = attachment ? { attachment } : {}
         const withCopy = composeForwardWithCopy(comment, link, quote)
         if (withCopy) {
           const { body, references, forwarded } = withCopy
