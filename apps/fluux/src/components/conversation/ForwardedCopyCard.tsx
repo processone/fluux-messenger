@@ -100,6 +100,14 @@ function CopyCardView({ message, formatTime, isDarkMode, onMediaLoad, isOwnMessa
     else navigateToConversation(origin.conversationId, origin.row)
   }, [message, addToast, t, navigateToConversation])
 
+  // The forwarded file is the forwarding message's own attachment; it is drawn in the quote it belongs to.
+  // Clicks on it belong to the preview (open, play), not to opening the original.
+  const file = message.attachment && (
+    <div data-forwarded-attachment title="" className="cursor-default" onClick={event => event.stopPropagation()}>
+      <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} isOwnMessage={isOwnMessage} />
+    </div>
+  )
+
   return (
     <div
       data-forwarded-copy
@@ -129,23 +137,13 @@ function CopyCardView({ message, formatTime, isDarkMode, onMediaLoad, isOwnMessa
         {time && <span className="text-xs text-fluux-muted">· {time}</span>}
       </div>
       <div className="mt-1 text-sm text-fluux-text whitespace-pre-wrap break-words select-text cursor-text">{renderStyledMessage(copy.text)}</div>
-      {message.attachment && !fileDiffers && (
-        // The forwarded file is the forwarding message's own attachment; it is drawn in the quote it belongs to.
-        // Clicks on it belong to the preview (open, play), not to opening the original.
-        <div data-forwarded-attachment title="" className="cursor-default" onClick={event => event.stopPropagation()}>
-          <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} isOwnMessage={isOwnMessage} />
-        </div>
-      )}
+      {!fileDiffers && file}
       {differs && (
         <div data-forward-differs className="mt-1.5 border-t border-fluux-hover pt-1.5 text-xs">
           <div className="font-medium text-fluux-yellow">{t('chat.forwardedCopyDiffers')}</div>
           <div className="mt-0.5 text-fluux-muted">{t('chat.forwardedCopyClaimed')}</div>
           <div className="whitespace-pre-wrap break-words select-text cursor-text text-fluux-muted">{claimed.text}</div>
-          {fileDiffers && (
-            <div data-forwarded-attachment title="" className="cursor-default" onClick={event => event.stopPropagation()}>
-              <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} isOwnMessage={isOwnMessage} />
-            </div>
-          )}
+          {fileDiffers && file}
         </div>
       )}
     </div>
