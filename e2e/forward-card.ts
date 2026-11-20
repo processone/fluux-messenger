@@ -68,9 +68,18 @@ test('a forwarded photo is drawn inside the quote, once, and a click on it does 
   await expect(card.locator('img')).toHaveCount(1)
   await expect(page.locator('[data-message-id="fwd-photo"] img[alt="contacts.png"]')).toHaveCount(1)
   await shot(page, `${process.env.FORWARD_TAG ?? 'after'}-photo-${test.info().project.name}`)
+  // This copy's original is not in the demo history, so opening it shows a toast: that toast is the signal.
+  const notFound = page.getByText('The original message is not in your history')
   await card.locator('img').click()
-  await expect(page.getByText('Open the original message')).toHaveCount(0)
-  await expect(page).toHaveURL(new RegExp(`/messages/${encodeURIComponent(PEER)}$`))
+  // The click opens the image preview, which is the file, not the original.
+  await expect(page.locator('[data-lightbox="image"]')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-lightbox="image"]')).toHaveCount(0)
+  // A click on the card's own text opens the original; it proves the lookup runs, and that it ran once, not for the image click too.
+  await card.getByText('Emma Wilson').click()
+  await expect(notFound).toHaveCount(1)
+  await page.waitForTimeout(500)
+  await expect(notFound).toHaveCount(1)
 })
 
 test('a photo forwarded from a joined room stays in the verified quote with no differs flag', async ({ page }) => {
