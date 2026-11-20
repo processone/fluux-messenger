@@ -221,20 +221,41 @@ test.describe('message right-click menu', () => {
     ])
     const toolbarOf = (id: string) => page.locator(`[data-message-id="${id}"] [data-message-toolbar]`).first()
     const shown = (id: string) => toolbarOf(id).evaluate(el => Number(getComputedStyle(el).opacity) > 0.5)
+    // True when a click at the centre of the toolbar's first button would land on the toolbar at all.
+    const clickable = (id: string) => toolbarOf(id).evaluate((el) => {
+      const button = el.querySelector('button')!.getBoundingClientRect()
+      const hit = document.elementFromPoint(button.x + button.width / 2, button.y + button.height / 2)
+      return !!hit?.closest('[data-message-toolbar]')
+    })
     const a = (await row(page, 'hov-a').getByText('First message').boundingBox())!
     const b = (await row(page, 'hov-b').getByText('Second message').boundingBox())!
-    // Without a menu, hovering a message shows its own actions.
+    // Without a menu, hovering a message shows its own actions, and they take clicks.
     await page.mouse.move(b.x + 20, b.y + b.height / 2)
     await expect.poll(() => shown('hov-b')).toBe(true)
+    expect(await clickable('hov-b')).toBe(true)
+    // Open the other message's own more-options menu, then right-click this message: that menu goes.
+    await toolbarOf('hov-b').getByRole('button', { name: 'More options' }).click()
+    const ownMenu = page.locator('[data-message-panel="more"]')
+    await expect(ownMenu).toHaveCount(1)
     await page.mouse.move(a.x + 20, a.y + a.height / 2)
     await page.mouse.click(a.x + 20, a.y + a.height / 2, { button: 'right' })
     await expect(menu(page)).toBeVisible()
+    await expect(ownMenu).toHaveCount(0)
+    await expect(menu(page).getByRole('button', { name: 'More reactions' })).toBeVisible()
     // The pointer crosses to the other message: only the right-click menu stays up.
     await page.mouse.move(b.x + 20, b.y + b.height / 2)
     await page.waitForTimeout(400)
     await expect(menu(page)).toBeVisible()
-    expect(await shown('hov-b')).toBe(false)
-    expect(await shown('hov-a')).toBe(false)
+    for (const id of ['hov-a', 'hov-b']) {
+      expect(await shown(id)).toBe(false)
+      expect(await clickable(id)).toBe(false)
+    }
+    // Closing the menu brings the hover actions back.
+    await page.keyboard.press('Escape')
+    await expect(menu(page)).toHaveCount(0)
+    await page.mouse.move(b.x + 40, b.y + b.height / 2)
+    await expect.poll(() => shown('hov-b')).toBe(true)
+    expect(await clickable('hov-b')).toBe(true)
   })
 
   test('the link chooser takes focus on its first link, and Tab moves between links', async ({ page }) => {

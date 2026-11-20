@@ -1444,6 +1444,8 @@ html, body {
 .composer-active [data-message-toolbar] {
   opacity: 0;
   pointer-events: none;
+  /* The visible bar sets its own pointer-events, so opacity alone would leave it clickable. */
+  visibility: hidden;
 }
 
 /* Font size slider styling */
@@ -2043,5 +2045,6 @@ input[type="range"]::-moz-range-thumb {
    (and their open dropdown anchors) until it closes. */
 :root[data-message-menu="open"] [data-message-toolbar] {
   opacity: 0 !important;
-  pointer-events: none !important;
+  /* The visible bar sets its own pointer-events, so hide the whole subtree to make it unclickable. */
+  visibility: hidden !important;
 }
