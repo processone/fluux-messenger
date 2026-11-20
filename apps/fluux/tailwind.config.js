@@ -9,6 +9,11 @@ export default {
   ],
   theme: {
     extend: {
+      // Accent AS TEXT reads --fluux-text-accent, which may differ from the fill
+      // (bg/border/ring-fluux-brand keep --fluux-bg-accent). See index.css.
+      textColor: {
+        fluux: { brand: 'var(--fluux-text-accent)' },
+      },
       colors: {
         // Fluux color palette — 3-tier design tokens (Foundation → Semantic → Component)
         // Tailwind aliases point to the most specific tier available.

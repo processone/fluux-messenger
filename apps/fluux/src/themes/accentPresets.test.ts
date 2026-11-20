@@ -46,6 +46,17 @@ function ratio(a: number, b: number): number {
 }
 
 const presets = fluuxTheme.accentPresets ?? []
+
+// Aurora dark lifts accent TEXT above a deep, white-text fill (index.css), and
+// useTheme keeps that lift for such presets. Luminous fills are their own text.
+const auroraDarkTextLift = Number(
+  css.match(/:root\[data-theme='fluux'\]:not\(\.light\)\s*\{[^}]*calc\(var\(--fluux-accent-l\) \+ (\d+)%\)/)?.[1] ?? 0,
+)
+function textLuminance(h: number, s: number, l: number, liftsDeepFills: boolean): number {
+  const fill = luminance(hslToRgb(h, s, l))
+  const deep = ratio(fill, 1) > ratio(fill, 0)
+  return liftsDeepFills && deep ? luminance(hslToRgb(h, s, l + auroraDarkTextLift)) : fill
+}
 const surfaces = {
   dark: { chat: token(':root', '--fluux-base-30'), hover: token(':root', '--fluux-base-50') },
   light: { chat: token('.light', '--fluux-base-30'), hover: token('.light', '--fluux-base-50') },
@@ -76,15 +87,13 @@ describe('Aurora accent presets', () => {
         })
       }
 
-      // The dark default keeps its white-text fill, which reads as a fill and an
-      // icon (3:1) but not as body-size text on the canvas; the other dark
-      // presets are luminous and clear AA as text too.
-      const textFloor = mode === 'dark' && preset.name === 'Periwinkle' ? 3 : 4.5
+      // The dark default keeps its deep white-text fill; its text is lifted.
+      const text = textLuminance(h, s, l, mode === 'dark')
       it(`[${mode}] ${preset.name}: reads as accent text on the chat canvas`, () => {
-        expect(ratio(fill, chat)).toBeGreaterThanOrEqual(textFloor)
+        expect(ratio(text, chat)).toBeGreaterThanOrEqual(4.5)
       })
       it(`[${mode}] ${preset.name}: reads as accent text on the hovered row`, () => {
-        expect(ratio(fill, hover)).toBeGreaterThanOrEqual(mode === 'dark' && preset.name === 'Periwinkle' ? 2.5 : 4.5)
+        expect(ratio(text, hover)).toBeGreaterThanOrEqual(4.5)
       })
     }
 
@@ -159,10 +168,9 @@ describe('Default accent presets, on every theme that uses them', () => {
  * readable text on fills.
  */
 describe('Theme default accents', () => {
-  // Aurora dark keeps its white-text periwinkle on purpose (see above): it reads
-  // as a fill and an icon (3:1) but not as body text. Every other default
-  // accent clears AA as text.
-  const BELOW_AA_AS_TEXT: Record<string, number> = { 'fluux/dark': 3.2 }
+  it('Aurora dark lifts the text of its deep default fill', () => {
+    expect(auroraDarkTextLift).toBeGreaterThan(0)
+  })
 
   for (const theme of builtinThemes) {
     for (const mode of ['dark', 'light'] as const) {
@@ -180,16 +188,17 @@ describe('Theme default accents', () => {
         const v = mode === 'light' ? pick('.light') : NaN
         return Number.isNaN(v) ? pick(':root') : v
       }
-      const fill = luminance(hslToRgb(num('--fluux-accent-h'), num('--fluux-accent-s'), num('--fluux-accent-l')))
+      const [h, s, l] = [num('--fluux-accent-h'), num('--fluux-accent-s'), num('--fluux-accent-l')]
+      const fill = luminance(hslToRgb(h, s, l))
+      const text = textLuminance(h, s, l, theme.id === 'fluux' && mode === 'dark')
       const chatToken = vars['--fluux-chat-bg']
       const chat = luminance(hexToRgb(chatToken?.startsWith('#') ? chatToken : read('--fluux-base-30')))
-      const key = `${theme.id}/${mode}`
 
       it(`[${mode}] ${theme.name}: text on the accent fill clears AA`, () => {
         expect(Math.max(ratio(fill, 0), ratio(fill, 1))).toBeGreaterThanOrEqual(4.5)
       })
       it(`[${mode}] ${theme.name}: accent reads as text on the chat canvas`, () => {
-        expect(ratio(fill, chat)).toBeGreaterThanOrEqual(BELOW_AA_AS_TEXT[key] ?? 4.5)
+        expect(ratio(text, chat)).toBeGreaterThanOrEqual(4.5)
       })
     }
   }

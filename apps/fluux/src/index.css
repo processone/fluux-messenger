@@ -267,6 +267,8 @@
      so the tier distinction holds. .light overrides below. */
   --fluux-text-faint: #8892B6;
   --fluux-text-on-accent: #ffffff;
+  /* Accent AS TEXT/icon (text-fluux-brand). Equal to the fill everywhere except
+     Aurora dark's default periwinkle: see the rule after this block. */
   --fluux-text-accent: var(--fluux-bg-accent);
   --fluux-text-link: var(--fluux-color-blue);
   /* Own-message ("you") name. The raw brand accent (hsl(231 100% 71%)) only
@@ -483,6 +485,15 @@
   /* emoji-mart theming lives on the em-emoji-picker host rule below (not here):
      emoji-mart's own per-theme :host rules would override these if set on :root,
      so they must target the host element directly. */
+}
+
+/* Aurora dark's default periwinkle is a white-text fill (4.7:1). That fill is
+   too deep to read as text or an icon on the canvas (3.3:1), so accent text
+   takes the same hue 12 points lighter: 5.7:1 on chat, 4.6:1 on a hovered
+   row. A chosen accent preset is luminous enough to serve as both, so
+   useTheme sets --fluux-text-accent back to the fill inline. */
+:root[data-theme='fluux']:not(.light) {
+  --fluux-text-accent: hsl(var(--fluux-accent-h), var(--fluux-accent-s), calc(var(--fluux-accent-l) + 12%));
 }
 
 /* Away has a shape cue so red-green colour vision does not have to distinguish
