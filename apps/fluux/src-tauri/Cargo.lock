@@ -9242,8 +9242,3 @@ dependencies = [
  "syn 3.0.10",
  "winnow 1.0.5",
 ]
-
-[[patch.unused]]
-name = "swift-rs"
-version = "1.0.8"
-source = "git+https://github.com/alchaplinsky/swift-rs?rev=aaf38d45ab3a4b10a5af3a3dbc64424e998fae8c#aaf38d45ab3a4b10a5af3a3dbc64424e998fae8c"

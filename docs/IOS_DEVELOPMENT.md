@@ -134,11 +134,10 @@ production builds and releases.
 
 ## Xcode compatibility
 
-The Cargo lockfile pins a temporary `swift-rs` fix for Xcode 27. The repository's
-`.cargo/config.toml` selects Tauri as the sole archive exporting the shared
-Swift runtime. Keep both files together when copying this setup to another
-checkout; remove the pin after an upstream release includes the fix. If a
-machine built iOS with the older dependency, rebuild the iOS target rather
+Xcode 27 makes the C exports of SwiftPM static libraries internal. `swift-rs`
+1.0.9 and later promote them back to global symbols at build time with
+`llvm-objcopy`, which is why the `llvm-tools` component is required. If a
+machine built iOS with an older `swift-rs`, rebuild the iOS target rather
 than reusing its Cargo or Xcode cache.
 
 ## Install and run on an iPhone or iPad
@@ -410,8 +409,8 @@ account-scoped keys (`base:<bareJid>`). A file that cannot be read is renamed
   version. Successful signing does not imply these requirements are satisfied.
 - **Page fails to load with hot reload:** inspect Tauri's host address and the
   Mac's firewall/network access to port 5173 (5194 for the live demo).
-- **Swift runtime link errors with Xcode 27:** verify `llvm-tools`, the checked-in
-  Cargo lockfile and `.cargo/config.toml`; rebuild the iOS target after updates.
+- **Swift runtime link errors with Xcode 27:** verify `llvm-tools` and that the
+  Cargo lockfile resolves `swift-rs` 1.0.9 or later; rebuild the iOS target after updates.
 - **TLS failure:** check the certificate chain and XMPP domain, not only the
   TCP endpoint name. The proxy validates through Apple's system trust policy.
 
