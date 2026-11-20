@@ -575,7 +575,12 @@ export const MessageBubble = memo(function MessageBubble({
   const onForward = forwardMessage && (messageLink || directForward) ? () => forwardMessage({
     ...(messageLink && { link: messageLink }),
     ...(quotable && { quote: {
-      author: senderName,
+      // The displayed name can be the private contact-list name (a one-to-one sender, or a room
+      // sender who has left), which must not leave this device. Quote others by what they published:
+      // the occupant nick in a room, the address in a one-to-one chat. Your own name is already public.
+      author: message.isOutgoing ? senderName
+        : message.type === 'groupchat' ? (message.from.split('/').slice(1).join('/') || getBareJid(message.from))
+        : getBareJid(message.from),
       text: forwardText,
       ...(message.type === 'groupchat' && { from: message.from }),
       ...(directForward && { from: getBareJid(message.from) }),

@@ -99,7 +99,7 @@ then the room message link, with the same XEP-0372 data reference as a pasted li
 A source that is retracted or cannot be read is forwarded as the link only.
 A forward to a room always sends this quoted form.
 
-A one-to-one message has no room link, so its forward is the comment and the quote only, with no link or data reference. The quote is attributed to the message's author and sender address. To a one-to-one chat it also carries the structured copy below, whose fallback marker covers the quote alone.
+A one-to-one message has no room link, so its forward is the comment and the quote only, with no link or data reference. The quote names the sender by address (a room message by its occupant nick), never by your contact-list name. To a one-to-one chat it also carries the structured copy below, whose fallback marker covers the quote alone.
 
 The generated quote and link are marked with XEP-0428 Fallback Indication:
 `<fallback xmlns="urn:xmpp:fallback:0" for="urn:fluux:forward-quote:0">` with one

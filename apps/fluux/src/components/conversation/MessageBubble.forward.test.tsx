@@ -124,11 +124,26 @@ describe('forward on a one-to-one message', () => {
       <MessageBubble {...bubble({ body: 'Ship it', references: undefined, ...message })} /></ForwardMessageProvider>)
   }
 
+  // FLM-336 finding 5: the quote names the sender by address, never by the private contact-list name.
   it('offers Forward and passes the content, the bare author address and no link', () => {
     renderDirect({ from: 'alice@example.com/phone' })
     fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
     expect(modal.props?.link).toBeUndefined()
-    expect(modal.props?.quote).toEqual({ author: 'Alice', text: 'Ship it', from: 'alice@example.com', type: 'chat', id: 'fwd', timestamp: Date.parse('2026-05-01T10:00:00Z') })
+    expect(modal.props?.quote).toEqual({ author: 'alice@example.com', text: 'Ship it', from: 'alice@example.com', type: 'chat', id: 'fwd', timestamp: Date.parse('2026-05-01T10:00:00Z') })
+  })
+
+  it('keeps your own published name on a message you sent', () => {
+    renderDirect({ from: 'me@example.com/laptop', isOutgoing: true })
+    fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+    expect(modal.props?.quote?.author).toBe('Alice')
+  })
+
+  it('quotes a room message by its occupant nick, never by the displayed contact-list name', () => {
+    modal.props = undefined as typeof modal.props
+    render(<ForwardMessageProvider conversationId="room@conference.example.com">
+      <MessageBubble {...bubble({ type: 'groupchat', from: 'room@conference.example.com/Alicia', body: 'Ship it', references: undefined, stanzaId: '1731490000123456', roomJid: 'room@conference.example.com' } as Partial<BaseMessage>)} supportsMAM /></ForwardMessageProvider>)
+    fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+    expect(modal.props?.quote?.author).toBe('Alicia')
   })
 
   it('marks a message from an encrypted chat so it can only go into an encrypted chat', () => {
@@ -143,14 +158,14 @@ describe('forward on a one-to-one message', () => {
     it('forwards the displayed comment and the attributed copied text, without the hidden quote', () => {
       renderDirect({ body: 'Look\n> Carol wrote:\n> Ship it', forwarded })
       fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
-      expect(modal.props?.quote).toMatchObject({ author: 'Alice', text: 'Look\nCarol wrote:\nShip it\nTonight', from: 'alice@example.com' })
+      expect(modal.props?.quote).toMatchObject({ author: 'alice@example.com', text: 'Look\nCarol wrote:\nShip it\nTonight', from: 'alice@example.com' })
       expect(modal.props?.quote).not.toHaveProperty('forwarded')
     })
 
     it('offers Forward on a copy-only message and forwards the attributed copied text', () => {
       renderDirect({ body: '', forwarded: { author: 'Carol', text: 'Ship it' } })
       fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
-      expect(modal.props?.quote).toMatchObject({ author: 'Alice', text: 'Carol wrote:\nShip it' })
+      expect(modal.props?.quote).toMatchObject({ author: 'alice@example.com', text: 'Carol wrote:\nShip it' })
     })
 
     it('keeps the protection flag of an encrypted copy-only message', () => {
