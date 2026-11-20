@@ -556,6 +556,8 @@
         "forwardedCopyDirectChat": "Directe chat",
         "forwardedCopyOpen": "Oorspronkelijk bericht openen",
         "forwardedCopyUnknownSource": "een onbekende groep",
+        "forwardedCopyDiffers": "De kopie van de doorsturende persoon wijkt af van het originele bericht",
+        "forwardedCopyClaimed": "Door de doorsturende persoon verzonden kopie:",
         "forwardedOriginNotFound": "Het oorspronkelijke bericht staat niet in je geschiedenis",
         "forwardQuoteOnly": "Verstuurt je opmerking en een geciteerde kopie van het bericht. Iedereen op de bestemming kan het citaat lezen.",
         "forwardEncryptedOnly": "Dit bericht komt uit een versleutelde chat en kan daarom alleen naar een versleutelde chat worden doorgestuurd.",

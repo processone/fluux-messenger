@@ -556,6 +556,8 @@
         "forwardedCopyDirectChat": "Yksityiskeskustelu",
         "forwardedCopyOpen": "Avaa alkuperäinen viesti",
         "forwardedCopyUnknownSource": "tuntematon huone",
+        "forwardedCopyDiffers": "Välitetty kopio eroaa alkuperäisestä viestistä",
+        "forwardedCopyClaimed": "Välityksen mukana lähetetty kopio:",
         "forwardedOriginNotFound": "Alkuperäinen viesti ei ole historiassasi",
         "forwardQuoteOnly": "Lähettää kommenttisi ja lainatun kopion viestistä. Kaikki kohteessa voivat lukea lainauksen.",
         "forwardEncryptedOnly": "Tämä viesti on salatusta keskustelusta, joten sen voi välittää vain salattuun keskusteluun.",

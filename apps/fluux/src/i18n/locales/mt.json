@@ -561,6 +561,8 @@
         "forwardedCopyDirectChat": "Chat dirett",
         "forwardedCopyOpen": "Iftaħ il-messaġġ oriġinali",
         "forwardedCopyUnknownSource": "kamra mhux magħrufa",
+        "forwardedCopyDiffers": "Il-kopja mgħoddija 'l quddiem hija differenti mill-messaġġ oriġinali",
+        "forwardedCopyClaimed": "Kopja mibgħuta mal-forward:",
         "forwardedOriginNotFound": "Il-messaġġ oriġinali mhuwiex fl-istorja tiegħek",
         "forwardQuoteOnly": "Tibgħat il-kummenti tiegħek u kopja kkwotata tal-messaġġ. Kulħadd fid-destinazzjoni jista' jaqra l-kwotazzjoni.",
         "forwardEncryptedOnly": "Dan il-messaġġ huwa minn chat ikkriptat, għalhekk jista' jiġi mgħoddi 'l quddiem biss lejn chat ikkriptat.",

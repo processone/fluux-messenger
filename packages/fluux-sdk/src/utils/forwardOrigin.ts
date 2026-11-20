@@ -5,6 +5,7 @@ import { getMessagesByForwardedId, getMessages, getRoomMessages, type ForwardedI
 import { captureStorageScope } from './storageScope'
 import { messageRowRef } from './roomStanzaId'
 import type { MessageRowRef } from '../core/types/messageRow'
+import { forwardedCopyTextOf } from '../core/modules/messagingUtils'
 
 /** Where the original of a forwarded copy can be opened. */
 export type ForwardOrigin =
@@ -31,6 +32,11 @@ export function forwardedCopyRoomLink(message: Pick<BaseMessage, 'references' | 
     if (target) return target
   }
   return null
+}
+
+/** Whether a received copy's text is what an honest forward of this body would carry. */
+export function forwardedCopyMatchesBody(copyText: string, body: string): boolean {
+  return copyText.trim() === forwardedCopyTextOf(body).trim()
 }
 
 /** Exact text first; a longer original counts only for a copy that was cut at the limit, judged before trimming. */

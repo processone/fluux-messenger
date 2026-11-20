@@ -556,6 +556,8 @@
         "forwardedCopyDirectChat": "Direct chat",
         "forwardedCopyOpen": "Open the original message",
         "forwardedCopyUnknownSource": "an unknown room",
+        "forwardedCopyDiffers": "The forwarder's copy differs from the original message",
+        "forwardedCopyClaimed": "Copy sent by the forwarder:",
         "forwardedOriginNotFound": "The original message is not in your history",
         "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
         "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",

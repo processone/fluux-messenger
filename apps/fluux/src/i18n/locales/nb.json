@@ -556,6 +556,8 @@
         "forwardedCopyDirectChat": "Direktechat",
         "forwardedCopyOpen": "Åpne den opprinnelige meldingen",
         "forwardedCopyUnknownSource": "et ukjent rom",
+        "forwardedCopyDiffers": "Den videresendte kopien avviker fra den opprinnelige meldingen",
+        "forwardedCopyClaimed": "Kopi sendt med videresendingen:",
         "forwardedOriginNotFound": "Den opprinnelige meldingen finnes ikke i historikken din",
         "forwardQuoteOnly": "Sender kommentaren din og en sitert kopi av meldingen. Alle på destinasjonen kan lese sitatet.",
         "forwardEncryptedOnly": "Denne meldingen er fra en kryptert chat, så den kan bare videresendes til en kryptert chat.",
