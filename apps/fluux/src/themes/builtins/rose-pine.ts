@@ -67,10 +67,11 @@ export const rosePineTheme: ThemeDefinition = {
       '--fluux-base-80': '#797593', // subtle
       '--fluux-base-90': '#575279', // text
       '--fluux-base-100': '#26233a',
-      // Foundation — accent (iris, adjusted for light)
+      // Foundation — accent: Dawn iris, deepened from #907aa9 (3.7:1 as text)
+      // to read at 5.5:1 and carry white text on fills (5.7:1).
       '--fluux-accent-h': '267',
-      '--fluux-accent-s': '22%',
-      '--fluux-accent-l': '57%',
+      '--fluux-accent-s': '25%',
+      '--fluux-accent-l': '47%',
       // Foundation — palette (Dawn)
       '--fluux-color-red': '#b4637a',    // love
       '--fluux-color-green': '#286983',  // pine

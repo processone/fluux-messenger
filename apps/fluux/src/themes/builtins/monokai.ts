@@ -21,10 +21,12 @@ export const monokaiTheme: ThemeDefinition = {
       '--fluux-base-80': '#a8a497',
       '--fluux-base-90': '#f8f8f2', // foreground
       '--fluux-base-100': '#ffffff',
-      // Foundation — accent (pink/magenta)
+      // Foundation — accent: Monokai pink, lifted from #f92672 (2.9:1 as text on
+      // the chat surface) to a softer pink that reads at 4.5:1 and carries
+      // black text on fills.
       '--fluux-accent-h': '338',
-      '--fluux-accent-s': '95%',
-      '--fluux-accent-l': '56%',
+      '--fluux-accent-s': '90%',
+      '--fluux-accent-l': '74%',
       // Foundation — palette
       '--fluux-color-red': '#f92672',    // pink/red
       '--fluux-color-green': '#a6e22e',  // green
@@ -109,7 +111,7 @@ export const monokaiTheme: ThemeDefinition = {
     },
   },
   swatches: {
-    dark: ['#272822', '#3e3d32', '#f92672', '#a6e22e', '#66d9ef'],
+    dark: ['#272822', '#3e3d32', '#f881ad', '#a6e22e', '#66d9ef'],
     light: ['#eeeadf', '#fdf8f0', '#c41854', '#5f8c0c', '#0f8da6'],
   },
 }

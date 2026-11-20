@@ -21,10 +21,11 @@ export const solarizedTheme: ThemeDefinition = {
       '--fluux-base-80': '#93a1a1', // base1
       '--fluux-base-90': '#eee8d5', // base2
       '--fluux-base-100': '#fdf6e3', // base3
-      // Foundation — accent (Solarized blue)
+      // Foundation — accent: Solarized blue, lifted from #268bd2 (3.1:1 as text
+      // on the #0a4050 chat surface) to read at 4.7:1. Fills take black text.
       '--fluux-accent-h': '205',
       '--fluux-accent-s': '69%',
-      '--fluux-accent-l': '49%',
+      '--fluux-accent-l': '64%',
       // Foundation — palette
       '--fluux-color-red': '#dc322f',
       '--fluux-color-green': '#859900',
@@ -85,10 +86,11 @@ export const solarizedTheme: ThemeDefinition = {
       '--fluux-base-80': '#657b83', // base00
       '--fluux-base-90': '#586e75', // base01
       '--fluux-base-100': '#002b36', // base03
-      // Foundation — accent (Solarized blue, adjusted)
+      // Foundation — accent: Solarized blue, deepened to read at 4.8:1 as text
+      // on base3 and carry white text on fills (5.2:1).
       '--fluux-accent-h': '205',
       '--fluux-accent-s': '69%',
-      '--fluux-accent-l': '42%',
+      '--fluux-accent-l': '40%',
       // Foundation — palette
       '--fluux-color-red': '#dc322f',
       '--fluux-color-green': '#718c00',
