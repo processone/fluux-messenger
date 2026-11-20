@@ -117,6 +117,11 @@ export interface SendMessageOptions {
    * the copy shows the body, and `fallback` marks the part of it a copy-reader may hide.
    */
   forwarded?: ForwardedCopyInput
+  /**
+   * The content came from an end-to-end encrypted chat (a forwarded file, for one): the send is
+   * refused unless it goes out inside encrypted protection.
+   */
+  requireEncryption?: boolean
 }
 
 /** What a forward names about the message it copies. */

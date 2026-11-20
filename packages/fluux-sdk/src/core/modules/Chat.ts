@@ -1101,7 +1101,7 @@ export class Chat extends BaseModule {
 
     // Guard: a forward whose source came from an encrypted chat carries that plaintext in its
     // body and copy; it never leaves unencrypted, whatever made the encryption step skip.
-    if (options?.forwarded?.fromEncrypted && !outgoingSecurityContext) {
+    if ((options?.forwarded?.fromEncrypted || options?.requireEncryption) && !outgoingSecurityContext) {
       throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }
 

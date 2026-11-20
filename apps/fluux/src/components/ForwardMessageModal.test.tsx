@@ -178,6 +178,44 @@ describe('ForwardMessageModal', () => {
       expect(fixture.roomSend).not.toHaveBeenCalled()
     })
 
+    // FLM-336 finding 4: the file itself goes along, never only its link or caption.
+    describe('with a photo or file', () => {
+      const attachment = { url: 'https://upload.example/p.png', name: 'p.png', mediaType: 'image/png', size: 10 }
+
+      it('sends a file without a caption to a chat as the file, with no copy', async () => {
+        render(<ForwardMessageModal attachment={attachment} onClose={vi.fn()} />)
+        pickAndSend('em')
+        await waitFor(() => expect(fixture.chatSend).toHaveBeenCalledOnce())
+        expect(fixture.chatSend.mock.calls[0][1]).toBe('')
+        expect(fixture.chatSend.mock.calls[0][2]).toMatchObject({ attachment })
+        expect(fixture.chatSend.mock.calls[0][2].forwarded).toBeUndefined()
+      })
+
+      it('sends the file with the caption copy to a chat', async () => {
+        render(<ForwardMessageModal attachment={attachment} quote={direct} onClose={vi.fn()} />)
+        pickAndSend('em')
+        await waitFor(() => expect(fixture.chatSend).toHaveBeenCalledOnce())
+        expect(fixture.chatSend.mock.calls[0][2]).toMatchObject({ attachment, forwarded: { text: 'Ship it' } })
+      })
+
+      it('sends the file to a room', async () => {
+        render(<ForwardMessageModal attachment={attachment} onClose={vi.fn()} />)
+        pickAndSend('design')
+        await waitFor(() => expect(fixture.roomSend).toHaveBeenCalledOnce())
+        expect(fixture.roomSend.mock.calls[0][2]).toMatchObject({ attachment })
+      })
+
+      it('keeps a file from an encrypted chat out of rooms and requires encryption on the send', async () => {
+        render(<ForwardMessageModal attachment={attachment} fromEncrypted onClose={vi.fn()} />)
+        fireEvent.focus(picker())
+        expect(Array.from(suggestions(), row => row.textContent).join()).not.toContain('Design')
+        pickAndSend('em')
+        await waitFor(() => expect(fixture.chatSend).toHaveBeenCalledOnce())
+        expect(fixture.chatSend.mock.calls[0][2]).toMatchObject({ attachment, requireEncryption: true })
+        expect(fixture.roomSend).not.toHaveBeenCalled()
+      })
+    })
+
     // A contact whose every key waits for a decision refuses the send; the dialog stays encrypted-only
     // (one send attempt, never plain text) and offers Review keys for that contact.
     it('offers Review keys for the contact when every key waits for a decision', async () => {

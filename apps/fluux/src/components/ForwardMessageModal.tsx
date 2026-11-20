@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { FileAttachment } from '@fluux/sdk'
 import { useChatActions, useRoomActions, useRoster, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { encryptionSendErrorKey, isKeysAwaitingDecision } from '@/e2ee/encryptionSendError'
@@ -15,11 +16,15 @@ interface ForwardMessageModalProps {
   link?: string
   /** The readable source text; left out when the source cannot be read. */
   quote?: ForwardQuote
+  /** The source's file, sent again as a file rather than only as a link or caption. */
+  attachment?: FileAttachment
+  /** The source was read from an encrypted chat, whether or not it has text. */
+  fromEncrypted?: boolean
   onClose: () => void
 }
 
 /** Forward a message as a comment, an attributed quote and, for a room message, its link. */
-export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModalProps) {
+export function ForwardMessageModal({ link, quote, attachment, fromEncrypted, onClose }: ForwardMessageModalProps) {
   const { t } = useTranslation()
   const { contacts } = useRoster()
   const conversations = useChatStore(s => s.conversations)
@@ -44,7 +49,7 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
     }
   }
   // A message read from an encrypted chat never goes to a room: rooms have no encryption.
-  const encryptedSource = !!quote?.fromEncrypted
+  const encryptedSource = !!(fromEncrypted || quote?.fromEncrypted)
   const joinedRooms = encryptedSource ? [] : Array.from(rooms.values()).filter(item => item.joined && item.selfOccupant?.role !== 'visitor')
   const validDestination = destination.startsWith('room:')
     ? joinedRooms.some(item => item.jid === destination.slice(5))
@@ -80,19 +85,21 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
         const liveRoom = roomStore.getState().rooms.get(jid)
         if (!liveRoom?.joined || liveRoom.selfOccupant?.role === 'visitor') throw new Error('Room unavailable')
         const { body, references } = composeForward(comment, link, quote)
-        await trackSend(room.sendMessage(jid, body, { references }))
+        await trackSend(room.sendMessage(jid, body, { references, ...(attachment && { attachment }) }))
       } else {
         // The SDK routes known room addresses as groupchat even via chat actions.
         if (roomStore.getState().rooms.has(jid)) throw new Error('Destination changed')
         // One stanza for every reader: the comment, quote and link, plus a structured copy. The quote
         // is marked as the copy's fallback, so a reader that shows the copy hides it; no device is asked.
+        // A file from an encrypted chat is refused unless this chat is encrypted too.
+        const fileOptions = attachment ? { attachment, ...(encryptedSource && { requireEncryption: true }) } : {}
         const withCopy = composeForwardWithCopy(comment, link, quote)
         if (withCopy) {
           const { body, references, forwarded } = withCopy
-          await trackSend(chat.sendMessage(jid, body, { references, forwarded }))
+          await trackSend(chat.sendMessage(jid, body, { references, forwarded, ...fileOptions }))
         } else {
           const { body, references } = composeForward(comment, link, quote)
-          await trackSend(chat.sendMessage(jid, body, { references }))
+          await trackSend(chat.sendMessage(jid, body, { references, ...fileOptions }))
         }
       }
       onClose()
@@ -125,6 +132,7 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
           <TextArea ref={commentRef} value={comment} onChange={event => setComment(event.target.value)} disabled={sending} rows={3}
             className="mt-1 w-full p-2 rounded bg-fluux-bg text-fluux-text border border-fluux-hover resize-none" />
         </label>
+        {attachment && <p className="text-xs text-fluux-muted break-all">{attachment.name ?? attachment.url}</p>}
         {link && <p className="text-xs text-fluux-muted break-all">{link}</p>}
         {failed && heldPeer ? (
           <div role="alert" className="text-sm text-fluux-error space-y-2">

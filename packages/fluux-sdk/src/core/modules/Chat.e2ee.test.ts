@@ -2157,6 +2157,22 @@ describe('Chat E2EE wiring', () => {
       expect(replyFallback).toBeDefined()
     })
 
+    // FLM-336 finding 4: a file forwarded out of an encrypted chat never leaves unprotected.
+    it('refuses a file marked as from an encrypted chat when no encryption applies, and sends nothing', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({ jid: 'me@example.com', manager: emptyManager, captureStanza: (el) => captured.push(el) })
+      const plainChat = new Chat(deps, new MAM(deps))
+      await expect(plainChat.sendMessage('bob@example.com', '', {
+        attachment: { url: 'https://upload.example.com/file.bin', name: 'file.bin', mediaType: 'application/octet-stream' },
+        requireEncryption: true,
+      })).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+      expect(captured).toHaveLength(0)
+    })
+
     it('shifts OOB fallback offsets when a cleartext reply to an encrypted message carries an attachment', async () => {
       const emptyManager = new E2EEManager({
         storage: new InMemoryStorageBackend(),
