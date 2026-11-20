@@ -449,6 +449,95 @@
         "destroyRoomConfirm": "See hävitab ruumi jäädavalt ja eemaldab kõik liikmed. Seda toimingut ei saa tagasi võtta.",
         "destroyRoomError": "Ruumi hävitamine ebaõnnestus.",
         "dangerZone": "Ohutsoon",
+        "settings": {
+            "sectionsLabel": "Toa seadete jaotised",
+            "unsaved": "Salvestamata muudatused",
+            "footer": "Toa seaded kehtivad pärast salvestamist kõigile. Teavitused puudutavad ainult sind ja kehtivad kohe.",
+            "currentTopic": "Praegune teema",
+            "noTopic": "Teema puudub",
+            "topicHint": "Kuvatakse päises toa nime all. Muutmisel postitatakse tuppa teade.",
+            "membersDesc": "Anna või võta liikmelisus, määra administraatoreid ja blokeeri aadresse.",
+            "bulkModerationDesc": "Eemalda korraga palju sõnumeid.",
+            "destroyTitle": "Hävita see tuba",
+            "sections": {
+                "general": {
+                    "label": "Üldine",
+                    "description": "Nimi, kirjeldus ja teema, mida kõik näevad."
+                },
+                "notifications": {
+                    "label": "Teavitused",
+                    "description": "Puudutab ainult sind ja kehtib kohe."
+                },
+                "access": {
+                    "label": "Juurdepääs ja privaatsus",
+                    "description": "Kes saavad toa leida ja sellega liituda ning mida nad näevad."
+                },
+                "permissions": {
+                    "label": "Õigused",
+                    "description": "Mida osalejad teha tohivad."
+                },
+                "moderation": {
+                    "label": "Modereerimine",
+                    "description": "Sõnaõigus, külastajad ja toa haldajad."
+                },
+                "advanced": {
+                    "label": "Ajalugu ja täpsemad",
+                    "description": "Arhiveerimine ja serveripõhised valikud."
+                },
+                "danger": {
+                    "label": "Ohutsoon",
+                    "description": "Pöördumatud toimingud."
+                }
+            },
+            "groups": {
+                "identity": "Identiteet",
+                "notifyMe": "Teavita mind",
+                "visibility": "Nähtavus",
+                "joining": "Liitumine",
+                "participantsCan": "Osalejad saavad",
+                "privateMessages": "Privaatsõnumid",
+                "memberList": "Liikmete nimekiri",
+                "voice": "Sõnaõigus",
+                "visitors": "Külastajad",
+                "people": "Inimesed",
+                "history": "Ajalugu",
+                "features": "Funktsioonid",
+                "other": "Muud serveri valikud"
+            },
+            "fields": {
+                "roomName": "Toa nimi",
+                "roomDesc": "Kirjeldus",
+                "lang": "Keel",
+                "publicRoom": "Näita avalikus kataloogis",
+                "persistentRoom": "Säilita tuba, kui see on tühi",
+                "publicList": "Kõik näevad, kes toas on",
+                "whois": "Kes näevad tegelikke aadresse",
+                "membersOnly": "Ainult liikmetele",
+                "passwordProtected": "Nõua parooli",
+                "roomSecret": "Parool",
+                "captchaProtected": "Nõua CAPTCHA-t",
+                "captchaWhitelist": "Jäta neil aadressidel CAPTCHA vahele",
+                "maxUsers": "Osalejate maksimaalne arv",
+                "allowSubscription": "Luba tellida ilma liitumata",
+                "changeSubject": "Muuta teemat",
+                "allowInvites": "Kutsuda teisi",
+                "allowQueryUsers": "Pärida teiste osalejate andmeid",
+                "allowPm": "Kes saavad saata privaatsõnumeid",
+                "allowPmFromVisitors": "Külastajad saavad kirjutada",
+                "getMemberList": "Kes saavad liikmete nimekirja vaadata",
+                "presenceBroadcast": "Teavita liitumistest ja lahkumistest",
+                "moderatedRoom": "Modereeritud tuba",
+                "membersByDefault": "Uued kasutajad saavad sõnaõiguse",
+                "allowVoiceRequests": "Külastajad saavad taotleda sõnaõigust",
+                "voiceRequestMinInterval": "Sekundeid sõnaõiguse taotluste vahel",
+                "allowVisitorStatus": "Külastajad saavad määrata olekusõnumi",
+                "allowVisitorNickChange": "Külastajad saavad muuta hüüdnime",
+                "mam": "Arhiveeri sõnumid (MAM)",
+                "enableLogging": "Avalik logimine",
+                "enableHats": "Rollimärgised (hats)",
+                "pubsub": "Seotud PubSub sõlm"
+            }
+        },
         "createRoom": "Loo ruum",
         "roomName": "Ruumi nimi",
         "roomNamePlaceholder": "nt, Meeskonnavestlus",
@@ -1619,11 +1708,11 @@
         "members_by_default": "Uued kasutajad saavad automaatselt osaleja rolli, mis võimaldab neil modereeritud ruumides rääkida.",
         "allow_private_messages_from_visitors": "Määrab, kas külastajad (sõnaõiguseta kasutajad) saavad saata privaatsõnumeid.",
         "allow_query_users": "Luba kasutajatel saata teabepäringuid (teenuste avastamine) teistele osalejatele.",
-        "allow_visitor_status": "Luba külastajatel lisada oma kohalolekule olekusõnum.",
-        "allow_visitor_nickchange": "Luba külastajatel muuta oma hüüdnime ruumis.",
-        "allow_voice_requests": "Luba külastajatel modereeritud ruumis taotleda sõnaõigust.",
+        "muc#roomconfig_allowvisitorstatus": "Luba külastajatel lisada oma kohalolekule olekusõnum.",
+        "muc#roomconfig_allowvisitornickchange": "Luba külastajatel muuta oma hüüdnime ruumis.",
+        "muc#roomconfig_allowvoicerequests": "Luba külastajatel modereeritud ruumis taotleda sõnaõigust.",
         "allow_subscription": "Luba kasutajatel tellida ruumi sõnumeid ilma kohal olemata. Tellijad saavad sõnumeid ilma ruumiga liitumata, kasulik mobiiliklientide või teavituste jaoks.",
-        "voice_request_min_interval": "Minimaalne ooteaeg (sekundites) sama külastaja sõnaõiguse taotluste vahel.",
+        "muc#roomconfig_voicerequestmininterval": "Minimaalne ooteaeg (sekundites) sama külastaja sõnaõiguse taotluste vahel.",
         "enable_hats": "Luba märkide kuvamine osalejanimede kõrval, mis näitavad erirollidele või kuuluvusi.",
         "mam": "Luba sõnumiarhiiv (MAM), et kliendid saaksid liitumisel või taasühendumisel varasemaid sõnumeid tuua. See on ajalugu, mida osalejad oma vestlusrakenduses näevad."
     },

@@ -449,6 +449,95 @@
         "destroyRoomConfirm": "대화방을 영구적으로 제거하고 모든 멤버를 내보냅니다. 이 작업은 취소할 수 없습니다.",
         "destroyRoomError": "대화방 제거 실패.",
         "dangerZone": "위험 영역",
+        "settings": {
+            "sectionsLabel": "대화방 설정 섹션",
+            "unsaved": "저장되지 않은 변경 사항",
+            "footer": "대화방 설정은 저장하면 모든 사람에게 적용됩니다. 알림 설정은 나에게만 바로 적용됩니다.",
+            "currentTopic": "현재 주제",
+            "noTopic": "설정된 주제 없음",
+            "topicHint": "헤더의 대화방 이름 아래에 표시됩니다. 변경하면 대화방에 알림이 게시됩니다.",
+            "membersDesc": "멤버십을 부여하거나 취소하고, 관리자를 지정하고, 주소를 차단합니다.",
+            "bulkModerationDesc": "여러 메시지를 한 번에 삭제합니다.",
+            "destroyTitle": "이 대화방 제거",
+            "sections": {
+                "general": {
+                    "label": "일반",
+                    "description": "모든 사람에게 표시되는 이름, 설명, 주제입니다."
+                },
+                "notifications": {
+                    "label": "알림",
+                    "description": "나에게만 적용되며 바로 반영됩니다."
+                },
+                "access": {
+                    "label": "접근 및 개인정보",
+                    "description": "대화방을 찾고 참여할 수 있는 사람과 볼 수 있는 내용입니다."
+                },
+                "permissions": {
+                    "label": "권한",
+                    "description": "참여자가 할 수 있는 작업입니다."
+                },
+                "moderation": {
+                    "label": "중재",
+                    "description": "발언권, 방문자, 대화방 운영자를 관리합니다."
+                },
+                "advanced": {
+                    "label": "기록 및 고급",
+                    "description": "메시지 보관 및 서버별 옵션입니다."
+                },
+                "danger": {
+                    "label": "위험 영역",
+                    "description": "되돌릴 수 없는 작업입니다."
+                }
+            },
+            "groups": {
+                "identity": "기본 정보",
+                "notifyMe": "알림 받을 항목",
+                "visibility": "공개 범위",
+                "joining": "참여",
+                "participantsCan": "참여자가 할 수 있는 작업",
+                "privateMessages": "개인 메시지",
+                "memberList": "멤버 목록",
+                "voice": "발언권",
+                "visitors": "방문자",
+                "people": "사람",
+                "history": "기록",
+                "features": "기능",
+                "other": "기타 서버 옵션"
+            },
+            "fields": {
+                "roomName": "대화방 이름",
+                "roomDesc": "설명",
+                "lang": "언어",
+                "publicRoom": "공개 목록에 표시",
+                "persistentRoom": "비어 있어도 대화방 유지",
+                "publicList": "누구나 참여자 목록을 볼 수 있음",
+                "whois": "실제 주소 공개 대상",
+                "membersOnly": "멤버 전용",
+                "passwordProtected": "비밀번호 필요",
+                "roomSecret": "비밀번호",
+                "captchaProtected": "CAPTCHA 필요",
+                "captchaWhitelist": "다음 주소는 CAPTCHA 건너뛰기",
+                "maxUsers": "최대 참여자 수",
+                "allowSubscription": "참여하지 않고 구독 허용",
+                "changeSubject": "주제 변경",
+                "allowInvites": "다른 사람 초대",
+                "allowQueryUsers": "다른 참여자 정보 조회",
+                "allowPm": "개인 메시지를 보낼 수 있는 사람",
+                "allowPmFromVisitors": "방문자가 메시지를 보낼 수 있는 대상",
+                "getMemberList": "멤버 목록을 조회할 수 있는 사람",
+                "presenceBroadcast": "입장 및 퇴장 알림 대상",
+                "moderatedRoom": "중재되는 대화방",
+                "membersByDefault": "새 사용자에게 발언권 부여",
+                "allowVoiceRequests": "방문자의 발언권 요청 허용",
+                "voiceRequestMinInterval": "발언권 요청 간격(초)",
+                "allowVisitorStatus": "방문자의 상태 메시지 설정 허용",
+                "allowVisitorNickChange": "방문자의 닉네임 변경 허용",
+                "mam": "메시지 보관 (MAM)",
+                "enableLogging": "공개 로그 기록",
+                "enableHats": "배지 (역할 표시)",
+                "pubsub": "연결된 PubSub 노드"
+            }
+        },
         "createRoom": "대화방 만들기",
         "roomName": "대화방 이름",
         "roomNamePlaceholder": "예: 팀 채팅",
@@ -1617,11 +1706,11 @@
         "members_by_default": "대화방에 참여하는 새 사용자는 자동으로 참가자 역할을 받아 중재 대화방에서 말할 수 있습니다.",
         "allow_private_messages_from_visitors": "방문자(발언권이 없는 사용자)가 비공개 메시지를 보낼 수 있는지 제어합니다.",
         "allow_query_users": "사용자가 다른 참가자에게 정보 쿼리(서비스 검색)를 보낼 수 있도록 허용합니다.",
-        "allow_visitor_status": "방문자가 상태 메시지를 상태에 포함할 수 있도록 허용합니다.",
-        "allow_visitor_nickchange": "방문자가 대화방에서 닉네임을 변경할 수 있도록 허용합니다.",
-        "allow_voice_requests": "중재 대화방의 방문자가 말할 수 있는 권한을 요청할 수 있도록 허용합니다.",
+        "muc#roomconfig_allowvisitorstatus": "방문자가 상태 메시지를 상태에 포함할 수 있도록 허용합니다.",
+        "muc#roomconfig_allowvisitornickchange": "방문자가 대화방에서 닉네임을 변경할 수 있도록 허용합니다.",
+        "muc#roomconfig_allowvoicerequests": "중재 대화방의 방문자가 말할 수 있는 권한을 요청할 수 있도록 허용합니다.",
         "allow_subscription": "사용자가 참석하지 않고 대화방 메시지를 구독할 수 있도록 허용합니다. 구독자는 대화방에 참여하지 않고도 메시지를 받습니다. 모바일 클라이언트 또는 알림에 유용합니다.",
-        "voice_request_min_interval": "같은 방문자의 발언권 요청 사이의 최소 대기 시간(초)입니다.",
+        "muc#roomconfig_voicerequestmininterval": "같은 방문자의 발언권 요청 사이의 최소 대기 시간(초)입니다.",
         "enable_hats": "참가자 이름 옆에 배지 표시를 활성화하여 특수 역할 또는 소속을 표시합니다.",
         "mam": "메시지 아카이브(MAM)를 활성화하여 클라이언트가 참여하거나 다시 연결할 때 과거 메시지를 가져올 수 있도록 합니다. 참가자가 채팅 앱에서 보는 기록입니다."
     },

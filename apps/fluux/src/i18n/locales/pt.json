@@ -449,6 +449,95 @@
         "destroyRoomConfirm": "Isto irá destruir permanentemente a sala e remover todos os membros. Esta ação não pode ser desfeita.",
         "destroyRoomError": "Falha ao destruir a sala.",
         "dangerZone": "Zona de Perigo",
+        "settings": {
+            "sectionsLabel": "Secções das definições da sala",
+            "unsaved": "Alterações não guardadas",
+            "footer": "As definições da sala aplicam-se a todos depois de guardadas. As notificações aplicam-se só a si, de imediato.",
+            "currentTopic": "Tópico atual",
+            "noTopic": "Nenhum tópico definido",
+            "topicHint": "Mostrado sob o nome da sala no cabeçalho. Alterá-lo publica um aviso na sala.",
+            "membersDesc": "Conceder ou retirar a filiação, promover administradores e banir endereços.",
+            "bulkModerationDesc": "Remover várias mensagens de uma só vez.",
+            "destroyTitle": "Destruir esta sala",
+            "sections": {
+                "general": {
+                    "label": "Geral",
+                    "description": "Nome, descrição e tópico visíveis para todos."
+                },
+                "notifications": {
+                    "label": "Notificações",
+                    "description": "Só o afeta a si e aplica-se de imediato."
+                },
+                "access": {
+                    "label": "Acesso e privacidade",
+                    "description": "Quem pode encontrar e entrar na sala, e o que pode ver."
+                },
+                "permissions": {
+                    "label": "Permissões",
+                    "description": "O que os participantes podem fazer."
+                },
+                "moderation": {
+                    "label": "Moderação",
+                    "description": "Voz, visitantes e quem gere a sala."
+                },
+                "advanced": {
+                    "label": "Histórico e avançado",
+                    "description": "Arquivo e opções específicas do servidor."
+                },
+                "danger": {
+                    "label": "Zona de perigo",
+                    "description": "Ações irreversíveis."
+                }
+            },
+            "groups": {
+                "identity": "Identidade",
+                "notifyMe": "Notificar-me sobre",
+                "visibility": "Visibilidade",
+                "joining": "Entrada",
+                "participantsCan": "Os participantes podem",
+                "privateMessages": "Mensagens privadas",
+                "memberList": "Lista de membros",
+                "voice": "Voz",
+                "visitors": "Visitantes",
+                "people": "Pessoas",
+                "history": "Histórico",
+                "features": "Funcionalidades",
+                "other": "Outras opções do servidor"
+            },
+            "fields": {
+                "roomName": "Nome da sala",
+                "roomDesc": "Descrição",
+                "lang": "Idioma",
+                "publicRoom": "Listar no diretório público",
+                "persistentRoom": "Manter a sala quando vazia",
+                "publicList": "Todos podem ver quem está na sala",
+                "whois": "Endereços reais visíveis para",
+                "membersOnly": "Apenas membros",
+                "passwordProtected": "Exigir uma senha",
+                "roomSecret": "Senha",
+                "captchaProtected": "Exigir um CAPTCHA",
+                "captchaWhitelist": "Dispensar o CAPTCHA para estes endereços",
+                "maxUsers": "Máximo de participantes",
+                "allowSubscription": "Permitir subscrever sem entrar",
+                "changeSubject": "Alterar o tópico",
+                "allowInvites": "Convidar outras pessoas",
+                "allowQueryUsers": "Consultar outros participantes",
+                "allowPm": "Quem pode enviar mensagens privadas",
+                "allowPmFromVisitors": "Os visitantes podem escrever a",
+                "getMemberList": "Quem pode obter a lista de membros",
+                "presenceBroadcast": "Anunciar entradas e saídas de",
+                "moderatedRoom": "Sala moderada",
+                "membersByDefault": "Novos utilizadores recebem voz",
+                "allowVoiceRequests": "Os visitantes podem pedir voz",
+                "voiceRequestMinInterval": "Segundos entre pedidos de voz",
+                "allowVisitorStatus": "Os visitantes podem definir uma mensagem de estado",
+                "allowVisitorNickChange": "Os visitantes podem mudar de alcunha",
+                "mam": "Arquivar mensagens (MAM)",
+                "enableLogging": "Registo público",
+                "enableHats": "Emblemas de função (hats)",
+                "pubsub": "Nó PubSub associado"
+            }
+        },
         "createRoom": "Criar Sala",
         "roomName": "Nome da Sala",
         "roomNamePlaceholder": "ex., Chat de Equipa",
@@ -1621,11 +1710,11 @@
         "members_by_default": "Novos utilizadores obtêm automaticamente o papel de participante, permitindo-lhes falar em salas moderadas.",
         "allow_private_messages_from_visitors": "Controla se os visitantes (utilizadores sem direito de voz) podem enviar mensagens privadas.",
         "allow_query_users": "Permitir que os utilizadores enviem consultas de informação (descoberta de serviços) a outros participantes.",
-        "allow_visitor_status": "Permitir que os visitantes incluam uma mensagem de estado na sua presença.",
-        "allow_visitor_nickchange": "Permitir que os visitantes alterem a sua alcunha na sala.",
-        "allow_voice_requests": "Permitir que os visitantes numa sala moderada peçam permissão para falar.",
+        "muc#roomconfig_allowvisitorstatus": "Permitir que os visitantes incluam uma mensagem de estado na sua presença.",
+        "muc#roomconfig_allowvisitornickchange": "Permitir que os visitantes alterem a sua alcunha na sala.",
+        "muc#roomconfig_allowvoicerequests": "Permitir que os visitantes numa sala moderada peçam permissão para falar.",
         "allow_subscription": "Permitir que os utilizadores subscrevam mensagens da sala sem estarem presentes. Os subscritores recebem mensagens sem entrar na sala, útil para clientes móveis ou notificações.",
-        "voice_request_min_interval": "Tempo mínimo de espera (em segundos) entre pedidos de voz do mesmo visitante.",
+        "muc#roomconfig_voicerequestmininterval": "Tempo mínimo de espera (em segundos) entre pedidos de voz do mesmo visitante.",
         "enable_hats": "Ativar a exibição de distintivos junto aos nomes dos participantes, mostrando papéis ou afiliações especiais.",
         "mam": "Ativar o arquivo de mensagens (MAM) para que os clientes possam obter mensagens anteriores ao entrar ou reconectar. Este é o histórico que os participantes veem na sua aplicação de chat."
     },

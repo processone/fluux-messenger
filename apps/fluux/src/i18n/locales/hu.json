@@ -447,6 +447,95 @@
         "destroyRoomConfirm": "Ez véglegesen megsemmisíti a szobát és eltávolítja az összes tagot. Ez a művelet nem vonható vissza.",
         "destroyRoomError": "A szoba megsemmisítése sikertelen.",
         "dangerZone": "Veszélyes zóna",
+        "settings": {
+            "sectionsLabel": "Szobabeállítások szakaszai",
+            "unsaved": "Mentetlen módosítások",
+            "footer": "A szobabeállítások mentés után mindenkire vonatkoznak. Az értesítések csak önre vonatkoznak, és azonnal érvénybe lépnek.",
+            "currentTopic": "Jelenlegi téma",
+            "noTopic": "Nincs téma beállítva",
+            "topicHint": "A fejlécben, a szoba neve alatt jelenik meg. A módosításáról értesítés jelenik meg a szobában.",
+            "membersDesc": "Tagság megadása vagy visszavonása, adminisztrátorok kinevezése és címek kitiltása.",
+            "bulkModerationDesc": "Sok üzenet eltávolítása egyszerre.",
+            "destroyTitle": "A szoba megsemmisítése",
+            "sections": {
+                "general": {
+                    "label": "Általános",
+                    "description": "Mindenki számára látható név, leírás és téma."
+                },
+                "notifications": {
+                    "label": "Értesítések",
+                    "description": "Csak önre vonatkozik, és azonnal érvénybe lép."
+                },
+                "access": {
+                    "label": "Hozzáférés és adatvédelem",
+                    "description": "Ki találhatja meg a szobát és ki csatlakozhat hozzá, és mit láthat."
+                },
+                "permissions": {
+                    "label": "Jogosultságok",
+                    "description": "Mit tehetnek a résztvevők."
+                },
+                "moderation": {
+                    "label": "Moderálás",
+                    "description": "Szólási jog, látogatók és a szoba vezetői."
+                },
+                "advanced": {
+                    "label": "Előzmények és speciális",
+                    "description": "Archiválás és szerverspecifikus beállítások."
+                },
+                "danger": {
+                    "label": "Veszélyes zóna",
+                    "description": "Visszafordíthatatlan műveletek."
+                }
+            },
+            "groups": {
+                "identity": "Azonosítás",
+                "notifyMe": "Értesítést kérek",
+                "visibility": "Láthatóság",
+                "joining": "Csatlakozás",
+                "participantsCan": "A résztvevők számára engedélyezett",
+                "privateMessages": "Privát üzenetek",
+                "memberList": "Taglista",
+                "voice": "Szólási jog",
+                "visitors": "Látogatók",
+                "people": "Személyek",
+                "history": "Előzmények",
+                "features": "Funkciók",
+                "other": "Egyéb szerverbeállítások"
+            },
+            "fields": {
+                "roomName": "Szoba neve",
+                "roomDesc": "Leírás",
+                "lang": "Nyelv",
+                "publicRoom": "Megjelenítés a nyilvános könyvtárban",
+                "persistentRoom": "Szoba megtartása, ha üres",
+                "publicList": "Bárki láthatja, ki van a szobában",
+                "whois": "Ki láthatja a valódi címeket",
+                "membersOnly": "Csak tagoknak",
+                "passwordProtected": "Jelszó megkövetelése",
+                "roomSecret": "Jelszó",
+                "captchaProtected": "CAPTCHA megkövetelése",
+                "captchaWhitelist": "CAPTCHA kihagyása ezeknél a címeknél",
+                "maxUsers": "Résztvevők maximális száma",
+                "allowSubscription": "Feliratkozás csatlakozás nélkül",
+                "changeSubject": "A téma módosítása",
+                "allowInvites": "Mások meghívása",
+                "allowQueryUsers": "Más résztvevők lekérdezése",
+                "allowPm": "Ki küldhet privát üzenetet",
+                "allowPmFromVisitors": "A látogatók írhatnak",
+                "getMemberList": "Ki kérheti le a taglistát",
+                "presenceBroadcast": "Belépések és távozások bejelentése",
+                "moderatedRoom": "Moderált szoba",
+                "membersByDefault": "Az új felhasználók szólási jogot kapnak",
+                "allowVoiceRequests": "A látogatók szólási jogot kérhetnek",
+                "voiceRequestMinInterval": "Másodpercek a szólásjog-kérések között",
+                "allowVisitorStatus": "A látogatók állapotüzenetet állíthatnak be",
+                "allowVisitorNickChange": "A látogatók módosíthatják a becenevüket",
+                "mam": "Üzenetek archiválása (MAM)",
+                "enableLogging": "Nyilvános naplózás",
+                "enableHats": "Szerepkör-jelvények (hats)",
+                "pubsub": "Társított PubSub csomópont"
+            }
+        },
         "createRoom": "Szoba létrehozása",
         "roomName": "Szoba neve",
         "roomNamePlaceholder": "pl., Csapatcsevegés",
@@ -1617,11 +1706,11 @@
         "members_by_default": "Az új felhasználók automatikusan megkapják a résztvevői szerepkört, ami lehetővé teszi számukra a beszédet moderált szobákban.",
         "allow_private_messages_from_visitors": "Meghatározza, hogy a látogatók (szólási jog nélküli felhasználók) küldhetnek-e privát üzeneteket.",
         "allow_query_users": "Felhasználók információs lekérdezéseket (szolgáltatásfelfedezés) küldhetnek más résztvevőknek.",
-        "allow_visitor_status": "Látogatók állapotüzenetet csatolhatnak a jelenlétükhöz.",
-        "allow_visitor_nickchange": "Látogatók megváltoztathatják a becenevüket a szobában.",
-        "allow_voice_requests": "Látogatók moderált szobában szólási jogot kérhetnek.",
+        "muc#roomconfig_allowvisitorstatus": "Látogatók állapotüzenetet csatolhatnak a jelenlétükhöz.",
+        "muc#roomconfig_allowvisitornickchange": "Látogatók megváltoztathatják a becenevüket a szobában.",
+        "muc#roomconfig_allowvoicerequests": "Látogatók moderált szobában szólási jogot kérhetnek.",
         "allow_subscription": "Felhasználók feliratkozhatnak a szoba üzeneteire anélkül, hogy jelen lennének. A feliratkozók üzeneteket kapnak a szobához való csatlakozás nélkül, hasznos mobil kliensek vagy értesítések számára.",
-        "voice_request_min_interval": "Minimális várakozási idő (másodpercben) ugyanazon látogató szólásjog-kérelmei között.",
+        "muc#roomconfig_voicerequestmininterval": "Minimális várakozási idő (másodpercben) ugyanazon látogató szólásjog-kérelmei között.",
         "enable_hats": "Jelvények megjelenítésének engedélyezése a résztvevők neve mellett, amelyek különleges szerepköröket vagy hovatartozást jeleznek.",
         "mam": "Üzenetarchívum (MAM) engedélyezése, hogy a kliensek korábbi üzeneteket kérhessenek le csatlakozáskor vagy újracsatlakozáskor. Ez az előzmény, amelyet a résztvevők a csevegőalkalmazásukban látnak."
     },

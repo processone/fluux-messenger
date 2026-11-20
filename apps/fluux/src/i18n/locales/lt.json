@@ -447,6 +447,95 @@
         "destroyRoomConfirm": "Tai negrįžtamai sunaikins kambarį ir pašalins visus narius. Šio veiksmo negalima atšaukti.",
         "destroyRoomError": "Nepavyko sunaikinti kambario.",
         "dangerZone": "Pavojinga zona",
+        "settings": {
+            "sectionsLabel": "Kambario nustatymų skiltys",
+            "unsaved": "Neišsaugoti pakeitimai",
+            "footer": "Išsaugoti kambario nustatymai taikomi visiems. Pranešimai taikomi tik jums ir iš karto.",
+            "currentTopic": "Dabartinė tema",
+            "noTopic": "Tema nenustatyta",
+            "topicHint": "Rodoma antraštėje po kambario pavadinimu. Pakeitus temą, kambaryje paskelbiamas pranešimas.",
+            "membersDesc": "Suteikite arba atimkite narystę, skirkite administratorius ir blokuokite adresus.",
+            "bulkModerationDesc": "Pašalinkite daug žinučių vienu metu.",
+            "destroyTitle": "Sunaikinti šį kambarį",
+            "sections": {
+                "general": {
+                    "label": "Bendra",
+                    "description": "Visiems rodomas pavadinimas, aprašymas ir tema."
+                },
+                "notifications": {
+                    "label": "Pranešimai",
+                    "description": "Taikoma tik jums ir iš karto."
+                },
+                "access": {
+                    "label": "Prieiga ir privatumas",
+                    "description": "Kas gali rasti kambarį ir prisijungti, ir ką jie gali matyti."
+                },
+                "permissions": {
+                    "label": "Leidimai",
+                    "description": "Ką gali daryti dalyviai."
+                },
+                "moderation": {
+                    "label": "Moderavimas",
+                    "description": "Teisė kalbėti, lankytojai ir kambario prižiūrėtojai."
+                },
+                "advanced": {
+                    "label": "Istorija ir išplėstiniai",
+                    "description": "Archyvavimas ir serverio parinktys."
+                },
+                "danger": {
+                    "label": "Pavojinga zona",
+                    "description": "Negrįžtami veiksmai."
+                }
+            },
+            "groups": {
+                "identity": "Tapatybė",
+                "notifyMe": "Pranešti man apie",
+                "visibility": "Matomumas",
+                "joining": "Prisijungimas",
+                "participantsCan": "Dalyviai gali",
+                "privateMessages": "Privačios žinutės",
+                "memberList": "Narių sąrašas",
+                "voice": "Teisė kalbėti",
+                "visitors": "Lankytojai",
+                "people": "Žmonės",
+                "history": "Istorija",
+                "features": "Funkcijos",
+                "other": "Kitos serverio parinktys"
+            },
+            "fields": {
+                "roomName": "Kambario pavadinimas",
+                "roomDesc": "Aprašymas",
+                "lang": "Kalba",
+                "publicRoom": "Rodyti viešajame kataloge",
+                "persistentRoom": "Išlaikyti kambarį, kai jis tuščias",
+                "publicList": "Visi gali matyti, kas yra kambaryje",
+                "whois": "Tikruosius adresus mato",
+                "membersOnly": "Tik nariams",
+                "passwordProtected": "Reikalauti slaptažodžio",
+                "roomSecret": "Slaptažodis",
+                "captchaProtected": "Reikalauti CAPTCHA",
+                "captchaWhitelist": "Praleisti CAPTCHA šiems adresams",
+                "maxUsers": "Didžiausias dalyvių skaičius",
+                "allowSubscription": "Leisti prenumeruoti neprisijungus",
+                "changeSubject": "Keisti temą",
+                "allowInvites": "Kviesti kitus",
+                "allowQueryUsers": "Užklausti informacijos apie kitus dalyvius",
+                "allowPm": "Kas gali siųsti privačias žinutes",
+                "allowPmFromVisitors": "Lankytojai gali rašyti",
+                "getMemberList": "Kas gali gauti narių sąrašą",
+                "presenceBroadcast": "Pranešti, kai prisijungia ar išeina",
+                "moderatedRoom": "Moderuojamas kambarys",
+                "membersByDefault": "Nauji naudotojai gauna teisę kalbėti",
+                "allowVoiceRequests": "Lankytojai gali prašyti teisės kalbėti",
+                "voiceRequestMinInterval": "Sekundės tarp prašymų kalbėti",
+                "allowVisitorStatus": "Lankytojai gali nustatyti būsenos žinutę",
+                "allowVisitorNickChange": "Lankytojai gali keisti slapyvardį",
+                "mam": "Archyvuoti žinutes (MAM)",
+                "enableLogging": "Viešas žurnalas",
+                "enableHats": "Ženkleliai (vaidmenų ženklai)",
+                "pubsub": "Susietas PubSub mazgas"
+            }
+        },
         "createRoom": "Sukurti kambarį",
         "roomName": "Kambario pavadinimas",
         "roomNamePlaceholder": "pvz., Komandos pokalbis",
@@ -1621,11 +1710,11 @@
         "members_by_default": "Nauji naudotojai automatiškai gauna dalyvio vaidmenį, leidžiantį jiems kalbėti moderuojamuose kambariuose.",
         "allow_private_messages_from_visitors": "Valdo, ar lankytojai (naudotojai be balso teisės) gali siųsti privačias žinutes.",
         "allow_query_users": "Leisti naudotojams siųsti informacines užklausas (paslaugų aptikimas) kitiems dalyviams.",
-        "allow_visitor_status": "Leisti lankytojams įtraukti būsenos žinutę į savo buvimą.",
-        "allow_visitor_nickchange": "Leisti lankytojams keisti slapyvardį kambaryje.",
-        "allow_voice_requests": "Leisti lankytojams moderuojamame kambaryje prašyti leidimo kalbėti.",
+        "muc#roomconfig_allowvisitorstatus": "Leisti lankytojams įtraukti būsenos žinutę į savo buvimą.",
+        "muc#roomconfig_allowvisitornickchange": "Leisti lankytojams keisti slapyvardį kambaryje.",
+        "muc#roomconfig_allowvoicerequests": "Leisti lankytojams moderuojamame kambaryje prašyti leidimo kalbėti.",
         "allow_subscription": "Leisti naudotojams prenumeruoti kambario žinutes nesant kambaryje. Prenumeratoriai gauna žinutes neprisijungdami prie kambario, naudinga mobiliems klientams ar pranešimams.",
-        "voice_request_min_interval": "Minimalus laukimo laikas (sekundėmis) tarp to paties lankytojo balso užklausų.",
+        "muc#roomconfig_voicerequestmininterval": "Minimalus laukimo laikas (sekundėmis) tarp to paties lankytojo balso užklausų.",
         "enable_hats": "Įjungti ženklelių rodymą šalia dalyvių vardų, rodančių specialius vaidmenis ar priklausomybes.",
         "mam": "Įjungti žinučių archyvą (MAM), kad klientai galėtų gauti ankstesnes žinutes prisijungiant ar vėl prisijungiant. Tai istorija, kurią dalyviai mato savo pokalbių programėlėje."
     },

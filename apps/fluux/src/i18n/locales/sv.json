@@ -447,6 +447,95 @@
         "destroyRoomConfirm": "Detta kommer permanent radera rummet och ta bort alla medlemmar. Denna åtgärd kan inte ångras.",
         "destroyRoomError": "Kunde inte radera rummet.",
         "dangerZone": "Riskzon",
+        "settings": {
+            "sectionsLabel": "Avsnitt i rumsinställningar",
+            "unsaved": "Osparade ändringar",
+            "footer": "Rumsinställningar gäller alla när de sparats. Aviseringar gäller bara dig, direkt.",
+            "currentTopic": "Nuvarande ämne",
+            "noTopic": "Inget ämne angivet",
+            "topicHint": "Visas under rummets namn i rubriken. En ändring publicerar ett meddelande i rummet.",
+            "membersDesc": "Ge eller återkalla medlemskap, befordra administratörer och bannlys adresser.",
+            "bulkModerationDesc": "Ta bort många meddelanden på en gång.",
+            "destroyTitle": "Radera det här rummet",
+            "sections": {
+                "general": {
+                    "label": "Allmänt",
+                    "description": "Namn, beskrivning och ämne som alla ser."
+                },
+                "notifications": {
+                    "label": "Aviseringar",
+                    "description": "Påverkar bara dig och gäller direkt."
+                },
+                "access": {
+                    "label": "Åtkomst och integritet",
+                    "description": "Vem som kan hitta och gå med i rummet, och vad de kan se."
+                },
+                "permissions": {
+                    "label": "Behörigheter",
+                    "description": "Vad deltagare får göra."
+                },
+                "moderation": {
+                    "label": "Moderering",
+                    "description": "Talrätt, besökare och de som sköter rummet."
+                },
+                "advanced": {
+                    "label": "Historik och avancerat",
+                    "description": "Arkivering och serverspecifika alternativ."
+                },
+                "danger": {
+                    "label": "Riskzon",
+                    "description": "Oåterkalleliga åtgärder."
+                }
+            },
+            "groups": {
+                "identity": "Identitet",
+                "notifyMe": "Avisera mig om",
+                "visibility": "Synlighet",
+                "joining": "Anslutning",
+                "participantsCan": "Deltagare kan",
+                "privateMessages": "Privata meddelanden",
+                "memberList": "Medlemslista",
+                "voice": "Talrätt",
+                "visitors": "Besökare",
+                "people": "Personer",
+                "history": "Historik",
+                "features": "Funktioner",
+                "other": "Andra serveralternativ"
+            },
+            "fields": {
+                "roomName": "Rummets namn",
+                "roomDesc": "Beskrivning",
+                "lang": "Språk",
+                "publicRoom": "Visa i den publika katalogen",
+                "persistentRoom": "Behåll rummet när det är tomt",
+                "publicList": "Alla kan se vilka som är i rummet",
+                "whois": "Riktiga adresser synliga för",
+                "membersOnly": "Endast medlemmar",
+                "passwordProtected": "Kräv lösenord",
+                "roomSecret": "Lösenord",
+                "captchaProtected": "Kräv CAPTCHA",
+                "captchaWhitelist": "Hoppa över CAPTCHA för dessa adresser",
+                "maxUsers": "Max antal deltagare",
+                "allowSubscription": "Tillåt prenumeration utan att gå med",
+                "changeSubject": "Ändra ämnet",
+                "allowInvites": "Bjuda in andra",
+                "allowQueryUsers": "Fråga om andra deltagare",
+                "allowPm": "Vem kan skicka privata meddelanden",
+                "allowPmFromVisitors": "Besökare kan skriva till",
+                "getMemberList": "Vem kan hämta medlemslistan",
+                "presenceBroadcast": "Meddela när dessa går med och lämnar",
+                "moderatedRoom": "Modererat rum",
+                "membersByDefault": "Nya användare får talrätt",
+                "allowVoiceRequests": "Besökare kan begära talrätt",
+                "voiceRequestMinInterval": "Sekunder mellan begäranden om talrätt",
+                "allowVisitorStatus": "Besökare kan ange statusmeddelande",
+                "allowVisitorNickChange": "Besökare kan byta smeknamn",
+                "mam": "Arkivera meddelanden (MAM)",
+                "enableLogging": "Offentlig loggning",
+                "enableHats": "Rollmärken (hats)",
+                "pubsub": "Kopplad PubSub-nod"
+            }
+        },
         "createRoom": "Skapa rum",
         "roomName": "Rumsnamn",
         "roomNamePlaceholder": "t.ex., Teamchatt",
@@ -1617,11 +1706,11 @@
         "members_by_default": "Nya användare får automatiskt deltagarrollen, vilket låter dem tala i modererade rum.",
         "allow_private_messages_from_visitors": "Styr om besökare (användare utan talerätt) kan skicka privata meddelanden.",
         "allow_query_users": "Tillåt användare att skicka informationsförfrågningar (tjänsteupptäckt) till andra deltagare.",
-        "allow_visitor_status": "Tillåt besökare att inkludera ett statusmeddelande med sin närvaro.",
-        "allow_visitor_nickchange": "Tillåt besökare att ändra sitt smeknamn i rummet.",
-        "allow_voice_requests": "Tillåt besökare i ett modererat rum att begära talerätt.",
+        "muc#roomconfig_allowvisitorstatus": "Tillåt besökare att inkludera ett statusmeddelande med sin närvaro.",
+        "muc#roomconfig_allowvisitornickchange": "Tillåt besökare att ändra sitt smeknamn i rummet.",
+        "muc#roomconfig_allowvoicerequests": "Tillåt besökare i ett modererat rum att begära talerätt.",
         "allow_subscription": "Tillåt användare att prenumerera på rumsmeddelanden utan att vara närvarande. Prenumeranter tar emot meddelanden utan att gå med i rummet, användbart för mobilklienter eller notifieringar.",
-        "voice_request_min_interval": "Minsta väntetid (i sekunder) mellan talerättsbegäranden från samma besökare.",
+        "muc#roomconfig_voicerequestmininterval": "Minsta väntetid (i sekunder) mellan talerättsbegäranden från samma besökare.",
         "enable_hats": "Aktivera visning av märken bredvid deltagarnamn som visar speciella roller eller tillhörigheter.",
         "mam": "Aktivera meddelandearkiv (MAM) så att klienter kan hämta tidigare meddelanden vid anslutning eller återanslutning. Detta är historiken som deltagare ser i sin chattapp."
     },

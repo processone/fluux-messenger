@@ -447,6 +447,95 @@
         "destroyRoomConfirm": "Tämä tuhoaa huoneen pysyvästi ja poistaa kaikki jäsenet. Tätä toimintoa ei voi perua.",
         "destroyRoomError": "Huoneen tuhoaminen epäonnistui.",
         "dangerZone": "Vaaravyöhyke",
+        "settings": {
+            "sectionsLabel": "Huoneen asetusten osiot",
+            "unsaved": "Tallentamattomia muutoksia",
+            "footer": "Huoneen asetukset koskevat kaikkia tallennuksen jälkeen. Ilmoitukset koskevat vain sinua ja tulevat voimaan heti.",
+            "currentTopic": "Nykyinen aihe",
+            "noTopic": "Ei aihetta",
+            "topicHint": "Näytetään otsikossa huoneen nimen alla. Muutoksesta lähetetään ilmoitus huoneeseen.",
+            "membersDesc": "Myönnä tai peru jäsenyyksiä, nimeä ylläpitäjiä ja estä osoitteita.",
+            "bulkModerationDesc": "Poista monta viestiä kerralla.",
+            "destroyTitle": "Tuhoa tämä huone",
+            "sections": {
+                "general": {
+                    "label": "Yleiset",
+                    "description": "Kaikille näkyvä nimi, kuvaus ja aihe."
+                },
+                "notifications": {
+                    "label": "Ilmoitukset",
+                    "description": "Koskee vain sinua ja tulee voimaan heti."
+                },
+                "access": {
+                    "label": "Pääsy ja yksityisyys",
+                    "description": "Kuka voi löytää huoneen ja liittyä siihen, ja mitä he näkevät."
+                },
+                "permissions": {
+                    "label": "Oikeudet",
+                    "description": "Mitä osallistujat saavat tehdä."
+                },
+                "moderation": {
+                    "label": "Moderointi",
+                    "description": "Puheoikeus, vierailijat ja huoneen ylläpitäjät."
+                },
+                "advanced": {
+                    "label": "Historia ja lisäasetukset",
+                    "description": "Arkistointi ja palvelinkohtaiset asetukset."
+                },
+                "danger": {
+                    "label": "Vaaravyöhyke",
+                    "description": "Peruuttamattomat toiminnot."
+                }
+            },
+            "groups": {
+                "identity": "Tunnistetiedot",
+                "notifyMe": "Ilmoita minulle",
+                "visibility": "Näkyvyys",
+                "joining": "Liittyminen",
+                "participantsCan": "Osallistujat voivat",
+                "privateMessages": "Yksityisviestit",
+                "memberList": "Jäsenluettelo",
+                "voice": "Puheoikeus",
+                "visitors": "Vierailijat",
+                "people": "Henkilöt",
+                "history": "Historia",
+                "features": "Ominaisuudet",
+                "other": "Muut palvelimen asetukset"
+            },
+            "fields": {
+                "roomName": "Huoneen nimi",
+                "roomDesc": "Kuvaus",
+                "lang": "Kieli",
+                "publicRoom": "Näytä julkisessa hakemistossa",
+                "persistentRoom": "Säilytä huone tyhjänä",
+                "publicList": "Kaikki näkevät, ketkä ovat huoneessa",
+                "whois": "Kuka näkee oikeat osoitteet",
+                "membersOnly": "Vain jäsenille",
+                "passwordProtected": "Vaadi salasana",
+                "roomSecret": "Salasana",
+                "captchaProtected": "Vaadi CAPTCHA",
+                "captchaWhitelist": "Ohita CAPTCHA näille osoitteille",
+                "maxUsers": "Osallistujien enimmäismäärä",
+                "allowSubscription": "Salli tilaus liittymättä",
+                "changeSubject": "Vaihtaa aiheen",
+                "allowInvites": "Kutsua muita",
+                "allowQueryUsers": "Hakea muiden osallistujien tietoja",
+                "allowPm": "Kuka voi lähettää yksityisviestejä",
+                "allowPmFromVisitors": "Vierailijat voivat lähettää viestin",
+                "getMemberList": "Kuka voi hakea jäsenluettelon",
+                "presenceBroadcast": "Ilmoita liittymiset ja poistumiset",
+                "moderatedRoom": "Moderoitu huone",
+                "membersByDefault": "Uusilla käyttäjillä on puheoikeus",
+                "allowVoiceRequests": "Vierailijat voivat pyytää puheoikeutta",
+                "voiceRequestMinInterval": "Sekuntia puheoikeuspyyntöjen välillä",
+                "allowVisitorStatus": "Vierailijat voivat asettaa tilaviestin",
+                "allowVisitorNickChange": "Vierailijat voivat vaihtaa nimimerkkiä",
+                "mam": "Arkistoi viestit (MAM)",
+                "enableLogging": "Julkinen lokitus",
+                "enableHats": "Roolitunnukset (hats)",
+                "pubsub": "Liitetty PubSub-solmu"
+            }
+        },
         "createRoom": "Luo huone",
         "roomName": "Huoneen nimi",
         "roomNamePlaceholder": "esim. Tiimikeskustelu",
@@ -1617,11 +1706,11 @@
         "members_by_default": "Uudet käyttäjät saavat automaattisesti osallistujan roolin, mikä sallii heidän puhua moderoiduissa huoneissa.",
         "allow_private_messages_from_visitors": "Määrittää, voivatko vierailijat (käyttäjät ilman puheoikeutta) lähettää yksityisviestejä.",
         "allow_query_users": "Salli käyttäjien lähettää tietokyselyjä (palvelun löytäminen) muille osallistujille.",
-        "allow_visitor_status": "Salli vierailijoiden sisällyttää tilaviesti läsnäoloonsa.",
-        "allow_visitor_nickchange": "Salli vierailijoiden vaihtaa nimimerkkiään huoneessa.",
-        "allow_voice_requests": "Salli vierailijoiden moderoidussa huoneessa pyytää puheoikeutta.",
+        "muc#roomconfig_allowvisitorstatus": "Salli vierailijoiden sisällyttää tilaviesti läsnäoloonsa.",
+        "muc#roomconfig_allowvisitornickchange": "Salli vierailijoiden vaihtaa nimimerkkiään huoneessa.",
+        "muc#roomconfig_allowvoicerequests": "Salli vierailijoiden moderoidussa huoneessa pyytää puheoikeutta.",
         "allow_subscription": "Salli käyttäjien tilata huoneen viestejä olematta läsnä. Tilaajat saavat viestejä liittymättä huoneeseen, hyödyllinen mobiilisovelluksille tai ilmoituksille.",
-        "voice_request_min_interval": "Vähimmäisodotusaika (sekunteina) saman vierailijan puheoikeuspyyntöjen välillä.",
+        "muc#roomconfig_voicerequestmininterval": "Vähimmäisodotusaika (sekunteina) saman vierailijan puheoikeuspyyntöjen välillä.",
         "enable_hats": "Ota käyttöön merkkien näyttö osallistujien nimien vieressä, jotka osoittavat erityisrooleja tai jäsenyyksiä.",
         "mam": "Ota käyttöön viestiarkisto (MAM), jotta sovellukset voivat hakea aiempia viestejä liittyessään tai yhdistäessään uudelleen. Tämä on historia, jonka osallistujat näkevät chat-sovelluksessaan."
     },

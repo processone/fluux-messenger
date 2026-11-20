@@ -449,6 +449,95 @@
         "destroyRoomConfirm": "פעולה זו תשמיד את החדר לצמיתות ותסיר את כל החברים. לא ניתן לבטל פעולה זו.",
         "destroyRoomError": "השמדת החדר נכשלה.",
         "dangerZone": "אזור מסוכן",
+        "settings": {
+            "sectionsLabel": "מקטעי הגדרות החדר",
+            "unsaved": "שינויים שלא נשמרו",
+            "footer": "הגדרות החדר חלות על כולם לאחר השמירה. ההתראות נוגעות רק לך וחלות מיד.",
+            "currentTopic": "נושא נוכחי",
+            "noTopic": "לא הוגדר נושא",
+            "topicHint": "מוצג מתחת לשם החדר בכותרת. שינוי הנושא מפרסם הודעה בחדר.",
+            "membersDesc": "הענקה או ביטול של חברות, מינוי מנהלים וחסימת כתובות.",
+            "bulkModerationDesc": "הסרת הודעות רבות בבת אחת.",
+            "destroyTitle": "השמדת חדר זה",
+            "sections": {
+                "general": {
+                    "label": "כללי",
+                    "description": "שם, תיאור ונושא שגלויים לכולם."
+                },
+                "notifications": {
+                    "label": "התראות",
+                    "description": "נוגע רק לך וחל מיד."
+                },
+                "access": {
+                    "label": "גישה ופרטיות",
+                    "description": "מי יכול למצוא את החדר ולהצטרף אליו, ומה הוא רואה."
+                },
+                "permissions": {
+                    "label": "הרשאות",
+                    "description": "מה מותר למשתתפים לעשות."
+                },
+                "moderation": {
+                    "label": "ניהול",
+                    "description": "זכות דיבור, מבקרים והאנשים שמנהלים את החדר."
+                },
+                "advanced": {
+                    "label": "היסטוריה ומתקדם",
+                    "description": "ארכוב ואפשרויות ייחודיות לשרת."
+                },
+                "danger": {
+                    "label": "אזור מסוכן",
+                    "description": "פעולות בלתי הפיכות."
+                }
+            },
+            "groups": {
+                "identity": "זהות",
+                "notifyMe": "להודיע לי על",
+                "visibility": "נראות",
+                "joining": "הצטרפות",
+                "participantsCan": "משתתפים יכולים",
+                "privateMessages": "הודעות פרטיות",
+                "memberList": "רשימת חברים",
+                "voice": "זכות דיבור",
+                "visitors": "מבקרים",
+                "people": "אנשים",
+                "history": "היסטוריה",
+                "features": "תכונות",
+                "other": "אפשרויות שרת נוספות"
+            },
+            "fields": {
+                "roomName": "שם החדר",
+                "roomDesc": "תיאור",
+                "lang": "שפה",
+                "publicRoom": "הצגה בספרייה הציבורית",
+                "persistentRoom": "שמירת החדר כשהוא ריק",
+                "publicList": "כולם יכולים לראות מי נמצא בחדר",
+                "whois": "כתובות אמיתיות גלויות ל",
+                "membersOnly": "לחברים בלבד",
+                "passwordProtected": "דרישת סיסמה",
+                "roomSecret": "סיסמה",
+                "captchaProtected": "דרישת CAPTCHA",
+                "captchaWhitelist": "פטור מ-CAPTCHA לכתובות אלה",
+                "maxUsers": "מספר משתתפים מרבי",
+                "allowSubscription": "אפשר הרשמה ללא הצטרפות",
+                "changeSubject": "לשנות את הנושא",
+                "allowInvites": "להזמין אחרים",
+                "allowQueryUsers": "לבצע שאילתות על משתתפים אחרים",
+                "allowPm": "מי יכול לשלוח הודעות פרטיות",
+                "allowPmFromVisitors": "מבקרים יכולים לכתוב ל",
+                "getMemberList": "מי יכול לקבל את רשימת החברים",
+                "presenceBroadcast": "הכרזה על כניסות ויציאות של",
+                "moderatedRoom": "חדר מנוהל",
+                "membersByDefault": "משתמשים חדשים מקבלים זכות דיבור",
+                "allowVoiceRequests": "מבקרים יכולים לבקש זכות דיבור",
+                "voiceRequestMinInterval": "שניות בין בקשות לזכות דיבור",
+                "allowVisitorStatus": "מבקרים יכולים להגדיר הודעת מצב",
+                "allowVisitorNickChange": "מבקרים יכולים לשנות כינוי",
+                "mam": "ארכוב הודעות (MAM)",
+                "enableLogging": "תיעוד ציבורי",
+                "enableHats": "תגי תפקיד (hats)",
+                "pubsub": "צומת PubSub משויך"
+            }
+        },
         "createRoom": "יצירת חדר",
         "roomName": "שם החדר",
         "roomNamePlaceholder": "למשל, צ'אט צוות",
@@ -1619,11 +1708,11 @@
         "members_by_default": "משתמשים חדשים שמצטרפים לחדר מקבלים אוטומטית תפקיד משתתף, המאפשר להם לדבר בחדרים מנוהלים.",
         "allow_private_messages_from_visitors": "שולט האם מבקרים (משתמשים ללא קול) יכולים לשלוח הודעות פרטיות.",
         "allow_query_users": "אפשר למשתמשים לשלוח שאילתות מידע (גילוי שירות) למשתתפים אחרים.",
-        "allow_visitor_status": "אפשר למבקרים לכלול הודעת סטטוס עם הנוכחות שלהם.",
-        "allow_visitor_nickchange": "אפשר למבקרים לשנות את הכינוי שלהם בחדר.",
-        "allow_voice_requests": "אפשר למבקרים בחדר מנוהל לבקש הרשאה לדבר.",
+        "muc#roomconfig_allowvisitorstatus": "אפשר למבקרים לכלול הודעת סטטוס עם הנוכחות שלהם.",
+        "muc#roomconfig_allowvisitornickchange": "אפשר למבקרים לשנות את הכינוי שלהם בחדר.",
+        "muc#roomconfig_allowvoicerequests": "אפשר למבקרים בחדר מנוהל לבקש הרשאה לדבר.",
         "allow_subscription": "אפשר למשתמשים להירשם להודעות החדר מבלי להיות נוכחים. מנויים מקבלים הודעות מבלי להצטרף לחדר, שימושי ללקוחות ניידים או התראות.",
-        "voice_request_min_interval": "זמן המתנה מינימלי (בשניות) בין בקשות קול מאותו מבקר.",
+        "muc#roomconfig_voicerequestmininterval": "זמן המתנה מינימלי (בשניות) בין בקשות קול מאותו מבקר.",
         "enable_hats": "הפעל תצוגת תגים ליד שמות משתתפים, המציגים תפקידים או שיוכים מיוחדים.",
         "mam": "הפעל ארכיון הודעות (MAM) כדי שלקוחות יוכלו לשלוף הודעות עבר בעת הצטרפות או חיבור מחדש. זו ההיסטוריה שהמשתתפים רואים באפליקציית הצ'אט שלהם."
     },

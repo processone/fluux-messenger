@@ -449,6 +449,95 @@
         "destroyRoomConfirm": "Aceasta va distruge permanent camera și va elimina toți membrii. Această acțiune nu poate fi anulată.",
         "destroyRoomError": "Distrugerea camerei a eșuat.",
         "dangerZone": "Zonă Periculoasă",
+        "settings": {
+            "sectionsLabel": "Secțiunile setărilor camerei",
+            "unsaved": "Modificări nesalvate",
+            "footer": "Setările camerei se aplică tuturor după salvare. Notificările se aplică doar ție, imediat.",
+            "currentTopic": "Subiectul actual",
+            "noTopic": "Niciun subiect setat",
+            "topicHint": "Afișat sub numele camerei în antet. Modificarea lui publică un anunț în cameră.",
+            "membersDesc": "Acordă sau retrage calitatea de membru, numește administratori și interzice adrese.",
+            "bulkModerationDesc": "Elimină mai multe mesaje deodată.",
+            "destroyTitle": "Distruge această cameră",
+            "sections": {
+                "general": {
+                    "label": "General",
+                    "description": "Nume, descriere și subiect vizibile pentru toți."
+                },
+                "notifications": {
+                    "label": "Notificări",
+                    "description": "Te afectează doar pe tine și se aplică imediat."
+                },
+                "access": {
+                    "label": "Acces și confidențialitate",
+                    "description": "Cine poate găsi camera și intra în ea, și ce poate vedea."
+                },
+                "permissions": {
+                    "label": "Permisiuni",
+                    "description": "Ce au voie să facă participanții."
+                },
+                "moderation": {
+                    "label": "Moderare",
+                    "description": "Voce, vizitatori și cei care administrează camera."
+                },
+                "advanced": {
+                    "label": "Istoric și avansat",
+                    "description": "Arhivare și opțiuni specifice serverului."
+                },
+                "danger": {
+                    "label": "Zonă periculoasă",
+                    "description": "Acțiuni ireversibile."
+                }
+            },
+            "groups": {
+                "identity": "Identitate",
+                "notifyMe": "Notifică-mă despre",
+                "visibility": "Vizibilitate",
+                "joining": "Intrare",
+                "participantsCan": "Participanții pot",
+                "privateMessages": "Mesaje private",
+                "memberList": "Lista membrilor",
+                "voice": "Voce",
+                "visitors": "Vizitatori",
+                "people": "Persoane",
+                "history": "Istoric",
+                "features": "Funcționalități",
+                "other": "Alte opțiuni ale serverului"
+            },
+            "fields": {
+                "roomName": "Numele camerei",
+                "roomDesc": "Descriere",
+                "lang": "Limbă",
+                "publicRoom": "Listează în directorul public",
+                "persistentRoom": "Păstrează camera când e goală",
+                "publicList": "Oricine poate vedea cine e în cameră",
+                "whois": "Adresele reale sunt vizibile pentru",
+                "membersOnly": "Doar membri",
+                "passwordProtected": "Solicită o parolă",
+                "roomSecret": "Parolă",
+                "captchaProtected": "Solicită un CAPTCHA",
+                "captchaWhitelist": "Scutește aceste adrese de CAPTCHA",
+                "maxUsers": "Număr maxim de participanți",
+                "allowSubscription": "Permite abonarea fără intrare",
+                "changeSubject": "Schimbarea subiectului",
+                "allowInvites": "Invitarea altor persoane",
+                "allowQueryUsers": "Interogarea altor participanți",
+                "allowPm": "Cine poate trimite mesaje private",
+                "allowPmFromVisitors": "Vizitatorii pot scrie către",
+                "getMemberList": "Cine poate obține lista membrilor",
+                "presenceBroadcast": "Anunță intrările și ieșirile pentru",
+                "moderatedRoom": "Cameră moderată",
+                "membersByDefault": "Utilizatorii noi primesc voce",
+                "allowVoiceRequests": "Vizitatorii pot cere voce",
+                "voiceRequestMinInterval": "Secunde între cererile de voce",
+                "allowVisitorStatus": "Vizitatorii pot seta un mesaj de stare",
+                "allowVisitorNickChange": "Vizitatorii își pot schimba porecla",
+                "mam": "Arhivează mesajele (MAM)",
+                "enableLogging": "Jurnal public",
+                "enableHats": "Insigne de rol (hats)",
+                "pubsub": "Nod PubSub asociat"
+            }
+        },
         "createRoom": "Creează Cameră",
         "roomName": "Numele Camerei",
         "roomNamePlaceholder": "ex., Chat de Echipă",
@@ -1621,11 +1710,11 @@
         "members_by_default": "Utilizatorii noi primesc automat rolul de participant, permițându-le să vorbească în camerele moderate.",
         "allow_private_messages_from_visitors": "Controlează dacă vizitatorii (utilizatori fără drept de vorbire) pot trimite mesaje private.",
         "allow_query_users": "Permite utilizatorilor să trimită interogări de informații (descoperire servicii) altor participanți.",
-        "allow_visitor_status": "Permite vizitatorilor să includă un mesaj de stare în prezența lor.",
-        "allow_visitor_nickchange": "Permite vizitatorilor să își schimbe porecla în cameră.",
-        "allow_voice_requests": "Permite vizitatorilor într-o cameră moderată să solicite permisiunea de a vorbi.",
+        "muc#roomconfig_allowvisitorstatus": "Permite vizitatorilor să includă un mesaj de stare în prezența lor.",
+        "muc#roomconfig_allowvisitornickchange": "Permite vizitatorilor să își schimbe porecla în cameră.",
+        "muc#roomconfig_allowvoicerequests": "Permite vizitatorilor într-o cameră moderată să solicite permisiunea de a vorbi.",
         "allow_subscription": "Permite utilizatorilor să se aboneze la mesajele camerei fără a fi prezenți. Abonații primesc mesaje fără a intra în cameră, util pentru clienți mobili sau notificări.",
-        "voice_request_min_interval": "Timp minim de așteptare (în secunde) între cererile de voce de la același vizitator.",
+        "muc#roomconfig_voicerequestmininterval": "Timp minim de așteptare (în secunde) între cererile de voce de la același vizitator.",
         "enable_hats": "Activează afișarea insignelor lângă numele participanților, arătând roluri sau afilieri speciale.",
         "mam": "Activează arhiva de mesaje (MAM) pentru ca clienții să poată obține mesajele anterioare la alăturare sau reconectare. Acesta este istoricul pe care participanții îl văd în aplicația lor de chat."
     },

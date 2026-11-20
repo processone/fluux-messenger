@@ -449,6 +449,95 @@
         "destroyRoomConfirm": "Dies wird den Raum dauerhaft löschen und alle Mitglieder entfernen. Diese Aktion kann nicht rückgängig gemacht werden.",
         "destroyRoomError": "Raum konnte nicht gelöscht werden.",
         "dangerZone": "Gefahrenzone",
+        "settings": {
+            "sectionsLabel": "Bereiche der Raumeinstellungen",
+            "unsaved": "Ungespeicherte Änderungen",
+            "footer": "Raumeinstellungen gelten nach dem Speichern für alle. Benachrichtigungen betreffen nur dich und gelten sofort.",
+            "currentTopic": "Aktuelles Thema",
+            "noTopic": "Kein Thema festgelegt",
+            "topicHint": "Wird in der Kopfzeile unter dem Raumnamen angezeigt. Eine Änderung wird im Raum angekündigt.",
+            "membersDesc": "Mitgliedschaft gewähren oder entziehen, Administratoren ernennen und Adressen sperren.",
+            "bulkModerationDesc": "Viele Nachrichten auf einmal entfernen.",
+            "destroyTitle": "Diesen Raum löschen",
+            "sections": {
+                "general": {
+                    "label": "Allgemein",
+                    "description": "Name, Beschreibung und Thema, für alle sichtbar."
+                },
+                "notifications": {
+                    "label": "Benachrichtigungen",
+                    "description": "Betrifft nur dich und gilt sofort."
+                },
+                "access": {
+                    "label": "Zugang und Privatsphäre",
+                    "description": "Wer den Raum finden und betreten kann und was dort sichtbar ist."
+                },
+                "permissions": {
+                    "label": "Berechtigungen",
+                    "description": "Was Teilnehmer tun dürfen."
+                },
+                "moderation": {
+                    "label": "Moderation",
+                    "description": "Rederecht, Besucher und die Verantwortlichen des Raums."
+                },
+                "advanced": {
+                    "label": "Verlauf und Erweitert",
+                    "description": "Archivierung und serverspezifische Optionen."
+                },
+                "danger": {
+                    "label": "Gefahrenbereich",
+                    "description": "Unumkehrbare Aktionen."
+                }
+            },
+            "groups": {
+                "identity": "Identität",
+                "notifyMe": "Benachrichtige mich bei",
+                "visibility": "Sichtbarkeit",
+                "joining": "Beitreten",
+                "participantsCan": "Teilnehmer dürfen",
+                "privateMessages": "Private Nachrichten",
+                "memberList": "Mitgliederliste",
+                "voice": "Rederecht",
+                "visitors": "Besucher",
+                "people": "Personen",
+                "history": "Verlauf",
+                "features": "Funktionen",
+                "other": "Weitere Serveroptionen"
+            },
+            "fields": {
+                "roomName": "Raumname",
+                "roomDesc": "Beschreibung",
+                "lang": "Sprache",
+                "publicRoom": "Im öffentlichen Verzeichnis anzeigen",
+                "persistentRoom": "Raum behalten, wenn er leer ist",
+                "publicList": "Jeder kann sehen, wer im Raum ist",
+                "whois": "Echte Adressen sichtbar für",
+                "membersOnly": "Nur für Mitglieder",
+                "passwordProtected": "Passwort verlangen",
+                "roomSecret": "Passwort",
+                "captchaProtected": "CAPTCHA verlangen",
+                "captchaWhitelist": "Kein CAPTCHA für diese Adressen",
+                "maxUsers": "Maximale Teilnehmerzahl",
+                "allowSubscription": "Abonnieren ohne Beitritt erlauben",
+                "changeSubject": "Thema ändern",
+                "allowInvites": "Andere einladen",
+                "allowQueryUsers": "Andere Teilnehmer abfragen",
+                "allowPm": "Wer private Nachrichten senden darf",
+                "allowPmFromVisitors": "Besucher dürfen schreiben an",
+                "getMemberList": "Wer die Mitgliederliste abrufen darf",
+                "presenceBroadcast": "Betreten und Verlassen ankündigen für",
+                "moderatedRoom": "Moderierter Raum",
+                "membersByDefault": "Neue Nutzer erhalten Rederecht",
+                "allowVoiceRequests": "Besucher dürfen Rederecht anfragen",
+                "voiceRequestMinInterval": "Sekunden zwischen Rederecht-Anfragen",
+                "allowVisitorStatus": "Besucher dürfen eine Statusnachricht setzen",
+                "allowVisitorNickChange": "Besucher dürfen ihren Spitznamen ändern",
+                "mam": "Nachrichten archivieren (MAM)",
+                "enableLogging": "Öffentliche Protokollierung",
+                "enableHats": "Rollenabzeichen (Hats)",
+                "pubsub": "Zugehöriger PubSub-Knoten"
+            }
+        },
         "createRoom": "Raum erstellen",
         "roomName": "Raumname",
         "roomNamePlaceholder": "z.B., Team-Chat",
@@ -1619,11 +1708,11 @@
         "members_by_default": "Neue Benutzer erhalten automatisch die Teilnehmerrolle, wodurch sie in moderierten Räumen sprechen können.",
         "allow_private_messages_from_visitors": "Bestimmt, ob Besucher (Benutzer ohne Rederecht) private Nachrichten senden können.",
         "allow_query_users": "Benutzern erlauben, Informationsanfragen (Service Discovery) an andere Teilnehmer zu senden.",
-        "allow_visitor_status": "Besuchern erlauben, eine Statusnachricht in ihre Anwesenheit aufzunehmen.",
-        "allow_visitor_nickchange": "Besuchern erlauben, ihren Spitznamen im Raum zu ändern.",
-        "allow_voice_requests": "Besuchern in einem moderierten Raum erlauben, das Rederecht anzufordern.",
+        "muc#roomconfig_allowvisitorstatus": "Besuchern erlauben, eine Statusnachricht in ihre Anwesenheit aufzunehmen.",
+        "muc#roomconfig_allowvisitornickchange": "Besuchern erlauben, ihren Spitznamen im Raum zu ändern.",
+        "muc#roomconfig_allowvoicerequests": "Besuchern in einem moderierten Raum erlauben, das Rederecht anzufordern.",
         "allow_subscription": "Benutzern erlauben, Raumnachrichten zu abonnieren, ohne anwesend zu sein. Abonnenten erhalten Nachrichten, ohne dem Raum beizutreten, nützlich für mobile Clients oder Benachrichtigungen.",
-        "voice_request_min_interval": "Minimale Wartezeit (in Sekunden) zwischen Rederechtsanfragen desselben Besuchers.",
+        "muc#roomconfig_voicerequestmininterval": "Minimale Wartezeit (in Sekunden) zwischen Rederechtsanfragen desselben Besuchers.",
         "enable_hats": "Anzeige von Abzeichen neben Teilnehmernamen aktivieren, die besondere Rollen oder Zugehörigkeiten anzeigen.",
         "mam": "Nachrichtenarchiv (MAM) aktivieren, damit Clients vergangene Nachrichten beim Beitreten oder Wiederverbinden abrufen können. Dies ist der Verlauf, den Teilnehmer in ihrer Chat-App sehen."
     },

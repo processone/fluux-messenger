@@ -449,6 +449,95 @@
         "destroyRoomConfirm": "Questo distruggerà permanentemente la stanza e rimuoverà tutti i membri. Questa azione non può essere annullata.",
         "destroyRoomError": "Impossibile distruggere la stanza.",
         "dangerZone": "Zona Pericolosa",
+        "settings": {
+            "sectionsLabel": "Sezioni delle impostazioni della stanza",
+            "unsaved": "Modifiche non salvate",
+            "footer": "Le impostazioni della stanza valgono per tutti una volta salvate. Le notifiche valgono solo per te, e subito.",
+            "currentTopic": "Argomento attuale",
+            "noTopic": "Nessun argomento impostato",
+            "topicHint": "Mostrato sotto il nome della stanza nell'intestazione. Cambiarlo pubblica un avviso nella stanza.",
+            "membersDesc": "Concedi o revoca l'appartenenza, nomina amministratori e metti al bando indirizzi.",
+            "bulkModerationDesc": "Rimuovi molti messaggi in una volta.",
+            "destroyTitle": "Distruggi questa stanza",
+            "sections": {
+                "general": {
+                    "label": "Generale",
+                    "description": "Nome, descrizione e argomento visibili a tutti."
+                },
+                "notifications": {
+                    "label": "Notifiche",
+                    "description": "Riguarda solo te e si applica subito."
+                },
+                "access": {
+                    "label": "Accesso e privacy",
+                    "description": "Chi può trovare la stanza ed entrarvi, e cosa può vedere."
+                },
+                "permissions": {
+                    "label": "Permessi",
+                    "description": "Cosa possono fare i partecipanti."
+                },
+                "moderation": {
+                    "label": "Moderazione",
+                    "description": "Diritto di parola, visitatori e chi gestisce la stanza."
+                },
+                "advanced": {
+                    "label": "Cronologia e avanzate",
+                    "description": "Archiviazione e opzioni specifiche del server."
+                },
+                "danger": {
+                    "label": "Zona pericolosa",
+                    "description": "Azioni irreversibili."
+                }
+            },
+            "groups": {
+                "identity": "Identità",
+                "notifyMe": "Avvisami per",
+                "visibility": "Visibilità",
+                "joining": "Ingresso",
+                "participantsCan": "I partecipanti possono",
+                "privateMessages": "Messaggi privati",
+                "memberList": "Elenco membri",
+                "voice": "Diritto di parola",
+                "visitors": "Visitatori",
+                "people": "Persone",
+                "history": "Cronologia",
+                "features": "Funzionalità",
+                "other": "Altre opzioni del server"
+            },
+            "fields": {
+                "roomName": "Nome della stanza",
+                "roomDesc": "Descrizione",
+                "lang": "Lingua",
+                "publicRoom": "Elenca nella directory pubblica",
+                "persistentRoom": "Mantieni la stanza quando è vuota",
+                "publicList": "Chiunque può vedere chi è nella stanza",
+                "whois": "Indirizzi reali visibili a",
+                "membersOnly": "Solo membri",
+                "passwordProtected": "Richiedi una password",
+                "roomSecret": "Password",
+                "captchaProtected": "Richiedi un CAPTCHA",
+                "captchaWhitelist": "Salta il CAPTCHA per questi indirizzi",
+                "maxUsers": "Numero massimo di partecipanti",
+                "allowSubscription": "Consenti l'iscrizione senza entrare",
+                "changeSubject": "Cambiare l'argomento",
+                "allowInvites": "Invitare altri",
+                "allowQueryUsers": "Cercare informazioni su altri partecipanti",
+                "allowPm": "Chi può inviare messaggi privati",
+                "allowPmFromVisitors": "I visitatori possono scrivere a",
+                "getMemberList": "Chi può ottenere l'elenco dei membri",
+                "presenceBroadcast": "Annuncia ingressi e uscite di",
+                "moderatedRoom": "Stanza moderata",
+                "membersByDefault": "I nuovi utenti hanno diritto di parola",
+                "allowVoiceRequests": "I visitatori possono chiedere la parola",
+                "voiceRequestMinInterval": "Secondi tra le richieste di parola",
+                "allowVisitorStatus": "I visitatori possono impostare un messaggio di stato",
+                "allowVisitorNickChange": "I visitatori possono cambiare soprannome",
+                "mam": "Archivia i messaggi (MAM)",
+                "enableLogging": "Registro pubblico",
+                "enableHats": "Distintivi (badge di ruolo)",
+                "pubsub": "Nodo PubSub associato"
+            }
+        },
         "createRoom": "Crea Stanza",
         "roomName": "Nome della Stanza",
         "roomNamePlaceholder": "es., Chat di Squadra",
@@ -1621,11 +1710,11 @@
         "members_by_default": "I nuovi utenti ottengono automaticamente il ruolo di partecipante, permettendo loro di parlare nelle stanze moderate.",
         "allow_private_messages_from_visitors": "Controlla se i visitatori (utenti senza diritto di parola) possono inviare messaggi privati.",
         "allow_query_users": "Consenti agli utenti di inviare richieste di informazioni (scoperta dei servizi) ad altri partecipanti.",
-        "allow_visitor_status": "Consenti ai visitatori di includere un messaggio di stato con la loro presenza.",
-        "allow_visitor_nickchange": "Consenti ai visitatori di cambiare il loro soprannome nella stanza.",
-        "allow_voice_requests": "Consenti ai visitatori in una stanza moderata di richiedere il permesso di parlare.",
+        "muc#roomconfig_allowvisitorstatus": "Consenti ai visitatori di includere un messaggio di stato con la loro presenza.",
+        "muc#roomconfig_allowvisitornickchange": "Consenti ai visitatori di cambiare il loro soprannome nella stanza.",
+        "muc#roomconfig_allowvoicerequests": "Consenti ai visitatori in una stanza moderata di richiedere il permesso di parlare.",
         "allow_subscription": "Consenti agli utenti di iscriversi ai messaggi della stanza senza essere presenti. Gli iscritti ricevono messaggi senza entrare nella stanza, utile per client mobili o notifiche.",
-        "voice_request_min_interval": "Tempo minimo di attesa (in secondi) tra le richieste di parola dallo stesso visitatore.",
+        "muc#roomconfig_voicerequestmininterval": "Tempo minimo di attesa (in secondi) tra le richieste di parola dallo stesso visitatore.",
         "enable_hats": "Abilita la visualizzazione di badge accanto ai nomi dei partecipanti, mostrando ruoli o affiliazioni speciali.",
         "mam": "Abilita l'archivio messaggi (MAM) in modo che i client possano recuperare i messaggi precedenti quando si uniscono o si riconnettono. Questa è la cronologia che i partecipanti vedono nella loro app di chat."
     },

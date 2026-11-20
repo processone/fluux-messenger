@@ -447,6 +447,95 @@
         "destroyRoomConfirm": "Dette vil permanent slette rommet og fjerne alle medlemmer. Denne handlingen kan ikke angres.",
         "destroyRoomError": "Kunne ikke slette rommet.",
         "dangerZone": "Faresone",
+        "settings": {
+            "sectionsLabel": "Seksjoner i rominnstillinger",
+            "unsaved": "Endringer som ikke er lagret",
+            "footer": "Rominnstillinger gjelder for alle når de er lagret. Varslinger gjelder bare deg, med en gang.",
+            "currentTopic": "Nåværende emne",
+            "noTopic": "Ikke noe emne angitt",
+            "topicHint": "Vises under romnavnet i toppfeltet. Når du endrer det, legges det ut et varsel i rommet.",
+            "membersDesc": "Gi eller fjern medlemskap, utnevn administratorer og utesteng adresser.",
+            "bulkModerationDesc": "Fjern mange meldinger på én gang.",
+            "destroyTitle": "Slett dette rommet",
+            "sections": {
+                "general": {
+                    "label": "Generelt",
+                    "description": "Navn, beskrivelse og emne som vises for alle."
+                },
+                "notifications": {
+                    "label": "Varslinger",
+                    "description": "Gjelder bare deg, og trer i kraft med en gang."
+                },
+                "access": {
+                    "label": "Tilgang og personvern",
+                    "description": "Hvem som kan finne og bli med i rommet, og hva de kan se."
+                },
+                "permissions": {
+                    "label": "Tillatelser",
+                    "description": "Hva deltakere har lov til."
+                },
+                "moderation": {
+                    "label": "Moderering",
+                    "description": "Talerett, besøkende og de som driver rommet."
+                },
+                "advanced": {
+                    "label": "Historikk og avansert",
+                    "description": "Arkivering og serverspesifikke valg."
+                },
+                "danger": {
+                    "label": "Faresone",
+                    "description": "Handlinger som ikke kan angres."
+                }
+            },
+            "groups": {
+                "identity": "Identitet",
+                "notifyMe": "Varsle meg om",
+                "visibility": "Synlighet",
+                "joining": "Bli med",
+                "participantsCan": "Deltakere kan",
+                "privateMessages": "Private meldinger",
+                "memberList": "Medlemsliste",
+                "voice": "Talerett",
+                "visitors": "Besøkende",
+                "people": "Personer",
+                "history": "Historikk",
+                "features": "Funksjoner",
+                "other": "Andre serveralternativer"
+            },
+            "fields": {
+                "roomName": "Romnavn",
+                "roomDesc": "Beskrivelse",
+                "lang": "Språk",
+                "publicRoom": "Vis i den offentlige katalogen",
+                "persistentRoom": "Behold rommet når det er tomt",
+                "publicList": "Alle kan se hvem som er i rommet",
+                "whois": "Ekte adresser synlige for",
+                "membersOnly": "Kun medlemmer",
+                "passwordProtected": "Krev passord",
+                "roomSecret": "Passord",
+                "captchaProtected": "Krev CAPTCHA",
+                "captchaWhitelist": "Hopp over CAPTCHA for disse adressene",
+                "maxUsers": "Maks antall deltakere",
+                "allowSubscription": "Tillat abonnement uten å bli med",
+                "changeSubject": "Endre emnet",
+                "allowInvites": "Invitere andre",
+                "allowQueryUsers": "Slå opp andre deltakere",
+                "allowPm": "Hvem kan sende private meldinger",
+                "allowPmFromVisitors": "Besøkende kan skrive til",
+                "getMemberList": "Hvem kan hente medlemslisten",
+                "presenceBroadcast": "Kunngjør ankomst og avreise for",
+                "moderatedRoom": "Moderert rom",
+                "membersByDefault": "Nye brukere får talerett",
+                "allowVoiceRequests": "Besøkende kan be om talerett",
+                "voiceRequestMinInterval": "Sekunder mellom forespørsler om talerett",
+                "allowVisitorStatus": "Besøkende kan angi statusmelding",
+                "allowVisitorNickChange": "Besøkende kan bytte kallenavn",
+                "mam": "Arkiver meldinger (MAM)",
+                "enableLogging": "Offentlig logging",
+                "enableHats": "Merker (rollemerker)",
+                "pubsub": "Tilknyttet PubSub-node"
+            }
+        },
         "createRoom": "Opprett rom",
         "roomName": "Romnavn",
         "roomNamePlaceholder": "f.eks., Teamchat",
@@ -1617,11 +1706,11 @@
         "members_by_default": "Nye brukere får automatisk deltakerrolle, slik at de kan snakke i modererte rom.",
         "allow_private_messages_from_visitors": "Styrer om besøkende (brukere uten talerett) kan sende private meldinger.",
         "allow_query_users": "Tillat brukere å sende informasjonsforespørsler (tjenesteoppdagelse) til andre deltakere.",
-        "allow_visitor_status": "Tillat besøkende å inkludere en statusmelding med sin tilstedeværelse.",
-        "allow_visitor_nickchange": "Tillat besøkende å endre kallenavnet sitt i rommet.",
-        "allow_voice_requests": "Tillat besøkende i et moderert rom å be om talerett.",
+        "muc#roomconfig_allowvisitorstatus": "Tillat besøkende å inkludere en statusmelding med sin tilstedeværelse.",
+        "muc#roomconfig_allowvisitornickchange": "Tillat besøkende å endre kallenavnet sitt i rommet.",
+        "muc#roomconfig_allowvoicerequests": "Tillat besøkende i et moderert rom å be om talerett.",
         "allow_subscription": "Tillat brukere å abonnere på rommeldinger uten å være til stede. Abonnenter mottar meldinger uten å bli med i rommet, nyttig for mobilklienter eller varsler.",
-        "voice_request_min_interval": "Minimum ventetid (i sekunder) mellom taleforespørsler fra samme besøkende.",
+        "muc#roomconfig_voicerequestmininterval": "Minimum ventetid (i sekunder) mellom taleforespørsler fra samme besøkende.",
         "enable_hats": "Aktiver visning av merker ved siden av deltakernavn som viser spesielle roller eller tilhørigheter.",
         "mam": "Aktiver meldingsarkiv (MAM) slik at klienter kan hente tidligere meldinger ved tilkobling eller gjenoppkobling. Dette er historikken deltakere ser i chat-appen sin."
     },

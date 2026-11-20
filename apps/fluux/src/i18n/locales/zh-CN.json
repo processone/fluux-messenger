@@ -447,6 +447,95 @@
         "destroyRoomConfirm": "这将永久解散房间并移除所有参与者。此操作无法撤销。",
         "destroyRoomError": "无法解散房间。",
         "dangerZone": "危险区域",
+        "settings": {
+            "sectionsLabel": "房间设置分区",
+            "unsaved": "未保存的更改",
+            "footer": "房间设置保存后对所有人生效。通知设置仅对您生效，并立即应用。",
+            "currentTopic": "当前话题",
+            "noTopic": "未设置话题",
+            "topicHint": "显示在标题栏的房间名称下方。更改话题会在房间内发布通知。",
+            "membersDesc": "授予或撤销成员资格、提升管理员以及封禁地址。",
+            "bulkModerationDesc": "一次移除多条消息。",
+            "destroyTitle": "解散此房间",
+            "sections": {
+                "general": {
+                    "label": "常规",
+                    "description": "所有人可见的名称、描述和话题。"
+                },
+                "notifications": {
+                    "label": "通知",
+                    "description": "仅对您生效，并立即应用。"
+                },
+                "access": {
+                    "label": "访问与隐私",
+                    "description": "谁可以找到并加入房间，以及他们能看到什么。"
+                },
+                "permissions": {
+                    "label": "权限",
+                    "description": "参与者可以执行的操作。"
+                },
+                "moderation": {
+                    "label": "审核",
+                    "description": "发言权、参观者以及管理房间的人。"
+                },
+                "advanced": {
+                    "label": "历史与高级",
+                    "description": "归档和服务器特定选项。"
+                },
+                "danger": {
+                    "label": "危险区域",
+                    "description": "不可撤销的操作。"
+                }
+            },
+            "groups": {
+                "identity": "身份",
+                "notifyMe": "通知我以下内容",
+                "visibility": "可见性",
+                "joining": "加入",
+                "participantsCan": "参与者可以",
+                "privateMessages": "私信",
+                "memberList": "成员列表",
+                "voice": "发言权",
+                "visitors": "参观者",
+                "people": "人员",
+                "history": "历史记录",
+                "features": "功能",
+                "other": "其他服务器选项"
+            },
+            "fields": {
+                "roomName": "房间名称",
+                "roomDesc": "描述",
+                "lang": "语言",
+                "publicRoom": "在公开目录中列出",
+                "persistentRoom": "房间为空时保留",
+                "publicList": "任何人都可以查看房间内成员",
+                "whois": "真实地址可见于",
+                "membersOnly": "仅限成员",
+                "passwordProtected": "需要密码",
+                "roomSecret": "密码",
+                "captchaProtected": "需要验证码（CAPTCHA）",
+                "captchaWhitelist": "以下地址免验证码",
+                "maxUsers": "最大参与者数",
+                "allowSubscription": "允许不加入即订阅",
+                "changeSubject": "更改话题",
+                "allowInvites": "邀请他人",
+                "allowQueryUsers": "查询其他参与者",
+                "allowPm": "谁可以发送私信",
+                "allowPmFromVisitors": "参观者可以私信",
+                "getMemberList": "谁可以获取成员列表",
+                "presenceBroadcast": "通告以下角色的加入和离开",
+                "moderatedRoom": "发言审核房间",
+                "membersByDefault": "新用户默认获得发言权",
+                "allowVoiceRequests": "参观者可以申请发言权",
+                "voiceRequestMinInterval": "发言权申请间隔（秒）",
+                "allowVisitorStatus": "参观者可以设置状态消息",
+                "allowVisitorNickChange": "参观者可以更改昵称",
+                "mam": "归档消息（MAM）",
+                "enableLogging": "公开记录",
+                "enableHats": "角色徽章（hats）",
+                "pubsub": "关联的 PubSub 节点"
+            }
+        },
         "createRoom": "创建房间",
         "roomName": "房间名称",
         "roomNamePlaceholder": "例如，团队聊天",
@@ -1617,11 +1706,11 @@
         "members_by_default": "新用户加入房间后自动获得参与者角色，允许他们在有发言审核的房间中发言。",
         "allow_private_messages_from_visitors": "控制参观者（没有发言权的用户）是否可以发送私信。",
         "allow_query_users": "允许用户向其他参与者发送信息查询（服务发现）。",
-        "allow_visitor_status": "允许参观者在其在线状态中包含状态消息。",
-        "allow_visitor_nickchange": "允许参观者在房间中更改昵称。",
-        "allow_voice_requests": "允许参观者在有发言审核的房间中请求发言权限。",
+        "muc#roomconfig_allowvisitorstatus": "允许参观者在其在线状态中包含状态消息。",
+        "muc#roomconfig_allowvisitornickchange": "允许参观者在房间中更改昵称。",
+        "muc#roomconfig_allowvoicerequests": "允许参观者在有发言审核的房间中请求发言权限。",
         "allow_subscription": "允许用户在未加入房间的情况下订阅房间消息。订阅者无需加入房间即可接收消息，这对移动客户端或通知功能非常有用。",
-        "voice_request_min_interval": "来自同一参观者两次发言权请求之间的最短等待时间（秒）。",
+        "muc#roomconfig_voicerequestmininterval": "来自同一参观者两次发言权请求之间的最短等待时间（秒）。",
         "enable_hats": "在参与者名称旁边启用头衔显示，以显示特殊角色或从属关系。",
         "mam": "启用消息归档（MAM），以便客户端在加入或重新连接时获取过往消息。这是参与者在聊天应用中看到的历史记录。"
     },
