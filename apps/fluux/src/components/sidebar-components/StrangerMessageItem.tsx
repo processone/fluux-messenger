@@ -47,7 +47,7 @@ export function StrangerMessageItem({ jid, messages, onSelect, onAccept, onIgnor
           <div className="flex items-center gap-2">
             <p className="font-medium text-fluux-text truncate">{displayName}</p>
             {messageCount > 1 && (
-              <span className="text-xs bg-fluux-brand/20 text-fluux-brand px-1.5 py-0.5 rounded">
+              <span className="text-xs bg-fluux-brand/20 text-fluux-brand-on-tint px-1.5 py-0.5 rounded">
                 {messageCount}
               </span>
             )}

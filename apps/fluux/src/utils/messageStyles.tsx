@@ -345,7 +345,7 @@ function renderSegment(segment: StyledSegment, index: number, isDarkMode?: boole
         : undefined
       const className = color
         ? 'px-1 rounded font-medium'
-        : 'text-fluux-brand bg-fluux-brand/10 px-1 rounded font-medium'
+        : 'text-fluux-brand-on-tint bg-fluux-brand/10 px-1 rounded font-medium'
       return (
         <span
           key={index}

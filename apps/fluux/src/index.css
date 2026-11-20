@@ -309,6 +309,10 @@
   /* Accent AS TEXT/icon (text-fluux-brand). Equal to the fill everywhere except
      Aurora dark's default periwinkle: see the rule after this block. */
   --fluux-text-accent: var(--fluux-bg-accent);
+  /* Accent text on an accent tint (text-fluux-brand-on-tint over bg-fluux-brand/20).
+     The tint lowers the contrast the accent was tuned for, so the text moves toward
+     white here and toward black in .light, keeping AA in every built-in theme. */
+  --fluux-text-accent-on-tint: color-mix(in srgb, var(--fluux-text-accent) 45%, #fff);
   --fluux-text-link: var(--fluux-color-blue);
   /* Own-message ("you") name. The raw brand accent (hsl(231 100% 71%)) only
      reaches ~2.8:1 on the dark message background, so a dedicated brand-indigo
@@ -603,6 +607,7 @@
      (the shared --fluux-color-blue only reached ~4.2:1 there). Overrides just the
      link token; other blue uses (status-info, syntax) keep --fluux-color-blue. */
   --fluux-text-link: #0860C6;
+  --fluux-text-accent-on-tint: color-mix(in srgb, var(--fluux-text-accent) 65%, #000);
   /* Syntax: comments use the faint tier (base-60 sat at ~1.7:1 on white);
      keywords use a deeper violet that clears AA on the message hover row too
      (the shared purple fell to ~3.7:1 there). */

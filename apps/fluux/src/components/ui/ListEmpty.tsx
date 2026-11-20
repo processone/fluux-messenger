@@ -26,7 +26,7 @@ export function ListEmpty({ icon: Icon, title, description, action, className = 
         <button
           type="button"
           onClick={action.onClick}
-          className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 text-xs text-fluux-brand bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-lg transition-colors"
+          className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 text-xs text-fluux-brand-on-tint bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-lg transition-colors"
         >
           {ActionIcon && <ActionIcon className="size-3" />}
           {action.label}

@@ -423,7 +423,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
           type="button"
           onClick={handleGoToMessage}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
-                     bg-fluux-brand/10 text-fluux-brand hover:bg-fluux-brand/20 transition-colors flex-shrink-0"
+                     bg-fluux-brand/10 text-fluux-brand-on-tint hover:bg-fluux-brand/20 transition-colors flex-shrink-0"
         >
           <ExternalLink className="size-3.5" />
           {t('search.goToMessage')}

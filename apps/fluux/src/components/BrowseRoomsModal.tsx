@@ -454,7 +454,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                       </p>
                     </div>
                     {joined ? (
-                      <span className="text-xs text-fluux-brand font-medium px-2 py-1 bg-fluux-brand/10 rounded">
+                      <span className="text-xs text-fluux-brand-on-tint font-medium px-2 py-1 bg-fluux-brand/10 rounded">
                         {t('rooms.joined')}
                       </span>
                     ) : (

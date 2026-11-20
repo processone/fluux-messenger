@@ -40,11 +40,11 @@ export function SettingsSidebar({ activeCategory, onCategoryChange }: SettingsSi
                     onClick={() => onCategoryChange(category.id)}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-start transition-colors
                       ${isActive
-                        ? 'bg-fluux-brand/10 text-fluux-brand'
+                        ? 'bg-fluux-brand/10 text-fluux-brand-on-tint'
                         : 'text-fluux-text hover:bg-fluux-hover'
                       }`}
                   >
-                    <Icon className={`size-5 ${isActive ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
+                    <Icon className={`size-5 ${isActive ? 'text-fluux-brand-on-tint' : 'text-fluux-muted'}`} />
                     <span className="text-sm font-medium">{t(category.labelKey)}</span>
                   </button>
                 </li>

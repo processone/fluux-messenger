@@ -336,7 +336,7 @@ export function NotificationsSettings() {
               <button
                 type="button"
                 onClick={handleRequestPermission}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand-on-tint hover:text-fluux-text
                            bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
               >
                 <Bell className="size-4" />
@@ -395,7 +395,7 @@ export function NotificationsSettings() {
               <button
                 type="button"
                 onClick={() => requestWebPushRegistration(client)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand-on-tint hover:text-fluux-text
                            bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
               >
                 <Bell className="size-4" />
@@ -420,7 +420,7 @@ export function NotificationsSettings() {
               <button
                 type="button"
                 onClick={() => enableWebPush(client)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand-on-tint hover:text-fluux-text
                            bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
               >
                 <Bell className="size-4" />
