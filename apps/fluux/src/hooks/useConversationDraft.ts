@@ -28,6 +28,8 @@ const draftOwners = new WeakMap<object, Map<string, (failed: FailedDraft) => boo
 const deferredDrafts = new WeakMap<object, Map<string, DeferredDraft>>()
 // Mention metadata survives view remounts, not application restarts. Only reuse
 // it when its text still matches the string in the existing draft store.
+// What each mounted editor currently holds, so text added from outside can tell it is already there.
+const draftReaders = new WeakMap<object, Map<string, () => string>>()
 const draftMentions = new WeakMap<object, Map<string, DraftSnapshot>>()
 function put<T>(map: WeakMap<object, Map<string, T>>, owner: object, key: string, value: T) {
   let entries = map.get(owner)
@@ -198,6 +200,7 @@ export function useConversationDraft({
       return !current.text
     }
     put(draftOwners, owner, ownerKey, recoverHere)
+    put(draftReaders, owner, ownerKey, () => readMessageDraft(conversationId).text)
     if (!isEditing) {
       const pending = deferredDrafts.get(owner)?.get(ownerKey)
       if (pending) {
@@ -214,7 +217,10 @@ export function useConversationDraft({
     } else cancelPendingSave()
     wasEditingRef.current = isEditing
     return () => {
-      if (draftOwners.get(owner)?.get(ownerKey) === recoverHere) remove(draftOwners, owner, ownerKey)
+      if (draftOwners.get(owner)?.get(ownerKey) === recoverHere) {
+        remove(draftOwners, owner, ownerKey)
+        remove(draftReaders, owner, ownerKey)
+      }
     }
   }, [owner, ownerKey, conversationId, isEditing, composerRef, cancelPendingSave, userSetText, persist, readMessageDraft])
 
@@ -259,4 +265,22 @@ export function useConversationDraft({
   }, [owner, ownerKey, userSetText, persist, conversationId])
 
   return [text, userSetText, consumeDraft, discardDraft]
+}
+
+/**
+ * Add text from outside the composer (a link's `body`) to a conversation's
+ * draft, below what is already there, whether or not its editor is open. The
+ * same text already at the end of the draft is not added again. Never sends.
+ */
+export function addDraftText(draftOperations: DraftOperations, conversationId: string, text: string): void {
+  const { owner, getDraft, setDraft } = draftOperations
+  const key = JSON.stringify([getStorageScopeJid(), conversationId])
+  const editor = draftOwners.get(owner)?.get(key)
+  const current = draftReaders.get(owner)?.get(key)?.() ?? getDraft(conversationId)
+  if (!text.trim() || current === text || current.endsWith(`\n\n${text}`)) return
+  if (editor) {
+    editor({ text, references: [], canRecover: () => true })
+    return
+  }
+  setDraft(conversationId, mergeFailedDraft(current, text))
 }

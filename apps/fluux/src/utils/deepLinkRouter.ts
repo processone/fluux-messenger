@@ -19,7 +19,8 @@ import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
  *
  * A login link names an account to sign in as (`xmpp:alice@example.com`,
  * `xmpp:alice@example.com?connect;server=…`); a room join, a message link or
- * a room address is navigation and never touches the login form.
+ * a room address, a subscribe request or any other action is navigation and
+ * never touches the login form.
  */
 export type DeepLinkIntent = 'login' | 'navigation'
 
@@ -29,7 +30,8 @@ export function classifyDeepLink(uri: string): DeepLinkIntent {
   if (!parsed) return 'navigation'
   // An explicit sign-in intent wins over any guess about the address.
   if (parsed.action === 'connect') return 'login'
-  if (parsed.action === 'join' || parsed.action === 'message') return 'navigation'
+  // Every other action (join, message, subscribe, roster, …) acts inside the app.
+  if (parsed.action) return 'navigation'
   if (isMucJid(getBareJid(parsed.jid))) return 'navigation'
   return 'login'
 }

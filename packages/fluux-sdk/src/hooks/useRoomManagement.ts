@@ -49,6 +49,13 @@ export function useRoomManagement() {
     [client]
   )
 
+  const domainHostsRooms = useCallback(
+    async (domain: string): Promise<boolean | null> => {
+      return client.rooms.domainHostsRooms(domain)
+    },
+    [client]
+  )
+
   const submitRoomConfig = useCallback(
     async (roomJid: string, values: Record<string, string | string[]>) => {
       await client.rooms.submitRoomConfig(roomJid, values)
@@ -143,6 +150,7 @@ export function useRoomManagement() {
       createRoom,
       destroyRoom,
       roomExists,
+      domainHostsRooms,
       submitRoomConfig,
       setSubject,
       setBookmark,
@@ -160,6 +168,7 @@ export function useRoomManagement() {
       createRoom,
       destroyRoom,
       roomExists,
+      domainHostsRooms,
       submitRoomConfig,
       setSubject,
       setBookmark,

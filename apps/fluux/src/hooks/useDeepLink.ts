@@ -7,7 +7,9 @@
  * Uses React Router for navigation instead of callback handlers.
  */
 import { useEffect, useRef, useCallback } from 'react'
-import { useChat, useRoom, useRoster, chatStore, roomStore, connectionStore, rosterStore, type Conversation, parseXmppUri, parseRoomMessageLink, isMucJid, getBareJid, getLocalPart } from '@fluux/sdk'
+import { useChat, useRoom, useRoster, chatStore, roomStore, connectionStore, rosterStore, type Conversation, parseXmppUri, parseRoomMessageLink, isMucJid, getBareJid, getLocalPart, boundedPlainText } from '@fluux/sdk'
+import { addDraftText, type DraftOperations } from './useConversationDraft'
+import { useModalStore } from '@/stores/modalStore'
 import { useConnectionStore, useRosterStore, useRoomStore } from '@fluux/sdk/react'
 import { useNavigateToTarget } from './useNavigateToTarget'
 import { useTranslation } from 'react-i18next'
@@ -26,6 +28,25 @@ function rosterLoadedFor(liveJid: string | null, roster: { isLoaded: boolean; ac
   return !!liveJid && roster.isLoaded && roster.accountJid === liveJid.split('/')[0]
 }
 
+/** Longest text a link may put in a composer, as for forwarded copies. */
+const MAX_LINK_BODY_CODE_POINTS = 4000
+
+const chatDrafts: DraftOperations = {
+  owner: chatStore,
+  getDraft: (id) => chatStore.getState().getDraft(id),
+  setDraft: (id, text) => chatStore.getState().setDraft(id, text),
+  clearDraft: (id) => chatStore.getState().clearDraft(id),
+}
+const roomDrafts: DraftOperations = {
+  owner: roomStore,
+  getDraft: (id) => roomStore.getState().getDraft(id),
+  setDraft: (id, text) => roomStore.getState().setDraft(id, text),
+  clearDraft: (id) => roomStore.getState().clearDraft(id),
+}
+
+/** Whether each server name hosts rooms, for the session; only real answers are kept. */
+const roomServiceByDomain = new Map<string, boolean>()
+
 /**
  * Hook that listens for XMPP deep links and navigates accordingly.
  * Shared by in-chat clicks on every platform and native system-link events.
@@ -35,7 +56,7 @@ export function useDeepLink() {
   const navigate = useNavigate()
   const openRoomMessageLink = useRoomMessageLink()
   const { addConversation } = useChat()
-  const { joinRoom, joinResult, getRoomInfo, isNonAnonymousRoomAcknowledged } = useRoom()
+  const { joinRoom, joinResult, getRoomInfo, isNonAnonymousRoomAcknowledged, domainHostsRooms } = useRoom()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const { t } = useTranslation()
   const addToast = useToastStore((s) => s.addToast)
@@ -53,6 +74,37 @@ export function useDeepLink() {
     contactsRef.current = contacts
     jidRef.current = jid
   }, [contacts, jid])
+
+  /**
+   * Whether an address is a room, from the first step that knows it: rooms
+   * Fluux holds, then contacts and chats, then its server's own answer about
+   * hosting rooms (once per server name), and only without an answer the
+   * name guess.
+   */
+  const isRoomAddress = async (bareJid: string): Promise<boolean> => {
+    if (roomStore.getState().rooms.has(bareJid)) return true
+    if (contactsRef.current.some(c => c.jid === bareJid) || chatStore.getState().hasConversation(bareJid)) return false
+    const domain = bareJid.slice(bareJid.indexOf('@') + 1)
+    let hostsRooms = roomServiceByDomain.get(domain)
+    if (hostsRooms === undefined) {
+      const answer = await domainHostsRooms(domain)
+      if (answer === null) return isMucJid(bareJid)
+      hostsRooms = answer
+      roomServiceByDomain.set(domain, answer)
+    }
+    return hostsRooms
+  }
+
+  /** Show a room's view (with its Join button when not joined) without joining it. */
+  const openRoomWithoutJoining = (roomJid: string) => {
+    const rooms = roomStore.getState()
+    if (!rooms.rooms.has(roomJid)) {
+      const account = getBareJid(jidRef.current ?? '')
+      rooms.addRoom({ jid: roomJid, name: getLocalPart(roomJid), nickname: getLocalPart(account) || 'guest',
+        joined: false, isBookmarked: false, occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set() })
+    }
+    navigateToRoom(roomJid)
+  }
 
   // Handle an XMPP URI
   const handleXmppUri = async (uri: string) => {
@@ -94,10 +146,43 @@ export function useDeepLink() {
       return
     }
 
-    const bareJid = getBareJid(parsed.jid)
+    // Every action waits for the app to be online: the room-or-person check
+    // asks the address's server and a subscribe link needs the roster.
+    if (status !== 'online' || (parsed.action === 'subscribe' && !rosterLoadedFor(jidRef.current, rosterStore.getState()))) {
+      deferDeepLink(uri)
+      return
+    }
 
-    // Determine if this is a MUC room based on action or JID pattern
-    const isRoom = parsed.action === 'join' || isMucJid(bareJid)
+    const bareJid = getBareJid(parsed.jid)
+    const isOwnAddress = bareJid === getBareJid(jidRef.current ?? '')
+
+    if (parsed.action === 'subscribe') {
+      if (isOwnAddress) return
+      if (await isRoomAddress(bareJid)) { openRoomWithoutJoining(bareJid); return }
+      const contact = contactsRef.current.find(c => c.jid === bareJid)
+      if (contact && (contact.subscription === 'to' || contact.subscription === 'both')) {
+        navigateToConversation(bareJid)
+        return
+      }
+      // Nothing is sent until the person presses Add contact.
+      useModalStore.getState().openAddContact(bareJid)
+      return
+    }
+
+    const body = parsed.action === 'message' && parsed.params.body
+      ? boundedPlainText(parsed.params.body, MAX_LINK_BODY_CODE_POINTS)
+      : ''
+
+    // A message link to a room never joins it: the room opens with its Join
+    // button and the text waits as the room's draft.
+    if (parsed.action === 'message' && await isRoomAddress(bareJid)) {
+      if (body) addDraftText(roomDrafts, bareJid, body)
+      openRoomWithoutJoining(bareJid)
+      return
+    }
+
+    // A join link, or an address with no action that is a room, joins it.
+    const isRoom = parsed.action === 'join' || (parsed.action !== 'message' && await isRoomAddress(bareJid))
 
     if (isRoom) {
       // Handle room/MUC URI
@@ -140,9 +225,8 @@ export function useDeepLink() {
     } else {
       // Handle 1:1 chat URI
       const contactJid = bareJid
-      const messageBody = parsed.params.body
 
-      console.log('[DeepLink] Opening chat with:', contactJid, { messageBody })
+      console.log('[DeepLink] Opening chat with:', contactJid)
 
       // Check if conversation exists
       const chatState = chatStore.getState()
@@ -161,14 +245,9 @@ export function useDeepLink() {
         addConversation(conversation)
       }
 
-      // Navigate to messages view and activate the conversation
+      // The link's text waits in the composer, below any draft; it is never sent.
+      if (body) addDraftText(chatDrafts, contactJid, body)
       navigateToConversation(contactJid)
-
-      // If a message body was provided, we could pre-fill the composer
-      // For now we just log it - pre-filling would require more plumbing
-      if (messageBody) {
-        console.log('[DeepLink] Message body provided (not implemented):', messageBody)
-      }
     }
   }
 

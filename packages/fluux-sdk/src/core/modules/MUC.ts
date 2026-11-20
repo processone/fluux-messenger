@@ -1554,6 +1554,30 @@ export class MUC extends BaseModule {
   }
 
   /**
+   * Ask a domain whether it hosts rooms (disco#info on the domain itself).
+   *
+   * Returns true when it answers with a conference identity, false when it
+   * answers with any other identity, and null when it gives no usable answer
+   * (error or timeout), so the caller can fall back to a guess.
+   */
+  async domainHostsRooms(domain: string): Promise<boolean | null> {
+    try {
+      const iq = xml(
+        'iq',
+        { type: 'get', to: domain, id: `disco_domain_${generateUUID()}` },
+        xml('query', { xmlns: NS_DISCO_INFO })
+      )
+      const response = await this.deps.sendIQ(iq, DISCO_QUERY_TIMEOUT_MS)
+      const query = response.getChild('query', NS_DISCO_INFO)
+      const identities = query?.getChildren('identity') ?? []
+      if (identities.length === 0) return null
+      return identities.some((i: Element) => i.attrs.category === 'conference')
+    } catch {
+      return null
+    }
+  }
+
+  /**
    * Create a new quick chat (temporary MUC room).
    *
    * Quick chats are non-persistent rooms designed for ad-hoc conversations.

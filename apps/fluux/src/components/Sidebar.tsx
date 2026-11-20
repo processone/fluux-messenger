@@ -124,6 +124,7 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
   // shortcut help) open/close. Actions are stable store methods.
   const showQuickChat = useModalStore((s) => s.quickChat)
   const showAddContact = useModalStore((s) => s.addContact)
+  const addContactJid = useModalStore((s) => s.addContactJid)
   const showNewMessage = useModalStore((s) => s.newMessage)
   const showPresenceMenu = useModalStore((s) => s.presenceMenu)
   const modalOpen = useModalStore((s) => s.open)
@@ -468,7 +469,7 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
 
       {/* Add Contact Modal */}
       {showAddContact && (
-        <AddContactModal onClose={() => modalClose('addContact')} />
+        <AddContactModal onClose={() => modalClose('addContact')} initialJid={addContactJid} />
       )}
 
       {/* New Message Modal */}
