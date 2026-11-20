@@ -34,7 +34,7 @@ export function getRoomJoinReasonMessage(
       return t('rooms.registeredNicknameRequired')
     case 'room-not-found':
       return t('rooms.roomNotFound')
-    // `not-in-room`, `timed-out` and `unknown` carry nothing an app-specific
+    // `not-in-room`, `timed-out`, `disconnected` and `unknown` carry nothing an app-specific
     // wording would add, so they read the server's own text when there is one.
     default:
       return text || t('rooms.failedToJoinRoom')

@@ -3,6 +3,36 @@ import { useXMPP } from '@fluux/sdk'
 import { useConnectionStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore } from '@fluux/sdk/stores'
 
+const PUBLISH_DEBOUNCE_MS = 1000
+
+function serializeRoom(roomJid: string): string {
+  return JSON.stringify(ignoreStore.getState().ignoredUsers[roomJid] || [])
+}
+
+type IgnoreClient = ReturnType<typeof useXMPP>['client']
+
+/**
+ * Publish a room's list when it differs from the last list known to match the
+ * server. `serverState` has no entry for a room whose fetch has not settled.
+ */
+function publishIfChanged(client: IgnoreClient, serverState: Record<string, string>, roomJid: string): void {
+  const previousJson = serverState[roomJid]
+  if (previousJson === undefined) return
+  const currentJson = serializeRoom(roomJid)
+  if (currentJson === previousJson) return
+
+  const users = ignoreStore.getState().ignoredUsers[roomJid]
+  const request = !users || users.length === 0
+    ? client.ignore.removeIgnoredUsers(roomJid)
+    : client.ignore.setIgnoredUsers(roomJid, users)
+  serverState[roomJid] = currentJson
+  request.catch((err: unknown) => {
+    // Restore the baseline so the next change retries the publish.
+    if (serverState[roomJid] === currentJson) serverState[roomJid] = previousJson
+    console.warn('[Fluux] Failed to publish ignored users for room', roomJid, err)
+  })
+}
+
 /**
  * Syncs ignored users with PEP (XEP-0223) when connected.
  *
@@ -14,32 +44,41 @@ export function useIgnoreSync() {
   const activeRoomJid = useRoomStore((s) => s.activeRoomJid)
   const { client } = useXMPP()
 
-  // Track which rooms we've already fetched this session
+  // Rooms whose fetch has started this session (settled or not)
   const fetchedRoomsRef = useRef<Set<string>>(new Set())
-  // Track what's been saved to server to detect local changes
+  // Last list known to match the server, per room, once its fetch settled
   const serverStateRef = useRef<Record<string, string>>({})
+  // Bumped on disconnect so a fetch from an earlier session is discarded
+  const sessionRef = useRef(0)
 
   // Lazy fetch: load ignored users from PEP on first room activation
   useEffect(() => {
     if (status !== 'online' || !activeRoomJid) return
     if (fetchedRoomsRef.current.has(activeRoomJid)) return
-
-    // Mark as fetched immediately to avoid duplicate requests
     fetchedRoomsRef.current.add(activeRoomJid)
 
     const roomJid = activeRoomJid
+    const session = sessionRef.current
+    const localAtFetch = serializeRoom(roomJid)
+
     client.ignore.fetchIgnoredUsersForRoom(roomJid).then((serverUsers) => {
-      if (serverUsers.length > 0) {
-        // Server has data — replace local state for this room (server wins)
+      if (session !== sessionRef.current) return
+      const changedDuringFetch = serializeRoom(roomJid) !== localAtFetch
+      if (serverUsers.length > 0 && !changedDuringFetch) {
+        // Server wins over data that only came from localStorage.
         ignoreStore.getState().setIgnoredForRoom(roomJid, serverUsers)
       }
-      // Snapshot current state for this room so save-on-change doesn't re-publish
-      const currentUsers = ignoreStore.getState().ignoredUsers[roomJid]
-      serverStateRef.current[roomJid] = JSON.stringify(currentUsers || [])
+      // A local list the server does not have stays local until it changes;
+      // an edit made while the fetch was in flight is newer than both.
+      serverStateRef.current[roomJid] = serverUsers.length > 0
+        ? JSON.stringify(serverUsers)
+        : localAtFetch
+      publishIfChanged(client, serverStateRef.current, roomJid)
     }).catch(() => {
-      // Server fetch failed — keep local data, snapshot it
-      const currentUsers = ignoreStore.getState().ignoredUsers[roomJid]
-      serverStateRef.current[roomJid] = JSON.stringify(currentUsers || [])
+      if (session !== sessionRef.current) return
+      // Server fetch failed: keep local data as the baseline.
+      serverStateRef.current[roomJid] = localAtFetch
+      publishIfChanged(client, serverStateRef.current, roomJid)
     })
   }, [status, activeRoomJid, client])
 
@@ -49,30 +88,13 @@ export function useIgnoreSync() {
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-    const unsubscribe = ignoreStore.subscribe((state) => {
+    const unsubscribe = ignoreStore.subscribe(() => {
       if (debounceTimer) clearTimeout(debounceTimer)
-
       debounceTimer = setTimeout(() => {
-        const current = state.ignoredUsers
-
-        // Only publish rooms we've already fetched (avoid pushing stale localStorage data)
-        for (const roomJid of fetchedRoomsRef.current) {
-          const currentJson = JSON.stringify(current[roomJid] || [])
-          const previousJson = serverStateRef.current[roomJid]
-          if (currentJson === previousJson) continue
-
-          // Room changed — publish or retract
-          const users = current[roomJid]
-          if (!users || users.length === 0) {
-            client.ignore.removeIgnoredUsers(roomJid).catch(() => {})
-          } else {
-            client.ignore.setIgnoredUsers(roomJid, users).catch(() => {})
-          }
-
-          // Update snapshot
-          serverStateRef.current[roomJid] = currentJson
+        for (const roomJid of Object.keys(serverStateRef.current)) {
+          publishIfChanged(client, serverStateRef.current, roomJid)
         }
-      }, 1000)
+      }, PUBLISH_DEBOUNCE_MS)
     })
 
     return () => {
@@ -84,6 +106,7 @@ export function useIgnoreSync() {
   // Reset on disconnect
   useEffect(() => {
     if (status === 'disconnected') {
+      sessionRef.current++
       fetchedRoomsRef.current = new Set()
       serverStateRef.current = {}
     }

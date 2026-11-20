@@ -15,6 +15,7 @@ import {
   clearUserAgentIdentity,
 } from '@fluux/sdk'
 import { clearAllAvatarData } from '@fluux/sdk/cache'
+import { ignoreStore } from '@fluux/sdk/stores'
 import { clearSession, getSession } from '@/utils/sessionStorage'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearMediaCache } from '@/utils/mediaCache'
@@ -93,6 +94,7 @@ export async function clearLocalData(options: ClearLocalDataOptions = {}): Promi
     consoleStore.getState().reset()
     adminStore.getState().reset()
     blockingStore.getState().reset()
+    ignoreStore.getState().reset()
     // Saved messages and their unsent queue are message text kept on this device too.
     clearSavedLocalData(scopedJid, allAccounts)
     // Clear search index (IndexedDB)

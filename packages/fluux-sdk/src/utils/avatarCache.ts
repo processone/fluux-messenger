@@ -158,6 +158,8 @@ function getDB(): Promise<IDBDatabase> {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
 
     request.onerror = () => {
+      // Drop the failed promise so a later call can retry the open.
+      dbPromise = null
       reject(request.error)
     }
 

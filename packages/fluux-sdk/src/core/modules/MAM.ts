@@ -262,6 +262,18 @@ export class MAM extends BaseModule {
   private correctionQueries = new Map<string, CorrectionReconciliation>()
   private observedArchives = new Map<string, () => boolean>()
 
+  /**
+   * Record that an archive answered in the current session. Entries from an
+   * ended session are dropped here: each holds that session's `isCurrent`
+   * closure, which keeps its transport and E2EE manager reachable.
+   */
+  private observeArchive(key: string, isCurrent: () => boolean): void {
+    for (const [archive, current] of this.observedArchives) {
+      if (!current()) this.observedArchives.delete(archive)
+    }
+    this.observedArchives.set(key, isCurrent)
+  }
+
   correctionCompletion(conversationId: string, room: boolean, revision?: CorrectionRevision) {
     const session = this.captureQuery()
     return (message: StoredMessage | StoredRoomMessage, isStoreCurrent: () => boolean) => {
@@ -672,7 +684,7 @@ export class MAM extends BaseModule {
             throw iqError
           }
           const { complete, page: pageInfo } = this.parseMAMResponse(response)
-          if (response.getChild('fin', NS_MAM)) this.observedArchives.set(JSON.stringify([false, conversationId]), session.isCurrent)
+          if (response.getChild('fin', NS_MAM)) this.observeArchive(JSON.stringify([false, conversationId]), session.isCurrent)
 
           // Drain the buffer: E2EE decrypt first (so modification bodies are
           // plaintext, not fallback hints), then modification detection, then parse.
@@ -996,7 +1008,7 @@ export class MAM extends BaseModule {
             throw iqError
           }
           const { complete, page: pageInfo } = this.parseMAMResponse(response)
-          if (response.getChild('fin', NS_MAM)) this.observedArchives.set(JSON.stringify([true, roomJid]), session.isCurrent)
+          if (response.getChild('fin', NS_MAM)) this.observeArchive(JSON.stringify([true, roomJid]), session.isCurrent)
 
           // Drain buffer: E2EE decrypt first, then modification detection, then parse.
           const correctionStart = modifications.corrections.length

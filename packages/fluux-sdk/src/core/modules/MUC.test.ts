@@ -16,6 +16,7 @@ import {
 import type { ModuleDependencies } from './BaseModule'
 import type { Room } from '../types/room'
 import { RoomJoinError } from '../errors'
+import { setStorageScopeJid } from '../../utils/storageScope'
 import { parse } from 'ltx'
 
 describe('MUC Module', () => {
@@ -1172,6 +1173,17 @@ describe('MUC Module', () => {
         },
       ]))
 
+    it('reports a join cut short by client teardown as disconnected, not timed out', async () => {
+      mockStores.room.getRoom.mockReturnValue(storedRoom())
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.joinRoom(ROOM, 'mynick')
+      const result = muc.joinResult(ROOM)
+      muc.cleanup()
+
+      await expect(result).rejects.toMatchObject({ reason: 'disconnected' })
+    })
+
     it('reports a refused password as wrong-password', async () => {
       mockStores.room.getRoom.mockReturnValue(storedRoom())
       mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
@@ -1642,7 +1654,8 @@ describe('MUC Module', () => {
             type: 'get',
             to: 'room@conference.example.org',
           }),
-        })
+        }),
+        10_000,
       )
     })
 
@@ -2293,6 +2306,27 @@ describe('MUC Module', () => {
 
       expect(result).toEqual([])
       expect(mockSendIQ).not.toHaveBeenCalled()
+    })
+
+    it('keeps the forbidden cache per account', async () => {
+      const forbidden = Object.assign(new Error('forbidden'), { condition: 'forbidden' })
+      setStorageScopeJid('first@example.org')
+      try {
+        mockSendIQ.mockRejectedValueOnce(forbidden)
+        await muc.queryRoomMembers(roomJid)
+        mockSendIQ.mockClear()
+
+        setStorageScopeJid('second@example.org')
+        mockSendIQ
+          .mockResolvedValueOnce(createAffiliationResponse('member', [{ jid: 'carol@example.org', nick: 'Carol' }]))
+          .mockResolvedValueOnce(createAffiliationResponse('admin', []))
+          .mockResolvedValueOnce(createAffiliationResponse('owner', []))
+        const result = await muc.queryRoomMembers(roomJid)
+
+        expect(result).toEqual([{ jid: 'carol@example.org', nick: 'Carol', affiliation: 'member' }])
+      } finally {
+        setStorageScopeJid(null)
+      }
     })
 
     it('does NOT poison the cache when a higher tier is forbidden but member succeeded (#519 admin)', async () => {

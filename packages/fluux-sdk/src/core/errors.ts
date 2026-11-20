@@ -48,6 +48,7 @@ export class ConnectionCancelledError extends Error {
  * - `room-not-found` — no such room, and it was not created
  * - `not-in-room` — the operation needs an occupancy this client does not have
  * - `timed-out` — no response before the retry budget ran out
+ * - `disconnected` — the client was torn down before the room answered
  * - `unknown` — the server gave a condition this list does not cover; read
  *   {@link RoomJoinError.condition} and {@link RoomJoinError.text} for detail
  */
@@ -62,13 +63,14 @@ export type RoomJoinReason =
   | 'room-not-found'
   | 'not-in-room'
   | 'timed-out'
+  | 'disconnected'
   | 'unknown'
 
 /**
  * Resolve an XEP-0045 §7.2 join failure to the reason a caller can act on.
  *
  * @param condition - RFC 6120 condition from the error presence, or one of the
- *   SDK's synthetic conditions (`'timeout'`, `'not-joined'`).
+ *   SDK's synthetic conditions (`'timeout'`, `'not-joined'`, `'disconnected'`).
  * @param passwordSent - Whether the refused join carried a password. Only
  *   `not-authorized` reads it, to tell a missing password from a wrong one.
  */
@@ -92,6 +94,8 @@ export function roomJoinReasonFor(condition: string, passwordSent = false): Room
       return 'not-in-room'
     case 'timeout':
       return 'timed-out'
+    case 'disconnected':
+      return 'disconnected'
     default:
       return 'unknown'
   }

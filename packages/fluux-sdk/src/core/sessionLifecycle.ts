@@ -28,10 +28,11 @@ import {
 } from './modules/connectionTimeouts'
 import { NS_CARBONS, NS_P1_PUSH_WEBPUSH } from './namespaces'
 import { getLocalPart } from './jid'
-import { logInfo } from './logger'
+import { logInfo, logWarn } from './logger'
 import { getCachedPlatform } from './platform'
 import { SDK_VERSION } from '../version'
 import { generateUUID } from '../utils/uuid'
+import { raceDeadline } from '../utils/deadline'
 import { bumpAvatarResumeCount } from '../utils/avatarCache'
 import type { StoreBindings } from './types'
 import type { ModuleDependencies } from './modules/BaseModule'
@@ -295,7 +296,11 @@ export class SessionLifecycleEngine {
             void this.autojoinBookmark(room, gen, release, 'SM resumption aborted before autojoin')
           }
         }
-      }).catch(() => {})
+      }).catch((err: unknown) => {
+        // Bookmarks added on another client while away are joined on the next
+        // fresh session instead.
+        logWarn(`SM resumption: bookmark fetch failed, autojoin skipped: ${err instanceof Error ? err.message : String(err)}`)
+      })
     }
   }
 
@@ -361,11 +366,11 @@ export class SessionLifecycleEngine {
     // after sleep/wake when the connection is unstable.
     const setupWork = this.runFreshSessionSetup(previouslyJoinedRooms, gen, iqTimeout)
     const setupStart = Date.now()
-    const timeoutPromise = new Promise<'timeout'>((resolve) =>
-      setTimeout(() => resolve('timeout'), FRESH_SESSION_SETUP_TIMEOUT_MS)
+    const result = await raceDeadline(
+      setupWork.then(() => 'done' as const),
+      FRESH_SESSION_SETUP_TIMEOUT_MS,
+      () => 'timeout' as const,
     )
-
-    const result = await Promise.race([setupWork.then(() => 'done' as const), timeoutPromise])
     if (result === 'timeout') {
       const elapsed = Date.now() - setupStart
       // If elapsed time far exceeds the requested delay, the system slept
