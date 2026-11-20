@@ -8,6 +8,7 @@ import type { MAM } from './MAM'
 import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
 import { stripNickWhitespace } from '../nick'
 import { generateUUID } from '../../utils/uuid'
+import { getStorageScopeJid } from '../../utils/storageScope'
 import { generateQuickChatSlug } from '../wordlist'
 import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
 import { buildForeignExtensions, parseBookmarkItem } from '../bookmarkItem'
@@ -267,9 +268,15 @@ export class MUC extends BaseModule {
    * Rooms whose affiliation lists the server refused to share (forbidden).
    * Remembered for the client's lifetime so member discovery isn't retried
    * (3 IQs + warnings) on every reconnect. A restart — or a permission change
-   * followed by a restart — clears it.
+   * followed by a restart — clears it. Keyed by account as well as room: one
+   * client serves every account it switches to, and a refusal for one account
+   * says nothing about another.
    */
   private membersForbiddenRooms = new Set<string>()
+
+  private membersForbiddenKey(roomJid: string): string {
+    return JSON.stringify([getStorageScopeJid(), roomJid])
+  }
 
   /**
    * The rooms whose bookmark, as Fluux holds it, is known to match the stored
@@ -776,7 +783,7 @@ export class MUC extends BaseModule {
     for (const [roomJid, deferred] of Array.from(this.joinDeferreds.entries())) {
       if (!deferred.settled) {
         deferred.settled = true
-        deferred.reject(new RoomJoinError(roomJid, 'timeout'))
+        deferred.reject(new RoomJoinError(roomJid, 'disconnected'))
       }
     }
     this.joinDeferreds.clear()
@@ -1418,15 +1425,8 @@ export class MUC extends BaseModule {
         xml('query', { xmlns: NS_DISCO_INFO })
       )
 
-      // Wrap sendIQ with a timeout to prevent hanging if remote server doesn't respond
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`Disco query timeout for ${roomJid}`)), DISCO_QUERY_TIMEOUT_MS)
-      })
-
-      const response = await Promise.race([
-        this.deps.sendIQ(iq),
-        timeoutPromise,
-      ])
+      // A remote room server may never answer.
+      const response = await this.deps.sendIQ(iq, DISCO_QUERY_TIMEOUT_MS)
 
       const query = response.getChild('query', NS_DISCO_INFO)
       if (!query) return null
@@ -1493,14 +1493,7 @@ export class MUC extends BaseModule {
         xml('query', { xmlns: NS_DISCO_INFO })
       )
 
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`Room exists check timeout for ${roomJid}`)), DISCO_QUERY_TIMEOUT_MS)
-      })
-
-      const response = await Promise.race([
-        this.deps.sendIQ(iq),
-        timeoutPromise,
-      ])
+      const response = await this.deps.sendIQ(iq, DISCO_QUERY_TIMEOUT_MS)
 
       const query = response.getChild('query', NS_DISCO_INFO)
       if (!query) return false
@@ -2692,7 +2685,7 @@ export class MUC extends BaseModule {
   async queryRoomMembers(
     roomJid: string
   ): Promise<Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }>> {
-    if (this.membersForbiddenRooms.has(roomJid)) return []
+    if (this.membersForbiddenRooms.has(this.membersForbiddenKey(roomJid))) return []
 
     const allMembers: Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }> = []
 
@@ -2732,7 +2725,7 @@ export class MUC extends BaseModule {
           // would lose the member list they ARE entitled to see on every later
           // session (#519).
           if (affiliation === 'member') {
-            this.membersForbiddenRooms.add(roomJid)
+            this.membersForbiddenRooms.add(this.membersForbiddenKey(roomJid))
             logWarn(`Member discovery forbidden for ${roomJid} — skipping for this session`)
           } else {
             logWarn(`Affiliation '${affiliation}' list forbidden for ${roomJid} — stopping at the accessible tiers`)

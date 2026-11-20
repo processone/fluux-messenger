@@ -1159,19 +1159,22 @@ describe('vCard cache through avatar dispatchers', () => {
 
     it('does not restore a negative when storage fails after positive evidence', async () => {
       await (await import('../../utils/unansweredLookups')).beginUnansweredLookup(JID)
-      let failOpen!: () => void
+      let failOpen: (() => void) | undefined
+      // Storage stays unavailable: the first open fails when the test says so,
+      // and any retried open fails on its own.
       vi.spyOn(indexedDB, 'open').mockImplementation(() => {
         const request = {
           error: new Error('Storage unavailable'), onerror: null as null | (() => void),
         }
-        failOpen = () => request.onerror?.()
+        if (failOpen) setTimeout(() => request.onerror?.(), 0)
+        else failOpen = () => request.onerror?.()
         return request as unknown as IDBOpenDBRequest
       })
       vi.spyOn(console, 'warn').mockImplementation(() => {})
       const mark = cache.markNoAvatar(JID, 'contact', 'definitive')
       await vi.waitFor(() => expect(failOpen).toBeTypeOf('function'))
       const evidence = client.profile.clearVCardNegativeCache(JID)
-      failOpen()
+      failOpen!()
       await Promise.all([mark, evidence])
       expect(await cache.hasNoAvatar(JID)).toBe(false)
     })

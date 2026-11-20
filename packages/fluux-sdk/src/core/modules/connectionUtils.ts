@@ -5,6 +5,8 @@
  * eliminate duplication and enable independent testing.
  */
 
+import { raceDeadline } from '../../utils/deadline'
+
 // ── Constants ──────────────────────────────────────────────────────────────────
 //
 // Re-exported for backward compatibility with existing imports/tests.
@@ -20,10 +22,7 @@ export {
  * Used to prevent hanging on xmpp.js stop() when the socket is already dead.
  */
 export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | void> {
-  return Promise.race([
-    promise,
-    new Promise<void>((resolve) => setTimeout(resolve, ms)),
-  ])
+  return raceDeadline(promise, ms, () => undefined)
 }
 
 /**

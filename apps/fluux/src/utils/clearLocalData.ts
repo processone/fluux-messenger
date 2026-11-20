@@ -14,6 +14,7 @@ import {
   clearUserAgentIdentity,
 } from '@fluux/sdk'
 import { clearAllAvatarData } from '@fluux/sdk/cache'
+import { ignoreStore } from '@fluux/sdk/stores'
 import { clearSession, getSession } from '@/utils/sessionStorage'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearMediaCache } from '@/utils/mediaCache'
@@ -92,6 +93,7 @@ export async function clearLocalData(options: ClearLocalDataOptions = {}): Promi
     consoleStore.getState().reset()
     adminStore.getState().reset()
     blockingStore.getState().reset()
+    ignoreStore.getState().reset()
     // Clear search index (IndexedDB)
     await clearSearchIndex()
     console.log('[Fluux] clearLocalData: stores reset')

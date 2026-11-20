@@ -1870,6 +1870,39 @@ describe('XMPPClient', () => {
       expect(fetchAvatarDataSpy).toHaveBeenCalledWith('contact@example.com', 'abc123hash')
     })
 
+    it('contains a rejected async internal handler instead of leaking an unhandled rejection', async () => {
+      const unhandled = vi.fn()
+      process.on('unhandledRejection', unhandled)
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        vi.spyOn(xmppClient.profile, 'removeContactAvatar').mockRejectedValue(new Error('idb closed'))
+
+        ;(xmppClient as any).emit('avatarMetadataUpdate', 'contact@example.com', null)
+        await vi.advanceTimersByTimeAsync(0)
+
+        expect(unhandled).not.toHaveBeenCalled()
+        expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('avatarMetadataUpdate'), expect.any(Error))
+      } finally {
+        process.off('unhandledRejection', unhandled)
+        consoleError.mockRestore()
+      }
+    })
+
+    it('keeps notifying internal handlers after one throws', () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const later = vi.fn()
+      const unsubscribeThrowing = (xmppClient as any).onInternal('rosterLoaded', () => { throw new Error('boom') })
+      const unsubscribeLater = (xmppClient as any).onInternal('rosterLoaded', later)
+      try {
+        expect(() => (xmppClient as any).emit('rosterLoaded')).not.toThrow()
+        expect(later).toHaveBeenCalled()
+      } finally {
+        unsubscribeThrowing()
+        unsubscribeLater()
+        consoleError.mockRestore()
+      }
+    })
+
     it('should wire a null avatarMetadataUpdate to profile.removeContactAvatar', async () => {
       const removeContactAvatarSpy = vi.spyOn(xmppClient.profile, 'removeContactAvatar').mockResolvedValue()
       // Emit avatarMetadataUpdate with null hash (avatar removed)

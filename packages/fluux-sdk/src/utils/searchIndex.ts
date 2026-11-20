@@ -237,6 +237,7 @@ function getDB(
         db.createObjectStore(META_STORE, { keyPath: 'key' })
       }
       const docsStore = tx.objectStore(DOCS_STORE)
+      if (docsStore.indexNames.contains('identityKeys')) return
       docsStore.createIndex('identityKeys', 'identityKeys', { multiEntry: true })
       if (oldVersion > 0) {
         // The version-change transaction makes the backfill atomic with the
