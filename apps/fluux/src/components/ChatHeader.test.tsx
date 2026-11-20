@@ -23,6 +23,7 @@ vi.mock('@/hooks', () => ({
     position: { x: 0, y: 0 },
   }),
   useClickOutside: () => {},
+  useModalInput: () => ({ current: null }),
 }))
 
 // Mock useHasHover (used by HeaderOverflowKebab — separate import path)
@@ -631,6 +632,34 @@ describe('ChatHeader', () => {
       expect(handlers.onRemoveContact).not.toHaveBeenCalled()
       fireEvent.click(screen.getByText('contacts.remove'))
       expect(handlers.onRemoveContact).toHaveBeenCalledTimes(1)
+    })
+
+    it('Add to contacts calls onAddContact', () => {
+      const onAddContact = vi.fn()
+      renderHeader({ onRenameContact: undefined, onRemoveContact: undefined, onAddContact })
+      rightClick(screen.getByRole('heading', { name: 'Alice' }))
+      fireEvent.click(screen.getByText('contacts.addToContacts'))
+      expect(onAddContact).toHaveBeenCalledTimes(1)
+    })
+
+    it('Rename opens the rename dialog for this contact', () => {
+      renderHeader()
+      rightClick(screen.getByRole('heading', { name: 'Alice' }))
+      fireEvent.click(screen.getByText('contacts.rename'))
+      expect(screen.getByDisplayValue('Alice')).toBeInTheDocument()
+    })
+
+    it('drops an open dialog and menu when the header moves to another chat', () => {
+      const { rerender, handlers } = renderHeader()
+      rightClick(screen.getByRole('heading', { name: 'Alice' }))
+      fireEvent.click(screen.getByText('contacts.blockUser'))
+      expect(screen.getByText('contacts.blockConfirm')).toBeInTheDocument()
+      rerender(<ChatHeader name="Bob" type="chat" jid="bob@example.com" onBlock={handlers.onBlock} />)
+      expect(screen.queryByText('contacts.blockConfirm')).not.toBeInTheDocument()
+      rightClick(screen.getByRole('heading', { name: 'Bob' }))
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+      rerender(<ChatHeader name="Carol" type="chat" jid="carol@example.com" onBlock={handlers.onBlock} />)
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     })
 
     it('Unblock acts at once', () => {

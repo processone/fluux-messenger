@@ -8,17 +8,10 @@ import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { copyToClipboard } from '@/utils/clipboard'
 import type { OverflowEntry } from './HeaderOverflowKebab'
 
-/** Words selected before the click; empty when none. */
-export interface HeaderMenuSelection {
-  text: string
-  /** Restored for Copy when the engine drops the selection while the menu is open. */
-  range?: Range
-}
-
 interface ChatHeaderContactMenuProps {
   menu: ContextMenuState
   entries: OverflowEntry[]
-  selection: HeaderMenuSelection
+  selection: { text: string }
 }
 
 export function ChatHeaderContactMenu({ menu, entries, selection }: ChatHeaderContactMenuProps) {
@@ -26,15 +19,7 @@ export function ChatHeaderContactMenu({ menu, entries, selection }: ChatHeaderCo
   useFocusTrap(menu.menuRef, { active: menu.isOpen })
 
   const run = (fn: () => void | Promise<void>) => { menu.close(); void fn() }
-  const copySelection = () => run(() => {
-    const live = window.getSelection()
-    if (live?.toString() !== selection.text && selection.range) {
-      live?.removeAllRanges()
-      live?.addRange(selection.range)
-    }
-    const done = live?.toString() === selection.text && typeof document.execCommand === 'function' && document.execCommand('copy')
-    if (!done) return copyToClipboard(selection.text)
-  })
+  const copySelection = () => run(() => copyToClipboard(selection.text))
 
   return createPortal(
     <div

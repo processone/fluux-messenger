@@ -14,7 +14,8 @@ import { useContextMenu } from '@/hooks/useContextMenu'
 import { copyToClipboard } from '@/utils/clipboard'
 import { ConfirmDialog } from './ConfirmDialog'
 import { RenameContactModal } from './RenameContactModal'
-import { ChatHeaderContactMenu, type HeaderMenuSelection } from './header/ChatHeaderContactMenu'
+import { ChatHeaderContactMenu } from './header/ChatHeaderContactMenu'
+import { selectionAtButtonDown, selectionForMenu } from '@/utils/menuSelection'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
 import { ConnectionStepSlot } from './ConnectionStep'
@@ -139,24 +140,20 @@ export function ChatHeader({
   // Right-click menu. Shift + right-click and text fields keep the system menu. A word that only
   // the right-click itself selected is not a selection: the text is read as the button goes down.
   const contactMenu = useContextMenu()
-  const [menuSelection, setMenuSelection] = useState<HeaderMenuSelection>({ text: '' })
+  // The header stays mounted across a switch between two chats: a dialog or menu opened for the
+  // previous contact must not rebind to the new one.
+  const { close: closeContactMenu } = contactMenu
+  useEffect(() => { setPending(null); closeContactMenu() }, [jid, closeContactMenu])
+  const [menuSelection, setMenuSelection] = useState({ text: '' })
   const selectionBeforeClick = useRef<string | null>(null)
-  const handleMouseDown = (event: React.MouseEvent) => {
-    selectionBeforeClick.current = event.button === 2 || event.ctrlKey ? (window.getSelection()?.toString() ?? '') : null
-  }
+  const handleMouseDown = (event: React.MouseEvent) => { selectionBeforeClick.current = selectionAtButtonDown(event) }
   const handleContextMenu = (event: React.MouseEvent<HTMLElement>) => {
     const el = event.target instanceof Element ? event.target : null
     if (isGroupChat || event.shiftKey || event.defaultPrevented || overflowEntries.length === 0) return
     if (el?.closest('input, textarea, [contenteditable="true"], [data-header-actions]')) return
-    const selection = window.getSelection()
-    const text = selection && !selection.isCollapsed && selection.rangeCount > 0
-      && selection.getRangeAt(0).intersectsNode(event.currentTarget) ? selection.toString() : ''
     const before = selectionBeforeClick.current
     selectionBeforeClick.current = null
-    const selected = text.trim() !== '' && (before === null || before === text) ? text : ''
-    // The click itself selected a word: the menu opens over no selection.
-    if (text && !selected) selection?.removeAllRanges()
-    setMenuSelection({ text: selected, range: selected ? selection!.getRangeAt(0).cloneRange() : undefined })
+    setMenuSelection(selectionForMenu(event.currentTarget, before))
     contactMenu.handleContextMenu(event)
   }
 
