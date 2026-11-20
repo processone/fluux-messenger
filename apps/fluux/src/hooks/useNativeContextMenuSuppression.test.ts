@@ -97,3 +97,13 @@ describe('shouldSuppressNativeMenu', () => {
     expect(shouldSuppressNativeMenu(div, null, true)).toBe(false)
   })
 })
+
+describe('Shift + right-click (FLM-347)', () => {
+  it('leaves the system menu on a plain element when Shift is held', () => {
+    const div = document.createElement('div')
+    document.body.appendChild(div)
+    expect(shouldSuppressNativeMenu(div, null, false, true)).toBe(false)
+    expect(shouldSuppressNativeMenu(div, null, false, false)).toBe(true)
+    div.remove()
+  })
+})

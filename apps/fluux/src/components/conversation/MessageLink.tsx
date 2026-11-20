@@ -12,8 +12,9 @@ interface MessageLinkProps {
 /**
  * A hyperlink inside a message. Left-click follows the link (handled globally by
  * externalLinkHandler); right-click opens LinkContextMenu (Copy link / Open in
- * browser) so the URL can be copied even on packaged desktop builds where the
- * native WebView menu is suppressed.
+ * browser) where the link stands alone, so the URL can be copied even on packaged
+ * desktop builds where the native WebView menu is suppressed. Inside a message the
+ * message's own menu (MessageContextMenu) carries those link items.
  *
  * Touch long-press is intentionally NOT wired here: the message bubble already
  * owns a long-press that opens MessageActionSheet, which carries its own Copy-link
@@ -22,6 +23,11 @@ interface MessageLinkProps {
  */
 export function MessageLink({ href, children, className = 'text-fluux-link hover:underline' }: MessageLinkProps) {
   const menu = useContextMenu()
+  // Inside a message the bubble's menu carries the link items; the link's own menu serves other places.
+  const onContextMenu = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (e.currentTarget.closest('[data-message-id]')) return
+    menu.handleContextMenu(e)
+  }
   return (
     <>
       <a
@@ -29,7 +35,7 @@ export function MessageLink({ href, children, className = 'text-fluux-link hover
         target="_blank"
         rel="noopener noreferrer"
         className={className}
-        onContextMenu={menu.handleContextMenu}
+        onContextMenu={onContextMenu}
       >
         {children ?? href}
       </a>

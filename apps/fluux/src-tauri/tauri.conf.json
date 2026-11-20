@@ -49,7 +49,6 @@
         "minHeight": 600,
         "resizable": true,
         "fullscreen": false,
-        "devtools": true,
         "backgroundColor": "#313338",
         "backgroundThrottling": "disabled",
         "dragDropEnabled": true,

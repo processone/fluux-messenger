@@ -6,7 +6,7 @@ import { platform } from '@/platform'
  *
  * On packaged Tauri builds we hide the raw WebView menu (Reload, Inspect
  * Element, Save Image As...) everywhere except where the native menu is
- * genuinely useful: editable fields and active text selections. Web / PWA
+ * genuinely useful: editable fields, active text selections and Shift + right-click. Web / PWA
  * builds are never affected, and `tauri:dev` keeps the menu so right-click
  * Inspect Element still works while developing.
  */
@@ -24,6 +24,8 @@ function isTargetWithinSelection(target: Element, selection: Selection | null): 
  *
  * Returns `false` (allow the native menu) when:
  * - the event was already handled by a component (`defaultPrevented`),
+ * - Shift is held: Shift + right-click is the way to the system menu
+ *   (Look Up, Translate, Speech, Services),
  * - the target is inside an `<input>`, `<textarea>`, or contenteditable region,
  * - the target falls within an active text selection.
  * Otherwise returns `true` (suppress).
@@ -32,8 +34,10 @@ export function shouldSuppressNativeMenu(
   target: EventTarget | null,
   selection: Selection | null,
   defaultPrevented: boolean,
+  shiftKey = false,
 ): boolean {
   if (defaultPrevented) return false
+  if (shiftKey) return false
   if (!(target instanceof Element)) return true
 
   // Editable regions keep the native menu (cut / copy / paste / spellcheck).
@@ -59,7 +63,7 @@ export function useNativeContextMenuSuppression(): void {
   useEffect(() => {
     if (!platform().hasNativeContextMenu || !import.meta.env.PROD) return
     const handler = (event: MouseEvent) => {
-      if (shouldSuppressNativeMenu(event.target, window.getSelection(), event.defaultPrevented)) {
+      if (shouldSuppressNativeMenu(event.composedPath()[0] ?? event.target, window.getSelection(), event.defaultPrevented, event.shiftKey)) {
         event.preventDefault()
       }
     }

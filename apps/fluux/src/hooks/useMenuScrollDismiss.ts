@@ -1,5 +1,4 @@
 import { useEffect, type RefObject } from 'react'
-import { getFloatingViewport } from './floatingViewport'
 
 /**
  * Whether a scroll should close an open context menu.
@@ -11,9 +10,9 @@ import { getFloatingViewport } from './floatingViewport'
  * menu must not disappear with them. On a busy machine that re-pin used to land just after a
  * member's menu opened, so Whisper vanished before it could be chosen.
  *
- * The menu's own scrolling keeps its earlier rule: a height-limited menu under the custom
- * title bar stays open. Without a connected anchor there is nothing to compare, so the menu
- * keeps closing on any scroll.
+ * The menu's own scrolling never closes it: a long menu scrolls inside its height limit.
+ * Without a connected anchor there is nothing to compare, so the menu keeps closing on any
+ * other scroll.
  */
 export function scrollDismissesMenu(
   target: EventTarget | null,
@@ -21,7 +20,7 @@ export function scrollDismissesMenu(
   anchor: Element | null,
 ): boolean {
   if (!(target instanceof Node)) return true
-  if (menu?.contains(target)) return !getFloatingViewport().top
+  if (menu?.contains(target)) return false
   if (!anchor?.isConnected) return true
   return target.contains(anchor)
 }

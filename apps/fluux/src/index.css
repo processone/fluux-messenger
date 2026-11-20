@@ -2012,3 +2012,11 @@ input[type="range"]::-moz-range-thumb {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
+
+/* A right-click message menu is the only message menu on screen: hide every row's hover actions
+   (and their open dropdown anchors) until it closes. */
+:root[data-message-menu="open"] [data-message-toolbar] {
+  opacity: 0 !important;
+  /* The visible bar sets its own pointer-events, so hide the whole subtree to make it unclickable. */
+  visibility: hidden !important;
+}

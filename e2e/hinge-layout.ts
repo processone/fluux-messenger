@@ -274,12 +274,15 @@ test.describe('fixed image menu measurement (FLM-308 F2)', () => {
     await image.evaluate((el, y) => el.dispatchEvent(new MouseEvent('contextmenu', {
       bubbles: true, cancelable: true, clientX: 100, clientY: y, button: 2,
     })), HINGE - 2 * MARGIN)
-    const copy = page.getByRole('button', { name: 'Copy image URL', exact: true })
-    await expect(copy).toBeVisible()
-    const bounds = (await copy.boundingBox())!
+    // The image's right-click opens the message menu, whose first rows are the reactions; the image
+    // actions follow, so the measurement follows the menu as a whole rather than one row.
+    const menu = page.getByRole('menu', { name: 'More options' })
+    await expect(menu).toBeVisible()
+    await expect(menu.getByRole('button', { name: 'Copy image URL', exact: true })).toBeVisible()
+    const bounds = (await menu.boundingBox())!
     expect(bounds.y).toBeLessThan(HINGE + MARGIN)
     expect(bounds.y + bounds.height).toBeGreaterThan(HINGE - MARGIN)
-    expect((await controlsNearHinge(page, 'y')).some(control => control.includes('Copy image URL'))).toBe(true)
+    expect((await controlsNearHinge(page, 'y')).some(control => control.includes('React with'))).toBe(true)
     await page.screenshot({ path: test.info().outputPath('fixed-image-menu-crossing.png') })
   })
 })

@@ -126,14 +126,14 @@ WKWebView has no "Memory" tab like Chrome. Use Safari Web Inspector:
 
 1. In Safari, enable **Safari → Settings → Advanced → "Show features for web developers"**.
 2. With Fluux running, open **Safari → Develop → [your Mac] → Fluux Messenger**.
-   (Or right-click inside Fluux → **Inspect Element**, which works because `devtools` is enabled in `tauri.conf.json`.)
+   (Or, in a development build from `npm run tauri:dev`, Shift + right-click inside Fluux → **Inspect Element**. Released builds do not include the inspector.)
 3. Switch to the **Timelines** tab.
 4. Click the gear icon → enable the **Memory** instrument.
 5. Click ● record, use Fluux for 30-60 seconds, stop, screenshot.
 
 ### Windows: Edge DevTools
 
-1. Right-click inside Fluux → **Inspect** (enabled by `devtools: true` in `tauri.conf.json`).
+1. In a development build from `npm run tauri:dev`, Shift + right-click inside Fluux → **Inspect**. Released builds do not include the inspector.
 2. Open the **Memory** tab.
 3. Take a **Heap snapshot** when Fluux has just started.
 4. Use Fluux until memory grows, then take another snapshot.

@@ -112,3 +112,35 @@ it('wraps focus through a shadow picker while excluding an inert message preview
   fireEvent.keyDown(getByText('Back'), { key: 'Tab', shiftKey: true })
   expect(host.shadowRoot!.activeElement).toBe(last)
 })
+
+it('wraps Tab in a shadow-aware trap when a widget inside stops the key from bubbling', () => {
+  function Menu() {
+    const ref = useRef<HTMLDivElement>(null)
+    useFocusTrap(ref, { includeShadowRoots: true })
+    return <div ref={ref}><button type="button">first</button><button type="button">last</button></div>
+  }
+  const { getByText } = render(<Menu />)
+  const last = getByText('last')
+  last.focus()
+  last.addEventListener('keydown', (e) => e.stopPropagation())
+  fireEvent.keyDown(last, { key: 'Tab' })
+  expect(getByText('first')).toHaveFocus()
+})
+
+it('lets an inner trap wrap before its outer trap sees Tab', () => {
+  function Nested() {
+    const outer = useRef<HTMLDivElement>(null)
+    const inner = useRef<HTMLDivElement>(null)
+    useFocusTrap(outer)
+    useFocusTrap(inner)
+    return <div ref={outer}>
+      <button type="button">download</button>
+      <div ref={inner}><button type="button">copy</button><button type="button">save</button></div>
+    </div>
+  }
+  const { getByText } = render(<Nested />)
+  const save = getByText('save')
+  save.focus()
+  fireEvent.keyDown(save, { key: 'Tab' })
+  expect(getByText('copy')).toHaveFocus()
+})

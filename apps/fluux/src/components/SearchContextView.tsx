@@ -644,6 +644,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
             onEdit={noop}
             onDelete={noopAsync}
             onMediaLoad={onMediaLoad}
+            readOnlyActions
             isDarkMode={isDarkMode}
             replyContext={replyContext}
             formatTime={formatTime}
