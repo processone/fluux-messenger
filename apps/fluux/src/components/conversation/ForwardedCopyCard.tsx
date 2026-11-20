@@ -10,8 +10,18 @@ import { routeDeepLink } from '@/utils/deepLinkRouter'
 import { formatDateHeader } from '@/utils/dateFormat'
 import { useDayChange } from '@/hooks/useDayChange'
 import { format } from 'date-fns'
+import { MessageAttachments } from '../MessageAttachments'
 import { useRoomMessagePreview } from './RoomMessageLinkPreview'
 import { renderStyledMessage } from '@/utils/messageStyles'
+
+interface CardProps {
+  message: Pick<BaseMessage, 'forwarded' | 'references'> & Partial<Pick<BaseMessage, 'attachment'>>
+  formatTime: (date: Date) => string
+  isDarkMode?: boolean
+  /** Called when the card's file preview finishes loading, so the list can keep its scroll position. */
+  onMediaLoad?: () => void
+  isOwnMessage?: boolean
+}
 
 /**
  * One forwarded copy, drawn as the source card: who wrote it, where, when, and the copied text.
@@ -19,25 +29,18 @@ import { renderStyledMessage } from '@/utils/messageStyles'
  * carries, or local history. When the copy links a room message the reader can read, that message
  * is read on display and shown in place of the copy.
  */
-export function ForwardedCopyCard(props: {
-  message: Pick<BaseMessage, 'forwarded' | 'references'>
-  formatTime: (date: Date) => string
-  isDarkMode?: boolean
-}) {
+export function ForwardedCopyCard(props: CardProps) {
   const link = forwardedCopyRoomLink(props.message)
   return link ? <VerifiedCopyCard key={`${link.roomJid}/${link.stanzaId}`} {...props} link={link} /> : <CopyCardView {...props} />
 }
 
 /** A copy of a room message the reader can read: the room's own message replaces the forwarder's claim. Keyed by the link in the caller so the lookup state belongs to one target. */
-function VerifiedCopyCard({ link, ...props }: Parameters<typeof ForwardedCopyCard>[0] & { link: NonNullable<ReturnType<typeof forwardedCopyRoomLink>> }) {
+function VerifiedCopyCard({ link, ...props }: CardProps & { link: NonNullable<ReturnType<typeof forwardedCopyRoomLink>> }) {
   const { readable } = useRoomMessagePreview(link)
   return <CopyCardView {...props} real={readable} />
 }
 
-function CopyCardView({ message, formatTime, isDarkMode, real }: {
-  message: Pick<BaseMessage, 'forwarded' | 'references'>
-  formatTime: (date: Date) => string
-  isDarkMode?: boolean
+function CopyCardView({ message, formatTime, isDarkMode, onMediaLoad, isOwnMessage, real }: CardProps & {
   /** The room's own message the copy links to, when the reader can read it. */
   real?: RoomMessage
 }) {
@@ -114,13 +117,20 @@ function CopyCardView({ message, formatTime, isDarkMode, real }: {
       </div>
       <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-sm">
         <span className="font-medium" style={{ color }}>{author}</span>
-        <span className="inline-flex items-center gap-1 text-xs text-fluux-muted">
-          <SourceIcon className="size-3 shrink-0" aria-hidden />
+        <span className="inline-flex items-baseline gap-1 text-xs text-fluux-muted">
+          <SourceIcon className="size-3 shrink-0 self-center" aria-hidden />
           {source}
         </span>
         {time && <span className="text-xs text-fluux-muted">· {time}</span>}
       </div>
       <div className="mt-1 text-sm text-fluux-text whitespace-pre-wrap break-words select-text cursor-text">{renderStyledMessage(copy.text)}</div>
+      {message.attachment && (
+        // The forwarded file is the forwarding message's own attachment; it is drawn in the quote it belongs to.
+        // Clicks on it belong to the preview (open, play), not to opening the original.
+        <div data-forwarded-attachment className="cursor-default" onClick={event => event.stopPropagation()}>
+          <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} isOwnMessage={isOwnMessage} />
+        </div>
+      )}
       {differs && (
         <div data-forward-differs className="mt-1.5 border-t border-fluux-hover pt-1.5 text-xs">
           <div className="font-medium text-fluux-yellow">{t('chat.forwardedCopyDiffers')}</div>
