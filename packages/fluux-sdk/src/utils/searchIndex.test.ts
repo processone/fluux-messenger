@@ -481,6 +481,36 @@ describe('searchIndex', () => {
       await indexMessage(createChatMessage('alice@example.com', { body: 'upgraded fine' }))
       expect(await search('upgraded')).toHaveLength(1)
     })
+
+    async function docIndexNames(): Promise<string[]> {
+      const db = await openDB('fluux-search-index:test@example.com')
+      try { return [...db.transaction('search-docs').store.indexNames].sort() } finally { db.close() }
+    }
+
+    it('drops the unused timestamp index from an existing docs store', async () => {
+      // Results are sorted in memory, so nothing reads a timestamp index.
+      await closeSearchIndex()
+      const legacy = await openDB('fluux-search-index:test@example.com', 3, {
+        upgrade(db) {
+          db.createObjectStore('search-tokens', { keyPath: 'token' })
+          const docs = db.createObjectStore('search-docs', { keyPath: 'indexId' })
+          docs.createIndex('timestamp', 'timestamp')
+          docs.createIndex('conversationId', 'conversationId')
+          docs.createIndex('identityKeys', 'identityKeys', { multiEntry: true })
+          db.createObjectStore('search-meta', { keyPath: 'key' })
+        },
+      })
+      legacy.close()
+      _resetDBForTesting()
+
+      await initSearchIndex('test@example.com')
+      expect(await docIndexNames()).toEqual(['conversationId', 'identityKeys'])
+    })
+
+    it('creates no timestamp index on a fresh docs store', async () => {
+      await initSearchIndex('test@example.com')
+      expect(await docIndexNames()).toEqual(['conversationId', 'identityKeys'])
+    })
   })
 
   // ===========================================================================

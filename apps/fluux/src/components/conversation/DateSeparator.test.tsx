@@ -22,29 +22,14 @@ describe('DateSeparator', () => {
     expect(screen.getByText('Formatted: 2024-01-15')).toBeInTheDocument()
   })
 
-  it('should flank the label with a rule on each side', () => {
-    const { container } = render(<DateSeparator date="2024-01-15" />)
-
-    const lines = container.querySelectorAll('.h-px.bg-fluux-hover')
-    expect(lines).toHaveLength(2)
-  })
-
-  it('should center the label between two symmetric rules', () => {
+  it('should draw the label as a centered pill with no rules', () => {
     const { container } = render(<DateSeparator date="2024-01-15" />)
 
     const wrapper = container.firstChild as HTMLElement
-    const [first, second, third] = Array.from(wrapper.children)
-    expect(first).toHaveClass('flex-1', 'h-px', 'bg-fluux-hover')
-    expect(second.tagName).toBe('SPAN')
-    expect(second).toHaveTextContent('Formatted: 2024-01-15')
-    expect(third).toHaveClass('flex-1', 'h-px', 'bg-fluux-hover')
-  })
-
-  it('should have correct styling classes', () => {
-    const { container } = render(<DateSeparator date="2024-01-15" />)
-
-    const wrapper = container.firstChild as HTMLElement
-    expect(wrapper).toHaveClass('flex', 'items-center', 'gap-3', 'pt-6', 'pb-2')
+    expect(wrapper).toHaveClass('flex', 'justify-center', 'pt-5', 'pb-0.5')
+    expect(wrapper.children).toHaveLength(1)
+    expect(container.querySelectorAll('.h-px')).toHaveLength(0)
+    expect(wrapper.firstElementChild).toHaveClass('rounded-full', 'border', 'bg-fluux-chat')
   })
 
   it('should style the date text correctly', () => {

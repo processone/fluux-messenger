@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act, fireEvent } from '@testing-library/react'
 import { useRef, useEffect } from 'react'
-import { FloatingDateHeader } from './FloatingDateHeader'
+import { FloatingDateHeader, FLOATING_DATE_LIVE_EDGE_PX } from './FloatingDateHeader'
 import { refreshCurrentDay } from '@/stores/currentDayStore'
 
 vi.mock('react-i18next', () => ({
@@ -13,7 +13,7 @@ vi.mock('react-i18next', () => ({
 }))
 
 // Test host: gives the component a real scroll element + a controllable getTopDate.
-function Host({ getTopDate, fadeDelayMs }: { getTopDate: () => string | null; fadeDelayMs?: number }) {
+function Host({ getTopDate, suppressed }: { getTopDate: () => string | null; suppressed?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     // expose the scroller so the test can dispatch scroll events
@@ -22,7 +22,7 @@ function Host({ getTopDate, fadeDelayMs }: { getTopDate: () => string | null; fa
   return (
     <div style={{ position: 'relative' }}>
       <div ref={ref} data-scroller style={{ overflow: 'auto' }} />
-      <FloatingDateHeader scrollerRef={ref} getTopDate={getTopDate} fadeDelayMs={fadeDelayMs} />
+      <FloatingDateHeader scrollerRef={ref} getTopDate={getTopDate} suppressed={suppressed} />
     </div>
   )
 }
@@ -32,8 +32,7 @@ describe('FloatingDateHeader', () => {
     vi.useFakeTimers()
     // Run the scroll-coalescing rAF synchronously. Whether fake timers also fake
     // rAF is environment-dependent under jsdom, which made the rAF-flush flaky;
-    // a synchronous frame keeps the scroll compute deterministic. The fade-out
-    // still rides the faked setTimeout below.
+    // a synchronous frame keeps the scroll compute deterministic.
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
       cb(0)
       return 0
@@ -47,12 +46,18 @@ describe('FloatingDateHeader', () => {
     refreshCurrentDay()
   })
 
-  function scroll(container: HTMLElement) {
+  /** jsdom has no layout: give the scroller the geometry of a list `fromBottom` px above its end. */
+  function scroll(container: HTMLElement, fromBottom = 500) {
     const scroller = container.querySelector('[data-scroller]') as HTMLElement
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 600 })
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 3000 })
+    Object.defineProperty(scroller, 'scrollTop', { configurable: true, value: 3000 - 600 - fromBottom })
     act(() => {
       fireEvent.scroll(scroller)
     })
   }
+
+  const overlayOf = (container: HTMLElement) => container.querySelector('[data-floating-date]') as HTMLElement
 
   it('shows the date pill on scroll with a non-null date', () => {
     vi.setSystemTime(new Date('2026-06-30T12:00:00'))
@@ -68,16 +73,42 @@ describe('FloatingDateHeader', () => {
     expect(container.querySelector('[data-floating-date-pill]')?.textContent).toContain('2026')
   })
 
-  it('fades out after the fade delay once scrolling stops', () => {
-    const { container } = render(<Host getTopDate={() => '2026-06-28'} fadeDelayMs={1200} />)
+  it('stays visible after scrolling stops while away from the newest messages', () => {
+    const { container } = render(<Host getTopDate={() => '2026-06-28'} />)
     scroll(container)
-    const overlay = container.querySelector('[data-floating-date]') as HTMLElement
-    expect(overlay.className).toContain('opacity-100')
-
     act(() => {
-      vi.advanceTimersByTime(1200)
+      vi.advanceTimersByTime(10_000)
     })
-    expect(overlay.className).toContain('opacity-0')
+    expect(overlayOf(container).className).toContain('opacity-100')
+    expect(overlayOf(container)).toHaveAttribute('aria-hidden', 'false')
+  })
+
+  it('hides at the newest messages', () => {
+    const { container } = render(<Host getTopDate={() => '2026-06-28'} />)
+    scroll(container)
+    expect(overlayOf(container).className).toContain('opacity-100')
+
+    scroll(container, 0)
+    expect(overlayOf(container).className).toContain('opacity-0')
+    expect(overlayOf(container)).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('treats a position just above the bottom as the newest messages', () => {
+    const { container } = render(<Host getTopDate={() => '2026-06-28'} />)
+    scroll(container, FLOATING_DATE_LIVE_EDGE_PX)
+    expect(overlayOf(container).className).toContain('opacity-0')
+
+    scroll(container, FLOATING_DATE_LIVE_EDGE_PX + 1)
+    expect(overlayOf(container).className).toContain('opacity-100')
+  })
+
+  it('yields to another overlay while suppressed', () => {
+    const { container, rerender } = render(<Host getTopDate={() => '2026-06-28'} suppressed />)
+    scroll(container)
+    expect(overlayOf(container).className).toContain('opacity-0')
+
+    rerender(<Host getTopDate={() => '2026-06-28'} suppressed={false} />)
+    expect(overlayOf(container).className).toContain('opacity-100')
   })
 
   it('stays hidden when getTopDate returns null (topmost is a separator)', () => {

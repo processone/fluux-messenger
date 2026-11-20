@@ -10,7 +10,7 @@ import { getBareJid } from '../core/jid'
 import { openIndexedDB } from './idbConnection'
 
 const DB_NAME = 'fluux-avatar-cache'
-const DB_VERSION = 4
+const DB_VERSION = 5
 const STORE_NAME = 'avatars'
 const HASH_STORE_NAME = 'avatar-hashes'
 const NO_AVATAR_STORE_NAME = 'no-avatar-jids'
@@ -161,7 +161,7 @@ function getDB(): Promise<IDBDatabase> {
   }
   const opening = openIndexedDB(DB_NAME, DB_VERSION, {
     onClosed: forget,
-    upgrade: (db) => {
+    upgrade: (db, _oldVersion, transaction) => {
       // Avatar blob store (v1)
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'hash' })
@@ -172,9 +172,12 @@ function getDB(): Promise<IDBDatabase> {
         hashStore.createIndex('type', 'type', { unique: false })
       }
       // No-avatar JIDs store (v3) - negative cache
+      // Read only by JID, so it carries no index.
       if (!db.objectStoreNames.contains(NO_AVATAR_STORE_NAME)) {
-        const noAvatarStore = db.createObjectStore(NO_AVATAR_STORE_NAME, { keyPath: 'jid' })
-        noAvatarStore.createIndex('type', 'type', { unique: false })
+        db.createObjectStore(NO_AVATAR_STORE_NAME, { keyPath: 'jid' })
+      } else {
+        const noAvatarStore = transaction.objectStore(NO_AVATAR_STORE_NAME)
+        if (noAvatarStore.indexNames.contains('type')) noAvatarStore.deleteIndex('type')
       }
       // PEP-forbidden domains store (v4) - domain-level negative cache
       if (!db.objectStoreNames.contains(PEP_FORBIDDEN_STORE_NAME)) {
