@@ -39,7 +39,8 @@ export function buildNotifyGroup({ room, t, setRoomNotifyLevel, onSaveFailed }: 
   // A saved level shows as a session choice until the bookmark stores it, so a bookmarked
   // room showing All messages or Off may be about to save it: Mentions only is saved then
   // too, and the bookmark ends on the latest choice.
-  const hasSavedChoice = savedNotifyLevel(room) !== 'mentions' || (!hasNoBookmark && mode !== 'mentions')
+  const storesMentions = savedNotifyLevel(room) === 'mentions'
+  const hasSavedChoice = !storesMentions || (!hasNoBookmark && mode !== 'mentions')
   // The menu closes on click, so a saved level the bookmark write refuses is
   // reported through onSaveFailed instead of being dropped unhandled.
   const setLevel = (level: NotifyLevel, persistent: boolean) => {
@@ -48,6 +49,9 @@ export function buildNotifyGroup({ room, t, setRoomNotifyLevel, onSaveFailed }: 
   const select = (next: NotifyMode) => {
     switch (next) {
       case 'mentions':
+        // When the bookmark already stores Mentions only, it applies for the session first,
+        // so it stays applied if the save is refused; a stored save clears that session choice.
+        if (hasSavedChoice && storesMentions) setLevel('mentions', false)
         setLevel('mentions', hasSavedChoice)
         break
       case 'all-session':

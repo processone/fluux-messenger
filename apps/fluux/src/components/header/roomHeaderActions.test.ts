@@ -94,7 +94,8 @@ describe('buildNotifyGroup', () => {
   it('clears a saved level when Mentions only or a session All messages replaces it', () => {
     const saved = group({ notifyOffPersistent: true })
     choose(saved.g, 'mentions')
-    expect(saved.setRoomNotifyLevel).toHaveBeenCalledWith('room@conf.example.com', 'mentions', true)
+    // Only the save: if it is refused, the room shows the stored Off again
+    expect(saved.setRoomNotifyLevel.mock.calls).toEqual([['room@conf.example.com', 'mentions', true]])
 
     const all = group({ notifyAllPersistent: true })
     choose(all.g, 'all-session')
@@ -106,14 +107,18 @@ describe('buildNotifyGroup', () => {
 
   // A saved All messages or Off shows as a session choice until the bookmark stores it.
   // Leaving it for Mentions only must save Mentions only, or the bookmark would end on
-  // the level the user moved away from.
+  // the level the user moved away from. Mentions only applies for the session first,
+  // so it stays applied when that save is refused.
   it.each([
     ['All messages', { notifyAll: true }],
     ['Off', { notifyAll: false, notifyOff: true }],
-  ] as const)('saves Mentions only when it replaces %s shown on a bookmarked room before the bookmark stores it', (_shown, partial) => {
+  ] as const)('applies and saves Mentions only when it replaces %s shown on a bookmarked room storing Mentions only', (_shown, partial) => {
     const mentions = group(partial)
     choose(mentions.g, 'mentions')
-    expect(mentions.setRoomNotifyLevel.mock.calls).toEqual([['room@conf.example.com', 'mentions', true]])
+    expect(mentions.setRoomNotifyLevel.mock.calls).toEqual([
+      ['room@conf.example.com', 'mentions', false],
+      ['room@conf.example.com', 'mentions', true],
+    ])
 
     const session = group(partial)
     choose(session.g, 'all-session')
