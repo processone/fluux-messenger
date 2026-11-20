@@ -11,6 +11,7 @@ import { formatDateHeader } from '@/utils/dateFormat'
 import { useDayChange } from '@/hooks/useDayChange'
 import { format } from 'date-fns'
 import { useRoomMessagePreview } from './RoomMessageLinkPreview'
+import { renderStyledMessage } from '@/utils/messageStyles'
 
 /**
  * One forwarded copy, drawn as the source card: who wrote it, where, when, and the copied text.
@@ -97,7 +98,11 @@ function CopyCardView({ message, formatTime, isDarkMode, real }: {
       role="link"
       tabIndex={0}
       title={t('chat.forwardedCopyOpen')}
-      onClick={() => { void open() }}
+      onClick={event => {
+        // A click on a link in the copy follows the link (the global handler), it does not open the original.
+        if ((event.target as Element).closest('a')) return
+        void open()
+      }}
       onKeyDown={event => { if (event.key === 'Enter' && event.target === event.currentTarget) { event.preventDefault(); void open() } }}
       className="mt-1.5 max-w-full cursor-pointer rounded-e border-s-[3px] bg-fluux-bg-secondary px-3 py-2 text-start shadow-sm transition-colors hover:bg-fluux-hover/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-fluux-brand"
       style={{ borderInlineStartColor: color }}
@@ -114,7 +119,7 @@ function CopyCardView({ message, formatTime, isDarkMode, real }: {
         </span>
         {time && <span className="text-xs text-fluux-muted">· {time}</span>}
       </div>
-      <div className="mt-1 text-sm text-fluux-text whitespace-pre-wrap break-words select-text cursor-text">{copy.text}</div>
+      <div className="mt-1 text-sm text-fluux-text whitespace-pre-wrap break-words select-text cursor-text">{renderStyledMessage(copy.text)}</div>
       {differs && (
         <div data-forward-differs className="mt-1.5 border-t border-fluux-hover pt-1.5 text-xs">
           <div className="font-medium text-fluux-yellow">{t('chat.forwardedCopyDiffers')}</div>
