@@ -1075,6 +1075,17 @@ describe('ChatView', () => {
       expect(onShowProfile).toHaveBeenCalledWith('alice@example.com')
       expect(useContactSecurityRequestStore.getState().jid).toBe('alice@example.com')
     })
+
+    it('opens the contact\'s Security details from the header when every key waits for a decision', () => {
+      mockEncryptionState = { kind: 'unsupported', needsDecision: true, waiting: 1 }
+      const onShowProfile = vi.fn()
+      render(<ChatView onShowProfile={onShowProfile} />)
+
+      fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'contacts.encryption.needsDecisionTitle' }))
+
+      expect(onShowProfile).toHaveBeenCalledWith('alice@example.com')
+      expect(useContactSecurityRequestStore.getState().jid).toBe('alice@example.com')
+    })
   })
 
   describe('Link preview suppression in encrypted conversations', () => {

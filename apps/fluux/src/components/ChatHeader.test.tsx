@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { ChatHeader } from './ChatHeader'
 import type { Contact } from '@fluux/sdk'
+import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
 // Mock i18next
 vi.mock('react-i18next', () => ({
@@ -292,6 +293,44 @@ describe('ChatHeader', () => {
       fireEvent.click(screen.getByText('chat.verifyPeer.menuViewVerified'))
 
       expect(onEncryptionClick).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('Keys that wait', () => {
+    const renderHeader = (encryptionState: ConversationEncryptionState, onReviewKeysClick?: () => void) => {
+      const contact = setupContact()
+      return render(
+        <ChatHeader
+          name="Alice Smith"
+          type="chat"
+          contact={contact}
+          jid={contact.jid}
+          encryptionState={encryptionState}
+          onReviewKeysClick={onReviewKeysClick}
+        />
+      )
+    }
+
+    it('shows a waiting shield that opens the keys when every key waits for a decision', () => {
+      const onReviewKeysClick = vi.fn()
+      renderHeader({ kind: 'unsupported', needsDecision: true, waiting: 1 }, onReviewKeysClick)
+
+      fireEvent.click(screen.getByRole('button', { name: 'contacts.encryption.needsDecisionTitle' }))
+
+      expect(onReviewKeysClick).toHaveBeenCalledTimes(1)
+    })
+
+    it('names the wait for earlier trust decisions when every key waits for trust data', () => {
+      renderHeader({ kind: 'unsupported', needsDecision: true, waiting: 1, pending: 1 }, vi.fn())
+
+      expect(screen.getByRole('button', { name: 'contacts.encryption.trustPendingTitle' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'contacts.encryption.needsDecisionTitle' })).not.toBeInTheDocument()
+    })
+
+    it('shows no encryption icon for a contact without keys', () => {
+      const { container } = renderHeader({ kind: 'unsupported' }, vi.fn())
+
+      expect(container.querySelector('svg[class*="lucide-shield"], svg[class*="lucide-lock"]')).toBeNull()
     })
   })
 
