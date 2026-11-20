@@ -325,13 +325,14 @@ describe('clearing another account', () => {
   })
 
   describe('selectSavedInConversation', () => {
-    it('keeps only the entries of one conversation, newest saved first, and nothing for an unknown one', () => {
+    it('keeps only the entries of one conversation, in the order given, and nothing for an unknown one', () => {
       s().save(entry('a', { savedAt: 1 }))
       s().save(entry('b', { savedAt: 3 }))
       s().save(entry('c', { savedAt: 2, conversationJid: 'emma@example.org', type: 'chat', from: 'emma@example.org' }))
-      expect(selectSavedInConversation(s().entries, 'team@conference.example').map((e) => e.id)).toEqual(['b', 'a'])
-      expect(selectSavedInConversation(s().entries, 'emma@example.org').map((e) => e.id)).toEqual(['c'])
-      expect(selectSavedInConversation(s().entries, 'nobody@example.org')).toEqual([])
+      const listed = Object.values(s().entries).sort((a, b) => b.savedAt - a.savedAt)
+      expect(selectSavedInConversation(listed, 'team@conference.example').map((e) => e.id)).toEqual(['b', 'a'])
+      expect(selectSavedInConversation(listed, 'emma@example.org').map((e) => e.id)).toEqual(['c'])
+      expect(selectSavedInConversation(listed, 'nobody@example.org')).toEqual([])
     })
   })
 })

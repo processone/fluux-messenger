@@ -180,7 +180,7 @@ export function ChatHeader({
   }
 
   // When the kebab holds an always-shown entry (profile/archive on a 1:1), it must
-  // stay visible at every width. When its only entry is the tier-collapsible search
+  // stay visible at every width. When its only entries are the tier-collapsible saved/search
   // (e.g. a group chat), the trigger should hide once search goes inline — otherwise
   // a wide header shows a kebab whose single row is container-query-hidden, i.e. an
   // empty menu. kebabClass('search') matches search's reveal threshold.

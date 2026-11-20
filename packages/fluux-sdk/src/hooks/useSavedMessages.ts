@@ -68,5 +68,5 @@ export function useSavedMessages() {
  * @category Hooks
  */
 export function useSavedCountInConversation(conversationJid: string | undefined): number {
-  return useSavedStore((s) => conversationJid ? selectSavedInConversation(s.entries, conversationJid).length : 0)
+  return useSavedStore((s) => conversationJid ? selectSavedInConversation(Object.values(s.entries), conversationJid).length : 0)
 }
