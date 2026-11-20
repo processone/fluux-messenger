@@ -26,7 +26,7 @@
     cursor: pointer;
   }
 
-  /* Headings (view titles, headers, section labels) use the Inter Tight display
+  /* Headings (view titles, headers, section labels) use the Inter Display
      face. Preflight resets headings to inherit, so this sets the default; an
      explicit font-* utility on a heading still wins (utilities layer > base). */
   h1, h2, h3, h4, h5, h6 {
@@ -67,32 +67,34 @@
   src: url('/fonts/Inter-Bold.woff2') format('woff2');
 }
 
-/* Inter Tight — display font, self-hosted */
+/* Inter Display — display font, self-hosted. The large-size cut of Inter from the
+   same release, so it covers every script Inter does: a heading never switches
+   face mid-word (fontCoverage.test.ts guards this). */
 @font-face {
-  font-family: 'Inter Tight';
+  font-family: 'Inter Display';
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('/fonts/InterTight-Medium.woff2') format('woff2');
+  src: url('/fonts/InterDisplay-Medium.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Inter Tight';
+  font-family: 'Inter Display';
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('/fonts/InterTight-SemiBold.woff2') format('woff2');
+  src: url('/fonts/InterDisplay-SemiBold.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Inter Tight';
+  font-family: 'Inter Display';
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('/fonts/InterTight-Bold.woff2') format('woff2');
+  src: url('/fonts/InterDisplay-Bold.woff2') format('woff2');
 }
 
-/* JetBrains Mono — code face, self-hosted (SIL OFL 1.1, see fonts/OFL.txt).
+/* JetBrains Mono — code face, self-hosted (SIL OFL 1.1, see fonts/JetBrainsMono-OFL.txt).
    First entry in --fluux-font-mono; the stack still ends in ui-monospace so a
    theme that overrides the family keeps a working fallback. */
 @font-face {
@@ -232,7 +234,7 @@
 
   /* Typography primitives */
   --fluux-font-ui: 'Inter', system-ui, sans-serif;
-  --fluux-font-display: 'Inter Tight', 'Inter', system-ui, sans-serif;
+  --fluux-font-display: 'Inter Display', 'Inter', system-ui, sans-serif;
   --fluux-font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Radius */

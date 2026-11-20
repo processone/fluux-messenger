@@ -67,11 +67,15 @@ look at it rather than assuming it is a known one.
 Three faces are self-hosted from `apps/fluux/public/fonts/`, all referenced by `@font-face`
 blocks near the top of `src/index.css` and copied to `dist/fonts/` by Vite:
 
-- **Inter** (400/500/600) — `--fluux-font-ui`
-- **Inter Tight** (500/600/700) — `--fluux-font-display`
+- **Inter** (400/500/600/700) — `--fluux-font-ui`, from the Inter 4.1 release, SIL OFL 1.1
+  (`public/fonts/Inter-OFL.txt`).
+- **Inter Display** (500/600/700) — `--fluux-font-display`, the large-size cut from the same
+  Inter 4.1 release, so it has Inter's full character set. It replaced Inter Tight, whose
+  files stopped at Latin-1: headings in Polish, Czech, Romanian… switched face mid-word and
+  Cyrillic/Greek headings fell back to Inter entirely. `fontCoverage.test.ts` guards this.
 - **JetBrains Mono** (400/500/700) — `--fluux-font-mono`, SIL OFL 1.1, added during the first
   design-sync run from the JetBrains v2.304 release. Licence text sits beside the woff2 files
-  at `public/fonts/OFL.txt`. `"Fira Code"` was dropped from the stack at the same time: it was
+  at `public/fonts/JetBrainsMono-OFL.txt`. `"Fira Code"` was dropped from the stack at the same time: it was
   only ever a second guess at a locally-installed face, and once JetBrains Mono ships as a
   webfont the family always resolves, so nothing could reach it.
 
