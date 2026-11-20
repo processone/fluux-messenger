@@ -42,12 +42,12 @@ test('the source label shares the name and time baseline, in a direct and a room
     await receive(page, id, { forwarded })
     const header = copy(page, id).locator('.items-baseline').first()
     await expect(header).toBeVisible()
-    // The text baseline of each part: the bottom of a zero-height inline marker placed at the text's baseline.
+    // The text baseline of each part: the bottom of a zero-height inline marker placed right after the part's own text.
     const baselines = await header.evaluate(row => [...row.children].map(part => {
+      const text = document.createTreeWalker(part, NodeFilter.SHOW_TEXT, { acceptNode: n => n.textContent?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP }).nextNode()!
       const marker = document.createElement('span')
       marker.style.cssText = 'display:inline-block;width:0;height:0'
-      const textHost = [...part.querySelectorAll('*')].find(el => !el.children.length && el.textContent) ?? part
-      textHost.appendChild(marker)
+      text.parentNode!.insertBefore(marker, text.nextSibling)
       const y = marker.getBoundingClientRect().bottom
       marker.remove()
       return y
