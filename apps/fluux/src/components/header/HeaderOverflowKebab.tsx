@@ -153,11 +153,12 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
           <div role="menu" className="py-1">
             {entries.map((e) =>
               e.kind === 'action' ? (
-                <ItemRow
-                  key={e.key}
-                  item={{ key: e.key, label: e.label, icon: e.icon, danger: e.danger, disabled: e.disabled, onSelect: e.onSelect }}
-                  onPick={() => { close(); e.onSelect() }}
-                />
+                <div key={e.key} className={e.separatorBefore ? 'mt-1 border-t border-fluux-border pt-1' : undefined}>
+                  <ItemRow
+                    item={{ key: e.key, label: e.label, icon: e.icon, danger: e.danger, disabled: e.disabled, onSelect: e.onSelect }}
+                    onPick={() => { close(); e.onSelect() }}
+                  />
+                </div>
               ) : (
                 <button
                   key={e.key}

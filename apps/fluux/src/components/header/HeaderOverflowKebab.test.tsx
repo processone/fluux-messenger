@@ -96,6 +96,18 @@ describe('HeaderOverflowKebab', () => {
     expect(screen.queryByText('Mentions only')).not.toBeInTheDocument()
   })
 
+  it.each([['hover', true], ['touch', false]])('%s: draws a divider above a row marked separatorBefore', (_name, hover) => {
+    mockHasHover.mockReturnValue(hover)
+    const entries: OverflowEntry[] = [
+      { kind: 'action', key: 'a', label: 'First', icon: Search, onSelect: vi.fn() },
+      { kind: 'action', key: 'b', label: 'Second', icon: UserPlus, onSelect: vi.fn(), separatorBefore: true },
+    ]
+    render(<HeaderOverflowKebab ariaLabel="More" entries={entries} />)
+    fireEvent.click(screen.getByLabelText('More'))
+    expect(screen.getByText('Second').closest('.border-t')).not.toBeNull()
+    expect(screen.getByText('First').closest('.border-t')).toBeNull()
+  })
+
   it('touch: back returns to root without firing actions', () => {
     mockHasHover.mockReturnValue(false)
     render(<HeaderOverflowKebab ariaLabel="More" entries={makeEntries()} />)

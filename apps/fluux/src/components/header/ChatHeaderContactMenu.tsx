@@ -28,7 +28,7 @@ export function ChatHeaderContactMenu({ menu, entries, selection }: ChatHeaderCo
       aria-label={t('contacts.actionsMenu')}
       tabIndex={-1}
       onClick={(e) => e.stopPropagation()}
-      // Pressing a button must not clear the page selection that Copy reads (WebKit drops it otherwise).
+      // Pressing a row must not move focus off the menu or start a text selection on the page.
       onMouseDown={(e) => e.preventDefault()}
       // The system menu stays reachable with Shift.
       onContextMenu={(e) => {
