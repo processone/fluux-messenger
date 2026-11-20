@@ -15,7 +15,7 @@ import { Tooltip } from './Tooltip'
 import { ConnectionStepSlot } from './ConnectionStep'
 import { UpdateStatus } from './UpdateStatus'
 import { Archive, ArchiveRestore, ArrowLeft, Clock, Hash, Loader2, Lock, Search, Shield, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, User } from 'lucide-react'
-import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { waitsOnlyForTrustData, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
 import { inlineClass, kebabClass } from './header/headerOverflow'
@@ -33,6 +33,8 @@ export interface ChatHeaderProps {
   onEncryptionClick?: () => void
   onDisableEncryptionClick?: () => void
   onEnableEncryptionClick?: () => void
+  /** Open the contact's Security details, where keys that wait for a decision are trusted or verified. */
+  onReviewKeysClick?: () => void
   /** Open the contact profile / management screen. 1:1 chats only. */
   onShowProfile?: () => void
   /** Whether the conversation is archived — selects the menu's Archive vs Unarchive item. 1:1 chats only. */
@@ -54,6 +56,7 @@ export function ChatHeader({
   onEncryptionClick,
   onDisableEncryptionClick,
   onEnableEncryptionClick,
+  onReviewKeysClick,
   onShowProfile,
   isArchived,
   onArchive,
@@ -151,14 +154,17 @@ export function ChatHeader({
       {/* Trailing action cluster — grouped tightly on mobile (gap-1) so the
           shield reads as part of the menu; desktop keeps the header's md gap. */}
       <div className="flex items-center gap-1 md:gap-3">
-        {/* Encryption status icon — only for 1:1 chats with active E2EE */}
-        {encryptionState && encryptionState.kind !== 'disabled' && encryptionState.kind !== 'unsupported' && (
+        {/* Encryption status icon — only for 1:1 chats with E2EE on. A contact
+            without keys shows none; one whose every key waits shows a warning. */}
+        {encryptionState && encryptionState.kind !== 'disabled' &&
+          (encryptionState.kind !== 'unsupported' || encryptionState.needsDecision === true) && (
           <EncryptionIcon
             state={encryptionState}
             peerName={name}
             onVerifyClick={onEncryptionClick}
             onDisableClick={onDisableEncryptionClick}
             onEnableClick={onEnableEncryptionClick}
+            onReviewKeysClick={onReviewKeysClick}
           />
         )}
 
@@ -222,12 +228,14 @@ function EncryptionIcon({
   onVerifyClick,
   onDisableClick,
   onEnableClick,
+  onReviewKeysClick,
 }: {
   state: ConversationEncryptionState
   peerName: string
   onVerifyClick?: () => void
   onDisableClick?: () => void
   onEnableClick?: () => void
+  onReviewKeysClick?: () => void
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -289,6 +297,41 @@ function EncryptionIcon({
 
   if (state.kind === 'keyLocked') {
     return <KeyLockedIcon fingerprint={state.fingerprint} />
+  }
+
+  // Every key of the contact waits for the person's decision, or for trust
+  // data from an earlier version or another device. Nothing can be sent, so
+  // the header must not look like a contact without keys.
+  if (state.kind === 'unsupported') {
+    const pending = waitsOnlyForTrustData(state)
+    const label = t(pending ? 'contacts.encryption.trustPendingTitle' : 'contacts.encryption.needsDecisionTitle')
+    const tooltip = (
+      <div>
+        <div>{label}</div>
+        <div className="text-xs mt-0.5 opacity-75">
+          {t(pending ? 'contacts.encryption.trustPendingDescription' : 'contacts.encryption.needsDecisionDescription')}
+        </div>
+      </div>
+    )
+    const colorClass = trustVisual('keyChanged').colorClass
+    return (
+      <Tooltip content={tooltip} position="bottom">
+        {onReviewKeysClick ? (
+          <button
+            type="button"
+            onClick={onReviewKeysClick}
+            className={`${btnClass} ${colorClass} cursor-pointer`}
+            aria-label={label}
+          >
+            <ShieldAlert className="size-4" />
+          </button>
+        ) : (
+          <div className={`${btnClass} ${colorClass}`} role="status" aria-label={label}>
+            <ShieldAlert className="size-4" />
+          </div>
+        )}
+      </Tooltip>
+    )
   }
 
   if (state.kind === 'rejected') {
@@ -382,8 +425,8 @@ function EncryptionIcon({
   // A contact met recently and not yet verified renders the same neutral gray
   // Shield as any other unverified contact — homogeneous with the Settings
   // → Encryption screen and the Security tab. The flag only picks a gentler
-  // tooltip below. The yellow ShieldAlert is reserved exclusively
-  // for the genuine `blocked` (key-changed) alert, so the two states do not
+  // tooltip below. The yellow ShieldAlert is reserved for keys that wait for
+  // a decision (and the retired `blocked` alert), so the two states do not
   // share an alarming icon.
   const Icon = verified ? ShieldCheck : Shield
   const colorClass = verified

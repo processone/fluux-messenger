@@ -494,6 +494,11 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           onEncryptionClick={canDecideTrust ? () => void handleOpenVerify() : undefined}
           onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
           onEnableEncryptionClick={encryptionState.kind === 'plaintextForced' ? handleEnableEncryption : undefined}
+          onReviewKeysClick={
+            activeConversation.type === 'chat' && onShowProfile
+              ? () => handleReviewKeys(activeConversation.id)
+              : undefined
+          }
           onShowProfile={
             activeConversation.type === 'chat' && onShowProfile
               ? () => onShowProfile(activeConversation.id)
