@@ -1805,7 +1805,11 @@
         "locked": "Saved messages are locked",
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
-        "unverified": "Not verified: not sealed with your key"
+        "unverified": "Not verified: not sealed with your key",
+        "headerButton": "Saglabāts šajā sarunā ({{count}}). Tos redzat tikai jūs.",
+        "scopeLabel": "Sarunā {{name}}",
+        "clearScope": "Rādīt visas saglabātās ziņas",
+        "onlyYou": "Saglabātās ziņas redzat tikai jūs"
     },
     "errorBoundary": {
         "title": "Kaut kas nogāja greizi",

@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { NotifyLevel, Room } from '@fluux/sdk'
-import { getUniqueOccupantCount } from '@fluux/sdk'
+import { getUniqueOccupantCount, useSavedCountInConversation } from '@fluux/sdk'
 import { RoomAvatar } from './RoomAvatar'
 import { Tooltip } from './Tooltip'
 import { ConnectionStepSlot } from './ConnectionStep'
@@ -36,6 +36,7 @@ import {
   Settings,
   UserPlus,
   Search,
+  Bookmark,
 } from 'lucide-react'
 
 export interface RoomHeaderProps {
@@ -52,6 +53,8 @@ export interface RoomHeaderProps {
   setSubject: (roomJid: string, subject: string) => Promise<void>
   destroyRoom: (roomJid: string, reason?: string) => Promise<void>
   onSearchInConversation?: () => void
+  /** Open the Saved tab narrowed to this room. The button shows only where something is saved. */
+  onShowSavedInConversation?: () => void
   onBulkModeration?: () => void
 }
 
@@ -68,6 +71,7 @@ export function RoomHeader({
   setSubject,
   destroyRoom,
   onSearchInConversation,
+  onShowSavedInConversation,
   onBulkModeration,
 }: RoomHeaderProps) {
   const { t } = useTranslation()
@@ -77,6 +81,9 @@ export function RoomHeader({
   const [showInfoModal, setShowInfoModal] = useState(false)
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const { dragRegionProps } = useWindowDrag()
+  const savedCount = useSavedCountInConversation(room.jid)
+  const savedLabel = t('saved.headerButton', { count: savedCount })
+  const showSaved = !!onShowSavedInConversation && savedCount > 0
   const configModalOpen = useRoomUiStore((s) => s.configModalOpen)
   const inviteModalOpen = useRoomUiStore((s) => s.inviteModalOpen)
   const openConfig = useRoomUiStore((s) => s.openConfig)
@@ -196,6 +203,24 @@ export function RoomHeader({
           </div>
         )}
 
+        {/* Saved in this conversation — inline copy (search tier) */}
+        {showSaved && (
+          <div className={inlineClass('search')}>
+            <Tooltip content={savedLabel} position="bottom">
+              <button
+                type="button"
+                onClick={onShowSavedInConversation}
+                className="px-1.5 py-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target inline-flex items-center gap-1"
+                aria-label={savedLabel}
+                data-testid="header-saved"
+              >
+                <Bookmark className="size-4" />
+                <span className="text-xs tabular-nums">{savedCount}</span>
+              </button>
+            </Tooltip>
+          </div>
+        )}
+
         {/* Search — inline copy (search tier) */}
         {onSearchInConversation && (
           <div className={inlineClass('search')}>
@@ -219,6 +244,9 @@ export function RoomHeader({
           <HeaderOverflowKebab
             ariaLabel={t('rooms.roomActions', 'Room actions')}
             entries={[
+              ...(showSaved
+                ? [{ kind: 'action', key: 'saved', label: savedLabel, icon: Bookmark, onSelect: onShowSavedInConversation, kebabClassName: kebabClass('search') } as OverflowEntry]
+                : []),
               ...(onSearchInConversation
                 ? [{ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') } as OverflowEntry]
                 : []),

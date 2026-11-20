@@ -1804,7 +1804,11 @@
         "locked": "Saved messages are locked",
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
-        "unverified": "Not verified: not sealed with your key"
+        "unverified": "Not verified: not sealed with your key",
+        "headerButton": "Salvestatud selles vestluses ({{count}}). Näed neid ainult sina.",
+        "scopeLabel": "Vestluses {{name}}",
+        "clearScope": "Näita kõiki salvestatud sõnumeid",
+        "onlyYou": "Salvestatud sõnumeid näed ainult sina"
     },
     "errorBoundary": {
         "title": "Midagi läks valesti",

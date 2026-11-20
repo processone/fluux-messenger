@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react'
 import { ChatHeader } from './ChatHeader'
-import type { Contact } from '@fluux/sdk'
+import { savedStore, type Contact } from '@fluux/sdk'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
 // Mock i18next
@@ -698,6 +698,38 @@ describe('ChatHeader', () => {
         expect(rows()[0]).toBe('sidebar.viewProfile')
         expect(window.getSelection()!.toString()).toBe('')
       })
+    })
+  })
+
+  describe('Saved in this conversation', () => {
+    const saveFrom = (jid: string) => savedStore.getState().save({
+      id: 'sv1', conversationJid: jid, type: 'chat', from: jid, text: 'kept', savedAt: 1000, stanzaId: 's1',
+    })
+    const renderHeader = (onShowSaved = vi.fn()) => {
+      render(<ChatHeader name="Alice" type="chat" jid="alice@example.com" onShowSavedInConversation={onShowSaved} />)
+      return onShowSaved
+    }
+    beforeEach(() => { savedStore.getState().reset() })
+
+    it('shows no Saved button where nothing is saved', () => {
+      renderHeader()
+      expect(screen.queryByTestId('header-saved')).toBeNull()
+    })
+
+    it('shows the count where something is saved, and opens the Saved tab', () => {
+      saveFrom('alice@example.com')
+      const onShowSaved = renderHeader()
+      const button = screen.getByTestId('header-saved')
+      expect(button).toHaveTextContent('1')
+      expect(button).toHaveAccessibleName('saved.headerButton')
+      fireEvent.click(button)
+      expect(onShowSaved).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores messages saved from another conversation', () => {
+      saveFrom('bob@example.com')
+      renderHeader()
+      expect(screen.queryByTestId('header-saved')).toBeNull()
     })
   })
 })

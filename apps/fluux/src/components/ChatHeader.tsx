@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ContactIdentity } from '@fluux/sdk'
+import { useSavedCountInConversation } from '@fluux/sdk'
 import { useRosterStore, useContactTime, useLastActivity } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 import { useWindowDrag, useAnchoredMenu } from '@/hooks'
@@ -20,7 +21,7 @@ import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
 import { ConnectionStepSlot } from './ConnectionStep'
 import { UpdateStatus } from './UpdateStatus'
-import { Archive, ArchiveRestore, ArrowLeft, Ban, Clock, Copy, Hash, Loader2, Lock, Pencil, Search, Shield, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, Trash2, User, UserPlus } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, Ban, Clock, Copy, Hash, Bookmark, Loader2, Lock, Pencil, Search, Shield, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, Trash2, User, UserPlus } from 'lucide-react'
 import { waitsOnlyForTrustData, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
@@ -35,6 +36,8 @@ export interface ChatHeaderProps {
   jid: string
   onBack?: () => void
   onSearchInConversation?: () => void
+  /** Open the Saved tab narrowed to this conversation. The button shows only where something is saved. */
+  onShowSavedInConversation?: () => void
   encryptionState?: ConversationEncryptionState
   onEncryptionClick?: () => void
   onDisableEncryptionClick?: () => void
@@ -70,6 +73,7 @@ export function ChatHeader({
   jid,
   onBack,
   onSearchInConversation,
+  onShowSavedInConversation,
   encryptionState,
   onEncryptionClick,
   onDisableEncryptionClick,
@@ -100,9 +104,16 @@ export function ChatHeader({
   // Contact actions that ask first or open a dialog. Shared by the ⋯ menu and the right-click menu.
   const [pending, setPending] = useState<'block' | 'remove' | 'rename' | null>(null)
 
+  const savedCount = useSavedCountInConversation(jid)
+  const savedLabel = t('saved.headerButton', { count: savedCount })
+  const showSaved = !!onShowSavedInConversation && savedCount > 0
+
   // 1:1 entries, one list for the ⋯ menu and the right-click menu: search (collapses on narrow
   // widths in the ⋯ menu) and the contact actions. Group chats expose none of these.
   const overflowEntries: OverflowEntry[] = []
+  if (showSaved && onShowSavedInConversation) {
+    overflowEntries.push({ kind: 'action', key: 'saved', label: savedLabel, icon: Bookmark, onSelect: onShowSavedInConversation, kebabClassName: kebabClass('search') })
+  }
   if (!isGroupChat) {
     if (onShowProfile) {
       overflowEntries.push({ kind: 'action', key: 'profile', label: t('sidebar.viewProfile'), icon: User, onSelect: onShowProfile })
@@ -250,6 +261,23 @@ export function ChatHeader({
             onEnableClick={onEnableEncryptionClick}
             onReviewKeysClick={onReviewKeysClick}
           />
+        )}
+
+        {/* Saved in this conversation — inline copy (same tier as search) */}
+        {showSaved && (
+          <div className={inlineClass('search')}>
+            <button
+              type="button"
+              onClick={onShowSavedInConversation}
+              className="px-1.5 py-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target inline-flex items-center gap-1"
+              aria-label={savedLabel}
+              title={savedLabel}
+              data-testid="header-saved"
+            >
+              <Bookmark className="size-4" />
+              <span className="text-xs tabular-nums">{savedCount}</span>
+            </button>
+          </div>
         )}
 
         {/* Search in conversation — inline copy (collapses on narrow widths) */}

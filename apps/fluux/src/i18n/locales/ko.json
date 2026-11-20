@@ -1802,7 +1802,11 @@
         "locked": "Saved messages are locked",
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
-        "unverified": "Not verified: not sealed with your key"
+        "unverified": "Not verified: not sealed with your key",
+        "headerButton": "이 대화에 저장됨 ({{count}}). 나만 볼 수 있습니다.",
+        "scopeLabel": "{{name}}에서",
+        "clearScope": "저장한 메시지 모두 보기",
+        "onlyYou": "저장한 메시지는 나만 볼 수 있습니다"
     },
     "errorBoundary": {
         "title": "문제가 발생했습니다",

@@ -113,6 +113,13 @@ function writeQueue(state: Pick<SavedState, 'pending' | 'entries'>): void {
 
 const initial = { entries: {}, pending: {}, remote: {}, removed: {}, revisions: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false, copyVersion: 0, generation: 0, sealState: 'unavailable' as const, lockedIds: {}, migrating: {} }
 
+/** The entries saved from one conversation (a contact's JID or a room's), newest saved first. Locked items hide their conversation, so they are never counted here. */
+export function selectSavedInConversation(entries: Record<string, SavedMessage>, conversationJid: string): SavedMessage[] {
+  return Object.values(entries)
+    .filter((entry) => entry.conversationJid === conversationJid)
+    .sort((a, b) => b.savedAt - a.savedAt || a.id.localeCompare(b.id))
+}
+
 /** Is this message already saved (by any of its identities)? */
 export function findSavedEntry(entries: Record<string, SavedMessage>, probe: SavedIdentity): SavedMessage | undefined {
   return Object.values(entries).find((entry) => sameSavedMessage(entry, probe))

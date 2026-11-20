@@ -50,6 +50,18 @@ test('save a room message and a chat message, open them from Saved, remove them'
   row = await openMore(page, 'saved-chat-1')
   await row.getByRole('button', { name: 'Save message', exact: true }).click()
 
+  // The chat header shows only this conversation's count; it opens the Saved tab narrowed to it.
+  await expect(page.getByTestId('header-saved')).toHaveText('1')
+  await page.getByTestId('header-saved').click()
+  await expect(page).toHaveURL(/\/saved/)
+  await expect(page.getByTestId('saved-row')).toHaveCount(1)
+  await expect(page.getByTestId('saved-row')).toContainText('The door code is on the board')
+  await expect(page.getByTestId('saved-scope')).toBeVisible()
+  await expect(page.getByTestId('saved-private-note')).toHaveText('Only you see your saved messages')
+  await expect(page.getByTestId('saved-conversation')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Show all saved messages' }).click()
+  await expect(page.getByTestId('saved-scope')).toHaveCount(0)
+
   // Both appear in Saved, newest saved first.
   await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
   await expect(page).toHaveURL(/\/saved/)
@@ -62,6 +74,7 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await rows.nth(1).click()
   await expect(page).toHaveURL(new RegExp(`/rooms/${encodeURIComponent(ROOM)}$`))
   await expect(page.locator(`[data-message-id="${roomId}"].message-highlight`)).toBeInViewport()
+  await expect(page.getByTestId('header-saved')).toHaveText('1')
 
   // Open the chat entry.
   await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()

@@ -30,6 +30,7 @@ vi.mock('react-i18next', () => ({
 }))
 
 import { SavedView } from './SavedView'
+import { useSavedScopeStore } from '@/stores/savedScopeStore'
 
 const entry = (id: string, extra: Partial<SavedMessage> = {}): SavedMessage => ({
   id, conversationJid: 'juliet@capulet.example', type: 'chat', from: 'juliet@capulet.example/balcony',
@@ -40,6 +41,7 @@ describe('SavedView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     savedStore.getState().reset()
+    useSavedScopeStore.getState().setScope(null)
   })
 
   it('shows the empty state when nothing is saved', () => {
@@ -137,5 +139,43 @@ describe('SavedView', () => {
     const rows = screen.getAllByTestId('saved-row')
     expect(within(rows[0]).getByTestId('saved-unverified')).toBeInTheDocument()
     expect(within(rows[1]).queryByTestId('saved-unverified')).toBeNull()
+  })
+
+  describe('narrowed to one conversation', () => {
+    const room = (id: string) => entry(id, { conversationJid: 'team@conference.example', type: 'groupchat', from: 'team@conference.example/Alice' })
+
+    it('lists only that conversation with its chip, the private note and no conversation line, and clears back to all', () => {
+      savedStore.setState({ entries: { a: room('a'), b: entry('b'), c: room('c') } })
+      useSavedScopeStore.getState().setScope('team@conference.example')
+      render(<SavedView problems={{}} onOpen={open} />)
+      const rows = screen.getAllByTestId('saved-row')
+      expect(rows.map((r) => r.getAttribute('data-saved-id')).sort()).toEqual(['a', 'c'])
+      expect(screen.getByTestId('saved-scope')).toHaveTextContent('saved.scopeLabel')
+      expect(screen.getByTestId('saved-private-note')).toHaveTextContent('saved.onlyYou')
+      expect(screen.queryByTestId('saved-conversation')).toBeNull()
+
+      fireEvent.click(screen.getByLabelText('saved.clearScope'))
+      expect(screen.getAllByTestId('saved-row')).toHaveLength(3)
+      expect(screen.queryByTestId('saved-scope')).toBeNull()
+      expect(screen.queryByTestId('saved-private-note')).toBeNull()
+      expect(screen.getAllByTestId('saved-conversation')).toHaveLength(2)
+    })
+
+    it('opens a row of the narrowed list', () => {
+      savedStore.setState({ entries: { a: room('a'), b: entry('b') } })
+      useSavedScopeStore.getState().setScope('team@conference.example')
+      render(<SavedView problems={{}} onOpen={open} />)
+      fireEvent.click(screen.getByTestId('saved-row'))
+      expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }))
+    })
+
+    it('falls back to the full list once the conversation has nothing saved', async () => {
+      savedStore.setState({ entries: { b: entry('b') } })
+      useSavedScopeStore.getState().setScope('team@conference.example')
+      render(<SavedView problems={{}} onOpen={open} />)
+      expect(screen.getAllByTestId('saved-row')).toHaveLength(1)
+      expect(screen.queryByTestId('saved-scope')).toBeNull()
+      await waitFor(() => expect(useSavedScopeStore.getState().conversationJid).toBeNull())
+    })
   })
 })

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Bookmark, Lock, Trash2, RefreshCw } from 'lucide-react'
+import { Bookmark, Lock, Trash2, RefreshCw, X } from 'lucide-react'
 import {
   connectionStore, chatStore, findLatestCopy, getBareJid, getLocalPart, getResource, useSavedMessages,
   type Message, type RoomMessage, type SavedMessage,
@@ -10,6 +10,7 @@ import { Avatar } from '../Avatar'
 import { RoomAvatar } from '../RoomAvatar'
 import { ListEmpty } from '../ui/ListEmpty'
 import { useDayChange } from '@/hooks/useDayChange'
+import { useSavedScopeStore } from '@/stores/savedScopeStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { formatConversationTime } from '@/utils/dateFormat'
 import type { SavedOpenProblem } from '@/hooks/useSavedOpener'
@@ -40,8 +41,22 @@ function useRowText(entry: SavedMessage): string {
   return t('chat.attachment')
 }
 
-function SavedRow({ entry, problem, onOpen, onRemove }: {
+/** The name of an entry's conversation: the room's, the contact's, else the conversation's own, else its JID's local part. */
+function useConversationName(entry: SavedMessage | undefined): string | undefined {
+  const isRoom = entry?.type === 'groupchat'
+  const jid = entry?.conversationJid
+  const room = useRoomStore((s) => isRoom && jid ? s.rooms.get(jid) : undefined)
+  const contact = useRosterStore((s) => !isRoom && jid ? s.contacts.get(jid) : undefined)
+  if (!entry || !jid) return undefined
+  return isRoom
+    ? room?.name || getLocalPart(jid)
+    : contact?.name || chatStore.getState().conversationEntities.get(jid)?.name || getLocalPart(jid)
+}
+
+function SavedRow({ entry, problem, onOpen, onRemove, showConversation }: {
   entry: SavedMessage
+  /** False when the list is narrowed to one conversation, which the chip already names. */
+  showConversation: boolean
   problem: SavedOpenProblem | undefined
   onOpen: (entry: SavedMessage) => void
   onRemove: (id: string) => void
@@ -54,9 +69,7 @@ function SavedRow({ entry, problem, onOpen, onRemove }: {
   const contact = useRosterStore((s) => isRoom ? undefined : s.contacts.get(entry.conversationJid))
   const own = getBareJid(connectionStore.getState().jid ?? '')
   const outgoing = !isRoom && getBareJid(entry.from) === own
-  const conversationName = isRoom
-    ? room?.name || getLocalPart(entry.conversationJid)
-    : contact?.name || chatStore.getState().conversationEntities.get(entry.conversationJid)?.name || getLocalPart(entry.conversationJid)
+  const conversationName = useConversationName(entry) ?? ''
   const senderName = outgoing ? t('chat.you') : isRoom ? (getResource(entry.from) || conversationName) : conversationName
   const text = useRowText(entry)
   const stamp = new Date(entry.sentAt ?? entry.savedAt)
@@ -82,7 +95,7 @@ function SavedRow({ entry, problem, onOpen, onRemove }: {
           <span className="text-sm font-medium text-fluux-text truncate" data-testid="saved-sender">{senderName}</span>
           <span className="text-xs text-fluux-muted flex-shrink-0">{formatConversationTime(stamp, t, language, timeFormat)}</span>
         </div>
-        {isRoom && <div className="text-xs text-fluux-muted truncate" data-testid="saved-conversation">{conversationName}</div>}
+        {isRoom && showConversation && <div className="text-xs text-fluux-muted truncate" data-testid="saved-conversation">{conversationName}</div>}
         <p className="text-sm line-clamp-2 break-words" data-testid="saved-text">{text}</p>
         {entry.unverified && <p className="text-xs text-fluux-muted" data-testid="saved-unverified">{t('saved.unverified')}</p>}
         {problem && (
@@ -115,7 +128,15 @@ export function SavedView({ problems, onOpen }: {
   onOpen: (entry: SavedMessage) => Promise<void>
 }) {
   const { t } = useTranslation()
-  const { saved, remove, lockedCount } = useSavedMessages()
+  const { saved: allSaved, remove, lockedCount } = useSavedMessages()
+  const scope = useSavedScopeStore((s) => s.conversationJid)
+  const setScope = useSavedScopeStore((s) => s.setScope)
+  const scoped = useMemo(() => scope ? allSaved.filter((entry) => entry.conversationJid === scope) : undefined, [allSaved, scope])
+  // The last saved message of the conversation was removed: nothing is left to narrow to.
+  const scopeEmpty = !!scope && scoped?.length === 0
+  useEffect(() => { if (scopeEmpty) setScope(null) }, [scopeEmpty, setScope])
+  const saved = scoped && scoped.length > 0 ? scoped : allSaved
+  const scopeName = useConversationName(scoped && scoped.length > 0 ? scoped[0] : undefined)
 
   if (lockedCount > 0 && saved.length === 0) {
     return (
@@ -137,11 +158,28 @@ export function SavedView({ problems, onOpen }: {
   }
   return (
     <div className="flex flex-col gap-0.5" data-testid="saved-list" aria-label={t('saved.title')}>
+      {scoped && scoped.length > 0 && (
+        <div className="flex items-center gap-1 px-2 pb-1" data-testid="saved-scope">
+          <span className="text-xs bg-fluux-hover rounded px-2 py-0.5 text-fluux-muted truncate">{t('saved.scopeLabel', { name: scopeName })}</span>
+          <button
+            type="button"
+            onClick={() => setScope(null)}
+            className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted flex-shrink-0 tap-target"
+            aria-label={t('saved.clearScope')}
+            title={t('saved.clearScope')}
+          >
+            <X className="size-3" />
+          </button>
+        </div>
+      )}
+      {scoped && scoped.length > 0 && (
+        <p className="px-2 pb-1 text-xs text-fluux-muted" data-testid="saved-private-note">{t('saved.onlyYou')}</p>
+      )}
       {lockedCount > 0 && (
         <p role="status" className="px-2 py-1 text-xs text-fluux-muted" data-testid="saved-locked-note">{t('saved.lockedSome', { count: lockedCount })}</p>
       )}
       {saved.map((entry) => (
-        <SavedRow key={entry.id} entry={entry} problem={problems[entry.id]} onOpen={(e) => { void onOpen(e) }} onRemove={remove} />
+        <SavedRow key={entry.id} entry={entry} problem={problems[entry.id]} onOpen={(e) => { void onOpen(e) }} onRemove={remove} showConversation={!scoped || scoped.length === 0} />
       ))}
     </div>
   )

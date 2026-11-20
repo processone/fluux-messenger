@@ -1806,7 +1806,11 @@
         "locked": "Saved messages are locked",
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
-        "unverified": "Not verified: not sealed with your key"
+        "unverified": "Not verified: not sealed with your key",
+        "headerButton": "Guardados en esta conversación ({{count}}). Solo tú los ves.",
+        "scopeLabel": "En {{name}}",
+        "clearScope": "Mostrar todos los mensajes guardados",
+        "onlyYou": "Solo tú ves tus mensajes guardados"
     },
     "errorBoundary": {
         "title": "Algo salió mal",

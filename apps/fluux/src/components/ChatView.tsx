@@ -56,6 +56,7 @@ interface ChatViewProps {
   onBack?: () => void
   onSwitchToMessages?: (conversationId: string) => void
   onSearchInConversation?: (conversationId: string) => void
+  onShowSavedInConversation?: (conversationId: string) => void
   /** Open the contact management screen for the given JID. 1:1 chats only. */
   onShowProfile?: (jid: string) => void
   // Focus zone refs for Tab cycling
@@ -65,7 +66,7 @@ interface ChatViewProps {
   findOnPageRef?: RefObject<FindOnPageHandle | null>
 }
 
-export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, onShowProfile, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
+export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, onShowSavedInConversation, onShowProfile, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
@@ -118,6 +119,10 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // Handler to open search scoped to this conversation
   const handleSearchInConversation = activeConversation && onSearchInConversation
     ? () => onSearchInConversation(activeConversation.id)
+    : undefined
+
+  const handleShowSaved = activeConversation && onShowSavedInConversation
+    ? () => onShowSavedInConversation(activeConversation.id)
     : undefined
 
   // Latest messages in a ref so the stable callbacks below don't close over
@@ -493,6 +498,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           jid={activeConversation.id}
           onBack={onBack}
           onSearchInConversation={handleSearchInConversation}
+          onShowSavedInConversation={handleShowSaved}
           encryptionState={encryptionState}
           onEncryptionClick={canDecideTrust ? () => void handleOpenVerify() : undefined}
           onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
