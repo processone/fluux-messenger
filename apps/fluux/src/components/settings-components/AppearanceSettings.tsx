@@ -252,7 +252,7 @@ export function AppearanceSettings() {
         <div className="space-y-6">
           {/* 1. Mode */}
           <div className="space-y-3">
-            <label className="text-sm font-medium text-fluux-text">{t('settings.mode')}</label>
+            <label className="type-section-title text-fluux-text">{t('settings.mode')}</label>
             <div className="grid w-full grid-cols-3 gap-3">
               {themeOptions.map((option) => {
                 const Icon = option.icon
@@ -286,7 +286,7 @@ export function AppearanceSettings() {
 
           {/* Display density */}
           <div className="space-y-3">
-            <label className="text-sm font-medium text-fluux-text">{t('settings.density')}</label>
+            <label className="type-section-title text-fluux-text">{t('settings.density')}</label>
             <div className="grid w-full grid-cols-2 gap-3">
               {densityOptions.map((option) => {
                 const isSelected = densityMode === option.value
@@ -313,7 +313,7 @@ export function AppearanceSettings() {
 
           {/* 2. Theme picker */}
           <div className="space-y-3">
-            <label className="text-sm font-medium text-fluux-text">{t('settings.theme')}</label>
+            <label className="type-section-title text-fluux-text">{t('settings.theme')}</label>
             <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))] gap-2">
               {allThemes.map((theme) => (
                 <ThemeCard
@@ -331,7 +331,7 @@ export function AppearanceSettings() {
 
           {/* 4. Accent color picker */}
           <div className="space-y-3">
-            <label className="text-sm font-medium text-fluux-text">{t('settings.accentColor')}</label>
+            <label className="type-section-title text-fluux-text">{t('settings.accentColor')}</label>
             <div className="flex flex-wrap gap-2 items-center">
               {/* Theme Default reset button */}
               <button

@@ -995,6 +995,17 @@ em-emoji-picker {
   font-weight: 600;
   letter-spacing: -0.01em;
 }
+/* Section titles head a group of controls on a settings or detail page
+   ("Mode", "Theme", "Sounds"). One step below the view title, above the 14px
+   row labels they introduce. Dense list group labels in the sidebar and member
+   panel keep their small uppercase style instead. */
+.type-section-title {
+  font-family: var(--fluux-font-display);
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
 
 [data-density="compact"] .icon-rail { width: 48px; }
 [data-density="compact"] .icon-rail-btn { width: 36px; height: 36px; }
