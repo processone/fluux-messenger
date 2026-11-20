@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatDateHeader } from '@/utils/dateFormat'
 import { useDayChange } from '@/hooks/useDayChange'
+import { DATE_PILL_CLASSES } from './DateSeparator'
+
+/** Within this many px of the bottom the reader is at the newest messages, where the pill hides. */
+export const FLOATING_DATE_LIVE_EDGE_PX = 64
 
 export interface FloatingDateHeaderProps {
   /** The scroll container to observe. */
@@ -13,17 +17,18 @@ export interface FloatingDateHeaderProps {
    * callback.
    */
   getTopDate: () => string | null
-  /** ms to keep the pill visible after the last scroll event. Default 1200. */
-  fadeDelayMs?: number
+  /** Hides the pill while another overlay holds the same top-center slot. */
+  suppressed?: boolean
 }
 
 /**
- * Floating "date pill" centered at the top of the message area. Appears while
- * scrolling, showing the date of the topmost visible message, and fades out shortly
- * after scrolling stops. Owns its own scroll listener and visibility state so the
- * parent MessageList never re-renders on scroll. Informational only.
+ * Date pill centered at the top of the message area. It shows the date of the topmost
+ * visible message for as long as the reader is scrolled away from the newest messages,
+ * and hides at the live edge and whenever a date separator is itself the topmost row.
+ * Owns its own scroll listener and visibility state so the parent MessageList never
+ * re-renders on scroll. Informational only.
  */
-export function FloatingDateHeader({ scrollerRef, getTopDate, fadeDelayMs = 1200 }: FloatingDateHeaderProps) {
+export function FloatingDateHeader({ scrollerRef, getTopDate, suppressed = false }: FloatingDateHeaderProps) {
   const { t, i18n } = useTranslation()
   const lang = i18n.language.split('-')[0]
   // Re-render when the local day rolls over, so the relative label below does not
@@ -31,8 +36,7 @@ export function FloatingDateHeader({ scrollerRef, getTopDate, fadeDelayMs = 1200
   useDayChange()
 
   const [date, setDate] = useState<string | null>(null)
-  const [visible, setVisible] = useState(false)
-  const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [away, setAway] = useState(false)
   const rafRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -40,45 +44,46 @@ export function FloatingDateHeader({ scrollerRef, getTopDate, fadeDelayMs = 1200
     if (!scroller) return
 
     const compute = () => {
-      rafRef.current = null
       const d = getTopDate()
-      if (d == null) {
-        setVisible(false)
-        return
-      }
-      setDate(d)
-      setVisible(true)
-      if (fadeTimer.current) clearTimeout(fadeTimer.current)
-      fadeTimer.current = setTimeout(() => setVisible(false), fadeDelayMs)
+      if (d != null) setDate(d)
+      const fromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+      setAway(d != null && fromBottom > FLOATING_DATE_LIVE_EDGE_PX)
     }
 
-    // Coalesce bursts of scroll events into one compute per frame.
-    const onScroll = () => {
-      if (rafRef.current != null) return
-      rafRef.current = requestAnimationFrame(compute)
+    // Coalesce bursts of scroll events into one compute per frame. The pending flag is
+    // cleared inside the callback, so a frame that runs synchronously cannot leave it set.
+    let framePending = false
+    const schedule = () => {
+      if (framePending) return
+      framePending = true
+      rafRef.current = requestAnimationFrame(() => {
+        framePending = false
+        rafRef.current = null
+        compute()
+      })
     }
 
-    scroller.addEventListener('scroll', onScroll, { passive: true })
+    scroller.addEventListener('scroll', schedule, { passive: true })
+    // A conversation can open away from the live edge (restored position, unread divider).
+    schedule()
     return () => {
-      scroller.removeEventListener('scroll', onScroll)
+      scroller.removeEventListener('scroll', schedule)
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
-      if (fadeTimer.current) clearTimeout(fadeTimer.current)
     }
-  }, [scrollerRef, getTopDate, fadeDelayMs])
+  }, [scrollerRef, getTopDate])
+
+  const visible = away && !suppressed
 
   return (
     <div
       data-floating-date
-      className={`absolute top-3 inset-x-0 z-30 flex justify-center pointer-events-none transition-opacity duration-300 ${
+      className={`absolute top-3 inset-x-0 z-30 flex justify-center pointer-events-none transition-opacity duration-200 ${
         visible ? 'opacity-100' : 'opacity-0'
       }`}
       aria-hidden={!visible}
     >
       {date && (
-        <span
-          data-floating-date-pill
-          className="px-3 py-1 rounded-full bg-fluux-float border border-fluux-border shadow-lg text-xs font-medium text-fluux-muted whitespace-nowrap"
-        >
+        <span data-floating-date-pill className={`${DATE_PILL_CLASSES} shadow-lg`}>
           {formatDateHeader(date, t, lang)}
         </span>
       )}

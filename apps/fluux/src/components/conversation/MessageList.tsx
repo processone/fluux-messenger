@@ -1049,11 +1049,18 @@ export function MessageList<T extends BaseMessage>({
           <div className="pb-2" />
         </div>
         ))}
+
+        {hasContent && <div aria-hidden="true" data-scroll-fade className="message-scroll-fade" />}
       </div>
 
-      {/* Floating date pill — appears while scrolling the virtualized list */}
+      {/* Floating date pill: shown while the reader is away from the newest messages. It yields
+          the top-center slot to the jump-to-last-read pill below. */}
       {virtualized && hasContent && (
-        <FloatingDateHeader scrollerRef={scrollContainerRef} getTopDate={getTopDate} />
+        <FloatingDateHeader
+          scrollerRef={scrollContainerRef}
+          getTopDate={getTopDate}
+          suppressed={!!firstNewRowId && markerAboveViewport}
+        />
       )}
 
       {/* Jump-to-last-read pill — shown while the "New messages" divider sits above the viewport.
