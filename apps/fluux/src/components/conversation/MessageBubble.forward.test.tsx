@@ -96,6 +96,18 @@ describe('standalone forwarded copy', () => {
     expect(container.querySelector('[data-forwarded-copy]')!.textContent).toContain('<img src=x')
   })
 
+  // FLM-336 finding 8: a link inside the copy is clickable like one in an ordinary message, through the whole bubble.
+  it('draws a link in the copy as a link, and following it or its menu does not open the original', () => {
+    const { container } = render(<MessageBubble {...bubble({ forwarded: { author: 'Bob', text: 'Docs at https://example.org/docs' }, references: undefined })} />)
+    const anchor = container.querySelector('[data-forwarded-copy] a')!
+    expect(anchor.getAttribute('href')).toBe('https://example.org/docs')
+    expect(anchor.getAttribute('target')).toBe('_blank')
+    fireEvent.click(anchor)
+    fireEvent.contextMenu(anchor)
+    fireEvent.click(screen.getByText('chat.copyLink'))
+    expect(screen.queryByText('chat.forwardedOriginNotFound')).toBeNull()
+  })
+
   // Review: a deletion removes the copied text from view even while the resident row still holds it.
   it('hides the copy once the message is retracted', () => {
     const { container } = render(<MessageBubble {...bubble({ forwarded, references: undefined, isRetracted: true })} />)
