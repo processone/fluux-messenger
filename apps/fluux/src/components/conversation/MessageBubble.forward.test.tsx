@@ -23,9 +23,9 @@ vi.mock('./RoomMessageLinkPreview', () => ({
 }))
 
 // The picker itself is covered by ForwardMessageModal.test; here it only reports what the row asked to forward.
-const modal = vi.hoisted(() => ({ props: undefined as undefined | { link?: string; quote?: Record<string, unknown>; attachment?: unknown; fromEncrypted?: boolean } }))
+const modal = vi.hoisted(() => ({ props: undefined as undefined | { link?: string; quote?: Record<string, unknown>; attachment?: unknown } }))
 vi.mock('../ForwardMessageModal', () => ({
-  ForwardMessageModal: (props: { link?: string; quote?: Record<string, unknown>; attachment?: unknown; fromEncrypted?: boolean }) => { modal.props = props; return null },
+  ForwardMessageModal: (props: { link?: string; quote?: Record<string, unknown>; attachment?: unknown }) => { modal.props = props; return null },
 }))
 
 vi.mock('@/hooks/useNavigateToTarget', () => ({ useNavigateToTarget: () => ({ navigateToConversation: vi.fn() }) }))
@@ -153,11 +153,11 @@ describe('forward on a one-to-one message', () => {
     const attachment = { url: 'https://upload.example/p.png', name: 'p.png', mediaType: 'image/png' }
     const open = () => fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
 
-    it('offers Forward on a file without a caption and passes the file, with no quote', () => {
+    it('offers Forward on a file without a caption and quotes its name, so the sender is named', () => {
       renderDirect({ body: '', attachment })
       open()
       expect(modal.props?.attachment).toEqual(attachment)
-      expect(modal.props?.quote).toBeUndefined()
+      expect(modal.props?.quote).toMatchObject({ author: 'Alice', text: 'p.png', from: 'alice@example.com' })
     })
 
     it('passes the caption as the quote beside the file', () => {
@@ -167,10 +167,16 @@ describe('forward on a one-to-one message', () => {
       expect(modal.props?.quote).toMatchObject({ text: 'Look at this' })
     })
 
+    it('quotes the last part of the address when the file has no name', () => {
+      renderDirect({ body: '', attachment: { url: 'https://upload.example/a/b.pdf?x=1' } })
+      open()
+      expect(modal.props?.quote).toMatchObject({ text: 'b.pdf' })
+    })
+
     it('marks an encrypted file even without a caption', () => {
       renderDirect({ body: '', attachment, securityContext: { protocolId: 'openpgp', trust: 'verified' } })
       open()
-      expect(modal.props?.fromEncrypted).toBe(true)
+      expect(modal.props?.quote?.fromEncrypted).toBe(true)
     })
 
     it.each([

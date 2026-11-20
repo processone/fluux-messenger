@@ -18,13 +18,11 @@ interface ForwardMessageModalProps {
   quote?: ForwardQuote
   /** The source's file, sent again as a file rather than only as a link or caption. */
   attachment?: FileAttachment
-  /** The source was read from an encrypted chat, whether or not it has text. */
-  fromEncrypted?: boolean
   onClose: () => void
 }
 
 /** Forward a message as a comment, an attributed quote and, for a room message, its link. */
-export function ForwardMessageModal({ link, quote, attachment, fromEncrypted, onClose }: ForwardMessageModalProps) {
+export function ForwardMessageModal({ link, quote, attachment, onClose }: ForwardMessageModalProps) {
   const { t } = useTranslation()
   const { contacts } = useRoster()
   const conversations = useChatStore(s => s.conversations)
@@ -49,7 +47,7 @@ export function ForwardMessageModal({ link, quote, attachment, fromEncrypted, on
     }
   }
   // A message read from an encrypted chat never goes to a room: rooms have no encryption.
-  const encryptedSource = !!(fromEncrypted || quote?.fromEncrypted)
+  const encryptedSource = !!quote?.fromEncrypted
   const joinedRooms = encryptedSource ? [] : Array.from(rooms.values()).filter(item => item.joined && item.selfOccupant?.role !== 'visitor')
   const validDestination = destination.startsWith('room:')
     ? joinedRooms.some(item => item.jid === destination.slice(5))

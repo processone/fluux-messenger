@@ -182,13 +182,12 @@ describe('ForwardMessageModal', () => {
     describe('with a photo or file', () => {
       const attachment = { url: 'https://upload.example/p.png', name: 'p.png', mediaType: 'image/png', size: 10 }
 
-      it('sends a file without a caption to a chat as the file, with no copy', async () => {
-        render(<ForwardMessageModal attachment={attachment} onClose={vi.fn()} />)
+      it('sends a file quoted by its name to a chat, with its copy', async () => {
+        render(<ForwardMessageModal attachment={attachment} quote={{ ...direct, text: 'p.png' }} onClose={vi.fn()} />)
         pickAndSend('em')
         await waitFor(() => expect(fixture.chatSend).toHaveBeenCalledOnce())
-        expect(fixture.chatSend.mock.calls[0][1]).toBe('')
-        expect(fixture.chatSend.mock.calls[0][2]).toMatchObject({ attachment })
-        expect(fixture.chatSend.mock.calls[0][2].forwarded).toBeUndefined()
+        expect(fixture.chatSend.mock.calls[0][1]).toContain('p.png')
+        expect(fixture.chatSend.mock.calls[0][2]).toMatchObject({ attachment, forwarded: { text: 'p.png' } })
       })
 
       it('sends the file with the caption copy to a chat', async () => {
@@ -206,7 +205,7 @@ describe('ForwardMessageModal', () => {
       })
 
       it('keeps a file from an encrypted chat out of rooms and requires encryption on the send', async () => {
-        render(<ForwardMessageModal attachment={attachment} fromEncrypted onClose={vi.fn()} />)
+        render(<ForwardMessageModal attachment={attachment} quote={{ ...direct, text: 'p.png', fromEncrypted: true }} onClose={vi.fn()} />)
         fireEvent.focus(picker())
         expect(Array.from(suggestions(), row => row.textContent).join()).not.toContain('Design')
         pickAndSend('em')
