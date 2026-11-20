@@ -4,6 +4,7 @@ import type { Element } from '@xmpp/client'
 import { SavedMessages, parseSavedItems, savedItemId } from './SavedMessages'
 import { NS_PUBSUB, NS_SAVED_MESSAGES } from '../namespaces'
 import type { SavedMessage } from '../types/saved'
+import { clearSealHint } from '../../utils/savedSealHint'
 
 const OWN = 'romeo@montague.example'
 
@@ -279,7 +280,7 @@ describe('SavedMessages sealing', () => {
       expect(setup(sealedHost()).saved.sealState()).toBe('ready')
       const { saved } = setup(early())
       expect(saved.sealState()).toBe('locked')
-      saved.forgetSealing()
+      clearSealHint(null, true)
       expect(saved.sealState()).toBe('unavailable')
     })
   })

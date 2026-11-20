@@ -38,7 +38,7 @@ export function setupSavedMessagesSideEffects(
   let epoch = 0
   let flushing = false
   let flushAgain = false
-  let refreshing = false
+  let refreshing = 0
 
   const online = () => connectionStore.getState().status === 'online'
   const state = () => savedStore.getState()
@@ -163,7 +163,7 @@ export function setupSavedMessagesSideEffects(
     const mine = epoch
     // Changes that arrive while this read is in flight are newer than its answer; the read owns its own record of them.
     const read = state().beginFetch()
-    refreshing = true
+    refreshing++
     try {
       const result = await client.internal.savedMessages.fetchAll()
       if (mine !== epoch || !state().fetchCurrent(read)) return
@@ -189,7 +189,7 @@ export function setupSavedMessagesSideEffects(
         logInfo(`SavedMessages: fetch ${result.status}; keeping the current list`)
       }
     } finally {
-      refreshing = false
+      refreshing--
       state().endFetch(read) // a read that did not land leaves nothing behind
     }
     await flush()
@@ -199,18 +199,14 @@ export function setupSavedMessagesSideEffects(
   const onKeyStateChange = () => {
     const before = state().sealState
     // A read still in flight may have opened its items under the old state: read again (a newer read supersedes it).
-    if (syncSealState() !== before && (state().loaded || refreshing)) void refresh().catch(() => {})
+    if (syncSealState() !== before && (state().loaded || refreshing > 0)) void refresh().catch(() => {})
   }
-  const unsubscribePluginRemoved = client.subscribe('e2ee:plugin-removed', ({ pluginId }) => {
-    if (pluginId === 'openpgp') client.internal.savedMessages.forgetSealing()
-    onKeyStateChange()
-  })
   const unsubscribeKeyUnlocked = client.subscribe('e2ee:key-unlocked', onKeyStateChange)
   const unsubscribePluginRegistered = client.subscribe('e2ee:plugin-registered', onKeyStateChange)
   const unsubscribeOnline = client.internal.on('online', () => { void refresh().catch(() => {}) })
   // A resumed session keeps the stream but not this page's memory: with no list loaded, read it.
   const unsubscribeResumed = client.internal.on('resumed', () => {
-    void (state().loaded && !refreshing ? flush() : refresh()).catch(() => {})
+    void (state().loaded && refreshing === 0 ? flush() : refresh()).catch(() => {})
   })
   // Notifications apply in arrival order, after what the cache knows of deletions has been learned.
   let notifications: Promise<void> = Promise.resolve()
@@ -240,6 +236,6 @@ export function setupSavedMessagesSideEffects(
   return () => {
     epoch += 1
     flushing = false
-    unsubscribeKeyUnlocked(); unsubscribePluginRegistered(); unsubscribePluginRemoved(); unsubscribeOnline(); unsubscribeResumed(); unsubscribeNotify(); unsubscribeAccount(); unsubscribeStore()
+    unsubscribeKeyUnlocked(); unsubscribePluginRegistered(); unsubscribeOnline(); unsubscribeResumed(); unsubscribeNotify(); unsubscribeAccount(); unsubscribeStore()
   }
 }

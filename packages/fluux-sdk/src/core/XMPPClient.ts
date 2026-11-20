@@ -1978,8 +1978,7 @@ export class XMPPClient {
     })
     // A plugin's disco features (XEP-0374 `urn:xmpp:openpgp:im:0`) are
     // advertised only while it is registered.
-    this.e2ee.onPluginUnregistered((pluginId, explicit) => {
-      if (explicit) this.emitSDK('e2ee:plugin-removed', { pluginId })
+    this.e2ee.onPluginUnregistered(() => {
       void this.announceCapsChange()
     })
     // When a peer's key material changes (PEP notification), re-attempt

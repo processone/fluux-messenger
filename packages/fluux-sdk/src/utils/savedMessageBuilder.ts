@@ -28,9 +28,9 @@ export function canSaveMessage(message: Message | RoomMessage): boolean {
 export function buildSavedMessage(message: Message | RoomMessage, ownJid: string, now: number = Date.now()): SavedMessage {
   const ownBare = getBareJid(ownJid)
   const encrypted = Boolean(message.securityContext || message.encryptedPayload)
-  // An encrypted message keeps its text only once this device has really decrypted it: a message still waiting, or one
+  // An encrypted message keeps its text only once this device has really decrypted it (or wrote it itself, which carries no availability state): a message still waiting, or one
   // that failed, has an internal placeholder as its body, which is not what the sender wrote.
-  const readable = !encrypted || (!message.encryptedPayload && message.contentAvailability?.state === 'ready')
+  const readable = !encrypted || (!message.encryptedPayload && (message.contentAvailability?.state === 'ready' || (message.isOutgoing && !message.contentAvailability)))
   const text = readable ? Array.from(message.body ?? '').slice(0, MAX_SAVED_CODE_POINTS).join('') : ''
   const base = {
     text, savedAt: now, sentAt: message.timestamp.getTime(), messageId: message.id,

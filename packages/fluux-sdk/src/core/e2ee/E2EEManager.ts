@@ -122,9 +122,7 @@ export class E2EEManager {
   private readonly securityContextListeners = new Set<SecurityContextUpdateListener>()
   private readonly forcedPlaintextConversations = new Set<string>()
   private pluginRegisteredCallback: ((pluginId: string) => void) | null = null
-  private pluginUnregisteredCallback: ((pluginId: string, explicit: boolean) => void) | null = null
-  /** True while {@link shutdown} removes plugins: a teardown, not a removal someone chose. */
-  private shuttingDown = false
+  private pluginUnregisteredCallback: ((pluginId: string) => void) | null = null
   private peerKeysChangedCallback: ((peer: BareJID) => void) | null = null
   private keyUnlockedCallback: (() => void) | null = null
   private readonly conversationSecurityListeners = new Set<(peer: BareJID | null) => void>()
@@ -254,7 +252,7 @@ export class E2EEManager {
     this.plugins.delete(id)
     await plugin.shutdown()
     this.logger.info(`E2EE plugin unregistered: ${id}`)
-    this.pluginUnregisteredCallback?.(id, !this.shuttingDown)
+    this.pluginUnregisteredCallback?.(id)
     this.dispatchConversationSecurityChanged(null)
   }
 
@@ -340,8 +338,8 @@ export class E2EEManager {
     this.pluginRegisteredCallback = cb
   }
 
-  /** Set a callback invoked whenever a registered plugin is removed; `explicit` is false when the whole manager is shutting down. */
-  onPluginUnregistered(cb: (pluginId: string, explicit: boolean) => void): void {
+  /** Set a callback invoked whenever a registered plugin is removed. */
+  onPluginUnregistered(cb: (pluginId: string) => void): void {
     this.pluginUnregisteredCallback = cb
   }
 
@@ -981,13 +979,8 @@ export class E2EEManager {
   /** Tear everything down — e.g. on account switch or logout. */
   async shutdown(): Promise<void> {
     const ids = [...this.plugins.keys()]
-    this.shuttingDown = true
-    try {
-      for (const id of ids) {
-        await this.unregister(id)
-      }
-    } finally {
-      this.shuttingDown = false
+    for (const id of ids) {
+      await this.unregister(id)
     }
     this.pins.clear()
     this.capabilityCache.clear()

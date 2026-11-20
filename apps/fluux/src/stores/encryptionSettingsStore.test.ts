@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { buildScopedStorageKey } from '@fluux/sdk'
 import { useEncryptionSettingsStore, isOpenpgpEnabled } from './encryptionSettingsStore'
 
 describe('encryptionSettingsStore', () => {
@@ -68,6 +69,16 @@ describe('encryptionSettingsStore', () => {
         .notifyPluginRegistrationFailed({ kind: 'permanent', code: 'pep-unsupported' })
       useEncryptionSettingsStore.getState().setOpenpgpEnabled(false)
       expect(useEncryptionSettingsStore.getState().registrationError).toBeNull()
+    })
+  })
+  describe('saved messages seal memory', () => {
+    it('turning OpenPGP off forgets that saved messages were sealed, whichever way it is turned off', () => {
+      const key = buildScopedStorageKey('fluux-saved-sealing')
+      localStorage.setItem(key, '1')
+      useEncryptionSettingsStore.getState().setOpenpgpEnabled(true)
+      expect(localStorage.getItem(key)).toBe('1')
+      useEncryptionSettingsStore.getState().setOpenpgpEnabled(false)
+      expect(localStorage.getItem(key)).toBeNull()
     })
   })
 })

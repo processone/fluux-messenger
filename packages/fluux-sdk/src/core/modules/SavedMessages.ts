@@ -195,12 +195,7 @@ export class SavedMessages {
     return readSealHint() ? 'locked' : 'unavailable'
   }
 
-  /** The person turned OpenPGP off: saved messages are written plain again. */
-  forgetSealing(): void {
-    writeSealHint(false)
-  }
-
-  /** Seal a whole entry: signed with the account's key, encrypted to the keys it announces. Throws while locked. */
+  /** Seal a whole entry: signed with the account's key, encrypted to that same key. Throws while locked. */
   private async seal(entry: SavedMessage): Promise<SavedMessage> {
     const manager = this.manager()
     if (!manager) throw new Error('SavedMessages: no encryption host to seal with')

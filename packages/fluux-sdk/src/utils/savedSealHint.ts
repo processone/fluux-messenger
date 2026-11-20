@@ -20,7 +20,7 @@ export function writeSealHint(on: boolean): void {
   } catch { /* storage unavailable: the hint is only a safeguard */ }
 }
 
-/** Forget the hint of one account, or of every account. */
+/** Forget the hint of one account (also called when the person turns OpenPGP off), or of every account. */
 export function clearSealHint(jid: string | null, allAccounts: boolean): void {
   try {
     if (allAccounts) {

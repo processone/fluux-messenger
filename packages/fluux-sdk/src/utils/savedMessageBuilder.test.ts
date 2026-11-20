@@ -32,6 +32,9 @@ describe('buildSavedMessage', () => {
     expect(buildSavedMessage(chat({ encryptedPayload: '<x/>', body: '' }), OWN)).toMatchObject({ text: '', encrypted: true })
     expect(buildSavedMessage(chat({ securityContext: { kind: 'encrypted' } as never, contentAvailability: { state: 'ready' }, body: 'decrypted text' }), OWN))
       .toMatchObject({ text: 'decrypted text', encrypted: true })
+    // A message this device sent encrypted has a security context and no availability state: its text is its own.
+    expect(buildSavedMessage(chat({ isOutgoing: true, securityContext: { kind: 'encrypted' } as never, body: 'my text' }), OWN))
+      .toMatchObject({ text: 'my text', encrypted: true })
     // A failed or unverified decrypt has an internal placeholder as its body: that is not what the sender wrote.
     for (const contentAvailability of [{ state: 'failed', reason: 'signature-invalid' }, { state: 'verification' }, { state: 'waiting' }, undefined] as const) {
       expect(buildSavedMessage(chat({ securityContext: { kind: 'encrypted' } as never, contentAvailability, body: '[Message rejected: invalid signature]' }), OWN))

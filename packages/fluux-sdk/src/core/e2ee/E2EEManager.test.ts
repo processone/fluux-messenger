@@ -1471,17 +1471,3 @@ describe('E2EEManager sealing to the account key', () => {
     }
   })
 })
-
-describe('E2EEManager plugin removal', () => {
-  it('tells an explicit removal from a shutdown', async () => {
-    const manager = makeManager()
-    const seen: Array<[string, boolean]> = []
-    manager.onPluginUnregistered((id, explicit) => seen.push([id, explicit]))
-    const plugin = new DummyPlaintextPlugin()
-    await manager.register(plugin)
-    await manager.unregister(plugin.descriptor.id)
-    await manager.register(new DummyPlaintextPlugin())
-    await manager.shutdown()
-    expect(seen).toEqual([[plugin.descriptor.id, true], [plugin.descriptor.id, false]])
-  })
-})

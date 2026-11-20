@@ -18,7 +18,6 @@ function setup() {
     publish: vi.fn().mockResolvedValue(undefined),
     retract: vi.fn().mockResolvedValue(undefined),
     fetchMaxItems: vi.fn().mockResolvedValue(256),
-    forgetSealing: vi.fn(),
     sealState: vi.fn<() => 'unavailable' | 'locked' | 'ready'>().mockReturnValue('unavailable'),
     // Like the real module with OpenPGP off: every item is a plain entry.
     open: vi.fn(async (items: SavedMessage[]) => ({ entries: items, locked: [] as string[], rejected: [] as string[], sealedSeen: 0 })),
@@ -521,15 +520,6 @@ describe('saved messages sync side effect', () => {
       await flushPromises()
       expect(Object.keys(savedStore.getState().entries)).toEqual(['s'])
       expect(savedStore.getState().lockedIds).toEqual({})
-      stop()
-    })
-
-    it('forgets that entries were sealed when the OpenPGP plugin is removed on purpose', async () => {
-      const { node, client, stop } = setup()
-      client._emitSDK('e2ee:plugin-removed', { pluginId: 'openpgp' })
-      expect(node.forgetSealing).toHaveBeenCalledTimes(1)
-      client._emitSDK('e2ee:plugin-removed', { pluginId: 'omemo' })
-      expect(node.forgetSealing).toHaveBeenCalledTimes(1)
       stop()
     })
 

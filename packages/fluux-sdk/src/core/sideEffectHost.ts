@@ -90,8 +90,6 @@ export interface SavedMessagesSideEffectHost {
   fetchMaxItems(): Promise<number | undefined>
   /** Whether entries are sealed to the account's own OpenPGP key. */
   sealState(): 'unavailable' | 'locked' | 'ready'
-  /** OpenPGP was turned off on purpose: forget that entries were sealed. */
-  forgetSealing(): void
   /** Open what a read or notification carried: sealed items are verified and decrypted, plain ones flagged. */
   open(items: SavedMessage[]): Promise<{ entries: SavedMessage[]; locked: string[]; rejected: string[]; sealedSeen: number }>
 }
