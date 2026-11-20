@@ -16,9 +16,9 @@ export function useSavedMessageAction(message: BaseMessage) {
   const { t } = useTranslation()
   const addToast = useToastStore((s) => s.addToast)
   const row = message as Message | RoomMessage
-  const savedEntry = useSavedStore((s) => (Object.keys(s.entries).length === 0
+  const savedEntry = useSavedStore((s) => Object.keys(s.entries).length === 0
     ? undefined
-    : findSavedEntry(s.entries, buildSavedMessage(row, connectionStore.getState().jid ?? '', 0))))
+    : findSavedEntry(s.entries, buildSavedMessage(row, connectionStore.getState().jid ?? '', 0)))
   const saveable = canSaveMessage(row)
 
   const toggle = useCallback(() => {

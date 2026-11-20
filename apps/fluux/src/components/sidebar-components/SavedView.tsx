@@ -23,8 +23,8 @@ import type { SavedOpenProblem } from '@/hooks/useSavedOpener'
 function useRowText(entry: SavedMessage): string {
   const { t } = useTranslation()
   // The resident window changes when messages arrive, edits included: look again then.
-  const chatWindow = useChatStore((s) => (entry.type === 'chat' ? s.messages.get(entry.conversationJid) : undefined))
-  const roomWindow = useRoomStore((s) => (entry.type === 'groupchat' ? s.messages.get(entry.conversationJid) : undefined))
+  const chatWindow = useChatStore((s) => entry.type === 'chat' ? s.messages.get(entry.conversationJid) : undefined)
+  const roomWindow = useRoomStore((s) => entry.type === 'groupchat' ? s.messages.get(entry.conversationJid) : undefined)
   // A durable edit or deletion of a stored copy (even one not resident) bumps this: look again.
   const copyVersion = useSavedStore((s) => s.copyVersion)
   const [copy, setCopy] = useState<Message | RoomMessage | undefined>()
@@ -49,8 +49,8 @@ function SavedRow({ entry, problem, onOpen, onRemove }: {
   useDayChange()
   const timeFormat = useSettingsStore((s) => s.timeFormat)
   const isRoom = entry.type === 'groupchat'
-  const room = useRoomStore((s) => (isRoom ? s.rooms.get(entry.conversationJid) : undefined))
-  const contact = useRosterStore((s) => (isRoom ? undefined : s.contacts.get(entry.conversationJid)))
+  const room = useRoomStore((s) => isRoom ? s.rooms.get(entry.conversationJid) : undefined)
+  const contact = useRosterStore((s) => isRoom ? undefined : s.contacts.get(entry.conversationJid))
   const own = getBareJid(connectionStore.getState().jid ?? '')
   const outgoing = !isRoom && getBareJid(entry.from) === own
   const conversationName = isRoom
