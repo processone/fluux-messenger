@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { fluuxTheme } from './builtins'
+import { builtinThemes, fluuxTheme } from './builtins'
+import { DEFAULT_ACCENT_PRESETS } from './defaultAccents'
 
 /**
  * Aurora accent presets must each look right on their own and as a family.
@@ -98,5 +99,56 @@ describe('Aurora accent presets', () => {
         expect(v).toBeLessThanOrEqual(hi)
       }
     })
+  }
+})
+
+/**
+ * The shared default list serves every built-in theme without its own presets,
+ * so it is checked on each of their chat canvases, not on one palette.
+ */
+describe('Default accent presets, on every theme that uses them', () => {
+  const users = builtinThemes.filter((t) => !t.accentPresets)
+
+  it('serves the built-in themes without a curated list', () => {
+    expect(users.length).toBeGreaterThan(10)
+  })
+
+  for (const mode of ['dark', 'light'] as const) {
+    const sel = mode === 'dark' ? ':root' : '.light'
+    const values = DEFAULT_ACCENT_PRESETS.map((p) => ({ name: p.name, y: luminance(hslToRgb(p[mode].h, p[mode].s, p[mode].l)) }))
+
+    for (const { name, y } of values) {
+      it(`[${mode}] ${name}: takes ${mode === 'dark' ? 'black' : 'white'} text at AA`, () => {
+        const onFill = mode === 'dark' ? ratio(y, 0) : ratio(y, 1)
+        expect(onFill).toBeGreaterThan(mode === 'dark' ? ratio(y, 1) : ratio(y, 0))
+        expect(onFill).toBeGreaterThanOrEqual(4.5)
+      })
+    }
+
+    it(`[${mode}] presets share one lightness band`, () => {
+      // Dark: luminous fills within 0.50 to 0.60. Light: white text at 6.0 to 6.8:1.
+      const [lo, hi] = mode === 'dark' ? [0.5, 0.6] : [1.05 / 6.8 - 0.05, 1.05 / 6.0 - 0.05]
+      for (const { y } of values) {
+        expect(y).toBeGreaterThanOrEqual(lo)
+        expect(y).toBeLessThanOrEqual(hi)
+      }
+    })
+
+    for (const theme of users) {
+      const vars = theme.variables[mode] ?? {}
+      const read = (name: string): string => {
+        const v = vars[name]
+        if (v?.startsWith('var(')) return read(v.slice(4, -1))
+        return v ?? token(sel, name)
+      }
+      const chatToken = vars['--fluux-chat-bg']
+      const chat = luminance(hexToRgb(chatToken?.startsWith('#') ? chatToken : read('--fluux-base-30')))
+
+      it(`[${mode}] ${theme.name}: every preset reads as accent text on the chat canvas`, () => {
+        for (const { name, y } of values) {
+          expect(ratio(y, chat), name).toBeGreaterThanOrEqual(4.5)
+        }
+      })
+    }
   }
 })

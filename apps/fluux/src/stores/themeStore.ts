@@ -69,6 +69,17 @@ function persistState(state: PersistedThemeState) {
   }
 }
 
+/**
+ * The accent to paint for a stored choice. A choice is persisted (and synced)
+ * as a full HSL snapshot, but presets get retuned between releases, so look it
+ * up by name in the active theme's list and paint the current values. A name
+ * the list doesn't carry (a preset from another theme) keeps its snapshot.
+ */
+export function resolveAccentPreset(stored: AccentPreset | null, presets: AccentPreset[]): AccentPreset | null {
+  if (!stored) return null
+  return presets.find((p) => p.name === stored.name) ?? stored
+}
+
 /** Derive a snippet ID from its filename */
 function snippetId(filename: string): string {
   return filename.replace(/\.css$/i, '').replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase()
