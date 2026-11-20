@@ -595,7 +595,9 @@ vi.mock('./ContactProfileView', () => ({
 }))
 
 vi.mock('./SettingsView', () => ({
-  SettingsView: () => <div data-testid="settings-view">Settings</div>,
+  SettingsView: ({ showOverview }: { showOverview?: boolean }) => (
+    <div data-testid={showOverview ? 'settings-overview' : 'settings-view'}>Settings</div>
+  ),
 }))
 
 vi.mock('./AdminView', () => ({
@@ -758,6 +760,19 @@ describe('ChatLayout - Tab Memory', () => {
       fireEvent.touchEnd(view, { changedTouches: [{ identifier: 1, clientX: 125, clientY: 310 }] })
 
       await waitFor(() => expect(screen.getByTestId('probe-path').textContent).toBe('/settings'))
+    })
+
+    it.each(['omemo', 'openpgp'])('returns from the %s screen to the encryption overview on a left-edge swipe', async (method) => {
+      render(<ChatLayoutWithProbe initialRoute={`/settings/encryption/${method}`} />)
+
+      const view = await screen.findByTestId('settings-view')
+      // The overview stays mounted underneath, so the drag reveals it rather than the settings list.
+      expect(screen.getByTestId('settings-overview')).toBeInTheDocument()
+      fireEvent.touchStart(view, { touches: [{ identifier: 1, clientX: 12, clientY: 300 }] })
+      fireEvent.touchMove(view, { touches: [{ identifier: 1, clientX: 125, clientY: 310 }] })
+      fireEvent.touchEnd(view, { changedTouches: [{ identifier: 1, clientX: 125, clientY: 310 }] })
+
+      await waitFor(() => expect(screen.getByTestId('probe-path').textContent).toBe('/settings/encryption'))
     })
 
     it('keeps the conversation open during a vertical scroll from the edge', () => {

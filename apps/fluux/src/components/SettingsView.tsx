@@ -24,13 +24,17 @@ import { ArrowLeft } from 'lucide-react'
 
 interface SettingsViewProps {
   onBack?: () => void
+  /** Leaves an encryption method screen for the overview; defaults to a plain navigation. */
+  onSubPageBack?: () => void
+  /** Draws the category's root screen even when the route names a sub-page. */
+  showOverview?: boolean
 }
 
 /**
  * Settings content view - renders the content for the selected settings category.
  * The settings category list is now in the main Sidebar component.
  */
-export function SettingsView({ onBack }: SettingsViewProps) {
+export function SettingsView({ onBack, onSubPageBack, showOverview = false }: SettingsViewProps) {
   detectRenderLoop('SettingsView')
   const { t } = useTranslation()
   const { dragRegionProps } = useWindowDrag()
@@ -47,7 +51,7 @@ export function SettingsView({ onBack }: SettingsViewProps) {
   const categoryLabel = activeCategoryConfig?.labelKey ? t(activeCategoryConfig.labelKey) : t('settings.title')
 
   // Encryption has a screen per method behind its overview; an unknown one shows the overview.
-  const encryptionSubPage = activeCategory === 'encryption' ? resolveEncryptionSubPage(settingsSubPage) : null
+  const encryptionSubPage = activeCategory === 'encryption' && !showOverview ? resolveEncryptionSubPage(settingsSubPage) : null
   const headerLabel = encryptionSubPage ? t(ENCRYPTION_SUB_PAGE_LABEL_KEYS[encryptionSubPage]) : categoryLabel
   // The category summary describes the category's root screen, not one of its sub-pages.
   const categoryDescription = activeCategoryConfig && !encryptionSubPage ? t(activeCategoryConfig.descriptionKey) : null
@@ -94,7 +98,7 @@ export function SettingsView({ onBack }: SettingsViewProps) {
         {encryptionSubPage && (
           <button
             type="button"
-            onClick={() => navigateToSettings('encryption', { replace: true })}
+            onClick={onSubPageBack ?? (() => navigateToSettings('encryption', { replace: true }))}
             className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover tap-target"
             aria-label={t('common.back')}
           >

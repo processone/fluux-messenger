@@ -50,6 +50,7 @@ import { reportStartupShell } from '@/utils/startupRecovery'
 import { useEasterEggNotifications } from '@/hooks/useEasterEggNotifications'
 import { useFocusZones, useViewNavigation, isMobileWeb, isSmallScreen, useWindowVisibility, useRouteSync, useDayBoundaryWatcher, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { resolveEncryptionSubPage } from './settings-components/encryptionPages'
 import { useIosPaneNavigation } from '@/hooks/useIosPaneNavigation'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/utils/sessionStorage'
@@ -384,6 +385,7 @@ function ChatLayoutContent() {
   const containerRef = useRef<HTMLDivElement>(null)
   const mobileMainRef = useRef<HTMLElement>(null)
   const occupantPaneRef = useRef<HTMLDivElement>(null)
+  const methodPaneRef = useRef<HTMLDivElement>(null)
 
   // Focus zone refs for Tab cycling - create refs at top level (stable across renders)
   const sidebarListRef = useRef<HTMLDivElement>(null)
@@ -765,6 +767,10 @@ function ChatLayoutContent() {
   const handleSettingsBack = () => {
     navigateToSettings(undefined, { replace: true })
   }
+  // An encryption method screen sits one level deeper: back goes to the Encryption overview.
+  const handleEncryptionMethodBack = () => {
+    navigateToSettings('encryption', { replace: true })
+  }
 
   const { markReadToNewest: markChatRead } = useChatActions()
   const { markReadToNewest: markRoomRead } = useRoomActions()
@@ -861,11 +867,23 @@ function ChatLayoutContent() {
     : searchPreviewResult ? () => searchStore.getState().setPreviewResult(null)
     : undefined
 
+  // On a small screen an encryption method screen covers the Encryption overview, which stays
+  // mounted underneath so the edge swipe reveals it instead of the settings list.
+  const mobileEncryptionMethod = sidebarView === 'settings' && settingsCategory === 'encryption'
+    && resolveEncryptionSubPage(settingsSubPage) !== null && isSmallScreen()
+  const methodPane = useIosPaneNavigation(
+    methodPaneRef,
+    mobileEncryptionMethod,
+    handleEncryptionMethodBack,
+    settingsSubPage,
+    { shown: mobileEncryptionMethod, animated: true },
+  )
+
   const mainPane = useIosPaneNavigation(
     mobileMainRef,
     (sidebarView === 'messages' && !!activeConversationId) ||
       (sidebarView === 'rooms' && !!activeRoomJid && !showRoomOccupants) ||
-      settingsHasContent,
+      (settingsHasContent && !mobileEncryptionMethod),
     sidebarView === 'settings' ? handleSettingsBack : sidebarView === 'rooms' ? handleRoomBack : handleChatBack,
     sidebarView === 'settings' ? settingsCategory : activeRoomJid || activeConversationId,
     {
@@ -1113,7 +1131,16 @@ function ChatLayoutContent() {
           <RegionErrorBoundary region="main" resetKey={mainViewKey} onBack={mainViewBack}>
           {sidebarView === 'settings' ? (
             <Suspense fallback={<ViewLoadingFallback />}>
-              <SettingsView onBack={() => mainPane.back(handleSettingsBack)} />
+              {mobileEncryptionMethod ? (
+                <div className="relative h-full">
+                  <SettingsView showOverview />
+                  <div ref={methodPaneRef} className={`absolute inset-0 z-10 bg-fluux-chat ${methodPane.preview ? 'shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : ''}`}>
+                    <SettingsView onSubPageBack={() => methodPane.back(handleEncryptionMethodBack)} />
+                  </div>
+                </div>
+              ) : (
+                <SettingsView onBack={() => mainPane.back(handleSettingsBack)} />
+              )}
             </Suspense>
           ) : previewJid ? (
             <Suspense fallback={<ViewLoadingFallback />}>
