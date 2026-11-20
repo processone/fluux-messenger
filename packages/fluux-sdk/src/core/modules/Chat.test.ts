@@ -3417,6 +3417,39 @@ describe('XMPPClient Message', () => {
       })
     })
 
+    describe('a reader device refusing a forwarded copy', () => {
+      const refusal = (from: string, condition: string, id = 'fwd-1') => createMockElement('message', {
+        from, to: 'user@example.com/desktop', type: 'error', id,
+      }, [{ name: 'error', attrs: { type: 'cancel' }, children: [{ name: condition, attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } }] }])
+      const withStoredMessage = (forwarded: boolean) => {
+        const row = { id: 'fwd-1', ...(forwarded && { forwarded: { from: 'x@example.com', text: 'hi', author: 'x' } }) }
+        mockStores.chat.getMessage = vi.fn((_c: string, id: string) => (id === 'fwd-1' ? row : undefined)) as never
+      }
+
+      it('does not mark a forward as failed when one device answers not-allowed', async () => {
+        await connectClient()
+        withStoredMessage(true)
+        mockXmppClientInstance._emit('stanza', refusal('contact@example.com/converse', 'not-allowed'))
+        expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message-error', expect.anything())
+        expect(emitSDKSpy).toHaveBeenCalledWith('console:event', expect.objectContaining({ category: 'error' }))
+      })
+
+      it('still marks a plain message as failed on not-allowed', async () => {
+        await connectClient()
+        withStoredMessage(false)
+        mockXmppClientInstance._emit('stanza', refusal('contact@example.com/converse', 'not-allowed'))
+        expect(emitSDKSpy).toHaveBeenCalledWith('chat:message-error', expect.objectContaining({ messageId: 'fwd-1' }))
+      })
+
+      it('still marks a forward as failed for a bare-address or other error', async () => {
+        await connectClient()
+        withStoredMessage(true)
+        mockXmppClientInstance._emit('stanza', refusal('contact@example.com', 'not-allowed'))
+        mockXmppClientInstance._emit('stanza', refusal('contact@example.com/converse', 'service-unavailable'))
+        expect(emitSDKSpy.mock.calls.filter((c: unknown[]) => c[0] === 'chat:message-error')).toHaveLength(2)
+      })
+    })
+
     it('should emit chat:message-error for delivery failure with server text', async () => {
       await connectClient()
 
