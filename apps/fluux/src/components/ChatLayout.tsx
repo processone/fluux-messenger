@@ -52,6 +52,7 @@ import { useIosPaneNavigation } from '@/hooks/useIosPaneNavigation'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/utils/sessionStorage'
 import { useModalStore } from '@/stores/modalStore'
+import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
 import { Server, ShieldOff, MessageCircle, Hash, Users, Search, Bookmark, Settings, Plus, ArrowLeft, Loader2, type LucideIcon } from 'lucide-react'
 
 /**
@@ -977,6 +978,15 @@ function ChatLayoutContent() {
     setSelectedContactJid(jid)
     navigateToContacts(jid, { replace: true })
   }
+
+  // A request to review a contact's keys from outside the contact's own chat (the Forward dialog)
+  // has no profile handler of its own: open that contact's profile, which shows Security details.
+  const requestedSecurityJid = useContactSecurityRequestStore((s) => s.jid)
+  const showProfileRef = useRef(handleShowProfileFromRoom)
+  useEffect(() => { showProfileRef.current = handleShowProfileFromRoom })
+  useEffect(() => {
+    if (requestedSecurityJid && requestedSecurityJid !== selectedContactJid) showProfileRef.current(requestedSecurityJid)
+  }, [requestedSecurityJid, selectedContactJid])
 
   // Handle adding a contact (subscription request)
   const handleAddContactFromProfile = async (jid: string) => {
