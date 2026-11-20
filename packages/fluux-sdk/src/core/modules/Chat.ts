@@ -192,6 +192,9 @@ function forwardFallbackElement(fullBody: string, shift: number, range: { begin:
     }))
 }
 
+/** Error conditions a reader device answers when it does not accept a forwarded copy. */
+const FORWARD_REFUSALS = new Set(['not-allowed', 'feature-not-implemented', 'bad-request'])
+
 /** The original's ids, kept on a forwarded copy so a reader can find the original again; never routed. */
 type ForwardedCopyIds = { id?: string; stanzaId?: string; stanzaIdBy?: string }
 
@@ -1959,6 +1962,16 @@ export class Chat extends BaseModule {
     // but the server already delivered the message to other available
     // resources. Marking the message as failed would be a false alarm.
     const messageId = stanza.attrs.id
+    // A reader device that cannot take a forwarded copy (Converse.js answers not-allowed) refuses
+    // only its own copy: the other readers got the message, so it is partly delivered, not failed.
+    if (messageId && getResource(from) && FORWARD_REFUSALS.has(error.condition)
+      && this.deps.stores?.chat.getMessage(bareFrom, messageId)?.forwarded) {
+      this.deps.emitSDK('console:event', {
+        message: `A device of ${bareFrom} refused the forwarded copy (${error.condition}); the message was delivered to the other readers`,
+        category: 'error',
+      })
+      return
+    }
     if (messageId && error.condition !== 'recipient-unavailable') {
       this.deps.emitSDK('chat:message-error', {
         conversationId: bareFrom,
