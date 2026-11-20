@@ -305,7 +305,7 @@ test('a saved message opens from a device that has never seen it, through the ar
   let refuse = true
   await one.page.routeWebSocket(/\/ws$/, ws => { if (refuse) void ws.close(); else ws.connectToServer() })
   kick('alice')
-  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).first()).toBeVisible({ timeout: 20_000 })
+  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).filter({ visible: true }).first()).toBeVisible({ timeout: 20_000 })
   await openSaved(one)
   const beforeCache = one.frames.length
   await savedRow(one, text).click()
@@ -408,7 +408,7 @@ test('a save made offline survives a reload and is sent once after the reconnect
   await one.page.routeWebSocket(/\/ws$/, ws => { if (refuse) void ws.close(); else ws.connectToServer() })
   kick('alice') // ends the reader's session too
   reader = await script('alice')
-  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).first()).toBeVisible({ timeout: 20_000 })
+  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).filter({ visible: true }).first()).toBeVisible({ timeout: 20_000 })
   await saveMessage(one, text)
   await expect.poll(() => one.page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.includes('fluux-saved-pending')).map(([, value]) => value).join('')), { timeout: 10_000 }).toContain(text.slice(0, 12))
   expect((await reader.items()).length).toBe(0)
@@ -471,7 +471,7 @@ test('a removal made offline survives a reload and is sent once after the reconn
   await one.page.routeWebSocket(/\/ws$/, ws => { if (refuse) void ws.close(); else ws.connectToServer() })
   kick('alice')
   reader = await script('alice')
-  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).first()).toBeVisible({ timeout: 20_000 })
+  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).filter({ visible: true }).first()).toBeVisible({ timeout: 20_000 })
   await openSaved(one)
   await savedRow(one, text).getByRole('button', { name: 'Remove from saved' }).click()
   await expect(savedRow(one, text)).toHaveCount(0)
@@ -534,7 +534,7 @@ test('a deletion made while this device was away is applied to the saved row and
   await one.page.routeWebSocket(/\/ws$/, ws => { if (refuse) void ws.close(); else ws.connectToServer() })
   kick('alice')
   reader = await script('alice')
-  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).first()).toBeVisible({ timeout: 20_000 })
+  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).filter({ visible: true }).first()).toBeVisible({ timeout: 20_000 })
   await bob.retract('alice', id)
   refuse = false
   await one.page.reload()
@@ -1072,7 +1072,7 @@ test('a save removed again while offline is never sent, and the node stays empty
   await one.page.routeWebSocket(/\/ws$/, ws => { if (refuse) void ws.close(); else ws.connectToServer() })
   kick('alice')
   reader = await script('alice')
-  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).first()).toBeVisible({ timeout: 20_000 })
+  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).filter({ visible: true }).first()).toBeVisible({ timeout: 20_000 })
   await saveMessage(one, text)
   await expect.poll(() => pendingQueue(one), { timeout: 10_000 }).toContain(text.slice(0, 12))
   await openSaved(one)
@@ -1215,7 +1215,7 @@ test('logging out with local data cleared removes a save still waiting on this d
   let refuse = true
   await one.page.routeWebSocket(/\/ws$/, ws => { if (refuse) void ws.close(); else ws.connectToServer() })
   kick('alice')
-  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).first()).toBeVisible({ timeout: 20_000 })
+  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).filter({ visible: true }).first()).toBeVisible({ timeout: 20_000 })
   await saveMessage(one, text)
   await expect.poll(() => pendingQueue(one), { timeout: 10_000 }).toContain(text.slice(0, 12))
 
@@ -1519,7 +1519,7 @@ test('switching account keeps the first account\'s waiting save, and a wipe by t
   let refuse = true
   await one.page.routeWebSocket(/\/ws$/, ws => { if (refuse) void ws.close(); else ws.connectToServer() })
   kick('alice')
-  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).first()).toBeVisible({ timeout: 20_000 })
+  await expect(one.page.getByText(/Reconnecting|Disconnected|Offline/i).filter({ visible: true }).first()).toBeVisible({ timeout: 20_000 })
   await saveMessage(one, text)
   await expect.poll(() => pendingQueue(one), { timeout: 10_000 }).toContain(text.slice(0, 12))
   const queueKeys = await savedKeys(one)
