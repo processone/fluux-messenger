@@ -68,7 +68,7 @@ export function MessageReactorsSheet({ reactions, initialEmoji, getReactorName, 
               target?.focus()
               target?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
             }}
-            className={`flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-3 ${index === selectedIndex ? 'border-fluux-brand bg-fluux-brand/20' : 'border-fluux-border hover:bg-fluux-hover'}`}
+            className={`flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-3 ${index === selectedIndex ? 'border-fluux-brand fluux-accent-tint' : 'border-fluux-border hover:bg-fluux-hover'}`}
           >
             <span className="text-xl">{tabEmoji}</span>
             <span className="text-sm text-fluux-muted">{users.length}</span>

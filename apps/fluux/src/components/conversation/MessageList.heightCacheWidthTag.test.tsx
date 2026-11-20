@@ -3,13 +3,13 @@
  *
  * The width tag of the persistent row-height cache in the virtualized MessageList, with the real
  * row-metrics sampler and the real cache module. Intent: a conversation's cached heights are kept
- * when the mounted window moves between only own (hug-width) bubbles and full-width rows, and are
+ * while the mounted window moves between short own replies and long incoming rows, and are
  * cleared only when the real content width changes.
  *
  * jsdom has no layout, so the rows mirror MessageBubble's markup (content column, chrome box, text)
  * and carry widths and heights read from the demo app in Chromium: at 1280px wide the content
- * column is 888px, the widest short own reply 142px, a four-line incoming row 70px and an own
- * continuation row 24px; at 1000px wide the column is 608px.
+ * column is 888px, a four-line incoming row 70px and an own continuation row 24px; at 1000px wide
+ * the column is 608px. Every text box spans the content column.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from '@testing-library/react'
@@ -75,12 +75,11 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
 const CONVERSATION = 'ava@fluux.chat'
 const COLUMN_AT_1280_PX = 888
 const COLUMN_AT_1000_PX = 608
-const WIDEST_OWN_TEXT_PX = 142
 const INCOMING_ROW_PX = 70
 const OWN_ROW_PX = 24
 const LONG_BODY = 'A comfortable reading column keeps a long conversation easy to follow. '.repeat(4)
 
-/** 40 incoming long messages, then 60 short own replies: the newest window holds only own rows. */
+/** 40 incoming long messages, then 60 short own replies: the newest window holds only own replies. */
 const MESSAGES: BaseMessage[] = Array.from({ length: 100 }, (_, i) => ({
   id: `own-case-${i}`,
   stanzaId: undefined, originId: undefined,
@@ -97,12 +96,12 @@ function setClientWidth(node: HTMLElement | null, read: () => number): void {
   if (node) Object.defineProperty(node, 'clientWidth', { configurable: true, get: read })
 }
 
-/** MessageBubble's width-bearing structure: an own bubble hugs its text inside the full column. */
+/** MessageBubble's width-bearing structure: every text box spans the content column. */
 function renderMessage(message: BaseMessage) {
   return (
     <div data-msg-column="" ref={node => setClientWidth(node, () => columnPx)}>
-      <div data-msg-chrome="cont" data-msg-own={message.isOutgoing ? '' : undefined}>
-        <div data-msg-text="" ref={node => setClientWidth(node, () => message.isOutgoing ? WIDEST_OWN_TEXT_PX : columnPx)}>
+      <div data-msg-chrome="cont">
+        <div data-msg-text="" ref={node => setClientWidth(node, () => columnPx)}>
           {message.body}
         </div>
       </div>
@@ -144,7 +143,7 @@ describe('MessageList height cache width tag', () => {
     localStorage.clear()
   })
 
-  it('keeps heights while the window moves between own-only and full-width rows, and clears them when the column narrows', () => {
+  it('keeps heights while the window moves between own replies and incoming rows, and clears them when the column narrows', () => {
     // The re-tag after a resize records the mounted rows' settled heights again.
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(OWN_ROW_PX)
     const view = render(list())
@@ -165,9 +164,9 @@ describe('MessageList height cache width tag', () => {
     expect(getConversationWidthBucket(CONVERSATION)).toBe(880)
     expect(getCachedHeight(CONVERSATION, lastOwnKey, scale)).toBe(OWN_ROW_PX)
 
-    // Narrowing the window: the own replies still hug the same 142px, but the column moved. The
-    // rows re-measure at the new width, then the sampler reads it: the tag moves at that sample,
-    // before any further measurement or teardown, and the rows just measured keep their heights.
+    // Narrowing the window moves the column. The rows re-measure at the new width, then the
+    // sampler reads it: the tag moves at that sample, before any further measurement or
+    // teardown, and the rows just measured keep their heights.
     showWindow(view, own, OWN_ROW_PX)
     columnPx = COLUMN_AT_1000_PX
     showWindow(view, own, OWN_ROW_PX)
@@ -176,7 +175,7 @@ describe('MessageList height cache width tag', () => {
     expect(getCachedHeight(CONVERSATION, lastOwnKey, scale)).toBe(OWN_ROW_PX)
   })
 
-  it('persists an own-only window under the real width bucket when the list unmounts', () => {
+  it('persists a window of own replies under the real width bucket when the list unmounts', () => {
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(OWN_ROW_PX)
     const view = render(list())
     const scale = useSettingsStore.getState().fontSize
@@ -185,7 +184,7 @@ describe('MessageList height cache width tag', () => {
     const firstIncomingKey = adapter.items[incoming[0]].key
 
     showWindow(view, incoming, INCOMING_ROW_PX)
-    // An own-only window that is sampled but not yet measured, then left: the snapshot taken on
+    // A window of own replies that is sampled but not yet measured, then left: the snapshot taken on
     // unmount persists it under the real width.
     isMounted = index => own.includes(index)
     view.rerender(list())

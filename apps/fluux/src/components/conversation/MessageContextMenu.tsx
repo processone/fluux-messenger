@@ -135,7 +135,7 @@ export function MessageContextMenu({
               type="button"
               key={emoji}
               onClick={() => react(emoji)}
-              className={`flex h-9 flex-1 items-center justify-center rounded-lg text-xl transition-colors hover:bg-fluux-hover ${myReactions.includes(emoji) ? 'bg-fluux-brand/20' : ''}`}
+              className={`flex h-9 flex-1 items-center justify-center rounded-lg text-xl transition-colors hover:bg-fluux-hover ${myReactions.includes(emoji) ? 'fluux-accent-tint' : ''}`}
               aria-label={t('chat.reactWith', { emoji })}
             >
               {emoji}

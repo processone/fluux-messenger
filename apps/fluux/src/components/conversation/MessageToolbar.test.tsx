@@ -140,9 +140,9 @@ describe('MessageToolbar', () => {
       const heart = screen.getByLabelText('React with ❤️')
       const laugh = screen.getByLabelText('React with 😂')
 
-      expect(thumbsUp).toHaveClass('bg-fluux-brand/20')
-      expect(heart).toHaveClass('bg-fluux-brand/20')
-      expect(laugh).not.toHaveClass('bg-fluux-brand/20')
+      expect(thumbsUp).toHaveClass('fluux-accent-tint')
+      expect(heart).toHaveClass('fluux-accent-tint')
+      expect(laugh).not.toHaveClass('fluux-accent-tint')
     })
   })
 

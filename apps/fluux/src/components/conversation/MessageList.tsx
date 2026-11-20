@@ -936,6 +936,8 @@ export function MessageList<T extends BaseMessage>({
         data-message-list
         data-message-interaction={interaction.heldMessageId ?? undefined}
       >
+        {hasContent && <div aria-hidden="true" data-scroll-fade="top" className="message-scroll-fade-top" />}
+
         {/* Loading state */}
         {showLoading && loadingState}
 

@@ -196,9 +196,8 @@ describe('MessageReactions', () => {
       const thumbsButton = screen.getByText('👍').closest('button')
       const heartButton = screen.getByText('❤️').closest('button')
 
-      expect(thumbsButton).toHaveClass('bg-fluux-brand/20')
-      expect(thumbsButton).toHaveClass('border-fluux-brand')
-      expect(heartButton).not.toHaveClass('bg-fluux-brand/20')
+      expect(thumbsButton).toHaveClass('fluux-accent-tint')
+      expect(heartButton).not.toHaveClass('fluux-accent-tint')
     })
 
     it('should highlight multiple user reactions', () => {
@@ -207,8 +206,8 @@ describe('MessageReactions', () => {
       const thumbsButton = screen.getByText('👍').closest('button')
       const heartButton = screen.getByText('❤️').closest('button')
 
-      expect(thumbsButton).toHaveClass('bg-fluux-brand/20')
-      expect(heartButton).toHaveClass('bg-fluux-brand/20')
+      expect(thumbsButton).toHaveClass('fluux-accent-tint')
+      expect(heartButton).toHaveClass('fluux-accent-tint')
     })
   })
 

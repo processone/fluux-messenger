@@ -35,46 +35,34 @@ export const ROW_METRICS_FALLBACK: RowEstimatorContext = {
 }
 
 /**
- * Pick the text element whose clientWidth is the conversation's real CONTENT width.
- *
- * Own bubbles are `w-fit` (hug width): their `[data-msg-text]` is only as wide as the text,
- * so sampling whichever row happens to be first poisons the width (and therefore the height
- * cache's width-bucket validity tag) with an essentially random value. Whisper cards have their
- * own inset and padding, so neither their width nor chrome calibrates ordinary rows. Prefer the first text
- * element OUTSIDE `[data-msg-own]`; if only own rows are mounted, return the widest own text box.
- * Its width is only a lower bound: the estimator and the height cache's width tag read
- * {@link realContentWidthPx} for it instead, and fall back to the lower bound outside a marked column.
+ * Pick the text element whose clientWidth is the conversation's real CONTENT width: the first
+ * one outside a whisper card. Whisper cards have their own inset and padding, so neither their
+ * width nor their chrome calibrates ordinary rows.
  */
 export function pickWidthSampleEl(root: HTMLElement): HTMLElement | null {
-  const all = root.querySelectorAll<HTMLElement>('[data-msg-text]')
-  let widestOwn: HTMLElement | null = null
-  for (const el of all) {
-    if (el.closest('[data-msg-whisper]')) continue
-    if (!el.closest('[data-msg-own]')) return el
-    if (!widestOwn || el.clientWidth > widestOwn.clientWidth) widestOwn = el
+  for (const el of root.querySelectorAll<HTMLElement>('[data-msg-text]')) {
+    if (!el.closest('[data-msg-whisper]')) return el
   }
-  return widestOwn
+  return null
 }
 
 /**
  * The conversation's REAL content width for a picked width sample: the width of the content
- * column (`[data-msg-column]`) its row sits in. Own and incoming rows share that column, so the
- * value is the same whether the mounted window holds only hug-width own bubbles or full-width
- * rows, and it changes only when the layout really does (such as the window or reading width).
- * A full-width text box outside a marked column is itself that width; an own text box outside
- * one is only a lower bound, so it yields undefined.
+ * column (`[data-msg-column]`) its row sits in, which changes only when the layout really does
+ * (such as the window or reading width). Outside a marked column the text box spans the
+ * content width itself.
  */
 export function realContentWidthPx(textEl: HTMLElement): number | undefined {
   const column = textEl.closest<HTMLElement>('[data-msg-column]')
   if (column) return column.clientWidth > 0 ? column.clientWidth : undefined
-  return textEl.closest('[data-msg-own]') ? undefined : textEl.clientWidth
+  return textEl.clientWidth
 }
 
 /**
  * Pick a row for chrome sampling (chrome = outer height − predicted text height): it must be
  * a PLAIN-TEXT row. Any other content makes the prediction meaningless (observed: a
- * continuation "chrome" of 369px vs the real ~6px), and own hug-width rows wrap at the bubble
- * width rather than the content width. Returns the first clean row of the shape, or null;
+ * continuation "chrome" of 369px vs the real ~6px). Whisper cards are skipped for their own
+ * inset and padding. Returns the first clean row of the shape, or null;
  * useRowMetrics still checks its size bounds.
  */
 export function pickChromeSampleEl(
@@ -83,7 +71,7 @@ export function pickChromeSampleEl(
 ): HTMLElement | null {
   const rows = root.querySelectorAll<HTMLElement>(`[data-msg-chrome="${shape}"]`)
   for (const row of rows) {
-    if (row.hasAttribute('data-msg-own') || row.hasAttribute('data-msg-whisper')) continue
+    if (row.hasAttribute('data-msg-whisper')) continue
     if (isPlainTextRow(row, shape)) return row
   }
   return null
@@ -151,7 +139,7 @@ export interface RowMetrics {
 
 /**
  * Samples the live row metrics needed to estimate unmounted rows: the body FontSpec, the text
- * content width (an incoming text box's width; the content column's with only own rows mounted),
+ * content width (the first ordinary text box's width),
  * the rendered line box (WebKit floors line boxes; we read the real box), and the
  * per-shape chrome deltas (chrome = a mounted row's outer height minus its predicted text height).
  * Chrome sampling requires the full text to fit both CAPPED_PREDICTION_PREFIX_CHARS and
@@ -184,21 +172,14 @@ export function useRowMetrics(
     if (!root) return
     const textEl = pickWidthSampleEl(root)
     if (!textEl || textEl.clientWidth <= 0) return
-    // Read before the unchanged-geometry return below: an own-only window keeps the same text
-    // sample when the window is resized, but its column (the real width) still moves.
+    // Read before the unchanged-geometry return below, so a column change is always reported.
     const realWidthPx = realContentWidthPx(textEl)
     if (realWidthPx !== undefined && realWidthPx !== realWidthPxRef.current) {
       realWidthPxRef.current = realWidthPx
       onRealWidthChangeRef.current?.(realWidthPx)
     }
     const fontSpec = fontSpecFrom(textEl)
-    // An own text box hugs its text, so with only own rows mounted the estimator reads the real
-    // content width instead: the unmounted rows wrap at the column, which an incoming text box
-    // fills, not at the widest own reply. Own rows wrap slightly narrower (by the own tint's
-    // inline padding), but every row keeps the width an incoming sample reads, so moving between
-    // own-only and mixed windows does not recalibrate the estimates.
-    const ownSample = textEl.closest('[data-msg-own]') !== null
-    const contentWidthPx = ownSample ? (realWidthPx ?? textEl.clientWidth) : textEl.clientWidth
+    const contentWidthPx = textEl.clientWidth
 
     // Line box height: primary = floor(lineHeightPx) — the engine-correct rendered box (WebKit
     // floors line boxes to integer px; floor(lineHeight) matches the real box for font-size

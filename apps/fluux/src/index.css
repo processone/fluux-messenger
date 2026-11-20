@@ -994,6 +994,26 @@ em-emoji-picker {
    rather than a solid fill, so it reads as the primary action without
    outshining the conversation rows. The label keeps the normal text colour,
    which is AA on the sidebar in every theme; accent-coloured text is not. */
+/* Accent tint for a selected or own state (your reaction, a selected tab) over any surface.
+   color-mix because Tailwind's /opacity modifier generates no rule for these var() colors. */
+.fluux-accent-tint { background-color: color-mix(in srgb, var(--fluux-bg-accent) 16%, transparent); }
+.fluux-accent-tint:hover { background-color: color-mix(in srgb, var(--fluux-bg-accent) 24%, transparent); }
+
+/* Reaction chips under a message: the chat surface with a hairline, like the date pills. An own
+   reaction adds .fluux-accent-tint and a border drawn from the accent. */
+.reaction-chip {
+  border: 1px solid var(--fluux-border);
+  background-color: var(--fluux-chat-bg);
+}
+.reaction-chip:hover { background-color: var(--fluux-bg-hover); }
+.reaction-chip.fluux-accent-tint {
+  border-color: color-mix(in srgb, var(--fluux-bg-accent) 50%, var(--fluux-border));
+  background-color: color-mix(in srgb, var(--fluux-bg-accent) 16%, var(--fluux-chat-bg));
+}
+.reaction-chip.fluux-accent-tint:hover {
+  background-color: color-mix(in srgb, var(--fluux-bg-accent) 24%, var(--fluux-chat-bg));
+}
+
 .request-accept {
   border: 1px solid color-mix(in srgb, var(--fluux-bg-accent) 55%, transparent);
   background: color-mix(in srgb, var(--fluux-bg-accent) 12%, transparent);
@@ -1452,6 +1472,22 @@ html, body {
   pointer-events: none;
   overflow-anchor: none;
   background: linear-gradient(to bottom, transparent, var(--fluux-chat-bg));
+}
+/* Top edge of the message list: the mirror of .message-scroll-fade, so text scrolling up dissolves
+ * under the conversation header instead of being sliced. Same zero net height and anchoring
+ * exclusion. It precedes the rows in the DOM, and the virtualized rows are positioned, so it needs
+ * a z-index to paint above them; it stays below the row's own raised layers (hover toolbars).
+ * top is negative by the scroller's pt-4 so it sits at the scrollport edge, not under the padding. */
+.message-scroll-fade-top {
+  position: sticky;
+  top: -1rem;
+  z-index: 1;
+  height: 1rem;
+  margin-top: -1rem;
+  margin-inline: -1rem;
+  pointer-events: none;
+  overflow-anchor: none;
+  background: linear-gradient(to top, transparent, var(--fluux-chat-bg));
 }
 
 /* Composer action row. On narrow widths (phone, narrowed pane) the input + send

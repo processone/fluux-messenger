@@ -212,7 +212,7 @@ export const MessageToolbar = memo(function MessageToolbar({
       className={`hidden can-hover:block absolute -top-12 end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out ${visibilityClass}`}
     >
       {/* Visible toolbar. The p-0.5 inset keeps each control's square hover/active
-          fill (hover:bg-fluux-hover, reacted bg-fluux-brand/20) clear of the
+          fill (hover:bg-fluux-hover, reacted fluux-accent-tint) clear of the
           rounded-md corners — without it, an end button's fill pokes past the
           popover's rounded border. Clipping via overflow-hidden isn't an option
           here because the reaction picker and more-menu dropdowns overflow the bar. */}
@@ -239,7 +239,7 @@ export const MessageToolbar = memo(function MessageToolbar({
           // line-height (1.5) adds leading that rides the emoji high in the pill.
           className={`px-2 py-1.5 leading-none transition-colors text-base ${
             showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'
-          } ${myReactions.includes(emoji) ? 'bg-fluux-brand/20' : ''}`}
+          } ${myReactions.includes(emoji) ? 'fluux-accent-tint' : ''}`}
           aria-label={t('chat.reactWith', { emoji })}
         >
           {emoji}
