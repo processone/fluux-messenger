@@ -57,6 +57,7 @@ async function connect(browser: Browser, name: 'alice' | 'bob' = 'alice', option
     // A real key made by the app itself (openpgp.js) for this throwaway account, as in e2e/forward-direct.live.ts.
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     await page.getByRole('button', { name: 'Encryption' }).click()
+    await page.getByRole('button', { name: /^OpenPGP/ }).click()
     await page.getByRole('switch').first().click()
     const fields = page.locator('input[type=password]')
     await fields.nth(0).fill(PASSPHRASE)
@@ -1962,6 +1963,77 @@ test('with OpenPGP on, a saved message is stored sealed, the list stays locked u
   await expect(one.page.getByTestId('saved-unverified')).toHaveCount(0)
   await shot(one.page, 'sealed-unlocked')
   expect((await reader.items()).length).toBe(2) // and it is left alone
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('with OpenPGP on, a save made while the key is locked waits across a restart and reaches the node only sealed', async ({ browser }) => {
+  test.setTimeout(240_000)
+  await forgetOpenpgpIdentity('alice')
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser, 'alice', { openpgp: true })
+  const text = `Saved while locked ${stamp}`
+  // A restart loses the session passphrase: the key is locked when the message is saved.
+  await one.page.reload()
+  await one.page.getByRole('button', { name: 'Unlock', exact: true }).first().waitFor()
+  await one.page.keyboard.press('Escape') // leave the key locked: dismiss the passphrase prompt
+  await expect(one.page.getByRole('dialog', { name: 'Unlock End-to-End Encryption' })).toBeHidden()
+  await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text }).last()).toBeVisible({ timeout: 30_000 })
+  // The prompt can come back when the chat opens: keep the key locked.
+  await one.page.waitForTimeout(1500)
+  if (await one.page.getByRole('dialog', { name: 'Unlock End-to-End Encryption' }).isVisible()) await one.page.keyboard.press('Escape')
+  await expect(one.page.getByRole('dialog', { name: 'Unlock End-to-End Encryption' })).toBeHidden()
+  await saveMessage(one, text)
+  await one.page.waitForTimeout(3000)
+  expect(await reader.items()).toEqual([]) // nothing, plain or sealed, reached the node
+  // Another restart, still locked: the save is still held back, never written in clear while the plugin starts.
+  await one.page.reload()
+  await one.page.getByRole('button', { name: 'Unlock', exact: true }).first().waitFor()
+  await one.page.waitForTimeout(3000)
+  expect(await reader.items()).toEqual([])
+  await one.page.locator('input[type=password]').first().fill(PASSPHRASE)
+  await one.page.getByRole('button', { name: 'Unlock', exact: true }).last().click()
+  const [item] = await nodeHolds(reader, 1)
+  expectSealed(item, [text, 'bob@localhost', '<body'])
+  expect(one.frames.filter(frame => frame.includes(NODE) && frame.includes(text))).toEqual([]) // no frame carried it in clear
+  await openSaved(one)
+  await expect(savedRow(one, text)).toBeVisible({ timeout: 30_000 })
+  await shot(one.page, 'saved-while-locked-sealed')
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('with OpenPGP turned off, a restart leaves the list readable and a save goes to the node as before', async ({ browser }) => {
+  test.setTimeout(240_000)
+  await forgetOpenpgpIdentity('alice')
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser, 'alice', { openpgp: true })
+  await one.page.getByRole('button', { name: 'Settings', exact: true }).click()
+  await one.page.getByRole('button', { name: 'Encryption' }).click()
+  await one.page.getByRole('button', { name: /^OpenPGP/ }).click()
+  await one.page.getByRole('switch').first().click() // off
+  await expect(one.page.getByRole('switch').first()).not.toBeChecked({ timeout: 30_000 })
+  await one.page.keyboard.press('Escape')
+  await one.page.reload()
+  await expect(one.page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible({ timeout: 30_000 })
+  const text = `Saved with OpenPGP off ${stamp}`
+  await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text }).last()).toBeVisible({ timeout: 30_000 })
+  await saveMessage(one, text)
+  const [item] = await nodeHolds(reader, 1)
+  expect(item).not.toContain('<sealed')
+  expect(item).toContain(text)
+  await openSaved(one)
+  await expect(one.page.getByText('Saved messages are locked')).toHaveCount(0)
+  await expect(savedRow(one, text)).toBeVisible({ timeout: 30_000 })
+  await shot(one.page, 'off-after-restart')
   await emptyNode(reader)
   await one.context.close(); await bob.stop(); await reader.stop()
 })
