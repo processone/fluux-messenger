@@ -2,7 +2,8 @@ import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useChatActions, useRoomActions, useRoster, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
-import { encryptionSendErrorKey } from '@/e2ee/encryptionSendError'
+import { encryptionSendErrorKey, isKeysAwaitingDecision } from '@/e2ee/encryptionSendError'
+import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
 import { trackSend } from '@/utils/pendingSends'
 import { composeForward, composeForwardWithCopy, type ForwardQuote } from '@/utils/forwardMessage'
 import { ContactSelector } from './ContactSelector'
@@ -29,6 +30,9 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
   const [comment, setComment] = useState('')
   const [sending, setSending] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
+  // The contact whose keys all wait for a decision: the refusal names them and offers Review keys.
+  const [heldPeer, setHeldPeer] = useState<string | null>(null)
+  const requestContactSecurity = useContactSecurityRequestStore(s => s.requestContactSecurity)
   const inFlight = useRef(false)
   const commentRef = useRef<HTMLTextAreaElement>(null)
   const pickerId = useId()
@@ -67,6 +71,7 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
     inFlight.current = true
     setSending(true)
     setFailed(null)
+    setHeldPeer(null)
     try {
       // The quote and link are marked as fallback: Fluux hides them when it can show the source.
       const jid = destination.slice(5)
@@ -93,6 +98,7 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
       onClose()
     } catch (err) {
       // Encryption refusals say why: the message stays unsent rather than going out as plaintext.
+      if (destination.startsWith('chat:') && isKeysAwaitingDecision(err)) setHeldPeer(destination.slice(5))
       setFailed(encryptionSendErrorKey(err) ?? 'chat.forwardFailed')
     } finally {
       inFlight.current = false
@@ -120,7 +126,15 @@ export function ForwardMessageModal({ link, quote, onClose }: ForwardMessageModa
             className="mt-1 w-full p-2 rounded bg-fluux-bg text-fluux-text border border-fluux-hover resize-none" />
         </label>
         {link && <p className="text-xs text-fluux-muted break-all">{link}</p>}
-        {failed && <p role="alert" className="text-sm text-fluux-error">{t(failed)}</p>}
+        {failed && heldPeer ? (
+          <div role="alert" className="text-sm text-fluux-error space-y-2">
+            <p>{t('chat.encryption.heldKeys.all', { name: chats.get(heldPeer) ?? heldPeer })}</p>
+            <button type="button" onClick={() => { requestContactSecurity(heldPeer); onClose() }}
+              className="px-3 py-1 text-xs font-medium rounded bg-fluux-hover text-fluux-text hover:bg-fluux-active">
+              {t('chat.encryption.heldKeys.review')}
+            </button>
+          </div>
+        ) : failed && <p role="alert" className="text-sm text-fluux-error">{t(failed)}</p>}
       </div>
       <div className="flex justify-end gap-2 px-4 py-3 border-t border-fluux-hover">
         <button type="button" onClick={onClose} disabled={sending}
